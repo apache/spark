@@ -39,6 +39,7 @@ private[spark] trait ShuffleManager {
   /** Get a writer for a given partition. Called on executors by map tasks. */
   def getWriter[K, V](
       handle: ShuffleHandle,
+      mapId: Long,
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V]
 

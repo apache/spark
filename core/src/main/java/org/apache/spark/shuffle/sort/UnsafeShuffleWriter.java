@@ -109,6 +109,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       BlockManager blockManager,
       TaskMemoryManager memoryManager,
       SerializedShuffleHandle<K, V> handle,
+      long mapId,
       TaskContext taskContext,
       SparkConf sparkConf,
       ShuffleWriteMetricsReporter writeMetrics,
@@ -122,7 +123,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
     this.blockManager = blockManager;
     this.memoryManager = memoryManager;
-    this.mapId = taskContext.taskAttemptId();
+    this.mapId = mapId;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.shuffleId = dep.shuffleId();
     this.serializer = dep.serializer().newInstance();

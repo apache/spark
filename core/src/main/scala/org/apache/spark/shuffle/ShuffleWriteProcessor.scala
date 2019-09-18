@@ -51,6 +51,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](
         dep.shuffleHandle,
+        context.taskAttemptId(),
         context,
         createMetricsReporter(context))
       writer.write(

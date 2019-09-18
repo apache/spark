@@ -130,6 +130,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Get a writer for a given partition. Called on executors by map tasks. */
   override def getWriter[K, V](
       handle: ShuffleHandle,
+      mapId: Long,
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
     val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
@@ -142,6 +143,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           env.blockManager,
           context.taskMemoryManager(),
           unsafeShuffleHandle,
+          mapId,
           context,
           env.conf,
           metrics,
@@ -150,13 +152,13 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
         new BypassMergeSortShuffleWriter(
           env.blockManager,
           bypassMergeSortHandle,
-          context.taskAttemptId(),
+          mapId,
           env.conf,
           metrics,
           shuffleExecutorComponents)
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
         new SortShuffleWriter(
-          shuffleBlockResolver, other, context, shuffleExecutorComponents)
+          shuffleBlockResolver, other, mapId, context, shuffleExecutorComponents)
     }
   }
 

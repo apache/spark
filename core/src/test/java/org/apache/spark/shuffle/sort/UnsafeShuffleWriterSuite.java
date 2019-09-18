@@ -178,6 +178,7 @@ public class UnsafeShuffleWriterSuite {
       blockManager,
       taskMemoryManager,
       new SerializedShuffleHandle<>(0, shuffleDep),
+      0L, // map id
       taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics(),
@@ -536,6 +537,7 @@ public class UnsafeShuffleWriterSuite {
         blockManager,
         taskMemoryManager,
         new SerializedShuffleHandle<>(0, shuffleDep),
+        0L, // map id
         taskContext,
         conf,
         taskContext.taskMetrics().shuffleWriteMetrics(),

@@ -367,7 +367,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val context1 =
       new TaskContextImpl(0, 0, 0, 0L, 0, taskMemoryManager, new Properties, metricsSystem)
     val writer1 = manager.getWriter[Int, Int](
-      shuffleHandle, context1, context1.taskMetrics.shuffleWriteMetrics)
+      shuffleHandle, 0, context1, context1.taskMetrics.shuffleWriteMetrics)
     val data1 = (1 to 10).map { x => x -> x}
 
     // second attempt -- also successful.  We'll write out different data,
@@ -376,7 +376,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val context2 =
       new TaskContextImpl(0, 0, 0, 1L, 0, taskMemoryManager, new Properties, metricsSystem)
     val writer2 = manager.getWriter[Int, Int](
-      shuffleHandle, context2, context2.taskMetrics.shuffleWriteMetrics)
+      shuffleHandle, 0, context2, context2.taskMetrics.shuffleWriteMetrics)
     val data2 = (11 to 20).map { x => x -> x}
 
     // interleave writes of both attempts -- we want to test that both attempts can occur
