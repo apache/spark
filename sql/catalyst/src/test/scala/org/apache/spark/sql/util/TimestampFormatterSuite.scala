@@ -137,21 +137,29 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
   }
 
   test("special timestamp values") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val zoneId = getZoneId(timeZone)
-        val formatter = TimestampFormatter(zoneId)
-        val tolerance = TimeUnit.SECONDS.toMicros(30)
+    withSQLConf(SQLConf.DIALECT.key -> SQLConf.Dialect.POSTGRESQL.toString) {
+      DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+          val zoneId = getZoneId(timeZone)
+          val formatter = TimestampFormatter(zoneId)
+          val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-        assert(formatter.parse("EPOCH") === 0)
-        val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
-        formatter.parse("now") should be (now +- tolerance)
-        val today = instantToMicros(LocalDateTime.now(zoneId)
-          .`with`(LocalTime.MIDNIGHT)
-          .atZone(zoneId).toInstant)
-        formatter.parse("yesterday CET") should be (today - MICROS_PER_DAY +- tolerance)
-        formatter.parse(" TODAY ") should be (today +- tolerance)
-        formatter.parse("Tomorrow ") should be (today + MICROS_PER_DAY +- tolerance)
+          assert(formatter.parse("EPOCH") === 0)
+          val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
+          formatter.parse("now") should be(now +- tolerance)
+          val today = instantToMicros(LocalDateTime.now(zoneId)
+            .`with`(LocalTime.MIDNIGHT)
+            .atZone(zoneId).toInstant)
+          formatter.parse("yesterday CET") should be(today - MICROS_PER_DAY +- tolerance)
+          formatter.parse(" TODAY ") should be(today +- tolerance)
+          formatter.parse("Tomorrow ") should be(today + MICROS_PER_DAY +- tolerance)
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.DIALECT.key -> SQLConf.Dialect.SPARK.toString) {
+      intercept[java.time.format.DateTimeParseException] {
+        TimestampFormatter(ZoneOffset.UTC).parse("EPOCH")
       }
     }
   }

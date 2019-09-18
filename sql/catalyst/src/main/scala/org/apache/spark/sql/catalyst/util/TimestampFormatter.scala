@@ -27,6 +27,8 @@ import java.util.concurrent.TimeUnit.SECONDS
 
 import DateTimeUtils.convertSpecialTimestamp
 
+import org.apache.spark.sql.internal.SQLConf
+
 sealed trait TimestampFormatter extends Serializable {
   /**
    * Parses a timestamp in a string and converts it to microseconds.
@@ -51,8 +53,12 @@ class Iso8601TimestampFormatter(
   @transient
   protected lazy val formatter = getOrCreateFormatter(pattern, locale)
 
+  private val supportSpecialValues: Boolean = {
+    SQLConf.get.getConf(SQLConf.DIALECT) == SQLConf.Dialect.POSTGRESQL.toString
+  }
+
   override def parse(s: String): Long = {
-    val specialDate = convertSpecialTimestamp(s.trim, zoneId)
+    val specialDate = if (supportSpecialValues) convertSpecialTimestamp(s.trim, zoneId) else None
     specialDate.getOrElse {
       val parsed = formatter.parse(s)
       val parsedZoneId = parsed.query(TemporalQueries.zone())
