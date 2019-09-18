@@ -53,9 +53,7 @@ class Iso8601TimestampFormatter(
   @transient
   protected lazy val formatter = getOrCreateFormatter(pattern, locale)
 
-  private val supportSpecialValues: Boolean = {
-    SQLConf.get.getConf(SQLConf.DIALECT) == SQLConf.Dialect.POSTGRESQL.toString
-  }
+  private val supportSpecialValues: Boolean = SQLConf.get.isPostgreSqlDialect
 
   override def parse(s: String): Long = {
     val specialDate = if (supportSpecialValues) convertSpecialTimestamp(s.trim, zoneId) else None

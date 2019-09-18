@@ -2231,6 +2231,8 @@ class SQLConf extends Serializable with Logging {
 
   def utcTimestampFuncEnabled: Boolean = getConf(UTC_TIMESTAMP_FUNC_ENABLED)
 
+  def isPostgreSqlDialect: Boolean = getConf(SQLConf.DIALECT) == Dialect.POSTGRESQL.toString
+
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
