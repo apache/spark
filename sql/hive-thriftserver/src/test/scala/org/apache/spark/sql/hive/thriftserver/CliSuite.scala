@@ -231,7 +231,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
     val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
-
     runCliWithin(
       3.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
@@ -364,7 +363,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
     val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
-
     runCliWithin(
       3.minute)(
       s"ADD JAR ${hiveContribJar};" -> "",
