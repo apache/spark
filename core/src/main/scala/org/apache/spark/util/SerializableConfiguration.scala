@@ -23,8 +23,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.annotation.DeveloperApi
 
 /**
- * Helper wrapper to serialize a Hadoop configuration. Intended for use when implementing DataSourceV2
- * readers & writers which depend on the Hadoop configuration from the driver node.
+ * Helper wrapper to serialize a Hadoop configuration. Intended for use when implementing
+ * DataSourceV2 readers & writers which depend on the Hadoop configuration from the driver node.
  */
 @DeveloperApi
 class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
