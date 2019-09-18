@@ -2150,9 +2150,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
                               outputCol=self.getOutputCol(),
                               handleInvalid=self.getHandleInvalid())
         else:
-            splitsArrayList = []
-            for x in list(java_model.getSplitsArray()):
-                splitsArrayList.append(list(x))
+            splitsArrayList = [list(x) for x in list(java_model.getSplitsArray())]
             return Bucketizer(splitsArray=splitsArrayList,
                               inputCols=self.getInputCols(),
                               outputCols=self.getOutputCols(),
