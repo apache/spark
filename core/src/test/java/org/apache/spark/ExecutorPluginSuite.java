@@ -17,6 +17,8 @@
 
 package org.apache.spark;
 
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.MetricRegistry;
 import org.apache.spark.api.java.JavaSparkContext;
 
 import org.junit.After;
@@ -30,12 +32,17 @@ public class ExecutorPluginSuite {
   private static final String testBadPluginName = TestBadShutdownPlugin.class.getName();
   private static final String testPluginName = TestExecutorPlugin.class.getName();
   private static final String testSecondPluginName = TestSecondPlugin.class.getName();
+  private static final String testMetricsPluginName = TestMetricsPlugin.class.getName();
 
   // Static value modified by testing plugins to ensure plugins loaded correctly.
   public static int numSuccessfulPlugins = 0;
 
   // Static value modified by testing plugins to verify plugins shut down properly.
   public static int numSuccessfulTerminations = 0;
+
+  // Static values modified by testing plugins to ensure metrics have been registered correctly.
+  public static MetricRegistry testMetricRegistry;
+  public static String gaugeName;
 
   private JavaSparkContext sc;
 
@@ -107,6 +114,19 @@ public class ExecutorPluginSuite {
     assertEquals(2, numSuccessfulTerminations);
   }
 
+  @Test
+  public void testPluginMetrics() {
+    // Verify that a custom metric is registered with the Spark metrics system
+    gaugeName = "test42";
+    SparkConf conf = initializeSparkConf(testMetricsPluginName);
+    sc = new JavaSparkContext(conf);
+    assertEquals(1, numSuccessfulPlugins);
+    assertEquals(gaugeName, testMetricRegistry.getGauges().firstKey());
+    sc.stop();
+    sc = null;
+    assertEquals(1, numSuccessfulTerminations);
+  }
+
   public static class TestExecutorPlugin implements ExecutorPlugin {
     public void init(ExecutorPluginContext pluginContext) {
       ExecutorPluginSuite.numSuccessfulPlugins++;
@@ -134,6 +154,26 @@ public class ExecutorPluginSuite {
 
     public void shutdown() {
       throw new RuntimeException("This plugin will fail to cleanly shut down");
+    }
+  }
+
+  public static class TestMetricsPlugin implements ExecutorPlugin {
+    public void init(ExecutorPluginContext myContext) {
+      MetricRegistry metricRegistry = myContext.metricRegistry;
+      // Registers a dummy metrics gauge for testing
+      String gaugeName = ExecutorPluginSuite.gaugeName;
+      metricRegistry.register(MetricRegistry.name(gaugeName), new Gauge<Integer>() {
+        @Override
+        public Integer getValue() {
+          return 42;
+        }
+      });
+      ExecutorPluginSuite.testMetricRegistry = metricRegistry;
+      ExecutorPluginSuite.numSuccessfulPlugins++;
+     }
+
+    public void shutdown() {
+      ExecutorPluginSuite.numSuccessfulTerminations++;
     }
   }
 }
