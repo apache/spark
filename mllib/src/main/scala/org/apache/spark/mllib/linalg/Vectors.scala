@@ -208,8 +208,9 @@ sealed trait Vector extends Serializable {
   /**
    * Calculate the dot product of this vector with another.
    *
-   * If `size` does not match an [IllegalArgumentException] is thrown.
+   * If `size` does not match an [[IllegalArgumentException]] is thrown.
    */
+  @Since("3.0.0")
   def dot(v: Vector): Double = BLAS.dot(this, v)
 }
 
@@ -361,8 +362,9 @@ object Vectors {
   /**
    * Calculate the dot product of two vectors.
    *
-   * If `size` does not match an [IllegalArgumentException] is thrown.
+   * If `size` does not match an [[IllegalArgumentException]] is thrown.
    */
+  @Since("3.0.0")
   def dot(v1: Vector, v2: Vector): Double = BLAS.dot(v1, v2)
 
   /**
