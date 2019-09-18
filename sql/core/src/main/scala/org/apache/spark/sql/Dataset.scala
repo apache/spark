@@ -400,7 +400,7 @@ class Dataset[T] private[sql](
     } else if (hasMoreData) {
       // For Data that has more than "numRows" records
       val rowsString = if (numRows == 1) "row" else "rows"
-      sb.append(s"only showing top $numRows $rowsString\n")
+      sb.append(s"only showing top $numRows / ${count()} $rowsString\n")
     }
 
     sb.toString()
