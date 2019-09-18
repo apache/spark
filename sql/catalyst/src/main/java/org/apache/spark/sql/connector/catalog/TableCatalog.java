@@ -36,7 +36,7 @@ import java.util.Map;
  * insensitive.
  */
 @Experimental
-public interface TableCatalog extends CatalogPlugin {
+public interface TableCatalog extends CatalogPlugin, SupportCreateTable {
   /**
    * List the tables in a namespace from the catalog.
    * <p>
@@ -72,41 +72,6 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
-   * Test whether a table exists using an {@link Identifier identifier} from the catalog.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must return false.
-   *
-   * @param ident a table identifier
-   * @return true if the table exists, false otherwise
-   */
-  default boolean tableExists(Identifier ident) {
-    try {
-      return loadTable(ident) != null;
-    } catch (NoSuchTableException e) {
-      return false;
-    }
-  }
-
-  /**
-   * Create a table in the catalog.
-   *
-   * @param ident a table identifier
-   * @param schema the schema of the new table, as a struct type
-   * @param partitions transforms to use for partitioning data in the table
-   * @param properties a string map of table properties
-   * @return metadata for the new table
-   * @throws TableAlreadyExistsException If a table or view already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
-   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
-   */
-  Table createTable(
-      Identifier ident,
-      StructType schema,
-      Transform[] partitions,
-      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
-
-  /**
    * Apply a set of {@link TableChange changes} to a table in the catalog.
    * <p>
    * Implementations may reject the requested changes. If any change is rejected, none of the
@@ -124,17 +89,6 @@ public interface TableCatalog extends CatalogPlugin {
   Table alterTable(
       Identifier ident,
       TableChange... changes) throws NoSuchTableException;
-
-  /**
-   * Drop a table in the catalog.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must not drop the view and must return false.
-   *
-   * @param ident a table identifier
-   * @return true if a table was deleted, false if no table exists for the identifier
-   */
-  boolean dropTable(Identifier ident);
 
   /**
    * Renames a table in the catalog.

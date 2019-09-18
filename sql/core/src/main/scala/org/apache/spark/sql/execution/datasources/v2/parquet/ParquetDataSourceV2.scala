@@ -16,7 +16,10 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
-import org.apache.spark.sql.connector.catalog.Table
+import java.util
+
+import org.apache.spark.sql.connector.catalog.{Identifier, Table}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2._
@@ -32,13 +35,25 @@ class ParquetDataSourceV2 extends FileDataSourceV2 {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)
-    ParquetTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+    ParquetTable(tableName, sparkSession, options, paths, None, None, fallbackFileFormat)
   }
 
   override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)
-    ParquetTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
+    ParquetTable(tableName, sparkSession, options, paths, Some(schema), None, fallbackFileFormat)
+  }
+
+  override def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    val options = toOptions(ident)
+    val paths = getPaths(options)
+    val tableName = getTableName(paths)
+    ParquetTable(
+      tableName, sparkSession, options, paths, Some(schema), Some(partitions), fallbackFileFormat)
   }
 }
 

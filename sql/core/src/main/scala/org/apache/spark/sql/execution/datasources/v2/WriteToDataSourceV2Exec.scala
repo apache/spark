@@ -30,9 +30,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, TableCatalog}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -59,7 +59,7 @@ case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
  * CreateTableAsSelectStagingExec.
  */
 case class CreateTableAsSelectExec(
-    catalog: TableCatalog,
+    catalog: SupportCreateTable,
     ident: Identifier,
     partitioning: Seq[Transform],
     plan: LogicalPlan,
@@ -148,7 +148,7 @@ case class AtomicCreateTableAsSelectExec(
  * ReplaceTableAsSelectStagingExec.
  */
 case class ReplaceTableAsSelectExec(
-    catalog: TableCatalog,
+    catalog: SupportCreateTable,
     ident: Identifier,
     partitioning: Seq[Transform],
     plan: LogicalPlan,

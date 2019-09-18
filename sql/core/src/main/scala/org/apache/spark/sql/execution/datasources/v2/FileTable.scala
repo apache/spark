@@ -36,7 +36,8 @@ abstract class FileTable(
     sparkSession: SparkSession,
     options: CaseInsensitiveStringMap,
     paths: Seq[String],
-    userSpecifiedSchema: Option[StructType])
+    userSpecifiedSchema: Option[StructType],
+    userSpecifiedPartitioning: Option[Array[Transform]])
   extends Table with SupportsRead with SupportsWrite {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -102,7 +103,8 @@ abstract class FileTable(
     StructType(fields)
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.asTransforms
+  override def partitioning: Array[Transform] = userSpecifiedPartitioning.getOrElse(
+    fileIndex.partitionSchema.asTransforms)
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 

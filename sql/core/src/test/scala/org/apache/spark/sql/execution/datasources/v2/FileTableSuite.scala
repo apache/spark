@@ -35,7 +35,7 @@ class DummyFileTable(
     paths: Seq[String],
     expectedDataSchema: StructType,
     userSpecifiedSchema: Option[StructType])
-  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+  extends FileTable(sparkSession, options, paths, userSpecifiedSchema, None) {
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = Some(expectedDataSchema)
 
   override def name(): String = "Dummy"

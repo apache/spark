@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.text
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.WriteBuilder
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileTable
@@ -31,8 +32,9 @@ case class TextTable(
     options: CaseInsensitiveStringMap,
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType],
+    userSpecifiedPartitioning: Option[Array[Transform]],
     fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+  extends FileTable(sparkSession, options, paths, userSpecifiedSchema, userSpecifiedPartitioning) {
   override def newScanBuilder(options: CaseInsensitiveStringMap): TextScanBuilder =
     TextScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
 

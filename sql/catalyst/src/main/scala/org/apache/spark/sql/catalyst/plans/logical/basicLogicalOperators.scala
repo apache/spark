@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types._
@@ -427,7 +427,7 @@ case class CreateV2Table(
  * Create a new table from a select query with a v2 catalog.
  */
 case class CreateTableAsSelect(
-    catalog: TableCatalog,
+    catalog: SupportCreateTable,
     tableName: Identifier,
     partitioning: Seq[Transform],
     query: LogicalPlan,
@@ -477,7 +477,7 @@ case class ReplaceTable(
  * If the table does not exist, and orCreate is false, then an exception will be thrown.
  */
 case class ReplaceTableAsSelect(
-    catalog: TableCatalog,
+    catalog: SupportCreateTable,
     tableName: Identifier,
     partitioning: Seq[Transform],
     query: LogicalPlan,

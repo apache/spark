@@ -14,13 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.execution.datasources.v2
+
+import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.catalog.TableProvider
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportIdentifierTranslation, Table, TableProvider}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -29,7 +32,7 @@ import org.apache.spark.util.Utils
 /**
  * A base interface for data source v2 implementations of the built-in file-based data sources.
  */
-trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
+trait FileDataSourceV2 extends SupportIdentifierTranslation with DataSourceRegister {
   /**
    * Returns a V1 [[FileFormat]] class of the same file data source.
    * This is a solution for the following cases:
@@ -59,4 +62,27 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
     val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
     hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
   }
+
+  override def fromOptions(options: CaseInsensitiveStringMap): Identifier = {
+    val paths = getPaths(options)
+    if (paths.length > 1) {
+      throw new IllegalArgumentException("Cannot create a table in multiple locations")
+    } else if (paths.isEmpty) {
+      throw new IllegalArgumentException("Didn't specify the 'path' for file based table")
+    }
+    Identifier.of(Array.empty, paths.head)
+  }
+
+  override def toOptions(identifier: Identifier): CaseInsensitiveStringMap = {
+    new CaseInsensitiveStringMap(Map("path" -> identifier.name()).asJava)
+  }
+
+  override def dropTable(ident: Identifier): Boolean = {
+    val path = ident.name()
+    val hdfsPath = new Path(path)
+    val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    fs.delete(hdfsPath, true /* recursive */)
+  }
+
+  override def loadTable(ident: Identifier): Table = getTable(toOptions(ident))
 }
