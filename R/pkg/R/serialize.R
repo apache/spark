@@ -57,7 +57,7 @@ writeObject <- function(con, object, writeType = TRUE) {
   type <- class(object)[[1L]]  # class of POSIXlt is c("POSIXlt", "POSIXt")
   # Checking types is needed here, since 'is.na' only handles atomic vectors,
   # lists and pairlists
-  naAsNullClasses = c("integer", "character", "logical", "double", "numeric")
+  naAsNullClasses <- c("integer", "character", "logical", "double", "numeric")
   if (inherits(object, naAsNullClasses) && is.na(object)) {
     object <- NULL
     type <- "NULL"
