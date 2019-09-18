@@ -487,17 +487,21 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // map stage1 completes successfully, with one task on each executor
     complete(taskSets(0), Seq(
       (Success,
-        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2), 5)),
+        MapStatus(
+          BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 5)),
       (Success,
-        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2), 6)),
+        MapStatus(
+          BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 6)),
       (Success, makeMapStatus("hostB", 1, mapTaskId = 7))
     ))
     // map stage2 completes successfully, with one task on each executor
     complete(taskSets(1), Seq(
       (Success,
-        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2), 8)),
+        MapStatus(
+          BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 8)),
       (Success,
-        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2), 9)),
+        MapStatus(
+          BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 9)),
       (Success, makeMapStatus("hostB", 1, mapTaskId = 10))
     ))
     // make sure our test setup is correct
