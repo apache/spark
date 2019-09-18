@@ -926,6 +926,7 @@ ansiNonReserved
     | BY
     | CACHE
     | CASCADE
+    | CATALOG
     | CHANGE
     | CLEAR
     | CLUSTER
@@ -1146,6 +1147,7 @@ nonReserved
     | CASCADE
     | CASE
     | CAST
+    | CATALOG
     | CHANGE
     | CHECK
     | CLEAR
