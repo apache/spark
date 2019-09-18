@@ -2370,6 +2370,7 @@ class HiveDDLSuite
             assert(reader.getCompressionKind.name === "ZLIB")
             assert(reader.getCompressionSize == 1001)
             assert(reader.getRowIndexStride == 2002)
+            reader.close()
           }
         }
       }
