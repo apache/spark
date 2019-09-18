@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import java.util
+import java.util.{Map => JMap}
 
 import com.google.common.collect.ImmutableMap
 
@@ -42,7 +42,7 @@ class ShuffleDriverComponentsSuite extends SparkFunSuite with LocalSparkContext 
 }
 
 class TestShuffleDriverComponents extends ShuffleDriverComponents {
-  override def initializeApplication(): util.Map[String, String] =
+  override def initializeApplication(): JMap[String, String] =
     ImmutableMap.of("test-key", "test-value")
 }
 
@@ -59,7 +59,7 @@ class TestShuffleExecutorComponents(delegate: ShuffleExecutorComponents)
   extends ShuffleExecutorComponents {
 
   override def initializeExecutor(appId: String, execId: String,
-                                  extraConfigs: util.Map[String, String]): Unit = {
+                                  extraConfigs: JMap[String, String]): Unit = {
     assert(extraConfigs.get("test-key") == "test-value")
     delegate.initializeExecutor(appId, execId, extraConfigs)
   }
