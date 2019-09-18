@@ -296,7 +296,8 @@ case class ArrayTransform(
     "It returns -1, 0, or 1 as the first nullable element is less than, equal to, or greater" +
     "than the second nullable element. Null elements will be placed at the end of the returned" +
     "array. If the comparator function returns other values (including NULL)," +
-    "the query will fail and raise an error",
+    "the query will fail and raise an error. By the default it will sort the array in " +
+    "ascending mode",
   examples = """
     Examples:
       > SELECT _FUNC_(array(5, 6, 1), (x,y) -> f(x,y));
@@ -305,31 +306,68 @@ case class ArrayTransform(
        ['dc', 'bc', 'ab']
   """,
   since = "3.0.0")
-case class ArraySorting(
+case class ArraySort(
     argument: Expression,
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  @transient lazy val argumenType: DataType =
+  def this(argument: Expression) = this(argument, Literal(true))
+
+  @transient lazy val argumentsType: DataType =
     argument.dataType.asInstanceOf[ArrayType].elementType
 
-  override def dataType: ArrayType = ArrayType(argumenType, argument.nullable)
+  @transient lazy val lt: Comparator[Any] = {
+    val ordering = argument.dataType match {
+      case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
+    }
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    checkArgumentDataTypes() match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        val LambdaFunction(_, arguments, _) = function
-        if (arguments.size == 2 && function.dataType == IntegerType) {
-          TypeCheckResult.TypeCheckSuccess
-        } else {
-          TypeCheckResult.TypeCheckFailure("Return type of the given function has to be" +
-            "IntegerType")
-        }
-      case failure => failure
+    (o1: Any, o2: Any) => {
+      if (o1 == null && o2 == null) {
+        0
+      } else if (o1 == null) {
+        1
+      } else if (o2 == null) {
+        -1
+      } else {
+        ordering.compare(o1, o2)
+      }
     }
   }
 
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySorting = {
+  override def dataType: ArrayType = ArrayType(argumentsType, argument.nullable)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+
+    if (function.dataType == BooleanType) {
+      argument.dataType match {
+        case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+          TypeCheckResult.TypeCheckSuccess
+        case ArrayType(dt, _) =>
+          val dtSimple = dt.catalogString
+          TypeCheckResult.TypeCheckFailure(
+            s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
+        case _ =>
+          TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
+      }
+    } else {
+      checkArgumentDataTypes() match {
+        case TypeCheckResult.TypeCheckSuccess =>
+          val LambdaFunction(_, arguments, _) = function
+          if (arguments.size == 2 && function.dataType == IntegerType) {
+            TypeCheckResult.TypeCheckSuccess
+          } else {
+            TypeCheckResult.TypeCheckFailure("Return type of the given function has to be" +
+              " IntegerType")
+          }
+
+        case failure => failure
+      }
+    }
+  }
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySort = {
     val ArrayType(elementType, containsNull) = argument.dataType
         copy(function =
           f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
@@ -340,7 +378,6 @@ case class ArraySorting(
     val secondParam = tail.head.asInstanceOf[NamedLambdaVariable]
     (firstParam, secondParam)
   }
-
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
@@ -362,19 +399,22 @@ case class ArraySorting(
       }
     }
 
-   sortEval(arr, customComparator)
+    if (function.dataType == BooleanType) {
+      sortEval(arr, lt)
+    } else {
+      sortEval(arr, customComparator)
+    }
   }
 
   def sortEval(array: Any, comparator: Comparator[Any]): Any = {
-    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](argumenType)
-    if (argumenType!= NullType) {
+    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](argumentsType)
+    if (argumentType!= NullType) {
       java.util.Arrays.sort(data, comparator)
     }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 
   override def prettyName: String = "array_sort"
-
 
 }
 

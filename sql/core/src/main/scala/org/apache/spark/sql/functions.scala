@@ -3328,15 +3328,6 @@ object functions {
   }
 
   /**
-   * Sorts the input array in ascending order. The elements of the input array must be orderable.
-   * Null elements will be placed at the end of the returned array.
-   *
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
-
-  /**
    * Remove all elements that equal to element from the given array.
    *
    * @group collection_funcs
