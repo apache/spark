@@ -37,10 +37,20 @@ import test.org.apache.spark.sql.JavaTestUtils;
 
 public class JavaHigherOrderFunctionsSuite {
     private transient TestSparkSession spark;
+    private Dataset<Row> df;
 
     @Before
     public void setUp() {
         spark = new TestSparkSession();
+        List<Row> data = toRows(
+            makeArray(1, 9, 8, 7),
+            makeArray(5, 8, 9, 7, 2),
+            JavaTestUtils.<Integer>makeArray(),
+            null
+        );
+        StructType schema =  new StructType()
+            .add("x", new ArrayType(IntegerType, true), true);
+        df = spark.createDataFrame(data, schema);
     }
 
     @After
@@ -50,166 +60,34 @@ public class JavaHigherOrderFunctionsSuite {
     }
 
     @Test
-    public void testTransformArrayPrimitiveNotContainingNull() {
-        List<Row> data = toRows(
-            makeArray(1, 9, 8, 7),
-            makeArray(5, 8, 9, 7, 2),
-            JavaTestUtils.<Integer>makeArray(),
-            null
-        );
-        StructType schema =  new StructType()
-            .add("i", new ArrayType(IntegerType, true), true);
-        Dataset<Row> df = spark.createDataFrame(data, schema);
-
-        Runnable f = () -> {
-            checkAnswer(
-                df.select(transform(col("i"), x -> x.plus(1))),
-                toRows(
-                    makeArray(2, 10, 9, 8),
-                    makeArray(6, 9, 10, 8, 3),
-                    JavaTestUtils.<Integer>makeArray(),
-                    null
-                ));
-            checkAnswer(
-                df.select(transform(col("i"), (x, i) -> x.plus(i))),
-                toRows(
-                    makeArray(1, 10, 10, 10),
-                    makeArray(5, 9, 11, 10, 6),
-                    JavaTestUtils.<Integer>makeArray(),
-                    null
-                ));
-        };
-
-        // Test with local relation, the Project will be evaluated without codegen
-        f.run();
-        // Test with cached relation, the Project will be evaluated with codegen
-        df.cache();
-        f.run();
-      }
-
-    @Test
-    public void testTransformArrayPrimitiveContainingNull() {
-        List<Row> data = toRows(
-            makeArray(1, 9, 8, null, 7),
-            makeArray(5, null, 8, 9, 7, 2),
-            JavaTestUtils.<Integer>makeArray(),
-            null
-        );
-        StructType schema =  new StructType()
-            .add("i", new ArrayType(IntegerType, true), true);
-        Dataset<Row> df = spark.createDataFrame(data, schema);
-
-        Runnable f = () -> {
-            checkAnswer(
-                df.select(transform(col("i"), x -> x.plus(1))),
-                toRows(
-                    makeArray(2, 10, 9, null, 8),
-                    makeArray(6, null, 9, 10, 8, 3),
-                    JavaTestUtils.<Integer>makeArray(),
-                    null
-                ));
-            checkAnswer(
-                df.select(transform(col("i"), (x, i) -> x.plus(i))),
-                toRows(
-                    makeArray(1, 10, 10, null, 11),
-                    makeArray(5, null, 10, 12, 11, 7),
-                    JavaTestUtils.<Integer>makeArray(),
-                    null
-                ));
-        };
-
-        // Test with local relation, the Project will be evaluated without codegen
-        f.run();
-        df.cache();
-        // Test with cached relation, the Project will be evaluated with codegen
-        f.run();
+    public void testTransform() {
+        checkAnswer(
+            df.select(transform(col("x"), x -> x.plus(1))),
+            toRows(
+                makeArray(2, 10, 9, 8),
+                makeArray(6, 9, 10, 8, 3),
+                JavaTestUtils.<Integer>makeArray(),
+                null
+            ));
+        checkAnswer(
+            df.select(transform(col("x"), (x, i) -> x.plus(i))),
+            toRows(
+                makeArray(1, 10, 10, 10),
+                makeArray(5, 9, 11, 10, 6),
+                JavaTestUtils.<Integer>makeArray(),
+                null
+            ));
     }
 
     @Test
-    public void testTransformArrayNonPrimitive() {
-        List<Row> data = toRows(
-            makeArray("c", "a", "b"),
-            makeArray("b", null, "c", null),
-            JavaTestUtils.<String>makeArray(),
-            null
-        );
-        StructType schema =  new StructType()
-            .add("s", new ArrayType(StringType, true), true);
-        Dataset<Row> df = spark.createDataFrame(data, schema);
-
-        Runnable f = () -> {
-            checkAnswer(df.select(transform(col("s"), x -> concat(x, x))),
-                toRows(
-                    makeArray("cc", "aa", "bb"),
-                    makeArray("bb", null, "cc", null),
-                    JavaTestUtils.<String>makeArray(),
-                    null
-                ));
-          checkAnswer(df.select(transform(col("s"), (x, i) -> concat(x, i))),
-                toRows(
-                    makeArray("c0", "a1", "b2"),
-                    makeArray("b0", null, "c2", null),
-                    JavaTestUtils.<String>makeArray(),
-                    null
-                ));
-        };
-
-        // Test with local relation, the Project will be evaluated without codegen
-        f.run();
-        // Test with cached relation, the Project will be evaluated with codegen
-        df.cache();
-        f.run();
-    }
-
-    @Test
-    public void testTransformSpecialCases() {
-        List<Row> data = toRows(
-            makeArray("c", "a", "b"),
-            makeArray("b", null, "c", null),
-            JavaTestUtils.<String>makeArray(),
-            null
-        );
-        StructType schema =  new StructType()
-            .add("s", new ArrayType(StringType, true), true);
-        Dataset<Row> df = spark.createDataFrame(data, schema);
-
-        Runnable f = () -> {
-            checkAnswer(df.select(transform(col("arg"), arg -> arg)),
-                toRows(
-                    makeArray("c", "a", "b"),
-                    makeArray("b", null, "c", null),
-                    JavaTestUtils.<String>makeArray(),
-                    null));
-            checkAnswer(df.select(transform(col("arg"), x -> col("arg"))),
-                toRows(
-                    makeArray(
-                        makeArray("c", "a", "b"),
-                        makeArray("c", "a", "b"),
-                        makeArray("c", "a", "b")
-                    ),
-                    makeArray(
-                        makeArray("b", null, "c", null),
-                        makeArray("b", null, "c", null),
-                        makeArray("b", null, "c", null),
-                        makeArray("b", null, "c", null)
-                    ),
-                    JavaTestUtils.<String>makeArray(),
-                    null));
-            checkAnswer(df.select(transform(col("arg"), x -> concat(col("arg"), array(x)))),
-                toRows(
-                    makeArray(
-                        makeArray("c", "a", "b", "c"),
-                        makeArray("c", "a", "b", "c"),
-                        makeArray("c", "a", "b", "c")
-                    ),
-                    makeArray(
-                        makeArray("b", null, "c", null, "b"),
-                        makeArray("b", null, "c", null, null),
-                        makeArray("b", null, "c", null, "b"),
-                        makeArray("b", null, "c", null, null)
-                    ),
-                    JavaTestUtils.<String>makeArray(),
-                    null));
-        };
+    public void testFilter() {
+        checkAnswer(
+            df.select(filter(col("x"), x -> x.plus(1).equalTo(10))),
+            toRows(
+                makeArray(9),
+                makeArray(9),
+                JavaTestUtils.<Integer>makeArray(),
+                null
+            ));
     }
 }
