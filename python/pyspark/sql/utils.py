@@ -18,9 +18,6 @@
 import py4j
 import sys
 
-if sys.version_info.major >= 3:
-    unicode = str
-
 
 class CapturedException(Exception):
     def __init__(self, desc, stackTrace, cause=None):
