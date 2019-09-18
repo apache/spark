@@ -70,7 +70,9 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
     }
     // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
     // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
-    if (!shuffleStages.forall(_.plan.canChangeNumPartitions)) {
+    if (!shuffleStages.forall(_.plan.canChangeNumPartitions)
+      || !shuffleStages.forall(_.isLocalShuffle == false)) {
+      // If the `shuffleStages` contains the local shuffle reader, we do not reduce the partitions.
       plan
     } else {
       val shuffleMetrics = shuffleStages.map { stage =>
@@ -180,45 +182,25 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
 case class CoalescedShuffleReaderExec(
     child: QueryStageExec,
-    partitionStartIndices: Array[Int],
-    var isLocal: Boolean = false) extends UnaryExecNode {
+    partitionStartIndices: Array[Int]) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
   override def doCanonicalize(): SparkPlan = child.canonicalized
 
   override def outputPartitioning: Partitioning = {
-    if (isLocal) {
-      val numPartitions = child match {
-        case stage: ShuffleQueryStageExec =>
-          stage.plan.shuffleDependency.rdd.partitions.length
-        case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-          stage.plan.shuffleDependency.rdd.partitions.length
-      }
-      UnknownPartitioning(numPartitions)
-    } else {
-      UnknownPartitioning(partitionStartIndices.length)
-    }
+    UnknownPartitioning(partitionStartIndices.length)
   }
 
   private var cachedShuffleRDD: RDD[InternalRow] = null
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = if (isLocal) {
-        child match {
-          case stage: ShuffleQueryStageExec =>
-            stage.plan.createLocalShuffleRDD(Some(partitionStartIndices))
-          case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-            stage.plan.createLocalShuffleRDD(Some(partitionStartIndices))
-        }
-      } else {
-        child match {
-          case stage: ShuffleQueryStageExec =>
-            stage.plan.createShuffledRDD(Some(partitionStartIndices))
-          case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-            stage.plan.createShuffledRDD(Some(partitionStartIndices))
-        }
+      cachedShuffleRDD = child match {
+        case stage: ShuffleQueryStageExec =>
+          stage.plan.createShuffledRDD(Some(partitionStartIndices))
+        case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+          stage.plan.createShuffledRDD(Some(partitionStartIndices))
       }
     }
     cachedShuffleRDD

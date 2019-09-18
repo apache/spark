@@ -17,55 +17,108 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.adaptive.rule.CoalescedShuffleReaderExec
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
 case class OptimizedLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
+
+  private def setIsLocalToFalse(shuffleStage: QueryStageExec): QueryStageExec = {
+    shuffleStage match {
+      case stage: ShuffleQueryStageExec =>
+        stage.isLocalShuffle = false
+      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+        stage.isLocalShuffle = false
+    }
+    shuffleStage
+  }
+
+  private def revertLocalShuffleReader(newPlan: SparkPlan): SparkPlan = {
+    val revertPlan = newPlan.transformUp {
+      case localReader: LocalShuffleReaderExec
+        if (ShuffleQueryStageExec.isShuffleQueryStageExec(localReader.child)) =>
+        setIsLocalToFalse(localReader.child)
+    }
+    revertPlan
+  }
+
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.optimizedLocalShuffleReaderEnabled) {
+    // Collect the `BroadcastHashJoinExec` nodes and if isEmpty directly return.
+    val bhjs = plan.collect {
+      case bhj: BroadcastHashJoinExec => bhj
+    }
+
+    if (!conf.optimizedLocalShuffleReaderEnabled || bhjs.isEmpty) {
       return plan
     }
 
-    plan.transformUp {
+    // If the streamedPlan is `ShuffleQueryStageExec`, set the value of `isLocalShuffle` to true
+    bhjs.map {
       case bhj: BroadcastHashJoinExec =>
-        bhj.buildSide match {
-          case BuildLeft if (bhj.right.isInstanceOf[CoalescedShuffleReaderExec]) =>
-            bhj.right.asInstanceOf[CoalescedShuffleReaderExec].isLocal = true
-          case BuildRight if (bhj.left.isInstanceOf[CoalescedShuffleReaderExec]) =>
-            bhj.left.asInstanceOf[CoalescedShuffleReaderExec].isLocal = true
-          case _ => None
+        bhj.children map {
+          case stage: ShuffleQueryStageExec => stage.isLocalShuffle = true
+          case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+            stage.isLocalShuffle = true
+          case plan: SparkPlan => plan
         }
-        bhj
     }
 
-    val afterEnsureRequirements = EnsureRequirements(conf).apply(plan)
+    // Add the new `LocalShuffleReaderExec` node if the value of `isLocalShuffle` is true
+    val newPlan = plan.transformUp {
+      case stage: ShuffleQueryStageExec if (stage.isLocalShuffle) =>
+        LocalShuffleReaderExec(stage)
+      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) if (stage.isLocalShuffle) =>
+        LocalShuffleReaderExec(stage)
+    }
+
+    val afterEnsureRequirements = EnsureRequirements(conf).apply(newPlan)
     val numExchanges = afterEnsureRequirements.collect {
       case e: ShuffleExchangeExec => e
     }.length
     if (numExchanges > 0) {
       logWarning("Local shuffle reader optimization is not applied due" +
         " to additional shuffles will be introduced.")
-      revertLocalShuffleReader(plan)
+      revertLocalShuffleReader(newPlan)
     } else {
-      plan
+      newPlan
     }
   }
-  private def revertLocalShuffleReader(plan: SparkPlan): SparkPlan = {
-    plan.transformUp {
-      case bhj: BroadcastHashJoinExec =>
-        bhj.buildSide match {
-          case BuildLeft if (bhj.right.isInstanceOf[CoalescedShuffleReaderExec]) =>
-            bhj.right.asInstanceOf[CoalescedShuffleReaderExec].isLocal = false
-          case BuildRight if (bhj.left.isInstanceOf[CoalescedShuffleReaderExec]) =>
-            bhj.left.asInstanceOf[CoalescedShuffleReaderExec].isLocal = false
-          case _ => None
-        }
-        bhj
+}
+
+case class LocalShuffleReaderExec(
+    child: QueryStageExec) extends UnaryExecNode {
+
+  override def output: Seq[Attribute] = child.output
+
+  override def doCanonicalize(): SparkPlan = child.canonicalized
+
+  override def outputPartitioning: Partitioning = {
+    val numPartitions = child match {
+      case stage: ShuffleQueryStageExec =>
+        stage.plan.shuffleDependency.rdd.partitions.length
+      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+        stage.plan.shuffleDependency.rdd.partitions.length
     }
-    plan
+    UnknownPartitioning(numPartitions)
+  }
+
+  private var cachedShuffleRDD: RDD[InternalRow] = null
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    if (cachedShuffleRDD == null) {
+      cachedShuffleRDD = child match {
+        case stage: ShuffleQueryStageExec =>
+          stage.plan.createLocalShuffleRDD()
+        case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+          stage.plan.createLocalShuffleRDD()
+      }
+    }
+    cachedShuffleRDD
   }
 }

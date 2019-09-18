@@ -80,6 +80,7 @@ class AdaptiveQueryExecSuite
   test("Change merge join to broadcast join") {
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.OPTIMIZED_LOCAL_SHUFFLE_READER_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a where value = '1'")

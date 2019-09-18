@@ -129,7 +129,8 @@ abstract class QueryStageExec extends LeafExecNode {
  */
 case class ShuffleQueryStageExec(
     override val id: Int,
-    override val plan: ShuffleExchangeExec) extends QueryStageExec {
+    override val plan: ShuffleExchangeExec,
+    var isLocalShuffle: Boolean = false) extends QueryStageExec {
 
   @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
     if (plan.inputRDD.getNumPartitions == 0) {
