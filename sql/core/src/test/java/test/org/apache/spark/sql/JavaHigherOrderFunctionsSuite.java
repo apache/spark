@@ -90,4 +90,16 @@ public class JavaHigherOrderFunctionsSuite {
                 null
             ));
     }
+
+    @Test
+    public void testExists() {
+        checkAnswer(
+            df.select(exists(col("x"), x -> x.plus(1).equalTo(10))),
+            toRows(
+                true,
+                true,
+                false,
+                null
+            ));
+    }
 }
