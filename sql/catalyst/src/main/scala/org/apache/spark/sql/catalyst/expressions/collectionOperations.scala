@@ -767,8 +767,8 @@ trait ArraySortLike extends ExpectsInputTypes {
 
   def sortEval(array: Any, comparator: Comparator[Any]): Any = {
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
-    if (elementType!= NullType) {
-    java.util.Arrays.sort(data, comparator)
+    if (elementType != NullType) {
+      java.util.Arrays.sort(data, comparator)
   }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }

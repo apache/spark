@@ -301,10 +301,12 @@ case class ArrayTransform(
     "ascending mode",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(5, 6, 1), (x,y) -> f(x,y));
+      > SELECT _FUNC_(array(5, 6, 1), (x, y) -> f(x, y));
        [1,5,6]
-      > SELECT _FUNC_(array('bc', 'ab', 'dc'), (x, y) -> f(x,y));
+      > SELECT _FUNC_(array('bc', 'ab', 'dc'), (x, y) -> f(x, y));
        ['dc', 'bc', 'ab']
+      > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
+ |     ["d", "c", "b", "a", null]
   """,
   since = "3.0.0")
 case class ArraySort(
@@ -343,8 +345,8 @@ case class ArraySort(
           if (arguments.size == 2 && function.dataType == IntegerType) {
             TypeCheckResult.TypeCheckSuccess
           } else {
-            TypeCheckResult.TypeCheckFailure("Return type of the given function has to be" +
-              " IntegerType")
+            TypeCheckResult.TypeCheckFailure("Return type of the given function has to be " +
+              "IntegerType")
           }
 
         case failure => failure
