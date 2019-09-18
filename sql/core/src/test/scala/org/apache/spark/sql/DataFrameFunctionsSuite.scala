@@ -426,6 +426,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }.getMessage().contains("only supports array input"))
 
     checkAnswer(
+      df.select(array_sort($"a"), array_sort($"b")),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+    checkAnswer(
       df.selectExpr("array_sort(a)", "array_sort(b)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
