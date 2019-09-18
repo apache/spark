@@ -22,21 +22,21 @@ import java.{util => ju}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.sources.v2.reader._
-
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 
 /** A [[InputPartition]] for reading Kafka data in a batch based streaming query. */
 private[kafka010] case class KafkaBatchInputPartition(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends InputPartition
+    failOnDataLoss: Boolean,
+    includeHeaders: Boolean) extends InputPartition
 
 private[kafka010] object KafkaBatchReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaBatchInputPartition]
     KafkaBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.pollTimeoutMs,
-      p.failOnDataLoss)
+      p.failOnDataLoss, p.includeHeaders)
   }
 }
 
@@ -45,12 +45,14 @@ private case class KafkaBatchPartitionReader(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends PartitionReader[InternalRow] with Logging {
+    failOnDataLoss: Boolean,
+    includeHeaders: Boolean) extends PartitionReader[InternalRow] with Logging {
 
   private val consumer = KafkaDataConsumer.acquire(offsetRange.topicPartition, executorKafkaParams)
 
   private val rangeToRead = resolveRange(offsetRange)
-  private val converter = new KafkaRecordToUnsafeRowConverter
+  private val unsafeRowProjector = new KafkaRecordToRowConverter()
+    .toUnsafeRowProjector(includeHeaders)
 
   private var nextOffset = rangeToRead.fromOffset
   private var nextRow: UnsafeRow = _
@@ -59,7 +61,7 @@ private case class KafkaBatchPartitionReader(
     if (nextOffset < rangeToRead.untilOffset) {
       val record = consumer.get(nextOffset, rangeToRead.untilOffset, pollTimeoutMs, failOnDataLoss)
       if (record != null) {
-        nextRow = converter.toUnsafeRow(record)
+        nextRow = unsafeRowProjector(record)
         nextOffset = record.offset + 1
         true
       } else {

@@ -77,7 +77,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private var eventLoop: EventLoop[JobGeneratorEvent] = null
 
   // last batch whose completion,checkpointing and metadata cleanup has been completed
-  private var lastProcessedBatch: Time = null
+  @volatile private[streaming] var lastProcessedBatch: Time = null
 
   /** Start generation of jobs */
   def start(): Unit = synchronized {

@@ -220,6 +220,8 @@ object DateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trim.getBytes
+    val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
+    if (specialTimestamp.isDefined) return specialTimestamp
     var j = 0
     var digitsMilli = 0
     var justTime = false
@@ -853,7 +855,13 @@ object DateTimeUtils {
     new Decimal().set(sinceEpoch, 20, 6)
   }
 
+  def currentTimestamp(): SQLTimestamp = instantToMicros(Instant.now())
+
   def currentDate(zoneId: ZoneId): SQLDate = localDateToDays(LocalDate.now(zoneId))
+
+  private def today(zoneId: ZoneId): ZonedDateTime = {
+    Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT)
+  }
 
   private val specialValueRe = """(\p{Alpha}+)\p{Blank}*(.*)""".r
 
@@ -883,6 +891,32 @@ object DateTimeUtils {
     input match {
       case specialValueRe(v, z) if isValid(v, z) => Some(v.toLowerCase(Locale.US))
       case _ => None
+    }
+  }
+
+  /**
+   * Converts notational shorthands that are converted to ordinary timestamps.
+   * @param input - a trimmed string
+   * @param zoneId - zone identifier used to get the current date.
+   * @return some of microseconds since the epoch if the conversion completed
+   *         successfully otherwise None.
+   */
+  def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[SQLTimestamp] = {
+    extractSpecialValue(input, zoneId).flatMap {
+      case "epoch" => Some(0)
+      case "now" => Some(currentTimestamp())
+      case "today" => Some(instantToMicros(today(zoneId).toInstant))
+      case "tomorrow" => Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
+      case "yesterday" => Some(instantToMicros(today(zoneId).minusDays(1).toInstant))
+      case _ => None
+    }
+  }
+
+  private def convertSpecialTimestamp(bytes: Array[Byte], zoneId: ZoneId): Option[SQLTimestamp] = {
+    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
+      convertSpecialTimestamp(new String(bytes, StandardCharsets.UTF_8), zoneId)
+    } else {
+      None
     }
   }
 

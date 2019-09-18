@@ -658,7 +658,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.30.Final</version>
+        <version>4.1.39.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -2284,6 +2284,17 @@
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
+                </rules>
+              </configuration>
+            </execution>
+            <execution>
+              <id>enforce-no-duplicate-dependencies</id>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <configuration>
+                <rules>
+                  <banDuplicatePomDependencyVersions/>
                 </rules>
               </configuration>
             </execution>

@@ -41,7 +41,7 @@ object ExplainUtils {
    *
    * @param plan Input query plan to process
    * @param append function used to append the explain output
-   * @param startOperationID The start value of operation id. The subsequent operations will
+   * @param startOperatorID The start value of operation id. The subsequent operations will
    *                         be assigned higher value.
    *
    * @return The last generated operation id for this input plan. This is to ensure we
@@ -125,7 +125,7 @@ object ExplainUtils {
    *       appear in the explain output.
    *    2. operator identifier starts at startOperatorID + 1
    * @param plan Input query plan to process
-   * @param startOperationID The start value of operation id. The subsequent operations will
+   * @param startOperatorID The start value of operation id. The subsequent operations will
    *                         be assigned higher value.
    * @param operatorIDs A output parameter that contains a map of operator id and query plan. This
    *                    is used by caller to print the detail portion of the plan.

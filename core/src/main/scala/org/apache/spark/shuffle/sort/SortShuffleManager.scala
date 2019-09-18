@@ -140,13 +140,13 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
         new UnsafeShuffleWriter(
           env.blockManager,
-          shuffleBlockResolver,
           context.taskMemoryManager(),
           unsafeShuffleHandle,
           mapId,
           context,
           env.conf,
-          metrics)
+          metrics,
+          shuffleExecutorComponents)
       case bypassMergeSortHandle: BypassMergeSortShuffleHandle[K @unchecked, V @unchecked] =>
         new BypassMergeSortShuffleWriter(
           env.blockManager,

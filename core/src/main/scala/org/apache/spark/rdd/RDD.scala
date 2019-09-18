@@ -430,8 +430,6 @@ abstract class RDD[T: ClassTag](
    *
    * If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
    * which can avoid performing a shuffle.
-   *
-   * TODO Fix the Shuffle+Repartition data loss issue described in SPARK-23207.
    */
   def repartition(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
     coalesce(numPartitions, shuffle = true)
@@ -557,7 +555,7 @@ abstract class RDD[T: ClassTag](
       val sampler = new BernoulliCellSampler[T](lb, ub)
       sampler.setSeed(seed + index)
       sampler.sample(partition)
-    }, preservesPartitioning = true)
+    }, isOrderSensitive = true, preservesPartitioning = true)
   }
 
   /**
@@ -868,6 +866,29 @@ abstract class RDD[T: ClassTag](
       this,
       (_: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(index, iter),
       preservesPartitioning)
+  }
+
+  /**
+   * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
+   * of the original partition.
+   *
+   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
+   *
+   * `isOrderSensitive` indicates whether the function is order-sensitive. If it is order
+   * sensitive, it may return totally different result when the input order
+   * is changed. Mostly stateful functions are order-sensitive.
+   */
+  private[spark] def mapPartitionsWithIndex[U: ClassTag](
+      f: (Int, Iterator[T]) => Iterator[U],
+      preservesPartitioning: Boolean,
+      isOrderSensitive: Boolean): RDD[U] = withScope {
+    val cleanedF = sc.clean(f)
+    new MapPartitionsRDD(
+      this,
+      (_: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(index, iter),
+      preservesPartitioning,
+      isOrderSensitive = isOrderSensitive)
   }
 
   /**

@@ -28,8 +28,6 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2
-import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
@@ -38,8 +36,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowTablesStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -344,12 +343,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
     val tableAlias = if (ctx.tableAlias() != null) {
       val ident = ctx.tableAlias().strictIdentifier()
-      if (ident != null) { Some(ident.getText) } else { None }
+      // We do not allow columns aliases after table alias.
+      if (ctx.tableAlias().identifierList() != null) {
+        throw new ParseException("Columns aliases is not allowed in DELETE.",
+          ctx.tableAlias().identifierList())
+      }
+      if (ident != null) Some(ident.getText) else None
+    } else {
+      None
+    }
+    val predicate = if (ctx.whereClause() != null) {
+      Some(expression(ctx.whereClause().booleanExpression()))
     } else {
       None
     }
 
-    DeleteFromStatement(tableId, tableAlias, expression(ctx.whereClause().booleanExpression()))
+    DeleteFromStatement(tableId, tableAlias, predicate)
   }
 
   /**
@@ -2178,7 +2187,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTransformList(ctx: TransformListContext): Seq[Transform] = withOrigin(ctx) {
     def getFieldReference(
         ctx: ApplyTransformContext,
-        arg: v2.expressions.Expression): FieldReference = {
+        arg: V2Expression): FieldReference = {
       lazy val name: String = ctx.identifier.getText
       arg match {
         case ref: FieldReference =>
@@ -2191,7 +2200,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     def getSingleFieldReference(
         ctx: ApplyTransformContext,
-        arguments: Seq[v2.expressions.Expression]): FieldReference = {
+        arguments: Seq[V2Expression]): FieldReference = {
       lazy val name: String = ctx.identifier.getText
       if (arguments.size > 1) {
         throw new ParseException(s"Too many arguments for transform $name", ctx)
@@ -2248,7 +2257,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Parse an argument to a transform. An argument may be a field reference (qualified name) or
    * a value literal.
    */
-  override def visitTransformArgument(ctx: TransformArgumentContext): v2.expressions.Expression = {
+  override def visitTransformArgument(ctx: TransformArgumentContext): V2Expression = {
     withOrigin(ctx) {
       val reference = Option(ctx.qualifiedName)
           .map(typedVisit[Seq[String]])
@@ -2259,6 +2268,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       reference.orElse(literal)
           .getOrElse(throw new ParseException(s"Invalid transform argument", ctx))
     }
+  }
+
+  /**
+   * Create a [[ShowNamespacesStatement]] command.
+   */
+  override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
+    ShowNamespacesStatement(
+      Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
+      Option(ctx.pattern).map(string))
   }
 
   /**

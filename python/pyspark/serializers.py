@@ -401,6 +401,32 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         return "ArrowStreamPandasUDFSerializer"
 
 
+class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
+
+    def load_stream(self, stream):
+        """
+        Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and yield as two
+        lists of pandas.Series.
+        """
+        import pyarrow as pa
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 2:
+                batch1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                yield (
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()]
+                )
+
+            elif dataframes_in_group != 0:
+                raise ValueError(
+                    'Invalid number of pandas.DataFrames in group {0}'.format(dataframes_in_group))
+
+
 class BatchedSerializer(Serializer):
 
     """

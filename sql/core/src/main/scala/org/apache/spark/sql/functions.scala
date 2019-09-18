@@ -2521,25 +2521,25 @@ object functions {
   }
 
   /**
-   * Overlay the specified portion of `src` with `replaceString`,
-   *  starting from byte position `pos` of `inputString` and proceeding for `len` bytes.
+   * Overlay the specified portion of `src` with `replace`,
+   *  starting from byte position `pos` of `src` and proceeding for `len` bytes.
    *
    * @group string_funcs
    * @since 3.0.0
    */
-  def overlay(src: Column, replaceString: String, pos: Int, len: Int): Column = withExpr {
-    Overlay(src.expr, lit(replaceString).expr, lit(pos).expr, lit(len).expr)
+  def overlay(src: Column, replace: Column, pos: Column, len: Column): Column = withExpr {
+    Overlay(src.expr, replace.expr, pos.expr, len.expr)
   }
 
   /**
-   * Overlay the specified portion of `src` with `replaceString`,
-   *  starting from byte position `pos` of `inputString`.
+   * Overlay the specified portion of `src` with `replace`,
+   *  starting from byte position `pos` of `src`.
    *
    * @group string_funcs
    * @since 3.0.0
    */
-  def overlay(src: Column, replaceString: String, pos: Int): Column = withExpr {
-    new Overlay(src.expr, lit(replaceString).expr, lit(pos).expr)
+  def overlay(src: Column, replace: Column, pos: Column): Column = withExpr {
+    new Overlay(src.expr, replace.expr, pos.expr)
   }
 
   /**
@@ -2634,8 +2634,8 @@ object functions {
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
-   *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
+   *                 can be cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   * @param format A pattern `dd.MM.uuuu` would return a string like `18.03.1993`
    * @return A string, or null if `dateExpr` was a string that could not be cast to a timestamp
    * @note Use specialized functions like [[year]] whenever possible as they benefit from a
    * specialized implementation.

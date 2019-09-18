@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -105,7 +106,8 @@ class QueryExecution(
    * Given QueryExecution is not a public class, end users are discouraged to use this: please
    * use `Dataset.rdd` instead where conversion will be applied.
    */
-  lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
+  lazy val toRdd: RDD[InternalRow] = new SQLExecutionRDD(
+    executedPlan.execute(), sparkSession.sessionState.conf)
 
   /**
    * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
@@ -212,7 +214,7 @@ class QueryExecution(
      *
      * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
      */
-    def codegenToSeq(): Seq[(String, String)] = {
+    def codegenToSeq(): Seq[(String, String, ByteCodeStats)] = {
       org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
     }
 
