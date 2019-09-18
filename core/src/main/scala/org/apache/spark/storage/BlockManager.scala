@@ -853,7 +853,6 @@ private[spark] class BlockManager(
    * @param bufferTransformer this transformer expected to open the file if the block is backed by a
    *                          file by this it is guaranteed the whole content can be loaded
    * @tparam T result type
-   * @return
    */
   private[spark] def getRemoteBlock[T](
       blockId: BlockId,
