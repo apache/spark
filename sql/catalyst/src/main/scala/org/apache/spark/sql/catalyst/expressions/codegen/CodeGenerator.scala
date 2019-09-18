@@ -1811,6 +1811,14 @@ object CodeGenerator extends Logging {
 
   def boxedType(dt: DataType): String = boxedType(javaType(dt))
 
+  def typeName(clazz: Class[_]): String = {
+    if (clazz.isArray) {
+      typeName(clazz.getComponentType) + "[]"
+    } else {
+      clazz.getName
+    }
+  }
+
   /**
    * Returns the representation of default value for a given Java Type.
    * @param jt the string name of the Java type

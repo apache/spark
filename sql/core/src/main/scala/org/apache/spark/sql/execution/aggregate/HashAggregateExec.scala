@@ -300,7 +300,7 @@ case class HashAggregateExec(
         val splitCodes = inputVars.flatten.zipWithIndex.map { case (args, i) =>
           val doAggFunc = ctx.freshName(s"doAggregate_${aggNames(i)}")
           val argList = args.map { v =>
-            s"${typeNameForCodegen(v.javaType)} ${v.variableName}"
+            s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
           }.mkString(", ")
           val doAggFuncName = ctx.addNewFunction(doAggFunc,
             s"""
@@ -392,14 +392,6 @@ case class HashAggregateExec(
        |// evaluate aggregate functions and update aggregation buffers
        |$codeToEvalAggFunc
      """.stripMargin
-  }
-
-  private def typeNameForCodegen(clazz: Class[_]): String = {
-    if (clazz.isArray) {
-      typeNameForCodegen(clazz.getComponentType) + "[]"
-    } else {
-      clazz.getName
-    }
   }
 
   private val groupingAttributes = groupingExpressions.map(_.toAttribute)

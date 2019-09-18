@@ -1021,11 +1021,29 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("SPARK-29122: hash-based aggregates for unfixed-length decimals in the interpreter mode") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+      SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
       withTempView("t") {
         spark.range(3).selectExpr("CAST(id AS decimal(38, 0)) a").createOrReplaceTempView("t")
         checkAnswer(sql("SELECT SUM(a) FROM t"), Row(java.math.BigDecimal.valueOf(3)))
       }
+    }
+  }
+
+  test("SPARK-29140: HashAggregateExec aggregating binary type doesn't break codegen compilation") {
+    val withDistinct = countDistinct($"c1")
+
+    val schema = new StructType().add("c1", BinaryType, nullable = true)
+    val schemaWithId = StructType(StructField("id", IntegerType, nullable = false) +: schema.fields)
+
+    withSQLConf(
+      SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
+      SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val emptyRows = spark.sparkContext.parallelize(Seq.empty[Row], 1)
+      val aggDf = spark.createDataFrame(emptyRows, schemaWithId)
+        .groupBy($"id" % 10 as "group")
+        .agg(withDistinct)
+        .orderBy("group")
+      checkAnswer(aggDf, Seq.empty[Row])
     }
   }
 }
