@@ -359,7 +359,7 @@ class SessionCatalog(
       && !tableDefinition.storage.locationUri.get.isAbsolute) {
       // make the location of the table qualified.
       val qualifiedTableLocation =
-      makeQualifiedPath(tableDefinition.storage.locationUri.get)
+        makeQualifiedPath(tableDefinition.storage.locationUri.get)
       tableDefinition.copy(
         storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
         identifier = tableIdentifier)
@@ -954,7 +954,6 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Option(db)))
     requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     requireNonEmptyValueInPartitionSpec(parts.map(_.spec))
-
     externalCatalog.alterPartitions(db, table, partitionWithQualifiedPath(tableName, parts))
   }
 
