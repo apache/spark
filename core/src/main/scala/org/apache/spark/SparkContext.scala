@@ -531,7 +531,12 @@ class SparkContext(config: SparkConf) extends Logging {
     val configuredPluginClasses = conf.get(SHUFFLE_IO_PLUGIN_CLASS)
     val maybeIO = Utils.loadExtensions(
       classOf[ShuffleDataIO], Seq(configuredPluginClasses), conf)
-    require(maybeIO.size == 1, s"Failed to load plugins of type $configuredPluginClasses")
+    require(maybeIO.nonEmpty, s"At least one valid shuffle plugin must be specified by config " +
+      s"${SHUFFLE_IO_PLUGIN_CLASS.key}, but $configuredPluginClasses resulted in zero valid " +
+      s"plugins.")
+    require(maybeIO.size == 1,
+        s"Specified shuffle plugin(s) $configuredPluginClasses resulted in more than one valid " +
+        s"plugin, but only one valid plugin should be specified")
     _shuffleDriverComponents = maybeIO.head.driver()
     _shuffleDriverComponents.initializeApplication().asScala.foreach {
       case (k, v) => _conf.set(ShuffleDataIO.SHUFFLE_SPARK_CONF_PREFIX + k, v) }
