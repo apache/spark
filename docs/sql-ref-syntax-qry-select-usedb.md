@@ -20,8 +20,9 @@ license: |
 ---
 
 ### Description
-Set the provided database as current database. All subsequent queries that do not explicitly
-provide a database will resolve table names to this database. 
+`USE` statement is used to set a current database. After a current database is set,
+the unqualified database artifacts such as tables, functions  and views that are 
+referenced by SQLs are resolved from the current database. 
 The default database name is 'default'.
 
 ### Syntax
@@ -32,9 +33,9 @@ USE database_name
 ### Parameter
 
 <dl>
-  <dt><code><em>{FROM|IN} database_name</em></code></dt>
+  <dt><code><em>database_name</em></code></dt>
   <dd>
-     Name of the database will be used. If the database is not exist exception will be thrown.
+     Name of the database will be used. If the database is not exist an exception will be thrown.
   </dd>
 </dl>
 
