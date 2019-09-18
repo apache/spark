@@ -31,7 +31,7 @@ public class ExecutorPluginContext {
   public final SparkConf sparkConf;
   public final String executorId;
   public final String executorHostName;
-  public final Boolean isLocal;
+  public final boolean isLocal;
 
   @Private
   public ExecutorPluginContext(
@@ -39,7 +39,7 @@ public class ExecutorPluginContext {
       SparkConf conf,
       String id,
       String hostName,
-      Boolean local) {
+      boolean local) {
     metricRegistry = registry;
     sparkConf = conf;
     executorId = id;
