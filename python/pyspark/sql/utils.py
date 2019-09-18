@@ -16,7 +16,6 @@
 #
 
 import py4j
-import sys
 
 
 class CapturedException(Exception):
