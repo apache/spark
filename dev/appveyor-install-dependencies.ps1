@@ -81,7 +81,7 @@ if (!(Test-Path $tools)) {
 # ========================== Maven
 Push-Location $tools
 
-$mavenVer = "3.6.1"
+$mavenVer = "3.6.2"
 Start-FileDownload "https://archive.apache.org/dist/maven/maven-3/$mavenVer/binaries/apache-maven-$mavenVer-bin.zip" "maven.zip"
 
 # extract
@@ -115,7 +115,7 @@ $env:Path += ";$env:HADOOP_HOME\bin"
 Pop-Location
 
 # ========================== R
-$rVer = "3.6.0"
+$rVer = "3.6.1"
 $rToolsVer = "3.5.1"
 
 InstallR

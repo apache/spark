@@ -186,8 +186,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
       }
     }
 
-    // TODO: enable this test case after SPARK-28463 and SPARK-26969
-    ignore(s"$version get decimal type") {
+    test(s"$version get decimal type") {
       testExecuteStatementWithProtocolVersion(version,
         "SELECT cast(1 as decimal(18, 2)) as c") { rs =>
         assert(rs.next())
@@ -262,10 +261,10 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
       }
     }
 
-    // We do not fully support interval type
-    ignore(s"$version get interval type") {
+    test(s"$version get interval type") {
       testExecuteStatementWithProtocolVersion(version, "SELECT interval '1' year '2' day") { rs =>
         assert(rs.next())
+        assert(rs.getString(1) === "interval 1 years 2 days")
       }
     }
 

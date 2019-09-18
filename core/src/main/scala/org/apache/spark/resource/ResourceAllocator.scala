@@ -23,18 +23,20 @@ import org.apache.spark.SparkException
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
- * Class used to help executor/worker allocate resources
- * Please note that this class is intended to be used in a single thread.
- * @param name Resource name, e.g. gpu/fpga
- * @param addresses Resource addresses provided by the executor/worker
+ * Trait used to help executor/worker allocate resources.
+ * Please note that this is intended to be used in a single thread.
  */
-class ResourceAllocator(name: String, addresses: Seq[String]) extends Serializable {
+trait ResourceAllocator {
+
+  protected def resourceName: String
+  protected def resourceAddresses: Seq[String]
+
   /**
    * Map from an address to its availability, the value `true` means the address is available,
    * while value `false` means the address is assigned.
    * TODO Use [[OpenHashMap]] instead to gain better performance.
    */
-  private val addressAvailabilityMap = mutable.HashMap(addresses.map(_ -> true): _*)
+  private lazy val addressAvailabilityMap = mutable.HashMap(resourceAddresses.map(_ -> true): _*)
 
   /**
    * Sequence of currently available resource addresses.
@@ -45,7 +47,6 @@ class ResourceAllocator(name: String, addresses: Seq[String]) extends Serializab
 
   /**
    * Sequence of currently assigned resource addresses.
-   * Exposed for testing only.
    */
   private[spark] def assignedAddrs: Seq[String] = addressAvailabilityMap
     .flatMap { case (addr, available) =>
@@ -60,15 +61,15 @@ class ResourceAllocator(name: String, addresses: Seq[String]) extends Serializab
   def acquire(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
       if (!addressAvailabilityMap.contains(address)) {
-        throw new SparkException(s"Try to acquire an address that doesn't exist. $name address " +
-          s"$address doesn't exist.")
+        throw new SparkException(s"Try to acquire an address that doesn't exist. $resourceName " +
+          s"address $address doesn't exist.")
       }
       val isAvailable = addressAvailabilityMap(address)
       if (isAvailable) {
         addressAvailabilityMap(address) = false
       } else {
-        throw new SparkException(s"Try to acquire an address that is not available. $name " +
-          s"address $address is not available.")
+        throw new SparkException("Try to acquire an address that is not available. " +
+          s"$resourceName address $address is not available.")
       }
     }
   }
@@ -81,14 +82,14 @@ class ResourceAllocator(name: String, addresses: Seq[String]) extends Serializab
   def release(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
       if (!addressAvailabilityMap.contains(address)) {
-        throw new SparkException(s"Try to release an address that doesn't exist. $name address " +
-          s"$address doesn't exist.")
+        throw new SparkException(s"Try to release an address that doesn't exist. $resourceName " +
+          s"address $address doesn't exist.")
       }
       val isAvailable = addressAvailabilityMap(address)
       if (!isAvailable) {
         addressAvailabilityMap(address) = true
       } else {
-        throw new SparkException(s"Try to release an address that is not assigned. $name " +
+        throw new SparkException(s"Try to release an address that is not assigned. $resourceName " +
           s"address $address is not assigned.")
       }
     }

@@ -22,62 +22,63 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalog.v2.{Catalogs, Identifier, TableCatalog, TableChange}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, NamespaceChange, TableChange}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class V2SessionCatalogSuite
-    extends SparkFunSuite with SharedSQLContext with BeforeAndAfter with BeforeAndAfterAll {
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeAndAfter {
 
-  private val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
-  private val schema: StructType = new StructType()
+  val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
+  val schema: StructType = new StructType()
       .add("id", IntegerType)
       .add("data", StringType)
 
+  val testNs: Array[String] = Array("db")
+  val defaultNs: Array[String] = Array("default")
+  val testIdent: Identifier = Identifier.of(testNs, "test_table")
+
+  def newCatalog(): V2SessionCatalog = {
+    val newCatalog = new V2SessionCatalog(spark.sessionState.catalog, spark.sessionState.conf)
+    newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
+    newCatalog
+  }
+}
+
+class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
+
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    spark.sql("""CREATE DATABASE IF NOT EXISTS db""")
-    spark.sql("""CREATE DATABASE IF NOT EXISTS ns""")
-    spark.sql("""CREATE DATABASE IF NOT EXISTS ns2""")
+    val catalog = newCatalog()
+    catalog.createNamespace(Array("db"), emptyProps)
+    catalog.createNamespace(Array("db2"), emptyProps)
+    catalog.createNamespace(Array("ns"), emptyProps)
+    catalog.createNamespace(Array("ns2"), emptyProps)
   }
 
   override protected def afterAll(): Unit = {
-    spark.sql("""DROP TABLE IF EXISTS db.test_table""")
-    spark.sql("""DROP DATABASE IF EXISTS db""")
-    spark.sql("""DROP DATABASE IF EXISTS ns""")
-    spark.sql("""DROP DATABASE IF EXISTS ns2""")
+    val catalog = newCatalog()
+    catalog.dropNamespace(Array("db"))
+    catalog.dropNamespace(Array("db2"))
+    catalog.dropNamespace(Array("ns"))
+    catalog.dropNamespace(Array("ns2"))
     super.afterAll()
   }
 
   after {
     newCatalog().dropTable(testIdent)
+    newCatalog().dropTable(testIdentNew)
   }
 
-  private def newCatalog(): TableCatalog = {
-    val newCatalog = new V2SessionCatalog(spark.sessionState)
-    newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
-    newCatalog
-  }
-
-  private val testIdent = Identifier.of(Array("db"), "test_table")
-
-  test("Catalogs can load the catalog") {
-    val catalog = newCatalog()
-
-    val conf = new SQLConf
-    conf.setConfString("spark.sql.catalog.test", catalog.getClass.getName)
-
-    val loaded = Catalogs.load("test", conf)
-    assert(loaded.getClass == catalog.getClass)
-  }
+  private val testIdentNew = Identifier.of(testNs, "test_table_new")
 
   test("listTables") {
     val catalog = newCatalog()
@@ -679,5 +680,361 @@ class V2SessionCatalogSuite
 
     assert(!wasDropped)
     assert(!catalog.tableExists(testIdent))
+  }
+
+  test("renameTable") {
+    val catalog = newCatalog()
+
+    assert(!catalog.tableExists(testIdent))
+    assert(!catalog.tableExists(testIdentNew))
+
+    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+
+    assert(catalog.tableExists(testIdent))
+    catalog.renameTable(testIdent, testIdentNew)
+
+    assert(!catalog.tableExists(testIdent))
+    assert(catalog.tableExists(testIdentNew))
+  }
+
+  test("renameTable: fail if table does not exist") {
+    val catalog = newCatalog()
+
+    val exc = intercept[NoSuchTableException] {
+      catalog.renameTable(testIdent, testIdentNew)
+    }
+
+    assert(exc.message.contains(testIdent.quoted))
+    assert(exc.message.contains("not found"))
+  }
+
+  test("renameTable: fail if new table name already exists") {
+    val catalog = newCatalog()
+
+    assert(!catalog.tableExists(testIdent))
+    assert(!catalog.tableExists(testIdentNew))
+
+    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdentNew, schema, Array.empty, emptyProps)
+
+    assert(catalog.tableExists(testIdent))
+    assert(catalog.tableExists(testIdentNew))
+
+    val exc = intercept[TableAlreadyExistsException] {
+      catalog.renameTable(testIdent, testIdentNew)
+    }
+
+    assert(exc.message.contains(testIdentNew.quoted))
+    assert(exc.message.contains("already exists"))
+  }
+
+  test("renameTable: fail if db does not match for old and new table names") {
+    val catalog = newCatalog()
+    val testIdentNewOtherDb = Identifier.of(Array("db2"), "test_table_new")
+
+    assert(!catalog.tableExists(testIdent))
+    assert(!catalog.tableExists(testIdentNewOtherDb))
+
+    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+
+    assert(catalog.tableExists(testIdent))
+
+    val exc = intercept[AnalysisException] {
+      catalog.renameTable(testIdent, testIdentNewOtherDb)
+    }
+
+    assert(exc.message.contains(testIdent.namespace.quoted))
+    assert(exc.message.contains(testIdentNewOtherDb.namespace.quoted))
+    assert(exc.message.contains("RENAME TABLE source and destination databases do not match"))
+  }
+}
+
+class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
+
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  def checkMetadata(
+      expected: scala.collection.Map[String, String],
+      actual: scala.collection.Map[String, String]): Unit = {
+    // remove location and comment that are automatically added by HMS unless they are expected
+    val toRemove = V2SessionCatalog.RESERVED_PROPERTIES.filter(expected.contains)
+    assert(expected -- toRemove === actual)
+  }
+
+  test("listNamespaces: basic behavior") {
+    val catalog = newCatalog()
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
+
+    assert(catalog.listNamespaces() === Array(testNs, defaultNs))
+    assert(catalog.listNamespaces(Array()) === Array(testNs, defaultNs))
+    assert(catalog.listNamespaces(testNs) === Array())
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("listNamespaces: fail if missing namespace") {
+    val catalog = newCatalog()
+
+    assert(catalog.namespaceExists(testNs) === false)
+
+    val exc = intercept[NoSuchNamespaceException] {
+      assert(catalog.listNamespaces(testNs) === Array())
+    }
+
+    assert(exc.getMessage.contains(testNs.quoted))
+    assert(catalog.namespaceExists(testNs) === false)
+  }
+
+  test("loadNamespaceMetadata: fail missing namespace") {
+    val catalog = newCatalog()
+
+    val exc = intercept[NoSuchNamespaceException] {
+      catalog.loadNamespaceMetadata(testNs)
+    }
+
+    assert(exc.getMessage.contains(testNs.quoted))
+  }
+
+  test("loadNamespaceMetadata: non-empty metadata") {
+    val catalog = newCatalog()
+
+    assert(catalog.namespaceExists(testNs) === false)
+
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
+
+    val metadata = catalog.loadNamespaceMetadata(testNs)
+
+    assert(catalog.namespaceExists(testNs) === true)
+    checkMetadata(metadata.asScala, Map("property" -> "value"))
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("loadNamespaceMetadata: empty metadata") {
+    val catalog = newCatalog()
+
+    assert(catalog.namespaceExists(testNs) === false)
+
+    catalog.createNamespace(testNs, emptyProps)
+
+    val metadata = catalog.loadNamespaceMetadata(testNs)
+
+    assert(catalog.namespaceExists(testNs) === true)
+    checkMetadata(metadata.asScala, emptyProps.asScala)
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("createNamespace: basic behavior") {
+    val catalog = newCatalog()
+    val expectedPath = sqlContext.sessionState.catalog.getDefaultDBPath(testNs(0)).toString
+
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
+
+    assert(expectedPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+
+    assert(catalog.namespaceExists(testNs) === true)
+    val metadata = catalog.loadNamespaceMetadata(testNs).asScala
+    checkMetadata(metadata, Map("property" -> "value"))
+    assert(expectedPath === metadata("location"))
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("createNamespace: initialize location") {
+    val catalog = newCatalog()
+    val expectedPath = "file:/tmp/db.db"
+
+    catalog.createNamespace(testNs, Map("location" -> expectedPath).asJava)
+
+    assert(expectedPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+
+    assert(catalog.namespaceExists(testNs) === true)
+    val metadata = catalog.loadNamespaceMetadata(testNs).asScala
+    checkMetadata(metadata, Map.empty)
+    assert(expectedPath === metadata("location"))
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("createNamespace: fail if namespace already exists") {
+    val catalog = newCatalog()
+
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
+
+    val exc = intercept[NamespaceAlreadyExistsException] {
+      catalog.createNamespace(testNs, Map("property" -> "value2").asJava)
+    }
+
+    assert(exc.getMessage.contains(testNs.quoted))
+    assert(catalog.namespaceExists(testNs) === true)
+    checkMetadata(catalog.loadNamespaceMetadata(testNs).asScala, Map("property" -> "value"))
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("createNamespace: fail nested namespace") {
+    val catalog = newCatalog()
+
+    // ensure the parent exists
+    catalog.createNamespace(Array("db"), emptyProps)
+
+    val exc = intercept[IllegalArgumentException] {
+      catalog.createNamespace(Array("db", "nested"), emptyProps)
+    }
+
+    assert(exc.getMessage.contains("Invalid namespace name: db.nested"))
+
+    catalog.dropNamespace(Array("db"))
+  }
+
+  test("createTable: fail if namespace does not exist") {
+    val catalog = newCatalog()
+
+    assert(catalog.namespaceExists(testNs) === false)
+
+    val exc = intercept[NoSuchNamespaceException] {
+      catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    }
+
+    assert(exc.getMessage.contains(testNs.quoted))
+    assert(catalog.namespaceExists(testNs) === false)
+  }
+
+  test("dropNamespace: drop missing namespace") {
+    val catalog = newCatalog()
+
+    assert(catalog.namespaceExists(testNs) === false)
+
+    val ret = catalog.dropNamespace(testNs)
+
+    assert(ret === false)
+  }
+
+  test("dropNamespace: drop empty namespace") {
+    val catalog = newCatalog()
+
+    catalog.createNamespace(testNs, emptyProps)
+
+    assert(catalog.namespaceExists(testNs) === true)
+
+    val ret = catalog.dropNamespace(testNs)
+
+    assert(ret === true)
+    assert(catalog.namespaceExists(testNs) === false)
+  }
+
+  test("dropNamespace: fail if not empty") {
+    val catalog = newCatalog()
+
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
+    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+
+    val exc = intercept[IllegalStateException] {
+      catalog.dropNamespace(testNs)
+    }
+
+    assert(exc.getMessage.contains(testNs.quoted))
+    assert(catalog.namespaceExists(testNs) === true)
+    checkMetadata(catalog.loadNamespaceMetadata(testNs).asScala, Map("property" -> "value"))
+
+    catalog.dropTable(testIdent)
+    catalog.dropNamespace(testNs)
+  }
+
+  test("alterNamespace: basic behavior") {
+    val catalog = newCatalog()
+
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
+
+    catalog.alterNamespace(testNs, NamespaceChange.setProperty("property2", "value2"))
+    checkMetadata(
+      catalog.loadNamespaceMetadata(testNs).asScala,
+      Map("property" -> "value", "property2" -> "value2"))
+
+    catalog.alterNamespace(testNs,
+      NamespaceChange.removeProperty("property2"),
+      NamespaceChange.setProperty("property3", "value3"))
+    checkMetadata(
+      catalog.loadNamespaceMetadata(testNs).asScala,
+      Map("property" -> "value", "property3" -> "value3"))
+
+    catalog.alterNamespace(testNs, NamespaceChange.removeProperty("property3"))
+    checkMetadata(
+      catalog.loadNamespaceMetadata(testNs).asScala,
+      Map("property" -> "value"))
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("alterNamespace: update namespace location") {
+    val catalog = newCatalog()
+    val initialPath = sqlContext.sessionState.catalog.getDefaultDBPath(testNs(0)).toString
+    val newPath = "file:/tmp/db.db"
+
+    catalog.createNamespace(testNs, emptyProps)
+
+    assert(initialPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+
+    catalog.alterNamespace(testNs, NamespaceChange.setProperty("location", newPath))
+
+    assert(newPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("alterNamespace: update namespace comment") {
+    val catalog = newCatalog()
+    val newComment = "test db"
+
+    catalog.createNamespace(testNs, emptyProps)
+
+    assert(spark.catalog.getDatabase(testNs(0)).description.isEmpty)
+
+    catalog.alterNamespace(testNs, NamespaceChange.setProperty("comment", newComment))
+
+    assert(newComment === spark.catalog.getDatabase(testNs(0)).description)
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("alterNamespace: fail if namespace doesn't exist") {
+    val catalog = newCatalog()
+
+    assert(catalog.namespaceExists(testNs) === false)
+
+    val exc = intercept[NoSuchNamespaceException] {
+      catalog.alterNamespace(testNs, NamespaceChange.setProperty("property", "value"))
+    }
+
+    assert(exc.getMessage.contains(testNs.quoted))
+  }
+
+  test("alterNamespace: fail to remove location") {
+    val catalog = newCatalog()
+
+    catalog.createNamespace(testNs, emptyProps)
+
+    val exc = intercept[UnsupportedOperationException] {
+      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("location"))
+    }
+
+    assert(exc.getMessage.contains("Cannot remove reserved property: location"))
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("alterNamespace: fail to remove comment") {
+    val catalog = newCatalog()
+
+    catalog.createNamespace(testNs, Map("comment" -> "test db").asJava)
+
+    val exc = intercept[UnsupportedOperationException] {
+      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("comment"))
+    }
+
+    assert(exc.getMessage.contains("Cannot remove reserved property: comment"))
+
+    catalog.dropNamespace(testNs)
   }
 }

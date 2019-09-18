@@ -22,13 +22,14 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark._
 import org.apache.spark.sql.{functions, AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoTable, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
+class DataFrameCallbackSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
   import functions._
 
@@ -200,8 +201,8 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       sparkContext.listenerBus.waitUntilEmpty(1000)
       assert(commands.length == 3)
       assert(commands(2)._1 == "insertInto")
-      assert(commands(2)._2.isInstanceOf[InsertIntoTable])
-      assert(commands(2)._2.asInstanceOf[InsertIntoTable].table
+      assert(commands(2)._2.isInstanceOf[InsertIntoStatement])
+      assert(commands(2)._2.asInstanceOf[InsertIntoStatement].table
         .asInstanceOf[UnresolvedRelation].multipartIdentifier == Seq("tab"))
     }
     // exiting withTable adds commands(3) via onSuccess (drops tab)

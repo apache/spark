@@ -29,8 +29,6 @@ import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.SerializationUtils
-
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -433,8 +431,10 @@ private[spark] class DAGScheduler(
    * submission.
    */
   private def checkBarrierStageWithNumSlots(rdd: RDD[_]): Unit = {
-    if (rdd.isBarrier() && rdd.getNumPartitions > sc.maxNumConcurrentTasks) {
-      throw new BarrierJobSlotsNumberCheckFailed
+    val numPartitions = rdd.getNumPartitions
+    val maxNumConcurrentTasks = sc.maxNumConcurrentTasks
+    if (rdd.isBarrier() && numPartitions > maxNumConcurrentTasks) {
+      throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
     }
   }
 
@@ -696,7 +696,7 @@ private[spark] class DAGScheduler(
     if (partitions.isEmpty) {
       val time = clock.getTimeMillis()
       listenerBus.post(
-        SparkListenerJobStart(jobId, time, Seq[StageInfo](), properties))
+        SparkListenerJobStart(jobId, time, Seq[StageInfo](), Utils.cloneProperties(properties)))
       listenerBus.post(
         SparkListenerJobEnd(jobId, time, JobSucceeded))
       // Return immediately if the job is running 0 tasks
@@ -708,7 +708,7 @@ private[spark] class DAGScheduler(
     val waiter = new JobWaiter[U](this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
-      SerializationUtils.clone(properties)))
+      Utils.cloneProperties(properties)))
     waiter
   }
 
@@ -780,7 +780,7 @@ private[spark] class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, rdd.partitions.indices.toArray, callSite, listener,
-      SerializationUtils.clone(properties)))
+      Utils.cloneProperties(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -817,7 +817,7 @@ private[spark] class DAGScheduler(
       this, jobId, 1,
       (_: Int, r: MapOutputStatistics) => callback(r))
     eventProcessLoop.post(MapStageSubmitted(
-      jobId, dependency, callSite, waiter, SerializationUtils.clone(properties)))
+      jobId, dependency, callSite, waiter, Utils.cloneProperties(properties)))
     waiter
   }
 
@@ -981,11 +981,14 @@ private[spark] class DAGScheduler(
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
     } catch {
       case e: BarrierJobSlotsNumberCheckFailed =>
-        logWarning(s"The job $jobId requires to run a barrier stage that requires more slots " +
-          "than the total number of slots in the cluster currently.")
         // If jobId doesn't exist in the map, Scala coverts its value null to 0: Int automatically.
         val numCheckFailures = barrierJobIdToNumTasksCheckFailures.compute(jobId,
           (_: Int, value: Int) => value + 1)
+
+        logWarning(s"Barrier stage in job $jobId requires ${e.requiredConcurrentTasks} slots, " +
+          s"but only ${e.maxConcurrentTasks} are available. " +
+          s"Will retry up to ${maxFailureNumTasksCheck - numCheckFailures + 1} more times")
+
         if (numCheckFailures <= maxFailureNumTasksCheck) {
           messageScheduler.schedule(
             new Runnable {
@@ -1571,13 +1574,13 @@ private[spark] class DAGScheduler(
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
               if (mapStage.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
-                // It's a little tricky to find all the succeeding stages of `failedStage`, because
+                // It's a little tricky to find all the succeeding stages of `mapStage`, because
                 // each stage only know its parents not children. Here we traverse the stages from
                 // the leaf nodes (the result stages of active jobs), and rollback all the stages
-                // in the stage chains that connect to the `failedStage`. To speed up the stage
+                // in the stage chains that connect to the `mapStage`. To speed up the stage
                 // traversing, we collect the stages to rollback first. If a stage needs to
                 // rollback, all its succeeding stages need to rollback to.
-                val stagesToRollback = HashSet(failedStage)
+                val stagesToRollback = HashSet[Stage](mapStage)
 
                 def collectStagesToRollback(stageChain: List[Stage]): Unit = {
                   if (stagesToRollback.contains(stageChain.head)) {

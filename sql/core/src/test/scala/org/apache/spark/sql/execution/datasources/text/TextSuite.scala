@@ -27,11 +27,11 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.TestUtils
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
-class TextSuite extends QueryTest with SharedSQLContext {
+class TextSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("reading text file") {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util
 import java.util.Locale
 
 import scala.collection.mutable
@@ -24,9 +25,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, LookupCatalog, TableChange}
-import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform}
-import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util.loadTable
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -36,15 +34,17 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, DescribeTableStatement, InsertIntoStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
-import org.apache.spark.sql.sources.v2.Table
+import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
@@ -59,6 +59,24 @@ object SimpleAnalyzer extends Analyzer(
     override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
   },
   new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+
+object FakeV2SessionCatalog extends TableCatalog {
+  private def fail() = throw new UnsupportedOperationException
+  override def listTables(namespace: Array[String]): Array[Identifier] = fail()
+  override def loadTable(ident: Identifier): Table = {
+    throw new NoSuchTableException(ident.toString)
+  }
+  override def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = fail()
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = fail()
+  override def dropTable(ident: Identifier): Boolean = fail()
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
+  override def name(): String = fail()
+}
 
 /**
  * Provides a way to keep state during the analysis, this enables us to decouple the concerns
@@ -101,18 +119,21 @@ object AnalysisContext {
  */
 class Analyzer(
     catalog: SessionCatalog,
+    v2SessionCatalog: TableCatalog,
     conf: SQLConf,
     maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
+  // Only for tests.
   def this(catalog: SessionCatalog, conf: SQLConf) = {
-    this(catalog, conf, conf.optimizerMaxIterations)
+    this(catalog, FakeV2SessionCatalog, conf, conf.optimizerMaxIterations)
   }
 
-  override protected def defaultCatalogName: Option[String] = conf.defaultV2Catalog
+  def this(catalog: SessionCatalog, v2SessionCatalog: TableCatalog, conf: SQLConf) = {
+    this(catalog, v2SessionCatalog, conf, conf.optimizerMaxIterations)
+  }
 
-  override protected def lookupCatalog(name: String): CatalogPlugin =
-    throw new CatalogNotFoundException("No catalog lookup function")
+  override val catalogManager: CatalogManager = new CatalogManager(conf, v2SessionCatalog)
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {
@@ -643,15 +664,22 @@ class Analyzer(
    * [[ResolveRelations]] still resolves v1 tables.
    */
   object ResolveTables extends Rule[LogicalPlan] {
-    import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
-          if catalog.isTemporaryTable(ident) =>
-        u // temporary views take precedence over catalog table names
+      case u: UnresolvedRelation =>
+        val v2TableOpt = lookupV2Relation(u.multipartIdentifier) match {
+          case scala.Left((_, _, tableOpt)) => tableOpt
+          case scala.Right(tableOpt) => tableOpt
+        }
+        v2TableOpt.map(DataSourceV2Relation.create).getOrElse(u)
 
-      case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalogPlugin), ident)) =>
-        loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
+      case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
+        val v2TableOpt = lookupV2Relation(u.multipartIdentifier) match {
+          case scala.Left((_, _, tableOpt)) => tableOpt
+          case scala.Right(tableOpt) => tableOpt
+        }
+        v2TableOpt.map(DataSourceV2Relation.create).map { v2Relation =>
+          i.copy(table = v2Relation)
+        }.getOrElse(i)
     }
   }
 
@@ -722,7 +750,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case i @ InsertIntoTable(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
+      case i @ InsertIntoStatement(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
           if child.resolved =>
         EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
           case v: View =>
@@ -766,40 +794,28 @@ class Analyzer(
 
   object ResolveInsertInto extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoStatement(
-          UnresolvedRelation(CatalogObjectIdentifier(Some(tableCatalog), ident)), _, _, _, _)
-          if i.query.resolved =>
-        loadTable(tableCatalog, ident)
-            .map(DataSourceV2Relation.create)
-            .map(relation => {
-              // ifPartitionNotExists is append with validation, but validation is not supported
-              if (i.ifPartitionNotExists) {
-                throw new AnalysisException(
-                  s"Cannot write, IF NOT EXISTS is not supported for table: ${relation.table.name}")
-              }
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) if i.query.resolved =>
+        // ifPartitionNotExists is append with validation, but validation is not supported
+        if (i.ifPartitionNotExists) {
+          throw new AnalysisException(
+            s"Cannot write, IF NOT EXISTS is not supported for table: ${r.table.name}")
+        }
 
-              val partCols = partitionColumnNames(relation.table)
-              validatePartitionSpec(partCols, i.partitionSpec)
+        val partCols = partitionColumnNames(r.table)
+        validatePartitionSpec(partCols, i.partitionSpec)
 
-              val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get)
-              val query = addStaticPartitionColumns(relation, i.query, staticPartitions)
-              val dynamicPartitionOverwrite = partCols.size > staticPartitions.size &&
-                  conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
+        val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get)
+        val query = addStaticPartitionColumns(r, i.query, staticPartitions)
+        val dynamicPartitionOverwrite = partCols.size > staticPartitions.size &&
+          conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
-              if (!i.overwrite) {
-                AppendData.byPosition(relation, query)
-              } else if (dynamicPartitionOverwrite) {
-                OverwritePartitionsDynamic.byPosition(relation, query)
-              } else {
-                OverwriteByExpression.byPosition(
-                  relation, query, staticDeleteExpression(relation, staticPartitions))
-              }
-            })
-            .getOrElse(i)
-
-      case i @ InsertIntoStatement(UnresolvedRelation(AsTableIdentifier(_)), _, _, _, _)
-          if i.query.resolved =>
-        InsertIntoTable(i.table, i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists)
+        if (!i.overwrite) {
+          AppendData.byPosition(r, query)
+        } else if (dynamicPartitionOverwrite) {
+          OverwritePartitionsDynamic.byPosition(r, query)
+        } else {
+          OverwriteByExpression.byPosition(r, query, staticDeleteExpression(r, staticPartitions))
+        }
     }
 
     private def partitionColumnNames(table: Table): Seq[String] = {
@@ -903,21 +919,15 @@ class Analyzer(
    * the table identifier does not include a catalog.
    */
   object ResolveAlterTable extends Rule[LogicalPlan] {
-    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case alter @ AlterTableAddColumnsStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), cols) =>
+      case alter @ AlterTableAddColumnsStatement(tableName, cols) =>
         val changes = cols.map { col =>
           TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
         }
+        resolveV2Alter(tableName, changes).getOrElse(alter)
 
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          changes)
-
-      case alter @ AlterTableAlterColumnStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), colName, dataType, comment) =>
+      case alter @ AlterTableAlterColumnStatement(tableName, colName, dataType, comment) =>
         val typeChange = dataType.map { newDataType =>
           TableChange.updateColumnType(colName.toArray, newDataType, true)
         }
@@ -926,51 +936,51 @@ class Analyzer(
           TableChange.updateColumnComment(colName.toArray, newComment)
         }
 
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          typeChange.toSeq ++ commentChange.toSeq)
+        resolveV2Alter(tableName, typeChange.toSeq ++ commentChange.toSeq).getOrElse(alter)
 
-      case alter @ AlterTableRenameColumnStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), col, newName) =>
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          Seq(TableChange.renameColumn(col.toArray, newName)))
+      case alter @ AlterTableRenameColumnStatement(tableName, col, newName) =>
+        val changes = Seq(TableChange.renameColumn(col.toArray, newName))
+        resolveV2Alter(tableName, changes).getOrElse(alter)
 
-      case alter @ AlterTableDropColumnsStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), cols) =>
+      case alter @ AlterTableDropColumnsStatement(tableName, cols) =>
         val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          changes)
+        resolveV2Alter(tableName, changes).getOrElse(alter)
 
-      case alter @ AlterTableSetPropertiesStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), props) =>
-        val changes = props.map {
-          case (key, value) =>
-            TableChange.setProperty(key, value)
+      case alter @ AlterTableSetPropertiesStatement(tableName, props) =>
+        val changes = props.map { case (key, value) =>
+          TableChange.setProperty(key, value)
         }
 
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          changes.toSeq)
+        resolveV2Alter(tableName, changes.toSeq).getOrElse(alter)
 
-      case alter @ AlterTableUnsetPropertiesStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), keys, _) =>
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          keys.map(key => TableChange.removeProperty(key)))
+      case alter @ AlterTableUnsetPropertiesStatement(tableName, keys, _) =>
+        resolveV2Alter(tableName, keys.map(key => TableChange.removeProperty(key))).getOrElse(alter)
 
-      case alter @ AlterTableSetLocationStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), newLoc) =>
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          Seq(TableChange.setProperty("location", newLoc)))
+      case alter @ AlterTableSetLocationStatement(tableName, newLoc) =>
+        resolveV2Alter(tableName, Seq(TableChange.setProperty("location", newLoc))).getOrElse(alter)
+    }
+
+    private def resolveV2Alter(
+        tableName: Seq[String],
+        changes: Seq[TableChange]): Option[AlterTable] = {
+      lookupV2Relation(tableName) match {
+        case scala.Left((v2Catalog, ident, tableOpt)) =>
+          Some(AlterTable(
+            v2Catalog.asTableCatalog,
+            ident,
+            tableOpt.map(DataSourceV2Relation.create).getOrElse(UnresolvedRelation(tableName)),
+            changes
+          ))
+        case scala.Right(tableOpt) =>
+          tableOpt.map { table =>
+            AlterTable(
+              sessionCatalog.asTableCatalog,
+              Identifier.of(tableName.init.toArray, tableName.last),
+              DataSourceV2Relation.create(table),
+              changes
+            )
+          }
+      }
     }
   }
   /**
@@ -1181,6 +1191,12 @@ class Analyzer(
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
+      case f @ FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, _, _, left, right) =>
+        val leftRes = leftAttributes
+          .map(x => resolveExpressionBottomUp(x, left).asInstanceOf[Attribute])
+        val rightRes = rightAttributes
+          .map(x => resolveExpressionBottomUp(x, right).asInstanceOf[Attribute])
+        f.copy(leftAttributes = leftRes, rightAttributes = rightRes)
       // intersect/except will be rewritten to join at the begininng of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
@@ -1640,7 +1656,8 @@ class Analyzer(
                 // AggregateExpression.
                 case wf: AggregateWindowFunction =>
                   if (isDistinct) {
-                    failAnalysis(s"${wf.prettyName} does not support the modifier DISTINCT")
+                    failAnalysis(
+                      s"DISTINCT specified, but ${wf.prettyName} is not an aggregate function")
                   } else {
                     wf
                   }
@@ -1649,7 +1666,8 @@ class Analyzer(
                 // This function is not an aggregate function, just return the resolved one.
                 case other =>
                   if (isDistinct) {
-                    failAnalysis(s"${other.prettyName} does not support the modifier DISTINCT")
+                    failAnalysis(
+                      s"DISTINCT specified, but ${other.prettyName} is not an aggregate function")
                   } else {
                     other
                   }
@@ -1761,6 +1779,8 @@ class Analyzer(
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q.children)
+      case d: DeleteFromTable if d.childrenResolved =>
+        resolveSubQueries(d, d.children)
     }
   }
 
@@ -1799,15 +1819,18 @@ class Analyzer(
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
       // Collect all Windowed Aggregate Expressions.
-      val windowedAggExprs = exprs.flatMap { expr =>
+      val windowedAggExprs: Set[Expression] = exprs.flatMap { expr =>
         expr.collect {
           case WindowExpression(ae: AggregateExpression, _) => ae
+          case WindowExpression(e: PythonUDF, _) if PythonUDF.isGroupedAggPandasUDF(e) => e
         }
       }.toSet
 
       // Find the first Aggregate Expression that is not Windowed.
       exprs.exists(_.collectFirst {
         case ae: AggregateExpression if !windowedAggExprs.contains(ae) => ae
+        case e: PythonUDF if PythonUDF.isGroupedAggPandasUDF(e) &&
+          !windowedAggExprs.contains(e) => e
       }.isDefined)
     }
   }
@@ -2005,6 +2028,58 @@ class Analyzer(
         val generators = projectList.filter(hasGenerator).map(trimAlias)
         throw new AnalysisException("Only one generator allowed per select clause but found " +
           generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
+
+      case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
+        val nestedGenerator = aggList.find(hasNestedGenerator).get
+        throw new AnalysisException("Generators are not supported when it's nested in " +
+          "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
+
+      case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
+        val generators = aggList.filter(hasGenerator).map(trimAlias)
+        throw new AnalysisException("Only one generator allowed per aggregate clause but found " +
+          generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
+
+      case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
+          case AliasedGenerator(_, _, _) => true
+          case other => other.resolved
+        } && aggList.exists(hasGenerator) =>
+        // If generator in the aggregate list was visited, set the boolean flag true.
+        var generatorVisited = false
+
+        val projectExprs = Array.ofDim[NamedExpression](aggList.length)
+        val newAggList = aggList
+          .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+          .zipWithIndex
+          .flatMap {
+            case (AliasedGenerator(generator, names, outer), idx) =>
+              // It's a sanity check, this should not happen as the previous case will throw
+              // exception earlier.
+              assert(!generatorVisited, "More than one generator found in aggregate.")
+              generatorVisited = true
+
+              val newGenChildren: Seq[Expression] = generator.children.zipWithIndex.map {
+                case (e, idx) => if (e.foldable) e else Alias(e, s"_gen_input_${idx}")()
+              }
+              val newGenerator = {
+                val g = generator.withNewChildren(newGenChildren.map { e =>
+                  if (e.foldable) e else e.asInstanceOf[Alias].toAttribute
+                }).asInstanceOf[Generator]
+                if (outer) GeneratorOuter(g) else g
+              }
+              val newAliasedGenerator = if (names.length == 1) {
+                Alias(newGenerator, names(0))()
+              } else {
+                MultiAlias(newGenerator, names)
+              }
+              projectExprs(idx) = newAliasedGenerator
+              newGenChildren.filter(!_.foldable).asInstanceOf[Seq[NamedExpression]]
+            case (other, idx) =>
+              projectExprs(idx) = other.toAttribute
+              other :: Nil
+          }
+
+        val newAgg = Aggregate(groupList, newAggList, child)
+        Project(projectExprs.toList, newAgg)
 
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.
@@ -2503,7 +2578,7 @@ class Analyzer(
    * Resolves columns of an output table from the data in a logical plan. This rule will:
    *
    * - Reorder columns when the write is by name
-   * - Insert safe casts when data types do not match
+   * - Insert casts when data types do not match
    * - Insert aliases when column names do not match
    * - Detect plans that are not compatible with the output table and throw AnalysisException
    */
@@ -2511,7 +2586,9 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case append @ AppendData(table, query, isByName)
           if table.resolved && query.resolved && !append.outputResolved =>
-        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+        val projection =
+          TableOutputResolver.resolveOutputColumns(
+            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
 
         if (projection != query) {
           append.copy(query = projection)
@@ -2521,7 +2598,9 @@ class Analyzer(
 
       case overwrite @ OverwriteByExpression(table, _, query, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
-        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+        val projection =
+          TableOutputResolver.resolveOutputColumns(
+            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
 
         if (projection != query) {
           overwrite.copy(query = projection)
@@ -2531,7 +2610,9 @@ class Analyzer(
 
       case overwrite @ OverwritePartitionsDynamic(table, query, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
-        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+        val projection =
+          TableOutputResolver.resolveOutputColumns(
+            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
 
         if (projection != query) {
           overwrite.copy(query = projection)
@@ -2539,81 +2620,18 @@ class Analyzer(
           overwrite
         }
     }
+  }
 
-    def resolveOutputColumns(
-        tableName: String,
-        expected: Seq[Attribute],
-        query: LogicalPlan,
-        byName: Boolean): LogicalPlan = {
-
-      if (expected.size < query.output.size) {
-        throw new AnalysisException(
-          s"""Cannot write to '$tableName', too many data columns:
-             |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
-             |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}""".stripMargin)
-      }
-
-      val errors = new mutable.ArrayBuffer[String]()
-      val resolved: Seq[NamedExpression] = if (byName) {
-        expected.flatMap { tableAttr =>
-          query.resolveQuoted(tableAttr.name, resolver) match {
-            case Some(queryExpr) =>
-              checkField(tableAttr, queryExpr, byName, err => errors += err)
-            case None =>
-              errors += s"Cannot find data for output column '${tableAttr.name}'"
-              None
-          }
-        }
-
-      } else {
-        if (expected.size > query.output.size) {
-          throw new AnalysisException(
-            s"""Cannot write to '$tableName', not enough data columns:
-               |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
-               |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
-                .stripMargin)
-        }
-
-        query.output.zip(expected).flatMap {
-          case (queryExpr, tableAttr) =>
-            checkField(tableAttr, queryExpr, byName, err => errors += err)
-        }
-      }
-
-      if (errors.nonEmpty) {
-        throw new AnalysisException(
-          s"Cannot write incompatible data to table '$tableName':\n- ${errors.mkString("\n- ")}")
-      }
-
-      Project(resolved, query)
+  private def storeAssignmentPolicy: StoreAssignmentPolicy.Value = {
+    val policy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.STRICT)
+    // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
+    if (policy == StoreAssignmentPolicy.LEGACY) {
+      val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
+      throw new AnalysisException(s"""
+        |"LEGACY" store assignment policy is disallowed in Spark data source V2.
+        |Please set the configuration $configKey to other values.""".stripMargin)
     }
-
-    private def checkField(
-        tableAttr: Attribute,
-        queryExpr: NamedExpression,
-        byName: Boolean,
-        addError: String => Unit): Option[NamedExpression] = {
-
-      // run the type check first to ensure type errors are present
-      val canWrite = DataType.canWrite(
-        queryExpr.dataType, tableAttr.dataType, byName, resolver, tableAttr.name, addError)
-
-      if (queryExpr.nullable && !tableAttr.nullable) {
-        addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
-        None
-
-      } else if (!canWrite) {
-        None
-
-      } else {
-        // always add an UpCast. it will be removed in the optimizer if it is unnecessary.
-        Some(Alias(
-          UpCast(queryExpr, tableAttr.dataType), tableAttr.name
-        )(
-          explicitMetadata = Option(tableAttr.metadata)
-        ))
-      }
-    }
+    policy
   }
 
   private def commonNaturalJoinProcessing(
@@ -2817,6 +2835,39 @@ class Analyzer(
 
         case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
       }
+    }
+  }
+
+  /**
+   * Performs the lookup of DataSourceV2 Tables. The order of resolution is:
+   *   1. Check if this relation is a temporary table
+   *   2. Check if it has a catalog identifier. Here we try to load the table. If we find the table,
+   *      we can return the table. The result returned by an explicit catalog will be returned on
+   *      the Left projection of the Either.
+   *   3. Try resolving the relation using the V2SessionCatalog if that is defined. If the
+   *      V2SessionCatalog returns a V1 table definition (UnresolvedTable), then we return a `None`
+   *      on the right side so that we can fallback to the V1 code paths.
+   * The basic idea is, if a value is returned on the Left, it means a v2 catalog is defined and
+   * must be used to resolve the table. If a value is returned on the right, then we can try
+   * creating a V2 relation if a V2 Table is defined. If it isn't defined, then we should defer
+   * to V1 code paths.
+   */
+  private def lookupV2Relation(
+      identifier: Seq[String]
+      ): Either[(CatalogPlugin, Identifier, Option[Table]), Option[Table]] = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+
+    identifier match {
+      case AsTemporaryViewIdentifier(ti) if catalog.isTemporaryTable(ti) =>
+        scala.Right(None)
+      case CatalogObjectIdentifier(Some(v2Catalog), ident) =>
+        scala.Left((v2Catalog, ident, loadTable(v2Catalog, ident)))
+      case CatalogObjectIdentifier(None, ident) =>
+        loadTable(catalogManager.v2SessionCatalog, ident) match {
+          case Some(_: V1Table) => scala.Right(None)
+          case other => scala.Right(other)
+        }
+      case _ => scala.Right(None)
     }
   }
 }

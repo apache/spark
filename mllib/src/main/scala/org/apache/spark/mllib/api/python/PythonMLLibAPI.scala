@@ -347,7 +347,6 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[Vector],
       k: Int,
       maxIterations: Int,
-      runs: Int,
       initializationMode: String,
       seed: java.lang.Long,
       initializationSteps: Int,

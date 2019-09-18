@@ -24,10 +24,9 @@ import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.unsafe.types.UTF8String
 
 
 private[kafka010] class KafkaRelation(
@@ -36,6 +35,7 @@ private[kafka010] class KafkaRelation(
     sourceOptions: CaseInsensitiveMap[String],
     specifiedKafkaParams: Map[String, String],
     failOnDataLoss: Boolean,
+    includeHeaders: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
     endingOffsets: KafkaOffsetRangeLimit)
   extends BaseRelation with TableScan with Logging {
@@ -49,7 +49,9 @@ private[kafka010] class KafkaRelation(
     (sqlContext.sparkContext.conf.get(NETWORK_TIMEOUT) * 1000L).toString
   ).toLong
 
-  override def schema: StructType = KafkaOffsetReader.kafkaSchema
+  private val converter = new KafkaRecordToRowConverter()
+
+  override def schema: StructType = KafkaRecordToRowConverter.kafkaSchema(includeHeaders)
 
   override def buildScan(): RDD[Row] = {
     // Each running query should use its own group id. Otherwise, the query may be only assigned
@@ -100,18 +102,14 @@ private[kafka010] class KafkaRelation(
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val executorKafkaParams =
       KafkaSourceProvider.kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId)
+    val toInternalRow = if (includeHeaders) {
+      converter.toInternalRowWithHeaders
+    } else {
+      converter.toInternalRowWithoutHeaders
+    }
     val rdd = new KafkaSourceRDD(
       sqlContext.sparkContext, executorKafkaParams, offsetRanges,
-      pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer = false).map { cr =>
-      InternalRow(
-        cr.key,
-        cr.value,
-        UTF8String.fromString(cr.topic),
-        cr.partition,
-        cr.offset,
-        DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(cr.timestamp)),
-        cr.timestampType.id)
-    }
+      pollTimeoutMs, failOnDataLoss).map(toInternalRow)
     sqlContext.internalCreateDataFrame(rdd.setName("kafka"), schema).rdd
   }
 

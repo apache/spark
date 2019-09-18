@@ -94,6 +94,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server = new HistoryServer(conf, provider, securityManager, 18080)
     server.initialize()
     server.bind()
+    provider.start()
     port = server.boundPort
   }
 
@@ -170,6 +171,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
     "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors",
     "executor memory usage" -> "applications/app-20161116163331-0000/executors",
+    "executor resource information" -> "applications/application_1555004656427_0144/executors",
 
     "app environment" -> "applications/app-20161116163331-0000/environment",
 
@@ -450,6 +452,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server = new HistoryServer(myConf, provider, securityManager, 0)
     server.initialize()
     server.bind()
+    provider.start()
     val port = server.boundPort
     val metrics = server.cacheMetrics
 

@@ -261,12 +261,17 @@
       <artifactId>jersey-container-servlet-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-all</artifactId>
+      <groupId>org.glassfish.jersey.inject</groupId>
+      <artifactId>jersey-hk2</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.test-framework.providers</groupId>
+      <artifactId>jersey-test-framework-provider-simple</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
-      <artifactId>netty</artifactId>
+      <artifactId>netty-all</artifactId>
     </dependency>
     <dependency>
       <groupId>com.clearspring.analytics</groupId>

@@ -46,7 +46,7 @@ Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
 or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 8+, Scala 2.12, Python 2.7+/3.4+ and R 3.1+.
+Spark runs on Java 8, Scala 2.12, Python 2.7+/3.4+ and R 3.1+.
 Python 2 support is deprecated as of Spark 3.0.0.
 R prior to version 3.4 support is deprecated as of Spark 3.0.0.
 For the Scala API, Spark {{site.SPARK_VERSION}}
@@ -146,6 +146,7 @@ options for deployment:
 * Integration with other storage systems:
   * [Cloud Infrastructures](cloud-integration.html)
   * [OpenStack Swift](storage-openstack-swift.html)
+* [Migration Guide](migration-guide.html): Migration guides for Spark components
 * [Building Spark](building-spark.html): build Spark using the Maven system
 * [Contributing to Spark](https://spark.apache.org/contributing.html)
 * [Third Party Projects](https://spark.apache.org/third-party-projects.html): related third party Spark projects

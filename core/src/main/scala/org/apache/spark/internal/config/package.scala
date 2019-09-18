@@ -1026,7 +1026,7 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val SHUFFLE_UNDAFE_FAST_MERGE_ENABLE =
+  private[spark] val SHUFFLE_UNSAFE_FAST_MERGE_ENABLE =
     ConfigBuilder("spark.shuffle.unsafe.fastMergeEnabled")
       .doc("Whether to perform a fast spill merge.")
       .booleanConf
@@ -1058,7 +1058,7 @@ package object config {
     ConfigBuilder("spark.barrier.sync.timeout")
       .doc("The timeout in seconds for each barrier() call from a barrier task. If the " +
         "coordinator didn't receive all the sync messages from barrier tasks within the " +
-        "configed time, throw a SparkException to fail all the tasks. The default value is set " +
+        "configured time, throw a SparkException to fail all the tasks. The default value is set " +
         "to 31536000(3600 * 24 * 365) so the barrier() call shall wait for one year.")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v > 0, "The value should be a positive time value.")

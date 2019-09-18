@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.annotation.{Experimental, Unstable}
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalog.v2.CatalogPlugin
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -27,14 +26,13 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.v2.{V2StreamingScanSupportCheck, V2WriteSupportCheck}
+import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
 /**
  * Builder that produces a Hive-aware `SessionState`.
  */
-@Experimental
 @Unstable
 class HiveSessionStateBuilder(session: SparkSession, parentState: Option[SessionState] = None)
   extends BaseSessionStateBuilder(session, parentState) {
@@ -69,13 +67,13 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   /**
    * A logical query plan `Analyzer` with rules specific to Hive.
    */
-  override protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
+  override protected def analyzer: Analyzer = new Analyzer(catalog, v2SessionCatalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
-        DataSourceResolution(conf, this) +:
+        DataSourceResolution(conf, this.catalogManager) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -91,11 +89,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
         PreReadCheck +:
-        V2WriteSupportCheck +:
-        V2StreamingScanSupportCheck +:
+        TableCapabilityCheck +:
         customCheckRules
-
-    override protected def lookupCatalog(name: String): CatalogPlugin = session.catalog(name)
   }
 
   /**

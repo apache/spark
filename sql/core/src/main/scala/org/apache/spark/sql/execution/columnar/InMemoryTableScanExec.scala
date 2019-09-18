@@ -49,11 +49,11 @@ case class InMemoryTableScanExec(
     }
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override def doCanonicalize(): SparkPlan =
-    copy(attributes = attributes.map(QueryPlan.normalizeExprId(_, relation.output)),
-      predicates = predicates.map(QueryPlan.normalizeExprId(_, relation.output)),
+    copy(attributes = attributes.map(QueryPlan.normalizeExpressions(_, relation.output)),
+      predicates = predicates.map(QueryPlan.normalizeExpressions(_, relation.output)),
       relation = relation.canonicalized.asInstanceOf[InMemoryRelation])
 
   override def vectorTypes: Option[Seq[String]] =

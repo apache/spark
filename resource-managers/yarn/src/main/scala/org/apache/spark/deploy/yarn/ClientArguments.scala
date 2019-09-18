@@ -74,7 +74,7 @@ private[spark] class ClientArguments(args: Array[String]) {
       s"""
       |Usage: org.apache.spark.deploy.yarn.Client [options]
       |Options:
-      |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster
+      |  --jar JAR_PATH           Path to your application's JAR file (required in YARN cluster
       |                           mode)
       |  --class CLASS_NAME       Name of your application's main class (required)
       |  --primary-py-file        A main Python file

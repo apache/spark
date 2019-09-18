@@ -229,10 +229,6 @@ private[spark] class SparkSubmit extends Logging {
     // Set the cluster manager
     val clusterManager: Int = args.master match {
       case "yarn" => YARN
-      case "yarn-client" | "yarn-cluster" =>
-        logWarning(s"Master ${args.master} is deprecated since 2.0." +
-          " Please use master \"yarn\" with specified deploy mode instead.")
-        YARN
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
       case m if m.startsWith("k8s") => KUBERNETES
@@ -251,22 +247,7 @@ private[spark] class SparkSubmit extends Logging {
         -1
     }
 
-    // Because the deprecated way of specifying "yarn-cluster" and "yarn-client" encapsulate both
-    // the master and deploy mode, we have some logic to infer the master and deploy mode
-    // from each other if only one is specified, or exit early if they are at odds.
     if (clusterManager == YARN) {
-      (args.master, args.deployMode) match {
-        case ("yarn-cluster", null) =>
-          deployMode = CLUSTER
-          args.master = "yarn"
-        case ("yarn-cluster", "client") =>
-          error("Client deploy mode is not compatible with master \"yarn-cluster\"")
-        case ("yarn-client", "cluster") =>
-          error("Cluster deploy mode is not compatible with master \"yarn-client\"")
-        case (_, mode) =>
-          args.master = "yarn"
-      }
-
       // Make sure YARN is included in our build if we're trying to use it
       if (!Utils.classIsLoadable(YARN_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
         error(
@@ -1047,7 +1028,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
    * Return whether the given primary resource requires running R.
    */
   private[deploy] def isR(res: String): Boolean = {
-    res != null && res.endsWith(".R") || res == SPARKR_SHELL
+    res != null && (res.endsWith(".R") || res.endsWith(".r")) || res == SPARKR_SHELL
   }
 
   private[deploy] def isInternal(res: String): Boolean = {

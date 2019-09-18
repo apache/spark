@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -32,10 +33,10 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext with KafkaTest {
+abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession with KafkaTest {
 
   import testImplicits._
 
@@ -46,7 +47,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "kafka")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "kafka")
 
   protected def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
@@ -70,7 +71,8 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
   protected def createDF(
       topic: String,
       withOptions: Map[String, String] = Map.empty[String, String],
-      brokerAddress: Option[String] = None) = {
+      brokerAddress: Option[String] = None,
+      includeHeaders: Boolean = false) = {
     val df = spark
       .read
       .format("kafka")
@@ -80,7 +82,13 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
     withOptions.foreach {
       case (key, value) => df.option(key, value)
     }
-    df.load().selectExpr("CAST(value AS STRING)")
+    if (includeHeaders) {
+      df.option("includeHeaders", "true")
+      df.load()
+        .selectExpr("CAST(value AS STRING)", "headers")
+    } else {
+      df.load().selectExpr("CAST(value AS STRING)")
+    }
   }
 
   test("explicit earliest to latest offsets") {
@@ -145,6 +153,27 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
     // latest offset partition 1, should change
     testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(1))
     checkAnswer(df, (0 to 30).map(_.toString).toDF)
+  }
+
+  test("default starting and ending offsets with headers") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessage(
+      topic, ("1", Seq()), Some(0)
+    )
+    testUtils.sendMessage(
+      topic, ("2", Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))), Some(1)
+    )
+    testUtils.sendMessage(
+      topic, ("3", Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8)))), Some(2)
+    )
+
+    // Implicit offset values, should default to earliest and latest
+    val df = createDF(topic, includeHeaders = true)
+    // Test that we default to "earliest" and "latest"
+    checkAnswer(df, Seq(("1", null),
+      ("2", Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))),
+      ("3", Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8))))).toDF)
   }
 
   test("reuse same dataframe in query") {
@@ -385,7 +414,7 @@ class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "kafka")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "kafka")
 
   test("V1 Source is used when set through SQLConf") {
     val topic = newTopic()
@@ -400,7 +429,7 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("V2 Source is used when set through SQLConf") {
     val topic = newTopic()

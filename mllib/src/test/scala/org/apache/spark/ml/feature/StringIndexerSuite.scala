@@ -246,7 +246,7 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCol("myOutputCol")
       .setHandleInvalid("skip")
     val newInstance = testDefaultReadWrite(instance)
-    assert(newInstance.labels === instance.labels)
+    assert(newInstance.labelsArray(0) === instance.labelsArray(0))
   }
 
   test("IndexToString params") {
@@ -292,7 +292,7 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
     val idx2str = new IndexToString()
       .setInputCol("labelIndex")
       .setOutputCol("sameLabel")
-      .setLabels(indexer.labels)
+      .setLabels(indexer.labelsArray(0))
 
     testTransformer[(Int, String, Double)](transformed, idx2str, "sameLabel", "label") {
       case Row(sameLabel, label) =>

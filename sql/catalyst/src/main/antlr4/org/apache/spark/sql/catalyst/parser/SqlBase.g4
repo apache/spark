@@ -92,6 +92,8 @@ statement
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
     | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
+    | SHOW NAMESPACES ((FROM | IN) multipartIdentifier)?
+        (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitioning=transformList) |
@@ -183,7 +185,7 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
-    | SHOW TABLES ((FROM | IN) db=errorCapturingIdentifier)?
+    | SHOW TABLES ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) db=errorCapturingIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
@@ -214,6 +216,7 @@ statement
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
+    | DELETE FROM multipartIdentifier tableAlias whereClause?          #deleteFromTable
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -1005,6 +1008,7 @@ ansiNonReserved
     | MINUTES
     | MONTHS
     | MSCK
+    | NAMESPACES
     | NO
     | NULLS
     | OF
@@ -1254,6 +1258,7 @@ nonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAMESPACES
     | NO
     | NOT
     | NULL
@@ -1514,6 +1519,7 @@ MINUTES: 'MINUTES';
 MONTH: 'MONTH';
 MONTHS: 'MONTHS';
 MSCK: 'MSCK';
+NAMESPACES: 'NAMESPACES';
 NATURAL: 'NATURAL';
 NO: 'NO';
 NOT: 'NOT' | '!';

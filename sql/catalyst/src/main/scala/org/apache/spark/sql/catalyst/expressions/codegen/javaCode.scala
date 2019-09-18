@@ -143,7 +143,10 @@ trait Block extends TreeNode[Block] with JavaCode {
     case _ => code.trim
   }
 
-  def length: Int = toString.length
+  def length: Int = {
+    // Returns a code length without comments
+    CodeFormatter.stripExtraNewLinesAndComments(toString).length
+  }
 
   def isEmpty: Boolean = toString.isEmpty
 
@@ -198,6 +201,9 @@ trait Block extends TreeNode[Block] with JavaCode {
   }
 
   override def verboseString(maxFields: Int): String = toString
+  override def simpleStringWithNodeId(): String = {
+    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+  }
 }
 
 object Block {

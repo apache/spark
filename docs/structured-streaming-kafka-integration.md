@@ -27,6 +27,8 @@ For Scala/Java applications using SBT/Maven project definitions, link your appli
     artifactId = spark-sql-kafka-0-10_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION_SHORT}}
 
+Please note that to use the headers functionality, your Kafka client version should be version 0.11.0.0 or up.
+
 For Python applications, you need to add this above library and its dependencies when deploying your
 application. See the [Deploying](#deploying) subsection below.
 
@@ -49,6 +51,17 @@ val df = spark
   .load()
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
+
+// Subscribe to 1 topic, with headers
+val df = spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .option("includeHeaders", "true")
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
+  .as[(String, String, Map)]
 
 // Subscribe to multiple topics
 val df = spark
@@ -84,6 +97,16 @@ Dataset<Row> df = spark
   .load();
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
+// Subscribe to 1 topic, with headers
+Dataset<Row> df = spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .option("includeHeaders", "true")
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers");
+
 // Subscribe to multiple topics
 Dataset<Row> df = spark
   .readStream()
@@ -115,6 +138,16 @@ df = spark \
   .option("subscribe", "topic1") \
   .load()
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to 1 topic, with headers
+val df = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
+  .option("includeHeaders", "true") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
 
 # Subscribe to multiple topics
 df = spark \
@@ -286,6 +319,10 @@ Each row in the source has the following schema:
   <td>timestampType</td>
   <td>int</td>
 </tr>
+<tr>
+  <td>headers (optional)</td>
+  <td>array</td>
+</tr>
 </table>
 
 The following options must be set for the Kafka source
@@ -425,25 +462,87 @@ The following configurations are optional:
   issues, set the Kafka consumer session timeout (by setting option "kafka.session.timeout.ms") to
   be very small. When this is set, option "groupIdPrefix" will be ignored.</td>
 </tr>
+<tr>
+  <td>includeHeaders</td>
+  <td>boolean</td>
+  <td>false</td>
+  <td>streaming and batch</td>
+  <td>Whether to include the Kafka headers in the row.</td>
+</tr>
 </table>
 
 ### Consumer Caching
 
 It's time-consuming to initialize Kafka consumers, especially in streaming scenarios where processing time is a key factor.
-Because of this, Spark caches Kafka consumers on executors. The caching key is built up from the following information:
+Because of this, Spark pools Kafka consumers on executors, by leveraging Apache Commons Pool.
+
+The caching key is built up from the following information:
+
 * Topic name
 * Topic partition
 * Group ID
 
-The size of the cache is limited by <code>spark.kafka.consumer.cache.capacity</code> (default: 64).
-If this threshold is reached, it tries to remove the least-used entry that is currently not in use.
-If it cannot be removed, then the cache will keep growing. In the worst case, the cache will grow to
-the max number of concurrent tasks that can run in the executor (that is, number of tasks slots),
-after which it will never reduce.
+The following properties are available to configure the consumer pool:
 
-If a task fails for any reason the new task is executed with a newly created Kafka consumer for safety reasons.
-At the same time the cached Kafka consumer which was used in the failed execution will be invalidated. Here it has to
-be emphasized it will not be closed if any other task is using it.
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.kafka.consumer.cache.capacity</td>
+  <td>The maximum number of consumers cached. Please note that it's a soft limit.</td>
+  <td>64</td>
+</tr>
+<tr>
+  <td>spark.kafka.consumer.cache.timeout</td>
+  <td>The minimum amount of time a consumer may sit idle in the pool before it is eligible for eviction by the evictor.</td>
+  <td>5m (5 minutes)</td>
+</tr>
+<tr>
+  <td>spark.kafka.consumer.cache.evictorThreadRunInterval</td>
+  <td>The interval of time between runs of the idle evictor thread for consumer pool. When non-positive, no idle evictor thread will be run.</td>
+  <td>1m (1 minutes)</td>
+</tr>
+<tr>
+  <td>spark.kafka.consumer.cache.jmx.enable</td>
+  <td>Enable or disable JMX for pools created with this configuration instance. Statistics of the pool are available via JMX instance.
+  The prefix of JMX name is set to "kafka010-cached-simple-kafka-consumer-pool".
+  </td>
+  <td>false</td>
+</tr>
+</table>
+
+The size of the pool is limited by <code>spark.kafka.consumer.cache.capacity</code>,
+but it works as "soft-limit" to not block Spark tasks.
+
+Idle eviction thread periodically removes consumers which are not used longer than given timeout.
+If this threshold is reached when borrowing, it tries to remove the least-used entry that is currently not in use.
+
+If it cannot be removed, then the pool will keep growing. In the worst case, the pool will grow to
+the max number of concurrent tasks that can run in the executor (that is, number of task slots).
+
+If a task fails for any reason, the new task is executed with a newly created Kafka consumer for safety reasons.
+At the same time, we invalidate all consumers in pool which have same caching key, to remove consumer which was used
+in failed execution. Consumers which any other tasks are using will not be closed, but will be invalidated as well
+when they are returned into pool.
+
+Along with consumers, Spark pools the records fetched from Kafka separately, to let Kafka consumers stateless in point
+of Spark's view, and maximize the efficiency of pooling. It leverages same cache key with Kafka consumers pool.
+Note that it doesn't leverage Apache Commons Pool due to the difference of characteristics.
+
+The following properties are available to configure the fetched data pool:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.kafka.consumer.fetchedData.cache.timeout</td>
+  <td>The minimum amount of time a fetched data may sit idle in the pool before it is eligible for eviction by the evictor.</td>
+  <td>5m (5 minutes)</td>
+</tr>
+<tr>
+  <td>spark.kafka.consumer.fetchedData.cache.evictorThreadRunInterval</td>
+  <td>The interval of time between runs of the idle evictor thread for fetched data pool. When non-positive, no idle evictor thread will be run.</td>
+  <td>1m (1 minutes)</td>
+</tr>
+</table>
 
 ## Writing Data to Kafka
 
@@ -466,6 +565,10 @@ The Dataframe being written to Kafka should have the following columns in schema
 <tr>
   <td>value (required)</td>
   <td>string or binary</td>
+</tr>
+<tr>
+  <td>headers (optional)</td>
+  <td>array</td>
 </tr>
 <tr>
   <td>topic (*optional)</td>
@@ -503,6 +606,13 @@ The following configurations are optional:
   <td>streaming and batch</td>
   <td>Sets the topic that all rows will be written to in Kafka. This option overrides any
   topic column that may exist in the data.</td>
+</tr>
+<tr>
+  <td>includeHeaders</td>
+  <td>boolean</td>
+  <td>false</td>
+  <td>streaming and batch</td>
+  <td>Whether to include the Kafka headers in the row.</td>
 </tr>
 </table>
 
@@ -770,7 +880,9 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td><code>spark.kafka.clusters.${cluster}.security.protocol</code></td>
     <td>SASL_SSL</td>
     <td>
-      Protocol used to communicate with brokers. For further details please see Kafka documentation. Only used to obtain delegation token.
+      Protocol used to communicate with brokers. For further details please see Kafka documentation. Protocol is applied on all the sources and sinks as default where
+      <code>bootstrap.servers</code> config matches (for further details please see <code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code>),
+      and can be overridden by setting <code>kafka.security.protocol</code> on the source or sink.
     </td>
   </tr>
   <tr>

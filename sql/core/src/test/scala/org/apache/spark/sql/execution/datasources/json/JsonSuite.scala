@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.util.Utils
@@ -45,7 +45,7 @@ class TestFileFilter extends PathFilter {
   override def accept(path: Path): Boolean = path.getParent.getName != "p=2"
 }
 
-class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
+class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
   import testImplicits._
 
   test("Type promotion") {

@@ -42,6 +42,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -221,7 +222,7 @@ private[hive] class HiveClientImpl(
     hiveConf
   }
 
-  private val userName = conf.getUser
+  override val userName = UserGroupInformation.getCurrentUser.getShortUserName
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)

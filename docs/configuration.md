@@ -230,7 +230,7 @@ of the most common options to set are:
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
     name and an array of addresses. For a client-submitted driver in Standalone, discovery
     script must assign different resource addresses to this driver comparing to workers' and
-    other dirvers' when <code>spark.resources.coordinate.enable</code> is off.
+    other drivers' when <code>spark.resources.coordinate.enable</code> is off.
   </td>
 </tr>
 <tr>
@@ -271,17 +271,17 @@ of the most common options to set are:
  <td><code>spark.executor.memoryOverhead</code></td>
   <td>executorMemory * 0.10, with minimum of 384 </td>
   <td>
-    Amount of non-heap memory to be allocated per executor process in cluster mode, in MiB unless
+    Amount of additional memory to be allocated per executor process in cluster mode, in MiB unless
     otherwise specified. This is memory that accounts for things like VM overheads, interned strings,
     other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
     This option is currently supported on YARN and Kubernetes.
     <br/>
-    <em>Note:</em> Non-heap memory includes off-heap memory 
-    (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other executor processes
-    (e.g. python process that goes with a PySpark executor) and memory used by other non-executor 
-    processes running in the same container. The maximum memory size of container to running executor 
-    is determined by the sum of <code>spark.executor.memoryOverhead</code> and 
-    <code>spark.executor.memory</code>.
+    <em>Note:</em> Additional memory includes PySpark executor memory 
+    (when <code>spark.executor.pyspark.memory</code> is not configured) and memory used by other
+    non-executor processes running in the same container. The maximum memory size of container to 
+    running executor is determined by the sum of <code>spark.executor.memoryOverhead</code>, 
+    <code>spark.executor.memory</code>, <code>spark.memory.offHeap.size</code> and 
+    <code>spark.executor.pyspark.memory</code>.
   </td>
 </tr>
 <tr>
@@ -1378,9 +1378,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory 
     use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
-    <em>Note:</em> If off-heap memory is enabled, may need to raise the non-heap memory size
-    (e.g. increase <code>spark.driver.memoryOverhead</code> or
-    <code>spark.executor.memoryOverhead</code>).
   </td>
 </tr>
 <tr>
@@ -2039,6 +2036,50 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+### Barrier Execution Mode
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.barrier.sync.timeout</code></td>
+  <td>365d</td>
+  <td>
+    The timeout in seconds for each <code>barrier()</code> call from a barrier task. If the
+    coordinator didn't receive all the sync messages from barrier tasks within the
+    configured time, throw a SparkException to fail all the tasks. The default value is set
+    to 31536000(3600 * 24 * 365) so the <code>barrier()</code> call shall wait for one year.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.barrier.maxConcurrentTasksCheck.interval</code></td>
+  <td>15s</td>
+  <td>
+    Time in seconds to wait between a max concurrent tasks check failure and the next
+    check. A max concurrent tasks check ensures the cluster can launch more concurrent
+    tasks than required by a barrier stage on job submitted. The check can fail in case
+    a cluster has just started and not enough executors have registered, so we wait for a
+    little while and try to perform the check again. If the check fails more than a
+    configured max failure times for a job then fail current job submission. Note this
+    config only applies to jobs that contain one or more barrier stages, we won't perform
+    the check on non-barrier jobs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures</code></td>
+  <td>40</td>
+  <td>
+    Number of max concurrent tasks check failures allowed before fail a job submission.
+    A max concurrent tasks check ensures the cluster can launch more concurrent tasks than
+    required by a barrier stage on job submitted. The check can fail in case a cluster
+    has just started and not enough executors have registered, so we wait for a little
+    while and try to perform the check again. If the check fails more than a configured
+    max failure times for a job then fail current job submission. Note this config only
+    applies to jobs that contain one or more barrier stages, we won't perform the check on
+    non-barrier jobs.
+  </td>
+</tr>
+</table>
+
 ### Dynamic Allocation
 
 <table class="table">
@@ -2576,3 +2617,15 @@ Also, you can modify or add configurations at runtime:
   --conf spark.hadoop.abc.def=xyz \ 
   myApp.jar
 {% endhighlight %}
+
+# Custom Resource Scheduling and Configuration Overview
+
+GPUs and other accelerators have been widely used for accelerating special workloads, e.g.,
+deep learning and signal processing. Spark now supports requesting and scheduling generic resources, such as GPUs, with a few caveats. The current implementation requires that the resource have addresses that can be allocated by the scheduler. It requires your cluster manager to support and be properly configured with the resources.
+
+There are configurations available to request resources for the driver: <code>spark.driver.resource.{resourceName}.amount</code>, request resources for the executor(s): <code>spark.executor.resource.{resourceName}.amount</code> and specify the requirements for each task: <code>spark.task.resource.{resourceName}.amount</code>. The <code>spark.driver.resource.{resourceName}.discoveryScript</code> config is required on YARN, Kubernetes and a client side Driver on Spark Standalone. <code>spark.driver.executor.{resourceName}.discoveryScript</code> config is required for YARN and Kubernetes. Kubernetes also requires <code>spark.driver.resource.{resourceName}.vendor</code> and/or <code>spark.executor.resource.{resourceName}.vendor</code>. See the config descriptions above for more information on each.
+
+Spark will use the configurations specified to first request containers with the corresponding resources from the cluster manager. Once it gets the container, Spark launches an Executor in that container which will discover what resources the container has and the addresses associated with each resource. The Executor will register with the Driver and report back the resources available to that Executor. The Spark scheduler can then schedule tasks to each Executor and assign specific resource addresses based on the resource requirements the user specified. The user can see the resources assigned to a task using the <code>TaskContext.get().resources</code> api. On the driver, the user can see the resources assigned with the SparkContext <code>resources</code> call. It's then up to the user to use the assignedaddresses to do the processing they want or pass those into the ML/AI framework they are using.
+
+See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with Mesos or local mode. If using local-cluster mode see the Spark Standalone documentation but be aware only a single worker resources file or discovery script can be specified the is shared by all the Workers so you should enable resource coordination (see <code>spark.resources.coordinate.enable</code>).
+

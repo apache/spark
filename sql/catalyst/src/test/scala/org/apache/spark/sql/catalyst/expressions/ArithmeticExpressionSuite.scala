@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -60,7 +61,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
 
     Seq("true", "false").foreach { checkOverflow =>
-      withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> checkOverflow) {
+      withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> checkOverflow) {
         DataTypeTestUtils.numericAndInterval.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Add, tpe, tpe)
         }
@@ -79,7 +80,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(Literal(Int.MinValue)), Int.MinValue)
     checkEvaluation(UnaryMinus(Literal(Short.MinValue)), Short.MinValue)
     checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
-    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
       checkExceptionInExpression[ArithmeticException](
         UnaryMinus(Literal(Long.MinValue)), "overflow")
       checkExceptionInExpression[ArithmeticException](
@@ -121,7 +122,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Subtract(positiveLongLit, negativeLongLit), positiveLong - negativeLong)
 
     Seq("true", "false").foreach { checkOverflow =>
-      withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> checkOverflow) {
+      withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> checkOverflow) {
         DataTypeTestUtils.numericAndInterval.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Subtract, tpe, tpe)
         }
@@ -143,7 +144,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Multiply(positiveLongLit, negativeLongLit), positiveLong * negativeLong)
 
     Seq("true", "false").foreach { checkOverflow =>
-      withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> checkOverflow) {
+      withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> checkOverflow) {
         DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Multiply, tpe, tpe)
         }
@@ -405,6 +406,36 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     assert(ctx2.inlinedMutableStates.size == 1)
   }
 
+  test("SPARK-28322: IntegralDivide supports decimal type") {
+    withSQLConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG.key -> "false") {
+      checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), Decimal(0))
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.4)), Literal(Decimal(0.6))), Decimal(2))
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), Decimal(1))
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(0.0))), null)
+      checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
+        BigDecimal("99999999999999999999999999999999999000"))
+      // overflow during promote precision
+      checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001)))),
+        null)
+    }
+    withSQLConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG.key -> "true") {
+      checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), 0L)
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.4)), Literal(Decimal(0.6))), 2L)
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), 1L)
+      checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(0.0))), null)
+      // overflows long and so returns a wrong result
+      checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
+        687399551400672280L)
+      // overflow during promote precision
+      checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001)))),
+        null)
+    }
+  }
+
   test("SPARK-24598: overflow on long returns wrong result") {
     val maxLongLiteral = Literal(Long.MaxValue)
     val minLongLiteral = Literal(Long.MinValue)
@@ -414,12 +445,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     val e4 = Add(minLongLiteral, minLongLiteral)
     val e5 = Subtract(minLongLiteral, maxLongLiteral)
     val e6 = Multiply(minLongLiteral, minLongLiteral)
-    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
       Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
         checkExceptionInExpression[ArithmeticException](e, "overflow")
       }
     }
-    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "false") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "false") {
       checkEvaluation(e1, Long.MinValue)
       checkEvaluation(e2, Long.MinValue)
       checkEvaluation(e3, -2L)
@@ -438,12 +469,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     val e4 = Add(minIntLiteral, minIntLiteral)
     val e5 = Subtract(minIntLiteral, maxIntLiteral)
     val e6 = Multiply(minIntLiteral, minIntLiteral)
-    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
       Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
         checkExceptionInExpression[ArithmeticException](e, "overflow")
       }
     }
-    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "false") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "false") {
       checkEvaluation(e1, Int.MinValue)
       checkEvaluation(e2, Int.MinValue)
       checkEvaluation(e3, -2)
@@ -462,12 +493,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     val e4 = Add(minShortLiteral, minShortLiteral)
     val e5 = Subtract(minShortLiteral, maxShortLiteral)
     val e6 = Multiply(minShortLiteral, minShortLiteral)
-    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
       Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
         checkExceptionInExpression[ArithmeticException](e, "overflow")
       }
     }
-    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "false") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "false") {
       checkEvaluation(e1, Short.MinValue)
       checkEvaluation(e2, Short.MinValue)
       checkEvaluation(e3, (-2).toShort)
@@ -486,12 +517,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     val e4 = Add(minByteLiteral, minByteLiteral)
     val e5 = Subtract(minByteLiteral, maxByteLiteral)
     val e6 = Multiply(minByteLiteral, minByteLiteral)
-    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
       Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
         checkExceptionInExpression[ArithmeticException](e, "overflow")
       }
     }
-    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "false") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "false") {
       checkEvaluation(e1, Byte.MinValue)
       checkEvaluation(e2, Byte.MinValue)
       checkEvaluation(e3, (-2).toByte)

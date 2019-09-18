@@ -17,9 +17,8 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.{Experimental, Unstable}
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
-import org.apache.spark.sql.catalog.v2.CatalogPlugin
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
@@ -29,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.v2.{V2StreamingScanSupportCheck, V2WriteSupportCheck}
+import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -52,7 +51,6 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * state will clone the parent sessions state's `conf`, `functionRegistry`, `experimentalMethods`
  * and `catalog` fields. Note that the state is cloned when `build` is called, and not before.
  */
-@Experimental
 @Unstable
 abstract class BaseSessionStateBuilder(
     val session: SparkSession,
@@ -153,6 +151,8 @@ abstract class BaseSessionStateBuilder(
     catalog
   }
 
+  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog, conf)
+
   /**
    * Interface exposed to the user for registering user-defined functions.
    *
@@ -166,12 +166,12 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
+  protected def analyzer: Analyzer = new Analyzer(catalog, v2SessionCatalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
-        DataSourceResolution(conf, this) +:
+        DataSourceResolution(conf, this.catalogManager) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -185,11 +185,8 @@ abstract class BaseSessionStateBuilder(
       PreWriteCheck +:
         PreReadCheck +:
         HiveOnlyCheck +:
-        V2WriteSupportCheck +:
-        V2StreamingScanSupportCheck +:
+        TableCapabilityCheck +:
         customCheckRules
-
-    override protected def lookupCatalog(name: String): CatalogPlugin = session.catalog(name)
   }
 
   /**

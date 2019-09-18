@@ -2950,6 +2950,13 @@ private[spark] object Utils extends Logging {
     val codec = codecFactory.getCodec(path)
     codec == null || codec.isInstanceOf[SplittableCompressionCodec]
   }
+
+  /** Create a new properties object with the same values as `props` */
+  def cloneProperties(props: Properties): Properties = {
+    val resultProps = new Properties()
+    props.forEach((k, v) => resultProps.put(k, v))
+    resultProps
+  }
 }
 
 private[util] object CallerContext extends Logging {
@@ -3033,7 +3040,8 @@ private[spark] class CallerContext(
     if (CallerContext.callerContextSupported) {
       try {
         val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-        val builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+        val builder: Class[AnyRef] =
+          Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
         val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
         val hdfsContext = builder.getMethod("build").invoke(builderInst)
         callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)

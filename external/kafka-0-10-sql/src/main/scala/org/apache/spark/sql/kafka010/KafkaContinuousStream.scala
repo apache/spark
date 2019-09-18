@@ -27,9 +27,9 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming._
+import org.apache.spark.sql.connector.read.InputPartition
+import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -56,6 +56,7 @@ class KafkaContinuousStream(
 
   private[kafka010] val pollTimeoutMs =
     options.getLong(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, 512)
+  private val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
 
   // Initialized when creating reader factories. If this diverges from the partitions at the latest
   // offsets, we need to reconfigure.
@@ -88,7 +89,7 @@ class KafkaContinuousStream(
     if (deletedPartitions.nonEmpty) {
       val message = if (
         offsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-        s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
+        s"$deletedPartitions are gone. ${CUSTOM_GROUP_ID_ERROR_MESSAGE}"
       } else {
         s"$deletedPartitions are gone. Some data may have been missed."
       }
@@ -102,7 +103,7 @@ class KafkaContinuousStream(
     startOffsets.toSeq.map {
       case (topicPartition, start) =>
         KafkaContinuousInputPartition(
-          topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
+          topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss, includeHeaders)
     }.toArray
   }
 
@@ -153,19 +154,22 @@ class KafkaContinuousStream(
  * @param pollTimeoutMs The timeout for Kafka consumer polling.
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
+ * @param includeHeaders Flag indicating whether to include Kafka records' headers.
  */
 case class KafkaContinuousInputPartition(
-    topicPartition: TopicPartition,
-    startOffset: Long,
-    kafkaParams: ju.Map[String, Object],
-    pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends InputPartition
+  topicPartition: TopicPartition,
+  startOffset: Long,
+  kafkaParams: ju.Map[String, Object],
+  pollTimeoutMs: Long,
+  failOnDataLoss: Boolean,
+  includeHeaders: Boolean) extends InputPartition
 
 object KafkaContinuousReaderFactory extends ContinuousPartitionReaderFactory {
   override def createReader(partition: InputPartition): ContinuousPartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaContinuousInputPartition]
     new KafkaContinuousPartitionReader(
-      p.topicPartition, p.startOffset, p.kafkaParams, p.pollTimeoutMs, p.failOnDataLoss)
+      p.topicPartition, p.startOffset, p.kafkaParams, p.pollTimeoutMs,
+      p.failOnDataLoss, p.includeHeaders)
   }
 }
 
@@ -184,9 +188,11 @@ class KafkaContinuousPartitionReader(
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends ContinuousPartitionReader[InternalRow] {
-  private val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams, useCache = false)
-  private val converter = new KafkaRecordToUnsafeRowConverter
+    failOnDataLoss: Boolean,
+    includeHeaders: Boolean) extends ContinuousPartitionReader[InternalRow] {
+  private val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams)
+  private val unsafeRowProjector = new KafkaRecordToRowConverter()
+    .toUnsafeRowProjector(includeHeaders)
 
   private var nextKafkaOffset = startOffset
   private var currentRecord: ConsumerRecord[Array[Byte], Array[Byte]] = _
@@ -225,7 +231,7 @@ class KafkaContinuousPartitionReader(
   }
 
   override def get(): UnsafeRow = {
-    converter.toUnsafeRow(currentRecord)
+    unsafeRowProjector(currentRecord)
   }
 
   override def getOffset(): KafkaSourcePartitionOffset = {
