@@ -184,11 +184,13 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("special timestamp values") {
-    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
-      val input = Seq(specialValue).toDS()
-      val readback = input.select(from_csv($"value", lit("t timestamp"),
-        Map.empty[String, String].asJava)).collect()
-      assert(readback(0).getAs[Row](0).getAs[Timestamp](0).getTime >= 0)
+    withSQLConf(SQLConf.DIALECT.key -> SQLConf.Dialect.POSTGRESQL.toString) {
+      Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
+        val input = Seq(specialValue).toDS()
+        val readback = input.select(from_csv($"value", lit("t timestamp"),
+          Map.empty[String, String].asJava)).collect()
+        assert(readback(0).getAs[Row](0).getAs[Timestamp](0).getTime >= 0)
+      }
     }
   }
 }
