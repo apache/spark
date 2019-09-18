@@ -53,22 +53,22 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
   @Override
   public Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException {
-    return ((TableCatalog)delegate).listTables(namespace);
+    return asTableCatalog().listTables(namespace);
   }
 
   @Override
   public Table loadTable(Identifier ident) throws NoSuchTableException {
-    return ((TableCatalog)delegate).loadTable(ident);
+    return asTableCatalog().loadTable(ident);
   }
 
   @Override
   public void invalidateTable(Identifier ident) {
-    ((TableCatalog)delegate).invalidateTable(ident);
+    asTableCatalog().invalidateTable(ident);
   }
 
   @Override
   public boolean tableExists(Identifier ident) {
-    return ((TableCatalog)delegate).tableExists(ident);
+    return asTableCatalog().tableExists(ident);
   }
 
   @Override
@@ -77,70 +77,78 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
       StructType schema,
       Transform[] partitions,
       Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
-    return ((TableCatalog)delegate).createTable(ident, schema, partitions, properties);
+    return asTableCatalog().createTable(ident, schema, partitions, properties);
   }
 
   @Override
   public Table alterTable(
       Identifier ident,
       TableChange... changes) throws NoSuchTableException {
-    return ((TableCatalog)delegate).alterTable(ident, changes);
+    return asTableCatalog().alterTable(ident, changes);
   }
 
   @Override
   public boolean dropTable(Identifier ident) {
-    return ((TableCatalog)delegate).dropTable(ident);
+    return asTableCatalog().dropTable(ident);
   }
 
   @Override
   public void renameTable(
       Identifier oldIdent,
       Identifier newIdent) throws NoSuchTableException, TableAlreadyExistsException {
-    ((TableCatalog)delegate).renameTable(oldIdent, newIdent);
+    asTableCatalog().renameTable(oldIdent, newIdent);
   }
 
   @Override
   public String[] defaultNamespace() {
-    return ((SupportsNamespaces)delegate).defaultNamespace();
+    return asNamespaceCatalog().defaultNamespace();
   }
 
   @Override
   public String[][] listNamespaces() throws NoSuchNamespaceException {
-    return ((SupportsNamespaces)delegate).listNamespaces();
+    return asNamespaceCatalog().listNamespaces();
   }
 
   @Override
   public String[][] listNamespaces(String[] namespace) throws NoSuchNamespaceException {
-    return ((SupportsNamespaces)delegate).listNamespaces(namespace);
+    return asNamespaceCatalog().listNamespaces(namespace);
   }
 
   @Override
   public boolean namespaceExists(String[] namespace) {
-    return ((SupportsNamespaces)delegate).namespaceExists(namespace);
+    return asNamespaceCatalog().namespaceExists(namespace);
   }
 
   @Override
   public Map<String, String> loadNamespaceMetadata(
       String[] namespace) throws NoSuchNamespaceException {
-    return ((SupportsNamespaces)delegate).loadNamespaceMetadata(namespace);
+    return asNamespaceCatalog().loadNamespaceMetadata(namespace);
   }
 
   @Override
   public void createNamespace(
       String[] namespace,
       Map<String, String> metadata) throws NamespaceAlreadyExistsException {
-    ((SupportsNamespaces)delegate).createNamespace(namespace, metadata);
+    asNamespaceCatalog().createNamespace(namespace, metadata);
   }
 
   @Override
   public void alterNamespace(
       String[] namespace,
       NamespaceChange... changes) throws NoSuchNamespaceException {
-    ((SupportsNamespaces)delegate).alterNamespace(namespace, changes);
+    asNamespaceCatalog().alterNamespace(namespace, changes);
   }
 
   @Override
   public boolean dropNamespace(String[] namespace) throws NoSuchNamespaceException {
     return ((SupportsNamespaces)delegate).dropNamespace(namespace);
+  }
+
+  private TableCatalog asTableCatalog() {
+    return (TableCatalog)delegate;
+  }
+
+  private SupportsNamespaces asNamespaceCatalog() {
+    return (SupportsNamespaces)delegate;
   }
 }
