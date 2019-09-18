@@ -38,9 +38,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
   import LiveListenerBus._
 
-  /** Length of time to wait while draining listener events. */
-  val WAIT_TIMEOUT_MILLIS = 10000
-
   val jobCompletionTime = 1421191296660L
 
   private val mockSparkContext: SparkContext = Mockito.mock(classOf[SparkContext])
@@ -65,7 +62,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     sc.listenerBus.addToSharedQueue(listener)
     sc.listenerBus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     sc.stop()
 
     assert(listener.sparkExSeen)
@@ -97,7 +94,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Starting listener bus should flush all buffered events
     bus.start(mockSparkContext, mockMetricsSystem)
     Mockito.verify(mockMetricsSystem).registerSource(bus.metrics)
-    bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    bus.waitUntilEmpty()
     assert(counter.count === 5)
     assert(sharedQueueSize(bus) === 0)
     assert(eventProcessingTimeCount(bus) === 5)
@@ -223,7 +220,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     rdd2.setName("Target RDD")
     rdd2.count()
 
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
 
     listener.stageInfos.size should be {1}
     val (stageInfo, taskInfoMetrics) = listener.stageInfos.head

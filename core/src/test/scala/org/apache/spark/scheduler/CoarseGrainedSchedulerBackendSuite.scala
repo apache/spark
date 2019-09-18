@@ -46,8 +46,6 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, Utils}
 class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext
     with Eventually {
 
-  private val executorUpTimeout = 1.minute
-
   test("serialized task larger than max RPC message size") {
     val conf = new SparkConf
     conf.set(RPC_MESSAGE_MAX_SIZE, 1)
@@ -180,7 +178,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     backend.driverEndpoint.askSync[Boolean](
       RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, logUrls, attributes, Map.empty))
 
-    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    sc.listenerBus.waitUntilEmpty()
     assert(executorAddedCount === 3)
   }
 
@@ -251,7 +249,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       assert(execResources(GPU).availableAddrs.sorted === Array("0", "1", "3"))
       assert(execResources(GPU).assignedAddrs.isEmpty)
     }
-    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    sc.listenerBus.waitUntilEmpty()
     assert(executorAddedCount === 3)
   }
 

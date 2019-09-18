@@ -716,7 +716,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
       x
     }.collect()
-    sc.listenerBus.waitUntilEmpty(10000)
+    sc.listenerBus.waitUntilEmpty()
     // As executors will send the metrics of running tasks via heartbeat, we can use this to check
     // whether there is any running task.
     eventually(timeout(10.seconds)) {

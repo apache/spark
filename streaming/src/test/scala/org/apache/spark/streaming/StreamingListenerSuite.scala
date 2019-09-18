@@ -227,7 +227,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
     // Post a Streaming event after stopping StreamingContext
     val receiverInfoStopped = ReceiverInfo(0, "test", false, "localhost", "0")
     ssc.scheduler.listenerBus.post(StreamingListenerReceiverStopped(receiverInfoStopped))
-    ssc.sparkContext.listenerBus.waitUntilEmpty(1000)
+    ssc.sparkContext.listenerBus.waitUntilEmpty()
     // The StreamingListener should not receive any event
     verifyNoMoreInteractions(streamingListener)
   }

@@ -498,7 +498,7 @@ object ShuffleSuite {
 
     job
 
-    sc.listenerBus.waitUntilEmpty(500)
+    sc.listenerBus.waitUntilEmpty()
     AggregatedShuffleMetrics(recordsWritten, recordsRead, bytesWritten, bytesRead)
   }
 }

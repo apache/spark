@@ -388,7 +388,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
       data.write.format("json").save(file.getAbsolutePath)
-      sparkContext.listenerBus.waitUntilEmpty(10000)
+      sparkContext.listenerBus.waitUntilEmpty()
       val executionIds = currentExecutionIds().diff(previousExecutionIds)
       assert(executionIds.size === 1)
       val executionId = executionIds.head
