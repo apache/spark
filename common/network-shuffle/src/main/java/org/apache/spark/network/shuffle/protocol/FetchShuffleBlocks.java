@@ -32,23 +32,23 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
   public final String appId;
   public final String execId;
   public final int shuffleId;
-  // The length of mapTaskIds must equal to reduceIds.size(), for the i-th mapTaskId in mapTaskIds,
-  // it corresponds to the i-th int[] in reduceIds, which contains all reduce id for this map task.
-  public final long[] mapTaskIds;
+  // The length of mapIds must equal to reduceIds.size(), for the i-th mapId in mapIds,
+  // it corresponds to the i-th int[] in reduceIds, which contains all reduce id for this map id.
+  public final long[] mapIds;
   public final int[][] reduceIds;
 
   public FetchShuffleBlocks(
       String appId,
       String execId,
       int shuffleId,
-      long[] mapTaskIds,
+      long[] mapIds,
       int[][] reduceIds) {
     this.appId = appId;
     this.execId = execId;
     this.shuffleId = shuffleId;
-    this.mapTaskIds = mapTaskIds;
+    this.mapIds = mapIds;
     this.reduceIds = reduceIds;
-    assert(mapTaskIds.length == reduceIds.length);
+    assert(mapIds.length == reduceIds.length);
   }
 
   @Override
@@ -60,7 +60,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
       .add("appId", appId)
       .add("execId", execId)
       .add("shuffleId", shuffleId)
-      .add("mapTaskIds", Arrays.toString(mapTaskIds))
+      .add("mapIds", Arrays.toString(mapIds))
       .add("reduceIds", Arrays.deepToString(reduceIds))
       .toString();
   }
@@ -75,7 +75,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     if (shuffleId != that.shuffleId) return false;
     if (!appId.equals(that.appId)) return false;
     if (!execId.equals(that.execId)) return false;
-    if (!Arrays.equals(mapTaskIds, that.mapTaskIds)) return false;
+    if (!Arrays.equals(mapIds, that.mapIds)) return false;
     return Arrays.deepEquals(reduceIds, that.reduceIds);
   }
 
@@ -84,7 +84,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     int result = appId.hashCode();
     result = 31 * result + execId.hashCode();
     result = 31 * result + shuffleId;
-    result = 31 * result + Arrays.hashCode(mapTaskIds);
+    result = 31 * result + Arrays.hashCode(mapIds);
     result = 31 * result + Arrays.deepHashCode(reduceIds);
     return result;
   }
@@ -98,7 +98,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     return Encoders.Strings.encodedLength(appId)
       + Encoders.Strings.encodedLength(execId)
       + 4 /* encoded length of shuffleId */
-      + Encoders.LongArrays.encodedLength(mapTaskIds)
+      + Encoders.LongArrays.encodedLength(mapIds)
       + 4 /* encoded length of reduceIds.size() */
       + encodedLengthOfReduceIds;
   }
@@ -108,7 +108,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     Encoders.Strings.encode(buf, appId);
     Encoders.Strings.encode(buf, execId);
     buf.writeInt(shuffleId);
-    Encoders.LongArrays.encode(buf, mapTaskIds);
+    Encoders.LongArrays.encode(buf, mapIds);
     buf.writeInt(reduceIds.length);
     for (int[] ids: reduceIds) {
       Encoders.IntArrays.encode(buf, ids);
@@ -119,12 +119,12 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     String appId = Encoders.Strings.decode(buf);
     String execId = Encoders.Strings.decode(buf);
     int shuffleId = buf.readInt();
-    long[] mapTaskIds = Encoders.LongArrays.decode(buf);
+    long[] mapIds = Encoders.LongArrays.decode(buf);
     int reduceIdsSize = buf.readInt();
     int[][] reduceIds = new int[reduceIdsSize][];
     for (int i = 0; i < reduceIdsSize; i++) {
       reduceIds[i] = Encoders.IntArrays.decode(buf);
     }
-    return new FetchShuffleBlocks(appId, execId, shuffleId, mapTaskIds, reduceIds);
+    return new FetchShuffleBlocks(appId, execId, shuffleId, mapIds, reduceIds);
   }
 }

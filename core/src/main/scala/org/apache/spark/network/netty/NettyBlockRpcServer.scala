@@ -64,12 +64,11 @@ class NettyBlockRpcServer(
         responseContext.onSuccess(new StreamHandle(streamId, blocksNum).toByteBuffer)
 
       case fetchShuffleBlocks: FetchShuffleBlocks =>
-        val blocks = fetchShuffleBlocks.mapTaskIds.zipWithIndex.flatMap {
-          case (mapTaskId, index) =>
-            fetchShuffleBlocks.reduceIds.apply(index).map { reduceId =>
-              blockManager.getBlockData(
-                ShuffleBlockId(fetchShuffleBlocks.shuffleId, mapTaskId, reduceId))
-            }
+        val blocks = fetchShuffleBlocks.mapIds.zipWithIndex.flatMap { case (mapId, index) =>
+          fetchShuffleBlocks.reduceIds.apply(index).map { reduceId =>
+            blockManager.getBlockData(
+              ShuffleBlockId(fetchShuffleBlocks.shuffleId, mapId, reduceId))
+          }
         }
         val numBlockIds = fetchShuffleBlocks.reduceIds.map(_.length).sum
         val streamId = streamManager.registerStream(appId, blocks.iterator.asJava,

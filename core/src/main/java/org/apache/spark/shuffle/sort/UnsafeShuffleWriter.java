@@ -78,7 +78,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final ShuffleWriteMetricsReporter writeMetrics;
   private final ShuffleExecutorComponents shuffleExecutorComponents;
   private final int shuffleId;
-  private final long mapTaskId;
+  private final long mapId;
   private final TaskContext taskContext;
   private final SparkConf sparkConf;
   private final boolean transferToEnabled;
@@ -122,7 +122,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
     this.blockManager = blockManager;
     this.memoryManager = memoryManager;
-    this.mapTaskId = taskContext.taskAttemptId();
+    this.mapId = taskContext.taskAttemptId();
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.shuffleId = dep.shuffleId();
     this.serializer = dep.serializer().newInstance();
@@ -228,7 +228,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
     mapStatus = MapStatus$.MODULE$.apply(
-      blockManager.shuffleServerId(), partitionLengths, mapTaskId);
+      blockManager.shuffleServerId(), partitionLengths, mapId);
   }
 
   @VisibleForTesting
@@ -264,11 +264,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     long[] partitionLengths;
     if (spills.length == 0) {
       final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
-          .createMapOutputWriter(shuffleId, mapTaskId, partitioner.numPartitions());
+          .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
       return mapWriter.commitAllPartitions();
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
-          shuffleExecutorComponents.createSingleFileMapOutputWriter(shuffleId, mapTaskId);
+          shuffleExecutorComponents.createSingleFileMapOutputWriter(shuffleId, mapId);
       if (maybeSingleFileWriter.isPresent()) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
@@ -293,7 +293,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         CompressionCodec$.MODULE$.supportsConcatenationOfSerializedStreams(compressionCodec);
     final boolean encryptionEnabled = blockManager.serializerManager().encryptionEnabled();
     final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
-        .createMapOutputWriter(shuffleId, mapTaskId, partitioner.numPartitions());
+        .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
     try {
       // There are multiple spills to merge, so none of these spill files' lengths were counted
       // towards our shuffle write count or shuffle write time. If we use the slow merge path,

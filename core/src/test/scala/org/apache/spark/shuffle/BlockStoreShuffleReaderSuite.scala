@@ -87,14 +87,14 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     // Setup the mocked BlockManager to return RecordingManagedBuffers.
     val localBlockManagerId = BlockManagerId("test-client", "test-client", 1)
     when(blockManager.blockManagerId).thenReturn(localBlockManagerId)
-    val buffers = (0 until numMaps).map { mapTaskId =>
+    val buffers = (0 until numMaps).map { mapId =>
       // Create a ManagedBuffer with the shuffle data.
       val nioBuffer = new NioManagedBuffer(ByteBuffer.wrap(byteOutputStream.toByteArray))
       val managedBuffer = new RecordingManagedBuffer(nioBuffer)
 
       // Setup the blockManager mock so the buffer gets returned when the shuffle code tries to
       // fetch shuffle data.
-      val shuffleBlockId = ShuffleBlockId(shuffleId, mapTaskId, reduceId)
+      val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
       when(blockManager.getBlockData(shuffleBlockId)).thenReturn(managedBuffer)
       managedBuffer
     }
@@ -103,12 +103,12 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     // shuffle data to read.
     val mapOutputTracker = mock(classOf[MapOutputTracker])
     when(mapOutputTracker.getMapSizesByExecutorId(
-      shuffleId, reduceId, reduceId + 1, false)).thenReturn {
+      shuffleId, reduceId, reduceId + 1, useOldFetchProtocol = false)).thenReturn {
       // Test a scenario where all data is local, to avoid creating a bunch of additional mocks
       // for the code to read data over the network.
-      val shuffleBlockIdsAndSizes = (0 until numMaps).map { mapTaskId =>
-        val shuffleBlockId = ShuffleBlockId(shuffleId, mapTaskId, reduceId)
-        (shuffleBlockId, byteOutputStream.size().toLong, mapTaskId)
+      val shuffleBlockIdsAndSizes = (0 until numMaps).map { mapId =>
+        val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
+        (shuffleBlockId, byteOutputStream.size().toLong, mapId)
       }
       Seq((localBlockManagerId, shuffleBlockIdsAndSizes)).toIterator
     }

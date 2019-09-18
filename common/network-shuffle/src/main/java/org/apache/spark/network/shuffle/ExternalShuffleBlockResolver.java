@@ -165,21 +165,21 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapTaskId, reduceId). We make assumptions
+   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId). We make assumptions
    * about how the hash and sort based shuffles store their data.
    */
   public ManagedBuffer getBlockData(
       String appId,
       String execId,
       int shuffleId,
-      long mapTaskId,
+      long mapId,
       int reduceId) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
       throw new RuntimeException(
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
-    return getSortBasedShuffleBlockData(executor, shuffleId, mapTaskId, reduceId);
+    return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
   }
 
   public ManagedBuffer getRddBlockData(
@@ -291,15 +291,14 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Sort-based shuffle data uses an index called "shuffle_ShuffleId_MapTaskId_0.index" into a data
-   * file called "shuffle_ShuffleId_MapTaskId_0.data".
-   * This logic is from IndexShuffleBlockResolver, and the block id format is from
-   * ShuffleDataBlockId and ShuffleIndexBlockId.
+   * Sort-based shuffle data uses an index called "shuffle_ShuffleId_MapId_0.index" into a data file
+   * called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockResolver,
+   * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
-    ExecutorShuffleInfo executor, int shuffleId, long mapTaskId, int reduceId) {
+    ExecutorShuffleInfo executor, int shuffleId, long mapId, int reduceId) {
     File indexFile = ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
-      "shuffle_" + shuffleId + "_" + mapTaskId + "_0.index");
+      "shuffle_" + shuffleId + "_" + mapId + "_0.index");
 
     try {
       ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFile);
@@ -307,7 +306,7 @@ public class ExternalShuffleBlockResolver {
       return new FileSegmentManagedBuffer(
         conf,
         ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
-          "shuffle_" + shuffleId + "_" + mapTaskId + "_0.data"),
+          "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         shuffleIndexRecord.getOffset(),
         shuffleIndexRecord.getLength());
     } catch (ExecutionException e) {

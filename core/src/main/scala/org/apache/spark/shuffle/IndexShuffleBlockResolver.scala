@@ -51,27 +51,26 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-  def getDataFile(shuffleId: Int, mapTaskId: Long): File = {
-    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapTaskId, NOOP_REDUCE_ID))
+  def getDataFile(shuffleId: Int, mapId: Long): File = {
+    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
-  private def getIndexFile(shuffleId: Int, mapTaskId: Long): File = {
-    blockManager.diskBlockManager.getFile(
-      ShuffleIndexBlockId(shuffleId, mapTaskId, NOOP_REDUCE_ID))
+  private def getIndexFile(shuffleId: Int, mapId: Long): File = {
+    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
   /**
    * Remove data file and index file that contain the output data from one map.
    */
-  def removeDataByMap(shuffleId: Int, mapTaskId: Long): Unit = {
-    var file = getDataFile(shuffleId, mapTaskId)
+  def removeDataByMap(shuffleId: Int, mapId: Long): Unit = {
+    var file = getDataFile(shuffleId, mapId)
     if (file.exists()) {
       if (!file.delete()) {
         logWarning(s"Error deleting data ${file.getPath()}")
       }
     }
 
-    file = getIndexFile(shuffleId, mapTaskId)
+    file = getIndexFile(shuffleId, mapId)
     if (file.exists()) {
       if (!file.delete()) {
         logWarning(s"Error deleting index ${file.getPath()}")
@@ -136,13 +135,13 @@ private[spark] class IndexShuffleBlockResolver(
    */
   def writeIndexFileAndCommit(
       shuffleId: Int,
-      mapTaskId: Long,
+      mapId: Long,
       lengths: Array[Long],
       dataTmp: File): Unit = {
-    val indexFile = getIndexFile(shuffleId, mapTaskId)
+    val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
     try {
-      val dataFile = getDataFile(shuffleId, mapTaskId)
+      val dataFile = getDataFile(shuffleId, mapId)
       // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
       // the following check and rename are atomic.
       synchronized {

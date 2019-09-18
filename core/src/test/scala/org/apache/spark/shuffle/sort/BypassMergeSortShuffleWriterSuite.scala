@@ -138,7 +138,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     val writer = new BypassMergeSortShuffleWriter[Int, Int](
       blockManager,
       shuffleHandle,
-      0L, // MapTaskAttemptId
+      0L, // MapId
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics,
       shuffleExecutorComponents)
@@ -164,7 +164,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       val writer = new BypassMergeSortShuffleWriter[Int, Int](
         blockManager,
         shuffleHandle,
-        0L,
+        0L, // MapId
         transferConf,
         taskContext.taskMetrics().shuffleWriteMetrics,
         shuffleExecutorComponents)
@@ -199,7 +199,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     val writer = new BypassMergeSortShuffleWriter[Int, Int](
       blockManager,
       shuffleHandle,
-      0L,
+      0L, // MapId
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics,
       shuffleExecutorComponents)
@@ -220,7 +220,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     val writer = new BypassMergeSortShuffleWriter[Int, Int](
       blockManager,
       shuffleHandle,
-      0L,
+      0L, // MapId
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics,
       shuffleExecutorComponents)
