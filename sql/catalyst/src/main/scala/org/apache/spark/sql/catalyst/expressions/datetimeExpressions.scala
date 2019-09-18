@@ -98,9 +98,7 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 
   override def dataType: DataType = TimestampType
 
-  override def eval(input: InternalRow): Any = {
-    instantToMicros(Instant.now())
-  }
+  override def eval(input: InternalRow): Any = currentTimestamp()
 
   override def prettyName: String = "current_timestamp"
 }
