@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.client
+package org.apache.spark.executor
 
-import scala.collection.immutable.IndexedSeq
+import com.codahale.metrics.MetricRegistry
 
-import org.scalatest.Suite
+import org.apache.spark.metrics.source.Source
 
-class HiveClientSuites extends Suite with HiveClientVersions {
-  override def nestedSuites: IndexedSeq[Suite] = {
-    // Hive 0.12 does not provide the partition filtering API we call
-    versions.filterNot(_ == "0.12").map(new HiveClientSuite(_))
-  }
+private[spark]
+class ExecutorPluginSource(name: String) extends Source {
+
+  override val metricRegistry = new MetricRegistry()
+
+  override val sourceName = name
 }

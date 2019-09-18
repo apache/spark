@@ -579,7 +579,7 @@ case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Comm
 
 case class DeleteFromTable(
     child: LogicalPlan,
-    condition: Expression) extends Command {
+    condition: Option[Expression]) extends Command {
 
   override def children: Seq[LogicalPlan] = child :: Nil
 }
