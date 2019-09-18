@@ -25,10 +25,10 @@ import collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
+class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("function get_json_object") {
@@ -232,7 +232,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(to_json($"c")).collect()
     }
     assert(e.getMessage.contains(
-      "Unable to convert column a of type calendarinterval to JSON."))
+      "Unable to convert column a of type interval to JSON."))
 
     // interval type is invalid for converting to JSON. We can't use it as value type of a map.
     val df2 = baseDf
@@ -240,7 +240,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val e2 = intercept[AnalysisException] {
       df2.select(to_json($"c")).collect()
     }
-    assert(e2.getMessage.contains("Unable to convert column col1 of type calendarinterval to JSON"))
+    assert(e2.getMessage.contains("Unable to convert column col1 of type interval to JSON"))
   }
 
   test("roundtrip in to_json and from_json - struct") {

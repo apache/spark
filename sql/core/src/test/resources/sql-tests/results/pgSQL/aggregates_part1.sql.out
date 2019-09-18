@@ -236,7 +236,7 @@ NaN
 
 -- !query 29
 SELECT avg(CAST(x AS DOUBLE)), var_pop(CAST(x AS DOUBLE))
-FROM (VALUES (CAST('1' AS DOUBLE)), (CAST('Infinity' AS DOUBLE))) v(x)
+FROM (VALUES (CAST('1' AS DOUBLE)), (CAST('infinity' AS DOUBLE))) v(x)
 -- !query 29 schema
 struct<avg(CAST(x AS DOUBLE)):double,var_pop(CAST(x AS DOUBLE)):double>
 -- !query 29 output
@@ -245,7 +245,7 @@ Infinity	NaN
 
 -- !query 30
 SELECT avg(CAST(x AS DOUBLE)), var_pop(CAST(x AS DOUBLE))
-FROM (VALUES ('Infinity'), ('1')) v(x)
+FROM (VALUES ('infinity'), ('1')) v(x)
 -- !query 30 schema
 struct<avg(CAST(x AS DOUBLE)):double,var_pop(CAST(x AS DOUBLE)):double>
 -- !query 30 output
@@ -254,7 +254,7 @@ Infinity	NaN
 
 -- !query 31
 SELECT avg(CAST(x AS DOUBLE)), var_pop(CAST(x AS DOUBLE))
-FROM (VALUES ('Infinity'), ('Infinity')) v(x)
+FROM (VALUES ('infinity'), ('infinity')) v(x)
 -- !query 31 schema
 struct<avg(CAST(x AS DOUBLE)):double,var_pop(CAST(x AS DOUBLE)):double>
 -- !query 31 output
@@ -263,7 +263,7 @@ Infinity	NaN
 
 -- !query 32
 SELECT avg(CAST(x AS DOUBLE)), var_pop(CAST(x AS DOUBLE))
-FROM (VALUES ('-Infinity'), ('Infinity')) v(x)
+FROM (VALUES ('-infinity'), ('infinity')) v(x)
 -- !query 32 schema
 struct<avg(CAST(x AS DOUBLE)):double,var_pop(CAST(x AS DOUBLE)):double>
 -- !query 32 output

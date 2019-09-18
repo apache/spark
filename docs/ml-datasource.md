@@ -63,7 +63,7 @@ scala> df.select("image.origin", "image.width", "image.height").show(truncate=fa
 
 <div data-lang="java" markdown="1">
 [`ImageDataSource`](api/java/org/apache/spark/ml/source/image/ImageDataSource.html)
-implements Spark SQL data source API for loading image data as DataFrame.
+implements Spark SQL data source API for loading image data as a DataFrame.
 
 {% highlight java %}
 Dataset<Row> imagesDF = spark.read().format("image").option("dropInvalid", true).load("data/mllib/images/origin/kittens");
@@ -83,7 +83,7 @@ Will output:
 </div>
 
 <div data-lang="python" markdown="1">
-In PySpark we provide Spark SQL data source API for loading image data as DataFrame.
+In PySpark we provide Spark SQL data source API for loading image data as a DataFrame.
 
 {% highlight python %}
 >>> df = spark.read.format("image").option("dropInvalid", true).load("data/mllib/images/origin/kittens")
@@ -100,7 +100,7 @@ In PySpark we provide Spark SQL data source API for loading image data as DataFr
 </div>
 
 <div data-lang="r" markdown="1">
-In SparkR we provide Spark SQL data source API for loading image data as DataFrame.
+In SparkR we provide Spark SQL data source API for loading image data as a DataFrame.
 
 {% highlight r %}
 > df = read.df("data/mllib/images/origin/kittens", "image")
@@ -115,6 +115,120 @@ In SparkR we provide Spark SQL data source API for loading image data as DataFra
 2   199    313
 3   300    200
 4   300    296
+
+{% endhighlight %}
+</div>
+
+
+</div>
+
+
+## LIBSVM data source
+
+This `LIBSVM` data source is used to load 'libsvm' type files from a directory.
+The loaded DataFrame has two columns: label containing labels stored as doubles and features containing feature vectors stored as Vectors.
+The schemas of the columns are:
+ - label: `DoubleType` (represents the instance label)
+ - features: `VectorUDT` (represents the feature vector)
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+[`LibSVMDataSource`](api/scala/index.html#org.apache.spark.ml.source.libsvm.LibSVMDataSource)
+implements a Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
+
+{% highlight scala %}
+scala> val df = spark.read.format("libsvm").option("numFeatures", "780").load("data/mllib/sample_libsvm_data.txt")
+df: org.apache.spark.sql.DataFrame = [label: double, features: vector]
+
+scala> df.show(10)
++-----+--------------------+
+|label|            features|
++-----+--------------------+
+|  0.0|(780,[127,128,129...|
+|  1.0|(780,[158,159,160...|
+|  1.0|(780,[124,125,126...|
+|  1.0|(780,[152,153,154...|
+|  1.0|(780,[151,152,153...|
+|  0.0|(780,[129,130,131...|
+|  1.0|(780,[158,159,160...|
+|  1.0|(780,[99,100,101,...|
+|  0.0|(780,[154,155,156...|
+|  0.0|(780,[127,128,129...|
++-----+--------------------+
+only showing top 10 rows
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+[`LibSVMDataSource`](api/java/org/apache/spark/ml/source/libsvm/LibSVMDataSource.html)
+implements Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
+
+{% highlight java %}
+Dataset<Row> df = spark.read.format("libsvm").option("numFeatures", "780").load("data/mllib/sample_libsvm_data.txt");
+df.show(10);
+/*
+Will output:
++-----+--------------------+
+|label|            features|
++-----+--------------------+
+|  0.0|(780,[127,128,129...|
+|  1.0|(780,[158,159,160...|
+|  1.0|(780,[124,125,126...|
+|  1.0|(780,[152,153,154...|
+|  1.0|(780,[151,152,153...|
+|  0.0|(780,[129,130,131...|
+|  1.0|(780,[158,159,160...|
+|  1.0|(780,[99,100,101,...|
+|  0.0|(780,[154,155,156...|
+|  0.0|(780,[127,128,129...|
++-----+--------------------+
+only showing top 10 rows
+*/
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+In PySpark we provide Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
+
+{% highlight python %}
+>>> df = spark.read.format("libsvm").option("numFeatures", "780").load("data/mllib/sample_libsvm_data.txt")
+>>> df.show(10)
++-----+--------------------+
+|label|            features|
++-----+--------------------+
+|  0.0|(780,[127,128,129...|
+|  1.0|(780,[158,159,160...|
+|  1.0|(780,[124,125,126...|
+|  1.0|(780,[152,153,154...|
+|  1.0|(780,[151,152,153...|
+|  0.0|(780,[129,130,131...|
+|  1.0|(780,[158,159,160...|
+|  1.0|(780,[99,100,101,...|
+|  0.0|(780,[154,155,156...|
+|  0.0|(780,[127,128,129...|
++-----+--------------------+
+only showing top 10 rows
+{% endhighlight %}
+</div>
+
+<div data-lang="r" markdown="1">
+In SparkR we provide Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
+
+{% highlight r %}
+> df = read.df("data/mllib/sample_libsvm_data.txt", "libsvm")
+> head(select(df, df$label, df$features), 10)
+
+   label                      features
+1      0 <environment: 0x7fe6d35366e8>
+2      1 <environment: 0x7fe6d353bf78>
+3      1 <environment: 0x7fe6d3541840>
+4      1 <environment: 0x7fe6d3545108>
+5      1 <environment: 0x7fe6d354c8e0>
+6      0 <environment: 0x7fe6d35501a8>
+7      1 <environment: 0x7fe6d3555a70>
+8      1 <environment: 0x7fe6d3559338>
+9      0 <environment: 0x7fe6d355cc00>
+10     0 <environment: 0x7fe6d35643d8>
 
 {% endhighlight %}
 </div>

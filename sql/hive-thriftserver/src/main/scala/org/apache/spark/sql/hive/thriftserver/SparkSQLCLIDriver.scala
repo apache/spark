@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, List => JList, Locale}
 import java.util.concurrent.TimeUnit
 
@@ -32,7 +33,6 @@ import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.HiveInterruptUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -100,9 +100,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, "UTF-8")
-      sessionState.info = new PrintStream(System.err, true, "UTF-8")
-      sessionState.err = new PrintStream(System.err, true, "UTF-8")
+      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
+      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
+      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
@@ -113,6 +113,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
+    // Hive 2.0.0 onwards HiveConf.getClassLoader returns the UDFClassLoader (created by Hive).
+    // Because of this spark cannot find the jars as class loader got changed
+    // Hive changed the class loader because of HIVE-11878, so it is required to use old
+    // classLoader as sparks loaded all the jars in this classLoader
+    conf.setClassLoader(Thread.currentThread().getContextClassLoader)
     sessionState.cmdProperties.entrySet().asScala.foreach { item =>
       val key = item.getKey.toString
       val value = item.getValue.toString
@@ -135,20 +140,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
 
-    val remoteMode = isRemoteMode(sessionState)
-    // "-h" option has been passed, so connect to Hive thrift server.
-    if (!remoteMode) {
-      // Hadoop-20 and above - we need to augment classpath using hiveconf
-      // components.
-      // See also: code in ExecDriver.java
-      var loader = conf.getClassLoader
-      val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
-      if (StringUtils.isNotBlank(auxJars)) {
-        loader = Utilities.addToClassPath(loader, StringUtils.split(auxJars, ","))
-      }
-      conf.setClassLoader(loader)
-      Thread.currentThread().setContextClassLoader(loader)
-    } else {
+    if (isRemoteMode(sessionState)) {
       // Hive 1.2 + not supported in CLI
       throw new RuntimeException("Remote operations not supported")
     }
@@ -166,13 +158,22 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val cli = new SparkSQLCLIDriver
     cli.setHiveVariables(oproc.getHiveVariables)
 
+    // In SparkSQL CLI, we may want to use jars augmented by hiveconf
+    // hive.aux.jars.path, here we add jars augmented by hiveconf to
+    // Spark's SessionResourceLoader to obtain these jars.
+    val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
+    if (StringUtils.isNotBlank(auxJars)) {
+      val resourceLoader = SparkSQLEnv.sqlContext.sessionState.resourceLoader
+      StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
+    }
+
     // TODO work around for set the log output to console, because the HiveContext
     // will set the output into an invalid buffer.
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, "UTF-8")
-      sessionState.info = new PrintStream(System.err, true, "UTF-8")
-      sessionState.err = new PrintStream(System.err, true, "UTF-8")
+      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
+      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
+      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }

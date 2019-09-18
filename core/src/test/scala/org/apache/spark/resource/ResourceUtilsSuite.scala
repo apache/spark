@@ -253,7 +253,7 @@ class ResourceUtilsSuite extends SparkFunSuite
       discoverResource(request)
     }.getMessage()
 
-    assert(error.contains("User is expecting to use resource: gpu but " +
+    assert(error.contains("User is expecting to use resource: gpu, but " +
       "didn't specify a discovery script!"))
   }
 }

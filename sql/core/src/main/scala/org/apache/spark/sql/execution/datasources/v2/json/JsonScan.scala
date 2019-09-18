@@ -24,10 +24,10 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JSONOptionsInRead
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.json.JsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.{FileScan, TextBasedFileScan}
-import org.apache.spark.sql.sources.v2.reader.PartitionReaderFactory
+import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -48,6 +48,15 @@ case class JsonScan(
 
   override def isSplitable(path: Path): Boolean = {
     JsonDataSource(parsedOptions).isSplitable && super.isSplitable(path)
+  }
+
+  override def getFileUnSplittableReason(path: Path): String = {
+    assert(!isSplitable(path))
+    if (!super.isSplitable(path)) {
+      super.getFileUnSplittableReason(path)
+    } else {
+      "the json datasource is set multiLine mode"
+    }
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {

@@ -136,10 +136,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
              |)""".stripMargin)
 
         spark.sql("REFRESH TABLE t1")
-        // Before SPARK-19678, sizeInBytes should be equal to dataSize.
-        // After SPARK-19678, sizeInBytes should be equal to DEFAULT_SIZE_IN_BYTES.
+        // After SPARK-28573, sizeInBytes should be equal to dataSize.
         val relation1 = spark.table("t1").queryExecution.analyzed.children.head
-        assert(relation1.stats.sizeInBytes === spark.sessionState.conf.defaultSizeInBytes)
+        assert(relation1.stats.sizeInBytes === dataSize)
 
         spark.sql("REFRESH TABLE t1")
         // After SPARK-19678 and enable ENABLE_FALL_BACK_TO_HDFS_FOR_STATS,
@@ -1448,6 +1447,68 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             } else {
               assert(catalogTable.stats.isEmpty)
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-28518 fix getDataSize refer to ChecksumFileSystem#isChecksumFile") {
+    withTempDir { tempDir =>
+      withTable("t1") {
+        spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+        Utils.tryWithResource(new PrintWriter(new File(tempDir + "/temp.crc"))) { writer =>
+          writer.write("1,2")
+        }
+
+        spark.sql(
+          s"""
+             |CREATE EXTERNAL TABLE t1(id BIGINT)
+             |STORED AS parquet
+             |LOCATION '${tempDir.getCanonicalPath}'
+             |TBLPROPERTIES (
+             |'rawDataSize'='-1', 'numFiles'='0', 'totalSize'='0',
+             |'COLUMN_STATS_ACCURATE'='false', 'numRows'='-1'
+             |)""".stripMargin)
+
+        spark.sql("REFRESH TABLE t1")
+        val relation1 = spark.table("t1").queryExecution.analyzed.children.head
+        // After SPARK-28573, sizeInBytes should be the actual size.
+        assert(relation1.stats.sizeInBytes === getDataSize(tempDir))
+
+        spark.sql("REFRESH TABLE t1")
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+          val relation2 = spark.table("t1").queryExecution.analyzed.children.head
+          assert(relation2.stats.sizeInBytes === getDataSize(tempDir))
+        }
+      }
+    }
+  }
+
+  test("fallBackToHdfs should not support Hive partitioned table") {
+    Seq(true, false).foreach { fallBackToHdfs =>
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHdfs",
+        HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+        withTempDir { dir =>
+          val tableDir = new File(dir, "table")
+          val partitionDir = new File(dir, "partition")
+          withTable("spark_28876") {
+            sql(
+              s"""
+                 |CREATE TABLE spark_28876(id bigint)
+                 |PARTITIONED BY (ds STRING)
+                 |STORED AS PARQUET
+                 |LOCATION '${tableDir.toURI}'
+             """.stripMargin)
+
+            spark.range(5).write.mode(SaveMode.Overwrite).parquet(partitionDir.getCanonicalPath)
+            sql(s"ALTER TABLE spark_28876 ADD PARTITION (ds='p1') LOCATION '$partitionDir'")
+
+            assert(getCatalogTable("spark_28876").stats.isEmpty)
+            val sizeInBytes = spark.table("spark_28876").queryExecution.analyzed.children.head
+              .asInstanceOf[HiveTableRelation].stats.sizeInBytes
+            assert(sizeInBytes === conf.defaultSizeInBytes)
+            assert(spark.table("spark_28876").count() === 5)
           }
         }
       }

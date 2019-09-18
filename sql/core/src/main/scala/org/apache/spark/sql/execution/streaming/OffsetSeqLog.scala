@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets._
 import scala.io.{Source => IOSource}
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 
 /**
  * This class is used to log offsets to persistent files in HDFS.
@@ -57,7 +57,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
       throw new IllegalStateException("Incomplete log file")
     }
 
-    val version = parseVersion(lines.next(), OffsetSeqLog.VERSION)
+    validateVersion(lines.next(), OffsetSeqLog.VERSION)
 
     // read metadata
     val metadata = lines.next().trim match {

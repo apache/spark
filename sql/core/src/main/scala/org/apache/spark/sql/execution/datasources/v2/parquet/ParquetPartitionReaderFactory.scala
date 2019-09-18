@@ -33,12 +33,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.execution.datasources.{PartitionedFile, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader}
 import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.SerializableConfiguration
@@ -197,7 +197,7 @@ case class ParquetPartitionReaderFactory(
       new ParquetRecordReader[UnsafeRow](readSupport)
     }
     val iter = new RecordReaderIterator(reader)
-    // SPARK-23457 Register a task completion lister before `initialization`.
+    // SPARK-23457 Register a task completion listener before `initialization`.
     taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
     reader
   }
@@ -219,7 +219,7 @@ case class ParquetPartitionReaderFactory(
     val vectorizedReader = new VectorizedParquetRecordReader(
       convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
     val iter = new RecordReaderIterator(vectorizedReader)
-    // SPARK-23457 Register a task completion lister before `initialization`.
+    // SPARK-23457 Register a task completion listener before `initialization`.
     taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
     logDebug(s"Appending $partitionSchema $partitionValues")
     vectorizedReader

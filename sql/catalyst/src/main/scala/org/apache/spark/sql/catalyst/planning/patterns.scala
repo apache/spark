@@ -118,19 +118,23 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         // Replace null with default value for joining key, then those rows with null in it could
         // be joined together
         case EqualNullSafe(l, r) if canEvaluate(l, left) && canEvaluate(r, right) =>
-          Some((Coalesce(Seq(l, Literal.default(l.dataType))),
-            Coalesce(Seq(r, Literal.default(r.dataType)))))
+          Seq((Coalesce(Seq(l, Literal.default(l.dataType))),
+            Coalesce(Seq(r, Literal.default(r.dataType)))),
+            (IsNull(l), IsNull(r))
+          )
         case EqualNullSafe(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
-          Some((Coalesce(Seq(r, Literal.default(r.dataType))),
-            Coalesce(Seq(l, Literal.default(l.dataType)))))
+          Seq((Coalesce(Seq(r, Literal.default(r.dataType))),
+            Coalesce(Seq(l, Literal.default(l.dataType)))),
+            (IsNull(r), IsNull(l))
+          )
         case other => None
       }
       val otherPredicates = predicates.filterNot {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
-        case EqualTo(l, r) =>
+        case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
             canEvaluate(l, right) && canEvaluate(r, left)
-        case other => false
+        case _ => false
       }
 
       if (joinKeys.nonEmpty) {

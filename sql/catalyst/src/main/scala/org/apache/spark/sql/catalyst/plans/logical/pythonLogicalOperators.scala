@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
 
 /**
- * FlatMap groups using an udf: pandas.Dataframe -> pandas.DataFrame.
+ * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
  * This is used by DataFrame.groupby().apply().
  */
 case class FlatMapGroupsInPandas(
@@ -39,6 +39,33 @@ case class FlatMapGroupsInPandas(
   override val producedAttributes = AttributeSet(output)
 }
 
+/**
+ * Map partitions using a udf: iter(pandas.Dataframe) -> iter(pandas.DataFrame).
+ * This is used by DataFrame.mapInPandas()
+ */
+case class MapInPandas(
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+
+  override val producedAttributes = AttributeSet(output)
+}
+
+/**
+ * Flatmap cogroups using a udf: pandas.Dataframe, pandas.Dataframe -> pandas.Dataframe
+ * This is used by DataFrame.groupby().cogroup().apply().
+ */
+case class FlatMapCoGroupsInPandas(
+    leftAttributes: Seq[Attribute],
+    rightAttributes: Seq[Attribute],
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    left: LogicalPlan,
+    right: LogicalPlan) extends BinaryNode {
+
+  override val producedAttributes = AttributeSet(output)
+}
+
 trait BaseEvalPython extends UnaryNode {
 
   def udfs: Seq[PythonUDF]
@@ -47,8 +74,7 @@ trait BaseEvalPython extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
-  @transient
-  override lazy val references: AttributeSet = AttributeSet(udfs.flatMap(_.references))
+  override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 }
 
 /**

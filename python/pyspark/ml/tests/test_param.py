@@ -87,6 +87,15 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertTrue(all([type(v) == float for v in b.getSplits()]))
         self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", 1.0]))
 
+    def test_list_list_float(self):
+        b = Bucketizer(splitsArray=[[-0.1, 0.5, 3], [-5, 1.5]])
+        self.assertEqual(b.getSplitsArray(), [[-0.1, 0.5, 3.0], [-5.0, 1.5]])
+        self.assertTrue(all([type(v) == list for v in b.getSplitsArray()]))
+        self.assertTrue(all([type(v) == float for v in b.getSplitsArray()[0]]))
+        self.assertTrue(all([type(v) == float for v in b.getSplitsArray()[1]]))
+        self.assertRaises(TypeError, lambda: Bucketizer(splitsArray=["a", 1.0]))
+        self.assertRaises(TypeError, lambda: Bucketizer(splitsArray=[[-5, 1.5], ["a", 1.0]]))
+
     def test_list_string(self):
         for labels in [np.array(['a', u'b']), ['a', u'b'], np.array(['a', 'b'])]:
             idx_to_string = IndexToString(labels=labels)

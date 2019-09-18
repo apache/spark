@@ -19,7 +19,7 @@ package org.apache.spark.repl
 
 import java.io._
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.Utils

@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer, IRecordProcessorFactory}
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{KinesisClientLibConfiguration, Worker}
+import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.internal.Logging
@@ -92,7 +93,9 @@ private[kinesis] class KinesisReceiver[T](
     messageHandler: Record => T,
     kinesisCreds: SparkAWSCredentials,
     dynamoDBCreds: Option[SparkAWSCredentials],
-    cloudWatchCreds: Option[SparkAWSCredentials])
+    cloudWatchCreds: Option[SparkAWSCredentials],
+    metricsLevel: MetricsLevel,
+    metricsEnabledDimensions: Set[String])
   extends Receiver[T](storageLevel) with Logging { receiver =>
 
   /*
@@ -162,6 +165,8 @@ private[kinesis] class KinesisReceiver[T](
         .withKinesisEndpoint(endpointUrl)
         .withTaskBackoffTimeMillis(500)
         .withRegionName(regionName)
+        .withMetricsLevel(metricsLevel)
+        .withMetricsEnabledDimensions(metricsEnabledDimensions.asJava)
 
       // Update the Kinesis client lib config with timestamp
       // if InitialPositionInStream.AT_TIMESTAMP is passed

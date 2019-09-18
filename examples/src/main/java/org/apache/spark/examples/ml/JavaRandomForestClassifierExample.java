@@ -69,7 +69,7 @@ public class JavaRandomForestClassifierExample {
     IndexToString labelConverter = new IndexToString()
       .setInputCol("prediction")
       .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.labels());
+      .setLabels(labelIndexer.labelsArray()[0]);
 
     // Chain indexers and forest in a Pipeline
     Pipeline pipeline = new Pipeline()

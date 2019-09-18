@@ -21,6 +21,7 @@ import java.io.{BufferedWriter, File, FileWriter}
 
 import scala.util.Properties
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
@@ -33,6 +34,8 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveContext}
+import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
+import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.{ResetSystemProperties, Utils}
@@ -124,6 +127,7 @@ class HiveSparkSubmitSuite
   }
 
   test("SPARK-8020: set sql conf in spark conf") {
+    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SparkSQLConfTest.getClass.getName.stripSuffix("$"),
@@ -161,6 +165,7 @@ class HiveSparkSubmitSuite
   }
 
   test("SPARK-9757 Persist Parquet relation with decimal column") {
+    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SPARK_9757.getClass.getName.stripSuffix("$"),
@@ -252,6 +257,7 @@ class HiveSparkSubmitSuite
   }
 
   test("SPARK-16901: set javax.jdo.option.ConnectionURL") {
+    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
     // In this test, we set javax.jdo.option.ConnectionURL and set metastore version to
     // 0.13. This test will make sure that javax.jdo.option.ConnectionURL will not be
     // overridden by hive's default settings when we create a HiveConf object inside
@@ -338,10 +344,10 @@ object SetMetastoreURLTest extends Logging {
     val builder = SparkSession.builder()
       .config(sparkConf)
       .config(UI_ENABLED.key, "false")
-      .config("spark.sql.hive.metastore.version", "0.13.1")
+      .config(HiveUtils.HIVE_METASTORE_VERSION.key, "0.13.1")
       // The issue described in SPARK-16901 only appear when
       // spark.sql.hive.metastore.jars is not set to builtin.
-      .config("spark.sql.hive.metastore.jars", "maven")
+      .config(HiveUtils.HIVE_METASTORE_JARS.key, "maven")
       .enableHiveSupport()
 
     val spark = builder.getOrCreate()
@@ -392,16 +398,16 @@ object SetWarehouseLocationTest extends Logging {
         // We are expecting that the value of spark.sql.warehouse.dir will override the
         // value of hive.metastore.warehouse.dir.
         val session = new TestHiveContext(new SparkContext(sparkConf
-          .set("spark.sql.warehouse.dir", warehouseLocation.toString)
+          .set(WAREHOUSE_PATH.key, warehouseLocation.toString)
           .set("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)))
           .sparkSession
         (session, warehouseLocation.toString)
 
     }
 
-    if (sparkSession.conf.get("spark.sql.warehouse.dir") != expectedWarehouseLocation) {
+    if (sparkSession.conf.get(WAREHOUSE_PATH.key) != expectedWarehouseLocation) {
       throw new Exception(
-        "spark.sql.warehouse.dir is not set to the expected warehouse location " +
+        s"${WAREHOUSE_PATH.key} is not set to the expected warehouse location " +
         s"$expectedWarehouseLocation.")
     }
 
@@ -564,7 +570,7 @@ object SparkSubmitClassLoaderTest extends Logging {
     val conf = new SparkConf()
     val hiveWarehouseLocation = Utils.createTempDir()
     conf.set(UI_ENABLED, false)
-    conf.set("spark.sql.warehouse.dir", hiveWarehouseLocation.toString)
+    conf.set(WAREHOUSE_PATH.key, hiveWarehouseLocation.toString)
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
@@ -642,14 +648,14 @@ object SparkSQLConfTest extends Logging {
     val conf = new SparkConf() {
       override def getAll: Array[(String, String)] = {
         def isMetastoreSetting(conf: String): Boolean = {
-          conf == "spark.sql.hive.metastore.version" || conf == "spark.sql.hive.metastore.jars"
+          conf == HiveUtils.HIVE_METASTORE_VERSION.key || conf == HiveUtils.HIVE_METASTORE_JARS.key
         }
         // If there is any metastore settings, remove them.
         val filteredSettings = super.getAll.filterNot(e => isMetastoreSetting(e._1))
 
         // Always add these two metastore settings at the beginning.
-        ("spark.sql.hive.metastore.version" -> "0.12") +:
-        ("spark.sql.hive.metastore.jars" -> "maven") +:
+        (HiveUtils.HIVE_METASTORE_VERSION.key -> "0.12") +:
+        (HiveUtils.HIVE_METASTORE_JARS.key -> "maven") +:
         filteredSettings
       }
 
@@ -676,10 +682,10 @@ object SPARK_9757 extends QueryTest {
     val hiveWarehouseLocation = Utils.createTempDir()
     val sparkContext = new SparkContext(
       new SparkConf()
-        .set("spark.sql.hive.metastore.version", "0.13.1")
-        .set("spark.sql.hive.metastore.jars", "maven")
+        .set(HiveUtils.HIVE_METASTORE_VERSION.key, "0.13.1")
+        .set(HiveUtils.HIVE_METASTORE_JARS.key, "maven")
         .set(UI_ENABLED, false)
-        .set("spark.sql.warehouse.dir", hiveWarehouseLocation.toString))
+        .set(WAREHOUSE_PATH.key, hiveWarehouseLocation.toString))
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
@@ -725,7 +731,7 @@ object SPARK_11009 extends QueryTest {
     val sparkContext = new SparkContext(
       new SparkConf()
         .set(UI_ENABLED, false)
-        .set("spark.sql.shuffle.partitions", "100"))
+        .set(SHUFFLE_PARTITIONS.key, "100"))
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
@@ -756,7 +762,7 @@ object SPARK_14244 extends QueryTest {
     val sparkContext = new SparkContext(
       new SparkConf()
         .set(UI_ENABLED, false)
-        .set("spark.sql.shuffle.partitions", "100"))
+        .set(SHUFFLE_PARTITIONS.key, "100"))
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
