@@ -2112,14 +2112,14 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   }
 
   test("SPARK-29101 test count with DROPMALFORMED mode") {
-    Seq((true, 4), (false, 3)).foreach { record =>
-      withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> record._1.toString) {
+    Seq((true, 4), (false, 3)).foreach { case (csvColumnPruning, expectedCount) =>
+      withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> csvColumnPruning.toString) {
         val count = spark.read
           .option("header", "true")
           .option("mode", "DROPMALFORMED")
           .csv(testFile(malformedRowFile))
           .count()
-        assert(record._2 == count)
+        assert(expectedCount == count)
       }
     }
   }
