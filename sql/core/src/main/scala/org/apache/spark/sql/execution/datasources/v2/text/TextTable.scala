@@ -28,7 +28,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class TextTable(
     name: String,
     sparkSession: SparkSession,
-    options: CaseInsensitiveStringMap,
+    options: java.util.Map[String, String],
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType],
     fallbackFileFormat: Class[_ <: FileFormat])

@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Map;
+
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -36,26 +39,32 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 public interface TableProvider {
 
   /**
-   * Return a {@link Table} instance to do read/write with user-specified options.
+   * Return a {@link Table} instance with the given table properties to do read/write.
+   * Implementations should infer the table schema and partitioning.
    *
-   * @param options the user-specified options that can identify a table, e.g. file path, Kafka
-   *                topic name, etc. It's an immutable case-insensitive string-to-string map.
+   * @param properties The properties of the table to load. It should be sufficient to define and
+   *                   access a table. The properties map may be {@link CaseInsensitiveStringMap}.
    */
-  Table getTable(CaseInsensitiveStringMap options);
+  Table loadTable(Map<String, String> properties);
 
   /**
-   * Return a {@link Table} instance to do read/write with user-specified schema and options.
-   * <p>
-   * By default this method throws {@link UnsupportedOperationException}, implementations should
-   * override this method to handle user-specified schema.
-   * </p>
-   * @param options the user-specified options that can identify a table, e.g. file path, Kafka
-   *                topic name, etc. It's an immutable case-insensitive string-to-string map.
-   * @param schema the user-specified schema.
-   * @throws UnsupportedOperationException
+   * Return a {@link Table} instance with the given table schema, partitioning and properties to do
+   * read/write . The returned table must report the same schema and partitioning with the given
+   * ones.
+   *
+   * By default this method simply calls {@link #loadTable(Map)}. The returned table may report
+   * different schema/partitioning and fail the job later. Implementation should override
+   * this method if they can leverage the given schema and partitioning.
+   *
+   * @param schema The schema of the table to load.
+   * @param partitions The data partitioning of the table to load.
+   * @param properties The properties of the table to load. It should be sufficient to define and
+   *                   access a table. The properties map may be {@link CaseInsensitiveStringMap}.
    */
-  default Table getTable(CaseInsensitiveStringMap options, StructType schema) {
-    throw new UnsupportedOperationException(
-      this.getClass().getSimpleName() + " source does not support user-specified schema");
+  default Table loadTable(
+      StructType schema,
+      Transform[] partitions,
+      Map<String, String> properties) {
+    return loadTable(properties);
   }
 }

@@ -19,6 +19,7 @@ package test.org.apache.spark.sql.connector;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Map;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
@@ -56,7 +57,7 @@ public class JavaPartitionAwareDataSource implements TableProvider {
   }
 
   @Override
-  public Table getTable(CaseInsensitiveStringMap options) {
+  public Table loadTable(Map<String, String> properties) {
     return new JavaSimpleBatchTable() {
       @Override
       public Transform[] partitioning() {

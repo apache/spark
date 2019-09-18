@@ -204,7 +204,7 @@ private case object TestRelation extends LeafNode with NamedRelation {
 }
 
 private object TestTableProvider extends TableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def loadTable(properties: util.Map[String, String]): Table = {
     throw new UnsupportedOperationException
   }
 }

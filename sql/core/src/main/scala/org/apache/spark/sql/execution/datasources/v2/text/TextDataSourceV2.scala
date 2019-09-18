@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.text
 
+import java.util
+
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class TextDataSourceV2 extends FileDataSourceV2 {
 
@@ -29,16 +31,18 @@ class TextDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "text"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    val paths = getPaths(options)
+  override def loadTable(properties: util.Map[String, String]): Table = {
+    val paths = getPaths(properties)
     val tableName = getTableName(paths)
-    TextTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+    TextTable(tableName, sparkSession, properties, paths, None, fallbackFileFormat)
   }
 
-  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
-    val paths = getPaths(options)
+  override def loadTable(
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    val paths = getPaths(properties)
     val tableName = getTableName(paths)
-    TextTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
+    TextTable(tableName, sparkSession, properties, paths, Some(schema), fallbackFileFormat)
   }
 }
-

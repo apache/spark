@@ -40,7 +40,7 @@ class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "parquet"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def loadTable(properties: java.util.Map[String, String]): Table = {
     new DummyReadOnlyFileTable
   }
 }
@@ -64,7 +64,7 @@ class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "parquet"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def loadTable(properties: java.util.Map[String, String]): Table = {
     new DummyWriteOnlyFileTable
   }
 }

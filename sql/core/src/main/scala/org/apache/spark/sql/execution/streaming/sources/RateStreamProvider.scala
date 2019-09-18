@@ -46,9 +46,25 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
 class RateStreamProvider extends TableProvider with DataSourceRegister {
-  import RateStreamProvider._
+  override def loadTable(properties: util.Map[String, String]): Table = {
+    RateStreamTable
+  }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def shortName(): String = "rate"
+}
+
+object RateStreamTable extends Table with SupportsRead {
+
+  override def name(): String = s"RateStreamTable"
+
+  override def schema(): StructType = RateStreamProvider.SCHEMA
+
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
+  }
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    import RateStreamProvider._
     val rowsPerSecond = options.getLong(ROWS_PER_SECOND, 1)
     if (rowsPerSecond <= 0) {
       throw new IllegalArgumentException(
@@ -69,38 +85,16 @@ class RateStreamProvider extends TableProvider with DataSourceRegister {
       throw new IllegalArgumentException(
         s"Invalid value '$numPartitions'. The option 'numPartitions' must be positive")
     }
-    new RateStreamTable(rowsPerSecond, rampUpTimeSeconds, numPartitions)
-  }
+    () => new Scan {
+      override def readSchema(): StructType = RateStreamProvider.SCHEMA
 
-  override def shortName(): String = "rate"
-}
+      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+        new RateStreamMicroBatchStream(
+          rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
 
-class RateStreamTable(
-    rowsPerSecond: Long,
-    rampUpTimeSeconds: Long,
-    numPartitions: Int)
-  extends Table with SupportsRead {
-
-  override def name(): String = {
-    s"RateStream(rowsPerSecond=$rowsPerSecond, rampUpTimeSeconds=$rampUpTimeSeconds, " +
-      s"numPartitions=$numPartitions)"
-  }
-
-  override def schema(): StructType = RateStreamProvider.SCHEMA
-
-  override def capabilities(): util.Set[TableCapability] = {
-    Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
-  }
-
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
-    override def readSchema(): StructType = RateStreamProvider.SCHEMA
-
-    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-      new RateStreamMicroBatchStream(
-        rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
-
-    override def toContinuousStream(checkpointLocation: String): ContinuousStream =
-      new RateStreamContinuousStream(rowsPerSecond, numPartitions)
+      override def toContinuousStream(checkpointLocation: String): ContinuousStream =
+        new RateStreamContinuousStream(rowsPerSecond, numPartitions)
+    }
   }
 }
 

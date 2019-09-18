@@ -34,15 +34,20 @@ import org.apache.spark.sql.util.SchemaUtils
 
 abstract class FileTable(
     sparkSession: SparkSession,
-    options: CaseInsensitiveStringMap,
+    options: java.util.Map[String, String],
     paths: Seq[String],
     userSpecifiedSchema: Option[StructType])
   extends Table with SupportsRead with SupportsWrite {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
+  private def caseSensitiveOptions = options match {
+    case m: CaseInsensitiveStringMap => m.asCaseSensitiveMap()
+    case other => other
+  }
+
   lazy val fileIndex: PartitioningAwareFileIndex = {
-    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+    val caseSensitiveMap = caseSensitiveOptions.asScala.toMap
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
     if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
@@ -104,7 +109,7 @@ abstract class FileTable(
 
   override def partitioning: Array[Transform] = fileIndex.partitionSchema.asTransforms
 
-  override def properties: util.Map[String, String] = options.asCaseSensitiveMap
+  override def properties: util.Map[String, String] = caseSensitiveOptions
 
   override def capabilities: java.util.Set[TableCapability] = FileTable.CAPABILITIES
 

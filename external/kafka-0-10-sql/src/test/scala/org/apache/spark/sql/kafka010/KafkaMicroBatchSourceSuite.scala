@@ -1142,7 +1142,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
         val dsOptions = new CaseInsensitiveStringMap(options.asJava)
-        val table = provider.getTable(dsOptions)
+        val table = provider.loadTable(dsOptions)
         val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
         val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),

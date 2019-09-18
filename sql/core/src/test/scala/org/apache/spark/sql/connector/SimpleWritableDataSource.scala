@@ -131,8 +131,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     }
   }
 
-  class MyTable(options: CaseInsensitiveStringMap)
-    extends SimpleBatchTable with SupportsWrite {
+  class MyTable(options: util.Map[String, String]) extends SimpleBatchTable with SupportsWrite {
 
     private val path = options.get("path")
     private val conf = SparkContext.getActive.get.hadoopConfiguration
@@ -151,7 +150,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
       Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def loadTable(options: util.Map[String, String]): Table = {
     new MyTable(options)
   }
 }

@@ -72,6 +72,8 @@ class InMemoryTable(
     this
   }
 
+  def clear(): Unit = dataMap.synchronized(dataMap.clear())
+
   override def capabilities: util.Set[TableCapability] = Set(
     TableCapability.BATCH_READ,
     TableCapability.BATCH_WRITE,

@@ -23,7 +23,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 /**
@@ -41,7 +40,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
 
   lazy val sparkSession = SparkSession.active
 
-  protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
+  protected def getPaths(map: java.util.Map[String, String]): Seq[String] = {
     val objectMapper = new ObjectMapper()
     val paths = Option(map.get("paths")).map { pathStr =>
       objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq

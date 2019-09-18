@@ -31,6 +31,8 @@ import org.apache.spark.sql.types.StructType
  * An implementation of catalog v2 `Table` to expose v1 table metadata.
  */
 private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
+  assert(v1Table.provider.isDefined)
+
   implicit class IdentifierHelper(identifier: TableIdentifier) {
     def quoted: String = {
       identifier.database match {
@@ -38,7 +40,6 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
           Seq(db, identifier.table).map(quote).mkString(".")
         case _ =>
           quote(identifier.table)
-
       }
     }
 
@@ -51,20 +52,18 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
     }
   }
 
-  def catalogTable: CatalogTable = v1Table
-
-  lazy val options: Map[String, String] = {
-    v1Table.storage.locationUri match {
+  override lazy val properties: util.Map[String, String] = {
+    val pathOption = v1Table.storage.locationUri match {
       case Some(uri) =>
-        v1Table.storage.properties + ("path" -> uri.toString)
+        Some("path" -> uri.toString)
       case _ =>
-        v1Table.storage.properties
+        None
     }
+    val providerOption = "provider" -> v1Table.provider.get
+    (v1Table.storage.properties ++ v1Table.properties ++ pathOption + providerOption).asJava
   }
 
-  override lazy val properties: util.Map[String, String] = v1Table.properties.asJava
-
-  override lazy val schema: StructType = v1Table.schema
+  override def schema: StructType = v1Table.schema
 
   override lazy val partitioning: Array[Transform] = {
     val partitions = new mutable.ArrayBuffer[Transform]()
@@ -84,5 +83,5 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
 
   override def capabilities: util.Set[TableCapability] = new util.HashSet[TableCapability]()
 
-  override def toString: String = s"UnresolvedTable($name)"
+  override def toString: String = s"V1Table($name)"
 }

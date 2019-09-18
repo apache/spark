@@ -33,7 +33,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 public class JavaAdvancedDataSourceV2 implements TableProvider {
 
   @Override
-  public Table getTable(CaseInsensitiveStringMap options) {
+  public Table loadTable(Map<String, String> properties) {
     return new JavaSimpleBatchTable() {
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {

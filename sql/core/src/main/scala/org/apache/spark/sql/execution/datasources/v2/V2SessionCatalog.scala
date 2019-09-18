@@ -42,7 +42,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import V2SessionCatalog._
 
-  override val defaultNamespace: Array[String] = Array("default")
+  override def defaultNamespace: Array[String] = Array("default")
 
   override def name: String = CatalogManager.SESSION_CATALOG_NAME
 
@@ -61,12 +61,24 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
     }
   }
 
+  override def tableExists(ident: Identifier): Boolean = {
+    if (ident.namespace().length <= 1) {
+      catalog.tableExists(ident.asTableIdentifier)
+    } else {
+      false
+    }
+  }
+
   override def loadTable(ident: Identifier): Table = {
     val catalogTable = try {
       catalog.getTableMetadata(ident.asTableIdentifier)
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)
+    }
+
+    if (catalogTable.tableType == CatalogTableType.VIEW) {
+      throw new NoSuchTableException(ident)
     }
 
     V1Table(catalogTable)
@@ -109,7 +121,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
         throw new TableAlreadyExistsException(ident)
     }
 
-    loadTable(ident)
+    V1Table(tableDesc)
   }
 
   override def alterTable(
@@ -124,31 +136,27 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
+    val updatedTable = catalogTable.copy(properties = properties, schema = schema)
 
     try {
-      catalog.alterTable(catalogTable.copy(properties = properties, schema = schema))
+      catalog.alterTable(updatedTable)
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)
     }
 
-    loadTable(ident)
+    V1Table(updatedTable)
   }
 
   override def dropTable(ident: Identifier): Boolean = {
-    try {
-      if (loadTable(ident) != null) {
-        catalog.dropTable(
-          ident.asTableIdentifier,
-          ignoreIfNotExists = true,
-          purge = true /* skip HDFS trash */)
-        true
-      } else {
-        false
-      }
-    } catch {
-      case _: NoSuchTableException =>
-        false
+    if (tableExists(ident)) {
+      catalog.dropTable(
+        ident.asTableIdentifier,
+        ignoreIfNotExists = true,
+        purge = true /* skip HDFS trash */)
+      true
+    } else {
+      false
     }
   }
 
@@ -156,9 +164,9 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
     if (tableExists(newIdent)) {
       throw new TableAlreadyExistsException(newIdent)
     }
-
-    // Load table to make sure the table exists
-    loadTable(oldIdent)
+    if (!tableExists(oldIdent)) {
+      throw new NoSuchTableException(oldIdent)
+    }
     catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)
   }
 
