@@ -103,7 +103,6 @@ class BinarizerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Binarizer should not support sparse vector with negative threshold") {
-    val threshold = -0.5
     val data = Seq((0, Vectors.sparse(3, Array(1), Array(0.5))),
       (1, Vectors.dense(Array(0.0, 0.5, 0.0))))
     val df = data.toDF("id", "feature")
