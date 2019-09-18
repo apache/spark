@@ -54,14 +54,14 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       .setIfMissing("spark.executor.memory", "3g")
       .setIfMissing(UI_ENABLED, false)
 
-    val spark = SparkSession.builder.config(conf).getOrCreate()
+    val sparkSession = SparkSession.builder.config(conf).getOrCreate()
 
     // Set default configs. Individual cases will change them if necessary.
-    spark.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
-    spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
-    spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+    sparkSession.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
+    sparkSession.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
+    sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
 
-    spark
+    sparkSession
   }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
