@@ -512,7 +512,10 @@ class VectorsSuite extends SparkFunSuite with Logging {
   }
 
   test("dot product only supports vectors of same size") {
-    intercept[IllegalArgumentException]{ Vectors.dot(Vectors.dense(arr), Vectors.zeros(1)) }
+    val vSize4 = Vectors.dense(arr)
+    val vSize1 = Vectors.zeros(1)
+    intercept[IllegalArgumentException]{ Vectors.dot(vSize4, vSize1) }
+    intercept[IllegalArgumentException]{ vSize1.dot(vSize4) }
   }
 
   test("dense vector dot product") {
