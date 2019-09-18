@@ -75,28 +75,38 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val schema = dataset.schema
     val inputType = schema($(inputCol)).dataType
     val td = $(threshold)
-
-    val binarizerDouble = udf { in: Double => if (in > td) 1.0 else 0.0 }
-    val binarizerVector = udf { (data: Vector) =>
-      val indices = ArrayBuilder.make[Int]
-      val values = ArrayBuilder.make[Double]
-
-      data.foreachActive { (index, value) =>
-        if (value > td) {
-          indices += index
-          values +=  1.0
-        }
-      }
-
-      Vectors.sparse(data.size, indices.result(), values.result()).compressed
-    }
-
     val metadata = outputSchema($(outputCol)).metadata
 
     inputType match {
       case DoubleType =>
+        val binarizerDouble = udf { in: Double => if (in > td) 1.0 else 0.0 }
         dataset.select(col("*"), binarizerDouble(col($(inputCol))).as($(outputCol), metadata))
+
       case _: VectorUDT =>
+        val func = (vector: Vector) => {
+          val indices = ArrayBuilder.make[Int]
+          val values = ArrayBuilder.make[Double]
+
+          vector.foreachActive { (index, value) =>
+            if (value > td) {
+              indices += index
+              values +=  1.0
+            }
+          }
+
+          Vectors.sparse(vector.size, indices.result(), values.result()).compressed
+        }
+
+        val binarizerVector = if (td < 0) {
+          udf { vector: Vector =>
+            require(vector.isInstanceOf[DenseVector],
+              s"Threshold must be non-negative for operations on sparse vector $vector.")
+            func(vector)
+          }
+        } else {
+          udf(func)
+        }
+
         dataset.select(col("*"), binarizerVector(col($(inputCol))).as($(outputCol), metadata))
     }
   }

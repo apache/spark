@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
@@ -101,6 +102,19 @@ class BinarizerSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("Binarizer should not support sparse vector with negative threshold") {
+    val threshold = -0.5
+    val data = Seq((0, Vectors.sparse(3, Array(1), Array(0.5))),
+      (1, Vectors.dense(Array(0.0, 0.5, 0.0))))
+    val df = data.toDF("id", "feature")
+    val binarizer = new Binarizer()
+      .setInputCol("feature")
+      .setOutputCol("binarized_feature")
+      .setThreshold(-0.5)
+    intercept[SparkException] {
+      binarizer.transform(df).count()
+    }
+  }
 
   test("read/write") {
     val t = new Binarizer()
