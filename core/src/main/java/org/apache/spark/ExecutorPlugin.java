@@ -40,12 +40,15 @@ public interface ExecutorPlugin {
    * Initialize the executor plugin.
    *
    * <p>Each executor will, during its initialization, invoke this method on each
-   * plugin provided in the spark.executor.plugins configuration.</p>
+   * plugin provided in the spark.executor.plugins configuration. The Spark executor
+   * will wait on the completion of the execution of the init method.</p>
    *
    * <p>Plugins should create threads in their implementation of this method for
    * any polling, blocking, or intensive computation.</p>
+   *
+   * @param pluginContext Context information for the executor where the plugin is running.
    */
-  default void init() {}
+  default void init(ExecutorPluginContext pluginContext) {}
 
   /**
    * Clean up and terminate this plugin.
