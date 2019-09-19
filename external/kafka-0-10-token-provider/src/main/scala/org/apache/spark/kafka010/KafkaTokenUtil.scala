@@ -251,17 +251,16 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  def findMatchingToken(
+  def findMatchingTokenClusterConfig(
       sparkConf: SparkConf,
-      bootStrapServers: String): Option[(Token[_ <: TokenIdentifier], KafkaTokenClusterConf)] = {
+      bootStrapServers: String): Option[KafkaTokenClusterConf] = {
     val tokens = UserGroupInformation.getCurrentUser().getCredentials.getAllTokens.asScala
     val clusterConfigs = tokens
       .filter(_.getService().toString().startsWith(TOKEN_SERVICE_PREFIX))
       .map { token =>
-        (token, KafkaTokenSparkConf.getClusterConfig(
-          sparkConf, getClusterIdentifier(token.getService())))
+        KafkaTokenSparkConf.getClusterConfig(sparkConf, getClusterIdentifier(token.getService()))
       }
-      .filter { case (_, clusterConfig) =>
+      .filter { clusterConfig =>
         val pattern = Pattern.compile(clusterConfig.targetServersRegex)
         Utils.stringToSeq(bootStrapServers).exists(pattern.matcher(_).matches())
       }

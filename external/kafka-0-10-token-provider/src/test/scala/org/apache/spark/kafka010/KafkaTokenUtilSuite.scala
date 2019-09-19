@@ -174,11 +174,11 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(KafkaTokenUtil.isGlobalJaasConfigurationProvided)
   }
 
-  test("findMatchingToken without token should return None") {
-    assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) === None)
+  test("findMatchingTokenClusterConfig without token should return None") {
+    assert(KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf, bootStrapServers) === None)
   }
 
-  test("findMatchingToken with non-matching tokens should return None") {
+  test("findMatchingTokenClusterConfig with non-matching tokens should return None") {
     sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       nonMatchingTargetServersRegex)
@@ -188,22 +188,21 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
     addTokenToUGI(new Text("intentionally_garbage"), tokenId1, tokenPassword1)
 
-    assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) === None)
+    assert(KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf, bootStrapServers) === None)
   }
 
-  test("findMatchingToken with one matching token should return token and cluster configuration") {
+  test("findMatchingTokenClusterConfig with one matching token should return token and cluster " +
+    "configuration") {
     sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
 
-    val clusterConfig = KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers)
-    assert(new String(clusterConfig.get._1.getIdentifier()) === tokenId1)
-    assert(new String(clusterConfig.get._1.getPassword()) === tokenPassword1)
-    assert(clusterConfig.get._2 === KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1))
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf, bootStrapServers)
+    assert(clusterConfig.get === KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1))
   }
 
-  test("findMatchingToken with multiple matching tokens should throw exception") {
+  test("findMatchingTokenClusterConfig with multiple matching tokens should throw exception") {
     sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
@@ -214,7 +213,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     addTokenToUGI(tokenService2, tokenId1, tokenPassword1)
 
     val thrown = intercept[IllegalArgumentException] {
-      KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers)
+      KafkaTokenUtil.findMatchingTokenClusterConfig(sparkConf, bootStrapServers)
     }
     assert(thrown.getMessage.contains("More than one delegation token matches"))
   }

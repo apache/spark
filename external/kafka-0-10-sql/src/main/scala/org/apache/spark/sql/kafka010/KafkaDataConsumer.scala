@@ -525,7 +525,13 @@ private[kafka010] class KafkaDataConsumer(
     if (!_consumer.isDefined) {
       retrieveConsumer()
     }
-    ensureConsumerHasLatestToken()
+    if (!isConsumerUsingCurrentToken) {
+      logDebug("Cached consumer uses and old delegation token, invalidating.")
+      releaseConsumer()
+      consumerPool.invalidateKey(cacheKey)
+      fetchedDataPool.invalidate(cacheKey)
+      retrieveConsumer()
+    }
     _consumer.get
   }
 
@@ -534,27 +540,19 @@ private[kafka010] class KafkaDataConsumer(
     require(_consumer.isDefined, "borrowing consumer from pool must always succeed.")
   }
 
-  private def ensureConsumerHasLatestToken(): Unit = {
+  private def isConsumerUsingCurrentToken: Boolean = {
     require(_consumer.isDefined, "Consumer must be defined")
     val params = _consumer.get.kafkaParamsWithSecurity
     if (params.containsKey(SaslConfigs.SASL_JAAS_CONFIG)) {
       logDebug("Delegation token used by cached consumer, checking if uses the latest token.")
-
-      val jaasParams = params.get(SaslConfigs.SASL_JAAS_CONFIG).asInstanceOf[String]
-      val clusterConfig = KafkaTokenUtil.findMatchingToken(SparkEnv.get.conf,
+      val consumerJaasParams = params.get(SaslConfigs.SASL_JAAS_CONFIG).asInstanceOf[String]
+      val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
         params.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
       require(clusterConfig.isDefined, "Delegation token must exist for this consumer.")
-      val username = new String(clusterConfig.get._1.getIdentifier)
-      // Identifier is changing only when new token obtained (in Spark we're not renewing tokens).
-      // As a conclusion if the actual token identifier in UGI is not found in the JAAS
-      // configuration then it uses the old token so it can be invalidated.
-      if (!jaasParams.contains(username)) {
-        logDebug("Cached consumer uses and old delegation token, invalidating.")
-        releaseConsumer()
-        consumerPool.invalidateKey(cacheKey)
-        fetchedDataPool.invalidate(cacheKey)
-        retrieveConsumer()
-      }
+      val currentJaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConfig.get)
+      consumerJaasParams.equals(currentJaasParams)
+    } else {
+      true
     }
   }
 
