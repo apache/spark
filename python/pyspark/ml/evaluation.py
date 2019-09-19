@@ -110,8 +110,6 @@ class JavaEvaluator(JavaParams, Evaluator):
 class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol, HasWeightCol,
                                     JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Evaluator for binary classification, which expects two input columns: rawPrediction and label.
     The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
     1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
@@ -194,8 +192,6 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
 class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeightCol,
                           JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Evaluator for Regression, which expects input columns prediction, label
     and an optional weight column.
 
@@ -278,8 +274,6 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
 class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeightCol,
                                         JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Evaluator for Multiclass Classification, which expects two input
     columns: prediction and label.
 
@@ -497,8 +491,6 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
                           JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Evaluator for Clustering results, which expects two input
     columns: prediction and features. The metric computes the Silhouette
     measure using the squared Euclidean distance.

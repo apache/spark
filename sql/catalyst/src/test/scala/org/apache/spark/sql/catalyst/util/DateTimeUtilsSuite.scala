@@ -19,19 +19,20 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.ZoneId
+import java.time.{LocalDateTime, LocalTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
+
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
 
-class DateTimeUtilsSuite extends SparkFunSuite {
+class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
 
   val TimeZonePST = TimeZone.getTimeZone("PST")
-  private def defaultTz = DateTimeUtils.defaultTimeZone()
   private def defaultZoneId = ZoneId.systemDefault()
 
   test("nanoseconds truncation") {
@@ -143,10 +144,14 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("1999 08")).isEmpty)
   }
 
+  private def toTimestamp(str: String, zoneId: ZoneId): Option[SQLTimestamp] = {
+    stringToTimestamp(UTF8String.fromString(str), zoneId)
+  }
+
   test("string to timestamp") {
     for (tz <- ALL_TIMEZONES) {
       def checkStringToTimestamp(str: String, expected: Option[Long]): Unit = {
-        assert(stringToTimestamp(UTF8String.fromString(str), tz.toZoneId) === expected)
+        assert(toTimestamp(str, tz.toZoneId) === expected)
       }
 
       checkStringToTimestamp("1969-12-31 16:00:00", Option(date(1969, 12, 31, 16, tz = tz)))
@@ -272,8 +277,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       UTF8String.fromString("2015-02-29 00:00:00"), defaultZoneId).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-04-31 00:00:00"), defaultZoneId).isEmpty)
-    assert(stringToTimestamp(UTF8String.fromString("2015-02-29"), defaultZoneId).isEmpty)
-    assert(stringToTimestamp(UTF8String.fromString("2015-04-31"), defaultZoneId).isEmpty)
+    assert(toTimestamp("2015-02-29", defaultZoneId).isEmpty)
+    assert(toTimestamp("2015-04-31", defaultZoneId).isEmpty)
   }
 
   test("hours") {
@@ -366,13 +371,13 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   test("timestamp add months") {
     val ts1 = date(1997, 2, 28, 10, 30, 0)
     val ts2 = date(2000, 2, 28, 10, 30, 0, 123000)
-    assert(timestampAddInterval(ts1, 36, 123000, defaultTz) === ts2)
+    assert(timestampAddInterval(ts1, 36, 123000, defaultZoneId) === ts2)
 
     val ts3 = date(1997, 2, 27, 16, 0, 0, 0, TimeZonePST)
     val ts4 = date(2000, 2, 27, 16, 0, 0, 123000, TimeZonePST)
     val ts5 = date(2000, 2, 28, 0, 0, 0, 123000, TimeZoneGMT)
-    assert(timestampAddInterval(ts3, 36, 123000, TimeZonePST) === ts4)
-    assert(timestampAddInterval(ts3, 36, 123000, TimeZoneGMT) === ts5)
+    assert(timestampAddInterval(ts3, 36, 123000, TimeZonePST.toZoneId) === ts4)
+    assert(timestampAddInterval(ts3, 36, 123000, TimeZoneGMT.toZoneId) === ts5)
   }
 
   test("monthsBetween") {
@@ -457,13 +462,12 @@ class DateTimeUtilsSuite extends SparkFunSuite {
         timezone: TimeZone = DateTimeUtils.defaultTimeZone()): Unit = {
       val truncated =
         DateTimeUtils.truncTimestamp(inputTS, level, timezone)
-      val expectedTS =
-        DateTimeUtils.stringToTimestamp(UTF8String.fromString(expected), defaultZoneId)
+      val expectedTS = toTimestamp(expected, defaultZoneId)
       assert(truncated === expectedTS.get)
     }
 
     val defaultInputTS = DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-05T09:32:05.359"), defaultZoneId)
+      UTF8String.fromString("2015-03-05T09:32:05.359123"), defaultZoneId)
     val defaultInputTS1 = DateTimeUtils.stringToTimestamp(
       UTF8String.fromString("2015-03-31T20:32:05.359"), defaultZoneId)
     val defaultInputTS2 = DateTimeUtils.stringToTimestamp(
@@ -487,6 +491,11 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", defaultInputTS.get)
     testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", defaultInputTS1.get)
     testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", defaultInputTS2.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_MICROSECOND, "2015-03-05T09:32:05.359123", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_MILLISECOND, "2015-03-05T09:32:05.359", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_DECADE, "2010-01-01", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_CENTURY, "2001-01-01", defaultInputTS.get)
+    testTrunc(DateTimeUtils.TRUNC_TO_MILLENNIUM, "2001-01-01", defaultInputTS.get)
 
     for (tz <- ALL_TIMEZONES) {
       withDefaultTimeZone(tz) {
@@ -500,6 +509,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
           UTF8String.fromString("2015-03-30T02:32:05.359"), defaultZoneId)
         val inputTS4 = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString("2015-03-29T02:32:05.359"), defaultZoneId)
+        val inputTS5 = DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString("1999-03-29T01:02:03.456789"), defaultZoneId)
 
         testTrunc(DateTimeUtils.TRUNC_TO_YEAR, "2015-01-01T00:00:00", inputTS.get, tz)
         testTrunc(DateTimeUtils.TRUNC_TO_MONTH, "2015-03-01T00:00:00", inputTS.get, tz)
@@ -515,6 +526,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS.get, tz)
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-01-01T00:00:00", inputTS1.get, tz)
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", inputTS2.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_DECADE, "1990-01-01", inputTS5.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_CENTURY, "1901-01-01", inputTS5.get, tz)
+        testTrunc(DateTimeUtils.TRUNC_TO_MILLENNIUM, "2001-01-01", inputTS.get, tz)
       }
     }
   }
@@ -533,12 +547,12 @@ class DateTimeUtilsSuite extends SparkFunSuite {
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
-      "Kwajalein" -> Set(8632),
+      "Kwajalein" -> Set(8632, 8633),
       "Pacific/Apia" -> Set(15338),
       "Pacific/Enderbury" -> Set(9130, 9131),
       "Pacific/Fakaofo" -> Set(15338),
       "Pacific/Kiritimati" -> Set(9130, 9131),
-      "Pacific/Kwajalein" -> Set(8632),
+      "Pacific/Kwajalein" -> Set(8632, 8633),
       "MIT" -> Set(15338))
     for (tz <- ALL_TIMEZONES) {
       val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
@@ -554,5 +568,22 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   test("toMillis") {
     assert(DateTimeUtils.toMillis(-9223372036844776001L) === -9223372036844777L)
     assert(DateTimeUtils.toMillis(-157700927876544L) === -157700927877L)
+  }
+
+  test("special timestamp values") {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      val tolerance = TimeUnit.SECONDS.toMicros(30)
+
+      assert(toTimestamp("Epoch", zoneId).get === 0)
+      val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
+      toTimestamp("NOW", zoneId).get should be (now +- tolerance)
+      assert(toTimestamp("now UTC", zoneId) === None)
+      val today = instantToMicros(LocalDateTime.now(zoneId)
+        .`with`(LocalTime.MIDNIGHT)
+        .atZone(zoneId).toInstant)
+      toTimestamp(" Yesterday", zoneId).get should be (today - MICROS_PER_DAY +- tolerance)
+      toTimestamp("Today ", zoneId).get should be (today +- tolerance)
+      toTimestamp(" tomorrow CET ", zoneId).get should be (today + MICROS_PER_DAY +- tolerance)
+    }
   }
 }

@@ -31,10 +31,10 @@ import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class JoinSuite extends QueryTest with SharedSQLContext {
+class JoinSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   setupTestData()
@@ -611,14 +611,16 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       /** Cartesian product involving C, which is not involved in a CROSS join */
       "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
 
-     def checkCartesianDetection(query: String): Unit = {
+    def checkCartesianDetection(query: String): Unit = {
       val e = intercept[Exception] {
         checkAnswer(sql(query), Nil);
       }
       assert(e.getMessage.contains("Detected implicit cartesian product"))
     }
 
-    cartesianQueries.foreach(checkCartesianDetection)
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      cartesianQueries.foreach(checkCartesianDetection)
+    }
 
     // Check that left_semi, left_anti, existence joins without conditions do not throw
     // an exception if cross joins are disabled
@@ -1001,7 +1003,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     val left = Seq((1, 2), (2, 3)).toDF("a", "b")
     val right = Seq((1, 2), (3, 4)).toDF("c", "d")
-    val df = left.join(right, pythonTestUDF($"a") === pythonTestUDF($"c"))
+    val df = left.join(right, pythonTestUDF(left("a")) === pythonTestUDF(right.col("c")))
 
     val joinNode = df.queryExecution.executedPlan.find(_.isInstanceOf[BroadcastHashJoinExec])
     assert(joinNode.isDefined)
@@ -1025,7 +1027,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     val left = Seq((1, 2), (2, 3)).toDF("a", "b")
     val right = Seq((1, 2), (3, 4)).toDF("c", "d")
-    val df = left.crossJoin(right).where(pythonTestUDF($"a") === pythonTestUDF($"c"))
+    val df = left.crossJoin(right).where(pythonTestUDF(left("a")) === right.col("c"))
 
     // Before optimization, there is a logical Filter operator.
     val filterInAnalysis = df.queryExecution.analyzed.find(_.isInstanceOf[Filter])

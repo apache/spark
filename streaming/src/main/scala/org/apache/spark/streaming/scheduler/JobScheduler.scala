@@ -22,8 +22,6 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import scala.collection.JavaConverters._
 import scala.util.Failure
 
-import org.apache.commons.lang3.SerializationUtils
-
 import org.apache.spark.ExecutorAllocationClient
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
@@ -31,7 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.{EventLoop, ThreadUtils}
+import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
 
 
 private[scheduler] sealed trait JobSchedulerEvent
@@ -52,8 +50,9 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1)
   private val jobExecutor =
     ThreadUtils.newDaemonFixedThreadPool(numConcurrentJobs, "streaming-job-executor")
-  private val jobGenerator = new JobGenerator(this)
+  private[streaming] val jobGenerator = new JobGenerator(this)
   val clock = jobGenerator.clock
+
   val listenerBus = new StreamingListenerBus(ssc.sparkContext.listenerBus)
 
   // These two are created only when scheduler starts.
@@ -230,7 +229,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     def run() {
       val oldProps = ssc.sparkContext.getLocalProperties
       try {
-        ssc.sparkContext.setLocalProperties(SerializationUtils.clone(ssc.savedProperties.get()))
+        ssc.sparkContext.setLocalProperties(Utils.cloneProperties(ssc.savedProperties.get()))
         val formattedTime = UIUtils.formatBatchTime(
           job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
         val batchUrl = s"/streaming/batch/?id=${job.time.milliseconds}"

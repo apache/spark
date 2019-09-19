@@ -574,16 +574,29 @@ class ReduceNumShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterA
     withSparkSession(test, 4, None)
   }
 
-  test("Union two datasets with different pre-shuffle partition number") {
+  test("Do not reduce the number of shuffle partition for repartition") {
     val test: SparkSession => Unit = { spark: SparkSession =>
-      val dataset1 = spark.range(3)
-      val dataset2 = spark.range(3)
-
-      val resultDf = dataset1.repartition(2, dataset1.col("id"))
-        .union(dataset2.repartition(3, dataset2.col("id"))).toDF()
+      val ds = spark.range(3)
+      val resultDf = ds.repartition(2, ds.col("id")).toDF()
 
       checkAnswer(resultDf,
-        Seq((0), (0), (1), (1), (2), (2)).map(i => Row(i)))
+        Seq(0, 1, 2).map(i => Row(i)))
+      val finalPlan = resultDf.queryExecution.executedPlan
+        .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      assert(finalPlan.collect { case p: CoalescedShuffleReaderExec => p }.length == 0)
+    }
+    withSparkSession(test, 200, None)
+  }
+
+  test("Union two datasets with different pre-shuffle partition number") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      val df1 = spark.range(3).join(spark.range(3), "id").toDF()
+      val df2 = spark.range(3).groupBy().sum()
+
+      val resultDf = df1.union(df2)
+
+      checkAnswer(resultDf, Seq((0), (1), (2), (3)).map(i => Row(i)))
+
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       // As the pre-shuffle partition number are different, we will skip reducing

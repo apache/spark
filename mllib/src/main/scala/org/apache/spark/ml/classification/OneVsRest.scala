@@ -169,9 +169,9 @@ final class OneVsRestModel private[ml] (
     // Check schema
     transformSchema(dataset.schema, logging = true)
 
-    if (getPredictionCol == "" && getRawPredictionCol == "") {
-      logWarning(s"$uid: OneVsRestModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+    if (getPredictionCol.isEmpty && getRawPredictionCol.isEmpty) {
+      logWarning(s"$uid: OneVsRestModel.transform() does nothing" +
+        " because no output columns were set.")
       return dataset.toDF
     }
 
@@ -218,7 +218,7 @@ final class OneVsRestModel private[ml] (
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
 
-    if (getRawPredictionCol != "") {
+    if (getRawPredictionCol.nonEmpty) {
       val numClass = models.length
 
       // output the RawPrediction as vector
@@ -228,18 +228,18 @@ final class OneVsRestModel private[ml] (
         Vectors.dense(predArray)
       }
 
-      predictionColNames = predictionColNames :+ getRawPredictionCol
-      predictionColumns = predictionColumns :+ rawPredictionUDF(col(accColName))
+      predictionColNames :+= getRawPredictionCol
+      predictionColumns :+= rawPredictionUDF(col(accColName))
     }
 
-    if (getPredictionCol != "") {
+    if (getPredictionCol.nonEmpty) {
       // output the index of the classifier with highest confidence as prediction
       val labelUDF = udf { (predictions: Map[Int, Double]) =>
         predictions.maxBy(_._2)._1.toDouble
       }
 
-      predictionColNames = predictionColNames :+ getPredictionCol
-      predictionColumns = predictionColumns :+ labelUDF(col(accColName))
+      predictionColNames :+= getPredictionCol
+      predictionColumns :+= labelUDF(col(accColName))
         .as(getPredictionCol, labelMetadata)
     }
 

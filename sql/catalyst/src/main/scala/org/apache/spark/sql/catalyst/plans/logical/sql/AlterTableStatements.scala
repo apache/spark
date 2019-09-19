@@ -24,12 +24,16 @@ import org.apache.spark.sql.types.DataType
  */
 case class QualifiedColType(name: Seq[String], dataType: DataType, comment: Option[String])
 
+trait AlterTableStatement extends ParsedStatement {
+  val tableName: Seq[String]
+}
+
 /**
  * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
  */
 case class AlterTableAddColumnsStatement(
     tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
+    columnsToAdd: Seq[QualifiedColType]) extends AlterTableStatement
 
 /**
  * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
@@ -38,7 +42,7 @@ case class AlterTableAlterColumnStatement(
     tableName: Seq[String],
     column: Seq[String],
     dataType: Option[DataType],
-    comment: Option[String]) extends ParsedStatement
+    comment: Option[String]) extends AlterTableStatement
 
 /**
  * ALTER TABLE ... RENAME COLUMN command, as parsed from SQL.
@@ -46,21 +50,21 @@ case class AlterTableAlterColumnStatement(
 case class AlterTableRenameColumnStatement(
     tableName: Seq[String],
     column: Seq[String],
-    newName: String) extends ParsedStatement
+    newName: String) extends AlterTableStatement
 
 /**
  * ALTER TABLE ... DROP COLUMNS command, as parsed from SQL.
  */
 case class AlterTableDropColumnsStatement(
     tableName: Seq[String],
-    columnsToDrop: Seq[Seq[String]]) extends ParsedStatement
+    columnsToDrop: Seq[Seq[String]]) extends AlterTableStatement
 
 /**
  * ALTER TABLE ... SET TBLPROPERTIES command, as parsed from SQL.
  */
 case class AlterTableSetPropertiesStatement(
     tableName: Seq[String],
-    properties: Map[String, String]) extends ParsedStatement
+    properties: Map[String, String]) extends AlterTableStatement
 
 /**
  * ALTER TABLE ... UNSET TBLPROPERTIES command, as parsed from SQL.
@@ -68,11 +72,11 @@ case class AlterTableSetPropertiesStatement(
 case class AlterTableUnsetPropertiesStatement(
     tableName: Seq[String],
     propertyKeys: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
+    ifExists: Boolean) extends AlterTableStatement
 
 /**
  * ALTER TABLE ... SET LOCATION command, as parsed from SQL.
  */
 case class AlterTableSetLocationStatement(
     tableName: Seq[String],
-    location: String) extends ParsedStatement
+    location: String) extends AlterTableStatement

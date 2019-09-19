@@ -17,9 +17,8 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile, PartitioningUtils}
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 abstract class FilePartitionReaderFactory extends PartitionReaderFactory {

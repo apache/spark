@@ -19,16 +19,13 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterEach
-
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
@@ -36,10 +33,7 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Tests for the user-facing [[org.apache.spark.sql.catalog.Catalog]].
  */
-class CatalogSuite
-  extends SparkFunSuite
-  with BeforeAndAfterEach
-  with SharedSQLContext {
+class CatalogSuite extends SharedSparkSession {
   import testImplicits._
 
   private def sessionCatalog: SessionCatalog = spark.sessionState.catalog

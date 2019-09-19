@@ -22,60 +22,92 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
-import org.apache.spark.sql.sources.v2.reader.Scan
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
+class KafkaSourceProviderSuite extends SparkFunSuite {
 
-  private val pollTimeoutMsMethod = PrivateMethod[Long]('pollTimeoutMs)
-  private val maxOffsetsPerTriggerMethod = PrivateMethod[Option[Long]]('maxOffsetsPerTrigger)
+  private val expected = "1111"
 
   override protected def afterEach(): Unit = {
     SparkEnv.set(null)
     super.afterEach()
   }
 
-  test("micro-batch mode - options should be handled as case-insensitive") {
-    def verifyFieldsInMicroBatchStream(
-        options: CaseInsensitiveStringMap,
-        expectedPollTimeoutMs: Long,
-        expectedMaxOffsetsPerTrigger: Option[Long]): Unit = {
-      // KafkaMicroBatchStream reads Spark conf from SparkEnv for default value
-      // hence we set mock SparkEnv here before creating KafkaMicroBatchStream
-      val sparkEnv = mock(classOf[SparkEnv])
-      when(sparkEnv.conf).thenReturn(new SparkConf())
-      SparkEnv.set(sparkEnv)
-
-      val scan = getKafkaDataSourceScan(options)
-      val stream = scan.toMicroBatchStream("dummy").asInstanceOf[KafkaMicroBatchStream]
-
-      assert(expectedPollTimeoutMs === getField(stream, pollTimeoutMsMethod))
-      assert(expectedMaxOffsetsPerTrigger === getField(stream, maxOffsetsPerTriggerMethod))
-    }
-
-    val expectedValue = 1000L
-    buildCaseInsensitiveStringMapForUpperAndLowerKey(
-      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString,
-      KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER -> expectedValue.toString)
-      .foreach(verifyFieldsInMicroBatchStream(_, expectedValue, Some(expectedValue)))
+  test("batch mode - options should be handled as case-insensitive") {
+    verifyFieldsInBatch(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, batch => {
+      assert(expected.toLong === batch.pollTimeoutMs)
+    })
   }
 
-  test("SPARK-28142 - continuous mode - options should be handled as case-insensitive") {
-    def verifyFieldsInContinuousStream(
-        options: CaseInsensitiveStringMap,
-        expectedPollTimeoutMs: Long): Unit = {
+  test("micro-batch mode - options should be handled as case-insensitive") {
+    verifyFieldsInMicroBatchStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
+      assert(expected.toLong === stream.pollTimeoutMs)
+    })
+    verifyFieldsInMicroBatchStream(KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER, expected, stream => {
+      assert(Some(expected.toLong) === stream.maxOffsetsPerTrigger)
+    })
+    verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
+      assert(expected.toInt === stream.kafkaOffsetReader.maxOffsetFetchAttempts)
+    })
+    verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
+        stream => {
+      assert(expected.toLong === stream.kafkaOffsetReader.offsetFetchAttemptIntervalMs)
+    })
+  }
+
+  test("continuous mode - options should be handled as case-insensitive") {
+    verifyFieldsInContinuousStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
+      assert(expected.toLong === stream.pollTimeoutMs)
+    })
+    verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
+      assert(expected.toInt === stream.offsetReader.maxOffsetFetchAttempts)
+    })
+    verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
+        stream => {
+      assert(expected.toLong === stream.offsetReader.offsetFetchAttemptIntervalMs)
+    })
+  }
+
+  private def verifyFieldsInBatch(
+      key: String,
+      value: String,
+      validate: (KafkaBatch) => Unit): Unit = {
+    buildCaseInsensitiveStringMapForUpperAndLowerKey(key -> value).foreach { options =>
+      val scan = getKafkaDataSourceScan(options)
+      val batch = scan.toBatch().asInstanceOf[KafkaBatch]
+      validate(batch)
+    }
+  }
+
+  private def verifyFieldsInMicroBatchStream(
+      key: String,
+      value: String,
+      validate: (KafkaMicroBatchStream) => Unit): Unit = {
+    // KafkaMicroBatchStream reads Spark conf from SparkEnv for default value
+    // hence we set mock SparkEnv here before creating KafkaMicroBatchStream
+    val sparkEnv = mock(classOf[SparkEnv])
+    when(sparkEnv.conf).thenReturn(new SparkConf())
+    SparkEnv.set(sparkEnv)
+
+    buildCaseInsensitiveStringMapForUpperAndLowerKey(key -> value).foreach { options =>
+      val scan = getKafkaDataSourceScan(options)
+      val stream = scan.toMicroBatchStream("dummy").asInstanceOf[KafkaMicroBatchStream]
+      validate(stream)
+    }
+  }
+
+  private def verifyFieldsInContinuousStream(
+      key: String,
+      value: String,
+      validate: (KafkaContinuousStream) => Unit): Unit = {
+    buildCaseInsensitiveStringMapForUpperAndLowerKey(key -> value).foreach { options =>
       val scan = getKafkaDataSourceScan(options)
       val stream = scan.toContinuousStream("dummy").asInstanceOf[KafkaContinuousStream]
-      assert(expectedPollTimeoutMs === getField(stream, pollTimeoutMsMethod))
+      validate(stream)
     }
-
-    val expectedValue = 1000
-    buildCaseInsensitiveStringMapForUpperAndLowerKey(
-      KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString)
-      .foreach(verifyFieldsInContinuousStream(_, expectedValue))
   }
 
   private def buildCaseInsensitiveStringMapForUpperAndLowerKey(
@@ -94,9 +126,5 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   private def getKafkaDataSourceScan(options: CaseInsensitiveStringMap): Scan = {
     val provider = new KafkaSourceProvider()
     provider.getTable(options).newScanBuilder(options).build()
-  }
-
-  private def getField[T](obj: AnyRef, method: PrivateMethod[T]): T = {
-    obj.invokePrivate(method())
   }
 }

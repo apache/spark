@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 
 // A special `MicroBatchStream` that can get latestOffset with a start offset.
 trait RateControlMicroBatchStream extends MicroBatchStream {

@@ -16,8 +16,6 @@ struct<>
 
 
 -- !query 1
--- Case 5
-  -- (one null column with no match -> row is returned)
 SELECT *
 FROM   m
 WHERE  b = 1.0 -- Matches (null, 1.0)
@@ -29,8 +27,6 @@ NULL	1
 
 
 -- !query 2
--- Case 6
-  -- (no null columns with match -> row not returned)
 SELECT *
 FROM   m
 WHERE  b = 3.0 -- Matches (2, 3.0)
@@ -42,8 +38,6 @@ struct<a:int,b:decimal(2,1)>
 
 
 -- !query 3
--- Case 7
-  -- (no null columns with no match -> row is returned)
 SELECT *
 FROM   m
 WHERE  b = 5.0 -- Matches (4, 5.0)

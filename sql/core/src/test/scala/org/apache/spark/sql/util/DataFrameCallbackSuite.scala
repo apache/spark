@@ -22,13 +22,14 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark._
 import org.apache.spark.sql.{functions, AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoTable, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
+class DataFrameCallbackSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
   import functions._
 
@@ -36,7 +37,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Long)]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         metrics += ((funcName, qe, duration))
@@ -63,10 +64,10 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
   }
 
   testQuietly("execute callback functions when a DataFrame action failed") {
-    val metrics = ArrayBuffer.empty[(String, QueryExecution, Exception)]
+    val metrics = ArrayBuffer.empty[(String, QueryExecution, Throwable)]
     val listener = new QueryExecutionListener {
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
-        metrics += ((funcName, qe, exception))
+      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {
+        metrics += ((funcName, qe, error))
       }
 
       // Only test failed case here, so no need to implement `onSuccess`
@@ -92,7 +93,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         val metric = qe.executedPlan match {
@@ -132,7 +133,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     val metrics = ArrayBuffer.empty[Long]
     val listener = new QueryExecutionListener {
       // Only test successful case here, so no need to implement `onFailure`
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         metrics += qe.executedPlan.longMetric("dataSize").value
@@ -172,10 +173,10 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
   test("execute callback functions for DataFrameWriter") {
     val commands = ArrayBuffer.empty[(String, LogicalPlan)]
-    val exceptions = ArrayBuffer.empty[(String, Exception)]
+    val errors = ArrayBuffer.empty[(String, Throwable)]
     val listener = new QueryExecutionListener {
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
-        exceptions += funcName -> exception
+      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {
+        errors += funcName -> error
       }
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
@@ -200,8 +201,8 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       sparkContext.listenerBus.waitUntilEmpty(1000)
       assert(commands.length == 3)
       assert(commands(2)._1 == "insertInto")
-      assert(commands(2)._2.isInstanceOf[InsertIntoTable])
-      assert(commands(2)._2.asInstanceOf[InsertIntoTable].table
+      assert(commands(2)._2.isInstanceOf[InsertIntoStatement])
+      assert(commands(2)._2.asInstanceOf[InsertIntoStatement].table
         .asInstanceOf[UnresolvedRelation].multipartIdentifier == Seq("tab"))
     }
     // exiting withTable adds commands(3) via onSuccess (drops tab)
@@ -221,9 +222,9 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
         spark.range(10).select($"id", $"id").write.insertInto("tab")
       }
       sparkContext.listenerBus.waitUntilEmpty(1000)
-      assert(exceptions.length == 1)
-      assert(exceptions.head._1 == "insertInto")
-      assert(exceptions.head._2 == e)
+      assert(errors.length == 1)
+      assert(errors.head._1 == "insertInto")
+      assert(errors.head._2 == e)
     }
   }
 }
