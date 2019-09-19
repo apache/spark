@@ -310,9 +310,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.PREFER_INTEGRAL_DIVISION.key, true)
-        // Propagate the SQL conf ANSI_ENABLED to executor.
-        // TODO: remove this after SPARK-29122 is resolved.
-        localSparkSession.sparkContext.setLocalProperty(SQLConf.ANSI_ENABLED.key, "true")
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
       case _ =>
     }
 
