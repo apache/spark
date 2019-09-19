@@ -29,7 +29,7 @@ except ImportError:
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark.testing.utils import ExecThread, ReusedPySparkTestCase, PySparkTestCase, QuietTest
+from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest
 
 if sys.version_info[0] >= 3:
     xrange = range
@@ -152,26 +152,18 @@ class WorkerTests(ReusedPySparkTestCase):
             self.sc.pythonVer = version
 
     def test_python_exception_non_hanging(self):
-        """
-        SPARK-21045: exceptions with no ascii encoding shall not hanging PySpark.
-        """
-        def f():
-            raise Exception("exception with 中 and \xd6\xd0")
+        # SPARK-21045: exceptions with no ascii encoding shall not hanging PySpark.
+        try:
+            def f():
+                raise Exception("exception with 中 and \xd6\xd0")
 
-        def run():
             self.sc.parallelize([1]).map(lambda x: f()).count()
-
-        t = ExecThread(target=run)
-        t.daemon = True
-        t.start()
-        t.join(10)
-        self.assertFalse(t.isAlive(), "Spark should not be blocked")
-        self.assertIsInstance(t.exception, Py4JJavaError)
-        if sys.version_info.major < 3:
-            # we have to use unicode here to avoid UnicodeDecodeError
-            self.assertRegexpMatches(unicode(t.exception).encode("utf-8"), "exception with 中")
-        else:
-            self.assertRegexpMatches(str(t.exception), "exception with 中")
+        except Py4JJavaError as e:
+            if sys.version_info.major < 3:
+                # we have to use unicode here to avoid UnicodeDecodeError
+                self.assertRegexpMatches(unicode(e).encode("utf-8"), "exception with 中")
+            else:
+                self.assertRegexpMatches(str(e), "exception with 中")
 
 
 class WorkerReuseTest(PySparkTestCase):
