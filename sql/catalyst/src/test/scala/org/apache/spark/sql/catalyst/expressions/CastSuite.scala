@@ -1044,14 +1044,14 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-28470: Cast should honor nullOnOverflow property") {
-    withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(Cast(Literal("134.12"), DecimalType(3, 2)), null)
       checkEvaluation(
         Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)), null)
       checkEvaluation(Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), null)
       checkEvaluation(Cast(Literal(134.12), DecimalType(3, 2)), null)
     }
-    withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkExceptionInExpression[ArithmeticException](
         Cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
       checkExceptionInExpression[ArithmeticException](
@@ -1117,7 +1117,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Cast to byte with option FAIL_ON_INTEGER_OVERFLOW enabled") {
-    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       testIntMaxAndMin(ByteType)
       Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
         checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
@@ -1142,7 +1142,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Cast to short with option FAIL_ON_INTEGER_OVERFLOW enabled") {
-    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       testIntMaxAndMin(ShortType)
       Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
         checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
@@ -1167,7 +1167,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Cast to int with option FAIL_ON_INTEGER_OVERFLOW enabled") {
-    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       testIntMaxAndMin(IntegerType)
       testLongMaxAndMin(IntegerType)
 
@@ -1184,7 +1184,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Cast to long with option FAIL_ON_INTEGER_OVERFLOW enabled") {
-    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       testLongMaxAndMin(LongType)
 
       Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
