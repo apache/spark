@@ -226,7 +226,7 @@
     -->
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
 
-    <CodeCacheSize>512m</CodeCacheSize>
+    <CodeCacheSize>1g</CodeCacheSize>
   </properties>
   <repositories>
     <repository>

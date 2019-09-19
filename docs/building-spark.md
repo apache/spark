@@ -19,7 +19,7 @@ Note that support for Java 7 was removed as of Spark 2.2.0.
 
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
-    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
+    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g"
 
 (The `ReservedCodeCacheSize` setting is optional but recommended.)
 If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
