@@ -77,38 +77,38 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val td = $(threshold)
     val metadata = outputSchema($(outputCol)).metadata
 
-    inputType match {
+    val binarizerUDF = inputType match {
       case DoubleType =>
-        val binarizerDouble = udf { in: Double => if (in > td) 1.0 else 0.0 }
-        dataset.select(col("*"), binarizerDouble(col($(inputCol))).as($(outputCol), metadata))
+        udf { in: Double => if (in > td) 1.0 else 0.0 }
 
-      case _: VectorUDT =>
-        val func = (vector: Vector) => {
+      case _: VectorUDT if td >= 0 =>
+        udf { vector: Vector =>
           val indices = ArrayBuilder.make[Int]
           val values = ArrayBuilder.make[Double]
-
           vector.foreachActive { (index, value) =>
             if (value > td) {
               indices += index
               values +=  1.0
             }
           }
-
           Vectors.sparse(vector.size, indices.result(), values.result()).compressed
         }
 
-        val binarizerVector = if (td < 0) {
-          udf { vector: Vector =>
-            require(vector.isInstanceOf[DenseVector],
-              s"Threshold must be non-negative for operations on sparse vector $vector.")
-            func(vector)
+      case _: VectorUDT if td < 0 =>
+        this.logWarning(s"Binarization operations on sparse dataset with negative threshold " +
+          s"$td will build a dense output, so take care when applying to sparse input.")
+        udf { vector: Vector =>
+          val values = Array.fill(vector.size)(1.0)
+          vector.foreachActive { (index, value) =>
+            if (value <= td) {
+              values(index) = 0.0
+            }
           }
-        } else {
-          udf(func)
+          Vectors.dense(values).compressed
         }
-
-        dataset.select(col("*"), binarizerVector(col($(inputCol))).as($(outputCol), metadata))
     }
+
+    dataset.withColumn($(outputCol), binarizerUDF(col($(inputCol))), metadata)
   }
 
   @Since("1.4.0")
