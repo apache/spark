@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
@@ -34,9 +36,12 @@ class SQLHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
     dynamicPartitionOverwrite: Boolean = false,
-    maxDynamicPartitions: Int = Int.MaxValue)
+    maxDynamicPartitions: Int = Int.MaxValue,
+    maxDynamicPartitionsPerTask: Int = Int.MaxValue)
   extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
     with Serializable with Logging {
+
+  private var totalPartitions: AtomicInteger = _
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)
@@ -65,6 +70,7 @@ class SQLHadoopMapReduceCommitProtocol(
         committer = ctor.newInstance()
       }
     }
+    totalPartitions = new AtomicInteger(0)
     logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
     committer
   }
@@ -72,12 +78,19 @@ class SQLHadoopMapReduceCommitProtocol(
   override def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
     val path = super.newTaskTempFile(taskContext, dir, ext)
+    totalPartitions.incrementAndGet()
     if (dynamicPartitionOverwrite) {
+      if (totalPartitions.get > maxDynamicPartitions) {
+        throw new SparkException(s"Total number of dynamic partitions created is" +
+          s" ${totalPartitions.get}, which is more than $maxDynamicPartitions." +
+          s" To solve this try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key}")
+      }
       val numParts = partitionPaths.size
-      if (numParts > maxDynamicPartitions) {
-        throw new SparkException(s"Number of dynamic partitions created is $numParts," +
-          s" which is more than $maxDynamicPartitions." +
-          s" To solve this try to increase ${SQLConf.MAX_DYNAMIC_PARTITIONS.key}")
+      if (numParts > maxDynamicPartitionsPerTask) {
+        throw new SparkException(s"Task ${taskContext.getTaskAttemptID.getTaskID.toString}" +
+          s" tried to create $numParts dynamic partitions," +
+          s" which is more than $maxDynamicPartitionsPerTask. To solve this" +
+          s" try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key}")
       }
     }
     path

@@ -1699,10 +1699,15 @@ object SQLConf {
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
 
-  val MAX_DYNAMIC_PARTITIONS =
-    buildConf("spark.sql.max.dynamic.partitions")
-      .doc("Maximum number of dynamic partitions allowed to be created in total. " +
-        "The default value is -1 which means no limitation")
+  val DYNAMIC_PARTITION_MAX_PARTITIONS =
+    buildConf("spark.sql.dynamic.partition.maxPartitions")
+      .doc("Maximum number of dynamic partitions allowed to be created in total. ")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
+  val DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK =
+    buildConf("spark.sql.dynamic.partition.maxPartitionsPerTask")
+      .doc("Maximum number of dynamic partitions allowed to be created per task. ")
       .intConf
       .createWithDefault(Int.MaxValue)
 
@@ -2458,7 +2463,9 @@ class SQLConf extends Serializable with Logging {
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
-  def maxDynamicPartitions: Int = getConf(MAX_DYNAMIC_PARTITIONS)
+  def maxDynamicPartitions: Int = getConf(DYNAMIC_PARTITION_MAX_PARTITIONS)
+
+  def maxDynamicPartitionsPerTask: Int = getConf(DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK)
 
   def storeAssignmentPolicy: Option[StoreAssignmentPolicy.Value] =
     getConf(STORE_ASSIGNMENT_POLICY).map(StoreAssignmentPolicy.withName)

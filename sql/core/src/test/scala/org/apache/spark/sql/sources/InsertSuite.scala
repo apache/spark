@@ -654,10 +654,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("dynamic partition overwrite with limitation") {
+  test("SPARK-29166: dynamic partition overwrite with limitation") {
     withSQLConf(
-      SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString,
-      SQLConf.MAX_DYNAMIC_PARTITIONS.key -> "3") {
+      SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       withTable("t") {
         sql(
           """
@@ -665,15 +664,23 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |partitioned by (part1, part2)
           """.stripMargin)
 
-        sql("insert into t partition(part1=1, part2=1) select 1")
-        checkAnswer(spark.table("t"), Row(1, 1, 1))
-
-        val e = intercept[SparkException] {
-          sql("insert overwrite table t partition(part1=2, part2)" +
-            " select 2, explode(array(2, 3, 4, 5))")
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key -> "2") {
+          val e1 = intercept[SparkException] {
+            sql("insert overwrite table t partition(part1=2, part2)" +
+              " select 2, explode(array(2, 3, 4, 5))")
+          }
+          assert(Utils.findFirstCause(e1).getMessage.contains("To solve this " +
+            s"try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key}"))
         }
-        assert(Utils.findFirstCause(e).getMessage.contains(
-          "To solve this try to increase spark.sql.max.dynamic.partitions"))
+
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key -> "3") {
+          val e2 = intercept[SparkException] {
+            sql("insert overwrite table t partition(part1=2, part2)" +
+              " select 2, explode(array(2, 3, 4, 5))")
+          }
+          assert(Utils.findFirstCause(e2).getMessage.contains("To solve this " +
+            s"try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key}"))
+        }
       }
     }
   }
