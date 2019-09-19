@@ -64,6 +64,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] =>
               if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {
+                scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
+                  "Tasks result size has exceeded maxResultSize"))
                 return
               }
               // deserialize "value" without holding any lock so that it won't block other threads.
@@ -75,6 +77,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               if (!taskSetManager.canFetchMoreResults(size)) {
                 // dropped by executor if size is larger than maxResultSize
                 sparkEnv.blockManager.master.removeBlock(blockId)
+                scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
+                  "Tasks result size has exceeded maxResultSize"))
                 return
               }
               logDebug("Fetching indirect task result for TID %s".format(tid))
