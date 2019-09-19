@@ -81,7 +81,6 @@ class CachedKafkaProducerSuite extends SharedSparkSession with PrivateMethodTest
 
     assert(producer1 === producer2)
     assert(producerPool.size(toCacheKey(kafkaParams)) === 1)
-    assert(producerPool.size === 1)
   }
 
   test("acquire should return a new instance with different params") {
@@ -96,7 +95,6 @@ class CachedKafkaProducerSuite extends SharedSparkSession with PrivateMethodTest
     assert(producer1 !== producer2)
     assert(producerPool.size(toCacheKey(kafkaParams1)) === 1)
     assert(producerPool.size(toCacheKey(kafkaParams2)) === 1)
-    assert(producerPool.size === 2)
   }
 
   test("Concurrent use of CachedKafkaProducer") {
