@@ -18,6 +18,7 @@ import glob
 import os
 import struct
 import sys
+import threading
 import unittest
 
 from pyspark import SparkContext, SparkConf
@@ -127,3 +128,18 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
         raise Exception("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
     else:
         return jars[0]
+
+
+class ExecThread(threading.Thread):
+    """ A wrapper thread which stores exception info if any occurred.
+    """
+    def __init__(self, target):
+        self.target = target
+        self.exception = None
+        threading.Thread.__init__(self)
+
+    def run(self):
+        try:
+            self.target()
+        except Exception as e:  # captures any exceptions
+            self.exception = e
