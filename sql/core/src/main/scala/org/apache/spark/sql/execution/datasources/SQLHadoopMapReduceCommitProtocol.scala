@@ -22,7 +22,7 @@ import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
+import org.apache.spark.internal.io.{FileSourceWriteDesc, HadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -32,9 +32,12 @@ import org.apache.spark.sql.internal.SQLConf
 class SQLHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
+    dynamicPartitionOverwrite: Boolean = false,
+    fileSourceWriteDesc: Option[FileSourceWriteDesc] = None)
+  extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite, fileSourceWriteDesc)
     with Serializable with Logging {
+
+  def this(jobId: String, path: String, dpOverwrite: Boolean) = this(jobId, path, dpOverwrite, None)
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)
@@ -55,7 +58,7 @@ class SQLHadoopMapReduceCommitProtocol(
         // The specified output committer is a FileOutputCommitter.
         // So, we will use the FileOutputCommitter-specified constructor.
         val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-        committer = ctor.newInstance(new Path(path), context)
+        committer = ctor.newInstance(getOutputPath(context), context)
       } else {
         // The specified output committer is just an OutputCommitter.
         // So, we will use the no-argument constructor.

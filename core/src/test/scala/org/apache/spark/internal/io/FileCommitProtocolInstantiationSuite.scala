@@ -53,6 +53,16 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       "Wrong constructor argument count")
   }
 
+  test("Four-arg constructor has priority") {
+    assert(4 == instantiateWithFileSourceWriteDesc(false, None).argCount,
+      "Wrong constructor argument count")
+  }
+
+  test("Four-arg constructor has priority with file source write description specified") {
+    assert(4 == instantiateWithFileSourceWriteDesc(false,
+      Some(FileSourceWriteDesc(true, Seq.empty))).argCount, "Wrong constructor argument count")
+  }
+
   test("The protocol must be of the correct class") {
     intercept[ClassCastException] {
       FileCommitProtocol.instantiate(
@@ -75,7 +85,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
 
   /**
    * Create a classic two-arg protocol instance.
-   * @param dynamic dyanmic partitioning mode
+   * @param dynamic dynamic partitioning mode
    * @return the instance
    */
   private def instantiateClassic(dynamic: Boolean): ClassicConstructorCommitProtocol = {
@@ -88,7 +98,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
 
   /**
    * Create a three-arg protocol instance.
-   * @param dynamic dyanmic partitioning mode
+   * @param dynamic dynamic partitioning mode
    * @return the instance
    */
   private def instantiateNew(
@@ -100,6 +110,21 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       dynamic).asInstanceOf[FullConstructorCommitProtocol]
   }
 
+  /**
+   * Create a four-arg protocol instance.
+   * @param dynamic dynamic partitioning mode
+   * @param desc file source write description
+   * @return the instance
+   */
+  private def instantiateWithFileSourceWriteDesc(
+      dynamic: Boolean, desc: Option[FileSourceWriteDesc]): FullConstructorCommitProtocol = {
+    FileCommitProtocol.instantiate(
+      classOf[FullConstructorCommitProtocol].getCanonicalName,
+      "job",
+      "path",
+      dynamic,
+      None).asInstanceOf[FullConstructorCommitProtocol]
+  }
 }
 
 /**
@@ -114,21 +139,26 @@ private class ClassicConstructorCommitProtocol(arg1: String, arg2: String)
  * This protocol implementation does have the new three-arg constructor
  * alongside the original, and a 4 arg one for completeness.
  * The final value of the real constructor is the number of arguments
- * used in the 2- and 3- constructor, for test assertions.
+ * used in the 2-, 3- and 4- constructor, for test assertions.
  */
 private class FullConstructorCommitProtocol(
   arg1: String,
   arg2: String,
   b: Boolean,
+  desc: Option[FileSourceWriteDesc],
   val argCount: Int)
   extends HadoopMapReduceCommitProtocol(arg1, arg2, b) {
 
   def this(arg1: String, arg2: String) = {
-    this(arg1, arg2, false, 2)
+    this(arg1, arg2, false, None, 2)
   }
 
   def this(arg1: String, arg2: String, b: Boolean) = {
-    this(arg1, arg2, false, 3)
+    this(arg1, arg2, false, None, 3)
+  }
+
+  def this(arg1: String, arg2: String, b: Boolean, desc: Option[FileSourceWriteDesc]) {
+    this(arg1, arg2, false, None, 4)
   }
 }
 

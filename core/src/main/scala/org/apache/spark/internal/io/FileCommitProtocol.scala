@@ -17,12 +17,14 @@
 
 package org.apache.spark.internal.io
 
+import java.io.IOException
+
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
-
 
 /**
  * An interface to define how a single Spark job commits its outputs. Three notes:
@@ -167,6 +169,86 @@ object FileCommitProtocol extends Logging {
             s" the committer ${className} does not have the appropriate constructor")
         val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
         ctor.newInstance(jobId, outputPath)
+    }
+  }
+
+  /**
+   * Instantiates a FileCommitProtocol with file source write description.
+   */
+  def instantiate(
+      className: String,
+      jobId: String,
+      outputPath: String,
+      dynamicPartitionOverwrite: Boolean,
+      fileSourceWriteDesc: Option[FileSourceWriteDesc]): FileCommitProtocol = {
+
+    logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
+      s" dynamic=$dynamicPartitionOverwrite; fileSourceWriteDesc= $fileSourceWriteDesc")
+    val clazz = Utils.classForName[FileCommitProtocol](className)
+    // First try the constructor with arguments (jobId: String, outputPath: String,
+    // dynamicPartitionOverwrite: Boolean, fileSourceWriteDesc: Option[FileSourceWriteDesc]).
+    // If that doesn't exist, try to invoke `FileCommitProtocol.instance(className,
+    // JobId, outputPath, dynamicPartitionOverwrite)`.
+    try {
+      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean],
+        classOf[Option[FileSourceWriteDesc]])
+      logDebug("Using (String, String, Boolean, Option[FileSourceWriteDesc]) constructor")
+      ctor.newInstance(jobId, outputPath, dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean],
+        fileSourceWriteDesc)
+    } catch {
+      case _: NoSuchMethodException =>
+        logDebug("Falling back to invoke instance(className, JobId, outputPath," +
+          " dynamicPartitionOverwrite)")
+        instantiate(className, jobId, outputPath, dynamicPartitionOverwrite)
+    }
+  }
+
+  /**
+   * Invoke a method from the Class of instance or from its superclasses.
+   */
+  private def invokeMethod(
+      instance: Any,
+      methodName: String,
+      argTypes: Seq[Class[_]],
+      params: Seq[AnyRef]): Any = {
+    var clazz: Class[_ <: Any] = instance.getClass
+    while (clazz != null) {
+      try {
+        val method = clazz.getDeclaredMethod(methodName, argTypes: _*)
+        method.setAccessible(true)
+        val r = method.invoke(instance, params: _*)
+        method.setAccessible(false)
+        return r
+      } catch {
+        case _: NoSuchMethodException =>
+          logDebug(s"Can not get $methodName method from $clazz, try to get from its superclass:" +
+            s" ${clazz.getSuperclass}")
+          clazz = clazz.getSuperclass
+      }
+    }
+    throw new NoSuchMethodException(s"Can not get $methodName method from ${instance.getClass}" +
+      " and its superclasses")
+  }
+
+  /**
+   * Invoke the `mergePaths` method of a FileOutputCommitter instance.
+   */
+  @throws[IOException]
+  def mergePaths(
+      committer: FileOutputCommitter,
+      fs: FileSystem,
+      from: FileStatus,
+      to: Path,
+      context: JobContext): Unit = {
+    try {
+      invokeMethod(committer, "mergePaths", Seq(classOf[FileSystem], classOf[FileStatus],
+        classOf[Path]), Seq(fs, from, to))
+    } catch {
+      case _: NoSuchMethodException =>
+        // The args of `mergePaths` method have been changed in high hadoop version.
+        logDebug("Falling back to (FileSystem, FileStatus, Path, JobContext) args method")
+        invokeMethod(committer, "mergePaths", Seq(classOf[FileSystem], classOf[FileStatus],
+          classOf[Path], classOf[JobContext]), Seq(fs, from, to, context))
     }
   }
 }

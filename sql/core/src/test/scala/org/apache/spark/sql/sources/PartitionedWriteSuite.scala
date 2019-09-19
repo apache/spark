@@ -20,16 +20,20 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.sql.Timestamp
 
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkEnv, TestUtils}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.FileSourceWriteDesc
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -40,6 +44,27 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
   override def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
     throw new Exception("there should be no custom partition path")
+  }
+}
+
+private class DetectCorrectOutputPathFileCommitProtocol(
+    jobId: String,
+    path: String,
+    dynamicPartitionOverwrite: Boolean,
+    fileSourceWriteDesc: Option[FileSourceWriteDesc])
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite,
+    fileSourceWriteDesc) with Serializable with Logging {
+
+  override def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
+    val committer = super.setupCommitter(context)
+
+    val newOutputPath = context.getConfiguration.get(FileOutputFormat.OUTDIR, "")
+    if (dynamicPartitionOverwrite) {
+      assert(new Path(newOutputPath).getName.startsWith(jobId))
+    } else {
+      assert(newOutputPath == path)
+    }
+    committer
   }
 }
 
@@ -153,6 +178,22 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
         assert(files.length == 1)
         // if there isn't timeZone option, then use session local timezone.
         checkPartitionValues(files.head, "2016-12-01 08:00:00")
+      }
+    }
+  }
+
+  test("Output path should be a staging output dir, whose last level path name is jobId," +
+    " when dynamicPartitionOverwrite is enabled") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTable("t") {
+        withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+          classOf[DetectCorrectOutputPathFileCommitProtocol].getName) {
+          Seq((1, 2)).toDF("a", "b")
+            .write
+            .partitionBy("b")
+            .mode("overwrite")
+            .saveAsTable("t")
+        }
       }
     }
   }

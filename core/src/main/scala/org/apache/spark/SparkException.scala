@@ -43,3 +43,9 @@ private[spark] case class SparkUserAppException(exitCode: Int)
  */
 private[spark] case class ExecutorDeadException(message: String)
   extends SparkException(message)
+
+/**
+ * Exception thrown when several InsertHadoopFsRelation operations are conflicted.
+ */
+private[spark] case class InsertFileSourceConflictException(message: String)
+  extends SparkException(message)
