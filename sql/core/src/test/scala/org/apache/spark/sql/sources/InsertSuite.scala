@@ -664,6 +664,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |partitioned by (part1, part2)
           """.stripMargin)
 
+        // no restriction
+        sql("insert overwrite table t partition(part1=2, part2)" +
+          " select 2, explode(array(2, 3, 4, 5))")
+        checkAnswer(spark.table("t"),
+          Seq(Row(2, 2, 2), Row(2, 2, 3), Row(2, 2, 4), Row(2, 2, 5)))
+
+        // task level restriction
         withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key -> "2") {
           val e1 = intercept[SparkException] {
             sql("insert overwrite table t partition(part1=2, part2)" +
@@ -673,6 +680,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             s"try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key}"))
         }
 
+        // job level restriction
         withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key -> "3") {
           val e2 = intercept[SparkException] {
             sql("insert overwrite table t partition(part1=2, part2)" +

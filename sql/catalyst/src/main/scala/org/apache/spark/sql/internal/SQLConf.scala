@@ -1701,13 +1701,17 @@ object SQLConf {
 
   val DYNAMIC_PARTITION_MAX_PARTITIONS =
     buildConf("spark.sql.dynamic.partition.maxPartitions")
-      .doc("Maximum number of dynamic partitions allowed to be created in total. ")
+      .doc("Maximum number of dynamic partitions allowed to be created in total. " +
+        s"This only takes effect when ${FILE_COMMIT_PROTOCOL_CLASS.key} set to " +
+        s"org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
       .intConf
       .createWithDefault(Int.MaxValue)
 
   val DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK =
     buildConf("spark.sql.dynamic.partition.maxPartitionsPerTask")
-      .doc("Maximum number of dynamic partitions allowed to be created per task. ")
+      .doc("Maximum number of dynamic partitions allowed to be created per task. " +
+        s"This only takes effect when ${FILE_COMMIT_PROTOCOL_CLASS.key} set to " +
+        s"org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
       .intConf
       .createWithDefault(Int.MaxValue)
 
