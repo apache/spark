@@ -50,7 +50,7 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
   def currentValue: InternalRow = mutableRow
 
   override def target(row: InternalRow): MutableProjection = {
-    // If `mutableRow` is `UnsafeRow`, `MutableProjection` accepts fixed-length types only
+    // If `mutableRow` is `UnsafeRow`, `MutableProjection` accepts mutable types only
     require(!row.isInstanceOf[UnsafeRow] ||
       validExprs.forall { case (e, _) => UnsafeRow.isMutable(e.dataType) },
       "MutableProjection cannot use UnsafeRow for output data types: " +

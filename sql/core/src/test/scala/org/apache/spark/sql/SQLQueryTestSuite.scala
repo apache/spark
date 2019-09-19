@@ -407,8 +407,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       val schema = df.schema
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
       val answer = SQLExecution.withNewExecutionId(session, df.queryExecution, Some(sql)) {
-          hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
-        }
+        hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
+      }
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
