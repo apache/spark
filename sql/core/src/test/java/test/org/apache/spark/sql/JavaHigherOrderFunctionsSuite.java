@@ -134,4 +134,16 @@ public class JavaHigherOrderFunctionsSuite {
                 null
             ));
     }
+
+    @Test
+    public void testZipWith() {
+        checkAnswer(
+            df.select(zip_with(col("x"), col("x"), (a, b) -> lit(42))),
+            toRows(
+                makeArray(42, 42, 42, 42),
+                makeArray(42, 42, 42, 42, 42),
+                JavaTestUtils.<Integer>makeArray(),
+                null
+            ));
+    }
 }
