@@ -360,14 +360,6 @@ object Vectors {
   }
 
   /**
-   * Calculate the dot product of two vectors.
-   *
-   * If `size` does not match an [[IllegalArgumentException]] is thrown.
-   */
-  @Since("3.0.0")
-  def dot(v1: Vector, v2: Vector): Double = v1.dot(v2)
-
-  /**
    * Creates a vector of all zeros.
    *
    * @param size vector size
