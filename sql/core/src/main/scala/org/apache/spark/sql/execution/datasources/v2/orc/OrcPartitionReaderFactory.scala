@@ -74,12 +74,11 @@ case class OrcPartitionReaderFactory(
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val requestedColIdsOrEmptyFile = {
+    val requestedColIdsOrEmptyFile =
       Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
         OrcUtils.requestedColumnIds(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
       }
-    }
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader[InternalRow]
@@ -121,12 +120,11 @@ case class OrcPartitionReaderFactory(
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val requestedColIdsOrEmptyFile = {
+    val requestedColIdsOrEmptyFile =
       Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
         OrcUtils.requestedColumnIds(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
       }
-    }
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader
