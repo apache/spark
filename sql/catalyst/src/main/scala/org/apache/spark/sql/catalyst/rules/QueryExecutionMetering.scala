@@ -21,8 +21,7 @@ import scala.collection.JavaConverters._
 
 import com.google.common.util.concurrent.AtomicLongMap
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{NANOS_PER_MICROS}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{NANOS_PER_SECOND}
 
 case class QueryExecutionMetering() {
   private val timeMap = AtomicLongMap.create[String]()
@@ -86,10 +85,12 @@ case class QueryExecutionMetering() {
       s"$ruleName $runtimeValue $numRunValue"
     }.mkString("\n", "\n", "")
 
+    val totalTimeInJavaDouble =
+      (totalTime / NANOS_PER_SECOND.toDouble).asInstanceOf[java.lang.Double]
     s"""
        |=== Metrics of Analyzer/Optimizer Rules ===
        |Total number of runs: $totalNumRuns
-       |Total time: ${UIUtils.formatDuration(totalTime / NANOS_PER_MICROS)}
+       |Total time: ${String.format("%.9f", totalTimeInJavaDouble)} seconds
        |
        |$colRuleName $colRunTime $colNumRuns
        |$ruleMetrics
