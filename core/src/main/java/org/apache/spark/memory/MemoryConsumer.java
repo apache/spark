@@ -78,7 +78,6 @@ public abstract class MemoryConsumer {
    * @param size the amount of memory should be released
    * @param trigger the MemoryConsumer that trigger this spilling
    * @return the amount of released memory in bytes
-   * @throws IOException
    */
   public abstract long spill(long size, MemoryConsumer trigger) throws IOException;
 

@@ -33,11 +33,6 @@ INSERT INTO INT4_TBL VALUES ('-2147483647');
 -- INSERT INTO INT4_TBL(f1) VALUES ('123       5');
 -- INSERT INTO INT4_TBL(f1) VALUES ('');
 
--- We cannot test this when failOnOverFlow=true here
--- because exception happens in the executors and the
--- output stacktrace cannot have an exact match
-set spark.sql.arithmeticOperations.failOnOverFlow=false;
-
 SELECT '' AS five, * FROM INT4_TBL;
 
 SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> smallint('0');
