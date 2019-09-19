@@ -85,10 +85,11 @@ case class QueryExecutionMetering() {
       s"$ruleName $runtimeValue $numRunValue"
     }.mkString("\n", "\n", "")
 
+    val format = new java.text.DecimalFormat("#,##0.#########")
     s"""
        |=== Metrics of Analyzer/Optimizer Rules ===
        |Total number of runs: $totalNumRuns
-       |Total time: ${totalTime / NANOS_PER_SECOND.toDouble} seconds
+       |Total time: ${format.format(totalTime / NANOS_PER_SECOND.toDouble)} seconds
        |
        |$colRuleName $colRunTime $colNumRuns
        |$ruleMetrics
