@@ -19,9 +19,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.time.Instant
 
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -36,11 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  *      Results will be written to "benchmarks/ExtractBenchmark-results.txt".
  * }}}
  */
-object ExtractBenchmark extends BenchmarkBase with SQLHelper {
-  private val spark: SparkSession = SparkSession.builder()
-    .master("local[1]")
-    .appName(this.getClass.getCanonicalName)
-    .getOrCreate()
+object ExtractBenchmark extends SqlBasedBenchmark {
 
   private def doBenchmark(cardinality: Long, exprs: String*): Unit = {
     val sinceSecond = Instant.parse("2010-01-01T00:00:00Z").getEpochSecond
