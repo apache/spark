@@ -33,10 +33,10 @@ import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.DEFAULT_CENTRAL_REPOSITORY
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
@@ -55,7 +55,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       barrierPrefixes: Seq[String] = Seq.empty,
       sharesHadoopClasses: Boolean = true): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
-    val centralRepo = sparkConf.get(DEFAULT_CENTRAL_REPOSITORY)
+    val centralRepo = sparkConf.get(SQLConf.CENTRAL_REPOSITORY)
     // We will first try to share Hadoop classes. If we cannot resolve the Hadoop artifact
     // with the given version, we will use Hadoop 2.7 and then will not share Hadoop classes.
     var _sharesHadoopClasses = sharesHadoopClasses

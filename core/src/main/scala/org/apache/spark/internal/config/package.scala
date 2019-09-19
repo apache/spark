@@ -1421,11 +1421,4 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
-  private[spark] val DEFAULT_CENTRAL_REPOSITORY =
-    ConfigBuilder("spark.central.repository")
-      .doc("The default central repository used for downloading Hive jars " +
-        "in IsolatedClientLoader.")
-      .stringConf
-      .createWithDefaultString("https://repo1.maven.org/maven2")
-
 }

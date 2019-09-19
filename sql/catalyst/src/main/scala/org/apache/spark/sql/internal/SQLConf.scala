@@ -1979,6 +1979,13 @@ object SQLConf {
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
       .createWithDefault(true)
+
+  private[spark] val CENTRAL_REPOSITORY =
+    ConfigBuilder("spark.sql.centralRepository")
+      .doc("The default central repository used for downloading Hive jars " +
+        "in IsolatedClientLoader.")
+      .stringConf
+      .createWithDefault("https://repo1.maven.org/maven2")
 }
 
 /**
