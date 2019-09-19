@@ -44,7 +44,7 @@ from pyspark.sql.types import to_arrow_type, StructType
 from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
 
-if sys.version_info.major >= 3:
+if sys.version >= '3':
     basestring = str
 else:
     from itertools import imap as map  # use iterator map by default
