@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{EOFException, InputStream, IOException}
+import java.nio.charset.StandardCharsets
 
 import scala.io.Source
 
@@ -54,7 +55,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       sourceName: String,
       maybeTruncated: Boolean = false,
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
-    val lines = Source.fromInputStream(logData).getLines()
+    val lines = Source.fromInputStream(logData, StandardCharsets.UTF_8.name()).getLines()
     replay(lines, sourceName, maybeTruncated, eventsFilter)
   }
 
