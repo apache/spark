@@ -1761,6 +1761,8 @@ class Analyzer(
         resolveSubQueries(q, q.children)
       case d: DeleteFromTable if d.childrenResolved =>
         resolveSubQueries(d, d.children)
+      case j: Join if j.childrenResolved =>
+        resolveSubQueries(j, Seq(j, j.left, j.right))
     }
   }
 
