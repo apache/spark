@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import java.io.{FileNotFoundException, IOException}
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -28,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{BUFFER_SIZE, CHECKPOINT_COMPRESS}
+import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS, CHECKPOINT_COMPRESS}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -82,14 +83,28 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     Array.tabulate(inputFiles.length)(i => new CheckpointRDDPartition(i))
   }
 
+  // Cache of preferred locations of checkpointed files.
+  private[spark] val cachedPreferredLocations: mutable.HashMap[Int, Seq[String]] =
+    mutable.HashMap.empty
+
   /**
    * Return the locations of the checkpoint file associated with the given partition.
    */
   protected override def getPreferredLocations(split: Partition): Seq[String] = {
-    val status = fs.getFileStatus(
-      new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index)))
-    val locations = fs.getFileBlockLocations(status, 0, status.getLen)
-    locations.headOption.toList.flatMap(_.getHosts).filter(_ != "localhost")
+    val cachePreferrredLoc = SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS)
+
+    if (cachePreferrredLoc && cachedPreferredLocations.contains(split.index)) {
+      cachedPreferredLocations(split.index)
+    } else {
+      val status = fs.getFileStatus(
+        new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index)))
+      val locations = fs.getFileBlockLocations(status, 0, status.getLen)
+      val preferredLoc = locations.headOption.toList.flatMap(_.getHosts).filter(_ != "localhost")
+      if (cachePreferrredLoc) {
+        cachedPreferredLocations.update(split.index, preferredLoc)
+      }
+      preferredLoc
+    }
   }
 
   /**

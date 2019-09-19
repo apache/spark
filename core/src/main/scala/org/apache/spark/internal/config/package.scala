@@ -783,6 +783,13 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val CACHE_CHECKPOINT_PREFERRED_LOCS =
+    ConfigBuilder("spark.rdd.checkpoint.cachePreferredLocs")
+      .internal()
+      .doc("Whether to cache preferred locations of checkpointed RDD.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SHUFFLE_ACCURATE_BLOCK_THRESHOLD =
     ConfigBuilder("spark.shuffle.accurateBlockThreshold")
       .doc("Threshold in bytes above which the size of shuffle blocks in " +
