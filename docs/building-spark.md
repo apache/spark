@@ -34,7 +34,7 @@ Spark requires Scala 2.12; support for Scala 2.11 was removed in Spark 3.0.0.
 
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
-    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
+    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g"
 
 (The `ReservedCodeCacheSize` setting is optional but recommended.)
 If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
@@ -160,7 +160,7 @@ prompt.
 Configure the JVM options for SBT in `.jvmopts` at the project root, for example:
 
     -Xmx2g
-    -XX:ReservedCodeCacheSize=512m
+    -XX:ReservedCodeCacheSize=1g
 
 For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](https://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
 
