@@ -38,10 +38,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 private[sql] object OrcFileFormat {
   private def checkFieldName(name: String): Unit = {
@@ -180,11 +179,11 @@ class OrcFileFormat
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val reader = OrcFile.createReader(filePath, readerOptions)
-
-      val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-        isCaseSensitive, dataSchema, requiredSchema, reader, conf)
-      reader.close()
+      val requestedColIdsOrEmptyFile =
+        Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+          OrcUtils.requestedColumnIds(
+            isCaseSensitive, dataSchema, requiredSchema, reader, conf)
+        }
 
       if (requestedColIdsOrEmptyFile.isEmpty) {
         Iterator.empty
