@@ -389,13 +389,10 @@ struct<five:string,q1:bigint,q2:bigint,minus:bigint>
 -- !query 40
 SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
 -- !query 40 schema
-struct<three:string,q1:bigint,q2:bigint,multiply:bigint>
+struct<>
 -- !query 40 output
-	123	456	56088
-	123	4567890123456789	561850485185185047
-	4567890123456789	-4567890123456789	-4868582358072306617
-	4567890123456789	123	561850485185185047
-	4567890123456789	4567890123456789	4868582358072306617
+java.lang.ArithmeticException
+long overflow
 
 
 -- !query 41
@@ -604,12 +601,10 @@ struct<q1:int>
 -- !query 60
 SELECT CAST(q1 AS int) FROM int8_tbl WHERE q2 <> 456
 -- !query 60 schema
-struct<q1:int>
+struct<>
 -- !query 60 output
--869367531
--869367531
--869367531
-123
+java.lang.ArithmeticException
+Casting 4567890123456789 to int causes overflow
 
 
 -- !query 61
@@ -623,12 +618,10 @@ struct<q1:smallint>
 -- !query 62
 SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 -- !query 62 schema
-struct<q1:smallint>
+struct<>
 -- !query 62 output
--32491
--32491
--32491
-123
+java.lang.ArithmeticException
+Casting 4567890123456789 to short causes overflow
 
 
 -- !query 63
@@ -662,9 +655,10 @@ struct<CAST(CAST(36854775807.0 AS FLOAT) AS BIGINT):bigint>
 -- !query 66
 SELECT CAST(double('922337203685477580700.0') AS bigint)
 -- !query 66 schema
-struct<CAST(CAST(922337203685477580700.0 AS DOUBLE) AS BIGINT):bigint>
+struct<>
 -- !query 66 output
-9223372036854775807
+java.lang.ArithmeticException
+Casting 9.223372036854776E20 to long causes overflow
 
 
 -- !query 67
@@ -728,17 +722,19 @@ struct<CAST(shiftleft(CAST(-1 AS BIGINT), 63) AS STRING):string>
 -- !query 72
 SELECT string(int(shiftleft(bigint(-1), 63))+1)
 -- !query 72 schema
-struct<CAST((CAST(shiftleft(CAST(-1 AS BIGINT), 63) AS INT) + 1) AS STRING):string>
+struct<>
 -- !query 72 output
-1
+java.lang.ArithmeticException
+Casting -9223372036854775808 to int causes overflow
 
 
 -- !query 73
 SELECT bigint((-9223372036854775808)) * bigint((-1))
 -- !query 73 schema
-struct<(CAST(-9223372036854775808 AS BIGINT) * CAST(-1 AS BIGINT)):bigint>
+struct<>
 -- !query 73 output
--9223372036854775808
+java.lang.ArithmeticException
+long overflow
 
 
 -- !query 74
@@ -760,9 +756,10 @@ struct<(CAST(-9223372036854775808 AS BIGINT) % CAST(-1 AS BIGINT)):bigint>
 -- !query 76
 SELECT bigint((-9223372036854775808)) * int((-1))
 -- !query 76 schema
-struct<(CAST(-9223372036854775808 AS BIGINT) * CAST(CAST(-1 AS INT) AS BIGINT)):bigint>
+struct<>
 -- !query 76 output
--9223372036854775808
+java.lang.ArithmeticException
+long overflow
 
 
 -- !query 77
@@ -784,9 +781,10 @@ struct<(CAST(-9223372036854775808 AS BIGINT) % CAST(CAST(-1 AS INT) AS BIGINT)):
 -- !query 79
 SELECT bigint((-9223372036854775808)) * smallint((-1))
 -- !query 79 schema
-struct<(CAST(-9223372036854775808 AS BIGINT) * CAST(CAST(-1 AS SMALLINT) AS BIGINT)):bigint>
+struct<>
 -- !query 79 output
--9223372036854775808
+java.lang.ArithmeticException
+long overflow
 
 
 -- !query 80

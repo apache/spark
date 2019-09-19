@@ -31,8 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StructType}
 import org.apache.spark.util.Utils
 
-// TODO: Refactor this to `HivePartitionFilteringSuite`
-class HiveClientSuite(version: String)
+class HivePartitionFilteringSuite(version: String)
     extends HiveVersionSuite(version) with BeforeAndAfterAll {
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname

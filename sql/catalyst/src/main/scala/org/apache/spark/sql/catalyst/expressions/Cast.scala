@@ -289,7 +289,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private lazy val dateFormatter = DateFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-  private val failOnIntegralTypeOverflow = SQLConf.get.failOnIntegralTypeOverflow
+  private val failOnIntegralTypeOverflow = SQLConf.get.ansiEnabled
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
@@ -537,7 +537,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         if (longValue == longValue.toShort) {
           longValue.toShort
         } else {
-          throw new ArithmeticException(s"Casting $t to short causes overflow.")
+          throw new ArithmeticException(s"Casting $t to short causes overflow")
         }
       })
     case TimestampType =>
@@ -548,12 +548,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw new ArithmeticException(s"Casting $b to short causes overflow.")
+            throw new ArithmeticException(s"Casting $b to short causes overflow")
         }
         if (intValue == intValue.toShort) {
           intValue.toShort
         } else {
-          throw new ArithmeticException(s"Casting $b to short causes overflow.")
+          throw new ArithmeticException(s"Casting $b to short causes overflow")
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
@@ -578,7 +578,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         if (longValue == longValue.toByte) {
           longValue.toByte
         } else {
-          throw new ArithmeticException(s"Casting $t to byte causes overflow.")
+          throw new ArithmeticException(s"Casting $t to byte causes overflow")
         }
       })
     case TimestampType =>
@@ -589,24 +589,24 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw new ArithmeticException(s"Casting $b to byte causes overflow.")
+            throw new ArithmeticException(s"Casting $b to byte causes overflow")
         }
         if (intValue == intValue.toByte) {
           intValue.toByte
         } else {
-          throw new ArithmeticException(s"Casting $b to byte causes overflow.")
+          throw new ArithmeticException(s"Casting $b to byte causes overflow")
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
   }
 
-  private val nullOnOverflow = SQLConf.get.decimalOperationsNullOnOverflow
+  private val nullOnOverflow = !SQLConf.get.ansiEnabled
 
   /**
    * Change the precision / scale in a given decimal to those set in `decimalType` (if any),
    * modifying `value` in-place and returning it if successful. If an overflow occurs, it
    * either returns null or throws an exception according to the value set for
-   * `spark.sql.decimalOperations.nullOnOverflow`.
+   * `spark.sql.ansi.enabled`.
    *
    * NOTE: this modifies `value` in-place, so don't call it on external data.
    */
@@ -625,7 +625,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   /**
    * Create new `Decimal` with precision and scale given in `decimalType` (if any).
-   * If overflow occurs, if `spark.sql.decimalOperations.nullOnOverflow` is true, null is returned;
+   * If overflow occurs, if `spark.sql.ansi.enabled` is false, null is returned;
    * otherwise, an `ArithmeticException` is thrown.
    */
   private[this] def toPrecision(value: Decimal, decimalType: DecimalType): Decimal =
@@ -1275,7 +1275,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           if ($longValue == ($integralType) $longValue) {
             $evPrim = ($integralType) $longValue;
           } else {
-            throw new ArithmeticException("Casting $c to $integralType causes overflow");
+            throw new ArithmeticException("Casting " + $c + " to $integralType causes overflow");
           }
         """
     } else {
@@ -1300,7 +1300,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         if ($c == ($integralType) $c) {
           $evPrim = ($integralType) $c;
         } else {
-          throw new ArithmeticException("Casting $c to $integralType causes overflow");
+          throw new ArithmeticException("Casting " + $c + " to $integralType causes overflow");
         }
       """
   }
@@ -1335,7 +1335,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
           $evPrim = ($integralType) $c;
         } else {
-          throw new ArithmeticException("Casting $c to $integralType causes overflow");
+          throw new ArithmeticException("Casting " + $c + " to $integralType causes overflow");
         }
       """
   }

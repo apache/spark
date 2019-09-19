@@ -184,6 +184,7 @@ class OrcFileFormat
 
       val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
         isCaseSensitive, dataSchema, requiredSchema, reader, conf)
+      reader.close()
 
       if (requestedColIdsOrEmptyFile.isEmpty) {
         Iterator.empty
