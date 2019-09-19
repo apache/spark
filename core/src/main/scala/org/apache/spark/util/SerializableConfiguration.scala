@@ -20,13 +20,13 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
 
 /**
  * Helper wrapper to serialize a Hadoop configuration. Intended for use when implementing
  * DataSourceV2 readers & writers which depend on the Hadoop configuration from the driver node.
  */
-@DeveloperApi
+@DeveloperApi @Unstable
 class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.defaultWriteObject()
