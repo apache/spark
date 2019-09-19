@@ -18,7 +18,6 @@ import glob
 import os
 import struct
 import sys
-import threading
 import unittest
 
 from pyspark import SparkContext, SparkConf
