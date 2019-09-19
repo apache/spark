@@ -125,5 +125,13 @@ public class JavaHigherOrderFunctionsSuite {
                 0,
                 null
             ));
+        checkAnswer(
+            df.select(aggregate(col("x"), lit(0), (acc, x) -> acc.plus(x), x -> x)),
+            toRows(
+                25,
+                31,
+                0,
+                null
+            ));
     }
 }
