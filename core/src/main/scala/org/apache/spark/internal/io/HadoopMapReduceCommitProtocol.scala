@@ -17,18 +17,19 @@
 
 package org.apache.spark.internal.io
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 import java.util.{Date, UUID}
 
 import scala.collection.mutable
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configurable
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
@@ -40,22 +41,31 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  *
  * @param jobId the job's or stage's id
  * @param path the job's output path, or null if committer acts as a noop
- * @param dynamicPartitionOverwrite If true, Spark will overwrite partition directories at runtime
- *                                  dynamically, i.e., we first write files under a staging
- *                                  directory with partition path, e.g.
- *                                  /path/to/staging/a=1/b=1/xxx.parquet. When committing the job,
- *                                  we first clean up the corresponding partition directories at
- *                                  destination path, e.g. /path/to/destination/a=1/b=1, and move
- *                                  files from staging directory to the corresponding partition
- *                                  directories under destination path.
+ * @param fileSourceWriteDesc a description for file source write operation
  */
 class HadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean = false)
+    fileSourceWriteDesc: Option[FileSourceWriteDesc])
   extends FileCommitProtocol with Serializable with Logging {
 
   import FileCommitProtocol._
+  import HadoopMapReduceCommitProtocol._
+
+  def this(jobId: String, path: String, dynamicPartitionOverwrite: Boolean = false) =
+    this(jobId, path, Some(new FileSourceWriteDesc(dynamicPartitionOverwrite =
+      dynamicPartitionOverwrite)))
+
+  /**
+   * If true, Spark will overwrite partition directories at runtime dynamically, i.e., we first
+   * write files under a staging directory with partition path, e.g.
+   * /path/to/staging/a=1/b=1/xxx.parquet.
+   * When committing the job, we first clean up the corresponding partition directories at
+   * destination path, e.g. /path/to/destination/a=1/b=1, and move files from staging directory to
+   * the corresponding partition directories under destination path.
+   */
+  def dynamicPartitionOverwrite: Boolean =
+    fileSourceWriteDesc.map(_.dynamicPartitionOverwrite).getOrElse(false)
 
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
   @transient private var committer: OutputCommitter = _
@@ -91,7 +101,71 @@ class HadoopMapReduceCommitProtocol(
    */
   private def stagingDir = new Path(path, ".spark-staging-" + jobId)
 
+  /**
+   * For InsertIntoHadoopFsRelation operation, we support concurrent write to different partitions
+   * in a same table.
+   */
+  def supportConcurrent: Boolean =
+    fileSourceWriteDesc.map(_.isInsertIntoHadoopFsRelation).getOrElse(false)
+
+  /**
+   * Get escaped static partition key and value pairs, the default is empty.
+   */
+  private def escapedStaticPartitionKVs =
+    fileSourceWriteDesc.map(_.escapedStaticPartitionKVs).getOrElse(Seq.empty)
+
+  /**
+   * The staging root directory for executing InsertIntoHadoopFsRelation operation concurrently.
+   */
+  @transient private var concurrentStagingDir: Path = null
+
+  /**
+   * The staging partition path for InsertIntoHadoopFsRelation operation.
+   * There are output path and lock file under it.
+   */
+  @transient private var concurrentStagingPartitionDir: Path = null
+
+  /**
+   * The staging partition dir for executing InsertIntoHadoopFsRelation operation concurrently.
+   */
+  @transient private var concurrentStagingPartitionOutputDir: Path = null
+
+  /**
+   * Get the desired output path for the job. The output will be [[path]] when current operation
+   * is not a InsertIntoHadoopFsRelation operation. Otherwise, we choose a sub path composed of
+   * [[escapedStaticPartitionKVs]] under [[concurrentStagingDir]] over [[path]] to mark this
+   * operation and we can detect whether there is a operation conflict with current by checking the
+   * existence of relative output path.
+   *
+   * @return Path the desired output path.
+   */
+  protected def getOutputPath(context: TaskAttemptContext): Path = {
+    if (supportConcurrent) {
+      val stagingDirName = ".spark-staging-" + escapedStaticPartitionKVs.size
+      concurrentStagingDir = new Path(path, stagingDirName)
+      concurrentStagingPartitionDir = new Path(path, buildPath(stagingDirName,
+        getEscapedStaticPartitionPath(escapedStaticPartitionKVs)))
+      val appId = SparkEnv.get.conf.getAppId
+      val outputPath = new Path(path, buildPath(stagingDirName,
+        getEscapedStaticPartitionPath(escapedStaticPartitionKVs), appId))
+      concurrentStagingDir.getFileSystem(context.getConfiguration).makeQualified(outputPath)
+      outputPath
+    } else {
+      new Path(path)
+    }
+  }
+
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
+    if (supportConcurrent) {
+      concurrentStagingPartitionOutputDir = getOutputPath(context)
+      context.getConfiguration.set(FileOutputFormat.OUTDIR,
+        concurrentStagingPartitionOutputDir.toString)
+      logDebug("Set file output committer algorithm version to 2 implicitly," +
+        " for that the task output would be committed to staging output path firstly," +
+        " which is equivalent to algorithm 1.")
+      context.getConfiguration.setInt(FileOutputCommitter.FILEOUTPUTCOMMITTER_ALGORITHM_VERSION, 2)
+    }
+
     val format = context.getOutputFormatClass.getConstructor().newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
     format match {
@@ -200,6 +274,15 @@ class HadoopMapReduceCommitProtocol(
           }
           fs.rename(new Path(stagingDir, part), finalPartPath)
         }
+      } else if (supportConcurrent) {
+        // For InsertIntoHadoopFsRelation operation, the result has been committed to staging
+        // output path, merge it to destination path.
+        mergeStagingPath(fs, concurrentStagingPartitionOutputDir, new Path(path))
+      }
+
+      if (supportConcurrent) {
+        // For InsertIntoHadoopFsRelation operation, try to delete its staging partition path.
+        deleteStagingPath(fs, concurrentStagingDir, concurrentStagingPartitionDir)
       }
 
       fs.delete(stagingDir, true)
@@ -224,6 +307,7 @@ class HadoopMapReduceCommitProtocol(
       if (hasValidPath) {
         val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
         fs.delete(stagingDir, true)
+        deleteStagingPath(fs, concurrentStagingDir, concurrentStagingPartitionDir)
       }
     } catch {
       case e: IOException =>
@@ -270,5 +354,147 @@ class HadoopMapReduceCommitProtocol(
       case e: IOException =>
         logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
     }
+  }
+}
+
+object  HadoopMapReduceCommitProtocol extends Logging {
+
+  /**
+   * Get a path according to specified partition key-value pairs.
+   */
+  def getEscapedStaticPartitionPath(staticPartitionKVs: Iterable[(String, String)]): String = {
+    buildPath(staticPartitionKVs.map(kv => kv._1 + "=" + kv._2).toSeq: _*)
+  }
+
+  /**
+   * Delete the staging partition path of current InsertIntoHadoopFsRelation operation. This
+   * staging partition path is used to mark a InsertIntoHadoopFsRelation operation and we can
+   * detect conflict when there are several operations write same partition or a non-partitioned
+   * table concurrently.
+   *
+   * The staging partition path is a multi level path and is composed of specified partition key
+   * value pairs formatted `.spark-staging-${depth}/p1=v1/p2=v2/.../pn=vn/appId/jobId`. When
+   * deleting the staging partition path, delete the last level with recursive firstly. Then try to
+   * delete upper level without recursive, if success, then delete upper level with same way, until
+   * delete the stagingPath.
+   */
+   def deleteStagingPath(
+       fs: FileSystem,
+       stagingPath: Path,
+       stagingPartitionPath: Path): Unit = {
+     if (stagingPath == null || stagingPartitionPath == null ||
+       !fs.isDirectory(stagingPartitionPath)) {
+       logWarning(
+         s"""
+            |Delete is not done; staging dir:$stagingPath or staging partition dir:
+            |$stagingPartitionPath is invalid.
+            |""".stripMargin)
+       return
+     }
+
+     if (!(stagingPath == stagingPartitionPath || stagingPartitionPath.toUri.getPath.startsWith(
+       stagingPath.toUri.getPath + Path.SEPARATOR))) {
+       throw new SparkException(
+         s"""
+           |Delete is not done; staging dir:$stagingPath or staging partition dir:
+           |$stagingPartitionPath is invalid.
+           |""".stripMargin)
+     }
+
+     // delete the staging partition path bottom up recursively.
+     deletePath(fs, stagingPartitionPath, true)
+
+     var currentLevelPath = stagingPartitionPath
+     while (currentLevelPath != stagingPath) {
+       currentLevelPath = currentLevelPath.getParent
+       deletePath(fs, currentLevelPath, false)
+     }
+   }
+
+  /**
+   * We ignore delete exception here since we just try to delete this path and it does impact the
+   * correctness of output result.
+   */
+  private def deletePath(fs: FileSystem, path: Path, recursive: Boolean): Unit = {
+    try {
+      logInfo(s"Deleting path:$path with recursive:$recursive")
+      if (!fs.delete(path, recursive)) {
+        logWarning(s"Failed to delete path:$path with recursive:$recursive")
+      }
+    } catch {
+      case e: Exception =>
+        logWarning(s"Exception occurred when deleting dir: $path.", e)
+    }
+  }
+
+  /**
+   * Merge files under staging output path into destination path. To keep the SUCCEEDED FILE from
+   * being merged first, we need to delete it before merging and regenerate it under destination
+   * path afterwards.
+   */
+  private def mergeStagingPath(
+      fs: FileSystem,
+      stagingPath: Path,
+      destPath: Path): Unit = {
+    val stagingMarkerPath = new Path(stagingPath, FileOutputCommitter.SUCCEEDED_FILE_NAME)
+    deletePath(fs, stagingMarkerPath, true)
+
+    doMergePaths(fs, fs.getFileStatus(stagingPath), destPath)
+
+    val markerPath = new Path(destPath, FileOutputCommitter.SUCCEEDED_FILE_NAME)
+    fs.create(markerPath).close()
+  }
+
+  /**
+   * This method is copied from [[FileOutputCommitter]]'s mergePaths but we change renameOrMerge
+   * to rename. Since it's only called in commitJob, rename is safe and more efficient.
+   */
+  @throws[IOException]
+  private[spark] def doMergePaths(fs: FileSystem, from: FileStatus, to: Path): Unit = {
+    logInfo(s"Merging data from $from to $to")
+
+    val toStat: FileStatus = Try {
+      fs.getFileStatus(to)
+    } match {
+      case Success(stat) => stat
+      case Failure(_: FileNotFoundException) => null
+      case Failure(e) => throw e
+    }
+
+    if (from.isFile) {
+      if (toStat != null && !fs.delete(to, true)) {
+        throw new IOException(s"Failed to delete $to" )
+      }
+      rename(fs, from, to)
+    } else if (from.isDirectory) {
+      if (toStat != null) {
+        if (!toStat.isDirectory) {
+          if (!fs.delete(to, true)) {
+            throw new IOException(s"Failed to delete $to")
+          }
+          rename(fs, from, to)
+        } else {
+          val listStatus = fs.listStatus(from.getPath)
+          logInfo(s"There are ${listStatus.size} files under $from")
+          listStatus.foreach { fileToMove =>
+            doMergePaths(fs, fileToMove, new Path(to, fileToMove.getPath.getName))
+          }
+        }
+      } else {
+        rename(fs, from, to)
+      }
+    }
+  }
+
+  @throws[IOException]
+  private def rename(fs: FileSystem, from: FileStatus, to: Path): Unit = {
+    logInfo(s"Renaming file from $from to $to")
+    if (!fs.rename(from.getPath, to)) {
+      throw new IOException(s"Failed to rename $from to $to")
+    }
+  }
+
+  def buildPath(components: String*): String = {
+    components.mkString(Path.SEPARATOR)
   }
 }

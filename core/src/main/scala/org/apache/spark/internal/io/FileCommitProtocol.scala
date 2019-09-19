@@ -23,7 +23,6 @@ import org.apache.hadoop.mapreduce._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-
 /**
  * An interface to define how a single Spark job commits its outputs. Three notes:
  *
@@ -31,7 +30,8 @@ import org.apache.spark.util.Utils
  *    will be used for tasks on executors.
  * 2. Implementations should have a constructor with 2 or 3 arguments:
  *      (jobId: String, path: String) or
- *      (jobId: String, path: String, dynamicPartitionOverwrite: Boolean)
+ *      (jobId: String, path: String, dynamicPartitionOverwrite: Boolean) or
+ *      (jobId: String, path: String, fileSourceWriteDesc: Option[FileSourceWriteDesc])
  * 3. A committer should not be reused across multiple Spark jobs.
  *
  * The proper call sequence is:
@@ -167,6 +167,36 @@ object FileCommitProtocol extends Logging {
             s" the committer ${className} does not have the appropriate constructor")
         val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
         ctor.newInstance(jobId, outputPath)
+    }
+  }
+
+  /**
+   * Instantiates a FileCommitProtocol with file source write description.
+   */
+  def instantiate(
+      className: String,
+      jobId: String,
+      outputPath: String,
+      fileSourceWriteDesc: Option[FileSourceWriteDesc]): FileCommitProtocol = {
+
+    logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
+      s" fileSourceWriteDesc= $fileSourceWriteDesc")
+    val clazz = Utils.classForName[FileCommitProtocol](className)
+    // First try the constructor with arguments (jobId: String, outputPath: String,
+    // fileSourceWriteDesc: Option[FileSourceWriteDesc]).
+    // If that doesn't exist, try to invoke `FileCommitProtocol.instance(className,
+    // JobId, outputPath, dynamicPartitionOverwrite)`.
+    try {
+      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String],
+        classOf[Option[FileSourceWriteDesc]])
+      logDebug("Using (String, String, Option[FileSourceWriteDesc]) constructor")
+      ctor.newInstance(jobId, outputPath, fileSourceWriteDesc)
+    } catch {
+      case _: NoSuchMethodException =>
+        logDebug("Falling back to invoke instance(className, JobId, outputPath," +
+          " dynamicPartitionOverwrite)")
+        instantiate(className, jobId, outputPath,
+          fileSourceWriteDesc.map(_.dynamicPartitionOverwrite).getOrElse(false))
     }
   }
 }

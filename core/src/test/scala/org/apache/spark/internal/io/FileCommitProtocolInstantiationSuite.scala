@@ -53,6 +53,15 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       "Wrong constructor argument count")
   }
 
+
+  test("With file source write desc arg constructor has priority when file source" +
+    " write description specified") {
+    val instance = instantiateWithFileSourceWriteDesc(
+      Some(new FileSourceWriteDesc(true, false, Seq.empty)))
+    assert(3 == instance.argCount, "Wrong constructor argument count")
+    assert("with file source write desc" == instance.msg, "Wrong constructor invoked")
+  }
+
   test("The protocol must be of the correct class") {
     intercept[ClassCastException] {
       FileCommitProtocol.instantiate(
@@ -75,7 +84,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
 
   /**
    * Create a classic two-arg protocol instance.
-   * @param dynamic dyanmic partitioning mode
+   * @param dynamic dynamic partitioning mode
    * @return the instance
    */
   private def instantiateClassic(dynamic: Boolean): ClassicConstructorCommitProtocol = {
@@ -88,7 +97,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
 
   /**
    * Create a three-arg protocol instance.
-   * @param dynamic dyanmic partitioning mode
+   * @param dynamic dynamic partitioning mode
    * @return the instance
    */
   private def instantiateNew(
@@ -100,6 +109,19 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       dynamic).asInstanceOf[FullConstructorCommitProtocol]
   }
 
+  /**
+   * Create a four-arg protocol instance.
+   * @param desc file source write description
+   * @return the instance
+   */
+  private def instantiateWithFileSourceWriteDesc(
+      desc: Option[FileSourceWriteDesc]): FullConstructorCommitProtocol = {
+    FileCommitProtocol.instantiate(
+      classOf[FullConstructorCommitProtocol].getCanonicalName,
+      "job",
+      "path",
+      None).asInstanceOf[FullConstructorCommitProtocol]
+  }
 }
 
 /**
@@ -119,16 +141,21 @@ private class ClassicConstructorCommitProtocol(arg1: String, arg2: String)
 private class FullConstructorCommitProtocol(
   arg1: String,
   arg2: String,
-  b: Boolean,
-  val argCount: Int)
-  extends HadoopMapReduceCommitProtocol(arg1, arg2, b) {
+  desc: Option[FileSourceWriteDesc],
+  val argCount: Int,
+  val msg: String = "")
+  extends HadoopMapReduceCommitProtocol(arg1, arg2, desc) {
 
   def this(arg1: String, arg2: String) = {
-    this(arg1, arg2, false, 2)
+    this(arg1, arg2, None, 2)
   }
 
   def this(arg1: String, arg2: String, b: Boolean) = {
-    this(arg1, arg2, false, 3)
+    this(arg1, arg2, Some(new FileSourceWriteDesc(dynamicPartitionOverwrite = b)), 3)
+  }
+
+  def this(arg1: String, arg2: String, desc: Option[FileSourceWriteDesc]) {
+    this(arg1, arg2, desc, 3, "with file source write desc")
   }
 }
 

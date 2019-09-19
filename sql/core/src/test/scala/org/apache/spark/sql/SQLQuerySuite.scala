@@ -24,7 +24,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.parallel.immutable.ParVector
 
-import org.apache.spark.{AccumulatorSuite, SparkException}
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.{AccumulatorSuite, InsertFileSourceConflictException, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
@@ -33,18 +37,22 @@ import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
+import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class SQLQuerySuite extends QueryTest with SharedSparkSession {
+  import HadoopMapReduceCommitProtocol._
+  import InsertIntoHadoopFsRelationCommand._
   import testImplicits._
 
   setupTestData()
@@ -3382,6 +3390,105 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         """.stripMargin)
       }
       assert(exp.getMessage.contains("Resources not found"))
+    }
+  }
+
+  test("SPARK-28945 SPARK-29037: Fix the issue that spark gives duplicate result and support" +
+    " concurrent file source write operations write to different partitions in the same table.") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
+      withTempDir { loc =>
+        withTable("ta", "tb", "tc") {
+          // partitioned table
+          sql("create table ta(id int, p1 int, p2 int) using parquet partitioned by (p1, p2)")
+          sql("insert overwrite table ta partition(p1=1,p2) select 1, 3")
+          val df1 = sql("select * from ta order by p2")
+          checkAnswer(df1, Array(Row(1, 1, 3)))
+          sql("insert overwrite table ta partition(p1=1,p2) select 1, 4")
+          val df2 = sql("select * from ta order by p2")
+          checkAnswer(df2, Array(Row(1, 1, 4)))
+          sql("insert overwrite table ta partition(p1=1,p2=5) select 1")
+          val df3 = sql("select * from ta order by p2")
+          checkAnswer(df3, Array(Row(1, 1, 4), Row(1, 1, 5)))
+          sql("insert overwrite table ta select 1, 2, 3")
+          val df4 = sql("select * from ta order by p2")
+          checkAnswer(df4, Array(Row(1, 2, 3)))
+          sql("insert overwrite table ta select 9, 9, 9")
+          val df5 = sql("select * from ta order by p2")
+          checkAnswer(df5, Array(Row(9, 9, 9)))
+          sql("insert into table ta select 6, 6, 6")
+          val df6 = sql("select * from ta order by p2")
+          checkAnswer(df6, Array(Row(6, 6, 6), Row(9, 9, 9)))
+
+          // non-partitioned table
+          sql("create table tb(id int) using parquet")
+          sql("insert into table tb select 7")
+          val df7 = sql("select * from tb order by id")
+          checkAnswer(df7, Array(Row(7)))
+          sql("insert overwrite table tb select 8")
+          val df8 = sql("select * from tb order by id")
+          checkAnswer(df8, Array(Row(8)))
+          sql("insert into table tb select 9")
+          val df9 = sql("select * from tb order by id")
+          checkAnswer(df9, Array(Row(8), Row(9)))
+
+          // detect concurrent conflict
+          sql(s"create table tc(id int, p1 int, p2 int) using parquet partitioned by (p1, p2) " +
+            s"location '${loc.getAbsolutePath}'")
+          sql("insert overwrite table tc partition(p1=1, p2) select 1, 3")
+
+          val staging1 = new File(buildPath(loc.getAbsolutePath, ".spark-staging-1", "p1=1",
+            "application_1234"))
+          staging1.mkdirs()
+          val stagingLock1 = new File(buildPath(loc.getAbsolutePath, ".spark-staging-1", "p1=1",
+            getLockName))
+          stagingLock1.createNewFile()
+
+          val msg = intercept[InsertFileSourceConflictException](
+            sql("insert overwrite table tc partition(p1=1, p2) select 1, 2")).message
+          assert(msg.contains(".spark-staging-1/p1=1,application_1234"))
+
+          val msg2 = intercept[InsertFileSourceConflictException](
+            sql("insert overwrite table tc partition(p1=1, p2=2) select 1")).message
+          assert(msg2.contains(".spark-staging-1/p1=1,application_1234"))
+
+          val msg3 = intercept[InsertFileSourceConflictException](
+            sql("insert overwrite table tc select 1, 2, 3")).message
+          assert(msg3.contains(".spark-staging-1/p1=1,application_1234"))
+
+          val msg4 = intercept[InsertFileSourceConflictException](
+            sql("insert into table tc select 1, 2, 3")).message
+          assert(msg4.contains(".spark-staging-1/p1=1,application_1234"))
+
+          sql("insert overwrite table tc partition(p1=2, p2) select 1, 2")
+          sql("insert overwrite table tc partition(p1=2, p2=3) select 1")
+        }
+      }
+    }
+  }
+
+  test("SPARK-29043: test doMergePaths") {
+    withTempDir { taLocation =>
+      withTempDir { dstLocation =>
+        withTable("ta") {
+          sql(
+            s"""
+               |create table ta(id int, p1 int, p2 int) using parquet partitioned by (p1, p2)
+               |location '${taLocation.getAbsolutePath}'
+               |""".stripMargin
+          )
+          sql("insert overwrite table ta partition(p1=1, p2) select 1, 1")
+          sql("insert overwrite table ta partition(p1=2, p2) select 2, 2")
+          sql("insert into ta partition(p1=3, p2) select 3, 3")
+
+          val taPath = new Path(taLocation.getAbsolutePath)
+          val dstPath = new Path(dstLocation.getAbsolutePath)
+          val fs = taPath.getFileSystem(SparkHadoopUtil.get.newConfiguration(sparkConf))
+          HadoopMapReduceCommitProtocol.doMergePaths(fs, fs.getFileStatus(taPath), dstPath)
+
+          checkAnswer(spark.read.load(dstLocation.getAbsolutePath),
+            Array(Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3)))
+        }
+      }
     }
   }
 }
