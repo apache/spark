@@ -114,4 +114,16 @@ public class JavaHigherOrderFunctionsSuite {
                 null
             ));
     }
+
+    @Test
+    public void testAggregate() {
+        checkAnswer(
+            df.select(aggregate(col("x"), lit(0), (acc, x) -> acc.plus(x))),
+            toRows(
+                25,
+                31,
+                0,
+                null
+            ));
+    }
 }
