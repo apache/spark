@@ -1026,7 +1026,7 @@ class CodegenContext extends Logging {
    * Defines an independent function for a given expression and returns a caller-side code
    * for the function as `ExprCode`.
    */
-  def defineIndependentFunction(
+  def defineSingleSplitFunction(
       expr: Expression,
       ev: ExprCode,
       funcNameOption: Option[String] = None,
@@ -1096,7 +1096,7 @@ class CodegenContext extends Logging {
       }
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
         commonExprs.zipWithIndex.map { case (exprs, i) =>
-          val funcEval = defineIndependentFunction(
+          val funcEval = defineSingleSplitFunction(
             expr = exprs.head,
             ev = commonExprVals(i),
             funcNameOption = Some("subExprValue"),

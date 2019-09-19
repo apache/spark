@@ -633,7 +633,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
   private def genSplitCode(ctx: CodegenContext, expr: Expression): ExprCode = {
     val eval = expr.genCode(ctx)
     if (eval.code.length > SQLConf.get.methodSplitThreshold) {
-      ctx.defineIndependentFunction(this, eval)
+      ctx.defineSingleSplitFunction(this, eval)
     } else {
       eval
     }
