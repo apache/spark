@@ -83,7 +83,7 @@ class HadoopMapReduceCommitProtocol(
    * e.g. a=1/b=2. Files under these partitions will be saved into staging directory and moved to
    * destination directory at the end, if `dynamicPartitionOverwrite` is true.
    */
-  @transient private var partitionPaths: mutable.Set[String] = null
+  @transient protected var partitionPaths: mutable.Set[String] = null
 
   /**
    * The staging directory of this write job. Spark uses it to deal with files with absolute output

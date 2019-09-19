@@ -104,12 +104,14 @@ case class InsertIntoHadoopFsRelationCommand(
     // partition columns.
     val dynamicPartitionOverwrite = enableDynamicOverwrite && mode == SaveMode.Overwrite &&
       staticPartitions.size < partitionColumns.length
+    val maxDynamicPartitions = sparkSession.sessionState.conf.maxDynamicPartitions
 
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputPath.toString,
-      dynamicPartitionOverwrite = dynamicPartitionOverwrite)
+      dynamicPartitionOverwrite = dynamicPartitionOverwrite,
+      maxDynamicPartitions = maxDynamicPartitions)
 
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>

@@ -147,26 +147,43 @@ object FileCommitProtocol extends Logging {
       className: String,
       jobId: String,
       outputPath: String,
-      dynamicPartitionOverwrite: Boolean = false): FileCommitProtocol = {
+      dynamicPartitionOverwrite: Boolean = false,
+      maxDynamicPartitions: Int = Int.MaxValue): FileCommitProtocol = {
 
     logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
       s" dynamic=$dynamicPartitionOverwrite")
     val clazz = Utils.classForName[FileCommitProtocol](className)
-    // First try the constructor with arguments (jobId: String, outputPath: String,
+    // dynamicPartitionOverwrite: Boolean, maxDynamicPartitions: Int).
+    // If that doesn't exist, try the one with (jobId: String, outputPath: String,
     // dynamicPartitionOverwrite: Boolean).
-    // If that doesn't exist, try the one with (jobId: string, outputPath: String).
+    // If that still doesn't exist, try the one with (jobId: string, outputPath: String).
     try {
-      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
-      logDebug("Using (String, String, Boolean) constructor")
-      ctor.newInstance(jobId, outputPath, dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
+      val ctor = clazz.getDeclaredConstructor(
+        classOf[String], classOf[String], classOf[Boolean], classOf[Int])
+      logDebug("Using (String, String, Boolean, Int) constructor")
+      ctor.newInstance(
+        jobId,
+        outputPath,
+        dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean],
+        maxDynamicPartitions.asInstanceOf[java.lang.Integer]
+      )
     } catch {
       case _: NoSuchMethodException =>
-        logDebug("Falling back to (String, String) constructor")
-        require(!dynamicPartitionOverwrite,
-          "Dynamic Partition Overwrite is enabled but" +
-            s" the committer ${className} does not have the appropriate constructor")
-        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
-        ctor.newInstance(jobId, outputPath)
+        try {
+          val ctor = clazz.getDeclaredConstructor(
+            classOf[String], classOf[String], classOf[Boolean])
+          logDebug("Using (String, String, Boolean) constructor")
+          ctor.newInstance(jobId, outputPath,
+            dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
+        } catch {
+          case _: NoSuchMethodException =>
+            logDebug("Falling back to (String, String) constructor")
+            require(!dynamicPartitionOverwrite,
+              "Dynamic Partition Overwrite is enabled but" +
+                s" the committer ${className} does not have the appropriate constructor")
+            val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
+            ctor.newInstance(jobId, outputPath)
+        }
     }
   }
 }

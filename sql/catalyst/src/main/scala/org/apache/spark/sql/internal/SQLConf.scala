@@ -1699,6 +1699,13 @@ object SQLConf {
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
 
+  val MAX_DYNAMIC_PARTITIONS =
+    buildConf("spark.sql.max.dynamic.partitions")
+      .doc("Maximum number of dynamic partitions allowed to be created in total. " +
+        "The default value is -1 which means no limitation")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
   }
@@ -2450,6 +2457,8 @@ class SQLConf extends Serializable with Logging {
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
+
+  def maxDynamicPartitions: Int = getConf(MAX_DYNAMIC_PARTITIONS)
 
   def storeAssignmentPolicy: Option[StoreAssignmentPolicy.Value] =
     getConf(STORE_ASSIGNMENT_POLICY).map(StoreAssignmentPolicy.withName)

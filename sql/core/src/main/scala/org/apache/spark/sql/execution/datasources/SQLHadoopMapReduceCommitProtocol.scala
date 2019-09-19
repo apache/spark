@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql.internal.SQLConf
@@ -32,7 +33,8 @@ import org.apache.spark.sql.internal.SQLConf
 class SQLHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean = false)
+    dynamicPartitionOverwrite: Boolean = false,
+    maxDynamicPartitions: Int = Int.MaxValue)
   extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
@@ -65,5 +67,19 @@ class SQLHadoopMapReduceCommitProtocol(
     }
     logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
     committer
+  }
+
+  override def newTaskTempFile(
+      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
+    val path = super.newTaskTempFile(taskContext, dir, ext)
+    if (dynamicPartitionOverwrite) {
+      val numParts = partitionPaths.size
+      if (numParts > maxDynamicPartitions) {
+        throw new SparkException(s"Number of dynamic partitions created is $numParts," +
+          s" which is more than $maxDynamicPartitions." +
+          s" To solve this try to increase ${SQLConf.MAX_DYNAMIC_PARTITIONS.key}")
+      }
+    }
+    path
   }
 }
