@@ -46,6 +46,7 @@ from pyspark import shuffle
 
 if sys.version >= '3':
     basestring = str
+    unicode = str
 else:
     from itertools import imap as map  # use iterator map by default
 
