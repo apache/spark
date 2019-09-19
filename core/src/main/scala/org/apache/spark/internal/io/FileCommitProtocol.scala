@@ -153,6 +153,7 @@ object FileCommitProtocol extends Logging {
     logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
       s" dynamic=$dynamicPartitionOverwrite")
     val clazz = Utils.classForName[FileCommitProtocol](className)
+    // First try the constructor with arguments (jobId: String, outputPath: String,
     // dynamicPartitionOverwrite: Boolean, maxDynamicPartitions: Int).
     // If that doesn't exist, try the one with (jobId: String, outputPath: String,
     // dynamicPartitionOverwrite: Boolean).
