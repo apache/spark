@@ -374,6 +374,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       val readerOptions = OrcFile.readerOptions(new Configuration())
       val reader = OrcFile.createReader(orcFilePath, readerOptions)
       val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
+      reader.close()
       assert(version === SPARK_VERSION_SHORT)
     }
   }

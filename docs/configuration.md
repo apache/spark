@@ -411,6 +411,16 @@ of the most common options to set are:
     use the default layout.
   </td>
 </tr>
+<tr>
+  <td><code>spark.driver.log.allowErasureCoding</code></td>
+  <td>false</td>
+  <td>
+    Whether to allow driver logs to use erasure coding.  On HDFS, erasure coded files will not
+    update as quickly as regular replicated files, so they make take longer to reflect changes
+    written by the application. Note that even if this is true, Spark will still not force the
+    file to use erasure coding, it will simply use file system defaults.
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
