@@ -146,7 +146,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     val scheduler = new DummyTaskSchedulerImpl(sc)
     val spyScheduler = spy(scheduler)
     val resultGetter = new TaskResultGetter(sc.env, spyScheduler)
-    spyScheduler.taskResultGetter = resultGetter
+    scheduler.taskResultGetter = resultGetter
     val myTsm = new TaskSetManager(spyScheduler, FakeTask.createTaskSet(2), 1) {
       // always returns false
       override def canFetchMoreResults(size: Long): Boolean = false
