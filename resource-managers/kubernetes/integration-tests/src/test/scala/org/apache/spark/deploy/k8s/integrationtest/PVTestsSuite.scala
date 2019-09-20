@@ -50,6 +50,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
       .withNewMetadata()
         .withName(PV_NAME)
       .endMetadata()
+      // TODO(SPARK-29076): Validate with docker 4 desktop
       .withNewSpec()
         .withCapacity(Map("storage" -> new QuantityBuilder().withAmount("1Gi").build()).asJava)
         .withAccessModes("ReadWriteOnce")
