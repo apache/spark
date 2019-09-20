@@ -3356,9 +3356,9 @@ class Dataset[T] private[sql](
     }
   }
 
-  private[sql] def toPythonIterator(): Array[Any] = {
+  private[sql] def toPythonIterator(prefetchPartitions: Boolean = false): Array[Any] = {
     withNewExecutionId {
-      PythonRDD.toLocalIteratorAndServe(javaToPython.rdd)
+      PythonRDD.toLocalIteratorAndServe(javaToPython.rdd, prefetchPartitions)
     }
   }
 
