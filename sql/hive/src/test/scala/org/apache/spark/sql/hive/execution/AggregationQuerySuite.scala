@@ -1030,8 +1030,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("SPARK-29140: HashAggregateExec aggregating binary type doesn't break codegen compilation") {
-    val withDistinct = countDistinct($"c1")
-
     val schema = new StructType().add("id", IntegerType, nullable = false)
       .add("c1", BinaryType, nullable = true)
 
@@ -1041,8 +1039,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       val emptyRows = spark.sparkContext.parallelize(Seq.empty[Row], 1)
       val aggDf = spark.createDataFrame(emptyRows, schema)
         .groupBy($"id" % 10 as "group")
-        .agg(withDistinct)
-        .orderBy("group")
+        .agg(countDistinct($"c1"))
       checkAnswer(aggDf, Seq.empty[Row])
     }
   }
