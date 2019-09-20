@@ -204,6 +204,30 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-29145: JOIN Condition use QueryList") {
+    withTempView("s1", "s2", "s3") {
+      Seq(1, 3, 5, 7, 9).toDF("id").createOrReplaceTempView("s1")
+      Seq(1, 3, 4, 6, 9).toDF("id").createOrReplaceTempView("s2")
+      Seq(3, 4, 6, 9).toDF("id").createOrReplaceTempView("s3")
+
+      checkAnswer(
+        sql("SELECT s1.id from s1 JOIN s2 ON s1.id = s2.id and s1.id IN (select 9)"),
+        Row(9) :: Nil)
+
+      checkAnswer(
+        sql("SELECT s1.id from s1 JOIN s2 ON s1.id = s2.id and s1.id NOT IN (select 9)"),
+        Row(1) :: Row(3) :: Nil)
+
+      checkAnswer(
+        sql("SELECT s1.id from s1 JOIN s2 ON s1.id = s2.id and s1.id IN (select id from s3)"),
+        Row(3) :: Row(9) :: Nil)
+
+      checkAnswer(
+        sql("SELECT s1.id from s1 JOIN s2 ON s1.id = s2.id and s1.id NOT IN (select id from s3)"),
+        Row(1) :: Nil)
+    }
+  }
+
   test("SPARK-14791: scalar subquery inside broadcast join") {
     val df = sql("select a, sum(b) as s from l group by a having a > (select avg(a) from l)")
     val expected = Row(3, 2.0, 3, 3.0) :: Row(6, null, 6, null) :: Nil
