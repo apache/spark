@@ -253,11 +253,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val maybeV2Provider = lookupV2Provider()
     if (maybeV2Provider.isDefined) {
-      if (partitioningColumns.nonEmpty) {
-        throw new AnalysisException(
-          "Cannot write data to TableProvider implementation if partition columns are specified.")
-      }
-
       val provider = maybeV2Provider.get
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, df.sparkSession.sessionState.conf)
@@ -267,6 +262,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       provider.getTable(dsOptions) match {
         case table: SupportsWrite if table.supports(BATCH_WRITE) =>
+          if (partitioningColumns.nonEmpty) {
+            throw new AnalysisException("Cannot write data to TableProvider implementation " +
+              "if partition columns are specified.")
+          }
           lazy val relation = DataSourceV2Relation.create(table, dsOptions)
           modeForDSV2 match {
             case SaveMode.Append =>

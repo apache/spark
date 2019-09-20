@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.types.BooleanType
@@ -32,6 +33,10 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
 
   private def failAnalysis(msg: String): Unit = throw new AnalysisException(msg)
 
+  private def supportsBatchWrite(table: Table): Boolean = {
+    table.supportsAny(BATCH_WRITE, V1_BATCH_WRITE)
+  }
+
   override def apply(plan: LogicalPlan): Unit = {
     plan foreach {
       case r: DataSourceV2Relation if !r.table.supports(BATCH_READ) =>
@@ -43,8 +48,7 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
 
       // TODO: check STREAMING_WRITE capability. It's not doable now because we don't have a
       //       a logical plan for streaming write.
-
-      case AppendData(r: DataSourceV2Relation, _, _, _) if !r.table.supports(BATCH_WRITE) =>
+      case AppendData(r: DataSourceV2Relation, _, _, _) if !supportsBatchWrite(r.table) =>
         failAnalysis(s"Table ${r.table.name()} does not support append in batch mode.")
 
       case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _, _)
@@ -54,13 +58,13 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
       case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _) =>
         expr match {
           case Literal(true, BooleanType) =>
-            if (!r.table.supports(BATCH_WRITE) ||
-              !r.table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER)) {
+            if (!supportsBatchWrite(r.table) ||
+                !r.table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER)) {
               failAnalysis(
                 s"Table ${r.table.name()} does not support truncate in batch mode.")
             }
           case _ =>
-            if (!r.table.supports(BATCH_WRITE) || !r.table.supports(OVERWRITE_BY_FILTER)) {
+            if (!supportsBatchWrite(r.table) || !r.table.supports(OVERWRITE_BY_FILTER)) {
               failAnalysis(s"Table ${r.table.name()} does not support " +
                 "overwrite by filter in batch mode.")
             }
