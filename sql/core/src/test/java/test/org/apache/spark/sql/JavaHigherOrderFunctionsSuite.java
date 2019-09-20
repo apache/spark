@@ -195,4 +195,27 @@ public class JavaHigherOrderFunctionsSuite {
                 null
             ));
     }
+
+    @Test
+    public void testMapFilter() {
+        checkAnswer(
+            mapDf.select(map_filter(col("x"), (k, v) -> lit(false))),
+            toRows(
+                mapAsScalaMap(new HashMap<Integer, Integer>()),
+                null
+            ));
+    }
+
+    @Test
+    public void testMapZipWith() {
+        checkAnswer(
+            mapDf.select(map_zip_with(col("x"), col("x"), (k, v1, v2) -> lit(false))),
+            toRows(
+                mapAsScalaMap(new HashMap<Integer, Boolean>() {{
+                    put(1, false);
+                    put(2, false);
+                }}),
+                null
+            ));
+    }
 }
