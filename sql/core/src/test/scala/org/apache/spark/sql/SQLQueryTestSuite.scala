@@ -310,9 +310,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.PREFER_INTEGRAL_DIVISION.key, true)
-        // Propagate the SQL conf ANSI_ENABLED to executor.
-        // TODO: remove this after SPARK-29122 is resolved.
-        localSparkSession.sparkContext.setLocalProperty(SQLConf.ANSI_ENABLED.key, "true")
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
       case _ =>
     }
 
@@ -406,7 +404,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       val df = session.sql(sql)
       val schema = df.schema
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-      val answer = hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
+      val answer = SQLExecution.withNewExecutionId(session, df.queryExecution, Some(sql)) {
+        hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
+      }
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
