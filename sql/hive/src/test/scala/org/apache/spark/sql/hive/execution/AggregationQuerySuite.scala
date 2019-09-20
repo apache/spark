@@ -1023,7 +1023,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
         SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
       withTable("t") {
-        spark.range(3).selectExpr("CAST(id AS decimal(38, 0)) a").write.saveAsTable("t")
+        spark.range(3).selectExpr("CAST(id AS decimal(38, 0)) a").createOrReplaceTempView("t")
         checkAnswer(sql("SELECT SUM(a) FROM t"), Row(java.math.BigDecimal.valueOf(3)))
       }
     }
