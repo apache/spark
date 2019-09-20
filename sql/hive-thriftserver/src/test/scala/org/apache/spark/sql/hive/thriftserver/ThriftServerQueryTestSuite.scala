@@ -26,7 +26,6 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.HiveSQLException
-import org.scalatest.Ignore
 
 import org.apache.spark.sql.{AnalysisException, SQLQueryTestSuite}
 import org.apache.spark.sql.catalyst.util.fileToString
@@ -43,12 +42,12 @@ import org.apache.spark.sql.types._
  *   2. Support DESC command.
  *   3. Support SHOW command.
  */
-@Ignore
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
   private var hiveServer2: HiveThriftServer2 = _
 
-  override def beforeEach(): Unit = {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     // Chooses a random port between 10000 and 19999
     var listeningPort = 10000 + Random.nextInt(10000)
 
@@ -65,8 +64,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     logInfo("HiveThriftServer2 started successfully")
   }
 
-  override def afterEach(): Unit = {
-    hiveServer2.stop()
+  override def afterAll(): Unit = {
+    try {
+      hiveServer2.stop()
+    } finally {
+      super.afterAll()
+    }
   }
 
   override val isTestWithConfigSets = false
