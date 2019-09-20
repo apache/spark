@@ -158,6 +158,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     val serializedDirect = ser.serialize(directTaskResult)
     resultGetter.enqueueSuccessfulTask(myTsm, 0, serializedDirect)
     resultGetter.enqueueSuccessfulTask(myTsm, 1, serializedIndirect)
+    Thread.sleep(1000L)
     verify(spyScheduler, times(1)).handleFailedTask(
       myTsm, 0, TaskState.KILLED, TaskKilled("Tasks result size has exceeded maxResultSize"))
     verify(spyScheduler, times(1)).handleFailedTask(
