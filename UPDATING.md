@@ -40,6 +40,40 @@ assists users migrating to a new version.
 
 ## Airflow Master
 
+### Normalize gcp_conn_id for Google Cloud Platform
+
+Previously not all hooks and operators related to Google Cloud Platform use 
+`gcp_conn_id` as parameter for GCP connection. There is currently one parameter 
+which apply to most services. Parameters like ``datastore_conn_id``, ``bigquery_conn_id``,
+``google_cloud_storage_conn_id`` and similar have been deprecated. Operators that require two connections are not changed.
+
+Following components were affected by normalization:
+  * airflow.gcp.hooks.datastore.DatastoreHook
+  * airflow.gcp.hooks.bigquery.BigQueryHook
+  * airflow.gcp.hooks.gcs.GoogleCloudStorageHook
+  * airflow.gcp.operators.bigquery.BigQueryCheckOperator
+  * airflow.gcp.operators.bigquery.BigQueryValueCheckOperator
+  * airflow.gcp.operators.bigquery.BigQueryIntervalCheckOperator
+  * airflow.gcp.operators.bigquery.BigQueryGetDataOperator
+  * airflow.gcp.operators.bigquery.BigQueryOperator
+  * airflow.gcp.operators.bigquery.BigQueryDeleteDatasetOperator
+  * airflow.gcp.operators.bigquery.BigQueryCreateEmptyDatasetOperator
+  * airflow.gcp.operators.bigquery.BigQueryTableDeleteOperator
+  * airflow.gcp.operators.gcs.GoogleCloudStorageCreateBucketOperator
+  * airflow.gcp.operators.gcs.GoogleCloudStorageListOperator
+  * airflow.gcp.operators.gcs.GoogleCloudStorageDownloadOperator
+  * airflow.gcp.operators.gcs.GoogleCloudStorageDeleteOperator
+  * airflow.gcp.operators.gcs.GoogleCloudStorageBucketCreateAclEntryOperator
+  * airflow.gcp.operators.gcs.GoogleCloudStorageObjectCreateAclEntryOperator
+  * airflow.operators.sql_to_gcs.BaseSQLToGoogleCloudStorageOperator
+  * airflow.operators.adls_to_gcs.AdlsToGoogleCloudStorageOperator
+  * airflow.operators.gcs_to_s3.GoogleCloudStorageToS3Operator
+  * airflow.operators.gcs_to_gcs.GoogleCloudStorageToGoogleCloudStorageOperator
+  * airflow.operators.bigquery_to_gcs.BigQueryToCloudStorageOperator
+  * airflow.operators.local_to_gcs.FileToGoogleCloudStorageOperator
+  * airflow.operators.cassandra_to_gcs.CassandraToGoogleCloudStorageOperator
+  * airflow.operators.bigquery_to_bigquery.BigQueryToBigQueryOperator
+
 ### Changes to propagating Kubernetes worker annotations
 
 `kubernetes_annotations` configuration section has been removed. 
@@ -56,7 +90,6 @@ it should be rewritten to
 [kubernetes]
 worker_annotations = { "annotation_key" : "annotation_value", "annotation_key2" : "annotation_value2" }
 ```
-
 
 ### Changes to import paths and names of GCP operators and hooks
 
