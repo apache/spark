@@ -267,7 +267,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   private def getKafkaParams(): ju.Map[String, Object] = {
     val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
     Map[String, Object](
-      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> "127.0.0.1:9092",
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers,
       SaslConfigs.SASL_JAAS_CONFIG -> KafkaTokenUtil.getTokenJaasParams(clusterConf)
     ).asJava
   }
