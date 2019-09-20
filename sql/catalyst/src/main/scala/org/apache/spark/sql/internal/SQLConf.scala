@@ -1979,6 +1979,14 @@ object SQLConf {
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
       .createWithDefault(true)
+
+  val IGNORE_DATA_LOCALITY =
+    buildConf("spark.sql.ignore.datalocality")
+      .doc("If it is set to true, Spark won't fetch the block locations for each file on " +
+        "listing files, which will greatly accelerate the list file operation, while loss " +
+        "data locality.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -2474,6 +2482,8 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
+
+  def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 
   /** ********************** SQLConf functionality methods ************ */
 
