@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.annotation.{DeveloperApi, Unstable}
 
 /**
- * Hadoop configuration but serializable.
+ * Hadoop configuration but serializable. Use `value` to access the Hadoop configuration.
  *
  * @param value Hadoop configuration
  */
