@@ -1023,7 +1023,7 @@ class CodegenContext extends Logging {
   }
 
   /**
-   * Defines an independent function for a given expression and returns a caller-side code
+   * Defines an individual function for a given expression and returns a caller-side code
    * for the function as `ExprCode`.
    */
   def defineSingleSplitFunction(
