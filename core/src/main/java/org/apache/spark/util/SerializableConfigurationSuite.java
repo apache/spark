@@ -14,27 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.util
-
-import java.io.{ObjectInputStream, ObjectOutputStream}
-
-import org.apache.hadoop.conf.Configuration
-
-import org.apache.spark.annotation.{DeveloperApi, Unstable}
+package org.apache.spark.util;
 
 /**
- * Helper wrapper to serialize a Hadoop configuration. Intended for use when implementing
- * DataSourceV2 readers & writers which depend on the Hadoop configuration from the driver node.
+ * This test ensures that the API we've exposed for SerializableConfiguration is usable
+ * from Java. It does not test any of the serialization it's self.
  */
-@DeveloperApi @Unstable
-class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
-  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
-    out.defaultWriteObject()
-    value.write(out)
-  }
-
-  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    value = new Configuration(false)
-    value.readFields(in)
+class SerializableConfigurationSuite {
+  public SerializableConfiguration compileTest() {
+    SerializableConfiguration scs = new SerializableConfiguration(null);
+    return scs;
   }
 }
