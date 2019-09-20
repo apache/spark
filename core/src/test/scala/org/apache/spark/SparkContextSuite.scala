@@ -761,7 +761,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
-      TestUtils.waitUntilExecutorsUp(sc, 1, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
       assert(sc.resources.size === 1)
       assert(sc.resources.get(GPU).get.addresses === Array("5", "6"))
       assert(sc.resources.get(GPU).get.name === "gpu")
@@ -790,7 +790,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
-      TestUtils.waitUntilExecutorsUp(sc, 1, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
       // driver gpu resources file should take precedence over the script
       assert(sc.resources.size === 1)
       assert(sc.resources.get(GPU).get.addresses === Array("0", "1", "8"))
