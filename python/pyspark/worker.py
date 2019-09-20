@@ -46,7 +46,6 @@ from pyspark import shuffle
 
 if sys.version >= '3':
     basestring = str
-    unicode = str
 else:
     from itertools import imap as map  # use iterator map by default
 
@@ -600,13 +599,10 @@ def main(infile, outfile):
     except Exception:
         try:
             exc_info = traceback.format_exc()
-            if sys.version_info.major < 3:
-                if isinstance(exc_info, unicode):
-                    exc_info = exc_info.encode("utf-8")
-                else:
-                    # exc_info may contains other encoding bytes, replace the invalid byte and
-                    # convert it back to utf-8 again
-                    exc_info = exc_info.decode("utf-8", "replace").encode("utf-8")
+            if isinstance(exc_info, bytes):
+                # exc_info may contains other encoding bytes, replace the invalid bytes and convert
+                # it back to utf-8 again
+                exc_info = exc_info.decode("utf-8", "replace").encode("utf-8")
             else:
                 exc_info = exc_info.encode("utf-8")
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
