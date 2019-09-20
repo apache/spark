@@ -379,7 +379,7 @@ class FakeReceiver(sendData: Boolean = false) extends Receiver[Int](StorageLevel
   @volatile var receiving = false
 
   // tracks calls of "onStart", "onStop"
-  val callsRecorder = new MethodsCallRecorder()
+  @transient lazy val callsRecorder = new MethodsCallRecorder()
 
   def onStart() {
     otherThread = new Thread() {
