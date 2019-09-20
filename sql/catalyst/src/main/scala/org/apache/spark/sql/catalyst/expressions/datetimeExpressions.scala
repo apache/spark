@@ -1983,29 +1983,33 @@ object DatePart {
   def parseExtractField(
       extractField: String,
       source: Expression,
-      errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millennium(source)
-    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
-    case "DECADE" | "DECADES" | "DEC" | "DECS" => Decade(source)
-    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
-    case "ISOYEAR" => IsoYear(source)
-    case "QUARTER" | "QTR" => Quarter(source)
-    case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
-    case "WEEK" | "W" | "WEEKS" => WeekOfYear(source)
-    case "DAY" | "D" | "DAYS" => DayOfMonth(source)
-    case "DAYOFWEEK" => DayOfWeek(source)
-    case "DOW" => Subtract(DayOfWeek(source), Literal(1))
-    case "ISODOW" => Add(WeekDay(source), Literal(1))
-    case "DOY" => DayOfYear(source)
-    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
-    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
-    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Second(source)
-    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
-      Milliseconds(source)
-    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
-      Microseconds(source)
-    case "EPOCH" => Epoch(source)
-    case _ => errorHandleFunc
+      errorHandleFunc: => Nothing): Expression = {
+    if (extractField == null) {
+      Literal(null, DoubleType)
+    } else extractField.toUpperCase(Locale.ROOT) match {
+      case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millennium(source)
+      case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
+      case "DECADE" | "DECADES" | "DEC" | "DECS" => Decade(source)
+      case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
+      case "ISOYEAR" => IsoYear(source)
+      case "QUARTER" | "QTR" => Quarter(source)
+      case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
+      case "WEEK" | "W" | "WEEKS" => WeekOfYear(source)
+      case "DAY" | "D" | "DAYS" => DayOfMonth(source)
+      case "DAYOFWEEK" => DayOfWeek(source)
+      case "DOW" => Subtract(DayOfWeek(source), Literal(1))
+      case "ISODOW" => Add(WeekDay(source), Literal(1))
+      case "DOY" => DayOfYear(source)
+      case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
+      case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
+      case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Second(source)
+      case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
+        Milliseconds(source)
+      case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
+        Microseconds(source)
+      case "EPOCH" => Epoch(source)
+      case _ => errorHandleFunc
+    }
   }
 }
 
@@ -2053,7 +2057,12 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
       if (!field.foldable) {
         throw new AnalysisException("The field parameter needs to be a foldable string value.")
       }
-      val fieldStr = field.eval().asInstanceOf[UTF8String].toString
+      val fieldEval = field.eval()
+      val fieldStr = if (fieldEval != null) {
+        fieldEval.asInstanceOf[UTF8String].toString
+      } else {
+        fieldEval.asInstanceOf[String]
+      }
       DatePart.parseExtractField(fieldStr, source, {
         throw new AnalysisException(s"Literals of type '$fieldStr' are currently not supported.")
       })
