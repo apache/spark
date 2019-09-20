@@ -17,9 +17,11 @@
 
 package test.org.apache.spark.sql;
 
+import java.util.HashMap;
 import java.util.List;
 
 import scala.collection.Seq;
+import static scala.collection.JavaConverters.mapAsScalaMap;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -37,11 +39,10 @@ import test.org.apache.spark.sql.JavaTestUtils;
 
 public class JavaHigherOrderFunctionsSuite {
     private transient TestSparkSession spark;
-    private Dataset<Row> df;
+    private Dataset<Row> arrDf;
+    private Dataset<Row> mapDf;
 
-    @Before
-    public void setUp() {
-        spark = new TestSparkSession();
+    private void setUpArrDf() {
         List<Row> data = toRows(
             makeArray(1, 9, 8, 7),
             makeArray(5, 8, 9, 7, 2),
@@ -50,7 +51,27 @@ public class JavaHigherOrderFunctionsSuite {
         );
         StructType schema =  new StructType()
             .add("x", new ArrayType(IntegerType, true), true);
-        df = spark.createDataFrame(data, schema);
+        arrDf = spark.createDataFrame(data, schema);
+    }
+
+    private void setUpMapDf() {
+        List<Row> data = toRows(
+            new HashMap<Integer, Integer>() {{
+                put(1, 1);
+                put(2, 2);
+            }},
+            null
+        );
+        StructType schema = new StructType()
+            .add("x", new MapType(IntegerType, IntegerType, true));
+        mapDf = spark.createDataFrame(data, schema);
+    }
+
+    @Before
+    public void setUp() {
+        spark = new TestSparkSession();
+        setUpArrDf();
+        setUpMapDf();
     }
 
     @After
@@ -62,7 +83,7 @@ public class JavaHigherOrderFunctionsSuite {
     @Test
     public void testTransform() {
         checkAnswer(
-            df.select(transform(col("x"), x -> x.plus(1))),
+            arrDf.select(transform(col("x"), x -> x.plus(1))),
             toRows(
                 makeArray(2, 10, 9, 8),
                 makeArray(6, 9, 10, 8, 3),
@@ -70,7 +91,7 @@ public class JavaHigherOrderFunctionsSuite {
                 null
             ));
         checkAnswer(
-            df.select(transform(col("x"), (x, i) -> x.plus(i))),
+            arrDf.select(transform(col("x"), (x, i) -> x.plus(i))),
             toRows(
                 makeArray(1, 10, 10, 10),
                 makeArray(5, 9, 11, 10, 6),
@@ -82,7 +103,7 @@ public class JavaHigherOrderFunctionsSuite {
     @Test
     public void testFilter() {
         checkAnswer(
-            df.select(filter(col("x"), x -> x.plus(1).equalTo(10))),
+            arrDf.select(filter(col("x"), x -> x.plus(1).equalTo(10))),
             toRows(
                 makeArray(9),
                 makeArray(9),
@@ -94,7 +115,7 @@ public class JavaHigherOrderFunctionsSuite {
     @Test
     public void testExists() {
         checkAnswer(
-            df.select(exists(col("x"), x -> x.plus(1).equalTo(10))),
+            arrDf.select(exists(col("x"), x -> x.plus(1).equalTo(10))),
             toRows(
                 true,
                 true,
@@ -106,7 +127,7 @@ public class JavaHigherOrderFunctionsSuite {
     @Test
     public void testForall() {
         checkAnswer(
-            df.select(forall(col("x"), x -> x.plus(1).equalTo(10))),
+            arrDf.select(forall(col("x"), x -> x.plus(1).equalTo(10))),
             toRows(
                 false,
                 false,
@@ -118,7 +139,7 @@ public class JavaHigherOrderFunctionsSuite {
     @Test
     public void testAggregate() {
         checkAnswer(
-            df.select(aggregate(col("x"), lit(0), (acc, x) -> acc.plus(x))),
+            arrDf.select(aggregate(col("x"), lit(0), (acc, x) -> acc.plus(x))),
             toRows(
                 25,
                 31,
@@ -126,7 +147,7 @@ public class JavaHigherOrderFunctionsSuite {
                 null
             ));
         checkAnswer(
-            df.select(aggregate(col("x"), lit(0), (acc, x) -> acc.plus(x), x -> x)),
+            arrDf.select(aggregate(col("x"), lit(0), (acc, x) -> acc.plus(x), x -> x)),
             toRows(
                 25,
                 31,
@@ -138,11 +159,25 @@ public class JavaHigherOrderFunctionsSuite {
     @Test
     public void testZipWith() {
         checkAnswer(
-            df.select(zip_with(col("x"), col("x"), (a, b) -> lit(42))),
+            arrDf.select(zip_with(col("x"), col("x"), (a, b) -> lit(42))),
             toRows(
                 makeArray(42, 42, 42, 42),
                 makeArray(42, 42, 42, 42, 42),
                 JavaTestUtils.<Integer>makeArray(),
+                null
+            ));
+    }
+
+    @Test
+    public void testTransformKeys() {
+        checkAnswer(
+            mapDf.select(transform_keys(col("x"), (k, v) -> k.plus(v))),
+            toRows(
+                mapAsScalaMap(
+                new HashMap<Integer, Integer>() {{
+                    put(2, 1);
+                    put(4, 2);
+                }}),
                 null
             ));
     }
