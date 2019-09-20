@@ -85,12 +85,10 @@ case class QueryExecutionMetering() {
       s"$ruleName $runtimeValue $numRunValue"
     }.mkString("\n", "\n", "")
 
-    val totalTimeInJavaDouble =
-      (totalTime / NANOS_PER_SECOND.toDouble).asInstanceOf[java.lang.Double]
     s"""
        |=== Metrics of Analyzer/Optimizer Rules ===
        |Total number of runs: $totalNumRuns
-       |Total time: ${String.format("%.9f", totalTimeInJavaDouble)} seconds
+       |Total time: ${"%.9f".format(totalTime / NANOS_PER_SECOND.toDouble)} seconds
        |
        |$colRuleName $colRunTime $colNumRuns
        |$ruleMetrics
