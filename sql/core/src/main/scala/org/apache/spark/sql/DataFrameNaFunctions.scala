@@ -488,7 +488,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     }
 
     val columnEquals = df.sparkSession.sessionState.analyzer.resolver
-    val fillColumnsInfo = df.schema.fields.filter { f =>
+    val filledColumns = df.schema.fields.filter { f =>
       val typeMatches = (targetType, f.dataType) match {
         case (NumericType, dt) => dt.isInstanceOf[NumericType]
         case (StringType, dt) => dt == StringType
@@ -498,9 +498,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       }
       // Only fill if the column is part of the cols list.
       typeMatches && cols.exists(col => columnEquals(f.name, col))
-    }.map { col =>
-      (col.name, fillCol[T](col, value))
     }
-    df.withColumns(fillColumnsInfo.map(_._1), fillColumnsInfo.map(_._2))
+    df.withColumns(filledColumns.map(_.name), filledColumns.map(fillCol[T](_, value)))
   }
 }
