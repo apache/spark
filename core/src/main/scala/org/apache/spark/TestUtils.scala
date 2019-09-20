@@ -264,7 +264,7 @@ private[spark] object TestUtils {
     try {
       body(listener)
     } finally {
-      sc.listenerBus.waitUntilEmpty(TimeUnit.SECONDS.toMillis(10))
+      sc.listenerBus.waitUntilEmpty()
       sc.listenerBus.removeListener(listener)
     }
   }

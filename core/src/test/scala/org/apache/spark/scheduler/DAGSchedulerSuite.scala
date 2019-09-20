@@ -172,9 +172,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     override def applicationAttemptId(): Option[String] = None
   }
 
-  /** Length of time to wait while draining listener events. */
-  val WAIT_TIMEOUT_MILLIS = 10000
-
   /**
    * Listeners which records some information to verify in UTs. Getter-kind methods in this class
    * ensures the value is returned after ensuring there's no event to process, as well as the
@@ -230,7 +227,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       _endedTasks.toSet
     }
 
-    private def waitForListeners(): Unit = sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    private def waitForListeners(): Unit = sc.listenerBus.waitUntilEmpty()
   }
 
   var sparkListener: EventInfoRecordingListener = null
@@ -839,7 +836,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val testRdd = new MyRDD(sc, 0, Nil)
     val waiter = scheduler.submitJob(testRdd, func, Seq.empty, CallSite.empty,
       resultHandler, properties)
-    sc.listenerBus.waitUntilEmpty(1000L)
+    sc.listenerBus.waitUntilEmpty()
     assert(assertionError.get() === null)
   }
 
@@ -957,7 +954,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     completeNextResultStageWithSuccess(1, 1)
 
     // Confirm job finished successfully
-    sc.listenerBus.waitUntilEmpty(1000)
+    sc.listenerBus.waitUntilEmpty()
     assert(ended)
     assert(results === (0 until parts).map { idx => idx -> 42 }.toMap)
     assertDataStructuresEmpty()
@@ -994,7 +991,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       } else {
         // Stage should have been aborted and removed from running stages
         assertDataStructuresEmpty()
-        sc.listenerBus.waitUntilEmpty(1000)
+        sc.listenerBus.waitUntilEmpty()
         assert(ended)
         jobResult match {
           case JobFailed(reason) =>
@@ -1116,7 +1113,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     completeNextResultStageWithSuccess(2, 1)
 
     assertDataStructuresEmpty()
-    sc.listenerBus.waitUntilEmpty(1000)
+    sc.listenerBus.waitUntilEmpty()
     assert(ended)
     assert(results === Map(0 -> 42))
   }
@@ -1175,7 +1172,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // Complete the result stage.
     completeNextResultStageWithSuccess(1, 1)
 
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     assertDataStructuresEmpty()
   }
 
@@ -1204,7 +1201,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // Complete the result stage.
     completeNextResultStageWithSuccess(1, 0)
 
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     assertDataStructuresEmpty()
   }
 
@@ -1230,7 +1227,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       null))
 
     // Assert the stage has been cancelled.
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     assert(failure.getMessage.startsWith("Job aborted due to stage failure: Could not recover " +
       "from a failed barrier ResultStage."))
   }
@@ -2668,7 +2665,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       sc.parallelize(1 to tasks, tasks).foreach { _ =>
         accum.add(1L)
       }
-      sc.listenerBus.waitUntilEmpty(1000)
+      sc.listenerBus.waitUntilEmpty()
       assert(foundCount.get() === tasks)
     }
   }

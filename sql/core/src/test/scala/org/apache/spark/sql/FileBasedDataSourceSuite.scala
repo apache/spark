@@ -488,7 +488,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
         sparkContext.addSparkListener(bytesReadListener)
         try {
           spark.read.csv(path).limit(1).collect()
-          sparkContext.listenerBus.waitUntilEmpty(1000L)
+          sparkContext.listenerBus.waitUntilEmpty()
           assert(bytesReads.sum === 7860)
         } finally {
           sparkContext.removeSparkListener(bytesReadListener)
