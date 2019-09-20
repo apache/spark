@@ -525,7 +525,8 @@ private[kafka010] class KafkaDataConsumer(
     if (!_consumer.isDefined) {
       retrieveConsumer()
     }
-    if (!isConsumerUsingCurrentToken) {
+    require(_consumer.isDefined, "Consumer must be defined")
+    if (!KafkaTokenUtil.isConnectorUsingCurrentToken(_consumer.get.kafkaParamsWithSecurity)) {
       logDebug("Cached consumer uses and old delegation token, invalidating.")
       releaseConsumer()
       consumerPool.invalidateKey(cacheKey)
@@ -538,22 +539,6 @@ private[kafka010] class KafkaDataConsumer(
   private def retrieveConsumer(): Unit = {
     _consumer = Option(consumerPool.borrowObject(cacheKey, kafkaParams))
     require(_consumer.isDefined, "borrowing consumer from pool must always succeed.")
-  }
-
-  private def isConsumerUsingCurrentToken: Boolean = {
-    require(_consumer.isDefined, "Consumer must be defined")
-    val params = _consumer.get.kafkaParamsWithSecurity
-    if (params.containsKey(SaslConfigs.SASL_JAAS_CONFIG)) {
-      logDebug("Delegation token used by cached consumer, checking if uses the latest token.")
-      val consumerJaasParams = params.get(SaslConfigs.SASL_JAAS_CONFIG).asInstanceOf[String]
-      val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
-        params.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
-      require(clusterConfig.isDefined, "Delegation token must exist for this consumer.")
-      val currentJaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConfig.get)
-      consumerJaasParams.equals(currentJaasParams)
-    } else {
-      true
-    }
   }
 
   private def getOrRetrieveFetchedData(offset: Long): FetchedData = _fetchedData match {

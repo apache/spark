@@ -17,7 +17,10 @@
 
 package org.apache.spark.kafka010
 
+import java.{util => ju}
 import java.security.PrivilegedExceptionAction
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.UserGroupInformation
@@ -228,5 +231,44 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(jaasParams.contains("tokenauth=true"))
     assert(jaasParams.contains(tokenId1))
     assert(jaasParams.contains(tokenPassword1))
+  }
+
+  test("isConnectorUsingCurrentToken without security should return true") {
+    val kafkaParams = Map[String, Object]().asJava
+
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams))
+  }
+
+  test("isConnectorUsingCurrentToken with same token should return true") {
+    setSparkEnv(
+      Map(
+        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
+      )
+    )
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+    val kafkaParams = getKafkaParams()
+
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams))
+  }
+
+  test("isConnectorUsingCurrentToken with different token should return false") {
+    setSparkEnv(
+      Map(
+        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
+      )
+    )
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+    val kafkaParams = getKafkaParams()
+    addTokenToUGI(tokenService1, tokenId2, tokenPassword2)
+
+    assert(!KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams))
+  }
+
+  private def getKafkaParams(): ju.Map[String, Object] = {
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
+    Map[String, Object](
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> "127.0.0.1:9092",
+      SaslConfigs.SASL_JAAS_CONFIG -> KafkaTokenUtil.getTokenJaasParams(clusterConf)
+    ).asJava
   }
 }
