@@ -181,4 +181,18 @@ public class JavaHigherOrderFunctionsSuite {
                 null
             ));
     }
+
+    @Test
+    public void testTransformValues() {
+        checkAnswer(
+            mapDf.select(transform_values(col("x"), (k, v) -> k.plus(v))),
+            toRows(
+                mapAsScalaMap(
+                new HashMap<Integer, Integer>() {{
+                    put(1, 2);
+                    put(2, 4);
+                }}),
+                null
+            ));
+    }
 }
