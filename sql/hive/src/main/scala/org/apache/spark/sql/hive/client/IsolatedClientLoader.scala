@@ -55,7 +55,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       barrierPrefixes: Seq[String] = Seq.empty,
       sharesHadoopClasses: Boolean = true): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
-    val centralRepo = sparkConf.get(SQLConf.CENTRAL_REPOSITORY)
+    val remoteRepos = sparkConf.get(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES)
     // We will first try to share Hadoop classes. If we cannot resolve the Hadoop artifact
     // with the given version, we will use Hadoop 2.7 and then will not share Hadoop classes.
     var _sharesHadoopClasses = sharesHadoopClasses
@@ -64,7 +64,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     } else {
       val (downloadedFiles, actualHadoopVersion) =
         try {
-          (downloadVersion(resolvedVersion, hadoopVersion, ivyPath, centralRepo), hadoopVersion)
+          (downloadVersion(resolvedVersion, hadoopVersion, ivyPath, remoteRepos), hadoopVersion)
         } catch {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
@@ -77,7 +77,7 @@ private[hive] object IsolatedClientLoader extends Logging {
               "spark.sql.hive.metastore.jars in the production environment.")
             _sharesHadoopClasses = false
             (downloadVersion(
-              resolvedVersion, fallbackVersion, ivyPath, centralRepo), fallbackVersion)
+              resolvedVersion, fallbackVersion, ivyPath, remoteRepos), fallbackVersion)
         }
       resolvedVersions.put((resolvedVersion, actualHadoopVersion), downloadedFiles)
       resolvedVersions((resolvedVersion, actualHadoopVersion))
@@ -116,7 +116,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       version: HiveVersion,
       hadoopVersion: String,
       ivyPath: Option[String],
-      centralRepo: String): Seq[URL] = {
+      remoteRepos: String): Seq[URL] = {
     val hiveArtifacts = version.extraDeps ++
       Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
@@ -126,7 +126,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
         SparkSubmitUtils.buildIvySettings(
-          Some(centralRepo),
+          Some(remoteRepos),
           ivyPath),
         exclusions = version.exclusions)
     }

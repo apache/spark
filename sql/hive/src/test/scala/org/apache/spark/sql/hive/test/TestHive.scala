@@ -70,7 +70,11 @@ object TestHive
         // LocalRelation will exercise the optimization rules better by disabling it as
         // this rule may potentially block testing of other optimization rules such as
         // ConstantPropagation etc.
-        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)))
+        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
+        // Add additional remote maven mirror repo here for avoiding the jenkins is blocked
+        // by maven central.
+        .set(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key,
+          "https://maven-central.storage-download.googleapis.com/repos/central/data/")))
 
 
 case class TestHiveVersion(hiveClient: HiveClient)

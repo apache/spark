@@ -1980,12 +1980,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val CENTRAL_REPOSITORY =
-    ConfigBuilder("spark.sql.centralRepository")
-      .doc("The default central repository used for downloading Hive jars " +
-        "in IsolatedClientLoader.")
+  private[spark] val ADDITIONAL_REMOTE_REPOSITORIES =
+    ConfigBuilder("spark.sql.additionalRemoteRepositories")
+      .doc("A comma-delimited string config of the optional additional remote maven mirror " +
+        "repositories, this can be used for downloading Hive jars in IsolatedClientLoader.")
       .stringConf
-      .createWithDefault("https://repo1.maven.org/maven2")
+      .createWithDefault("")
 }
 
 /**
