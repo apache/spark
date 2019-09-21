@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -40,10 +41,20 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     comparePlans(actual, correctAnswer)
   }
 
+  private def assertFilter(originalExpr: Expression,
+                           expectedExpr: Expression): Unit = {
+    val originalPlan = testRelation.where(originalExpr).analyze
+    val optimizedPlan = Optimize.execute(originalPlan)
+    val expectedPlan = testRelation.where(expectedExpr).analyze
+    comparePlans(optimizedPlan, expectedPlan)
+  }
+
   private val trueBranch = (TrueLiteral, Literal(5))
   private val normalBranch = (NonFoldableLiteral(true), Literal(10))
   private val unreachableBranch = (FalseLiteral, Literal(20))
   private val nullBranch = (Literal.create(null, NullType), Literal(30))
+  private val testRelation =
+    LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
 
   val isNotNullCond = IsNotNull(UnresolvedAttribute(Seq("a")))
   val isNullCond = IsNull(UnresolvedAttribute("b"))
@@ -168,11 +179,7 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   }
 
   test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
-    val condition1 = Not(IsNull(UnresolvedAttribute("i")))
-    val predicate1 = IsNotNull(UnresolvedAttribute("i"))
-    val condition2 = Not(IsNotNull(UnresolvedAttribute("i")))
-    val predicate2 = IsNull(UnresolvedAttribute("i"))
-    assertEquivalent(condition1, predicate1)
-    assertEquivalent(condition2, predicate2)
+    assertFilter(Not(IsNotNull(UnresolvedAttribute("b"))), IsNull(UnresolvedAttribute("b")))
+    assertFilter(Not(IsNull(UnresolvedAttribute("b"))), IsNotNull(UnresolvedAttribute("b")))
   }
 }

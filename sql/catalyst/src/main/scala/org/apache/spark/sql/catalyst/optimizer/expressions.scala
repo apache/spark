@@ -462,8 +462,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
 
-      case _ @ Not(expr: IsNull) => IsNotNull(expr.child)
-      case _ @ Not(expr: IsNotNull) => IsNull(expr.child)
+      case n @ Not(expr: IsNull) => IsNotNull(expr.child)
+      case n @ Not(expr: IsNotNull) => IsNull(expr.child)
     }
   }
 }
