@@ -31,3 +31,29 @@ jobs:
         export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Pscala-${{ matrix.scala }} package
+
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Linters
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions/setup-java@v1
+      with:
+        java-version: '1.8'
+    - uses: actions/setup-python@v1
+      with:
+        python-version: '3.x'
+        architecture: 'x64'
+    - name: Scala
+      run: ./dev/lint-scala
+    - name: Java
+      run: ./dev/lint-java
+    - name: Python
+      run: |
+        pip install flake8 sphinx numpy
+        ./dev/lint-python
+    - name: License
+      run: ./dev/check-license
+    - name: Dependencies
+      run: ./dev/test-dependencies.sh
