@@ -38,73 +38,70 @@ public class KVStoreSnapshotter {
     this.serializer = serializer;
   }
 
-  public void dump(KVStore store, File snapshotFile) throws Exception {
-    DataOutputStream output = new DataOutputStream(new FileOutputStream(snapshotFile));
-
+  /** Dump current KVStore to the output stream - caller should close the output stream. */
+  public void dump(KVStore store, DataOutputStream snapshotStream) throws Exception {
     // store metadata if it exists
     Class<?> metadataType = store.metadataType();
     if (metadataType != null) {
-      writeClassName(metadataType, output);
+      writeClassName(metadataType, snapshotStream);
       Object metadata = store.getMetadata(metadataType);
-      writeObject(metadata, output);
-      writeEndOfType(output);
+      writeObject(metadata, snapshotStream);
+      writeEndOfType(snapshotStream);
     } else {
-      writeEndOfType(output);
+      writeEndOfType(snapshotStream);
     }
 
     Set<Class<?>> types = store.types();
     for (Class<?> clazz : types) {
-      writeClassName(clazz, output);
+      writeClassName(clazz, snapshotStream);
 
       KVStoreView<?> view = store.view(clazz);
       for (Object obj : view) {
-        writeObject(obj, output);
+        writeObject(obj, snapshotStream);
       }
 
-      writeEndOfType(output);
+      writeEndOfType(snapshotStream);
     }
 
-    writeEndOfFile(output);
-    output.close();
+    writeEndOfFile(snapshotStream);
   }
 
-  public void restore(File snapshotFile, KVStore store) throws Exception {
-    DataInputStream input = new DataInputStream(new FileInputStream(snapshotFile));
-
+  /** Restore current KVStore from the input stream - caller should close the input stream. */
+  public void restore(DataInputStream snapshotStream, KVStore store) throws Exception {
     // first one would be metadata
-    int metadataClazzLen = input.readInt();
+    int metadataClazzLen = snapshotStream.readInt();
     if (metadataClazzLen > 0) {
-      Class<?> metadataClazz = readClassName(input, metadataClazzLen);
+      Class<?> metadataClazz = readClassName(snapshotStream, metadataClazzLen);
       // metadata presented
-      int objLen = input.readInt();
-      Object metadata = readObj(input, metadataClazz, objLen);
+      int objLen = snapshotStream.readInt();
+      Object metadata = readObj(snapshotStream, metadataClazz, objLen);
       store.setMetadata(metadata);
 
       // additionally read -2 as end of type
-      consumeEndOfType(input);
+      consumeEndOfType(snapshotStream);
     }
 
     boolean eof = false;
     while (!eof) {
-      int typeClazzNameLen = input.readInt();
+      int typeClazzNameLen = snapshotStream.readInt();
       if (typeClazzNameLen == MARKER_END_OF_FILE) {
         eof = true;
       } else {
-        Class<?> typeClazz = readClassName(input, typeClazzNameLen);
+        Class<?> typeClazz = readClassName(snapshotStream, typeClazzNameLen);
         boolean eot = false;
         while (!eot) {
-          int objLen = input.readInt();
+          int objLen = snapshotStream.readInt();
           if (objLen == MARKER_END_OF_TYPE) {
             eot = true;
           } else {
-            Object obj = readObj(input, typeClazz, objLen);
+            Object obj = readObj(snapshotStream, typeClazz, objLen);
             store.write(obj);
           }
         }
       }
     }
 
-    input.close();
+    snapshotStream.close();
   }
 
   private void writeClassName(Class<?> clazz, DataOutputStream output) throws IOException {

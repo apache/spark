@@ -20,7 +20,11 @@ package org.apache.spark.util.kvstore;
 import org.apache.commons.io.FileUtils;
 import org.junit.Test;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -88,12 +92,17 @@ public class KVStoreSnapshotterSuite {
     snapshotFile.delete();
     assertFalse(snapshotFile.exists());
 
-    try {
-      snapshotter.dump(source, snapshotFile);
-      assertTrue(snapshotFile.exists() && snapshotFile.isFile());
-      assertTrue(snapshotFile.length() > 0);
 
-      snapshotter.restore(snapshotFile, destination);
+    try {
+      try (DataOutputStream output = new DataOutputStream(new FileOutputStream(snapshotFile))) {
+        snapshotter.dump(source, output);
+        assertTrue(snapshotFile.exists() && snapshotFile.isFile());
+        assertTrue(snapshotFile.length() > 0);
+      }
+
+      try (DataInputStream input = new DataInputStream(new FileInputStream(snapshotFile))) {
+        snapshotter.restore(input, destination);
+      }
 
       Class<?> metadataType = source.metadataType();
       assertEquals(destination.metadataType(), metadataType);
