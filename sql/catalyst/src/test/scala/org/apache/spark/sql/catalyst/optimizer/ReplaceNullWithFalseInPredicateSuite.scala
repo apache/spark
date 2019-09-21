@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, IsNotNull, IsNull, LambdaFunction, Literal, MapFilter, NamedExpression, Not, Or, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -338,6 +338,18 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       arguments = Seq[NamedExpression](lv('e)))
     val column = ArrayTransform('a, lambdaFunc)
     testProjection(originalExpr = column, expectedExpr = column)
+  }
+
+  test("NOT isnull(x)     -> isnotnull(x)") {
+    val condition = Not(IsNull(UnresolvedAttribute("i")))
+    val predicate = IsNotNull(UnresolvedAttribute("i"))
+    testFilter(condition, predicate)
+  }
+
+  test("NOT isNotNull(x)     -> isNull(x)") {
+    val condition = Not(IsNotNull(UnresolvedAttribute("i")))
+    val predicate = IsNull(UnresolvedAttribute("i"))
+    testFilter(condition, predicate)
   }
 
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {
