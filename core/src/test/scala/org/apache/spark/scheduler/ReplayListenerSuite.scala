@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io._
 import java.net.URI
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
@@ -52,10 +53,11 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   test("Simple replay") {
     val logFilePath = getFilePath(testDir, "events.txt")
     val fstream = fileSystem.create(logFilePath)
+    val fwriter = new OutputStreamWriter(fstream, StandardCharsets.UTF_8)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
-    Utils.tryWithResource(new PrintWriter(fstream)) { writer =>
+    Utils.tryWithResource(new PrintWriter(fwriter)) { writer =>
       // scalastyle:off println
       writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
       writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
@@ -88,7 +90,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     val buffered = new ByteArrayOutputStream
     val codec = new LZ4CompressionCodec(new SparkConf())
     val compstream = codec.compressedOutputStream(buffered)
-    Utils.tryWithResource(new PrintWriter(compstream)) { writer =>
+    val cwriter = new OutputStreamWriter(compstream, StandardCharsets.UTF_8)
+    Utils.tryWithResource(new PrintWriter(cwriter)) { writer =>
 
       val applicationStart = SparkListenerApplicationStart("AppStarts", None,
         125L, "Mickey", None)
@@ -134,10 +137,11 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   test("Replay incompatible event log") {
     val logFilePath = getFilePath(testDir, "incompatible.txt")
     val fstream = fileSystem.create(logFilePath)
+    val fwriter = new OutputStreamWriter(fstream, StandardCharsets.UTF_8)
     val applicationStart = SparkListenerApplicationStart("Incompatible App", None,
       125L, "UserUsingIncompatibleVersion", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
-    Utils.tryWithResource(new PrintWriter(fstream)) { writer =>
+    Utils.tryWithResource(new PrintWriter(fwriter)) { writer =>
       // scalastyle:off println
       writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
       writer.println("""{"Event":"UnrecognizedEventOnlyForTest","Timestamp":1477593059313}""")
