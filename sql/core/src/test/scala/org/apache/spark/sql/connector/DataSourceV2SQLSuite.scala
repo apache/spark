@@ -890,6 +890,13 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("v2 catalog 'unknown' cannot be loaded"))
   }
 
+  test("Use: v2 session catalog is used and database does not exist") {
+    val exception = intercept[NoSuchDatabaseException] {
+      sql("USE ns1")
+    }
+    assert(exception.getMessage.contains("Database 'ns1' not found"))
+  }
+
   test("Use: v2 session catalog is used with invalid database name") {
     val exception = intercept[AnalysisException] {
       sql("USE ns1.ns1_1")
