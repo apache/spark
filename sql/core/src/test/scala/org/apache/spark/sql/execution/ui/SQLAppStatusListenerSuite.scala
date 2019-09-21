@@ -480,7 +480,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     // At the beginning of this test case, there should be no live data in the listener.
     assert(listener.noLiveData())
     spark.sparkContext.parallelize(1 to 10).foreach(i => ())
-    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
     // Listener should ignore the non-SQL stages, as the stage data are only removed when SQL
     // execution ends, which will not be triggered for non-SQL jobs.
     assert(listener.noLiveData())
@@ -673,7 +673,7 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
             case e: SparkException => // This is expected for a failed job
           }
         }
-        sc.listenerBus.waitUntilEmpty(10000)
+        sc.listenerBus.waitUntilEmpty()
         val statusStore = spark.sharedState.statusStore
         assert(statusStore.executionsCount() <= 50)
         assert(statusStore.planGraphCount() <= 50)

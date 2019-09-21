@@ -161,10 +161,10 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
         DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
 
-    Seq(true, false).foreach { nullOnOverflow =>
-      withSQLConf((SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key, nullOnOverflow.toString)) {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
-        if (nullOnOverflow) {
+        if (!ansiEnabled) {
           checkAnswer(structDf, Row(null))
         } else {
           val e = intercept[SparkException] {
@@ -2114,7 +2114,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
       val df = spark.read.json(path.getCanonicalPath)
       assert(df.columns === Array("i", "p"))
-      spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
       assert(numJobs == 1)
     }
   }

@@ -172,9 +172,9 @@ public class UnsafeShuffleWriterSuite {
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
   }
 
-  private UnsafeShuffleWriter createWriter(boolean transferToEnabled) {
+  private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled) {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
-    return new UnsafeShuffleWriter(
+    return new UnsafeShuffleWriter<>(
       blockManager,
         taskMemoryManager,
       new SerializedShuffleHandle<>(0, 1, shuffleDep),
@@ -533,7 +533,7 @@ public class UnsafeShuffleWriterSuite {
     final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
     taskMemoryManager = spy(taskMemoryManager);
     when(taskMemoryManager.pageSizeBytes()).thenReturn(pageSizeBytes);
-    final UnsafeShuffleWriter writer = new UnsafeShuffleWriter(
+    final UnsafeShuffleWriter<Object, Object> writer = new UnsafeShuffleWriter<>(
         blockManager,
         taskMemoryManager,
         new SerializedShuffleHandle<>(0, 1, shuffleDep),

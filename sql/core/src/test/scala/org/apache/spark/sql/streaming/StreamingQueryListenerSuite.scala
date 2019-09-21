@@ -49,7 +49,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     assert(spark.streams.active.isEmpty)
     assert(spark.streams.listListeners().isEmpty)
     // Make sure we don't leak any events to the next test
-    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
   }
 
   testQuietly("single listener, check trigger events are generated correctly") {
@@ -320,7 +320,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           q.recentProgress.size > 1 && q.recentProgress.size <= 11
         }
         testStream(input.toDS)(actions: _*)
-        spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+        spark.sparkContext.listenerBus.waitUntilEmpty()
         // 11 is the max value of the possible numbers of events.
         assert(numProgressEvent > 1 && numProgressEvent <= 11)
       } finally {
@@ -343,7 +343,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         AddData(mem, 1, 2, 3),
         CheckAnswer(1, 2, 3)
       )
-      session.sparkContext.listenerBus.waitUntilEmpty(5000)
+      session.sparkContext.listenerBus.waitUntilEmpty()
     }
 
     def assertEventsCollected(collector: EventCollector): Unit = {

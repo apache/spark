@@ -131,7 +131,7 @@ private[spark] class EventLoggingListener(
 
       EventLoggingListener.initEventLog(bstream, testing, loggedEvents)
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
-      writer = Some(new PrintWriter(bstream))
+      writer = Some(new PrintWriter(new OutputStreamWriter(bstream, StandardCharsets.UTF_8)))
       logInfo("Logging events to %s".format(logPath))
     } catch {
       case e: Exception =>

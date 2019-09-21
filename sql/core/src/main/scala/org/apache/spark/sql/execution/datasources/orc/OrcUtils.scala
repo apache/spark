@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 object OrcUtils extends Logging {
 
@@ -62,9 +62,9 @@ object OrcUtils extends Logging {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     try {
-      val reader = OrcFile.createReader(file, readerOptions)
-      val schema = reader.getSchema
-      reader.close()
+      val schema = Utils.tryWithResource(OrcFile.createReader(file, readerOptions)) { reader =>
+        reader.getSchema
+      }
       if (schema.getFieldNames.size == 0) {
         None
       } else {
