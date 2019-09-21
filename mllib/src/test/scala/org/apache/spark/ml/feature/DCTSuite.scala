@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D
+import org.jtransforms.dct.DoubleDCT_1D
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
