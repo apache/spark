@@ -19,4 +19,18 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+`MSCK REPAIR TABLE` recovers all the partitions in the directory of a table and updates the catalog. `MSCK REPAIR TABLE` on a non-existent table or a table without partitions throws Exception. Another way to recover partitions is to use `ALTER TABLE RECOVER PARTITIONS`.
+
+### Syntax
+{% highlight sql %}
+MSCK REPAIR TABLE table_name
+{% endhighlight %}
+
+### Examples
+{% highlight sql %}
+MSCK REPAIR TABLE t1;
+
+{% endhighlight %}
+### Related Statements
+ * [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
