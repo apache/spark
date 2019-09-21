@@ -557,8 +557,8 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e: NullIntolerant if e.children.exists(isNullLiteral) =>
         Literal.create(null, e.dataType)
 
-      case n@Not(expr: IsNull) => IsNotNull(expr.child)
-      case n@Not(expr: IsNotNull) => IsNull(expr.child)
+      case n @ Not(expr: IsNull) => IsNotNull(expr.child)
+      case n @ Not(expr: IsNotNull) => IsNull(expr.child)
     }
   }
 }
