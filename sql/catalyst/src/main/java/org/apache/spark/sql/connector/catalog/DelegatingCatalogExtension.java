@@ -141,7 +141,7 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
   @Override
   public boolean dropNamespace(String[] namespace) throws NoSuchNamespaceException {
-    return ((SupportsNamespaces)delegate).dropNamespace(namespace);
+    return asNamespaceCatalog().dropNamespace(namespace);
   }
 
   private TableCatalog asTableCatalog() {

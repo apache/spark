@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStat
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowTablesCommand}
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, SetDatabaseCommand, ShowTablesCommand}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
@@ -39,6 +39,7 @@ case class DataSourceResolution(
   extends Rule[LogicalPlan] with CastSupport with LookupCatalog {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Util.isSessionCatalog
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(
@@ -173,30 +174,15 @@ case class DataSourceResolution(
       ShowNamespaces(currentCatalog.asNamespaceCatalog, None, pattern)
 
     case ShowNamespacesStatement(Some(namespace), pattern) =>
-      val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace
-      maybeCatalog match {
-        case Some(catalog) =>
-          ShowNamespaces(catalog.asNamespaceCatalog, Some(ns), pattern)
-        case None =>
-          throw new AnalysisException(
-            s"No v2 catalog is available for ${namespace.quoted}")
-      }
+      val CurrentCatalogAndNamespace(catalog, ns) = namespace
+      ShowNamespaces(catalog.asNamespaceCatalog, Some(ns), pattern)
 
     case ShowTablesStatement(None, pattern) =>
       ShowTables(currentCatalog.asTableCatalog, catalogManager.currentNamespace, pattern)
 
     case ShowTablesStatement(Some(namespace), pattern) =>
-      val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace
-      maybeCatalog match {
-        case Some(catalog) =>
-          ShowTables(catalog.asTableCatalog, ns, pattern)
-        case None =>
-          if (namespace.length != 1) {
-            throw new AnalysisException(
-              s"The database name is not valid: ${namespace.quoted}")
-          }
-          ShowTablesCommand(Some(namespace.quoted), pattern)
-      }
+      val CurrentCatalogAndNamespace(catalog, ns) = namespace
+      ShowTables(catalog.asTableCatalog, ns, pattern)
 
     case UseCatalogAndNamespaceStatement(catalogName, namespace) =>
       catalogName match {
@@ -204,9 +190,17 @@ case class DataSourceResolution(
           validateCatalog(c)
           UseCatalogAndNamespace(catalogManager, Some(c), namespace)
         case None =>
-          require(namespace.nonEmpty)
+          assert(namespace.nonEmpty)
           val CurrentCatalogAndNamespace(catalog, ns) = namespace.get
-          UseCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
+          if (isSessionCatalog(catalog)) {
+            if (namespace.get.length != 1) {
+              throw new AnalysisException(
+                s"The database name is not valid: '${namespace.get.quoted}'")
+            }
+            SetDatabaseCommand(namespace.get.head)
+          } else {
+            UseCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
+          }
       }
   }
 

@@ -63,7 +63,7 @@ object SimpleAnalyzer extends Analyzer(
 object FakeV2SessionCatalog extends CatalogPlugin {
   private def fail() = throw new UnsupportedOperationException
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
-  override def name(): String = "fake_v2_session"
+  override def name(): String = CatalogManager.SESSION_CATALOG_NAME
 }
 
 /**

@@ -65,7 +65,7 @@ private[sql] class SessionState(
     catalogBuilder: () => SessionCatalog,
     val sqlParser: ParserInterface,
     analyzerBuilder: () => Analyzer,
-    optimizerBuilder: (CatalogManager) => Optimizer,
+    optimizerBuilder: CatalogManager => Optimizer,
     val planner: SparkPlanner,
     val streamingQueryManager: StreamingQueryManager,
     val listenerManager: ExecutionListenerManager,

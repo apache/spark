@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
@@ -674,29 +674,27 @@ class DataSourceV2SQLSuite
     runShowTablesSql("SHOW TABLES FROM testcat.unknown", Seq())
   }
 
-  test("ShowTables: using v1 catalog") {
+  test("ShowTables: using v2 session catalog") {
     runShowTablesSql(
       "SHOW TABLES FROM default",
-      Seq(Row("", "source", true), Row("", "source2", true)),
-      expectV2Catalog = false)
+      Seq(Row("", "source"), Row("", "source2")))
   }
 
-  test("ShowTables: using v1 catalog, db doesn't exist ") {
-    // 'db' below resolves to a database name for v1 catalog because there is no catalog named
-    // 'db' and there is no default catalog set.
+  test("ShowTables: using v2 session catalog, db doesn't exist ") {
+    // 'db' below resolves to a database name and v2 session catalog is used.
     val exception = intercept[NoSuchDatabaseException] {
-      runShowTablesSql("SHOW TABLES FROM db", Seq(), expectV2Catalog = false)
+      sql("SHOW TABLES FROM db")
     }
 
     assert(exception.getMessage.contains("Database 'db' not found"))
   }
 
-  test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
-    val exception = intercept[AnalysisException] {
-      runShowTablesSql("SHOW TABLES FROM a.b", Seq(), expectV2Catalog = false)
+  test("ShowTables: using v2 session catalog, namespace ('a.b') is not allowed.") {
+    val exception = intercept[NoSuchNamespaceException] {
+      sql("SHOW TABLES FROM a.b")
     }
 
-    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+    assert(exception.getMessage.contains("Namespace 'a.b' not found"))
   }
 
   test("ShowTables: using v2 catalog with empty namespace") {
@@ -738,22 +736,12 @@ class DataSourceV2SQLSuite
     runShowTablesSql("SHOW TABLES", Seq(Row("ns1.ns2", "table")))
   }
 
-  private def runShowTablesSql(
-      sqlText: String,
-      expected: Seq[Row],
-      expectV2Catalog: Boolean = true): Unit = {
-    val schema = if (expectV2Catalog) {
-      new StructType()
-        .add("namespace", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-    } else {
-      new StructType()
-        .add("database", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-        .add("isTemporary", BooleanType, nullable = false)
-    }
+  private def runShowTablesSql(sqlText: String, expected: Seq[Row]): Unit = {
+    val schema = new StructType()
+      .add("namespace", StringType, nullable = false)
+      .add("tableName", StringType, nullable = false)
 
-    val df = spark.sql(sqlText)
+    val df = sql(sqlText)
     assert(df.schema === schema)
     assert(expected === df.collect())
   }
@@ -823,12 +811,12 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("does not support namespaces"))
   }
 
-  test("ShowNamespaces: no v2 catalog is available") {
+  test("ShowNamespaces: session catalog is used and namespace doesn't exist") {
     val exception = intercept[AnalysisException] {
       sql("SHOW NAMESPACES in dummy")
     }
 
-    assert(exception.getMessage.contains("No v2 catalog is available"))
+    assert(exception.getMessage.contains("Namespace 'dummy' not found"))
   }
 
   test("ShowNamespaces: change catalog and namespace with USE statements") {
@@ -900,6 +888,13 @@ class DataSourceV2SQLSuite
       sql("USE ns1.ns1_1 IN unknown")
     }
     assert(exception.getMessage.contains("v2 catalog 'unknown' cannot be loaded"))
+  }
+
+  test("Use: v2 session catalog is used with invalid database name") {
+    val exception = intercept[AnalysisException] {
+      sql("USE ns1.ns1_1")
+    }
+    assert(exception.getMessage.contains("The database name is not valid: 'ns1.ns1_1'"))
   }
 
   test("tableCreation: partition column case insensitive resolution") {

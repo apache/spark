@@ -29,7 +29,7 @@ class CatalogManagerSuite extends SparkFunSuite {
   test("CatalogManager should reflect the changes of default catalog") {
     val conf = new SQLConf
     val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog)
-    assert(catalogManager.currentCatalog.name == "fake_v2_session")
+    assert(catalogManager.currentCatalog.name == CatalogManager.SESSION_CATALOG_NAME)
     // FakeV2SessionCatalog does not support namespaces.
     assert(catalogManager.currentNamespace.sameElements(Array.empty[String]))
 
