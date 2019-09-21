@@ -867,6 +867,11 @@ class DataSourceV2SQLSuite
     assert(catalogManager.currentCatalog.name() == "session")
     assert(catalogManager.currentNamespace === Array("default"))
 
+    // The following implicitly creates namespaces.
+    sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat2.ns2.ns2_2.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat2.ns3.ns3_3.table (id bigint) USING foo")
+
     // Catalog is explicitly specified as 'testcat'.
     sql("USE ns1.ns1_1 IN testcat")
     assert(catalogManager.currentCatalog.name() == "testcat")
@@ -890,18 +895,18 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("v2 catalog 'unknown' cannot be loaded"))
   }
 
-  test("Use: v2 session catalog is used and database does not exist") {
-    val exception = intercept[NoSuchDatabaseException] {
+  test("Use: v2 session catalog is used and namespace does not exist") {
+    val exception = intercept[AnalysisException] {
       sql("USE ns1")
     }
-    assert(exception.getMessage.contains("Database 'ns1' not found"))
+    assert(exception.getMessage.contains("Namespace 'ns1' not found"))
   }
 
-  test("Use: v2 session catalog is used with invalid database name") {
+  test("Use: v2 catalog is used and namespace does not exist") {
     val exception = intercept[AnalysisException] {
-      sql("USE ns1.ns1_1")
+      sql("USE testcat.ns1.ns2")
     }
-    assert(exception.getMessage.contains("The database name is not valid: 'ns1.ns1_1'"))
+    assert(exception.getMessage.contains("Namespace 'ns1.ns2' not found"))
   }
 
   test("tableCreation: partition column case insensitive resolution") {

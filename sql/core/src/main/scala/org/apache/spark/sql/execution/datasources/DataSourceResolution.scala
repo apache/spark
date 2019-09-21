@@ -192,11 +192,10 @@ case class DataSourceResolution(
         case None =>
           assert(namespace.nonEmpty)
           val CurrentCatalogAndNamespace(catalog, ns) = namespace.get
+          if (!catalog.asNamespaceCatalog.namespaceExists(ns.toArray)) {
+            throw new AnalysisException(s"Namespace '${ns.quoted}' not found")
+          }
           if (isSessionCatalog(catalog)) {
-            if (namespace.get.length != 1) {
-              throw new AnalysisException(
-                s"The database name is not valid: '${namespace.get.quoted}'")
-            }
             SetDatabaseCommand(namespace.get.head)
           } else {
             UseCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
