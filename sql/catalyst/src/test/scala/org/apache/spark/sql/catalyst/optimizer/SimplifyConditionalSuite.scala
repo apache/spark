@@ -166,4 +166,13 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Literal(1))
     )
   }
+
+  test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
+    val condition1 = Not(IsNull(UnresolvedAttribute("i")))
+    val predicate1 = IsNotNull(UnresolvedAttribute("i"))
+    val condition2 = Not(IsNotNull(UnresolvedAttribute("i")))
+    val predicate2 = IsNull(UnresolvedAttribute("i"))
+    assertEquivalent(condition1, predicate1)
+    assertEquivalent(condition2, predicate2)
+  }
 }

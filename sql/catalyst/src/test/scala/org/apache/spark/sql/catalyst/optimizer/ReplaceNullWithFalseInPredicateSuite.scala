@@ -340,18 +340,6 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     testProjection(originalExpr = column, expectedExpr = column)
   }
 
-  test("NOT isnull(x)     -> isnotnull(x)") {
-    val condition = Not(IsNull(UnresolvedAttribute("i")))
-    val predicate = IsNotNull(UnresolvedAttribute("i"))
-    testFilter(condition, predicate)
-  }
-
-  test("NOT isNotNull(x)     -> isNull(x)") {
-    val condition = Not(IsNotNull(UnresolvedAttribute("i")))
-    val predicate = IsNull(UnresolvedAttribute("i"))
-    testFilter(condition, predicate)
-  }
-
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {
     test((rel, exp) => rel.where(exp), originalCond, expectedCond)
   }

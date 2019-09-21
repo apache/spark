@@ -3193,7 +3193,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-29152: Not/isNull/isNotNull rewrite") {
+  test("SPARK-29152: Simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
     withTempView("tbl1") {
       val df: DataFrame =
         Seq[java.lang.Boolean](true, false, true, null, false, null, true).toDF("id")

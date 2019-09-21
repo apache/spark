@@ -461,6 +461,9 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
+
+      case _ @ Not(expr: IsNull) => IsNotNull(expr.child)
+      case _ @ Not(expr: IsNotNull) => IsNull(expr.child)
     }
   }
 }
@@ -556,9 +559,6 @@ object NullPropagation extends Rule[LogicalPlan] {
       // a null literal.
       case e: NullIntolerant if e.children.exists(isNullLiteral) =>
         Literal.create(null, e.dataType)
-
-      case n @ Not(expr: IsNull) => IsNotNull(expr.child)
-      case n @ Not(expr: IsNotNull) => IsNull(expr.child)
     }
   }
 }
