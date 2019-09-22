@@ -90,6 +90,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         ConstantFolding,
         ReorderAssociativeOperator,
         LikeSimplification,
+        RewriteCoalesceWithBooleanExpr,
         BooleanSimplification,
         SimplifyConditionals,
         RemoveDispensableExpressions,
