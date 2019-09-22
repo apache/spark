@@ -374,8 +374,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
       case Not(Not(e)) => e
 
-      case Not(e: IsNull) => IsNotNull(e.child)
-      case Not(e: IsNotNull) => IsNull(e.child)
+      case Not(IsNull(e)) => IsNotNull(e)
+      case Not(IsNotNull(e)) => IsNull(e)
     }
   }
 }

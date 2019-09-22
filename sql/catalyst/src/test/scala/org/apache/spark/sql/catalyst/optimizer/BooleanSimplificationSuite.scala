@@ -240,8 +240,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   }
 
   test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
-    checkCondition(Not(IsNotNull(UnresolvedAttribute("b"))), IsNull(UnresolvedAttribute("b")))
-    checkCondition(Not(IsNull(UnresolvedAttribute("b"))), IsNotNull(UnresolvedAttribute("b")))
+    checkCondition(Not(IsNotNull('b)), IsNull('b))
+    checkCondition(Not(IsNull('b)), IsNotNull('b))
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
