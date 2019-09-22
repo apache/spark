@@ -41,19 +41,10 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     comparePlans(actual, correctAnswer)
   }
 
-  private def assertFilter(originalExpr: Expression, expectedExpr: Expression): Unit = {
-    val originalPlan = testRelation.where(originalExpr).analyze
-    val optimizedPlan = Optimize.execute(originalPlan)
-    val expectedPlan = testRelation.where(expectedExpr).analyze
-    comparePlans(optimizedPlan, expectedPlan)
-  }
-
   private val trueBranch = (TrueLiteral, Literal(5))
   private val normalBranch = (NonFoldableLiteral(true), Literal(10))
   private val unreachableBranch = (FalseLiteral, Literal(20))
   private val nullBranch = (Literal.create(null, NullType), Literal(30))
-  private val testRelation =
-    LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
 
   val isNotNullCond = IsNotNull(UnresolvedAttribute(Seq("a")))
   val isNullCond = IsNull(UnresolvedAttribute("b"))
@@ -175,10 +166,5 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Nil,
         Literal(1))
     )
-  }
-
-  test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
-    assertFilter(Not(IsNotNull(UnresolvedAttribute("b"))), IsNull(UnresolvedAttribute("b")))
-    assertFilter(Not(IsNull(UnresolvedAttribute("b"))), IsNotNull(UnresolvedAttribute("b")))
   }
 }

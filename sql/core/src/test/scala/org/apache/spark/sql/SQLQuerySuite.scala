@@ -3192,19 +3192,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       checkAnswer(df3, Array(Row(new java.math.BigDecimal("0.100000000000000000000000100"))))
     }
   }
-
-  test("SPARK-29152: Simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
-    withTempView("tbl1") {
-      val df: DataFrame =
-        Seq[java.lang.Boolean](true, false, true, null, false, null, true).toDF("id")
-      df.createOrReplaceTempView("tbl1")
-      val query1 = sql("select id from tbl1 where not(isnull(id) or id == false)")
-      val query2 = sql("select id from tbl1 where not(isnotnull(id) and id == true)  ")
-
-      checkAnswer(query1, Row(true) :: Row(true) :: Row(true) :: Nil)
-      checkAnswer(query2, Row(false) :: Row(null) :: Row(false) :: Row(null) :: Nil)
-    }
-  }
 }
 
 case class Foo(bar: Option[String])
