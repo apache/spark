@@ -26,8 +26,11 @@ import java.util.Locale
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
+import org.apache.spark.sql.internal.SQLConf
 
 trait DateTimeFormatterHelper {
+  protected val supportSpecialValues: Boolean = SQLConf.get.isPostgreSqlDialect
+
   // Converts the parsed temporal object to ZonedDateTime. It sets time components to zeros
   // if they does not exist in the parsed object.
   protected def toZonedDateTime(

@@ -36,7 +36,9 @@ class Iso8601DateFormatter(
   private lazy val formatter = getOrCreateFormatter(pattern, locale)
 
   override def parse(s: String): Int = {
-    val specialDate = convertSpecialDate(s.trim, zoneId)
+    val specialDate = if (supportSpecialValues) {
+      convertSpecialDate(s.trim, zoneId)
+    } else None
     specialDate.getOrElse {
       val localDate = LocalDate.parse(s, formatter)
       localDateToDays(localDate)
