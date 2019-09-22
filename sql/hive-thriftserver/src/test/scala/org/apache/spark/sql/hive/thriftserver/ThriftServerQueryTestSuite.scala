@@ -28,11 +28,12 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.HiveSQLException
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -74,6 +75,11 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
       super.afterAll()
     }
   }
+
+  override def sparkConf: SparkConf = super.sparkConf
+    // Hive Thrift server should not executes SQL queries in an asynchronous way
+    // because we may set session configuration.
+    .set(HiveUtils.HIVE_THRIFT_SERVER_ASYNC, false)
 
   override val isTestWithConfigSets = false
 
