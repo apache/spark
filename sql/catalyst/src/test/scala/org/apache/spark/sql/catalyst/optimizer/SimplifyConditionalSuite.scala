@@ -41,8 +41,7 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     comparePlans(actual, correctAnswer)
   }
 
-  private def assertFilter(originalExpr: Expression,
-                           expectedExpr: Expression): Unit = {
+  private def assertFilter(originalExpr: Expression, expectedExpr: Expression): Unit = {
     val originalPlan = testRelation.where(originalExpr).analyze
     val optimizedPlan = Optimize.execute(originalPlan)
     val expectedPlan = testRelation.where(expectedExpr).analyze

@@ -373,6 +373,9 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case Not(a And b) => Or(Not(a), Not(b))
 
       case Not(Not(e)) => e
+
+      case Not(expr: IsNull) => IsNotNull(expr.child)
+      case Not(expr: IsNotNull) => IsNull(expr.child)
     }
   }
 }
@@ -461,9 +464,6 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
-
-      case n @ Not(expr: IsNull) => IsNotNull(expr.child)
-      case n @ Not(expr: IsNotNull) => IsNull(expr.child)
     }
   }
 }
