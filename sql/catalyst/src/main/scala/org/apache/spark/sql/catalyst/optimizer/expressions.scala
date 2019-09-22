@@ -735,3 +735,17 @@ object CombineConcats extends Rule[LogicalPlan] {
       flattenConcats(concat)
   }
 }
+
+
+/**
+ * Coalesce when only two parameter and last one is Boolean Literal can be
+ * rewrite as boolean expression, this will be eligible for Parquet / data source filter pushdown.
+ */
+object RewriteCoalesceWithBooleanExpr extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressionsUp {
+    case Coalesce(Seq(expr1: Expression, expr2: Expression)) if expr2 == Literal.TrueLiteral =>
+      Or(expr1, IsNull(expr1))
+    case Coalesce(Seq(expr1: Expression, expr2: Expression)) if expr2 == Literal.FalseLiteral =>
+      And(expr1, IsNotNull(expr1))
+  }
+}
