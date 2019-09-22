@@ -19,4 +19,24 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+`ADD JAR` adds a file, jar or archive to the list of resources. The added files can be listed using `LIST JAR`.
+
+### Syntax
+{% highlight sql %}
+ADD JAR file_name
+{% endhighlight %}
+
+### Parameters
+<dl>
+ <dt><code><em>file_name</em></code></dt>
+ <dd>The name of the file/jar/archive to be added. It could be either on a local file system or a HDFS.</dd>
+</dl>
+
+### Examples
+{% highlight sql %}
+ADD JAR t1;
+{% endhighlight %}
+
+### Related Statements
+ * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
