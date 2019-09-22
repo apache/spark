@@ -18,16 +18,19 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.sql.{DriverManager, SQLException, Statement, Timestamp}
-import java.util.Locale
+import java.sql.{DriverManager, Statement, Timestamp}
+import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.{Random, Try}
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.HiveSQLException
 
-import org.apache.spark.sql.{AnalysisException, SQLQueryTestSuite}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.SQLQueryTestSuite
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.internal.SQLConf
@@ -169,19 +172,47 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
             || d.sql.toUpperCase(Locale.ROOT).startsWith("DESC\n")
             || d.sql.toUpperCase(Locale.ROOT).startsWith("DESCRIBE ")
             || d.sql.toUpperCase(Locale.ROOT).startsWith("DESCRIBE\n") =>
+
           // Skip show command, see HiveResult.hiveResultString
           case s if s.sql.toUpperCase(Locale.ROOT).startsWith("SHOW ")
             || s.sql.toUpperCase(Locale.ROOT).startsWith("SHOW\n") =>
-          // AnalysisException should exactly match.
-          // SQLException should not exactly match. We only assert the result contains Exception.
-          case _ if output.output.startsWith(classOf[SQLException].getName) =>
+
+          case _ if output.output.startsWith(classOf[RuntimeException].getName) =>
             assert(expected.output.contains("Exception"),
               s"Exception did not match for query #$i\n${expected.sql}, " +
                 s"expected: ${expected.output}, but got: ${output.output}")
+
+          case _ if output.output.startsWith(classOf[NoSuchTableException].getPackage.getName) =>
+            assert(expected.output.startsWith(classOf[NoSuchTableException].getPackage.getName),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
+          case _ if output.output.startsWith(classOf[SparkException].getName)
+            && output.output.contains("overflow") =>
+            assert(expected.output.contains(classOf[ArithmeticException].getName)
+              && expected.output.contains("overflow"),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
+          case _ if output.output.startsWith(classOf[ArithmeticException].getName)
+            && output.output.contains("causes overflow") =>
+            assert(expected.output.contains(classOf[ArithmeticException].getName)
+              && expected.output.contains("causes overflow"),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
+          case _ if output.output.startsWith(classOf[MissingFormatArgumentException].getName)
+            && output.output.contains("Format specifier") =>
+            assert(expected.output.contains(classOf[MissingFormatArgumentException].getName)
+              && expected.output.contains("Format specifier"),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
           // HiveSQLException is usually a feature that our ThriftServer cannot support.
           // Please add SQL to blackList.
           case _ if output.output.startsWith(classOf[HiveSQLException].getName) =>
             assert(false, s"${output.output} for query #$i\n${expected.sql}")
+
           case _ =>
             assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
               output.output
@@ -244,15 +275,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
         answer
       }
     } catch {
-      case a: AnalysisException =>
-        // Do not output the logical plan tree which contains expression IDs.
-        // Also implement a crude way of masking expression IDs in the error message
-        // with a generic pattern "###".
-        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")).sorted
       case NonFatal(e) =>
+        val rootCause = ExceptionUtils.getRootCause(e)
         // If there is an exception, put the exception class followed by the message.
-        Seq(e.getClass.getName, e.getMessage)
+        Seq(rootCause.getClass.getName, rootCause.getMessage)
     }
   }
 
