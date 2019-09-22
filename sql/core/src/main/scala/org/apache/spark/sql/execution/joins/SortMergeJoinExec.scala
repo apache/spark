@@ -212,6 +212,7 @@ case class SortMergeJoinExec(
                     currentRightMatches = null
                     currentLeftRow = null
                     rightMatchesIterator = null
+                    smjScanner.close()
                     return false
                   }
                 }
@@ -221,6 +222,7 @@ case class SortMergeJoinExec(
                   return true
                 }
               }
+              smjScanner.close()
               false
             }
 
@@ -302,6 +304,7 @@ case class SortMergeJoinExec(
                   }
                 }
               }
+              smjScanner.close()
               false
             }
 
@@ -343,6 +346,7 @@ case class SortMergeJoinExec(
                   return true
                 }
               }
+              smjScanner.close()
               false
             }
 
@@ -382,6 +386,7 @@ case class SortMergeJoinExec(
                 numOutputRows += 1
                 return true
               }
+              smjScanner.close()
               false
             }
 
@@ -640,6 +645,8 @@ case class SortMergeJoinExec(
       (evaluateVariables(leftVars), "")
     }
 
+    // The last two line of code generate in processNext here will handle properly
+    // releasing the resources if the input iterators are not fully consumed
     s"""
        |while (findNextInnerJoinRows($leftInput, $rightInput)) {
        |  ${leftVarDecl.mkString("\n")}
@@ -653,6 +660,10 @@ case class SortMergeJoinExec(
        |  }
        |  if (shouldStop()) return;
        |}
+       |((org.apache.spark.sql.execution.ScalaIteratorWithBufferedIterator)$leftInput)
+       |  .getBufferedRowIterator().close();
+       |((org.apache.spark.sql.execution.ScalaIteratorWithBufferedIterator)$rightInput)
+       |  .getBufferedRowIterator().close();
      """.stripMargin
   }
 }
@@ -686,7 +697,7 @@ private[joins] class SortMergeJoinScanner(
     streamedIter: RowIterator,
     bufferedIter: RowIterator,
     inMemoryThreshold: Int,
-    spillThreshold: Int) {
+    spillThreshold: Int) extends CloseableScanner {
   private[this] var streamedRow: InternalRow = _
   private[this] var streamedRowKey: InternalRow = _
   private[this] var bufferedRow: InternalRow = _
@@ -800,6 +811,15 @@ private[joins] class SortMergeJoinScanner(
       // If there is a streamed input then we always return true
       true
     }
+  }
+
+  /**
+   * Once the join has been completed, the iterators for both relations
+   * should be closed, so that acquired memory can be released.
+   */
+  def close(): Unit = {
+    closeIterator(streamedIter)
+    closeIterator(bufferedIter)
   }
 
   // --- Private methods --------------------------------------------------------------------------
@@ -969,7 +989,11 @@ private abstract class OneSideOuterIterator(
 
   override def advanceNext(): Boolean = {
     val r = advanceBufferUntilBoundConditionSatisfied() || advanceStream()
-    if (r) numOutputRows += 1
+    if (r) {
+      numOutputRows += 1
+    } else {
+      smjScanner.close()
+    }
     r
   }
 
@@ -984,7 +1008,7 @@ private class SortMergeFullOuterJoinScanner(
     rightIter: RowIterator,
     boundCondition: InternalRow => Boolean,
     leftNullRow: InternalRow,
-    rightNullRow: InternalRow)  {
+    rightNullRow: InternalRow) extends CloseableScanner {
   private[this] val joinedRow: JoinedRow = new JoinedRow()
   private[this] var leftRow: InternalRow = _
   private[this] var leftRowKey: InternalRow = _
@@ -1147,6 +1171,15 @@ private class SortMergeFullOuterJoinScanner(
       false
     }
   }
+
+  /**
+   * Once the join has been completed, the iterators for both relations
+   * should be closed, so that acquired memory can be released.
+   */
+  def close(): Unit = {
+    closeIterator(leftIter)
+    closeIterator(rightIter)
+  }
 }
 
 private class FullOuterIterator(
@@ -1157,9 +1190,37 @@ private class FullOuterIterator(
 
   override def advanceNext(): Boolean = {
     val r = smjScanner.advanceNext()
-    if (r) numRows += 1
+    if (r) {
+      numRows += 1
+    } else {
+      smjScanner.close()
+    }
     r
   }
 
   override def getRow: InternalRow = resultProj(joinedRow)
+}
+
+/**
+ * This trait enables the SMJ scanner to properly release the resources if either the
+ * left or right iterator is not fully consumed. This only works for when codegen is
+ * not enabled, i.e. for non-inner join and inner join when whole-stage codegen is
+ * disabled. For inner join with whole-stage codegen, it is handled separately in
+ * the generated code.
+ */
+trait CloseableScanner {
+  def closeIterator(iter: RowIterator): Unit = {
+    iter match {
+      case rowIter: RowIteratorFromScala =>
+        val underlyingIter = rowIter.toScala
+        underlyingIter match {
+          case toClose: UnsafeExternalRowIterator =>
+            toClose.close()
+          case toClose: ScalaIteratorWithBufferedIterator =>
+            toClose.getBufferedRowIterator.close()
+          case _ =>
+        }
+      case _ =>
+    }
+  }
 }

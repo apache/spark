@@ -149,6 +149,16 @@ case class SortExec(
         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
         | }
       """.stripMargin.trim)
+    // Override the close method in BufferedRowIterator to release resources if the sortedIterator
+    // is not fully consumed
+    ctx.addNewFunction("close",
+      s"""
+         | public void close() {
+         |   if ($sortedIterator != null) {
+         |     ((org.apache.spark.sql.execution.UnsafeExternalRowIterator)$sortedIterator).close();
+         |   }
+         | }
+       """.stripMargin, true)
 
     val outputRow = ctx.freshName("outputRow")
     val peakMemory = metricTerm(ctx, "peakMemory")

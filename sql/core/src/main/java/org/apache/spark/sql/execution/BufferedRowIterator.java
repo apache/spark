@@ -95,4 +95,10 @@ public abstract class BufferedRowIterator {
    * After it's called, if currentRow is still null, it means no more rows left.
    */
   protected abstract void processNext() throws IOException;
+
+  /**
+   * This enables the generate class to implement a method in order to properly release the resources
+   * if the iterator is not fully consumed. See SPARK-21492 for more details.
+   */
+  public void close() {}
 }

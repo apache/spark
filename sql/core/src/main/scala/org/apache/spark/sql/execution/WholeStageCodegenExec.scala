@@ -569,6 +569,14 @@ object WholeStageCodegenExec {
 }
 
 /**
+ * A trait that extends Scala Iterator[InternalRow] which enables exposing the underlying
+ * BufferedRowIterator
+ */
+trait ScalaIteratorWithBufferedIterator extends Iterator[InternalRow] {
+  def getBufferedRowIterator: BufferedRowIterator
+}
+
+/**
  * WholeStageCodegen compiles a subtree of plans that support codegen together into single Java
  * function.
  *
@@ -721,13 +729,14 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
         val (clazz, _) = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(index, Array(iter))
-        new Iterator[InternalRow] {
+        new ScalaIteratorWithBufferedIterator {
           override def hasNext: Boolean = {
             val v = buffer.hasNext
             if (!v) durationMs += buffer.durationMs()
             v
           }
           override def next: InternalRow = buffer.next()
+          override def getBufferedRowIterator: BufferedRowIterator = buffer
         }
       }
     } else {
@@ -740,13 +749,14 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
         val (clazz, _) = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(index, Array(leftIter, rightIter))
-        new Iterator[InternalRow] {
+        new ScalaIteratorWithBufferedIterator {
           override def hasNext: Boolean = {
             val v = buffer.hasNext
             if (!v) durationMs += buffer.durationMs()
             v
           }
           override def next: InternalRow = buffer.next()
+          override def getBufferedRowIterator: BufferedRowIterator = buffer
         }
       }
     }
