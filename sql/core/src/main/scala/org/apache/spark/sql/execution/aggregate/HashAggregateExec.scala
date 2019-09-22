@@ -299,7 +299,9 @@ case class HashAggregateExec(
       if (inputVars.forall(_.isDefined)) {
         val splitCodes = inputVars.flatten.zipWithIndex.map { case (args, i) =>
           val doAggFunc = ctx.freshName(s"doAggregate_${aggNames(i)}")
-          val argList = args.map(v => s"${v.javaType.getName} ${v.variableName}").mkString(", ")
+          val argList = args.map { v =>
+            s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
+          }.mkString(", ")
           val doAggFuncName = ctx.addNewFunction(doAggFunc,
             s"""
                |private void $doAggFunc($argList) throws java.io.IOException {
