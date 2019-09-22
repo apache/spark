@@ -39,7 +39,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
     val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
     def checkStringToTimestamp(originalTime: String, expectedParsedTime: String) {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
-        UTF8String.fromString(originalTime), defaultZoneId, false)
+        UTF8String.fromString(originalTime), defaultZoneId, true)
       assert(parsedTimestampOp.isDefined, "timestamp with nanoseconds was not parsed correctly")
       assert(DateTimeUtils.timestampToString(tf, parsedTimestampOp.get) === expectedParsedTime)
     }
@@ -282,9 +282,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
 
     // Test stringToTimestamp
     assert(stringToTimestamp(
-      UTF8String.fromString("2015-02-29 00:00:00"), defaultZoneId, false).isEmpty)
+      UTF8String.fromString("2015-02-29 00:00:00"), defaultZoneId, true).isEmpty)
     assert(stringToTimestamp(
-      UTF8String.fromString("2015-04-31 00:00:00"), defaultZoneId, false).isEmpty)
+      UTF8String.fromString("2015-04-31 00:00:00"), defaultZoneId, true).isEmpty)
     assert(toTimestamp("2015-02-29", defaultZoneId).isEmpty)
     assert(toTimestamp("2015-04-31", defaultZoneId).isEmpty)
   }
@@ -475,15 +475,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
     }
 
     val defaultInputTS = DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-05T09:32:05.359123"), defaultZoneId, false)
+      UTF8String.fromString("2015-03-05T09:32:05.359123"), defaultZoneId, true)
     val defaultInputTS1 = DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-31T20:32:05.359"), defaultZoneId, false)
+      UTF8String.fromString("2015-03-31T20:32:05.359"), defaultZoneId, true)
     val defaultInputTS2 = DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-04-01T02:32:05.359"), defaultZoneId, false)
+      UTF8String.fromString("2015-04-01T02:32:05.359"), defaultZoneId, true)
     val defaultInputTS3 = DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-30T02:32:05.359"), defaultZoneId, false)
+      UTF8String.fromString("2015-03-30T02:32:05.359"), defaultZoneId, true)
     val defaultInputTS4 = DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2015-03-29T02:32:05.359"), defaultZoneId, false)
+      UTF8String.fromString("2015-03-29T02:32:05.359"), defaultZoneId, true)
 
     testTrunc(DateTimeUtils.TRUNC_TO_YEAR, "2015-01-01T00:00:00", defaultInputTS.get)
     testTrunc(DateTimeUtils.TRUNC_TO_MONTH, "2015-03-01T00:00:00", defaultInputTS.get)
@@ -508,17 +508,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
     for (tz <- ALL_TIMEZONES) {
       withDefaultTimeZone(tz) {
         val inputTS = DateTimeUtils.stringToTimestamp(
-          UTF8String.fromString("2015-03-05T09:32:05.359"), defaultZoneId, false)
+          UTF8String.fromString("2015-03-05T09:32:05.359"), defaultZoneId, true)
         val inputTS1 = DateTimeUtils.stringToTimestamp(
-          UTF8String.fromString("2015-03-31T20:32:05.359"), defaultZoneId, false)
+          UTF8String.fromString("2015-03-31T20:32:05.359"), defaultZoneId, true)
         val inputTS2 = DateTimeUtils.stringToTimestamp(
-          UTF8String.fromString("2015-04-01T02:32:05.359"), defaultZoneId, false)
+          UTF8String.fromString("2015-04-01T02:32:05.359"), defaultZoneId, true)
         val inputTS3 = DateTimeUtils.stringToTimestamp(
-          UTF8String.fromString("2015-03-30T02:32:05.359"), defaultZoneId, false)
+          UTF8String.fromString("2015-03-30T02:32:05.359"), defaultZoneId, true)
         val inputTS4 = DateTimeUtils.stringToTimestamp(
-          UTF8String.fromString("2015-03-29T02:32:05.359"), defaultZoneId, false)
+          UTF8String.fromString("2015-03-29T02:32:05.359"), defaultZoneId, true)
         val inputTS5 = DateTimeUtils.stringToTimestamp(
-          UTF8String.fromString("1999-03-29T01:02:03.456789"), defaultZoneId, false)
+          UTF8String.fromString("1999-03-29T01:02:03.456789"), defaultZoneId, true)
 
         testTrunc(DateTimeUtils.TRUNC_TO_YEAR, "2015-01-01T00:00:00", inputTS.get, tz)
         testTrunc(DateTimeUtils.TRUNC_TO_MONTH, "2015-03-01T00:00:00", inputTS.get, tz)

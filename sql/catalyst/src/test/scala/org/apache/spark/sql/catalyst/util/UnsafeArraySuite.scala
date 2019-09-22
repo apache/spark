@@ -43,9 +43,9 @@ class UnsafeArraySuite extends SparkFunSuite {
   private def defaultZoneId = ZoneId.systemDefault()
   val timestampArray = Array(
     DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("1970-1-1 00:00:00"), defaultZoneId, false).get,
+      UTF8String.fromString("1970-1-1 00:00:00"), defaultZoneId, true).get,
     DateTimeUtils.stringToTimestamp(
-      UTF8String.fromString("2016-7-26 00:00:00"), defaultZoneId, false).get)
+      UTF8String.fromString("2016-7-26 00:00:00"), defaultZoneId, true).get)
   val decimalArray4_1 = Array(
     BigDecimal("123.4").setScale(1, BigDecimal.RoundingMode.FLOOR),
     BigDecimal("567.8").setScale(1, BigDecimal.RoundingMode.FLOOR))
