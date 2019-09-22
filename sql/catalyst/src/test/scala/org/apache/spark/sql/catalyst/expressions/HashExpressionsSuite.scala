@@ -174,7 +174,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("hive-hash for date type") {
     def checkHiveHashForDateType(dateString: String, expected: Long): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToDate(UTF8String.fromString(dateString)).get,
+        DateTimeUtils.stringToDate(UTF8String.fromString(dateString), ZoneOffset.UTC).get,
         DateType,
         expected)
     }

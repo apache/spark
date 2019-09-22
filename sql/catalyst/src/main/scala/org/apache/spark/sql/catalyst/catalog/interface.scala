@@ -491,7 +491,7 @@ object CatalogColumnStat extends Logging {
     dataType match {
       case BooleanType => s.toBoolean
       case DateType if version == 1 => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
-      case DateType => DateFormatter().parse(s)
+      case DateType => DateFormatter(ZoneOffset.UTC).parse(s)
       case TimestampType if version == 1 =>
         DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
       case TimestampType => getTimestampFormatter().parse(s)
@@ -516,7 +516,7 @@ object CatalogColumnStat extends Logging {
    */
   def toExternalString(v: Any, colName: String, dataType: DataType): String = {
     val externalValue = dataType match {
-      case DateType => DateFormatter().format(v.asInstanceOf[Int])
+      case DateType => DateFormatter(ZoneOffset.UTC).format(v.asInstanceOf[Int])
       case TimestampType => getTimestampFormatter().format(v.asInstanceOf[Long])
       case BooleanType | _: IntegralType | FloatType | DoubleType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal

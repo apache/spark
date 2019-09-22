@@ -1369,18 +1369,25 @@ object CodeGenerator extends Logging {
       case e: InternalCompilerException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
-        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
-        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
+        logGeneratedCode(code)
         throw new InternalCompilerException(msg, e)
       case e: CompileException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
-        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
-        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
+        logGeneratedCode(code)
         throw new CompileException(msg, e.getLocation)
     }
 
     (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], codeStats)
+  }
+
+  private def logGeneratedCode(code: CodeAndComment): Unit = {
+    val maxLines = SQLConf.get.loggingMaxLinesForCodegen
+    if (Utils.isTesting) {
+      logError(s"\n${CodeFormatter.format(code, maxLines)}")
+    } else {
+      logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
+    }
   }
 
   /**
@@ -1803,6 +1810,14 @@ object CodeGenerator extends Logging {
   }
 
   def boxedType(dt: DataType): String = boxedType(javaType(dt))
+
+  def typeName(clazz: Class[_]): String = {
+    if (clazz.isArray) {
+      typeName(clazz.getComponentType) + "[]"
+    } else {
+      clazz.getName
+    }
+  }
 
   /**
    * Returns the representation of default value for a given Java Type.

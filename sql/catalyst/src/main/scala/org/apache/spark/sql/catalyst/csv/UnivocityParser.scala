@@ -78,7 +78,10 @@ class UnivocityParser(
     options.timestampFormat,
     options.zoneId,
     options.locale)
-  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
+  private val dateFormatter = DateFormatter(
+    options.dateFormat,
+    options.zoneId,
+    options.locale)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {

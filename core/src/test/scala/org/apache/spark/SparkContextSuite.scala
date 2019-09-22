@@ -716,7 +716,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
       x
     }.collect()
-    sc.listenerBus.waitUntilEmpty(10000)
+    sc.listenerBus.waitUntilEmpty()
     // As executors will send the metrics of running tasks via heartbeat, we can use this to check
     // whether there is any running task.
     eventually(timeout(10.seconds)) {
@@ -761,7 +761,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
-      TestUtils.waitUntilExecutorsUp(sc, 1, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
       assert(sc.resources.size === 1)
       assert(sc.resources.get(GPU).get.addresses === Array("5", "6"))
       assert(sc.resources.get(GPU).get.name === "gpu")
@@ -790,7 +790,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
-      TestUtils.waitUntilExecutorsUp(sc, 1, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
       // driver gpu resources file should take precedence over the script
       assert(sc.resources.size === 1)
       assert(sc.resources.get(GPU).get.addresses === Array("0", "1", "8"))

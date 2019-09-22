@@ -76,9 +76,7 @@ case class CurrentDate(timeZoneId: Option[String] = None)
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def eval(input: InternalRow): Any = {
-    localDateToDays(LocalDate.now(zoneId))
-  }
+  override def eval(input: InternalRow): Any = currentDate(zoneId)
 
   override def prettyName: String = "current_date"
 }
@@ -2053,10 +2051,15 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
       if (!field.foldable) {
         throw new AnalysisException("The field parameter needs to be a foldable string value.")
       }
-      val fieldStr = field.eval().asInstanceOf[UTF8String].toString
-      DatePart.parseExtractField(fieldStr, source, {
-        throw new AnalysisException(s"Literals of type '$fieldStr' are currently not supported.")
-      })
+      val fieldEval = field.eval()
+      if (fieldEval == null) {
+        Literal(null, DoubleType)
+      } else {
+        val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
+        DatePart.parseExtractField(fieldStr, source, {
+          throw new AnalysisException(s"Literals of type '$fieldStr' are currently not supported.")
+        })
+      }
     })
   }
 

@@ -20,7 +20,8 @@ import sys
 from pyspark import since, keyword_only
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
+    JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 
@@ -37,10 +38,9 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
 
 
 @inherit_doc
-class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                       HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
-                       HasStandardization, HasSolver, HasWeightCol, HasAggregationDepth, HasLoss,
-                       JavaMLWritable, JavaMLReadable):
+class LinearRegression(JavaPredictor, HasMaxIter, HasRegParam, HasTol, HasElasticNetParam,
+                       HasFitIntercept, HasStandardization, HasSolver, HasWeightCol,
+                       HasAggregationDepth, HasLoss, JavaMLWritable, JavaMLReadable):
     """
     Linear regression.
 
@@ -66,15 +66,21 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     ...     (0.0, 2.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
     >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
     >>> model = lr.fit(df)
+    >>> model.setFeaturesCol("features")
+    LinearRegression...
+    >>> model.setPredictionCol("newPrediction")
+    LinearRegression...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
+    >>> abs(model.predict(test0.head().features) - (-1.0)) < 0.001
+    True
+    >>> abs(model.transform(test0).head().newPrediction - (-1.0)) < 0.001
     True
     >>> abs(model.coefficients[0] - 1.0) < 0.001
     True
     >>> abs(model.intercept - 0.0) < 0.001
     True
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
-    >>> abs(model.transform(test1).head().prediction - 1.0) < 0.001
+    >>> abs(model.transform(test1).head().newPrediction - 1.0) < 0.001
     True
     >>> lr.setParams("vector")
     Traceback (most recent call last):
@@ -161,7 +167,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return self.getOrDefault(self.epsilon)
 
 
-class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritable, JavaMLReadable,
+class LinearRegressionModel(JavaPredictionModel, GeneralJavaMLWritable, JavaMLReadable,
                             HasTrainingSummary):
     """
     Model fitted by :class:`LinearRegression`.
@@ -460,8 +466,7 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
 
 
 @inherit_doc
-class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                         HasWeightCol, JavaMLWritable, JavaMLReadable):
+class IsotonicRegression(JavaPredictor, HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
@@ -472,6 +477,12 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
+    >>> model.setFeaturesCol("features")
+    IsotonicRegression...
+    >>> model.setLabelCol("newLabel")
+    IsotonicRegression...
+    >>> model.getLabelCol()
+    'newLabel'
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -555,7 +566,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.featureIndex)
 
 
-class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class IsotonicRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`IsotonicRegression`.
 
@@ -804,8 +815,7 @@ class GBTRegressorParams(GBTParams, TreeRegressorParams):
 
 
 @inherit_doc
-class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeightCol,
-                            HasPredictionCol, DecisionTreeParams, TreeRegressorParams,
+class DecisionTreeRegressor(JavaPredictor, HasWeightCol, DecisionTreeParams, TreeRegressorParams,
                             HasCheckpointInterval, HasSeed, JavaMLWritable, JavaMLReadable,
                             HasVarianceCol):
     """
@@ -828,6 +838,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     >>> model.numFeatures
     1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.predict(test0.head().features)
+    0.0
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -950,7 +962,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
 
 
 @inherit_doc
-class DecisionTreeModel(JavaModel, JavaPredictionModel):
+class DecisionTreeModel(JavaPredictionModel):
     """
     Abstraction for Decision Tree models.
 
@@ -1052,9 +1064,8 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
 
 
 @inherit_doc
-class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
-                            RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
-                            JavaMLWritable, JavaMLReadable):
+class RandomForestRegressor(JavaPredictor, HasSeed, RandomForestParams, TreeRegressorParams,
+                            HasCheckpointInterval, JavaMLWritable, JavaMLReadable):
     """
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for regression.
@@ -1072,6 +1083,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> allclose(model.treeWeights, [1.0, 1.0])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.predict(test0.head().features)
+    0.0
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -1240,9 +1253,8 @@ class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaML
 
 
 @inherit_doc
-class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                   GBTRegressorParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
-                   JavaMLReadable):
+class GBTRegressor(JavaPredictor, GBTRegressorParams, HasCheckpointInterval, HasSeed,
+                   JavaMLWritable, JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
@@ -1259,6 +1271,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> print(gbt.getFeatureSubsetStrategy())
     all
     >>> model = gbt.fit(df)
+    >>> model.setFeaturesCol("features")
+    GBTRegressionModel...
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> model.numFeatures
@@ -1266,6 +1280,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.predict(test0.head().features)
+    0.0
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -1465,9 +1481,8 @@ class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
 
 
 @inherit_doc
-class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                            HasFitIntercept, HasMaxIter, HasTol, HasAggregationDepth,
-                            JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegression(JavaPredictor, HasFitIntercept, HasMaxIter, HasTol,
+                            HasAggregationDepth, JavaMLWritable, JavaMLReadable):
     """
     Accelerated Failure Time (AFT) Model Survival Regression
 
@@ -1482,6 +1497,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (1e-40, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
     >>> aftsr = AFTSurvivalRegression()
     >>> model = aftsr.fit(df)
+    >>> model.setFeaturesCol("features")
+    AFTSurvivalRegression...
     >>> model.predict(Vectors.dense(6.3))
     1.0
     >>> model.predictQuantiles(Vectors.dense(6.3))
@@ -1607,7 +1624,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self.getOrDefault(self.quantilesCol)
 
 
-class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`AFTSurvivalRegression`.
 
@@ -1654,9 +1671,8 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 
 @inherit_doc
-class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, HasPredictionCol,
-                                  HasFitIntercept, HasMaxIter, HasTol, HasRegParam, HasWeightCol,
-                                  HasSolver, JavaMLWritable, JavaMLReadable):
+class GeneralizedLinearRegression(JavaPredictor, HasFitIntercept, HasMaxIter, HasTol, HasRegParam,
+                                  HasWeightCol, HasSolver, JavaMLWritable, JavaMLReadable):
     """
     Generalized Linear Regression.
 
@@ -1686,6 +1702,8 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     ...     (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
     >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
     >>> model = glr.fit(df)
+    >>> model.setFeaturesCol("features")
+    GeneralizedLinearRegression...
     >>> transformed = model.transform(df)
     >>> abs(transformed.head().prediction - 1.5) < 0.001
     True
@@ -1861,7 +1879,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self.getOrDefault(self.offsetCol)
 
 
-class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable,
+class GeneralizedLinearRegressionModel(JavaPredictionModel, JavaMLWritable,
                                        JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by :class:`GeneralizedLinearRegression`.
