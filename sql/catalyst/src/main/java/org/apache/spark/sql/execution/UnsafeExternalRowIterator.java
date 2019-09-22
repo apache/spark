@@ -27,7 +27,8 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterIterator;
 
-public abstract class UnsafeExternalRowIterator extends AbstractIterator<UnsafeRow> implements Closeable {
+public abstract class UnsafeExternalRowIterator extends AbstractIterator<UnsafeRow>
+    implements Closeable {
 
   private final UnsafeSorterIterator sortedIterator;
   private UnsafeRow row;
