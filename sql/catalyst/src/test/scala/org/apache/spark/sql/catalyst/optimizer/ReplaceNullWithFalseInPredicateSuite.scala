@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Coalesce, Expression, GreaterThan, If, IsNotNull, IsNull, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -33,6 +33,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Replace null literals", FixedPoint(10),
+        RewriteCoalesceWithBooleanExpr,
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
@@ -43,6 +44,13 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   private val testRelation =
     LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
   private val anotherTestRelation = LocalRelation('d.int)
+
+  test("rewrite boolean coalesce to boolean expression") {
+    testFilter(originalCond = Coalesce(Seq(UnresolvedAttribute("b"), Literal.TrueLiteral)),
+      expectedCond = Or(UnresolvedAttribute("b"), IsNull(UnresolvedAttribute("b"))))
+    testFilter(originalCond = Coalesce(Seq(UnresolvedAttribute("b"), Literal.FalseLiteral)),
+      expectedCond = And(UnresolvedAttribute("b"), IsNotNull(UnresolvedAttribute("b"))))
+  }
 
   test("replace null inside filter and join conditions") {
     testFilter(originalCond = Literal(null, BooleanType), expectedCond = FalseLiteral)
