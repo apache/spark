@@ -416,6 +416,37 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-29189: Add an option to ignore block locations when listing file") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      for (i <- 1 to 8) {
+        val file = new File(partitionDirectory, i + ".txt")
+        stringToFile(file, "text")
+      }
+      val path = new Path(dir.getCanonicalPath)
+
+      var withBlockLocations, withoutBlockLocations = Seq.empty[FileStatus]
+      withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
+         "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+        withBlockLocations = fileIndex.
+          listLeafFiles(Seq(new Path(partitionDirectory.getPath))).toSeq
+      }
+      withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true",
+         "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+        withoutBlockLocations = fileIndex.
+          listLeafFiles(Seq(new Path(partitionDirectory.getPath))).toSeq
+      }
+      assert(withBlockLocations.size == withoutBlockLocations.size)
+      assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
+        b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
+      assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
+        b.asInstanceOf[LocatedFileStatus].getBlockLocations.isEmpty))
+      assert(withoutBlockLocations.forall(withBlockLocations.contains))
+    }
+  }
 }
 
 object DeletionRaceFileSystem {
