@@ -134,8 +134,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   private val clsName = this.getClass.getCanonicalName
 
   override def sparkConf: SparkConf = super.sparkConf
-    // Reduce shuffle partitions to reduce testing time.
-    .set(SQLConf.SHUFFLE_PARTITIONS, 5)
+    // Fewer shuffle partitions to speed up testing.
+    .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
   /** List of test cases to ignore, in lower cases. */
   protected def blackList: Set[String] = Set(
