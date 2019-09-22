@@ -39,7 +39,6 @@ case class DataSourceResolution(
   extends Rule[LogicalPlan] with CastSupport with LookupCatalog {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util.isSessionCatalog
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(
@@ -195,11 +194,7 @@ case class DataSourceResolution(
           if (!catalog.asNamespaceCatalog.namespaceExists(ns.toArray)) {
             throw new AnalysisException(s"Namespace '${ns.quoted}' not found")
           }
-          if (isSessionCatalog(catalog)) {
-            SetDatabaseCommand(namespace.get.head)
-          } else {
-            UseCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
-          }
+          UseCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
       }
   }
 

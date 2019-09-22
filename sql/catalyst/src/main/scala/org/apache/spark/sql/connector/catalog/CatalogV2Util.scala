@@ -220,8 +220,4 @@ private[sql] object CatalogV2Util {
       case _: NoSuchDatabaseException => None
       case _: NoSuchNamespaceException => None
     }
-
-  def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
-    catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
-  }
 }

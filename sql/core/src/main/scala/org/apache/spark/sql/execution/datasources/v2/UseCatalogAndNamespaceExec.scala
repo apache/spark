@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -35,7 +36,11 @@ case class UseCatalogAndNamespaceExec(
     // The catalog is updated first because CatalogManager resets the current namespace
     // when the current catalog is set.
     catalogName.map(catalogManager.setCurrentCatalog)
-    namespace.map(ns => catalogManager.setCurrentNamespace(ns.toArray))
+
+    namespace.map { ns =>
+      SparkSession.active.sessionState.catalog.setCurrentDatabase(ns.head)
+      catalogManager.setCurrentNamespace(ns.toArray)
+    }
 
     sqlContext.sparkContext.parallelize(Seq.empty, 1)
   }
