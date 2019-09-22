@@ -72,8 +72,6 @@ trait SharedSparkSessionBase
       // this rule may potentially block testing of other optimization rules such as
       // ConstantPropagation etc.
       .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
-      // Reduce shuffle partitions to reduce testing time.
-      .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
     conf.set(
       StaticSQLConf.WAREHOUSE_PATH,
       conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)
