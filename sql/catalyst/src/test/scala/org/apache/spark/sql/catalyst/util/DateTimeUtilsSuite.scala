@@ -154,7 +154,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
   private def toTimestamp(
       str: String,
       zoneId: ZoneId,
-      supportSpecialValues: Boolean = false): Option[SQLTimestamp] = {
+      supportSpecialValues: Boolean = true): Option[SQLTimestamp] = {
     stringToTimestamp(UTF8String.fromString(str), zoneId, supportSpecialValues)
   }
 
@@ -596,10 +596,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
 
       // It must return None when support of special values is disabled
       assert(toTimestamp("Epoch", zoneId, false) === None)
-
-      // Parsing of regular timestamps must not fail when support of special values is enabled
-      assert(toTimestamp("2019-09-18 22:26:30Z", ZoneOffset.UTC).get ===
-        date(2019, 9, 18, 22, 26, 30))
     }
   }
 
