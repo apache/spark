@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.FileStreamSink
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -290,7 +291,7 @@ object InMemoryFileIndex extends Logging {
       isRootPath: Boolean): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
-    val ignoreLocality = sessionOpt.map(_.sqlContext.conf.ignoreDataLocality).getOrElse(false)
+    val ignoreLocality = hadoopConf.getBoolean(SQLConf.IGNORE_DATA_LOCALITY.key, false)
 
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.

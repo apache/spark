@@ -442,8 +442,8 @@ class FileIndexSuite extends SharedSparkSession {
       assert(withBlockLocations.size == withoutBlockLocations.size)
       assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
         b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
-      assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
-        b.asInstanceOf[LocatedFileStatus].getBlockLocations.isEmpty))
+      assert(withoutBlockLocations.forall(b => b.isInstanceOf[FileStatus] &&
+        !b.isInstanceOf[LocatedFileStatus]))
       assert(withoutBlockLocations.forall(withBlockLocations.contains))
     }
   }
