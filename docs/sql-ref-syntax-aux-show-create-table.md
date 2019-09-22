@@ -20,38 +20,31 @@ license: |
 ---
 
 ### Description
-`SHOW CREATE TABLE` returns the `CREATE TABLE` statement that creates a given table. `SHOW CREATE TABLE` on a non-existent table throws Exception.
+`SHOW CREATE TABLE` returns the [CREATE TABLE statement](sql-ref-syntax-ddl-create-table.html) or [CREATE VIEW statement](sql-ref-syntax-ddl-create-view.html) that was used to create a given table or view. `SHOW CREATE TABLE` on a non-existent table or a temporary view throws Exception.
 
 ### Syntax
 {% highlight sql %}
-SHOW CREATE TABLE table_name
+SHOW CREATE TABLE name
 {% endhighlight %}
 
 ### Parameters
 <dl>
- <dt><code><em>table_name</em></code></dt>
- <dd>The name of the table to be used for SHOW CREATE TABLE.</dd>
+ <dt><code><em>name</em></code></dt>
+ <dd>The name of the table or view to be used for SHOW CREATE TABLE.</dd>
 </dl>
 
 ### Examples
 {% highlight sql %}
-CREATE TABLE test (c INT);
+create table test_table (c INT) using json;
 
-SHOW CREATE TABLE test;
+show create table test_table;
 
--- the result of SHOW CREATE TABLE test
-CREATE TABLE `test`(`c` INT)
-ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-WITH SERDEPROPERTIES (
-  'serialization.format' = '1'
-)
-STORED AS
-  INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
-  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-TBLPROPERTIES (
-  'transient_lastDdlTime' = '1569097524'
-)
+-- the result of SHOW CREATE TABLE test_table
+CREATE TABLE `test_table` (`c` INT)
+USING json
+
 {% endhighlight %}
 
 ### Related Statements
  * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
+ * [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
