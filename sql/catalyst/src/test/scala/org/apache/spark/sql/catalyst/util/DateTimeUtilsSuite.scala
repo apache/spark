@@ -120,8 +120,11 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
-  private def toDate(s: String, zoneId: ZoneId = ZoneOffset.UTC): Option[SQLDate] = {
-    stringToDate(UTF8String.fromString(s), zoneId)
+  private def toDate(
+      s: String,
+      zoneId: ZoneId = ZoneOffset.UTC,
+      supportSpecialValues: Boolean = true): Option[SQLDate] = {
+    stringToDate(UTF8String.fromString(s), zoneId, supportSpecialValues)
   }
 
   test("string to date") {
@@ -609,6 +612,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
       assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
       assert(toDate("today", zoneId).get === today)
       assert(toDate("tomorrow CET ", zoneId).get === today + 1)
+
+      // It must return None when support of special values is disabled
+      assert(toDate("Epoch", zoneId, false) === None)
     }
   }
 }

@@ -1732,14 +1732,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         throw new ParseException(s"Cannot parse the $valueType value: $value", ctx)
       }
     }
+    def supportSpecialValues() = SQLConf.get.isPostgreSqlDialect
+    def zoneId() = getZoneId(SQLConf.get.sessionLocalTimeZone)
     try {
       valueType match {
         case "DATE" =>
-          toLiteral(stringToDate(_, getZoneId(SQLConf.get.sessionLocalTimeZone)), DateType)
+          toLiteral(stringToDate(_, zoneId(), supportSpecialValues()), DateType)
         case "TIMESTAMP" =>
-          val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
-          val supportSpecialValues = SQLConf.get.isPostgreSqlDialect
-          toLiteral(stringToTimestamp(_, zoneId, supportSpecialValues), TimestampType)
+          toLiteral(stringToTimestamp(_, zoneId(), supportSpecialValues()), TimestampType)
         case "INTERVAL" =>
           Literal(CalendarInterval.fromString(value), CalendarIntervalType)
         case "X" =>

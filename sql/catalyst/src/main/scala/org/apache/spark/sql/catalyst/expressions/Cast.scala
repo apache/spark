@@ -469,8 +469,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
-    case StringType =>
-      buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
+    case StringType => buildCast[UTF8String](_, s =>
+      DateTimeUtils.stringToDate(s, zoneId, supportSpecialValues).orNull)
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
@@ -1068,10 +1068,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case StringType =>
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
         val zid = getZoneId()
+        val sv = ctx.addReferenceObj("supportSpecialValues", supportSpecialValues)
         (c, evPrim, evNull) =>
           code"""
           scala.Option<Integer> $intOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c, $zid);
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c, $zid, $sv);
           if ($intOpt.isDefined()) {
             $evPrim = ((Integer) $intOpt.get()).intValue();
           } else {

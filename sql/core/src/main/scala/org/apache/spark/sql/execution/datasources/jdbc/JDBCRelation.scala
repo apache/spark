@@ -184,12 +184,13 @@ private[sql] object JDBCRelation extends Logging {
           s"Cannot parse the bound value $value as ${columnType.catalogString}")
       }
     }
+    def supportSpecialValues(): Boolean = SQLConf.get.isPostgreSqlDialect
     columnType match {
       case _: NumericType => value.toLong
-      case DateType => parse(stringToDate(_, getZoneId(timeZoneId))).toLong
+      case DateType => parse(stringToDate(_, getZoneId(timeZoneId), supportSpecialValues())).toLong
       case TimestampType => parse(stringToTimestamp(_,
         getZoneId(timeZoneId),
-        supportSpecialValues = SQLConf.get.isPostgreSqlDialect))    }
+        supportSpecialValues()))    }
   }
 
   private def toBoundValueInWhereClause(

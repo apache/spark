@@ -383,7 +383,10 @@ object DateTimeUtils {
    * `yyyy-[m]m-[d]d *`
    * `yyyy-[m]m-[d]dT*`
    */
-  def stringToDate(s: UTF8String, zoneId: ZoneId): Option[SQLDate] = {
+  def stringToDate(
+      s: UTF8String,
+      zoneId: ZoneId,
+      supportSpecialValues: Boolean): Option[SQLDate] = {
     if (s == null) {
       return None
     }
@@ -391,8 +394,10 @@ object DateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trim.getBytes
-    val specialDate = convertSpecialDate(bytes, zoneId)
-    if (specialDate.isDefined) return specialDate
+    if (supportSpecialValues) {
+      val specialDate = convertSpecialDate(bytes, zoneId)
+      if (specialDate.isDefined) return specialDate
+    }
     var j = 0
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
