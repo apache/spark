@@ -80,6 +80,15 @@ SHOW TABLES FROM default LIKE 'sam*';
   | default   | sam        | false        |
   | default   | sam1       | false        |
   +-----------+------------+--------------+--+
+-- List all tables matching the pattern `sam*|suj`
+SHOW TABLES  LIKE 'sam*|suj';
+  +-----------+------------+--------------+--+
+  | database  | tableName  | isTemporary  |
+  +-----------+------------+--------------+--+
+  | default   | sam        | false        |
+  | default   | sam1       | false        |
+  | default   | suj        | false        |
+  +-----------+------------+--------------+--+
 
 {% endhighlight %}
 
