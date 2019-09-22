@@ -85,9 +85,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     "pgSQL/case.sql",
     // SPARK-28624
     "date.sql",
-    // SPARK-28619
-    "pgSQL/aggregates_part1.sql",
-    "group-by.sql",
     // SPARK-28620
     "pgSQL/float4.sql",
     // SPARK-28636
@@ -95,12 +92,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     "literals.sql",
     "subquery/scalar-subquery/scalar-subquery-predicate.sql",
     "subquery/in-subquery/in-limit.sql",
+    "subquery/in-subquery/in-group-by.sql",
     "subquery/in-subquery/simple-in.sql",
     "subquery/in-subquery/in-order-by.sql",
-    "subquery/in-subquery/in-set-operations.sql",
-    // SPARK-28637
-    "cast.sql",
-    "ansi/interval.sql"
+    "subquery/in-subquery/in-set-operations.sql"
   )
 
   override def runQueries(
