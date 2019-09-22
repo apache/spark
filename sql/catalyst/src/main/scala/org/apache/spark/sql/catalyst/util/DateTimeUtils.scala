@@ -847,9 +847,10 @@ object DateTimeUtils {
    * since 1970-01-01 00:00:00 local time.
    */
   def getEpoch(timestamp: SQLTimestamp, zoneId: ZoneId): Decimal = {
-    val offset = zoneId.getRules.getOffset(microsToInstant(timestamp)).getTotalSeconds
-    val sinceEpoch = BigDecimal(timestamp) / MICROS_PER_SECOND + offset
-    new Decimal().set(sinceEpoch, 20, 6)
+    val offset = SECONDS.toMicros(
+      zoneId.getRules.getOffset(microsToInstant(timestamp)).getTotalSeconds)
+    val sinceEpoch = timestamp + offset
+    Decimal(sinceEpoch, 20, 6)
   }
 
   def currentTimestamp(): SQLTimestamp = instantToMicros(Instant.now())
