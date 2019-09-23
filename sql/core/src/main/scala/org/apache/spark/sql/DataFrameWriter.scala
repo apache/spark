@@ -381,7 +381,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     val command = mode match {
-      case SaveMode.Append =>
+      case SaveMode.Append | SaveMode.ErrorIfExists | SaveMode.Ignore =>
         AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap)
 
       case SaveMode.Overwrite =>
@@ -394,10 +394,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         } else {
           OverwriteByExpression.byPosition(table, df.logicalPlan, Literal(true), extraOptions.toMap)
         }
-
-      case other =>
-        throw new AnalysisException(s"insertInto does not support $other mode, " +
-          s"please use Append or Overwrite mode instead.")
     }
 
     runCommand(df.sparkSession, "insertInto") {
