@@ -111,8 +111,26 @@ public class TransportConf {
   /** Requested maximum length of the queue of incoming connections. Default is 64. */
   public int backLog() { return conf.getInt(SPARK_NETWORK_IO_BACKLOG_KEY, 64); }
 
-  /** Number of threads used in the server thread pool. Default to 0, which is 2x#cores. */
-  public int serverThreads() { return conf.getInt(SPARK_NETWORK_IO_SERVERTHREADS_KEY, 0); }
+  /**
+   * The configured ratio between number of server threads and number of chunk fetch handler
+   * threads. Default to 1, which sets the size of both thread pools to be equal. Number of
+   * server threads needs to be a multiple of this ratio. See SPARK-29206.
+   */
+  private int getChunkFetchHandlerThreadsRatio() {
+    return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsRatio", 1);
+  }
+
+  /**
+   * Number of threads used in the server thread pool. Default to 0, which is 2x#cores.
+   * If spark.shuffle.server.chunkFetchHandlerThreadsRatio is configured, the actual
+   * # of server threads will round up to the nearest int that is a multiple of the
+   * configured ratio.
+   */
+  public int serverThreads() {
+    int chunkFetchHandlerThreadsRatio = getChunkFetchHandlerThreadsRatio();
+    int configuredServerThreads = conf.getInt(SPARK_NETWORK_IO_SERVERTHREADS_KEY, 0);
+    return (int) Math.ceil(configuredServerThreads / (chunkFetchHandlerThreadsRatio * 1.0));
+  }
 
   /** Number of threads used in the client thread pool. Default to 0, which is 2x#cores. */
   public int clientThreads() { return conf.getInt(SPARK_NETWORK_IO_CLIENTTHREADS_KEY, 0); }
@@ -311,7 +329,7 @@ public class TransportConf {
   }
 
   /**
-   * Percentage of io.serverThreads used by netty to process ChunkFetchRequest.
+   * Number of threads used by netty to process ChunkFetchRequest.
    * Shuffle server will use a separate EventLoopGroup to process ChunkFetchRequest messages.
    * Although when calling the async writeAndFlush on the underlying channel to send
    * response back to client, the I/O on the channel is still being handled by
@@ -320,25 +338,25 @@ public class TransportConf {
    * threads for the completion of sending back responses, we are able to put a limit on
    * the max number of threads from TransportServer's default EventLoopGroup that are
    * going to be consumed by writing response to ChunkFetchRequest, which are I/O intensive
-   * and could take long time to process due to disk contentions. By configuring a slightly
+   * and could take long time to process due to disk contentions. By configuring a
    * higher number of shuffler server threads, we are able to reserve some threads for
    * handling other RPC messages, thus making the Client less likely to experience timeout
-   * when sending RPC messages to the shuffle server. The number of threads used for handling
-   * chunked fetch requests are percentage of io.serverThreads (if defined) else it is a percentage
-   * of 2 * #cores. However, a percentage of 0 means netty default number of threads which
-   * is 2 * #cores ignoring io.serverThreads. The percentage here is configured via
-   * spark.shuffle.server.chunkFetchHandlerThreadsPercent. The returned value is rounded off to
-   * ceiling of the nearest integer.
+   * when sending RPC messages to the shuffle server. The number of server threads needs to
+   * be a multiple of the number of threads used for handling chunked fetch requests. See
+   * SPARK-29206 for more details. This is controlled via configuring a ratio between
+   * io.serverThreads and chunk fetch handler threads, such that # server threads = ratio *
+   * # chunk fetch handler threads. The default value of this ratio is 1, which means the
+   * numbers of threads in both thread pools are equal. If io.serverThreads is not defined,
+   * then 2 * #cores threads will be used for both server threads and chunk fetch handler
+   * threads, ignoring the ratio configuration.
    */
   public int chunkFetchHandlerThreads() {
     if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
     }
-    int chunkFetchHandlerThreadsPercent =
-      conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 100);
-    int threads =
-      this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors();
-    return (int) Math.ceil(threads * (chunkFetchHandlerThreadsPercent / 100.0));
+    int chunkFetchHandlerThreadsRatio = getChunkFetchHandlerThreadsRatio();
+    return this.serverThreads() > 0 ? this.serverThreads() / chunkFetchHandlerThreadsRatio :
+        2 * NettyRuntime.availableProcessors();
   }
 
   /**
