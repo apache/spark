@@ -291,12 +291,14 @@ case class ArrayTransform(
  * Sorts elements in an array using a comparator function.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr, func) - Sorts and returns the array based on the given " +
+  usage = "_FUNC_(expr, func) - Sorts the input array in ascending order. The elements of the " +
+    "input array must be orderable. Null elements will be placed at the end of the returned " +
+    "array. Since 3.0.0 also sorts and returns the array based on the given " +
     "comparator function. The comparator will take two nullable arguments " +
     "representing two nullable elements of the array." +
-    "It returns -1, 0, or 1 as the first nullable element is less than, equal to, or greater" +
-    "than the second nullable element. Null elements will be placed at the end of the returned" +
-    "array. If the comparator function returns other values (including NULL)," +
+    "It returns -1, 0, or 1 as the first nullable element is less than, equal to, or greater " +
+    "than the second nullable element. Null elements will be placed at the end of the returned " +
+    "array. If the comparator function returns other values (including NULL), " +
     "the query will fail and raise an error. By the default it will sort the array in " +
     "ascending mode",
   examples = """
@@ -308,7 +310,7 @@ case class ArrayTransform(
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
  |     ["d", "c", "b", "a", null]
   """,
-  since = "3.0.0")
+  since = "2.4.0")
 case class ArraySort(
     argument: Expression,
     function: Expression)
@@ -366,26 +368,26 @@ case class ArraySort(
     (firstParam, secondParam)
   }
 
-  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
-    val arr = argumentValue.asInstanceOf[ArrayData]
+  def comparator(inputRow: InternalRow): Comparator[Any] = {
     val f = functionForEval
-
-    @transient lazy val customComparator: Comparator[Any] = {
-      (o1: Any, o2: Any) => {
-        if (o1 == null && o2 == null) {
-          0
-        } else if (o1 == null) {
-          1
-        } else if (o2 == null) {
-          -1
-        } else {
-          firstParam.value.set(o2)
-          secondParam.value.set(o1)
-          f.eval(inputRow).asInstanceOf[Int]
-        }
+    (o1: Any, o2: Any) => {
+      if (o1 == null && o2 == null) {
+        0
+      } else if (o1 == null) {
+        1
+      } else if (o2 == null) {
+        -1
+      } else {
+        firstParam.value.set(o2)
+        secondParam.value.set(o1)
+        f.eval(inputRow).asInstanceOf[Int]
       }
     }
-      sortEval(arr, if (function.dataType == BooleanType) lt else customComparator)
+  }
+
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue.asInstanceOf[ArrayData]
+    sortEval(arr, if (function.dataType == BooleanType) lt else comparator(inputRow))
   }
 
   override def prettyName: String = "array_sort"
