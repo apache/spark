@@ -54,13 +54,11 @@ class DataSourceSuite extends SharedSparkSession {
     )
 
     assert(
-      resultPaths.equals(
-        Seq(
-          globPath1Result1,
-          globPath1Result2,
-          globPath2Result1,
-          globPath2Result2
-        )
+      resultPaths.toSet == Set(
+        globPath1Result1,
+        globPath1Result2,
+        globPath2Result1,
+        globPath2Result2
       )
     )
   }
@@ -77,11 +75,9 @@ class DataSourceSuite extends SharedSparkSession {
     )
 
     assert(
-      resultPaths.equals(
-        Seq(
-          path1,
-          path2
-        )
+      resultPaths.toSet == Set(
+        path1,
+        path2
       )
     )
   }
