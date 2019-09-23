@@ -17,59 +17,34 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SortOrder}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
  * A special node that allows skipping query planning all the way to physical execution. This node
- * can be used when a query is being run repeatedly, and the plan doesn't need to be optimized
- * every time, or a plan was already optimized, and planned to the physical level, but we had to
- * go back to logical plan land for some reason (e.g. V1 DataSource write execution).
+ * can be used when a query was planned to the physical level, but we had to go back to logical plan
+ * land for some reason (e.g. V1 DataSource write execution). This will allow the metrics, and the
+ * query plan to properly appear as part of the query execution.
  */
-case class AlreadyPlanned(
-    physicalPlan: SparkPlan,
-    output: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
-  override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))
-
-  override def computeStats(): Statistics = Statistics(sizeInBytes = conf.defaultSizeInBytes)
+case class AlreadyPlanned(physicalPlan: SparkPlan) extends LeafNode {
+  override val output: Seq[Attribute] = physicalPlan.output
+  override lazy val resolved: Boolean = false
 }
 
-case class AlreadyPlannedExec(
-    physicalPlan: SparkPlan,
-    output: Seq[Attribute]) extends LeafExecNode {
-  override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException("AlreadyPlanned nodes should be removed pre-execution")
-  }
-  override def supportsColumnar: Boolean = physicalPlan.supportsColumnar
-  override def vectorTypes: Option[Seq[String]] = physicalPlan.vectorTypes
-  override def outputPartitioning: Partitioning = physicalPlan.outputPartitioning
-  override def outputOrdering: Seq[SortOrder] = physicalPlan.outputOrdering
+class AlreadyPlannedExecution(
+    session: SparkSession,
+    plan: AlreadyPlanned) extends QueryExecution(session, plan) {
+  override lazy val analyzed: LogicalPlan = plan
+  override lazy val optimizedPlan: LogicalPlan = plan
+  override lazy val sparkPlan: SparkPlan = plan.physicalPlan
+  override lazy val executedPlan: SparkPlan = plan.physicalPlan
 }
 
 object AlreadyPlanned {
   def dataFrame(sparkSession: SparkSession, query: SparkPlan): DataFrame = {
-    val plan = AlreadyPlanned(query, query.output)
-    Dataset.ofRows(sparkSession, plan)
-  }
-}
-
-object ExtractAlreadyPlanned extends Rule[SparkPlan] {
-  override def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case AlreadyPlannedExec(alreadyPlanned: SparkPlan, output) =>
-      if (alreadyPlanned.output != output) {
-        val newAttr = output.map(o => o.name -> o).toMap
-        val projections = alreadyPlanned.output.map { o =>
-          Alias(o, o.name)(newAttr(o.name).exprId, o.qualifier, Option(o.metadata))
-        }
-        ProjectExec(projections, alreadyPlanned)
-      } else {
-        alreadyPlanned
-      }
+    val qe = new AlreadyPlannedExecution(sparkSession, AlreadyPlanned(query))
+    new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema))
   }
 }

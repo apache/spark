@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlreadyPlannedSuite extends SparkPlanTest with SharedSparkSession {
@@ -30,24 +31,23 @@ class AlreadyPlannedSuite extends SparkPlanTest with SharedSparkSession {
     checkAnswer(planned, identity, df.toDF().collect())
   }
 
-  test("planning on top - filter") {
+  test("planning on top won't work - filter") {
     val df = spark.range(10)
     val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.executedPlan)
 
-    checkAnswer(planned.where('id < 5), identity, df.toDF().where('id < 5).collect())
+    val e = intercept[AnalysisException] {
+      planned.where('id < 5).collect()
+    }
   }
 
-  test("planning on top - joins") {
+  test("planning on top won't work - joins") {
     val df = spark.range(10)
     val planned = AlreadyPlanned.dataFrame(spark, df.queryExecution.executedPlan)
 
     val join = planned.where('id < 3).alias("l").join(planned.alias("r"), Seq("id"))
-    val expected = df.where('id < 3).alias("l").join(df.alias("r"), Seq("id"))
 
-    checkAnswer(join, identity, expected.collect())
-
-    val useJoinedPlan = AlreadyPlanned.dataFrame(spark, expected.queryExecution.executedPlan)
-    checkAnswer(useJoinedPlan, identity, expected.collect())
-    checkAnswer(useJoinedPlan.where('id < 2), identity, expected.where('id < 2).collect())
+    intercept[AnalysisException] {
+      join.collect()
+    }
   }
 }
