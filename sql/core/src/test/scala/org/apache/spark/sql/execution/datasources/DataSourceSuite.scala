@@ -26,7 +26,7 @@ class DataSourceSuite extends SharedSparkSession {
   import TestPaths._
 
   test("test glob and non glob paths") {
-    val allPaths = DataSource.checkAndGlobPathIfNecessary(
+    val resultPaths = DataSource.checkAndGlobPathIfNecessary(
       Seq(
         path1.toString,
         path2.toString,
@@ -38,11 +38,11 @@ class DataSourceSuite extends SharedSparkSession {
       checkFilesExist = true,
     )
 
-    assert(allPaths.equals(allPathsInFs))
+    assert(resultPaths.toSet == allPathsInFs.toSet)
   }
 
   test("test glob paths") {
-    val allPaths = DataSource.checkAndGlobPathIfNecessary(
+    val resultPaths = DataSource.checkAndGlobPathIfNecessary(
       Seq(
         globPath1.toString,
         globPath2.toString,
@@ -53,7 +53,7 @@ class DataSourceSuite extends SharedSparkSession {
     )
 
     assert(
-      allPaths.equals(
+      resultPaths.equals(
         Seq(
           globPath1Result1,
           globPath1Result2,
@@ -65,7 +65,7 @@ class DataSourceSuite extends SharedSparkSession {
   }
 
   test("test non glob paths") {
-    val allPaths = DataSource.checkAndGlobPathIfNecessary(
+    val resultPaths = DataSource.checkAndGlobPathIfNecessary(
       Seq(
         path1.toString,
         path2.toString,
@@ -76,7 +76,7 @@ class DataSourceSuite extends SharedSparkSession {
     )
 
     assert(
-      allPaths.equals(
+      resultPaths.equals(
         Seq(
           path1,
           path2,
