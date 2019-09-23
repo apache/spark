@@ -52,17 +52,17 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
 // Format of the shuffle block ids (including data and index) should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
 @DeveloperApi
-case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
+case class ShuffleBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
 @DeveloperApi
-case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
+case class ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"
 }
 
 @DeveloperApi
-case class ShuffleIndexBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
+case class ShuffleIndexBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
 }
 
@@ -117,11 +117,11 @@ object BlockId {
     case RDD(rddId, splitIndex) =>
       RDDBlockId(rddId.toInt, splitIndex.toInt)
     case SHUFFLE(shuffleId, mapId, reduceId) =>
-      ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
+      ShuffleBlockId(shuffleId.toInt, mapId.toLong, reduceId.toInt)
     case SHUFFLE_DATA(shuffleId, mapId, reduceId) =>
-      ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
+      ShuffleDataBlockId(shuffleId.toInt, mapId.toLong, reduceId.toInt)
     case SHUFFLE_INDEX(shuffleId, mapId, reduceId) =>
-      ShuffleIndexBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
+      ShuffleIndexBlockId(shuffleId.toInt, mapId.toLong, reduceId.toInt)
     case BROADCAST(broadcastId, field) =>
       BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
     case TASKRESULT(taskId) =>

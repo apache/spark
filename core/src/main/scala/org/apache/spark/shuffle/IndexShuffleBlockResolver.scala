@@ -51,18 +51,18 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-  def getDataFile(shuffleId: Int, mapId: Int): File = {
+  def getDataFile(shuffleId: Int, mapId: Long): File = {
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
-  private def getIndexFile(shuffleId: Int, mapId: Int): File = {
+  private def getIndexFile(shuffleId: Int, mapId: Long): File = {
     blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
   /**
    * Remove data file and index file that contain the output data from one map.
    */
-  def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
+  def removeDataByMap(shuffleId: Int, mapId: Long): Unit = {
     var file = getDataFile(shuffleId, mapId)
     if (file.exists()) {
       if (!file.delete()) {
@@ -135,7 +135,7 @@ private[spark] class IndexShuffleBlockResolver(
    */
   def writeIndexFileAndCommit(
       shuffleId: Int,
-      mapId: Int,
+      mapId: Long,
       lengths: Array[Long],
       dataTmp: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
