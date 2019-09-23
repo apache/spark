@@ -622,11 +622,13 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("special date values") {
-    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
-      val input = Seq(s"""{"d": "$specialValue"}""").toDS()
-      val readback = input.select(from_json($"value", lit("d date"),
-        Map.empty[String, String].asJava)).collect()
-      assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
+    withSQLConf(SQLConf.DIALECT.key -> SQLConf.Dialect.POSTGRESQL.toString) {
+      Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
+        val input = Seq(s"""{"d": "$specialValue"}""").toDS()
+        val readback = input.select(from_json($"value", lit("d date"),
+          Map.empty[String, String].asJava)).collect()
+        assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
+      }
     }
   }
 }
