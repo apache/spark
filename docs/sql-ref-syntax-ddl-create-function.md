@@ -24,7 +24,11 @@ license: |
 in Spark. Temporary functions are scoped at a session level where as permanent
 functions are created in the persistent catalog and are made available to
 all sessions. The resources specified in the `USING` clause are made available
-to all executors when they are executed for the first time.
+to all executors when they are executed for the first time. In addition to the
+SQL interface, spark allows users to create custom user defined scalar and
+aggregate functions using Scala, Python and Java APIs. Please refer to 
+[scalar_functions](sql-getting-started.html#scalar-functions) and 
+[aggregate functions](sql-getting-started#aggregations) for more information.
 
 ### Syntax
 {% highlight sql %}
@@ -44,8 +48,8 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
   <dt><code><em>TEMPORARY</em></code></dt>
   <dd>
     Indicates the scope of function being created. When TEMPORARY is specified, the
-    created function is valid in the current session. No persistent entry is made 
-    in the catalog for these kind of functions.
+    created function is valid and visible in the current session. No persistent
+    entry is made in the catalog for these kind of functions.
   </dd>
   <dt><code><em>IF NOT EXISTS</em></code></dt>
   <dd>
@@ -85,7 +89,7 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
 
 ### Examples
 {% highlight sql %}
--- 1. Create a simple UDF `SimpleUdf` that adds the supplied integet value by 10.
+-- 1. Create a simple UDF `SimpleUdf` that adds the supplied integral value by 10.
 --    import org.apache.hadoop.hive.ql.exec.UDF;
 --    public class SimpleUdf extends UDF {
 --      public int evaluate(int value) {
@@ -134,7 +138,7 @@ SHOW USER FUNCTIONS;
   |   simple_temp_udf|
   +------------------+
 
--- 1. Mofify `SimpleUdf`'s implementation to add supplied integet value by 20.
+-- 1. Mofify `SimpleUdf`'s implementation to add supplied integral value by 20.
 --    import org.apache.hadoop.hive.ql.exec.UDF;
   
 --    public class SimpleUdfR extends UDF {

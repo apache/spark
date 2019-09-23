@@ -346,6 +346,9 @@ For example:
 
 </div>
 
+## Scalar Functions
+(to be filled soon)
+
 ## Aggregations
 
 The [built-in DataFrames functions](api/scala/index.html#org.apache.spark.sql.functions$) provide common
