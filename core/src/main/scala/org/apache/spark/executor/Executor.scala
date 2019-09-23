@@ -629,49 +629,51 @@ private[spark] class Executor(
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
-        case t: Throwable if env.isStopped =>
-          // Log the expected exception after executor.stop without stack traces
-          // see: SPARK-19147
-          logError(s"Exception in $taskName (TID $taskId): ${t.getMessage}")
-
         case t: Throwable =>
-          // Attempt to exit cleanly by informing the driver of our failure.
-          // If anything goes wrong (or this was a fatal exception), we will delegate to
-          // the default uncaught exception handler, which will terminate the Executor.
-          logError(s"Exception in $taskName (TID $taskId)", t)
+          if (env.isStopped) {
+            // Log the expected exception after executor.stop without stack traces
+            // see: SPARK-19147
+            logError(s"Exception in $taskName (TID $taskId): ${t.getMessage}")
 
-          // SPARK-20904: Do not report failure to driver if if happened during shut down. Because
-          // libraries may set up shutdown hooks that race with running tasks during shutdown,
-          // spurious failures may occur and can result in improper accounting in the driver (e.g.
-          // the task failure would not be ignored if the shutdown happened because of premption,
-          // instead of an app issue).
-          if (!ShutdownHookManager.inShutdown()) {
-            val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
-            val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+          } else {
+            // Attempt to exit cleanly by informing the driver of our failure.
+            // If anything goes wrong (or this was a fatal exception), we will delegate to
+            // the default uncaught exception handler, which will terminate the Executor.
+            logError(s"Exception in $taskName (TID $taskId)", t)
 
-            val serializedTaskEndReason = {
-              try {
-                val ef = new ExceptionFailure(t, accUpdates).withAccums(accums)
-                  .withMetricPeaks(metricPeaks)
-                ser.serialize(ef)
-              } catch {
-                case _: NotSerializableException =>
-                  // t is not serializable so just send the stacktrace
-                  val ef = new ExceptionFailure(t, accUpdates, false).withAccums(accums)
+            // SPARK-20904: Do not report failure to driver if if happened during shut down. Because
+            // libraries may set up shutdown hooks that race with running tasks during shutdown,
+            // spurious failures may occur and can result in improper accounting in the driver (e.g.
+            // the task failure would not be ignored if the shutdown happened because of premption,
+            // instead of an app issue).
+            if (!ShutdownHookManager.inShutdown()) {
+              val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
+              val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
+
+              val serializedTaskEndReason = {
+                try {
+                  val ef = new ExceptionFailure(t, accUpdates).withAccums(accums)
                     .withMetricPeaks(metricPeaks)
                   ser.serialize(ef)
+                } catch {
+                  case _: NotSerializableException =>
+                    // t is not serializable so just send the stacktrace
+                    val ef = new ExceptionFailure(t, accUpdates, false).withAccums(accums)
+                      .withMetricPeaks(metricPeaks)
+                    ser.serialize(ef)
+                }
               }
+              setTaskFinishedAndClearInterruptStatus()
+              execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
+            } else {
+              logInfo("Not reporting error to driver during JVM shutdown.")
             }
-            setTaskFinishedAndClearInterruptStatus()
-            execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
-          } else {
-            logInfo("Not reporting error to driver during JVM shutdown.")
-          }
 
-          // Don't forcibly exit unless the exception was inherently fatal, to avoid
-          // stopping other tasks unnecessarily.
-          if (!t.isInstanceOf[SparkOutOfMemoryError] && Utils.isFatalError(t)) {
-            uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
+            // Don't forcibly exit unless the exception was inherently fatal, to avoid
+            // stopping other tasks unnecessarily.
+            if (!t.isInstanceOf[SparkOutOfMemoryError] && Utils.isFatalError(t)) {
+              uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
+            }
           }
       } finally {
         runningTasks.remove(taskId)
