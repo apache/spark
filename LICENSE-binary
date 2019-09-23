@@ -396,6 +396,8 @@ org.codehaus.janino:commons-compiler
 org.codehaus.janino:janino
 jline:jline
 org.jodd:jodd-core
+com.github.wendykierp:JTransforms
+pl.edu.icm:JLargeArrays
 
 
 BSD 3-Clause
@@ -433,8 +435,12 @@ is distributed under the 3-Clause BSD license.
 MIT License
 -----------
 
-org.spire-math:spire-macros_2.12
-org.spire-math:spire_2.12
+org.typelevel:spire_2.12
+org.typelevel:spire-macros_2.12
+org.typelevel:spire-platform_2.12
+org.typelevel:spire-util_2.12
+org.typelevel:algebra_2.12:jar
+org.typelevel:cats-kernel_2.12
 org.typelevel:machinist_2.12
 net.razorvine:pyrolite
 org.slf4j:jcl-over-slf4j
@@ -495,11 +501,6 @@ Eclipse Public License (EPL) 2.0
 
 jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/ee4j.ca
 jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
-
-Mozilla Public License (MPL) 1.1
---------------------------------
-
-com.github.rwl:jtransforms https://sourceforge.net/projects/jtransforms/
 
 
 Python Software Foundation License

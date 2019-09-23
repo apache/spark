@@ -76,9 +76,7 @@ case class CurrentDate(timeZoneId: Option[String] = None)
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def eval(input: InternalRow): Any = {
-    localDateToDays(LocalDate.now(zoneId))
-  }
+  override def eval(input: InternalRow): Any = currentDate(zoneId)
 
   override def prettyName: String = "current_date"
 }
@@ -98,9 +96,7 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 
   override def dataType: DataType = TimestampType
 
-  override def eval(input: InternalRow): Any = {
-    instantToMicros(Instant.now())
-  }
+  override def eval(input: InternalRow): Any = currentTimestamp()
 
   override def prettyName: String = "current_timestamp"
 }
@@ -592,19 +588,35 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  @transient private lazy val formatter: Option[TimestampFormatter] = {
+    if (right.foldable) {
+      Option(right.eval()).map(format => TimestampFormatter(format.toString, zoneId))
+    } else None
+  }
+
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val df = TimestampFormatter(format.toString, zoneId)
-    UTF8String.fromString(df.format(timestamp.asInstanceOf[Long]))
+    val tf = if (formatter.isEmpty) {
+      TimestampFormatter(format.toString, zoneId)
+    } else {
+      formatter.get
+    }
+    UTF8String.fromString(tf.format(timestamp.asInstanceOf[Long]))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val locale = ctx.addReferenceObj("locale", Locale.US)
-    defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid, $locale)
+    formatter.map { tf =>
+      val timestampFormatter = ctx.addReferenceObj("timestampFormatter", tf)
+      defineCodeGen(ctx, ev, (timestamp, _) => {
+        s"""UTF8String.fromString($timestampFormatter.format($timestamp))"""
+      })
+    }.getOrElse {
+      val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      defineCodeGen(ctx, ev, (timestamp, format) => {
+        s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid)
           .format($timestamp))"""
-    })
+      })
+    }
   }
 
   override def prettyName: String = "date_format"
@@ -647,7 +659,7 @@ case class ToUnixTimestamp(
  * Converts time string with given pattern to Unix time stamp (in seconds), returns null if fail.
  * See [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
- * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
+ * If the second parameter is missing, use "uuuu-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
  * If the first parameter is a Date or Timestamp instead of String, we will ignore the
  * second parameter.
@@ -2039,10 +2051,15 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
       if (!field.foldable) {
         throw new AnalysisException("The field parameter needs to be a foldable string value.")
       }
-      val fieldStr = field.eval().asInstanceOf[UTF8String].toString
-      DatePart.parseExtractField(fieldStr, source, {
-        throw new AnalysisException(s"Literals of type '$fieldStr' are currently not supported.")
-      })
+      val fieldEval = field.eval()
+      if (fieldEval == null) {
+        Literal(null, DoubleType)
+      } else {
+        val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
+        DatePart.parseExtractField(fieldStr, source, {
+          throw new AnalysisException(s"Literals of type '$fieldStr' are currently not supported.")
+        })
+      }
     })
   }
 

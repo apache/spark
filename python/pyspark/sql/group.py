@@ -22,6 +22,7 @@ from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import *
+from pyspark.sql.cogroup import CoGroupedData
 
 __all__ = ["GroupedData"]
 
@@ -218,6 +219,15 @@ class GroupedData(object):
             jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self._df)
 
+    @since(3.0)
+    def cogroup(self, other):
+        """
+        Cogroups this group with another group so that we can run cogrouped operations.
+
+        See :class:`CoGroupedData` for the operations that can be run.
+        """
+        return CoGroupedData(self, other)
+
     @since(2.3)
     def apply(self, udf):
         """
@@ -232,7 +242,7 @@ class GroupedData(object):
         The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
         returnType of the pandas udf.
 
-        .. note:: This function requires a full shuffle. all the data of a group will be loaded
+        .. note:: This function requires a full shuffle. All the data of a group will be loaded
             into memory, so the user should be aware of the potential OOM risk if data is skewed
             and certain groups are too large to fit in memory.
 

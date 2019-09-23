@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.client
+package org.apache.spark.tags;
 
-import scala.collection.immutable.IndexedSeq
+import org.scalatest.TagAnnotation;
 
-import org.scalatest.Suite
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-class HiveClientSuites extends Suite with HiveClientVersions {
-  override def nestedSuites: IndexedSeq[Suite] = {
-    // Hive 0.12 does not provide the partition filtering API we call
-    versions.filterNot(_ == "0.12").map(new HiveClientSuite(_))
-  }
-}
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface ExtendedSQLTest { }

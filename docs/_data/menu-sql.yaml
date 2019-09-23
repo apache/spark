@@ -64,15 +64,7 @@
     - text: Usage Notes
       url: sql-pyspark-pandas-with-arrow.html#usage-notes
 - text: Migration Guide
-  url: sql-migration-guide.html
-  subitems:
-    - text: Spark SQL Upgrading Guide
-      url: sql-migration-guide-upgrade.html
-    - text: Compatibility with Apache Hive
-      url: sql-migration-guide-hive-compatibility.html
-    - text: SQL Reserved/Non-Reserved Keywords
-      url: sql-reserved-and-non-reserved-keywords.html
-
+  url: sql-migration-old.html
 - text: SQL Reference
   url: sql-ref.html
   subitems:
@@ -141,6 +133,8 @@
                   url: sql-ref-syntax-qry-select-limit.html
                 - text: Set operations
                   url: sql-ref-syntax-qry-select-setops.html
+                - text: USE database
+                  url: sql-ref-syntax-qry-select-usedb.html
                 - text: Common Table Expression(CTE)
                   url: sql-ref-syntax-qry-select-cte.html
                 - text: Subqueries
