@@ -1,0 +1,100 @@
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Invoke extract for timestamp:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to timestamp                                   438            548         128         22.8          43.8       1.0X
+MILLENNIUM of timestamp                            1343           1453         139          7.4         134.3       0.3X
+CENTURY of timestamp                               1287           1305          16          7.8         128.7       0.3X
+DECADE of timestamp                                1253           1258           7          8.0         125.3       0.3X
+YEAR of timestamp                                  1224           1247          24          8.2         122.4       0.4X
+ISOYEAR of timestamp                               1356           1383          35          7.4         135.6       0.3X
+QUARTER of timestamp                               1386           1395           8          7.2         138.6       0.3X
+MONTH of timestamp                                 1215           1227          11          8.2         121.5       0.4X
+WEEK of timestamp                                  1711           1720           9          5.8         171.1       0.3X
+DAY of timestamp                                   1227           1251          37          8.1         122.7       0.4X
+DAYOFWEEK of timestamp                             1386           1392          11          7.2         138.6       0.3X
+DOW of timestamp                                   1405           1426          34          7.1         140.5       0.3X
+ISODOW of timestamp                                1344           1363          30          7.4         134.4       0.3X
+DOY of timestamp                                   1249           1251           3          8.0         124.9       0.4X
+HOUR of timestamp                                   766            773           9         13.1          76.6       0.6X
+MINUTE of timestamp                                 761            774          22         13.1          76.1       0.6X
+SECOND of timestamp                                 627            638          11         16.0          62.7       0.7X
+MILLISECONDS of timestamp                           700            704           4         14.3          70.0       0.6X
+MICROSECONDS of timestamp                           615            627          10         16.3          61.5       0.7X
+EPOCH of timestamp                                28897          28929          29          0.3        2889.7       0.0X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Invoke extract for date:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to date                                       1078           1081           4          9.3         107.8       1.0X
+MILLENNIUM of date                                 1232           1244          16          8.1         123.2       0.9X
+CENTURY of date                                    1233           1234           1          8.1         123.3       0.9X
+DECADE of date                                     1210           1212           3          8.3         121.0       0.9X
+YEAR of date                                       1201           1212           9          8.3         120.1       0.9X
+ISOYEAR of date                                    1468           1474           5          6.8         146.8       0.7X
+QUARTER of date                                    1474           1482          11          6.8         147.4       0.7X
+MONTH of date                                      1211           1215           4          8.3         121.1       0.9X
+WEEK of date                                       1684           1685           2          5.9         168.4       0.6X
+DAY of date                                        1208           1214           6          8.3         120.8       0.9X
+DAYOFWEEK of date                                  1374           1387          23          7.3         137.4       0.8X
+DOW of date                                        1396           1404          11          7.2         139.6       0.8X
+ISODOW of date                                     1320           1322           3          7.6         132.0       0.8X
+DOY of date                                        1243           1258          13          8.0         124.3       0.9X
+HOUR of date                                       1997           2018          29          5.0         199.7       0.5X
+MINUTE of date                                     2021           2039          26          4.9         202.1       0.5X
+SECOND of date                                     1862           1878          22          5.4         186.2       0.6X
+MILLISECONDS of date                               1998           2015          16          5.0         199.8       0.5X
+MICROSECONDS of date                               1893           1901           7          5.3         189.3       0.6X
+EPOCH of date                                     30353          30376          41          0.3        3035.3       0.0X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Invoke date_part for timestamp:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to timestamp                                   384            389           4         26.1          38.4       1.0X
+MILLENNIUM of timestamp                            1237           1244           6          8.1         123.7       0.3X
+CENTURY of timestamp                               1236           1244           7          8.1         123.6       0.3X
+DECADE of timestamp                                1204           1210           9          8.3         120.4       0.3X
+YEAR of timestamp                                  1197           1207          16          8.4         119.7       0.3X
+ISOYEAR of timestamp                               1466           1470           4          6.8         146.6       0.3X
+QUARTER of timestamp                               1500           1505           6          6.7         150.0       0.3X
+MONTH of timestamp                                 1190           1218          25          8.4         119.0       0.3X
+WEEK of timestamp                                  1681           1710          25          5.9         168.1       0.2X
+DAY of timestamp                                   1201           1206           7          8.3         120.1       0.3X
+DAYOFWEEK of timestamp                             1376           1390          13          7.3         137.6       0.3X
+DOW of timestamp                                   1399           1409          17          7.1         139.9       0.3X
+ISODOW of timestamp                                1347           1354           8          7.4         134.7       0.3X
+DOY of timestamp                                   1257           1263           6          8.0         125.7       0.3X
+HOUR of timestamp                                   749            753           5         13.4          74.9       0.5X
+MINUTE of timestamp                                 746            749           4         13.4          74.6       0.5X
+SECOND of timestamp                                 626            637          15         16.0          62.6       0.6X
+MILLISECONDS of timestamp                           695            724          25         14.4          69.5       0.6X
+MICROSECONDS of timestamp                           611            629          27         16.4          61.1       0.6X
+EPOCH of timestamp                                28908          28938          31          0.3        2890.8       0.0X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Invoke date_part for date:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cast to date                                       1076           1083           6          9.3         107.6       1.0X
+MILLENNIUM of date                                 1230           1236           7          8.1         123.0       0.9X
+CENTURY of date                                    1245           1250           5          8.0         124.5       0.9X
+DECADE of date                                     1206           1211           8          8.3         120.6       0.9X
+YEAR of date                                       1194           1201           6          8.4         119.4       0.9X
+ISOYEAR of date                                    1461           1471           9          6.8         146.1       0.7X
+QUARTER of date                                    1496           1500           7          6.7         149.6       0.7X
+MONTH of date                                      1192           1195           4          8.4         119.2       0.9X
+WEEK of date                                       1682           1687           6          5.9         168.2       0.6X
+DAY of date                                        1199           1207          14          8.3         119.9       0.9X
+DAYOFWEEK of date                                  1372           1383          19          7.3         137.2       0.8X
+DOW of date                                        1384           1393          14          7.2         138.4       0.8X
+ISODOW of date                                     1327           1338          10          7.5         132.7       0.8X
+DOY of date                                        1243           1247           7          8.0         124.3       0.9X
+HOUR of date                                       2001           2010          10          5.0         200.1       0.5X
+MINUTE of date                                     2046           2053           9          4.9         204.6       0.5X
+SECOND of date                                     1859           1863           4          5.4         185.9       0.6X
+MILLISECONDS of date                               2000           2013          16          5.0         200.0       0.5X
+MICROSECONDS of date                               1856           1857           1          5.4         185.6       0.6X
+EPOCH of date                                     30365          30388          29          0.3        3036.5       0.0X
+

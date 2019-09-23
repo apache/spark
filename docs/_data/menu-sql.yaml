@@ -133,6 +133,8 @@
                   url: sql-ref-syntax-qry-select-limit.html
                 - text: Set operations
                   url: sql-ref-syntax-qry-select-setops.html
+                - text: USE database
+                  url: sql-ref-syntax-qry-select-usedb.html
                 - text: Common Table Expression(CTE)
                   url: sql-ref-syntax-qry-select-cte.html
                 - text: Subqueries

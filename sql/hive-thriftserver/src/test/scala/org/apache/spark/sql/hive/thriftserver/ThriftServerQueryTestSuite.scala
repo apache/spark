@@ -110,7 +110,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
         case _: PgSQLTest =>
           // PostgreSQL enabled cartesian product by default.
           statement.execute(s"SET ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
-          statement.execute(s"SET ${SQLConf.ANSI_SQL_PARSER.key} = true")
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.PREFER_INTEGRAL_DIVISION.key} = true")
         case _ =>
       }

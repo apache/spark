@@ -285,7 +285,6 @@ trait MesosSchedulerUtils extends Logging {
    * The attribute values are the mesos attribute types and they are
    *
    * @param offerAttributes the attributes offered
-   * @return
    */
   protected def toAttributeMap(offerAttributes: JList[Attribute])
     : Map[String, GeneratedMessageV3] = {
