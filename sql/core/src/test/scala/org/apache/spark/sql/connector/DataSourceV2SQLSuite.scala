@@ -1049,6 +1049,31 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("Update: basic - update all") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, name string, age int, p int)
+           |USING foo
+           |PARTITIONED BY (id, p)
+         """.stripMargin)
+      sql(
+        s"""
+           |INSERT INTO $t
+           |VALUES (1L, 'Herry', 26, 1),
+           |(2L, 'Jack', 31, 2),
+           |(3L, 'Lisa', 28, 3),
+           |(4L, 'Frank', 33, 3)
+         """.stripMargin)
+    }
+    val errMsg = "Update table is not supported temporarily"
+    testCreateAnalysisError(
+      s"UPDATE $t SET name='Robert', age=32",
+      errMsg
+    )
+  }
+
   private def testCreateAnalysisError(sqlStatement: String, expectedError: String): Unit = {
     val errMsg = intercept[AnalysisException] {
       sql(sqlStatement)
