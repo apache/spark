@@ -139,7 +139,8 @@ object SQLConf {
       }
     } else {
       val isSchedulerEventLoopThread = SparkContext.getActive
-        .map(_.dagScheduler.eventProcessLoop.eventThread)
+        .flatMap { sc => Option(sc.dagScheduler) }
+        .map(_.eventProcessLoop.eventThread)
         .exists(_.getId == Thread.currentThread().getId)
       if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
@@ -409,12 +410,6 @@ object SQLConf {
       "aliases) which might negatively impact overall runtime.")
     .booleanConf
     .createWithDefault(true)
-
-  val ANSI_SQL_PARSER =
-    buildConf("spark.sql.parser.ansi.enabled")
-      .doc("When true, tries to conform to ANSI SQL syntax.")
-      .booleanConf
-      .createWithDefault(false)
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
@@ -1556,16 +1551,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DECIMAL_OPERATIONS_NULL_ON_OVERFLOW =
-    buildConf("spark.sql.decimalOperations.nullOnOverflow")
-      .internal()
-      .doc("When true (default), if an overflow on a decimal occurs, then NULL is returned. " +
-        "Spark's older versions and Hive behave in this way. If turned to false, SQL ANSI 2011 " +
-        "specification will be followed instead: an arithmetic exception is thrown, as most " +
-        "of the SQL databases do.")
-      .booleanConf
-      .createWithDefault(true)
-
   val LITERAL_PICK_MINIMUM_PRECISION =
     buildConf("spark.sql.legacy.literal.pickMinimumPrecision")
       .internal()
@@ -1721,6 +1706,14 @@ object SQLConf {
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createOptional
+
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
+      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
+      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser.")
+    .booleanConf
+    .createWithDefault(false)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -1884,15 +1877,6 @@ object SQLConf {
         "output ordering, which is expensive and may make the planning quite slow.")
     .booleanConf
     .createWithDefault(false)
-
-  val FAIL_ON_INTEGRAL_TYPE_OVERFLOW =
-    buildConf("spark.sql.failOnIntegralTypeOverflow")
-      .doc("If it is set to true, all operations on integral fields throw an " +
-        "exception if an overflow occurs. If it is false (default), in case of overflow a wrong " +
-        "result is returned.")
-      .internal()
-      .booleanConf
-      .createWithDefault(false)
 
   val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
     buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
@@ -2194,8 +2178,6 @@ class SQLConf extends Serializable with Logging {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
-  def ansiParserEnabled: Boolean = getConf(ANSI_SQL_PARSER)
-
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
@@ -2417,10 +2399,6 @@ class SQLConf extends Serializable with Logging {
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 
-  def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
-
-  def failOnIntegralTypeOverflow: Boolean = getConf(FAIL_ON_INTEGRAL_TYPE_OVERFLOW)
-
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
   def continuousStreamingEpochBacklogQueueSize: Int =
@@ -2452,6 +2430,8 @@ class SQLConf extends Serializable with Logging {
 
   def storeAssignmentPolicy: Option[StoreAssignmentPolicy.Value] =
     getConf(STORE_ASSIGNMENT_POLICY).map(StoreAssignmentPolicy.withName)
+
+  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 

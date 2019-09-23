@@ -204,6 +204,14 @@ sealed trait Vector extends Serializable {
    */
   @Since("2.0.0")
   def asML: newlinalg.Vector
+
+  /**
+   * Calculate the dot product of this vector with another.
+   *
+   * If `size` does not match an [[IllegalArgumentException]] is thrown.
+   */
+  @Since("3.0.0")
+  def dot(v: Vector): Double = BLAS.dot(this, v)
 }
 
 /**

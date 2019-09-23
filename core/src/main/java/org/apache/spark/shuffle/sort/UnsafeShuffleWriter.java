@@ -57,6 +57,7 @@ import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
 import org.apache.spark.storage.BlockManager;
+import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
 
@@ -382,6 +383,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         ShufflePartitionWriter writer = mapWriter.getPartitionWriter(partition);
         OutputStream partitionOutput = writer.openStream();
         try {
+          partitionOutput = new TimeTrackingOutputStream(writeMetrics, partitionOutput);
           partitionOutput = blockManager.serializerManager().wrapForEncryption(partitionOutput);
           if (compressionCodec != null) {
             partitionOutput = compressionCodec.compressedOutputStream(partitionOutput);

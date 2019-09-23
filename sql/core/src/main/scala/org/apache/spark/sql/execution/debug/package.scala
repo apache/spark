@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.Collections
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
@@ -27,7 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
@@ -81,11 +82,20 @@ package object debug {
   def writeCodegen(append: String => Unit, plan: SparkPlan): Unit = {
     val codegenSeq = codegenStringSeq(plan)
     append(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
-    for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
-      append(s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n")
+    for (((subtree, code, codeStats), i) <- codegenSeq.zipWithIndex) {
+      val usedConstPoolRatio = if (codeStats.maxConstPoolSize > 0) {
+        val rt = 100.0 * codeStats.maxConstPoolSize / CodeGenerator.MAX_JVM_CONSTANT_POOL_SIZE
+        "(%.2f%% used)".format(rt)
+      } else {
+        ""
+      }
+      val codeStatsStr = s"maxMethodCodeSize:${codeStats.maxMethodCodeSize}; " +
+        s"maxConstantPoolSize:${codeStats.maxConstPoolSize}$usedConstPoolRatio; " +
+        s"numInnerClasses:${codeStats.numInnerClasses}"
+      append(s"== Subtree ${i + 1} / ${codegenSeq.size} ($codeStatsStr) ==\n")
       append(subtree)
       append("\nGenerated code:\n")
-      append(s"${code}\n")
+      append(s"$code\n")
     }
   }
 
@@ -95,7 +105,7 @@ package object debug {
    * @param plan the query plan for codegen
    * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
    */
-  def codegenStringSeq(plan: SparkPlan): Seq[(String, String)] = {
+  def codegenStringSeq(plan: SparkPlan): Seq[(String, String, ByteCodeStats)] = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
     plan transform {
       case s: WholeStageCodegenExec =>
@@ -105,7 +115,13 @@ package object debug {
     }
     codegenSubtrees.toSeq.map { subtree =>
       val (_, source) = subtree.doCodeGen()
-      (subtree.toString, CodeFormatter.format(source))
+      val codeStats = try {
+        CodeGenerator.compile(source)._2
+      } catch {
+        case NonFatal(_) =>
+          ByteCodeStats.UNAVAILABLE
+      }
+      (subtree.toString, CodeFormatter.format(source), codeStats)
     }
   }
 
@@ -130,7 +146,7 @@ package object debug {
    * @param query the streaming query for codegen
    * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
    */
-  def codegenStringSeq(query: StreamingQuery): Seq[(String, String)] = {
+  def codegenStringSeq(query: StreamingQuery): Seq[(String, String, ByteCodeStats)] = {
     val w = asStreamExecution(query)
     if (w.lastExecution != null) {
       codegenStringSeq(w.lastExecution.executedPlan)
