@@ -1068,7 +1068,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case StringType =>
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
         val zid = getZoneId()
-        val sv = ctx.addReferenceObj("supportSpecialValues", supportSpecialValues)
+        val sv = supportSpecialValues.toString
         (c, evPrim, evNull) =>
           code"""
           scala.Option<Integer> $intOpt =
