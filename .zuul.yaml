@@ -1,0 +1,14 @@
+- project:
+    name: theopenlab/spark
+    check:
+      jobs:
+        - spark-build-and-python-test-arm64
+    
+- job:
+    name: spark-build-and-python-test-arm64
+    parent: init-test
+    description: |
+      The spark build and test other modules in openlab cluster.
+    run: .zuul/playbooks/spark-build/run_python_tests.yaml
+    nodeset: ubuntu-xenial-arm64
+    timeout: 86400

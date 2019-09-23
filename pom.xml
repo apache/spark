@@ -241,6 +241,7 @@
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
 
     <CodeCacheSize>1g</CodeCacheSize>
+    <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
   </properties>
   <repositories>
     <repository>
@@ -527,7 +528,7 @@
         <version>${commons.httpcore.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.fusesource.leveldbjni</groupId>
+        <groupId>${leveldbjni.group}</groupId>
         <artifactId>leveldbjni-all</artifactId>
         <version>1.8</version>
       </dependency>
@@ -3127,5 +3128,11 @@
     <profile>
       <id>sparkr</id>
     </profile>
+    <!--profile>
+      <id>aarch64</id>
+      <properties>
+        <leveldbjni.group>org.openlabtesting.leveldbjni</leveldbjni.group>
+      </properties>
+    </profile-->
   </profiles>
 </project>

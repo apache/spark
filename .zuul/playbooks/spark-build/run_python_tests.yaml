@@ -1,0 +1,40 @@
+- hosts: all
+  tasks:
+    - name: Build spark master using mvn with hadoop 2.7
+      shell:
+        cmd: |
+          set -exo pipefail
+          sudo apt-get update -y
+
+          # Install java
+          sudo apt-get install default-jre -y
+          sudo apt-get install default-jdk -y
+          java_home=$(dirname $(dirname $(update-alternatives --list javac)))
+          echo "export JAVA_HOME=${java_home}" >> ~/.profile
+          echo "export PATH=${java_home}/bin:$PATH" >> ~/.profile
+          source ~/.profile
+  
+          # Install maven
+          wget http://www.us.apache.org/dist/maven/maven-3/3.6.2/binaries/apache-maven-3.6.2-bin.tar.gz
+          tar -xvf apache-maven-3.6.2-bin.tar.gz
+          export PATH=$PWD/apache-maven-3.6.2/bin:$PATH
+
+          # fix kafka authfail tests
+          sudo sed -i "s|127.0.0.1 $(hostname) localhost|127.0.0.1 localhost $(hostname)|" /etc/hosts
+
+          cd {{ ansible_user_dir }}/{{ zuul.project.src_dir }}
+
+          ./build/mvn install package -DskipTests -Phadoop-2.7 -Pyarn -Phive -Phive-thriftserver -Pkinesis-asl -Pmesos
+
+          # use leveldbjni arm supporting jar
+          wget https://repo1.maven.org/maven2/org/openlabtesting/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar
+          mvn install:install-file -DgroupId=org.fusesource.leveldbjni -DartifactId=leveldbjni-all -Dversion=1.8 -Dpackaging=jar -Dfile=leveldbjni-all-1.8.jar
+          
+          # install packages needed
+          pip install converage numpy
+          # run python tests
+          python/run-tests --python-executables=python3.5
+
+        chdir: '/home/zuul/src'
+        executable: /bin/bash
+      environment: '{{ global_env }}'

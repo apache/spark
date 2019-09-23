@@ -52,7 +52,7 @@
     </dependency>
 
     <dependency>
-      <groupId>org.fusesource.leveldbjni</groupId>
+      <groupId>${leveldbjni.group}</groupId>
       <artifactId>leveldbjni-all</artifactId>
       <version>1.8</version>
     </dependency>
