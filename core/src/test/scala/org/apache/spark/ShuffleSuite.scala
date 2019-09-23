@@ -360,7 +360,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val metricsSystem = sc.env.metricsSystem
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+    val shuffleHandle = manager.registerShuffle(0, shuffleDep)
     mapTrackerMaster.registerShuffle(0, 1)
 
     // first attempt -- its successful

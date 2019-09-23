@@ -91,7 +91,7 @@ private[spark] class ShuffleMapTask(
 
     val rdd = rddAndDep._1
     val dep = rddAndDep._2
-    dep.shuffleWriterProcessor.write(rdd, dep, partitionId, context, partition)
+    dep.shuffleWriterProcessor.write(rdd, dep, context, partition)
   }
 
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
