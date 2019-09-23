@@ -59,8 +59,8 @@ SHOW USER FUNCTIONS;
   | default.test_avg  |
   +-------------------+
 
--- Create Temporary function `temp_avg`
-CREATE TEMPORARY FUNCTION temp_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage';
+-- Create Temporary function `test_avg`
+CREATE TEMPORARY FUNCTION test_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage';
 
 -- List user functions
 SHOW USER FUNCTIONS;
@@ -68,7 +68,7 @@ SHOW USER FUNCTIONS;
   |     function      |
   +-------------------+
   | default.test_avg  |
-  | temp_avg          |
+  | test_avg          |
   +-------------------+
 
 -- Drop Permanent function
