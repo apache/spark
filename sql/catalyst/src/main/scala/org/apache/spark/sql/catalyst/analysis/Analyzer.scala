@@ -75,7 +75,7 @@ object FakeV2SessionCatalog extends TableCatalog {
   override def dropTable(ident: Identifier): Boolean = fail()
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
-  override def name(): String = fail()
+  override def name(): String = CatalogManager.SESSION_CATALOG_NAME
 }
 
 /**
@@ -133,7 +133,7 @@ class Analyzer(
     this(catalog, v2SessionCatalog, conf, conf.optimizerMaxIterations)
   }
 
-  override val catalogManager: CatalogManager = new CatalogManager(conf, v2SessionCatalog)
+  override val catalogManager: CatalogManager = new CatalogManager(conf, v2SessionCatalog, catalog)
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {
