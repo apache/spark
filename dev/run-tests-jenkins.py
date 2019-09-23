@@ -196,7 +196,7 @@ def main():
     # format: http://linux.die.net/man/1/timeout
     # must be less than the timeout configured on Jenkins. Usually Jenkins's timeout is higher
     # then this. Please consult with the build manager or a committer when it should be increased.
-    tests_timeout = "400m"
+    tests_timeout = "4m"
 
     # Array to capture all test names to run on the pull request. These tests are represented
     # by their file equivalents in the dev/tests/ directory.
@@ -230,10 +230,10 @@ def main():
 
     # post end message
     result_message = github_message('has finished')
-    result_message += '\n' + 'This patch tested by %s with %s and %s' % (
+    result_message += '\n\n' + ' * This patch tested by `%s` with `%s` and `%s`' % (
         os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt"),
         os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7"),
-        os.environ["JAVA_HOME"]) + '\n'
+        os.environ["JAVA_HOME"])
     result_message += '\n' + test_result_note + '\n'
     result_message += '\n'.join(pr_check_results)
 
