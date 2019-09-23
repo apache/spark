@@ -172,6 +172,7 @@ object InMemoryFileIndex extends Logging {
       areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
 
     val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
+    val ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
@@ -182,6 +183,7 @@ object InMemoryFileIndex extends Logging {
           filter,
           Some(sparkSession),
           ignoreMissingFiles = ignoreMissingFiles,
+          ignoreLocality = ignoreLocality,
           isRootPath = areRootPaths)
         (path, leafFiles)
       }
@@ -222,6 +224,7 @@ object InMemoryFileIndex extends Logging {
               filter,
               None,
               ignoreMissingFiles = ignoreMissingFiles,
+              ignoreLocality = ignoreLocality,
               isRootPath = areRootPaths)
             (path, leafFiles)
           }.iterator
@@ -288,10 +291,10 @@ object InMemoryFileIndex extends Logging {
       filter: PathFilter,
       sessionOpt: Option[SparkSession],
       ignoreMissingFiles: Boolean,
+      ignoreLocality: Boolean,
       isRootPath: Boolean): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
-    val ignoreLocality = hadoopConf.getBoolean(SQLConf.IGNORE_DATA_LOCALITY.key, false)
 
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.
@@ -355,6 +358,7 @@ object InMemoryFileIndex extends Logging {
               filter,
               sessionOpt,
               ignoreMissingFiles = ignoreMissingFiles,
+              ignoreLocality = ignoreLocality,
               isRootPath = false)
           }
       }

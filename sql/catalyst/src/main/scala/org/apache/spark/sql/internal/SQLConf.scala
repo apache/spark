@@ -832,6 +832,14 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val IGNORE_DATA_LOCALITY =
+    buildConf("spark.sql.sources.ignore.datalocality")
+      .doc("If it is set to true, Spark will not fetch the block locations for each file on " +
+        "listing files, which will greatly accelerate the list file operation, while loss " +
+        "data locality.")
+      .booleanConf
+      .createWithDefault(false)
+
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
   val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY =
@@ -1979,14 +1987,6 @@ object SQLConf {
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
       .createWithDefault(true)
-
-  val IGNORE_DATA_LOCALITY =
-    buildConf("spark.sql.ignore.datalocality")
-      .doc("If it is set to true, Spark won't fetch the block locations for each file on " +
-        "listing files, which will greatly accelerate the list file operation, while loss " +
-        "data locality.")
-      .booleanConf
-      .createWithDefault(false)
 }
 
 /**
