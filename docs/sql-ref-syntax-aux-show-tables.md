@@ -20,7 +20,10 @@ license: |
 ---
 ### Description
 
-List all the `tables` from the database with `database-name` and `is temporary table`.
+`SHOW TABLES` statement returns all the tables for an optionally specified `database`.
+Additionally, the output of this statement may be filtered via an optional matching
+pattern. If no database is specified then the tables are returned from the 
+current database.
 
 ### Syntax
 {% highlight sql %}
