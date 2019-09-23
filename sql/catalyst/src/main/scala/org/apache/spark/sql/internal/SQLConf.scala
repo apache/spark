@@ -1701,7 +1701,7 @@ object SQLConf {
 
   val DYNAMIC_PARTITION_MAX_PARTITIONS =
     buildConf("spark.sql.dynamic.partition.maxPartitions")
-      .doc("Maximum number of dynamic partitions allowed to be created in total. " +
+      .doc("Maximum total number of dynamic partitions allowed to be created by one DML. " +
         s"This only takes effect when ${FILE_COMMIT_PROTOCOL_CLASS.key} set to " +
         s"org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
       .intConf
