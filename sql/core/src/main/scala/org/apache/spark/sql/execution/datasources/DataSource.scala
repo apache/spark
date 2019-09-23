@@ -734,30 +734,45 @@ object DataSource extends Logging {
    * Checks and returns files in all the paths.
    */
   private[sql] def checkAndGlobPathIfNecessary(
-      paths: Seq[String],
+      pathStrings: Seq[String],
       hadoopConf: Configuration,
       checkEmptyGlobPath: Boolean,
       checkFilesExist: Boolean): Seq[Path] = {
-    val allGlobPath = paths.flatMap { path =>
-      val hdfsPath = new Path(path)
-      val fs = hdfsPath.getFileSystem(hadoopConf)
-      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      val globPath = SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
-
-      if (checkEmptyGlobPath && globPath.isEmpty) {
-        throw new AnalysisException(s"Path does not exist: $qualified")
+    val qualifiedPaths = pathStrings
+      .map{pathString =>
+        val path = new Path(pathString)
+        val fs = path.getFileSystem(hadoopConf)
+        path.makeQualified(fs.getUri, fs.getWorkingDirectory)
       }
 
-      // Sufficient to check head of the globPath seq for non-glob scenario
-      // Don't need to check once again if files exist in streaming mode
-      if (checkFilesExist && !fs.exists(globPath.head)) {
-        throw new AnalysisException(s"Path does not exist: ${globPath.head}")
+    // Split the paths into glob and non glob paths, because we don't need to do an existence check
+    // for globbed paths.
+    val globPaths = qualifiedPaths
+      .filter(path => SparkHadoopUtil.get.isGlobPath(path))
+    val nonGlobPaths = qualifiedPaths
+      .filter(path => !SparkHadoopUtil.get.isGlobPath(path))
+
+    val globbedPaths = globPaths.par.flatMap { globPath =>
+      val fs = globPath.getFileSystem(hadoopConf)
+      val globResult = SparkHadoopUtil.get.globPath(fs, globPath)
+
+      if (checkEmptyGlobPath && globResult.isEmpty) {
+        throw new AnalysisException(s"Path does not exist: $globPath")
       }
-      globPath
+
+      globResult
     }
 
+    nonGlobPaths.par.foreach { path =>
+      val fs = path.getFileSystem(hadoopConf)
+      if (checkFilesExist && !fs.exists(path)) {
+        throw new AnalysisException(s"Path does not exist: $path")
+      }
+    }
+
+    val allPaths = globbedPaths ++ nonGlobPaths
     if (checkFilesExist) {
-      val (filteredOut, filteredIn) = allGlobPath.partition { path =>
+      val (filteredOut, filteredIn) = allPaths.partition { path =>
         InMemoryFileIndex.shouldFilterOut(path.getName)
       }
       if (filteredIn.isEmpty) {
@@ -769,7 +784,7 @@ object DataSource extends Logging {
       }
     }
 
-    allGlobPath
+    allPaths.seq
   }
 
   /**
