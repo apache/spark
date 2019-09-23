@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -31,11 +32,11 @@ class DataSourceSuite extends SharedSparkSession {
         path1.toString,
         path2.toString,
         globPath1.toString,
-        globPath2.toString,
+        globPath2.toString
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = true,
+      checkFilesExist = true
     )
 
     assert(resultPaths.toSet == allPathsInFs.toSet)
@@ -45,11 +46,11 @@ class DataSourceSuite extends SharedSparkSession {
     val resultPaths = DataSource.checkAndGlobPathIfNecessary(
       Seq(
         globPath1.toString,
-        globPath2.toString,
+        globPath2.toString
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = true,
+      checkFilesExist = true
     )
 
     assert(
@@ -58,7 +59,7 @@ class DataSourceSuite extends SharedSparkSession {
           globPath1Result1,
           globPath1Result2,
           globPath2Result1,
-          globPath2Result2,
+          globPath2Result2
         )
       )
     )
@@ -68,18 +69,18 @@ class DataSourceSuite extends SharedSparkSession {
     val resultPaths = DataSource.checkAndGlobPathIfNecessary(
       Seq(
         path1.toString,
-        path2.toString,
+        path2.toString
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = true,
+      checkFilesExist = true
     )
 
     assert(
       resultPaths.equals(
         Seq(
           path1,
-          path2,
+          path2
         )
       )
     )
@@ -91,11 +92,11 @@ class DataSourceSuite extends SharedSparkSession {
         Seq(
           path1.toString,
           path2.toString,
-          nonExistentPath.toString,
+          nonExistentPath.toString
         ),
         hadoopConf,
         checkEmptyGlobPath = true,
-        checkFilesExist = true,
+        checkFilesExist = true
       )
     )
   }
@@ -106,11 +107,11 @@ class DataSourceSuite extends SharedSparkSession {
         Seq(
           globPath1.toString,
           globPath2.toString,
-          nonExistentGlobPath.toString,
+          nonExistentGlobPath.toString
         ),
         hadoopConf,
         checkEmptyGlobPath = true,
-        checkFilesExist = true,
+        checkFilesExist = true
       )
     )
   }
@@ -139,20 +140,20 @@ object TestPaths {
     globPath1Result1,
     globPath1Result2,
     globPath2Result1,
-    globPath2Result2,
+    globPath2Result2
   )
 
   val mockGlobResults: Map[Path, Array[FileStatus]] = Map(
     globPath1 ->
       Array(
         createMockFileStatus(globPath1Result1.toString),
-        createMockFileStatus(globPath1Result2.toString),
+        createMockFileStatus(globPath1Result2.toString)
       ),
     globPath2 ->
       Array(
         createMockFileStatus(globPath2Result1.toString),
-        createMockFileStatus(globPath2Result2.toString),
-      ),
+        createMockFileStatus(globPath2Result2.toString)
+      )
   )
 
   def createMockFileStatus(path: String): FileStatus = {
