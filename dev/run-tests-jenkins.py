@@ -230,6 +230,10 @@ def main():
 
     # post end message
     result_message = github_message('has finished')
+    result_message += '\n' + 'This patch tested by %s with %s and %s' % (
+        os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt"),
+        os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7"),
+        os.environ["JAVA_HOME"]) + '\n'
     result_message += '\n' + test_result_note + '\n'
     result_message += '\n'.join(pr_check_results)
 
