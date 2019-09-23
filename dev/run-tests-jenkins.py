@@ -183,6 +183,8 @@ def main():
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.7"
     if "test-hadoop3.2" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop3.2"
+    if "test-java11" in ghprb_pull_title:
+        os.environ["AMPLAB_JENKINS_BUILD_JDK"] = "java11"
 
     build_display_name = os.environ["BUILD_DISPLAY_NAME"]
     build_url = os.environ["BUILD_URL"]
@@ -230,12 +232,12 @@ def main():
 
     # post end message
     result_message = github_message('has finished')
-    result_message += '\n\n' + ' * This patch tested by `%s` with `%s` and `%s`' % (
-        os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt"),
-        os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7"),
-        os.environ["JAVA_HOME"])
     result_message += '\n' + test_result_note + '\n'
     result_message += '\n'.join(pr_check_results)
+    result_message += '\n' + ' * This patch tested by `%s` with `%s` and `%s`.' % (
+        os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt"),
+        os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7"),
+        os.environ.get("AMPLAB_JENKINS_BUILD_JDK", "java8"))
 
     post_message_to_github(result_message, ghprb_pull_id)
 
