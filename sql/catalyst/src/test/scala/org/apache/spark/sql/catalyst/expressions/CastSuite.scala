@@ -1200,4 +1200,14 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
     }
   }
+
+  test("cast special timestamp value") {
+    withSQLConf(SQLConf.DIALECT.key -> SQLConf.Dialect.POSTGRESQL.toString) {
+      checkEvaluation(cast(Literal("epoch"), TimestampType, Option("UTC")),
+        new Timestamp(0))
+    }
+    withSQLConf(SQLConf.DIALECT.key -> SQLConf.Dialect.SPARK.toString) {
+      checkEvaluation(cast(Literal("epoch"), TimestampType, Option("UTC")), null)
+    }
+  }
 }

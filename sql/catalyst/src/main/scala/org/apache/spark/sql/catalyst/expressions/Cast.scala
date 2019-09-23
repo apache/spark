@@ -1183,7 +1183,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val zid = JavaCode.global(
         ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
         zoneIdClass)
-      val sv = ctx.addReferenceObj("supportSpecialValues", supportSpecialValues)
+      val sv = supportSpecialValues.toString
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         code"""
