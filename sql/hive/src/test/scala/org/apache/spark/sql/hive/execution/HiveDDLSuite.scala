@@ -2133,7 +2133,7 @@ class HiveDDLSuite
       }
     }
   }
-  
+
   hiveFormats.foreach { tableType =>
     test(s"alter hive serde table add columns -- partitioned - $tableType") {
       withTable("tab") {
