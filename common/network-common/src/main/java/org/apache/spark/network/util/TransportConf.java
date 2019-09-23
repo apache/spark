@@ -122,14 +122,18 @@ public class TransportConf {
 
   /**
    * Number of threads used in the server thread pool. Default to 0, which is 2x#cores.
-   * If spark.shuffle.server.chunkFetchHandlerThreadsRatio is configured, the actual
-   * # of server threads will round up to the nearest int that is a multiple of the
-   * configured ratio.
+   * If spark.shuffle.server.chunkFetchHandlerThreadsRatio is configured, and the Netty server
+   * is for shuffle, then the actual # of server threads will round up to the nearest int that
+   * is a multiple of the configured ratio.
    */
   public int serverThreads() {
-    int chunkFetchHandlerThreadsRatio = getChunkFetchHandlerThreadsRatio();
     int configuredServerThreads = conf.getInt(SPARK_NETWORK_IO_SERVERTHREADS_KEY, 0);
-    return (int) Math.ceil(configuredServerThreads / (chunkFetchHandlerThreadsRatio * 1.0));
+    if (this.getModuleName().equalsIgnoreCase("shuffle")) {
+      int chunkFetchHandlerThreadsRatio = getChunkFetchHandlerThreadsRatio();
+      return (int) Math.ceil(configuredServerThreads / (chunkFetchHandlerThreadsRatio * 1.0));
+    } else {
+      return configuredServerThreads;
+    }
   }
 
   /** Number of threads used in the client thread pool. Default to 0, which is 2x#cores. */
