@@ -466,11 +466,12 @@ class DataFrameTests(ReusedSQLTestCase):
         df1 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
         df2 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
 
-        # joins without conditions require cross join syntax
-        self.assertRaises(AnalysisException, lambda: df1.join(df2).collect())
+        with self.sql_conf({"spark.sql.crossJoin.enabled": False}):
+            # joins without conditions require cross join syntax
+            self.assertRaises(AnalysisException, lambda: df1.join(df2).collect())
 
-        # works with crossJoin
-        self.assertEqual(1, df1.crossJoin(df2).count())
+            # works with crossJoin
+            self.assertEqual(1, df1.crossJoin(df2).count())
 
     def test_cache(self):
         spark = self.spark
@@ -687,6 +688,12 @@ class DataFrameTests(ReusedSQLTestCase):
         df = self.spark.range(3, numPartitions=4)
         it = df.toLocalIterator()
         expected = df.collect()
+        self.assertEqual(expected, list(it))
+
+    def test_to_local_iterator_prefetch(self):
+        df = self.spark.range(8, numPartitions=4)
+        expected = df.collect()
+        it = df.toLocalIterator(prefetchPartitions=True)
         self.assertEqual(expected, list(it))
 
     def test_to_local_iterator_not_fully_consumed(self):

@@ -545,6 +545,18 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     assert(appender.seenMessage)
   }
+
+  test("SPARK-28916: subexrepssion elimination can cause 64kb code limit on UnsafeProjection") {
+    val numOfExprs = 10000
+    val exprs = (0 to numOfExprs).flatMap(colIndex =>
+      Seq(Add(BoundReference(colIndex, DoubleType, true),
+        BoundReference(numOfExprs + colIndex, DoubleType, true)),
+        Add(BoundReference(colIndex, DoubleType, true),
+          BoundReference(numOfExprs + colIndex, DoubleType, true))))
+    // these should not fail to compile due to 64K limit
+    GenerateUnsafeProjection.generate(exprs, true)
+    GenerateMutableProjection.generate(exprs, true)
+  }
 }
 
 case class HugeCodeIntExpression(value: Int) extends Expression {

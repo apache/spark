@@ -23,16 +23,15 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRowWithSchema}
-import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types.StructType
 
-case class DescribeTableExec(table: Table, isExtended: Boolean) extends LeafExecNode {
-
-  override val output: Seq[AttributeReference] =
-    DescribeTableSchema.describeTableAttributes()
+case class DescribeTableExec(
+    output: Seq[Attribute],
+    table: Table,
+    isExtended: Boolean) extends LeafExecNode {
 
   private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
 

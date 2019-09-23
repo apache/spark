@@ -30,14 +30,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.connector.write.{BatchWrite, WriteBuilder}
+import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.sources.v2.reader.{Batch, Scan, ScanBuilder}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, WriteBuilder}
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -70,7 +69,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
     validateStreamOptions(caseInsensitiveParameters)
     require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
-    (shortName(), KafkaOffsetReader.kafkaSchema)
+    val includeHeaders = caseInsensitiveParameters.getOrElse(INCLUDE_HEADERS, "false").toBoolean
+    (shortName(), KafkaRecordToRowConverter.kafkaSchema(includeHeaders))
   }
 
   override def createSource(
@@ -108,7 +108,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   override def getTable(options: CaseInsensitiveStringMap): KafkaTable = {
-    new KafkaTable
+    val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
+    new KafkaTable(includeHeaders)
   }
 
   /**
@@ -132,12 +133,15 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       caseInsensitiveParameters, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
     assert(endingRelationOffsets != EarliestOffsetRangeLimit)
 
+    val includeHeaders = caseInsensitiveParameters.getOrElse(INCLUDE_HEADERS, "false").toBoolean
+
     new KafkaRelation(
       sqlContext,
       strategy(caseInsensitiveParameters),
       sourceOptions = caseInsensitiveParameters,
       specifiedKafkaParams = specifiedKafkaParams,
       failOnDataLoss = failOnDataLoss(caseInsensitiveParameters),
+      includeHeaders = includeHeaders,
       startingOffsets = startingRelationOffsets,
       endingOffsets = endingRelationOffsets)
   }
@@ -360,13 +364,14 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  class KafkaTable extends Table with SupportsRead with SupportsWrite {
+  class KafkaTable(includeHeaders: Boolean) extends Table with SupportsRead with SupportsWrite {
 
     override def name(): String = "KafkaTable"
 
-    override def schema(): StructType = KafkaOffsetReader.kafkaSchema
+    override def schema(): StructType = KafkaRecordToRowConverter.kafkaSchema(includeHeaders)
 
     override def capabilities(): ju.Set[TableCapability] = {
+      import TableCapability._
       // ACCEPT_ANY_SCHEMA is needed because of the following reasons:
       // * Kafka writer validates the schema instead of the SQL analyzer (the schema is fixed)
       // * Read schema differs from write schema (please see Kafka integration guide)
@@ -403,8 +408,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   class KafkaScan(options: CaseInsensitiveStringMap) extends Scan {
+    val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
 
-    override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
+    override def readSchema(): StructType = {
+      KafkaRecordToRowConverter.kafkaSchema(includeHeaders)
+    }
 
     override def toBatch(): Batch = {
       val caseInsensitiveOptions = CaseInsensitiveMap(options.asScala.toMap)
@@ -423,7 +431,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         specifiedKafkaParams,
         failOnDataLoss(caseInsensitiveOptions),
         startingRelationOffsets,
-        endingRelationOffsets)
+        endingRelationOffsets,
+        includeHeaders)
     }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
@@ -498,6 +507,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchoffset.retryintervalms"
   private[kafka010] val CONSUMER_POLL_TIMEOUT = "kafkaconsumer.polltimeoutms"
   private val GROUP_ID_PREFIX = "groupidprefix"
+  private[kafka010] val INCLUDE_HEADERS = "includeheaders"
 
   val TOPIC_OPTION_KEY = "topic"
 

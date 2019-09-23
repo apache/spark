@@ -42,6 +42,8 @@ class FloatType private() extends FractionalType {
     (x: Float, y: Float) => Utils.nanSafeCompareFloats(x, y)
   private[sql] val asIntegral = FloatAsIfIntegral
 
+  override private[sql] def exactNumeric = FloatExactNumeric
+
   /**
    * The default size of a value of the FloatType is 4 bytes.
    */

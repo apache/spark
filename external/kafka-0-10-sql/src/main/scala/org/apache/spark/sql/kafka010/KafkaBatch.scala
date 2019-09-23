@@ -23,8 +23,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReaderFactory}
-
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory}
 
 private[kafka010] class KafkaBatch(
     strategy: ConsumerStrategy,
@@ -32,7 +31,8 @@ private[kafka010] class KafkaBatch(
     specifiedKafkaParams: Map[String, String],
     failOnDataLoss: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
-    endingOffsets: KafkaOffsetRangeLimit)
+    endingOffsets: KafkaOffsetRangeLimit,
+    includeHeaders: Boolean)
   extends Batch with Logging {
   assert(startingOffsets != LatestOffsetRangeLimit,
     "Starting offset not allowed to be set to latest offsets.")
@@ -91,7 +91,7 @@ private[kafka010] class KafkaBatch(
       KafkaSourceProvider.kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId)
     offsetRanges.map { range =>
       new KafkaBatchInputPartition(
-        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, false)
+        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, includeHeaders)
     }.toArray
   }
 

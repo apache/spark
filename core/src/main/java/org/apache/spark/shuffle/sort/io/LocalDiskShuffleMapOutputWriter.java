@@ -24,8 +24,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
-
 import java.util.Optional;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,6 +54,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   private final int bufferSize;
   private int lastPartitionId = -1;
   private long currChannelPosition;
+  private long bytesWrittenToMergedFile = 0L;
 
   private final File outputFile;
   private File outputTempFile;
@@ -96,10 +97,23 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   @Override
-  public void commitAllPartitions() throws IOException {
+  public long[] commitAllPartitions() throws IOException {
+    // Check the position after transferTo loop to see if it is in the right position and raise a
+    // exception if it is incorrect. The position will not be increased to the expected length
+    // after calling transferTo in kernel version 2.6.32. This issue is described at
+    // https://bugs.openjdk.java.net/browse/JDK-7052359 and SPARK-3948.
+    if (outputFileChannel != null && outputFileChannel.position() != bytesWrittenToMergedFile) {
+      throw new IOException(
+          "Current position " + outputFileChannel.position() + " does not equal expected " +
+              "position " + bytesWrittenToMergedFile + " after transferTo. Please check your " +
+              " kernel version to see if it is 2.6.32, as there is a kernel bug which will lead " +
+              "to unexpected behavior when using transferTo. You can set " +
+              "spark.file.transferTo=false to disable this NIO feature.");
+    }
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
     blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
+    return partitionLengths;
   }
 
   @Override
@@ -132,11 +146,10 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   private void initChannel() throws IOException {
-    if (outputFileStream == null) {
-      outputFileStream = new FileOutputStream(outputTempFile, true);
-    }
+    // This file needs to opened in append mode in order to work around a Linux kernel bug that
+    // affects transferTo; see SPARK-3948 for more details.
     if (outputFileChannel == null) {
-      outputFileChannel = outputFileStream.getChannel();
+      outputFileChannel = new FileOutputStream(outputTempFile, true).getChannel();
     }
   }
 
@@ -226,6 +239,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     public void close() {
       isClosed = true;
       partitionLengths[partitionId] = count;
+      bytesWrittenToMergedFile += count;
     }
 
     private void verifyNotClosed() {
@@ -256,6 +270,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     @Override
     public void close() throws IOException {
       partitionLengths[partitionId] = getCount();
+      bytesWrittenToMergedFile += partitionLengths[partitionId];
     }
   }
 }

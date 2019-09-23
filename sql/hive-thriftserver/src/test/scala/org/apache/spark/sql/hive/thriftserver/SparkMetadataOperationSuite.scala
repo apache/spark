@@ -223,4 +223,28 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       assert(!rs.next())
     }
   }
+
+  test("Spark's own GetCatalogsOperation(SparkGetCatalogsOperation)") {
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getCatalogs
+      assert(!rs.next())
+    }
+  }
+
+  test("GetTypeInfo Thrift API") {
+    def checkResult(rs: ResultSet, typeNames: Seq[String]): Unit = {
+      for (i <- typeNames.indices) {
+        assert(rs.next())
+        assert(rs.getString("TYPE_NAME") === typeNames(i))
+      }
+      // Make sure there are no more elements
+      assert(!rs.next())
+    }
+
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      checkResult(metaData.getTypeInfo, ThriftserverShimUtils.supportedType().map(_.getName))
+    }
+  }
 }

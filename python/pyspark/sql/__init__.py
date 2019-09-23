@@ -43,7 +43,7 @@ from __future__ import absolute_import
 
 
 from pyspark.sql.types import Row
-from pyspark.sql.context import SQLContext, HiveContext, UDFRegistration
+from pyspark.sql.context import SQLContext, UDFRegistration
 from pyspark.sql.session import SparkSession
 from pyspark.sql.column import Column
 from pyspark.sql.catalog import Catalog
@@ -54,7 +54,7 @@ from pyspark.sql.window import Window, WindowSpec
 
 
 __all__ = [
-    'SparkSession', 'SQLContext', 'HiveContext', 'UDFRegistration',
+    'SparkSession', 'SQLContext', 'UDFRegistration',
     'DataFrame', 'GroupedData', 'Column', 'Catalog', 'Row',
     'DataFrameNaFunctions', 'DataFrameStatFunctions', 'Window', 'WindowSpec',
     'DataFrameReader', 'DataFrameWriter'
