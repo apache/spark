@@ -1206,7 +1206,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(cast(Literal("epoch"), TimestampType, Option("UTC")),
         new Timestamp(0))
       checkEvaluation(cast(Literal("epoch"), DateType, Option("UTC")),
-        new Date(0))
+        Date.valueOf("1970-01-01"))
     }
     withSQLConf(SQLConf.DIALECT.key -> SQLConf.Dialect.SPARK.toString) {
       checkEvaluation(cast(Literal("epoch"), TimestampType, Option("UTC")), null)
