@@ -387,6 +387,7 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-minikdc</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>net.razorvine</groupId>
