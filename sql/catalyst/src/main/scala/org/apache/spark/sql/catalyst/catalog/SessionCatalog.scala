@@ -1084,9 +1084,9 @@ class SessionCatalog(
   private def partitionWithQualifiedPath(
       tableIdentifier: TableIdentifier,
       parts: Seq[CatalogTablePartition]): Seq[CatalogTablePartition] = {
+    lazy val tbl = getTableMetadata(tableIdentifier)
     parts.map { part =>
       if (part.storage.locationUri.isDefined && !part.storage.locationUri.get.isAbsolute) {
-        val tbl = getTableMetadata(tableIdentifier)
         val partPath = new Path(new Path(tbl.location), new Path(part.storage.locationUri.get))
         val qualifiedPartPath = makeQualifiedPath(CatalogUtils.stringToURI(partPath.toString))
         part.copy(storage = part.storage.copy(locationUri = Some(qualifiedPartPath)))

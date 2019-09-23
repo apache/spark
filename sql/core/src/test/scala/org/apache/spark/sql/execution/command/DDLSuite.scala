@@ -2532,7 +2532,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withTempDir { dir =>
         spark.sql(
           s"""
-             |CREATE TABLE t(a STRING, b STRING) USING parquet PARTITIONED BY(b) LOCATION '$dir'
+             |CREATE TABLE t(a STRING, b STRING) USING ${dataSource} PARTITIONED BY(b) LOCATION '$dir'
            """.stripMargin)
         spark.sql("INSERT INTO TABLE t PARTITION(b=1) SELECT 2")
         val part = spark.sessionState.catalog.getPartition(TableIdentifier("t"), Map("b" -> "1"))
@@ -2543,7 +2543,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withTempDir { dir =>
         spark.sql(s"ALTER TABLE t PARTITION(b=1) SET LOCATION '$dir'")
 
-        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         val part = spark.sessionState.catalog.getPartition(TableIdentifier("t"), Map("b" -> "1"))
         assert(part.storage.locationUri.contains(makeQualifiedPath(dir.getAbsolutePath)))
         assert(part.storage.locationUri.get.toString.startsWith("file:/"))
