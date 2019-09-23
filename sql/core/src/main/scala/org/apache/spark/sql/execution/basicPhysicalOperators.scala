@@ -117,7 +117,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   override def output: Seq[Attribute] = {
     child.output.map { a =>
-      if (a.nullable && notNullAttributes.contains(a.exprId)) {
+      if (a.nullable && notNullPreds.exists(_.semanticEquals(a))) {
         a.withNullability(false)
       } else {
         a
