@@ -75,7 +75,6 @@ private[ml] trait PredictorParams extends Params
         } else {
           lit(1.0)
         }
-      case _ => lit(1.0)
     }
 
     dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
