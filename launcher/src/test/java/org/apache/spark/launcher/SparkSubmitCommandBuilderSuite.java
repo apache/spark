@@ -250,6 +250,34 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     new SparkSubmitCommandBuilder().buildSparkSubmitArgs();
   }
 
+  @Test
+  public void testisClientMode() {
+    // Default master is "local[*]"
+    SparkSubmitCommandBuilder launcher =
+            newCommandBuilder(Collections.emptyList());
+    assertTrue("By default application run in local mode",
+            launcher.isClientMode(Collections.EMPTY_MAP));
+    // --master yarn or it can be any RM
+    List<String> sparkSubmitArgs = Arrays.asList(
+            parser.MASTER,
+            "yarn");
+    launcher = newCommandBuilder(sparkSubmitArgs);
+    assertTrue("By default deploy mode is client",
+            launcher.isClientMode(Collections.EMPTY_MAP));
+    // --master yarn and set spark.submit.deployMode to client
+    Map<String, String> userProps = new HashMap<>();
+    userProps.put("spark.submit.deployMode", "client");
+    assertTrue(launcher.isClientMode(userProps));
+    // --master mesos --deploy-mode cluster
+    sparkSubmitArgs = Arrays.asList(
+            parser.MASTER,
+            "mesos",
+            parser.DEPLOY_MODE,
+            "cluster");
+    launcher = newCommandBuilder(sparkSubmitArgs);
+    assertTrue(!launcher.isClientMode(Collections.EMPTY_MAP));
+  }
+
   private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {
     final String DRIVER_DEFAULT_PARAM = "-Ddriver-default";
     final String DRIVER_EXTRA_PARAM = "-Ddriver-extra";
