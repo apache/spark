@@ -3023,9 +3023,9 @@ select udf(b.unique1) from
 -- !query 147 schema
 struct<CAST(udf(cast(unique1 as string)) AS INT):int>
 -- !query 147 output
-NULL
-NULL
 0
+NULL
+NULL
 NULL
 NULL
 
