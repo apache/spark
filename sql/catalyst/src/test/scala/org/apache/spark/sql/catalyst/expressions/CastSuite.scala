@@ -818,37 +818,60 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       "interval 1 years 3 months -3 days")
   }
 
-  test("cast string to boolean") {
-    checkCast("true", true)
-    checkCast("tru", true)
-    checkCast("tr", true)
-    checkCast("t", true)
-    checkCast("tRUe", true)
-    checkCast("    tRue   ", true)
-    checkCast("    tRu   ", true)
-    checkCast("yes", true)
-    checkCast("ye", true)
-    checkCast("y", true)
-    checkCast("1", true)
-    checkCast("on", true)
+  test("cast string to boolean with Spark dialect") {
+    withSQLConf(SQLConf.DIALECT.key -> SQLConf.Dialect.SPARK.toString) {
+      checkCast("t", true)
+      checkCast("true", true)
+      checkCast("tRUe", true)
+      checkCast("y", true)
+      checkCast("yes", true)
+      checkCast("1", true)
 
-    checkCast("false", false)
-    checkCast("fals", false)
-    checkCast("fal", false)
-    checkCast("fa", false)
-    checkCast("f", false)
-    checkCast("    fAlse    ", false)
-    checkCast("    fAls    ", false)
-    checkCast("    FAlsE    ", false)
-    checkCast("no", false)
-    checkCast("n", false)
-    checkCast("0", false)
-    checkCast("off", false)
-    checkCast("of", false)
+      checkCast("f", false)
+      checkCast("false", false)
+      checkCast("FAlsE", false)
+      checkCast("n", false)
+      checkCast("no", false)
+      checkCast("0", false)
 
-    checkEvaluation(cast("o", BooleanType), null)
-    checkEvaluation(cast("abc", BooleanType), null)
-    checkEvaluation(cast("", BooleanType), null)
+      checkEvaluation(cast("abc", BooleanType), null)
+      checkEvaluation(cast("", BooleanType), null)
+    }
+  }
+
+  test("cast string to boolean with PostgreSQL dialect") {
+    withSQLConf(SQLConf.DIALECT.key -> SQLConf.Dialect.POSTGRESQL.toString) {
+      checkCast("true", true)
+      checkCast("tru", true)
+      checkCast("tr", true)
+      checkCast("t", true)
+      checkCast("tRUe", true)
+      checkCast("    tRue   ", true)
+      checkCast("    tRu   ", true)
+      checkCast("yes", true)
+      checkCast("ye", true)
+      checkCast("y", true)
+      checkCast("1", true)
+      checkCast("on", true)
+
+      checkCast("false", false)
+      checkCast("fals", false)
+      checkCast("fal", false)
+      checkCast("fa", false)
+      checkCast("f", false)
+      checkCast("    fAlse    ", false)
+      checkCast("    fAls    ", false)
+      checkCast("    FAlsE    ", false)
+      checkCast("no", false)
+      checkCast("n", false)
+      checkCast("0", false)
+      checkCast("off", false)
+      checkCast("of", false)
+
+      checkEvaluation(cast("o", BooleanType), null)
+      checkEvaluation(cast("abc", BooleanType), null)
+      checkEvaluation(cast("", BooleanType), null)
+    }
   }
 
   test("SPARK-16729 type checking for casting to date type") {

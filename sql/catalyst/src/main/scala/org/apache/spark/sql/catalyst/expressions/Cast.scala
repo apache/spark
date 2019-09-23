@@ -391,10 +391,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // UDFToBoolean
   private[this] def castToBoolean(from: DataType): Any => Any = from match {
     case StringType =>
+      val dialect = SQLConf.get.getConf(SQLConf.DIALECT)
       buildCast[UTF8String](_, s => {
-        if (StringUtils.isTrueString(s)) {
+        if (StringUtils.isTrueString(s, dialect)) {
           true
-        } else if (StringUtils.isFalseString(s)) {
+        } else if (StringUtils.isFalseString(s, dialect)) {
           false
         } else {
           null
@@ -1250,11 +1251,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToBooleanCode(from: DataType): CastFunction = from match {
     case StringType =>
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
+      val dialect = SQLConf.get.getConf(SQLConf.DIALECT)
       (c, evPrim, evNull) =>
         code"""
-          if ($stringUtils.isTrueString($c)) {
+          if ($stringUtils.isTrueString($c, "$dialect")) {
             $evPrim = true;
-          } else if ($stringUtils.isFalseString($c)) {
+          } else if ($stringUtils.isFalseString($c, "$dialect")) {
             $evPrim = false;
           } else {
             $evNull = true;
