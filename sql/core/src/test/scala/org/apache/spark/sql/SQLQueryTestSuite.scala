@@ -22,7 +22,7 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
@@ -134,6 +134,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
+
+  override def sparkConf: SparkConf = super.sparkConf
+    // Fewer shuffle partitions to speed up testing.
+    .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
   /** List of test cases to ignore, in lower cases. */
   protected def blackList: Set[String] = Set(
@@ -293,10 +297,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
     testCase match {
       case udfTestCase: UDFTest =>
-        // In Python UDF tests, the number of shuffle partitions matters considerably in
-        // the testing time because it requires to fork and communicate between external
-        // processes.
-        localSparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 4)
         registerTestUDF(udfTestCase.udf, localSparkSession)
       case _ =>
     }
