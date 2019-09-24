@@ -786,9 +786,20 @@ package object config {
   private[spark] val CACHE_CHECKPOINT_PREFERRED_LOCS =
     ConfigBuilder("spark.rdd.checkpoint.cachePreferredLocs")
       .internal()
-      .doc("Whether to cache preferred locations of checkpointed RDD.")
+      .doc("Whether to cache preferred locations of checkpointed RDD. Caching preferred " +
+        "locations can relieve query loading to DFS and save the query time. The drawback " +
+        "is that the cached locations can be possibly outdated and lose data locality. " +
+        "This location cache expires by `spark.rdd.checkpoint.cachePreferredLocsExpireTime` " +
+        "minutes.")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME =
+    ConfigBuilder("spark.rdd.checkpoint.cachePreferredLocsExpireTime")
+      .internal()
+      .doc("Expire time in minutes for caching preferred locations of checkpointed RDD.")
+      .timeConf(TimeUnit.MINUTES)
+      .createWithDefault(60)
 
   private[spark] val SHUFFLE_ACCURATE_BLOCK_THRESHOLD =
     ConfigBuilder("spark.shuffle.accurateBlockThreshold")

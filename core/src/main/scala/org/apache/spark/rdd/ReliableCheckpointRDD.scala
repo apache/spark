@@ -24,12 +24,13 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS, CHECKPOINT_COMPRESS}
+import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS, CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_COMPRESS}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -84,26 +85,33 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   }
 
   // Cache of preferred locations of checkpointed files.
-  private[spark] val cachedPreferredLocations: mutable.HashMap[Int, Seq[String]] =
-    mutable.HashMap.empty
+  @transient private[spark] lazy val cachedPreferredLocations = CacheBuilder.newBuilder()
+    .expireAfterWrite(
+      SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME),
+      TimeUnit.MINUTES)
+    .build(
+      new CacheLoader[Partition, Seq[String]]() {
+        override def load(split: Partition): Seq[String] = {
+          getPartitionBlockLocations(split)
+        }
+      })
+
+  // Returns the block locations of given partition on file system.
+  private def getPartitionBlockLocations(split: Partition): Seq[String] = {
+    val status = fs.getFileStatus(
+      new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index)))
+    val locations = fs.getFileBlockLocations(status, 0, status.getLen)
+    locations.headOption.toList.flatMap(_.getHosts).filter(_ != "localhost")
+  }
 
   /**
    * Return the locations of the checkpoint file associated with the given partition.
    */
   protected override def getPreferredLocations(split: Partition): Seq[String] = {
-    val cachePreferrredLoc = SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS)
-
-    if (cachePreferrredLoc && cachedPreferredLocations.contains(split.index)) {
-      cachedPreferredLocations(split.index)
+    if (SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS)) {
+      cachedPreferredLocations.get(split)
     } else {
-      val status = fs.getFileStatus(
-        new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index)))
-      val locations = fs.getFileBlockLocations(status, 0, status.getLen)
-      val preferredLoc = locations.headOption.toList.flatMap(_.getHosts).filter(_ != "localhost")
-      if (cachePreferrredLoc) {
-        cachedPreferredLocations.update(split.index, preferredLoc)
-      }
-      preferredLoc
+      getPartitionBlockLocations(split)
     }
   }
 
