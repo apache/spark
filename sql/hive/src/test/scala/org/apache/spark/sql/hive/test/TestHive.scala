@@ -32,7 +32,6 @@ import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
@@ -650,14 +649,22 @@ private[sql] class TestHiveSessionStateBuilder(
 }
 
 private[hive] object HiveTestJars {
-  def getHiveContribJar: File = getHiveTestJar("org.apache.hive:hive-contrib")
-  def getHiveHcatalogCoreJar: File = getHiveTestJar("org.apache.hive.hcatalog:hive-hcatalog-core")
+  private val repository = "https://repository.apache.org/content/repositories/releases/"
+  private val hiveTestJarsDir = Utils.createTempDir()
 
-  private def getHiveTestJar(coordinate: String): File = {
-    // isTransitive = false: Only direct dependencies should be resolved.
-    val filePath = SparkSubmitUtils.resolveMavenCoordinates(
-      s"$coordinate:${HiveUtils.builtinHiveVersion}",
-      SparkSubmitUtils.buildIvySettings(None, None), isTransitive = false)
-    new File(filePath)
+  def getHiveContribJar: File =
+    getJarFromUrl(s"${repository}org/apache/hive/hive-contrib/" +
+      s"${HiveUtils.builtinHiveVersion}/hive-contrib-${HiveUtils.builtinHiveVersion}.jar")
+  def getHiveHcatalogCoreJar: File =
+    getJarFromUrl(s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
+      s"${HiveUtils.builtinHiveVersion}/hive-hcatalog-core-${HiveUtils.builtinHiveVersion}.jar")
+
+  private def getJarFromUrl(urlString: String): File = {
+    val fileName = urlString.split("/").last
+    val targetFile = new File(hiveTestJarsDir, fileName)
+    if (!targetFile.exists()) {
+      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, new SparkConf, null, null)
+    }
+    targetFile
   }
 }
