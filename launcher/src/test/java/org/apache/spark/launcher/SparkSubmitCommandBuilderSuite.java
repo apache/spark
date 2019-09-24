@@ -253,29 +253,21 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   @Test
   public void testIsClientMode() {
     // Default master is "local[*]"
-    SparkSubmitCommandBuilder launcher =
-            newCommandBuilder(Collections.emptyList());
+    SparkSubmitCommandBuilder builder = newCommandBuilder(Collections.emptyList());
     assertTrue("By default application run in local mode",
-            launcher.isClientMode(Collections.EMPTY_MAP));
+      builder.isClientMode(Collections.emptyMap()));
     // --master yarn or it can be any RM
-    List<String> sparkSubmitArgs = Arrays.asList(
-            parser.MASTER,
-            "yarn");
-    launcher = newCommandBuilder(sparkSubmitArgs);
-    assertTrue("By default deploy mode is client",
-            launcher.isClientMode(Collections.EMPTY_MAP));
+    List<String> sparkSubmitArgs = Arrays.asList(parser.MASTER, "yarn");
+    builder = newCommandBuilder(sparkSubmitArgs);
+    assertTrue("By default deploy mode is client", builder.isClientMode(Collections.emptyMap()));
     // --master yarn and set spark.submit.deployMode to client
     Map<String, String> userProps = new HashMap<>();
     userProps.put("spark.submit.deployMode", "client");
-    assertTrue(launcher.isClientMode(userProps));
+    assertTrue(builder.isClientMode(userProps));
     // --master mesos --deploy-mode cluster
-    sparkSubmitArgs = Arrays.asList(
-            parser.MASTER,
-            "mesos",
-            parser.DEPLOY_MODE,
-            "cluster");
-    launcher = newCommandBuilder(sparkSubmitArgs);
-    assertTrue(!launcher.isClientMode(Collections.EMPTY_MAP));
+    sparkSubmitArgs = Arrays.asList(parser.MASTER, "mesos", parser.DEPLOY_MODE, "cluster");
+    builder = newCommandBuilder(sparkSubmitArgs);
+    assertFalse(builder.isClientMode(Collections.emptyMap()));
   }
 
   private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {
