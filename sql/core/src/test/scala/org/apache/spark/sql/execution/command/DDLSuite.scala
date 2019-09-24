@@ -2532,7 +2532,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withTempDir { dir =>
         spark.sql(
           s"""
-             |CREATE TABLE t(a STRING, b STRING) USING ${dataSource} PARTITIONED BY(b) LOCATION '$dir'
+             |CREATE TABLE t(a STRING, b STRING)
+             |USING ${dataSource} PARTITIONED BY(b) LOCATION '$dir'
            """.stripMargin)
         spark.sql("INSERT INTO TABLE t PARTITION(b=1) SELECT 2")
         val part = spark.sessionState.catalog.getPartition(TableIdentifier("t"), Map("b" -> "1"))
