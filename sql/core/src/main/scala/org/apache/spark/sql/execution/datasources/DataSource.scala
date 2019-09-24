@@ -747,10 +747,7 @@ object DataSource extends Logging {
 
     // Split the paths into glob and non glob paths, because we don't need to do an existence check
     // for globbed paths.
-    val globPaths = qualifiedPaths
-      .filter(path => SparkHadoopUtil.get.isGlobPath(path))
-    val nonGlobPaths = qualifiedPaths
-      .filter(path => !SparkHadoopUtil.get.isGlobPath(path))
+    val (globPaths, nonGlobPaths) = qualifiedPaths.partition(SparkHadoopUtil.get.isGlobPath)
 
     val globbedPaths = globPaths.par.flatMap { globPath =>
       val fs = globPath.getFileSystem(hadoopConf)
