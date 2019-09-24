@@ -29,7 +29,7 @@ public interface SupportsDelete {
   /**
    * Delete data from a data source table that matches filter expressions.
    * <p>
-   * Rows are deleted from the data source iff all of the filter expressions match. That is, the
+   * Rows are deleted from the data source if all of the filter expressions match. That is, the
    * expressions must be interpreted as a set of filters that are ANDed together.
    * <p>
    * Implementations may reject a delete operation if the delete isn't possible without significant
