@@ -520,16 +520,20 @@ class DataFrame(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def toLocalIterator(self):
+    def toLocalIterator(self, prefetchPartitions=False):
         """
         Returns an iterator that contains all of the rows in this :class:`DataFrame`.
         The iterator will consume as much memory as the largest partition in this DataFrame.
+        With prefetch it may consume up to the memory of the 2 largest partitions.
+
+        :param prefetchPartitions: If Spark should pre-fetch the next partition
+                                   before it is needed.
 
         >>> list(df.toLocalIterator())
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            sock_info = self._jdf.toPythonIterator()
+            sock_info = self._jdf.toPythonIterator(prefetchPartitions)
         return _local_iterator_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix

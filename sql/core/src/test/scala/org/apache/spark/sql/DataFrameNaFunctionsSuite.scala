@@ -20,9 +20,9 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
+class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   def createDF(): DataFrame = {
@@ -229,6 +229,41 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
       // will no longer be flagged as nullable, so do not compare schemas directly.
       assert(df.na.fill(fillMap).schema.fields.map(_.dataType) === df.schema.fields.map(_.dataType))
     }
+  }
+
+  def createDFsWithSameFieldsName(): (DataFrame, DataFrame) = {
+    val df1 = Seq(
+      ("f1-1", "f2", null),
+      ("f1-2", null, null),
+      ("f1-3", "f2", "f3-1"),
+      ("f1-4", "f2", "f3-1")
+    ).toDF("f1", "f2", "f3")
+    val df2 = Seq(
+      ("f1-1", null, null),
+      ("f1-2", "f2", null),
+      ("f1-3", "f2", "f4-1")
+    ).toDF("f1", "f2", "f4")
+    (df1, df2)
+  }
+
+  test("fill unambiguous field for join operation") {
+    val (df1, df2) = createDFsWithSameFieldsName()
+    val joined_df = df1.join(df2, Seq("f1"), joinType = "left_outer")
+    checkAnswer(joined_df.na.fill("", cols = Seq("f4")),
+      Row("f1-1", "f2", null, null, "") ::
+        Row("f1-2", null, null, "f2", "") ::
+        Row("f1-3", "f2", "f3-1", "f2", "f4-1") ::
+        Row("f1-4", "f2", "f3-1", null, "") :: Nil)
+  }
+
+  test("fill ambiguous field for join operation") {
+    val (df1, df2) = createDFsWithSameFieldsName()
+    val joined_df = df1.join(df2, Seq("f1"), joinType = "left_outer")
+
+    val message = intercept[AnalysisException] {
+      joined_df.na.fill("", cols = Seq("f2"))
+    }.getMessage
+    assert(message.contains("Reference 'f2' is ambiguous"))
   }
 
   test("replace") {

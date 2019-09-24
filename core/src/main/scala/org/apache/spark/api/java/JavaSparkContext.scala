@@ -609,7 +609,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   /**
    * Set the directory under which RDDs are going to be checkpointed. The directory must
-   * be a HDFS path if running on a cluster.
+   * be an HDFS path if running on a cluster.
    */
   def setCheckpointDir(dir: String) {
     sc.setCheckpointDir(dir)

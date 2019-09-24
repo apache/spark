@@ -1569,8 +1569,9 @@ def format_string(format, *cols):
     """
     Formats the arguments in printf-style and returns the result as a string column.
 
-    :param col: the column name of the numeric value to be formatted
-    :param d: the N decimal places
+    :param format: string that can contain embedded format tags and used as result column's value
+    :param cols: list of column names (string) or list of :class:`Column` expressions to
+        be used in formatting
 
     >>> df = spark.createDataFrame([(5, "hello")], ['a', 'b'])
     >>> df.select(format_string('%d %s', df.a, df.b).alias('v')).collect()
@@ -2813,6 +2814,8 @@ class PandasUDFType(object):
 
     GROUPED_MAP = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
 
+    COGROUPED_MAP = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
+
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
     MAP_ITER = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
@@ -2915,8 +2918,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
-
-    .. note:: Experimental
 
     The function type of the UDF can be one of the following:
 
@@ -3321,7 +3322,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
                          PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                          PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                          PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-                         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF]:
+                         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+                         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF]:
         raise ValueError("Invalid functionType: "
                          "functionType must be one the values from PandasUDFType")
 

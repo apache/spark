@@ -53,7 +53,7 @@ object HiveThriftServer2 extends Logging {
    * Starts a new thrift server with the given context.
    */
   @DeveloperApi
-  def startWithContext(sqlContext: SQLContext): Unit = {
+  def startWithContext(sqlContext: SQLContext): HiveThriftServer2 = {
     val server = new HiveThriftServer2(sqlContext)
 
     val executionHive = HiveUtils.newClientForExecution(
@@ -69,6 +69,7 @@ object HiveThriftServer2 extends Logging {
     } else {
       None
     }
+    server
   }
 
   def main(args: Array[String]) {
@@ -137,7 +138,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   private[thriftserver] object ExecutionState extends Enumeration {
-    val STARTED, COMPILED, FAILED, FINISHED, CLOSED = Value
+    val STARTED, COMPILED, CANCELED, FAILED, FINISHED, CLOSED = Value
     type ExecutionState = Value
   }
 
@@ -173,16 +174,31 @@ object HiveThriftServer2 extends Logging {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       server.stop()
     }
-    private var onlineSessionNum: Int = 0
     private val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
     private val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
     private val retainedStatements = conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT)
     private val retainedSessions = conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
-    private var totalRunning = 0
 
-    def getOnlineSessionNum: Int = synchronized { onlineSessionNum }
+    def getOnlineSessionNum: Int = synchronized {
+      sessionList.count(_._2.finishTimestamp == 0)
+    }
 
-    def getTotalRunning: Int = synchronized { totalRunning }
+    def isExecutionActive(execInfo: ExecutionInfo): Boolean = {
+      !(execInfo.state == ExecutionState.FAILED ||
+        execInfo.state == ExecutionState.CANCELED ||
+        execInfo.state == ExecutionState.CLOSED)
+    }
+
+    /**
+     * When an error or a cancellation occurs, we set the finishTimestamp of the statement.
+     * Therefore, when we count the number of running statements, we need to exclude errors and
+     * cancellations and count all statements that have not been closed so far.
+     */
+    def getTotalRunning: Int = synchronized {
+      executionList.count {
+        case (_, v) => isExecutionActive(v)
+      }
+    }
 
     def getSessionList: Seq[SessionInfo] = synchronized { sessionList.values.toSeq }
 
@@ -207,14 +223,12 @@ object HiveThriftServer2 extends Logging {
       synchronized {
         val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
         sessionList.put(sessionId, info)
-        onlineSessionNum += 1
         trimSessionIfNecessary()
       }
     }
 
     def onSessionClosed(sessionId: String): Unit = synchronized {
       sessionList(sessionId).finishTimestamp = System.currentTimeMillis
-      onlineSessionNum -= 1
       trimSessionIfNecessary()
     }
 
@@ -230,7 +244,6 @@ object HiveThriftServer2 extends Logging {
       trimExecutionIfNecessary()
       sessionList(sessionId).totalExecution += 1
       executionList(id).groupId = groupId
-      totalRunning += 1
     }
 
     def onStatementParsed(id: String, executionPlan: String): Unit = synchronized {
@@ -238,20 +251,22 @@ object HiveThriftServer2 extends Logging {
       executionList(id).state = ExecutionState.COMPILED
     }
 
-    def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {
-      synchronized {
-        executionList(id).finishTimestamp = System.currentTimeMillis
-        executionList(id).detail = errorMessage
-        executionList(id).state = ExecutionState.FAILED
-        totalRunning -= 1
-        trimExecutionIfNecessary()
-      }
+    def onStatementCanceled(id: String): Unit = synchronized {
+      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).state = ExecutionState.CANCELED
+      trimExecutionIfNecessary()
+    }
+
+    def onStatementError(id: String, errorMsg: String, errorTrace: String): Unit = synchronized {
+      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).detail = errorMsg
+      executionList(id).state = ExecutionState.FAILED
+      trimExecutionIfNecessary()
     }
 
     def onStatementFinish(id: String): Unit = synchronized {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).state = ExecutionState.FINISHED
-      totalRunning -= 1
       trimExecutionIfNecessary()
     }
 

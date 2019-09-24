@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import java.net.URLDecoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
@@ -177,7 +178,6 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
-    <script src={prependBaseUri(request, "/static/additional-metrics.js")}></script>
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
@@ -425,6 +425,9 @@ private[spark] object UIUtils extends Logging {
               {
                 g.rootCluster.getCachedNodes.map { n =>
                   <div class="cached-rdd">{n.id}</div>
+                } ++
+                g.rootCluster.getBarrierClusters.map { c =>
+                  <div class="barrier-rdd">{c.id}</div>
                 }
               }
             </div>
@@ -523,10 +526,10 @@ private[spark] object UIUtils extends Logging {
    */
   def decodeURLParameter(urlParam: String): String = {
     var param = urlParam
-    var decodedParam = URLDecoder.decode(param, "UTF-8")
+    var decodedParam = URLDecoder.decode(param, UTF_8.name())
     while (param != decodedParam) {
       param = decodedParam
-      decodedParam = URLDecoder.decode(param, "UTF-8")
+      decodedParam = URLDecoder.decode(param, UTF_8.name())
     }
     param
   }

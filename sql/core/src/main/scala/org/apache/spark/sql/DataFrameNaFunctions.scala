@@ -488,7 +488,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     }
 
     val columnEquals = df.sparkSession.sessionState.analyzer.resolver
-    val projections = df.schema.fields.map { f =>
+    val filledColumns = df.schema.fields.filter { f =>
       val typeMatches = (targetType, f.dataType) match {
         case (NumericType, dt) => dt.isInstanceOf[NumericType]
         case (StringType, dt) => dt == StringType
@@ -497,12 +497,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
           throw new IllegalArgumentException(s"$targetType is not matched at fillValue")
       }
       // Only fill if the column is part of the cols list.
-      if (typeMatches && cols.exists(col => columnEquals(f.name, col))) {
-        fillCol[T](f, value)
-      } else {
-        df.col(f.name)
-      }
+      typeMatches && cols.exists(col => columnEquals(f.name, col))
     }
-    df.select(projections : _*)
+    df.withColumns(filledColumns.map(_.name), filledColumns.map(fillCol[T](_, value)))
   }
 }

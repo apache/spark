@@ -10,8 +10,6 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/select_implicit.sql
 --
 -- This test file was converted from pgSQL/select_implicit.sql
--- [SPARK-28445] Inconsistency between Scala and Python/Panda udfs when groupby with udf() is used
--- TODO: We should add UDFs in GROUP BY clause when [SPARK-28445] is resolved.
 
 -- load test data
 CREATE TABLE test_missing_target (a int, b int, c string, d string) using parquet;
@@ -29,29 +27,29 @@ INSERT INTO test_missing_target VALUES (9, 4, 'CCCC', 'j');
 
 --   w/ existing GROUP BY target
 SELECT udf(c), udf(count(*)) FROM test_missing_target GROUP BY
-test_missing_target.c
+udf(test_missing_target.c)
 ORDER BY udf(c);
 
 --   w/o existing GROUP BY target using a relation name in GROUP BY clause
-SELECT udf(count(*)) FROM test_missing_target GROUP BY test_missing_target.c
+SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(test_missing_target.c)
 ORDER BY udf(c);
 
 --   w/o existing GROUP BY target and w/o existing a different ORDER BY target
 --   failure expected
-SELECT udf(count(*)) FROM test_missing_target GROUP BY a ORDER BY udf(b);
+SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(a) ORDER BY udf(b);
 
 --   w/o existing GROUP BY target and w/o existing same ORDER BY target
-SELECT udf(count(*)) FROM test_missing_target GROUP BY b ORDER BY udf(b);
+SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b);
 
 --   w/ existing GROUP BY target using a relation name in target
 SELECT udf(test_missing_target.b), udf(count(*))
-  FROM test_missing_target GROUP BY b ORDER BY udf(b);
+  FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b);
 
 --   w/o existing GROUP BY target
 SELECT udf(c) FROM test_missing_target ORDER BY udf(a);
 
 --   w/o existing ORDER BY target
-SELECT udf(count(*)) FROM test_missing_target GROUP BY b ORDER BY udf(b) desc;
+SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b) desc;
 
 --   group using reference number
 SELECT udf(count(*)) FROM test_missing_target ORDER BY udf(1) desc;
@@ -67,7 +65,7 @@ SELECT udf(c), udf(count(*)) FROM test_missing_target GROUP BY 3;
 --   failure expected
 SELECT udf(count(*)) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
-	GROUP BY b ORDER BY udf(b);
+	GROUP BY udf(b) ORDER BY udf(b);
 
 --   order w/ target under ambiguous condition
 --   failure NOT expected
@@ -82,17 +80,17 @@ SELECT udf(udf(a)/2), udf(udf(a)/2) FROM test_missing_target
 --   group expression w/ target under ambiguous condition
 --   failure NOT expected
 SELECT udf(a/2), udf(a/2) FROM test_missing_target
-	GROUP BY a/2 ORDER BY udf(a/2);
+	GROUP BY udf(a/2) ORDER BY udf(a/2);
 
 --   group w/ existing GROUP BY target under ambiguous condition
 SELECT udf(x.b), udf(count(*)) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
-	GROUP BY x.b ORDER BY udf(x.b);
+	GROUP BY udf(x.b) ORDER BY udf(x.b);
 
 --   group w/o existing GROUP BY target under ambiguous condition
 SELECT udf(count(*)) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
-	GROUP BY x.b ORDER BY udf(x.b);
+	GROUP BY udf(x.b) ORDER BY udf(x.b);
 
 -- [SPARK-28329] SELECT INTO syntax
 --   group w/o existing GROUP BY target under ambiguous condition
@@ -107,50 +105,50 @@ SELECT udf(count(*)) FROM test_missing_target x, test_missing_target y
 --  Functions and expressions
 
 --   w/ existing GROUP BY target
-SELECT a%2, udf(count(udf(b))) FROM test_missing_target
-GROUP BY test_missing_target.a%2
+SELECT udf(a%2), udf(count(udf(b))) FROM test_missing_target
+GROUP BY udf(test_missing_target.a%2)
 ORDER BY udf(test_missing_target.a%2);
 
 --   w/o existing GROUP BY target using a relation name in GROUP BY clause
 SELECT udf(count(c)) FROM test_missing_target
-GROUP BY lower(test_missing_target.c)
+GROUP BY udf(lower(test_missing_target.c))
 ORDER BY udf(lower(test_missing_target.c));
 
 --   w/o existing GROUP BY target and w/o existing a different ORDER BY target
 --   failure expected
-SELECT udf(count(udf(a))) FROM test_missing_target GROUP BY a ORDER BY udf(b);
+SELECT udf(count(udf(a))) FROM test_missing_target GROUP BY udf(a) ORDER BY udf(b);
 
 --   w/o existing GROUP BY target and w/o existing same ORDER BY target
-SELECT udf(count(b)) FROM test_missing_target GROUP BY b/2 ORDER BY udf(b/2);
+SELECT udf(count(b)) FROM test_missing_target GROUP BY udf(b/2) ORDER BY udf(b/2);
 
 --   w/ existing GROUP BY target using a relation name in target
 SELECT udf(lower(test_missing_target.c)), udf(count(udf(c)))
-  FROM test_missing_target GROUP BY lower(c) ORDER BY udf(lower(c));
+  FROM test_missing_target GROUP BY udf(lower(c)) ORDER BY udf(lower(c));
 
 --   w/o existing GROUP BY target
 SELECT udf(a) FROM test_missing_target ORDER BY udf(upper(udf(d)));
 
 --   w/o existing ORDER BY target
 SELECT udf(count(b)) FROM test_missing_target
-	GROUP BY (b + 1) / 2 ORDER BY udf((b + 1) / 2) desc;
+	GROUP BY udf((b + 1) / 2) ORDER BY udf((b + 1) / 2) desc;
 
 --   group w/o existing GROUP BY and ORDER BY target under ambiguous condition
 --   failure expected
 SELECT udf(count(udf(x.a))) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
-	GROUP BY b/2 ORDER BY udf(b/2);
+	GROUP BY udf(b/2) ORDER BY udf(b/2);
 
 --   group w/ existing GROUP BY target under ambiguous condition
 SELECT udf(x.b/2), udf(count(udf(x.b))) FROM test_missing_target x,
 test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
-	GROUP BY x.b/2 ORDER BY udf(x.b/2);
+	GROUP BY udf(x.b/2) ORDER BY udf(x.b/2);
 
 --   group w/o existing GROUP BY target under ambiguous condition
 --   failure expected due to ambiguous b in count(b)
 SELECT udf(count(udf(b))) FROM test_missing_target x, test_missing_target y
 	WHERE udf(x.a) = udf(y.a)
-	GROUP BY x.b/2;
+	GROUP BY udf(x.b/2);
 
 -- [SPARK-28329] SELECT INTO syntax
 --   group w/o existing GROUP BY target under ambiguous condition

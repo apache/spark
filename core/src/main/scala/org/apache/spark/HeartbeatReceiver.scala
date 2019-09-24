@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
-import scala.collection.mutable
+import scala.collection.mutable.{HashMap, Map}
 import scala.concurrent.Future
 
 import org.apache.spark.executor.ExecutorMetrics
@@ -38,9 +38,11 @@ import org.apache.spark.util._
  */
 private[spark] case class Heartbeat(
     executorId: String,
-    accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])], // taskId -> accumulator updates
+    // taskId -> accumulator updates
+    accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
     blockManagerId: BlockManagerId,
-    executorUpdates: ExecutorMetrics) // executor level updates
+    // (stageId, stageAttemptId) -> executor metric peaks
+    executorUpdates: Map[(Int, Int), ExecutorMetrics])
 
 /**
  * An event that SparkContext uses to notify HeartbeatReceiver that SparkContext.taskScheduler is
@@ -73,7 +75,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   private[spark] var scheduler: TaskScheduler = null
 
   // executor ID -> timestamp of when the last heartbeat from this executor was received
-  private val executorLastSeen = new mutable.HashMap[String, Long]
+  private val executorLastSeen = new HashMap[String, Long]
 
   private val executorTimeoutMs = sc.conf.get(config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT)
 
@@ -120,14 +122,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       context.reply(true)
 
     // Messages received from executors
-    case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId, executorMetrics) =>
+    case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId, executorUpdates) =>
       if (scheduler != null) {
         if (executorLastSeen.contains(executorId)) {
           executorLastSeen(executorId) = clock.getTimeMillis()
           eventLoopThread.submit(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               val unknownExecutor = !scheduler.executorHeartbeatReceived(
-                executorId, accumUpdates, blockManagerId, executorMetrics)
+                executorId, accumUpdates, blockManagerId, executorUpdates)
               val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
               context.reply(response)
             }

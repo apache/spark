@@ -126,7 +126,7 @@ private[spark] object AccumulatorSuite {
     sc.addSparkListener(listener)
     testBody
     // wait until all events have been processed before proceeding to assert things
-    sc.listenerBus.waitUntilEmpty(10 * 1000)
+    sc.listenerBus.waitUntilEmpty()
     val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
     val isSet = accums.exists { a =>
       a.name == Some(PEAK_EXECUTION_MEMORY) && a.value.exists(_.asInstanceOf[Long] > 0L)

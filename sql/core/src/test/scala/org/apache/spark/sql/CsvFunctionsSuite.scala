@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -25,10 +26,10 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
+class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("from_csv with empty options") {
@@ -179,6 +180,24 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
       val df = input.select(from_csv($"value", lit("time timestamp"), options.asJava))
 
       checkAnswer(df, Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
+    }
+  }
+
+  test("special timestamp values") {
+    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
+      val input = Seq(specialValue).toDS()
+      val readback = input.select(from_csv($"value", lit("t timestamp"),
+        Map.empty[String, String].asJava)).collect()
+      assert(readback(0).getAs[Row](0).getAs[Timestamp](0).getTime >= 0)
+    }
+  }
+
+  test("special date values") {
+    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
+      val input = Seq(specialValue).toDS()
+      val readback = input.select(from_csv($"value", lit("d date"),
+        Map.empty[String, String].asJava)).collect()
+      assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
     }
   }
 }

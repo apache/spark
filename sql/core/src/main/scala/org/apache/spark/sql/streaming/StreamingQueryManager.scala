@@ -21,6 +21,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -30,12 +31,12 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
-import org.apache.spark.sql.sources.v2.{SupportsWrite, Table}
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -197,6 +198,15 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    */
   def removeListener(listener: StreamingQueryListener): Unit = {
     listenerBus.removeListener(listener)
+  }
+
+  /**
+   * List all [[StreamingQueryListener]]s attached to this [[StreamingQueryManager]].
+   *
+   * @since 3.0.0
+   */
+  def listListeners(): Array[StreamingQueryListener] = {
+    listenerBus.listeners.asScala.toArray
   }
 
   /** Post a listener event */

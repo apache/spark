@@ -437,7 +437,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   }
 
   test("check blacklist configuration invariants") {
-    val conf = new SparkConf().setMaster("yarn-cluster")
+    val conf = new SparkConf().setMaster("yarn").set(config.SUBMIT_DEPLOY_MODE, "cluster")
     Seq(
       (2, 2),
       (2, 3)

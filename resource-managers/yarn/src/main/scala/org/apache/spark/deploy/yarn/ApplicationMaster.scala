@@ -578,7 +578,11 @@ private[spark] class ApplicationMaster(
             e.getMessage)
         case e: Throwable =>
           failureCount += 1
-          if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+          if (!NonFatal(e)) {
+            finish(FinalApplicationStatus.FAILED,
+              ApplicationMaster.EXIT_REPORTER_FAILURE,
+              "Fatal exception: " + StringUtils.stringifyException(e))
+          } else if (failureCount >= reporterMaxFailures) {
             finish(FinalApplicationStatus.FAILED,
               ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
                 s"$failureCount time(s) from Reporter thread.")
@@ -703,7 +707,8 @@ private[spark] class ApplicationMaster(
       // of files to add to PYTHONPATH, which Client.scala already handles, so it's empty.
       userArgs = Seq(args.primaryPyFile, "") ++ userArgs
     }
-    if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
+    if (args.primaryRFile != null &&
+        (args.primaryRFile.endsWith(".R") || args.primaryRFile.endsWith(".r"))) {
       // TODO(davies): add R dependencies here
     }
 
@@ -851,7 +856,9 @@ object ApplicationMaster extends Logging {
     master = new ApplicationMaster(amArgs, sparkConf, yarnConf)
 
     val ugi = sparkConf.get(PRINCIPAL) match {
-      case Some(principal) =>
+      // We only need to log in with the keytab in cluster mode. In client mode, the driver
+      // handles the user keytab.
+      case Some(principal) if amArgs.userClass != null =>
         val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()

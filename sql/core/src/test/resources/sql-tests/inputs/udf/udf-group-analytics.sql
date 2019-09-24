@@ -1,18 +1,17 @@
 -- This test file was converted from group-analytics.sql.
--- TODO: UDF should be inserted and tested at GROUP BY clause after SPARK-28445
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2)
 AS testData(a, b);
 
 -- CUBE on overlapping columns
-SELECT a + b, b, udf(SUM(a - b)) FROM testData GROUP BY a + b, b WITH CUBE;
+SELECT udf(a + b), b, udf(SUM(a - b)) FROM testData GROUP BY udf(a + b), b WITH CUBE;
 
-SELECT a, udf(b), SUM(b) FROM testData GROUP BY a, b WITH CUBE;
+SELECT udf(a), udf(b), SUM(b) FROM testData GROUP BY udf(a), b WITH CUBE;
 
 -- ROLLUP on overlapping columns
 SELECT udf(a + b), b, SUM(a - b) FROM testData GROUP BY a + b, b WITH ROLLUP;
 
-SELECT a, b, udf(SUM(b)) FROM testData GROUP BY a, b WITH ROLLUP;
+SELECT udf(a), b, udf(SUM(b)) FROM testData GROUP BY udf(a), b WITH ROLLUP;
 
 CREATE OR REPLACE TEMPORARY VIEW courseSales AS SELECT * FROM VALUES
 ("dotNET", 2012, 10000), ("Java", 2012, 20000), ("dotNET", 2012, 5000), ("dotNET", 2013, 48000), ("Java", 2013, 30000)
@@ -38,14 +37,14 @@ GROUP BY course, earnings GROUPING SETS((), (course), (course, earnings)) ORDER 
 -- GROUPING/GROUPING_ID
 SELECT udf(course), udf(year), GROUPING(course), GROUPING(year), GROUPING_ID(course, year) FROM courseSales
 GROUP BY CUBE(course, year);
-SELECT course, udf(year), GROUPING(course) FROM courseSales GROUP BY course, year;
-SELECT course, udf(year), GROUPING_ID(course, year) FROM courseSales GROUP BY course, year;
+SELECT course, udf(year), GROUPING(course) FROM courseSales GROUP BY course, udf(year);
+SELECT course, udf(year), GROUPING_ID(course, year) FROM courseSales GROUP BY udf(course), year;
 SELECT course, year, grouping__id FROM courseSales GROUP BY CUBE(course, year) ORDER BY grouping__id, course, udf(year);
 
 -- GROUPING/GROUPING_ID in having clause
 SELECT course, year FROM courseSales GROUP BY CUBE(course, year)
 HAVING GROUPING(year) = 1 AND GROUPING_ID(course, year) > 0 ORDER BY course, udf(year);
-SELECT course, udf(year) FROM courseSales GROUP BY course, year HAVING GROUPING(course) > 0;
+SELECT course, udf(year) FROM courseSales GROUP BY udf(course), year HAVING GROUPING(course) > 0;
 SELECT course, udf(udf(year)) FROM courseSales GROUP BY course, year HAVING GROUPING_ID(course) > 0;
 SELECT udf(course), year FROM courseSales GROUP BY CUBE(course, year) HAVING grouping__id > 0;
 

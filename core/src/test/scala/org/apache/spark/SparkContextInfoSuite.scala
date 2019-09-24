@@ -63,7 +63,7 @@ class SparkContextInfoSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
     assert(sc.getRDDStorageInfo.length === 0)
     rdd.collect()
-    sc.listenerBus.waitUntilEmpty(10000)
+    sc.listenerBus.waitUntilEmpty()
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
       assert(sc.getRDDStorageInfo.length === 1)
     }

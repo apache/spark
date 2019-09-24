@@ -22,7 +22,6 @@ SELECT false AS `false`;
 
 SELECT boolean('t') AS true;
 
--- [SPARK-27931] Trim the string when cast string type to boolean type
 SELECT boolean('   f           ') AS `false`;
 
 SELECT boolean('true') AS true;
@@ -49,12 +48,10 @@ SELECT boolean('no') AS `false`;
 -- [SPARK-27923] PostgreSQL does not accept 'nay' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('nay') AS error;
 
--- [SPARK-27931] Accept 'on' and 'off' as input for boolean data type
 SELECT boolean('on') AS true;
 
 SELECT boolean('off') AS `false`;
 
--- [SPARK-27931] Accept unique prefixes thereof
 SELECT boolean('of') AS `false`;
 
 -- [SPARK-27923] PostgreSQL does not accept 'o' but Spark SQL accepts it and sets it to NULL
@@ -101,7 +98,7 @@ SELECT boolean('f') <= boolean('t') AS true;
 
 -- explicit casts to/from text
 SELECT boolean(string('TrUe')) AS true, boolean(string('fAlse')) AS `false`;
--- [SPARK-27931] Trim the string when cast to boolean type
+
 SELECT boolean(string('    true   ')) AS true,
        boolean(string('     FALSE')) AS `false`;
 SELECT string(boolean(true)) AS true, string(boolean(false)) AS `false`;
@@ -191,37 +188,37 @@ SELECT '' AS tf_12_ff_4, BOOLTBL1.*, BOOLTBL2.*
 -- - thomas 2000-01-04
 --
 
--- SELECT '' AS True, f1
---    FROM BOOLTBL1
---    WHERE f1 IS TRUE;
+SELECT '' AS True, f1
+   FROM BOOLTBL1
+   WHERE f1 IS TRUE;
 
--- SELECT '' AS "Not False", f1
---    FROM BOOLTBL1
---    WHERE f1 IS NOT FALSE;
+SELECT '' AS `Not False`, f1
+   FROM BOOLTBL1
+   WHERE f1 IS NOT FALSE;
 
--- SELECT '' AS "False", f1
---    FROM BOOLTBL1
---    WHERE f1 IS FALSE;
+SELECT '' AS `False`, f1
+   FROM BOOLTBL1
+   WHERE f1 IS FALSE;
 
--- SELECT '' AS "Not True", f1
---    FROM BOOLTBL1
---    WHERE f1 IS NOT TRUE;
+SELECT '' AS `Not True`, f1
+   FROM BOOLTBL1
+   WHERE f1 IS NOT TRUE;
 
--- SELECT '' AS "True", f1
---    FROM BOOLTBL2
---    WHERE f1 IS TRUE;
+SELECT '' AS `True`, f1
+   FROM BOOLTBL2
+   WHERE f1 IS TRUE;
 
--- SELECT '' AS "Not False", f1
---    FROM BOOLTBL2
---    WHERE f1 IS NOT FALSE;
+SELECT '' AS `Not False`, f1
+   FROM BOOLTBL2
+   WHERE f1 IS NOT FALSE;
 
--- SELECT '' AS "False", f1
---    FROM BOOLTBL2
---    WHERE f1 IS FALSE;
+SELECT '' AS `False`, f1
+   FROM BOOLTBL2
+   WHERE f1 IS FALSE;
 
--- SELECT '' AS "Not True", f1
---    FROM BOOLTBL2
---    WHERE f1 IS NOT TRUE;
+SELECT '' AS `Not True`, f1
+   FROM BOOLTBL2
+   WHERE f1 IS NOT TRUE;
 
 --
 -- Tests for BooleanTest
@@ -232,15 +229,15 @@ INSERT INTO BOOLTBL3 VALUES ('false', false, 2);
 INSERT INTO BOOLTBL3 VALUES ('null', null, 3);
 
 -- [SPARK-27924] E061-14: Search Conditions
--- SELECT
---     d,
---     b IS TRUE AS istrue,
---     b IS NOT TRUE AS isnottrue,
---     b IS FALSE AS isfalse,
---     b IS NOT FALSE AS isnotfalse,
---     b IS UNKNOWN AS isunknown,
---     b IS NOT UNKNOWN AS isnotunknown
--- FROM booltbl3 ORDER BY o;
+SELECT
+    d,
+    b IS TRUE AS istrue,
+    b IS NOT TRUE AS isnottrue,
+    b IS FALSE AS isfalse,
+    b IS NOT FALSE AS isnotfalse,
+    b IS UNKNOWN AS isunknown,
+    b IS NOT UNKNOWN AS isnotunknown
+FROM booltbl3 ORDER BY o;
 
 
 -- Test to make sure short-circuiting and NULL handling is

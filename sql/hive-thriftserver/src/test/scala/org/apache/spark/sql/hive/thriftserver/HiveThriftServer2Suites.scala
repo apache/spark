@@ -144,10 +144,17 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       def executeTest(hiveList: String): Unit = {
         hiveList.split(";").foreach{ m =>
           val kv = m.split("=")
-          // select "${a}"; ---> avalue
-          val resultSet = statement.executeQuery("select \"${" + kv(0) + "}\"")
+          val k = kv(0)
+          val v = kv(1)
+          val modValue = s"${v}_MOD_VALUE"
+          // select '${a}'; ---> avalue
+          val resultSet = statement.executeQuery(s"select '$${$k}'")
           resultSet.next()
-          assert(resultSet.getString(1) === kv(1))
+          assert(resultSet.getString(1) === v)
+          statement.executeQuery(s"set $k=$modValue")
+          val modResultSet = statement.executeQuery(s"select '$${$k}'")
+          modResultSet.next()
+          assert(modResultSet.getString(1) === s"$modValue")
         }
       }
     }
@@ -537,7 +544,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       if (HiveUtils.isHive23) {
-        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.5"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.6"))
       } else {
         assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
       }
@@ -554,7 +561,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       if (HiveUtils.isHive23) {
-        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.5"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.6"))
       } else {
         assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
       }
@@ -660,6 +667,21 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val rs = statement.executeQuery("SELECT CAST(1 AS decimal(38, 18))")
       assert(rs.next())
       assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.000000000000000000"))
+    }
+  }
+
+  test("Support interval type") {
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval 3 months 1 hours")
+      assert(rs.next())
+      assert(rs.getString(1) === "interval 3 months 1 hours")
+    }
+    // Invalid interval value
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 3 months 1 hou")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
     }
   }
 }

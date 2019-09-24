@@ -286,7 +286,7 @@ $(document).ready(function () {
         " Show Additional Metrics" +
         "</a></div>" +
         "<div class='container-fluid container-fluid-div' id='toggle-metrics' hidden>" +
-        "<div><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
+        "<div id='select_all' class='select-all-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
         "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11'> Scheduler Delay</div>" +
         "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12'> Task Deserialization Time</div>" +
         "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13'> Shuffle Read Blocked Time</div>" +
@@ -323,7 +323,7 @@ $(document).ready(function () {
                 "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
                 "external sort.");
     $('[data-toggle="tooltip"]').tooltip();
-    tasksSummary = $("#parent-container");
+    var tasksSummary = $("#parent-container");
     getStandAloneAppId(function (appId) {
 
         var endPoint = stageEndPoint(appId);
@@ -346,7 +346,7 @@ $(document).ready(function () {
             }
 
             // prepare data for executor summary table
-            stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
+            var stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
             $.getJSON(createRESTEndPointForExecutorsPage(appId),
               function(executorSummaryResponse, status, jqXHR) {
                 var executorDetailsMap = {};
@@ -877,7 +877,7 @@ $(document).ready(function () {
                         { "visible": false, "targets": 16 },
                         { "visible": false, "targets": 17 },
                         { "visible": false, "targets": 18 }
-                    ],
+                    ]
                 };
                 taskTableSelector = $(taskTable).DataTable(taskConf);
                 $('#active-tasks-table_filter input').unbind();
@@ -897,14 +897,14 @@ $(document).ready(function () {
                     // Get the column
                     var para = $(this).attr('data-column');
                     if (para == "0") {
-                        var column = taskTableSelector.column(optionalColumns);
+                        var allColumns = taskTableSelector.columns(optionalColumns);
                         if ($(this).is(":checked")) {
                             $(".toggle-vis").prop('checked', true);
-                            column.visible(true);
+                            allColumns.visible(true);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableArray);
                         } else {
                             $(".toggle-vis").prop('checked', false);
-                            column.visible(false);
+                            allColumns.visible(false);
                             var taskSummaryMetricsTableFilteredArray =
                                 taskSummaryMetricsTableArray.filter(row => row.checkboxId < 11);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);

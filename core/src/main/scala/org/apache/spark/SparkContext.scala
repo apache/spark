@@ -31,7 +31,6 @@ import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
 
 import com.google.common.collect.MapMaker
-import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
@@ -42,6 +41,8 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.deploy.StandaloneResourceUtils._
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -244,6 +245,15 @@ class SparkContext(config: SparkConf) extends Logging {
 
   def isLocal: Boolean = Utils.isLocalMaster(_conf)
 
+  private def isClientStandalone: Boolean = {
+    val isSparkCluster = master match {
+      case SparkMasterRegex.SPARK_REGEX(_) => true
+      case SparkMasterRegex.LOCAL_CLUSTER_REGEX(_, _, _) => true
+      case _ => false
+    }
+    deployMode == "client" && isSparkCluster
+  }
+
   /**
    * @return true if context is stopped or in the midst of stopping.
    */
@@ -335,7 +345,7 @@ class SparkContext(config: SparkConf) extends Logging {
     override protected def childValue(parent: Properties): Properties = {
       // Note: make a clone such that changes in the parent properties aren't reflected in
       // the those of the children threads, which has confusing semantics (SPARK-10563).
-      SerializationUtils.clone(parent)
+      Utils.cloneProperties(parent)
     }
     override protected def initialValue(): Properties = new Properties()
   }
@@ -379,7 +389,18 @@ class SparkContext(config: SparkConf) extends Logging {
     _driverLogger = DriverLogger(_conf)
 
     val resourcesFileOpt = conf.get(DRIVER_RESOURCES_FILE)
-    _resources = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
+    val allResources = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
+    _resources = {
+      // driver submitted in client mode under Standalone may have conflicting resources with
+      // other drivers/workers on this host. We should sync driver's resources info into
+      // SPARK_RESOURCES/SPARK_RESOURCES_COORDINATE_DIR/ to avoid collision.
+      if (isClientStandalone) {
+        acquireResources(_conf, SPARK_DRIVER_PREFIX, allResources, Utils.getProcessId)
+      } else {
+        allResources
+      }
+    }
+    logResourceInfo(SPARK_DRIVER_PREFIX, _resources)
 
     // log out spark.app.name in the Spark driver logs
     logInfo(s"Submitted application: $appName")
@@ -516,7 +537,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
     // create and start the heartbeater for collecting memory metrics
-    _heartbeater = new Heartbeater(env.memoryManager,
+    _heartbeater = new Heartbeater(
       () => SparkContext.this.reportHeartBeat(),
       "driver-heartbeater",
       conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
@@ -1910,8 +1931,10 @@ class SparkContext(config: SparkConf) extends Logging {
       ShutdownHookManager.removeShutdownHook(_shutdownHookRef)
     }
 
-    Utils.tryLogNonFatalError {
-      postApplicationEnd()
+    if (listenerBus != null) {
+      Utils.tryLogNonFatalError {
+        postApplicationEnd()
+      }
     }
     Utils.tryLogNonFatalError {
       _driverLogger.foreach(_.stop())
@@ -1958,6 +1981,9 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     Utils.tryLogNonFatalError {
       _progressBar.foreach(_.stop())
+    }
+    if (isClientStandalone) {
+      releaseResources(_conf, SPARK_DRIVER_PREFIX, _resources, Utils.getProcessId)
     }
     _taskScheduler = null
     // TODO: Cache.stop()?
@@ -2425,10 +2451,13 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Reports heartbeat metrics for the driver. */
   private def reportHeartBeat(): Unit = {
-    val driverUpdates = _heartbeater.getCurrentMetrics()
+    val currentMetrics = ExecutorMetrics.getCurrentMetrics(env.memoryManager)
+    val driverUpdates = new HashMap[(Int, Int), ExecutorMetrics]
+    // In the driver, we do not track per-stage metrics, so use a dummy stage for the key
+    driverUpdates.put(EventLoggingListener.DRIVER_STAGE_KEY, new ExecutorMetrics(currentMetrics))
     val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
     listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
-      Some(driverUpdates)))
+      driverUpdates))
   }
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
@@ -2722,7 +2751,7 @@ object SparkContext extends Logging {
 
       // Calculate the max slots each executor can provide based on resources available on each
       // executor and resources required by each task.
-      val taskResourceRequirements = parseTaskResourceRequirements(sc.conf)
+      val taskResourceRequirements = parseResourceRequirements(sc.conf, SPARK_TASK_PREFIX)
       val executorResourcesAndAmounts =
         parseAllResourceRequests(sc.conf, SPARK_EXECUTOR_PREFIX)
           .map(request => (request.id.resourceName, request.amount)).toMap

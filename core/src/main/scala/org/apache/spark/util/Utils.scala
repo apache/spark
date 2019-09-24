@@ -51,6 +51,7 @@ import com.google.common.net.InetAddresses
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.eclipse.jetty.util.MultiException
@@ -266,6 +267,26 @@ private[spark] object Utils extends Logging {
     file.setWritable(true, true) &&
     file.setExecutable(false, false) &&
     file.setExecutable(true, true)
+  }
+
+  /**
+   * Create a directory given the abstract pathname
+   * @return true, if the directory is successfully created; otherwise, return false.
+   */
+  def createDirectory(dir: File): Boolean = {
+    try {
+      // This sporadically fails - not sure why ... !dir.exists() && !dir.mkdirs()
+      // So attempting to create and then check if directory was created or not.
+      dir.mkdirs()
+      if ( !dir.exists() || !dir.isDirectory) {
+        logError(s"Failed to create directory " + dir)
+      }
+      dir.isDirectory
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to create directory " + dir, e)
+        false
+    }
   }
 
   /**
@@ -2554,6 +2575,28 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Given a process id, return true if the process is still running.
+   */
+  def isProcessRunning(pid: Int): Boolean = {
+    val process = executeCommand(Seq("kill", "-0", pid.toString))
+    process.waitFor(10, TimeUnit.SECONDS)
+    process.exitValue() == 0
+  }
+
+  /**
+   * Returns the pid of this JVM process.
+   */
+  def getProcessId: Int = {
+    val PROCESS = "(\\d+)@(.*)".r
+    val name = getProcessName()
+    name match {
+      case PROCESS(pid, _) => pid.toInt
+      case _ =>
+        throw new SparkException(s"Unexpected process name: $name, expected to be PID@hostname.")
+    }
+  }
+
+  /**
    * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
    * this is formatted as PID@hostname.
    */
@@ -2901,6 +2944,19 @@ private[spark] object Utils extends Logging {
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
   }
+
+  /** Check whether the file of the path is splittable. */
+  def isFileSplittable(path: Path, codecFactory: CompressionCodecFactory): Boolean = {
+    val codec = codecFactory.getCodec(path)
+    codec == null || codec.isInstanceOf[SplittableCompressionCodec]
+  }
+
+  /** Create a new properties object with the same values as `props` */
+  def cloneProperties(props: Properties): Properties = {
+    val resultProps = new Properties()
+    props.forEach((k, v) => resultProps.put(k, v))
+    resultProps
+  }
 }
 
 private[util] object CallerContext extends Logging {
@@ -2984,7 +3040,8 @@ private[spark] class CallerContext(
     if (CallerContext.callerContextSupported) {
       try {
         val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-        val builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+        val builder: Class[AnyRef] =
+          Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
         val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
         val hdfsContext = builder.getMethod("build").invoke(builderInst)
         callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)

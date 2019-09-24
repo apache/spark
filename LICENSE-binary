@@ -253,7 +253,6 @@ commons-codec:commons-codec
 commons-collections:commons-collections
 io.fabric8:kubernetes-client
 io.fabric8:kubernetes-model
-io.netty:netty
 io.netty:netty-all
 net.hydromatic:eigenbase-properties
 net.sf.supercsv:super-csv
@@ -370,6 +369,20 @@ org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
 org.scala-lang.modules:scala-xml_2.12
 org.opencypher:okapi-shade
+com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
+com.zaxxer.HikariCP
+org.apache.hive:hive-common
+org.apache.hive:hive-llap-common
+org.apache.hive:hive-serde
+org.apache.hive:hive-service-rpc
+org.apache.hive:hive-shims-0.23
+org.apache.hive:hive-shims
+org.apache.hive:hive-shims-scheduler
+org.apache.hive:hive-storage-api
+org.apache.hive:hive-vector-code-gen
+org.datanucleus:javax.jdo
+com.tdunning:json
+org.apache.velocity:velocity
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
@@ -397,6 +410,8 @@ org.codehaus.janino:commons-compiler
 org.codehaus.janino:janino
 jline:jline
 org.jodd:jodd-core
+com.github.wendykierp:JTransforms
+pl.edu.icm:JLargeArrays
 
 
 BSD 3-Clause
@@ -434,8 +449,12 @@ is distributed under the 3-Clause BSD license.
 MIT License
 -----------
 
-org.spire-math:spire-macros_2.12
-org.spire-math:spire_2.12
+org.typelevel:spire_2.12
+org.typelevel:spire-macros_2.12
+org.typelevel:spire-platform_2.12
+org.typelevel:spire-util_2.12
+org.typelevel:algebra_2.12:jar
+org.typelevel:cats-kernel_2.12
 org.typelevel:machinist_2.12
 net.razorvine:pyrolite
 org.slf4j:jcl-over-slf4j
@@ -459,15 +478,15 @@ Common Development and Distribution License (CDDL) 1.0
 
 javax.activation:activation  http://www.oracle.com/technetwork/java/javase/tech/index-jsp-138795.html
 javax.xml.stream:stax-api    https://jcp.org/en/jsr/detail?id=173
+javax.transaction:javax.transaction-api
 
 
 Common Development and Distribution License (CDDL) 1.1
 ------------------------------------------------------
 
-javax.annotation:javax.annotation-api    https://jcp.org/en/jsr/detail?id=250
+javax.el:javax.el-api	https://javaee.github.io/uel-ri/
 javax.servlet:javax.servlet-api   https://javaee.github.io/servlet-spec/
 javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
-javax.ws.rs:javax.ws.rs-api https://github.com/jax-rs
 javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
 org.glassfish.hk2:hk2-api https://github.com/javaee/glassfish
 org.glassfish.hk2:hk2-locator (same)
@@ -492,10 +511,11 @@ jakarta.xml.bind:jakarta.xml.bind-api
 com.sun.istack:istack-commons-runtime
 
 
-Mozilla Public License (MPL) 1.1
+Eclipse Public License (EPL) 2.0
 --------------------------------
 
-com.github.rwl:jtransforms https://sourceforge.net/projects/jtransforms/
+jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/ee4j.ca
+jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
 
 
 Python Software Foundation License

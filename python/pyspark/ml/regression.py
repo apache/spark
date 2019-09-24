@@ -20,7 +20,8 @@ import sys
 from pyspark import since, keyword_only
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
+    JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 
@@ -37,10 +38,9 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
 
 
 @inherit_doc
-class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                       HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
-                       HasStandardization, HasSolver, HasWeightCol, HasAggregationDepth, HasLoss,
-                       JavaMLWritable, JavaMLReadable):
+class LinearRegression(JavaPredictor, HasMaxIter, HasRegParam, HasTol, HasElasticNetParam,
+                       HasFitIntercept, HasStandardization, HasSolver, HasWeightCol,
+                       HasAggregationDepth, HasLoss, JavaMLWritable, JavaMLReadable):
     """
     Linear regression.
 
@@ -66,15 +66,21 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     ...     (0.0, 2.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
     >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
     >>> model = lr.fit(df)
+    >>> model.setFeaturesCol("features")
+    LinearRegression...
+    >>> model.setPredictionCol("newPrediction")
+    LinearRegression...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
+    >>> abs(model.predict(test0.head().features) - (-1.0)) < 0.001
+    True
+    >>> abs(model.transform(test0).head().newPrediction - (-1.0)) < 0.001
     True
     >>> abs(model.coefficients[0] - 1.0) < 0.001
     True
     >>> abs(model.intercept - 0.0) < 0.001
     True
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
-    >>> abs(model.transform(test1).head().prediction - 1.0) < 0.001
+    >>> abs(model.transform(test1).head().newPrediction - 1.0) < 0.001
     True
     >>> lr.setParams("vector")
     Traceback (most recent call last):
@@ -161,7 +167,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return self.getOrDefault(self.epsilon)
 
 
-class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritable, JavaMLReadable,
+class LinearRegressionModel(JavaPredictionModel, GeneralJavaMLWritable, JavaMLReadable,
                             HasTrainingSummary):
     """
     Model fitted by :class:`LinearRegression`.
@@ -224,8 +230,6 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritabl
 
 class LinearRegressionSummary(JavaWrapper):
     """
-    .. note:: Experimental
-
     Linear regression results evaluated on a dataset.
 
     .. versionadded:: 2.0.0
@@ -431,8 +435,6 @@ class LinearRegressionSummary(JavaWrapper):
 @inherit_doc
 class LinearRegressionTrainingSummary(LinearRegressionSummary):
     """
-    .. note:: Experimental
-
     Linear regression training results. Currently, the training summary ignores the
     training weights except for the objective trace.
 
@@ -464,8 +466,7 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
 
 
 @inherit_doc
-class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                         HasWeightCol, JavaMLWritable, JavaMLReadable):
+class IsotonicRegression(JavaPredictor, HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
@@ -476,6 +477,12 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
+    >>> model.setFeaturesCol("features")
+    IsotonicRegression...
+    >>> model.setLabelCol("newLabel")
+    IsotonicRegression...
+    >>> model.getLabelCol()
+    'newLabel'
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -559,7 +566,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.featureIndex)
 
 
-class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class IsotonicRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`IsotonicRegression`.
 
@@ -582,6 +589,96 @@ class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         regression.
         """
         return self._call_java("predictions")
+
+
+class DecisionTreeParams(Params):
+    """
+    Mixin for Decision Tree parameters.
+    """
+
+    leafCol = Param(Params._dummy(), "leafCol", "Leaf indices column name. Predicted leaf " +
+                    "index of each instance in each tree by preorder.",
+                    typeConverter=TypeConverters.toString)
+
+    maxDepth = Param(Params._dummy(), "maxDepth", "Maximum depth of the tree. (>= 0) E.g., " +
+                     "depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
+                     typeConverter=TypeConverters.toInt)
+
+    maxBins = Param(Params._dummy(), "maxBins", "Max number of bins for discretizing continuous " +
+                    "features.  Must be >=2 and >= number of categories for any categorical " +
+                    "feature.", typeConverter=TypeConverters.toInt)
+
+    minInstancesPerNode = Param(Params._dummy(), "minInstancesPerNode", "Minimum number of " +
+                                "instances each child must have after split. If a split causes " +
+                                "the left or right child to have fewer than " +
+                                "minInstancesPerNode, the split will be discarded as invalid. " +
+                                "Should be >= 1.", typeConverter=TypeConverters.toInt)
+
+    minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split " +
+                        "to be considered at a tree node.", typeConverter=TypeConverters.toFloat)
+
+    maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to " +
+                          "histogram aggregation. If too small, then 1 node will be split per " +
+                          "iteration, and its aggregates may exceed this size.",
+                          typeConverter=TypeConverters.toInt)
+
+    cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass " +
+                         "trees to executors to match instances with nodes. If true, the " +
+                         "algorithm will cache node IDs for each instance. Caching can speed " +
+                         "up training of deeper trees. Users can set how often should the cache " +
+                         "be checkpointed or disable it by setting checkpointInterval.",
+                         typeConverter=TypeConverters.toBoolean)
+
+    def __init__(self):
+        super(DecisionTreeParams, self).__init__()
+
+    def setLeafCol(self, value):
+        """
+        Sets the value of :py:attr:`leafCol`.
+        """
+        return self._set(leafCol=value)
+
+    def getLeafCol(self):
+        """
+        Gets the value of leafCol or its default value.
+        """
+        return self.getOrDefault(self.leafCol)
+
+    def getMaxDepth(self):
+        """
+        Gets the value of maxDepth or its default value.
+        """
+        return self.getOrDefault(self.maxDepth)
+
+    def getMaxBins(self):
+        """
+        Gets the value of maxBins or its default value.
+        """
+        return self.getOrDefault(self.maxBins)
+
+    def getMinInstancesPerNode(self):
+        """
+        Gets the value of minInstancesPerNode or its default value.
+        """
+        return self.getOrDefault(self.minInstancesPerNode)
+
+    def getMinInfoGain(self):
+        """
+        Gets the value of minInfoGain or its default value.
+        """
+        return self.getOrDefault(self.minInfoGain)
+
+    def getMaxMemoryInMB(self):
+        """
+        Gets the value of maxMemoryInMB or its default value.
+        """
+        return self.getOrDefault(self.maxMemoryInMB)
+
+    def getCacheNodeIds(self):
+        """
+        Gets the value of cacheNodeIds or its default value.
+        """
+        return self.getOrDefault(self.cacheNodeIds)
 
 
 class TreeEnsembleParams(DecisionTreeParams):
@@ -718,8 +815,7 @@ class GBTRegressorParams(GBTParams, TreeRegressorParams):
 
 
 @inherit_doc
-class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeightCol,
-                            HasPredictionCol, DecisionTreeParams, TreeRegressorParams,
+class DecisionTreeRegressor(JavaPredictor, HasWeightCol, DecisionTreeParams, TreeRegressorParams,
                             HasCheckpointInterval, HasSeed, JavaMLWritable, JavaMLReadable,
                             HasVarianceCol):
     """
@@ -731,7 +827,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance")
+    >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance", leafCol="leafId")
     >>> model = dt.fit(df)
     >>> model.depth
     1
@@ -742,7 +838,12 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     >>> model.numFeatures
     1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> model.predict(test0.head().features)
+    0.0
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> result.leafId
     0.0
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
@@ -778,19 +879,20 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
-                 seed=None, varianceCol=None, weightCol=None):
+                 seed=None, varianceCol=None, weightCol=None, leafCol=""):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 impurity="variance", seed=None, varianceCol=None, weightCol=None)
+                 impurity="variance", seed=None, varianceCol=None, weightCol=None, \
+                 leafCol="")
         """
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.DecisionTreeRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="variance")
+                         impurity="variance", leafCol="")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -799,12 +901,14 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="variance", seed=None, varianceCol=None, weightCol=None):
+                  impurity="variance", seed=None, varianceCol=None, weightCol=None,
+                  leafCol=""):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  impurity="variance", seed=None, varianceCol=None, weightCol=None)
+                  impurity="variance", seed=None, varianceCol=None, weightCol=None, \
+                  leafCol="")
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self._input_kwargs
@@ -858,7 +962,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
 
 
 @inherit_doc
-class DecisionTreeModel(JavaModel, JavaPredictionModel):
+class DecisionTreeModel(JavaPredictionModel):
     """
     Abstraction for Decision Tree models.
 
@@ -960,9 +1064,8 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
 
 
 @inherit_doc
-class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
-                            RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
-                            JavaMLWritable, JavaMLReadable):
+class RandomForestRegressor(JavaPredictor, HasSeed, RandomForestParams, TreeRegressorParams,
+                            HasCheckpointInterval, JavaMLWritable, JavaMLReadable):
     """
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for regression.
@@ -973,15 +1076,20 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42)
+    >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42, leafCol="leafId")
     >>> model = rf.fit(df)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> model.predict(test0.head().features)
     0.0
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> result.leafId
+    DenseVector([0.0, 0.0])
     >>> model.numFeatures
     1
     >>> model.trees
@@ -1010,13 +1118,13 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
-                 featureSubsetStrategy="auto"):
+                 featureSubsetStrategy="auto", leafCol=""):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
-                 featureSubsetStrategy="auto")
+                 featureSubsetStrategy="auto", leafCol="")
         """
         super(RandomForestRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1024,7 +1132,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="variance", subsamplingRate=1.0, numTrees=20,
-                         featureSubsetStrategy="auto")
+                         featureSubsetStrategy="auto", leafCol="")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1034,13 +1142,13 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
-                  featureSubsetStrategy="auto"):
+                  featureSubsetStrategy="auto", leafCol=""):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
-                  featureSubsetStrategy="auto")
+                  featureSubsetStrategy="auto", leafCol="")
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -1145,9 +1253,8 @@ class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaML
 
 
 @inherit_doc
-class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                   GBTRegressorParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
-                   JavaMLReadable):
+class GBTRegressor(JavaPredictor, GBTRegressorParams, HasCheckpointInterval, HasSeed,
+                   JavaMLWritable, JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
@@ -1158,12 +1265,14 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42)
+    >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42, leafCol="leafId")
     >>> print(gbt.getImpurity())
     variance
     >>> print(gbt.getFeatureSubsetStrategy())
     all
     >>> model = gbt.fit(df)
+    >>> model.setFeaturesCol("features")
+    GBTRegressionModel...
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> model.numFeatures
@@ -1171,8 +1280,13 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> model.predict(test0.head().features)
     0.0
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> result.leafId
+    DenseVector([0.0, 0.0, 0.0, 0.0, 0.0])
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -1209,21 +1323,22 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                 validationIndicatorCol=None):
+                 validationIndicatorCol=None, leafCol=""):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                 validationIndicatorCol=None)
+                 validationIndicatorCol=None, leafCol="")
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
-                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01)
+                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
+                         leafCol="")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1234,14 +1349,14 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
                   impuriy="variance", featureSubsetStrategy="all", validationTol=0.01,
-                  validationIndicatorCol=None):
+                  validationIndicatorCol=None, leafCol=""):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                  validationIndicatorCol=None)
+                  validationIndicatorCol=None, leafCol="")
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self._input_kwargs
@@ -1366,12 +1481,9 @@ class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
 
 
 @inherit_doc
-class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                            HasFitIntercept, HasMaxIter, HasTol, HasAggregationDepth,
-                            JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegression(JavaPredictor, HasFitIntercept, HasMaxIter, HasTol,
+                            HasAggregationDepth, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Accelerated Failure Time (AFT) Model Survival Regression
 
     Fit a parametric AFT survival regression model based on the Weibull distribution
@@ -1385,6 +1497,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (1e-40, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
     >>> aftsr = AFTSurvivalRegression()
     >>> model = aftsr.fit(df)
+    >>> model.setFeaturesCol("features")
+    AFTSurvivalRegression...
     >>> model.predict(Vectors.dense(6.3))
     1.0
     >>> model.predictQuantiles(Vectors.dense(6.3))
@@ -1510,10 +1624,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self.getOrDefault(self.quantilesCol)
 
 
-class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by :class:`AFTSurvivalRegression`.
 
     .. versionadded:: 1.6.0
@@ -1559,12 +1671,9 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 
 @inherit_doc
-class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, HasPredictionCol,
-                                  HasFitIntercept, HasMaxIter, HasTol, HasRegParam, HasWeightCol,
-                                  HasSolver, JavaMLWritable, JavaMLReadable):
+class GeneralizedLinearRegression(JavaPredictor, HasFitIntercept, HasMaxIter, HasTol, HasRegParam,
+                                  HasWeightCol, HasSolver, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Generalized Linear Regression.
 
     Fit a Generalized Linear Model specified by giving a symbolic description of the linear
@@ -1593,6 +1702,8 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     ...     (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
     >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
     >>> model = glr.fit(df)
+    >>> model.setFeaturesCol("features")
+    GeneralizedLinearRegression...
     >>> transformed = model.transform(df)
     >>> abs(transformed.head().prediction - 1.5) < 0.001
     True
@@ -1768,11 +1879,9 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self.getOrDefault(self.offsetCol)
 
 
-class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable,
+class GeneralizedLinearRegressionModel(JavaPredictionModel, JavaMLWritable,
                                        JavaMLReadable, HasTrainingSummary):
     """
-    .. note:: Experimental
-
     Model fitted by :class:`GeneralizedLinearRegression`.
 
     .. versionadded:: 2.0.0
@@ -1826,8 +1935,6 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWri
 
 class GeneralizedLinearRegressionSummary(JavaWrapper):
     """
-    .. note:: Experimental
-
     Generalized linear regression results evaluated on a dataset.
 
     .. versionadded:: 2.0.0
@@ -1939,8 +2046,6 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
 @inherit_doc
 class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSummary):
     """
-    .. note:: Experimental
-
     Generalized linear regression training results.
 
     .. versionadded:: 2.0.0
