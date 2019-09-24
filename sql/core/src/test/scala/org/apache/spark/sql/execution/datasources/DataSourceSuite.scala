@@ -117,18 +117,18 @@ object TestPaths {
   val hadoopConf = new Configuration()
   hadoopConf.set("fs.mockFs.impl", classOf[MockFileSystem].getName)
 
-  val path1: Path = new Path("mockFs:///somepath1")
-  val path2: Path = new Path("mockFs:///somepath2")
-  val globPath1: Path = new Path("mockFs:///globpath1*")
-  val globPath2: Path = new Path("mockFs:///globpath2*")
+  val path1: Path = new Path("mockFs://mockFs/somepath1")
+  val path2: Path = new Path("mockFs://mockFs/somepath2")
+  val globPath1: Path = new Path("mockFs://mockFs/globpath1*")
+  val globPath2: Path = new Path("mockFs://mockFs/globpath2*")
 
-  val nonExistentPath: Path = new Path("mockFs:///nonexistentpath")
-  val nonExistentGlobPath: Path = new Path("mockFs:///nonexistentpath*")
+  val nonExistentPath: Path = new Path("mockFs://mockFs/nonexistentpath")
+  val nonExistentGlobPath: Path = new Path("mockFs://mockFs/nonexistentpath*")
 
-  val globPath1Result1: Path = new Path("mockFs:///globpath1/path1")
-  val globPath1Result2: Path = new Path("mockFs:///globpath1/path2")
-  val globPath2Result1: Path = new Path("mockFs:///globpath2/path1")
-  val globPath2Result2: Path = new Path("mockFs:///globpath2/path2")
+  val globPath1Result1: Path = new Path("mockFs://mockFs/globpath1/path1")
+  val globPath1Result2: Path = new Path("mockFs://mockFs/globpath1/path2")
+  val globPath2Result1: Path = new Path("mockFs://mockFs/globpath2/path1")
+  val globPath2Result2: Path = new Path("mockFs://mockFs/globpath2/path2")
 
   val allPathsInFs = Seq(
     path1,
