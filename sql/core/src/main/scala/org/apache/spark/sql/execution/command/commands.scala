@@ -158,10 +158,10 @@ case class ExplainCommand(
     val outputString =
       if (codegen) {
         try {
-        codegenString(queryExecution.executedPlan)
-      } catch {
-        case e: AnalysisException => e.toString
-      }
+          codegenString(queryExecution.executedPlan)
+        } catch {
+          case e: AnalysisException => e.toString
+        }
       } else if (extended) {
         queryExecution.toString
       } else if (cost) {
