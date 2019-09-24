@@ -37,14 +37,9 @@ if have_pyarrow:
     import pyarrow as pa
 
 
-"""
-Tests below use pd.DataFrame.assign that will infer mixed types (unicode/str) for column names
-from kwargs w/ Python 2, so need to set check_column_type=False and avoid this check
-"""
-if sys.version < '3':
-    _check_column_type = False
-else:
-    _check_column_type = True
+# Tests below use pd.DataFrame.assign that will infer mixed types (unicode/str) for column names
+# from kwargs w/ Python 2, so need to set check_column_type=False and avoid this check
+_check_column_type = sys.version >= '3'
 
 
 @unittest.skipIf(
