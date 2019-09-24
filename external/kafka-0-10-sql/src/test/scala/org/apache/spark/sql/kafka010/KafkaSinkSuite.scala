@@ -160,6 +160,62 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
     }
   }
 
+   test("streaming - write to kafka with headers fields") {
+    val input = MemoryStream[String]
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val writer = createKafkaWriter(
+      input.toDF(),
+      withTopic = None,
+      withOutputMode = Some(OutputMode.Append))(
+      withSelectExpr = s"'$topic' as topic", "value", "map('x', 'y') as headers")
+
+    val reader = createKafkaReader(topic)
+      .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
+      .selectExpr("CAST(key as INT) key", "CAST(value as INT) value")
+      .as[(Option[Int], Int)]
+      .map(_._2)
+
+    try {
+      input.addData("1", "2", "3", "4", "5")
+      failAfter(streamingTimeout) {
+        writer.processAllAvailable()
+      }
+      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5)
+      input.addData("6", "7", "8", "9", "10")
+      failAfter(streamingTimeout) {
+        writer.processAllAvailable()
+      }
+      checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    } finally {
+      writer.stop()
+    }
+  }
+
+  test("streaming - write data with valid schema but wrong headers types") {
+    val input = MemoryStream[String]
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    var writer: StreamingQuery = null
+    var ex: Exception = null
+    try {
+      /* headers field wrong type */
+      ex = intercept[StreamingQueryException] {
+        writer = createKafkaWriter(input.toDF())(
+          withSelectExpr = s"'$topic' as topic", "value", "'foo' as headers"
+        )
+        input.addData("1", "2", "3", "4", "5")
+        writer.processAllAvailable()
+      }
+    } finally {
+      writer.stop()
+    }
+    assert(ex.getMessage.toLowerCase(Locale.ROOT)
+      .contains(" headers attribute type must be a map<string,string>"))
+  }
+
   test("streaming - write aggregation w/o topic field, with topic option") {
     val input = MemoryStream[String]
     val topic = newTopic()

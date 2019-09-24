@@ -90,7 +90,11 @@ class KafkaStreamDataWriter(
     targetTopic: Option[String],
     producerParams: ju.Map[String, Object],
     inputSchema: Seq[Attribute])
-  extends KafkaRowWriter(inputSchema, targetTopic) with DataWriter[InternalRow] {
+      extends KafkaRowWriter(
+        inputSchema,
+        targetTopic,
+        inputSchema.exists(_.name == KafkaWriter.HEADERS_ATTRIBUTE_NAME)
+      ) with DataWriter[InternalRow] {
 
   private lazy val producer = CachedKafkaProducer.getOrCreate(producerParams)
 

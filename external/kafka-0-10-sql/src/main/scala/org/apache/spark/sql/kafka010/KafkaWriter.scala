@@ -22,8 +22,8 @@ import java.{util => ju}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.types.{BinaryType, StringType}
+import org.apache.spark.sql.execution.{QueryExecution}
+import org.apache.spark.sql.types.{BinaryType, MapType, StringType}
 import org.apache.spark.util.Utils
 
 /**
@@ -39,6 +39,8 @@ private[kafka010] object KafkaWriter extends Logging {
   val TOPIC_ATTRIBUTE_NAME: String = "topic"
   val KEY_ATTRIBUTE_NAME: String = "key"
   val VALUE_ATTRIBUTE_NAME: String = "value"
+  val HEADERS_ATTRIBUTE_NAME: String = "headers"
+
 
   override def toString: String = "KafkaWriter"
 
@@ -75,6 +77,12 @@ private[kafka010] object KafkaWriter extends Logging {
         throw new AnalysisException(s"$VALUE_ATTRIBUTE_NAME attribute type " +
           s"must be a ${StringType.catalogString} or ${BinaryType.catalogString}")
     }
+    schema.find(_.name == HEADERS_ATTRIBUTE_NAME).map(_.dataType match {
+      case MapType(StringType, StringType, _) => // good
+      case _ =>
+        throw new AnalysisException(s"$HEADERS_ATTRIBUTE_NAME attribute type " +
+            s"must be a ${MapType(StringType, StringType, true).catalogString}")
+    })
   }
 
   def write(
@@ -85,7 +93,8 @@ private[kafka010] object KafkaWriter extends Logging {
     val schema = queryExecution.analyzed.output
     validateQuery(schema, kafkaParameters, topic)
     queryExecution.toRdd.foreachPartition { iter =>
-      val writeTask = new KafkaWriteTask(kafkaParameters, schema, topic)
+      val writeTask = new KafkaWriteTask(kafkaParameters, schema, topic,
+        schema.exists(_.name == HEADERS_ATTRIBUTE_NAME))
       Utils.tryWithSafeFinally(block = writeTask.execute(iter))(
         finallyBlock = writeTask.close())
     }

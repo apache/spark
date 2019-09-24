@@ -20,10 +20,11 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord, RecordMetadata}
-
+import org.apache.kafka.common.header.internals.RecordHeaders
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
-import org.apache.spark.sql.types.{BinaryType, StringType}
+import org.apache.spark.sql.types.{BinaryType, MapType, StringType}
 
 /**
  * Writes out data in a single Spark task, without any concerns about how
@@ -33,7 +34,8 @@ import org.apache.spark.sql.types.{BinaryType, StringType}
 private[kafka010] class KafkaWriteTask(
     producerConfiguration: ju.Map[String, Object],
     inputSchema: Seq[Attribute],
-    topic: Option[String]) extends KafkaRowWriter(inputSchema, topic) {
+    topic: Option[String],
+    includeHeaders: Boolean = false) extends KafkaRowWriter(inputSchema, topic, includeHeaders) {
   // used to synchronize with Kafka callbacks
   private var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
 
@@ -59,7 +61,7 @@ private[kafka010] class KafkaWriteTask(
 }
 
 private[kafka010] abstract class KafkaRowWriter(
-    inputSchema: Seq[Attribute], topic: Option[String]) {
+    inputSchema: Seq[Attribute], topic: Option[String], includeHeaders: Boolean) {
 
   // used to synchronize with Kafka callbacks
   @volatile protected var failedWrite: Exception = _
@@ -88,7 +90,36 @@ private[kafka010] abstract class KafkaRowWriter(
       throw new NullPointerException(s"null topic present in the data. Use the " +
         s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
     }
-    val record = new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, key, value)
+    val headers: RecordHeaders = if (includeHeaders) {
+      val rowHeaders = projectedRow.getMap(3)
+      val len = rowHeaders.numElements()
+      val headers = new RecordHeaders()
+      val keyArray = rowHeaders.keyArray()
+      val valueArray = rowHeaders.valueArray()
+      var i = 0
+      while (i < len) {
+        val key = keyArray.getUTF8String(i).toString
+        if (valueArray.isNullAt(i)) {
+          headers.add(key, null)
+        } else {
+          headers.add(key, valueArray.getUTF8String(i).toString.getBytes())
+        }
+        i += 1
+      }
+      headers
+    } else {
+      null
+    }
+
+    if (topic == null) {
+      throw new NullPointerException(s"null topic present in the data. Use the " +
+          s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
+    }
+
+    val record = new ProducerRecord[Array[Byte], Array[Byte]](
+      topic.toString, null.asInstanceOf[Integer], null.asInstanceOf[Long], key, value, headers
+    )
+
     producer.send(record, callback)
   }
 
@@ -131,9 +162,26 @@ private[kafka010] abstract class KafkaRowWriter(
         throw new IllegalStateException(s"${KafkaWriter.VALUE_ATTRIBUTE_NAME} " +
           s"attribute unsupported type ${t.catalogString}")
     }
-    UnsafeProjection.create(
-      Seq(topicExpression, Cast(keyExpression, BinaryType),
-        Cast(valueExpression, BinaryType)), inputSchema)
+    if (includeHeaders) {
+      val headerExpression = inputSchema
+          .find(_.name == KafkaWriter.HEADERS_ATTRIBUTE_NAME).getOrElse(
+        throw new IllegalStateException("Required attribute " +
+            s"'${KafkaWriter.HEADERS_ATTRIBUTE_NAME}' not found")
+      )
+      headerExpression.dataType match {
+        case MapType(StringType, StringType, _) => // good
+        case _ =>
+          throw new AnalysisException(s"${KafkaWriter.HEADERS_ATTRIBUTE_NAME} attribute type must" +
+              s" be a ${MapType(StringType, StringType, valueContainsNull = false).catalogString}")
+      }
+      UnsafeProjection.create(
+        Seq(topicExpression, Cast(keyExpression, BinaryType),
+          Cast(valueExpression, BinaryType), headerExpression), inputSchema)
+    } else {
+      UnsafeProjection.create(
+        Seq(topicExpression, Cast(keyExpression, BinaryType),
+          Cast(valueExpression, BinaryType)), inputSchema)
+    }
   }
 }
 
