@@ -21,15 +21,16 @@ import java.io.IOException
 import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
+import org.apache.spark.sql.execution.command.{CommandUtils, CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -228,6 +229,62 @@ case class RelationConversions(
         OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)
     }
+  }
+}
+
+/**
+ * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
+ */
+case class PruneHiveTablePartitions(
+  session: SparkSession) extends Rule[LogicalPlan] with PredicateHelper {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case filter @ Filter(condition, relation: HiveTableRelation) if relation.isPartitioned =>
+      val predicates = splitConjunctivePredicates(condition)
+      val normalizedFilters = predicates.map { e =>
+        e transform {
+          case a: AttributeReference =>
+            a.withName(relation.output.find(_.semanticEquals(a)).get.name)
+        }
+      }
+      val partitionSet = AttributeSet(relation.partitionCols)
+      val pruningPredicates = normalizedFilters.filter { predicate =>
+        !predicate.references.isEmpty &&
+          predicate.references.subsetOf(partitionSet)
+      }
+      val conf = session.sessionState.conf
+      if (pruningPredicates.nonEmpty && conf.fallBackToHdfsForStatsEnabled &&
+        conf.metastorePartitionPruning) {
+        val prunedPartitions = session.sharedState.externalCatalog.listPartitionsByFilter(
+          relation.tableMeta.database,
+          relation.tableMeta.identifier.table,
+          pruningPredicates,
+          conf.sessionLocalTimeZone)
+        val sizeInBytes = try {
+          prunedPartitions.map { part =>
+            val rawDataSize = part.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
+            val totalSize = part.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+            if (rawDataSize.isDefined && rawDataSize.get > 0) {
+              rawDataSize.get
+            } else if (totalSize.isDefined && totalSize.get > 0L) {
+              totalSize.get
+            } else {
+              CommandUtils.calculateLocationSize(
+                session.sessionState, relation.tableMeta.identifier, part.storage.locationUri)
+            }
+          }.sum
+        } catch {
+          case e: IOException =>
+            logWarning("Failed to get table size from HDFS.", e)
+            conf.defaultSizeInBytes
+        }
+        val withStats = relation.tableMeta.copy(
+          stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+        val prunedCatalogRelation = relation.copy(tableMeta = withStats)
+        val filterExpression = predicates.reduceLeft(And)
+        Filter(filterExpression, prunedCatalogRelation)
+      } else {
+        filter
+      }
   }
 }
 

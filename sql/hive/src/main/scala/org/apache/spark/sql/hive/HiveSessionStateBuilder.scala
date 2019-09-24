@@ -21,9 +21,10 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlanner
+import org.apache.spark.sql.execution.{SparkOptimizer, SparkPlanner}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
@@ -91,6 +92,20 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         PreReadCheck +:
         TableCapabilityCheck +:
         customCheckRules
+  }
+
+  /**
+   * Logical query plan optimizer that takes into account Hive.
+   */
+  override protected def optimizer: Optimizer = {
+    new SparkOptimizer(catalog, experimentalMethods) {
+      override def postHocOptimizationBatches: Seq[Batch] = Seq(
+        Batch("Prune Hive Table Partitions", Once, PruneHiveTablePartitions(session))
+      )
+
+      override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
+        super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
+    }
   }
 
   /**
