@@ -416,7 +416,7 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-29189: Add an option to ignore block locations when listing file") {
+  test("Add an option to ignore block locations when listing file") {
     withTempDir { dir =>
       val partitionDirectory = new File(dir, "a=foo")
       partitionDirectory.mkdir()
@@ -426,25 +426,26 @@ class FileIndexSuite extends SharedSparkSession {
       }
       val path = new Path(dir.getCanonicalPath)
 
-      var withBlockLocations, withoutBlockLocations = Seq.empty[FileStatus]
       withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
          "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
-        withBlockLocations = fileIndex.
-          listLeafFiles(Seq(new Path(partitionDirectory.getPath))).toSeq
+        val withBlockLocations = fileIndex.
+          listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+
+        withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true",
+                     "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+          val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+          val withoutBlockLocations = fileIndex.
+            listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+
+          assert(withBlockLocations.size == withoutBlockLocations.size)
+          assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
+            b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
+          assert(withoutBlockLocations.forall(b => b.isInstanceOf[FileStatus] &&
+            !b.isInstanceOf[LocatedFileStatus]))
+          assert(withoutBlockLocations.forall(withBlockLocations.contains))
+        }
       }
-      withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true",
-         "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
-        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
-        withoutBlockLocations = fileIndex.
-          listLeafFiles(Seq(new Path(partitionDirectory.getPath))).toSeq
-      }
-      assert(withBlockLocations.size == withoutBlockLocations.size)
-      assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
-        b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
-      assert(withoutBlockLocations.forall(b => b.isInstanceOf[FileStatus] &&
-        !b.isInstanceOf[LocatedFileStatus]))
-      assert(withoutBlockLocations.forall(withBlockLocations.contains))
     }
   }
 }
