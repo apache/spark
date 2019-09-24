@@ -1842,6 +1842,19 @@ class Dataset[T] private[sql](
   def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
 
   /**
+   * Aggregates on the entire Dataset without groups.
+   * {{{
+   *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
+   *   ds.agg("colA", "colB")
+   *   ds.agg($"colA", $"colB")
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.0.0
+   */
+  def agg(col: String, cols: String*): DataFrame = agg(Column(col), cols.map(Column(_)) : _*)
+
+  /**
    * Returns a new Dataset by taking the first `n` rows. The difference between this function
    * and `head` is that `head` is an action and returns an array (by triggering query execution)
    * while `limit` returns a new Dataset.
