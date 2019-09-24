@@ -21,7 +21,7 @@ import java.{util => ju}
 import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
@@ -49,6 +49,9 @@ private[kafka010] class KafkaOffsetReader(
     val driverKafkaParams: ju.Map[String, Object],
     readerOptions: CaseInsensitiveMap[String],
     driverGroupIdPrefix: String) extends Logging {
+
+  import KafkaOffsetReader._
+
   /**
    * Used to ensure execute fetch operations execute in an UninterruptibleThread
    */
@@ -166,83 +169,118 @@ private[kafka010] class KafkaOffsetReader(
   def fetchSpecificOffsets(
       partitionOffsets: Map[TopicPartition, Long],
       reportDataLoss: String => Unit): KafkaSourceOffset = {
-    val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
-      assert(partitions.asScala == partitionOffsets.keySet,
-        "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
-          "Use -1 for latest, -2 for earliest, if you don't care.\n" +
-          s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions.asScala}")
-      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
+    val fnRetrievePartitionOffsets: (TPToOffsets, ju.Set[TopicPartition]) => TPToOffsets = {
+      case (newParams, _) => newParams
     }
 
-    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = { _ =>
-      partitionOffsets
-    }
+    fetchSpecificOffsets0(partitionOffsets, adjustParamsWithPartitionsForOffsets,
+      fnRetrievePartitionOffsets, assertFetchedOffsetsForOffsets(reportDataLoss))
+  }
 
-    val fnAssertFetchedOffsets: Map[TopicPartition, Long] => Unit = { fetched =>
-      partitionOffsets.foreach {
-        case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
-          off != KafkaOffsetRangeLimit.EARLIEST =>
-          if (fetched(tp) != off) {
-            reportDataLoss(
-              s"startingOffsets for $tp was $off but consumer reset to ${fetched(tp)}")
-          }
-        case _ =>
-        // no real way to check that beginning or end is reasonable
-      }
-    }
+  private def adjustParamsWithPartitionsForOffsets
+      : (TPToOffsets, ju.Set[TopicPartition]) => TPToOffsets = { case (params, partitions) =>
+    assert(partitions.asScala == params.keySet,
+      "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
+        "Use -1 for latest, -2 for earliest, if you don't care.\n" +
+        s"Specified: ${params.keySet} Assigned: ${partitions.asScala}")
+    logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $params")
+    params
+  }
 
-    fetchSpecificOffsets0(fnAssertParametersWithPartitions, fnRetrievePartitionOffsets,
-      fnAssertFetchedOffsets)
+  private def assertFetchedOffsetsForOffsets(reportDataLoss: String => Unit)
+      : (TPToOffsets, TPToOffsets) => Unit = { case (newParams, fetched) =>
+    newParams.foreach {
+      case (tp, off) if off != KafkaOffsetRangeLimit.LATEST &&
+        off != KafkaOffsetRangeLimit.EARLIEST =>
+        if (fetched(tp) != off) {
+          reportDataLoss(
+            s"startingOffsets for $tp was $off but consumer reset to ${fetched(tp)}")
+        }
+      case _ =>
+      // no real way to check that beginning or end is reasonable
+    }
   }
 
   def fetchSpecificTimestampBasedOffsets(
       partitionTimestamps: Map[TopicPartition, Long],
       failsOnNoMatchingOffset: Boolean): KafkaSourceOffset = {
-    val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
-      assert(partitions.asScala == partitionTimestamps.keySet,
-        "If starting/endingOffsetsByTimestamp contains specific offsets, you must specify all " +
-          s"topics. Specified: ${partitionTimestamps.keySet} Assigned: ${partitions.asScala}")
-      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionTimestamps")
-    }
+    val fnAssertFetchedOffsets: (TPToOffsets, TPToOffsets) => Unit = { (_, _) => }
 
-    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = { _ => {
-        val converted = partitionTimestamps.map { case (tp, timestamp) =>
-          tp -> java.lang.Long.valueOf(timestamp)
-        }.asJava
-
-        val offsetForTime: ju.Map[TopicPartition, OffsetAndTimestamp] =
-          consumer.offsetsForTimes(converted)
-
-        offsetForTime.asScala.map { case (tp, offsetAndTimestamp) =>
-          if (failsOnNoMatchingOffset) {
-            assert(offsetAndTimestamp != null, "No offset matched from request of " +
-              s"topic-partition $tp and timestamp ${partitionTimestamps(tp)}.")
-          }
-
-          if (offsetAndTimestamp == null) {
-            tp -> KafkaOffsetRangeLimit.LATEST
-          } else {
-            tp -> offsetAndTimestamp.offset()
-          }
-        }.toMap
-      }
-    }
-
-    val fnAssertFetchedOffsets: Map[TopicPartition, Long] => Unit = { _ => }
-
-    fetchSpecificOffsets0(fnAssertParametersWithPartitions, fnRetrievePartitionOffsets,
+    fetchSpecificOffsets0(partitionTimestamps,
+      adjustParamsWithPartitionsForTimestampBasedOffset,
+      retrievePartitionOffsetsForTimestampBasedOffset(failsOnNoMatchingOffset),
       fnAssertFetchedOffsets)
   }
 
+  private def adjustParamsWithPartitionsForTimestampBasedOffset
+      : (TPToOffsets, ju.Set[TopicPartition]) => TPToOffsets = { case (params, partitions) =>
+    val paramsGroupedByTopic = params.groupBy(_._1.topic())
+    val partitionsGroupedByTopic = partitions.asScala.groupBy(_.topic())
+
+    assert(paramsGroupedByTopic.keySet == partitionsGroupedByTopic.keySet,
+      s"Not all specified topics are assigned. Specified: ${params.keySet} " +
+        s"Assigned: ${partitions.asScala}")
+
+    val newParams: Map[TopicPartition, Long] = paramsGroupedByTopic.map {
+      case (topic, tpToOffset) =>
+        if (tpToOffset.keySet.map(_.partition()).contains(GLOBAL_PARTITION_NUM)) {
+          // global timestamp has been set for all partitions in topic
+
+          // we disallow overriding timestamp per partition for simplicity
+          assert(tpToOffset.size == 1, "Global timestamp for topic cannot be set along with " +
+            "specifying partition(s). Specify only global timestamp for each topic if you want " +
+            s"to use global timestamp. Configuration error on topic $topic, specified: $params")
+
+          val partsForTopic = partitionsGroupedByTopic(topic)
+          val timestampOffset = tpToOffset(new TopicPartition(topic, GLOBAL_PARTITION_NUM))
+
+          partsForTopic.map { part => part -> timestampOffset }.toMap
+        } else {
+          val partsForTopic = partitionsGroupedByTopic(topic)
+          assert(tpToOffset.keySet == partsForTopic.toSet,
+            "If starting/endingOffsetsByTimestamp contains specific offsets, you must specify" +
+              s" all TopicPartitions. Specified: ${params.keySet} Assigned: " +
+              s"${partitions.asScala}")
+          tpToOffset
+        }
+    }.reduceLeft { (acc: TPToOffsets, tpToOffsets: TPToOffsets) => acc ++ tpToOffsets }
+
+    logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $newParams")
+    newParams
+  }
+
+  private def retrievePartitionOffsetsForTimestampBasedOffset(failsOnNoMatchingOffset: Boolean)
+      : (TPToOffsets, ju.Set[TopicPartition]) => TPToOffsets = { case (newPartitionTimestamps, _) =>
+    val converted = newPartitionTimestamps.map { case (tp, timestamp) =>
+      tp -> java.lang.Long.valueOf(timestamp)
+    }.asJava
+
+    val offsetForTime: ju.Map[TopicPartition, OffsetAndTimestamp] =
+      consumer.offsetsForTimes(converted)
+
+    offsetForTime.asScala.map { case (tp, offsetAndTimestamp) =>
+      if (failsOnNoMatchingOffset) {
+        assert(offsetAndTimestamp != null, "No offset matched from request of " +
+          s"topic-partition $tp and timestamp ${newPartitionTimestamps(tp)}.")
+      }
+
+      if (offsetAndTimestamp == null) {
+        tp -> KafkaOffsetRangeLimit.LATEST
+      } else {
+        tp -> offsetAndTimestamp.offset()
+      }
+    }.toMap
+  }
+
   private def fetchSpecificOffsets0(
-      fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit,
-      fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long],
-      fnAssertFetchedOffsets: Map[TopicPartition, Long] => Unit): KafkaSourceOffset = {
+      partitionTimestamps: TPToOffsets,
+      fnAdjustParamsWithPartitions: (TPToOffsets, ju.Set[TopicPartition]) => TPToOffsets,
+      fnRetrievePartitionOffsets: (TPToOffsets, ju.Set[TopicPartition]) => TPToOffsets,
+      fnAssertFetchedOffsets: (TPToOffsets, TPToOffsets) => Unit): KafkaSourceOffset = {
     val fetched = partitionsAssignedToConsumer {
       partitions => {
-        fnAssertParametersWithPartitions(partitions)
-
-        val partitionOffsets = fnRetrievePartitionOffsets(partitions)
+        val newPartTimestamps = fnAdjustParamsWithPartitions(partitionTimestamps, partitions)
+        val partitionOffsets = fnRetrievePartitionOffsets(newPartTimestamps, partitions)
 
         partitionOffsets.foreach {
           case (tp, KafkaOffsetRangeLimit.LATEST) =>
@@ -252,13 +290,15 @@ private[kafka010] class KafkaOffsetReader(
           case (tp, off) => consumer.seek(tp, off)
         }
 
-        partitionOffsets.map {
+        val fetchedOffsets = partitionOffsets.map {
           case (tp, _) => tp -> consumer.position(tp)
         }
+
+        fnAssertFetchedOffsets(newPartTimestamps, fetchedOffsets)
+
+        fetchedOffsets
       }
     }
-
-    fnAssertFetchedOffsets(fetched)
 
     KafkaSourceOffset(fetched)
   }
@@ -307,7 +347,7 @@ private[kafka010] class KafkaOffsetReader(
          * latest offset (offset in `knownOffsets` is great than the one in `partitionOffsets`).
          */
         def findIncorrectOffsets(): Seq[(TopicPartition, Long, Long)] = {
-          var incorrectOffsets = ArrayBuffer[(TopicPartition, Long, Long)]()
+          var incorrectOffsets = mutable.ArrayBuffer[(TopicPartition, Long, Long)]()
           partitionOffsets.foreach { case (tp, offset) =>
             knownOffsets.foreach(_.get(tp).foreach { knownOffset =>
               if (knownOffset > offset) {
@@ -477,4 +517,12 @@ private[kafka010] class KafkaOffsetReader(
     stopConsumer()
     _consumer = null  // will automatically get reinitialized again
   }
+}
+
+private[kafka010] object KafkaOffsetReader {
+  // The type is to shorten the type to reduce characters in line: please avoid exposing
+  // this type to outside of KafkaOffsetReader - parameter/return type of public methods
+  private type TPToOffsets = Map[TopicPartition, Long]
+
+  val GLOBAL_PARTITION_NUM = -1
 }

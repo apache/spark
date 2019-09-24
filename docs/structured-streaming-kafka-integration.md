@@ -365,15 +365,16 @@ The following configurations are optional:
 <tr>
   <td>startingOffsetsByTimestamp</td>
   <td>json string
-  """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
+  """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """ or """ {"topicA":{"-1": 1000}, "topicB": {"-1": 2000}} """
   </td>
-  <td>none (the value of <code>startingOffsets<code/> will apply)</td>
+  <td>none (the value of <code>startingOffsets</code> will apply)</td>
   <td>streaming and batch</td>
   <td>The start point of timestamp when a query is started, a json string specifying a starting timestamp for
   each TopicPartition. The returned offset for each partition is the earliest offset whose timestamp is greater than or
   equal to the given timestamp in the corresponding partition. If the matched offset doesn't exist,
   the query will fail immediately to prevent unintended read from such partition. (This is a kind of limitation as of now, and will be addressed in near future.)<p/>
-  <p/>
+  You can specify global timestamp per topic which applies to all partitions in topic, via setting partition to "-1".
+  Note that the option is mutually exclusive, you can't specify timestamp for both global and specific partition(s).<p/>
   Spark simply passes the timestamp information to <code>KafkaConsumer.offsetsForTimes</code>, and doesn't interpret or reason about the value. <p/>
   For more details on <code>KafkaConsumer.offsetsForTimes</code>, please refer <a href="https://kafka.apache.org/21/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html#offsetsForTimes-java.util.Map-">javadoc</a> for details.<p/>
   Also the meaning of <code>timestamp</code> here can be vary according to Kafka configuration (<code>log.message.timestamp.type</code>): please refer <a href="https://kafka.apache.org/documentation/">Kafka documentation</a> for further details.<p/>
@@ -401,15 +402,16 @@ The following configurations are optional:
 <tr>
   <td>endingOffsetsByTimestamp</td>
   <td>json string
-  """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
+  """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """ or """ {"topicA":{"-1": 1000}, "topicB": {"-1": 2000} """
   </td>
-  <td>latest</td>
+  <td>the value of <code>endingOffsets</code> will apply</td>
   <td>batch query</td>
-  <td>The end point when a batch query is ended, a json string specifying an ending timesamp for each TopicPartition.
+  <td>The end point when a batch query is ended, a json string specifying an ending timestamp for each TopicPartition.
   The returned offset for each partition is the earliest offset whose timestamp is greater than or equal to
   the given timestamp in the corresponding partition. If the matched offset doesn't exist, the offset will
   be set to latest.<p/>
-  <p/>
+  You can specify global timestamp per topic which applies to all partitions in topic, via setting partition to "-1".
+  Note that the option is mutually exclusive, you can't specify timestamp for both global and specific partition(s).<p/>
   Spark simply passes the timestamp information to <code>KafkaConsumer.offsetsForTimes</code>, and doesn't interpret or reason about the value. <p/>
   For more details on <code>KafkaConsumer.offsetsForTimes</code>, please refer <a href="https://kafka.apache.org/21/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html#offsetsForTimes-java.util.Map-">javadoc</a> for details.<p/>
   Also the meaning of <code>timestamp</code> here can be vary according to Kafka configuration (<code>log.message.timestamp.type</code>): please refer <a href="https://kafka.apache.org/documentation/">Kafka documentation</a> for further details.<p/>

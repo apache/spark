@@ -268,6 +268,24 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     }, topic, 0 to 19)
   }
 
+  test("global timestamp provided for starting and ending") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    // timestamp both presented: starting "first" ending "finalized"
+    verifyTimestampRelatedQueryResult({ df =>
+      val startPartitionTimestamps: Map[TopicPartition, Long] = Map(
+        new TopicPartition(topic, KafkaOffsetReader.GLOBAL_PARTITION_NUM) -> timestamps(1))
+      val startingTimestamps = JsonUtils.partitionTimestamps(startPartitionTimestamps)
+
+      val endPartitionTimestamps = Map(
+        new TopicPartition(topic, KafkaOffsetReader.GLOBAL_PARTITION_NUM) -> timestamps(2))
+      val endingTimestamps = JsonUtils.partitionTimestamps(endPartitionTimestamps)
+
+      df.option("startingOffsetsByTimestamp", startingTimestamps)
+        .option("endingOffsetsByTimestamp", endingTimestamps)
+    }, topic, 10 to 19)
+  }
+
   test("no matched offset for timestamp - startingOffsets") {
     val (topic, timestamps) = prepareTimestampRelatedUnitTest
 
@@ -284,19 +302,40 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       }, topic, Seq.empty)
     }
 
-    @tailrec
-    def assertionErrorInExceptionChain(e: Throwable): Boolean = {
-      if (e.isInstanceOf[AssertionError]) {
-        true
-      } else if (e.getCause == null) {
-        false
-      } else {
-        assertionErrorInExceptionChain(e.getCause)
-      }
+    assert(findAssertionErrorInExceptionChain(e).isDefined,
+      "Cannot find expected AssertionError in chained exceptions")
+  }
+
+  test("specifying both global timestamp and specific timestamp for partition") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    val e = intercept[SparkException] {
+      verifyTimestampRelatedQueryResult({ df =>
+        val startTopicTimestamps = Map(
+          new TopicPartition(topic, KafkaOffsetReader.GLOBAL_PARTITION_NUM) -> timestamps(1),
+          new TopicPartition(topic, 1) -> timestamps(2)
+        )
+        val startingTimestamps = JsonUtils.partitionTimestamps(startTopicTimestamps)
+
+        df.option("startingOffsetsByTimestamp", startingTimestamps)
+      }, topic, Seq.empty)
     }
 
-    assert(assertionErrorInExceptionChain(e),
-      "Cannot find expected AssertionError in chained exceptions")
+    val actualError = findAssertionErrorInExceptionChain(e)
+    assert(actualError.isDefined, "Cannot find expected AssertionError in chained exceptions")
+    assert(actualError.get.getMessage.contains(
+      "Global timestamp for topic cannot be set along with specifying partition"))
+  }
+
+  @tailrec
+  private def findAssertionErrorInExceptionChain(e: Throwable): Option[Throwable] = {
+    if (e.isInstanceOf[AssertionError]) {
+      Some(e)
+    } else if (e.getCause == null) {
+      None
+    } else {
+      findAssertionErrorInExceptionChain(e.getCause)
+    }
   }
 
   test("no matched offset for timestamp - endingOffsets") {
