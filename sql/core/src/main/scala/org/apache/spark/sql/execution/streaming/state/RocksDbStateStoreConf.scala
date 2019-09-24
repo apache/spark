@@ -22,16 +22,9 @@ import org.apache.spark.util.Utils
 class RocksDbStateStoreConf(@transient private val stateStoreConf: StateStoreConf)
   extends Serializable {
 
-  private val DEFAULT_BLOCKSIZE_IN_KB = 32
-  private val DEFAULT_MEMTABLE_BUDGET_IN_MB = 1024
-  private val DEFAULT_CACHE_SIZE_IN_MB = 512
-  def this() = this(StateStoreConf.empty)
+  import RocksDbStateStoreConf._
 
-  val BLOCK_SIZE_KEY = "spark.sql.streaming.stateStore.rocksDb.blockSizeInKB"
-  val MEMTABLE_BUDGET_KEY = "spark.sql.streaming.stateStore.rocksDb.memtableBudgetInMB"
-  val CACHE_SIZE_KEY = "spark.sql.streaming.stateStore.rocksDb.cacheSizeInMB"
-  val ENABLE_STATS_KEY = "spark.sql.streaming.stateStore.rocksDb.enableDbStats"
-  val LOCAL_DIR_KEY = "spark.sql.streaming.stateStore.rocksDb.localDir"
+  def this() = this(StateStoreConf.empty)
 
   val blockSizeInKB: Int = stateStoreConf.confs
     .getOrElse(BLOCK_SIZE_KEY, DEFAULT_BLOCKSIZE_IN_KB.toString).toInt
@@ -39,12 +32,21 @@ class RocksDbStateStoreConf(@transient private val stateStoreConf: StateStoreCon
   val memtableBudgetInMB: Int = stateStoreConf.confs
     .getOrElse(MEMTABLE_BUDGET_KEY, DEFAULT_MEMTABLE_BUDGET_IN_MB.toString).toInt
 
-  val cacheSizeInMB: Int = stateStoreConf.confs
-    .getOrElse(CACHE_SIZE_KEY, DEFAULT_CACHE_SIZE_IN_MB.toString).toInt
-
   val enableStats: Boolean = stateStoreConf.confs
     .getOrElse(ENABLE_STATS_KEY, "false").toBoolean
 
   val localDir: String = stateStoreConf.confs
     .getOrElse(LOCAL_DIR_KEY, Utils.createTempDir().getAbsolutePath)
+}
+
+object RocksDbStateStoreConf {
+  val DEFAULT_BLOCKSIZE_IN_KB = 32
+  val DEFAULT_MEMTABLE_BUDGET_IN_MB = 1024
+  val DEFAULT_CACHE_SIZE_IN_MB = 512
+
+  val BLOCK_SIZE_KEY = "spark.sql.streaming.stateStore.rocksDb.blockSizeInKB"
+  val MEMTABLE_BUDGET_KEY = "spark.sql.streaming.stateStore.rocksDb.memtableBudgetInMB"
+  val CACHE_SIZE_KEY = "spark.sql.streaming.stateStore.rocksDb.cacheSizeInMB"
+  val ENABLE_STATS_KEY = "spark.sql.streaming.stateStore.rocksDb.enableDbStats"
+  val LOCAL_DIR_KEY = "spark.sql.streaming.stateStore.rocksDb.localDir"
 }

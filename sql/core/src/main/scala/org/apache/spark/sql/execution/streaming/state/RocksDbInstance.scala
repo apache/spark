@@ -50,7 +50,6 @@ class RocksDbInstance(
   protected val writeOptions: WriteOptions = new WriteOptions()
   protected val table_options = new BlockBasedTableConfig
   protected val options: Options = new Options()
-  protected val rocksDbLRUCache = new LRUCache(conf.cacheSizeInMB * 1024 * 1024, 6, false)
 
   private def isOpen(): Boolean = {
     db != null
@@ -114,7 +113,6 @@ class RocksDbInstance(
       options.close()
       readOptions.close()
       writeOptions.close()
-      rocksDbLRUCache.close()
     }
   }
 
@@ -369,7 +367,6 @@ class OptimisticTransactionDbInstance(
       options.close()
       readOptions.close()
       writeOptions.close()
-      rocksDbLRUCache.close()
     }
   }
 
@@ -411,6 +408,16 @@ object RocksDbInstance {
   RocksDB.loadLibrary()
 
   val COMMIT_FILE_NAME = "commit"
+
+  private val rocksDbCacheSizeInMB: Int = if (SparkEnv.get != null) {
+    SparkEnv.get.conf.getInt(
+      RocksDbStateStoreConf.CACHE_SIZE_KEY,
+      RocksDbStateStoreConf.DEFAULT_CACHE_SIZE_IN_MB)
+  } else {
+    RocksDbStateStoreConf.DEFAULT_CACHE_SIZE_IN_MB
+  }
+
+  lazy val rocksDbLRUCache = new LRUCache(rocksDbCacheSizeInMB * 1024 * 1024, 6, false)
 
   def destroyDB(path: String): Unit = {
     val f: File = new File(path)
