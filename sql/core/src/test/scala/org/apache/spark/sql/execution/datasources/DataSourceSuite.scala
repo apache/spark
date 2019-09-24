@@ -39,7 +39,7 @@ class DataSourceSuite extends SharedSparkSession {
       checkFilesExist = true
     )
 
-    assert(resultPaths.toSet == allPathsInFs.toSet)
+    assert(resultPaths.toSet === allPathsInFs.toSet)
   }
 
   test("test glob paths") {
@@ -54,7 +54,7 @@ class DataSourceSuite extends SharedSparkSession {
     )
 
     assert(
-      resultPaths.toSet == Set(
+      resultPaths.toSet === Set(
         globPath1Result1,
         globPath1Result2,
         globPath2Result1,
@@ -75,7 +75,7 @@ class DataSourceSuite extends SharedSparkSession {
     )
 
     assert(
-      resultPaths.toSet == Set(
+      resultPaths.toSet === Set(
         path1,
         path2
       )
