@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false) {
