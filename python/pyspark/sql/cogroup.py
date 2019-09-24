@@ -43,7 +43,11 @@ class CoGroupedData(object):
         as a `DataFrame`.
 
         The user-defined function should take two `pandas.DataFrame` and return another
-        `pandas.DataFrame`. For each side of the cogroup, all columns are passed together
+        `pandas.DataFrame`. Alternatively, a user-defined function which additionally takes
+        a Tuple can be provided, in which case the cogroup key will be passed in as the Tuple
+        parameter.
+
+        For each side of the cogroup, all columns are passed together
         as a `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame`
         are combined as a :class:`DataFrame`.
 
@@ -77,6 +81,19 @@ class CoGroupedData(object):
         |20000102|  1|3.0|  x|
         |20000101|  2|2.0|  y|
         |20000102|  2|4.0|  y|
+        +--------+---+---+---+
+        >>> @pandas_udf("time int, id int, v1 double, v2 string", PandasUDFType.COGROUPED_MAP)
+        ... def asof_join(k, l, r):
+        ...    if k == (1,):
+        ...         return pd.merge_asof(l, r, on="time", by="id")
+        ...    else:
+        ...        return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
+        >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()
+        +--------+---+---+---+
+        |    time| id| v1| v2|
+        +--------+---+---+---+
+        |20000101|  1|1.0|  x|
+        |20000102|  1|3.0|  x|
         +--------+---+---+---+
 
         .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
