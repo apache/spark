@@ -22,9 +22,9 @@ import org.apache.spark.SparkFunSuite
 
 class ProcfsMetricsGetterSuite extends SparkFunSuite {
 
-  val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
 
   test("testGetProcessInfo") {
+    val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
     var r = ProcfsMetrics(0, 0, 0, 0, 0, 0)
     r = p.addProcfsMetricsFromOneProcess(r, 26109)
     assert(r.jvmVmemTotal == 4769947648L)
