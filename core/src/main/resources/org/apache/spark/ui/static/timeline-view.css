@@ -223,10 +223,11 @@ rect.getting-result-time-proportion {
 }
 
 .vis-timeline .vis-item.executor.vis-selected {
-    background-color: #00aaff;
-    border-color: #184c66;
-    z-index: 2;
+  background-color: #00AAFF;
+  border-color: #184C66;
+  z-index: 2;
 }
+
 tr.corresponding-item-hover > td, tr.corresponding-item-hover > th {
   background-color: #D6FFE4 !important;
 }
