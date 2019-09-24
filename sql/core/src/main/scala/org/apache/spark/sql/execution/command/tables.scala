@@ -508,6 +508,7 @@ abstract class DescribeCommandBase extends RunnableCommand {
       header: Boolean): Unit = {
     if (header) {
       append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+      append(buffer, "", "", "")
     }
     schema.foreach { column =>
       append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
@@ -540,15 +541,18 @@ case class DescribeTableCommand(
         throw new AnalysisException(
           s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
       }
-      describeSchema(catalog.lookupRelation(table).schema, result, header = false)
+      describeSchema(catalog.lookupRelation(table).schema, result, header = isExtended)
     } else {
       val metadata = catalog.getTableMetadata(table)
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
-        describeSchema(sparkSession.table(metadata.identifier).schema, result, header = false)
+        val allCols = sparkSession.table(metadata.identifier).schema
+        val normalCols = schemaWithoutPartCols(allCols, metadata.partitionColumnNames)
+        describeSchema(normalCols, result, header = isExtended)
       } else {
-        describeSchema(metadata.schema, result, header = false)
+        val normalCols = schemaWithoutPartCols(metadata.schema, metadata.partitionColumnNames)
+        describeSchema(normalCols, result, header = isExtended)
       }
 
       describePartitionInfo(metadata, result)
@@ -565,8 +569,17 @@ case class DescribeTableCommand(
     result
   }
 
+  private def schemaWithoutPartCols(schema: StructType, partColNames: Seq[String]): StructType = {
+    if (partColNames.isEmpty) {
+      schema
+    } else {
+      StructType(schema.filter(col => !partColNames.contains(col.name)))
+    }
+  }
+
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (table.partitionColumnNames.nonEmpty) {
+      append(buffer, "", "", "")
       append(buffer, "# Partition Information", "", "")
       describeSchema(table.partitionSchema, buffer, header = true)
     }
