@@ -163,6 +163,13 @@ class GaussianMixtureModel(JavaModel, GaussianMixtureParams, JavaMLWritable, Jav
         """
         return self._call_java("predict", value)
 
+    @since("3.0.0")
+    def predictProbability(self, value):
+        """
+        Predict probability for the given features.
+        """
+        return self._call_java("predictProbability", value)
+
 
 @inherit_doc
 class GaussianMixture(JavaEstimator, GaussianMixtureParams, JavaMLWritable, JavaMLReadable):
@@ -202,6 +209,8 @@ class GaussianMixture(JavaEstimator, GaussianMixtureParams, JavaMLWritable, Java
     GaussianMixture...
     >>> model.predict(df.head().features)
     2
+    >>> model.predictProbability(df.head().features)
+    DenseVector([0.0, 0.4736, 0.5264])
     >>> model.hasSummary
     True
     >>> summary = model.summary
