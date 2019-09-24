@@ -251,7 +251,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
-  public void testisClientMode() {
+  public void testIsClientMode() {
     // Default master is "local[*]"
     SparkSubmitCommandBuilder launcher =
             newCommandBuilder(Collections.emptyList());
