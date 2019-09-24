@@ -227,6 +227,7 @@ class Analyzer(
       ResolveRandomSeed ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
+    Batch("PostgreSQl dialect", Once, PostgreSQLDialect.postgreSQLDialectRules(conf): _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),

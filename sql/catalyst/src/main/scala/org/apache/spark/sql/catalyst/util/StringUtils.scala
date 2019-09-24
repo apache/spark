@@ -75,24 +75,17 @@ object StringUtils extends Logging {
     Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
   private[this] val falseStringsOfPostgreSQL =
     Set("false", "fals", "fal", "fa", "f", "no", "n", "off", "of", "0").map(UTF8String.fromString)
-  // scalastyle:off caselocale
-  def isTrueString(s: UTF8String, dialect: String): Boolean = {
-    SQLConf.Dialect.withName(dialect) match {
-      case SQLConf.Dialect.SPARK =>
-        trueStrings.contains(s.toLowerCase)
-      case SQLConf.Dialect.POSTGRESQL =>
-        trueStringsOfPostgreSQL.contains(s.toLowerCase.trim())
-    }
-  }
 
-  def isFalseString(s: UTF8String, dialect: String): Boolean = {
-    SQLConf.Dialect.withName(dialect) match {
-      case SQLConf.Dialect.SPARK =>
-        falseStrings.contains(s.toLowerCase)
-      case SQLConf.Dialect.POSTGRESQL =>
-        falseStringsOfPostgreSQL.contains(s.toLowerCase.trim())
-    }
-  }
+  // scalastyle:off caselocale
+  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.toLowerCase)
+
+  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.toLowerCase)
+
+  def postgreIsTrueString(s: UTF8String): Boolean =
+    trueStringsOfPostgreSQL.contains(s.toLowerCase.trim())
+
+  def postgreIsFalseString(s: UTF8String): Boolean =
+    falseStringsOfPostgreSQL.contains(s.toLowerCase.trim())
   // scalastyle:on caselocale
 
   /**
