@@ -32,10 +32,12 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar._
 
 import org.apache.spark._
-import org.apache.spark.ResourceName.GPU
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -187,12 +189,12 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     val conf = new SparkConf()
       .set(EXECUTOR_CORES, 3)
-      .set(SPARK_EXECUTOR_RESOURCE_PREFIX + GPU + SPARK_RESOURCE_AMOUNT_SUFFIX, "3")
       .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
       .setMaster(
       "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")
       .setAppName("test")
-    setTaskResourceRequirement(conf, GPU, 1)
+    conf.set(TASK_GPU_ID.amountConf, "1")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "1")
 
     sc = new SparkContext(conf)
     val backend = sc.schedulerBackend.asInstanceOf[TestCoarseGrainedSchedulerBackend]

@@ -830,7 +830,8 @@ class DataTypeVerificationTests(unittest.TestCase):
             (2**31 - 1, IntegerType()),
 
             # Long
-            (2**64, LongType()),
+            (-(2**63), LongType()),
+            (2**63 - 1, LongType()),
 
             # Float & Double
             (1.0, FloatType()),
@@ -957,7 +958,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

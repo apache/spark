@@ -22,7 +22,8 @@ import time
 import unittest
 import warnings
 
-from pyspark.sql import Row
+from pyspark import SparkContext, SparkConf
+from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import udf
 from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
@@ -214,7 +215,7 @@ class ArrowTests(ReusedSQLTestCase):
         exception_udf = udf(raise_exception, IntegerType())
         df = df.withColumn("error", exception_udf())
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(RuntimeError, 'My error'):
+            with self.assertRaisesRegexp(Exception, 'My error'):
                 df.toPandas()
 
     def _createDataFrame_toggle(self, pdf, schema=None):
@@ -271,7 +272,7 @@ class ArrowTests(ReusedSQLTestCase):
         fields[0], fields[1] = fields[1], fields[0]  # swap str with int
         wrong_schema = StructType(fields)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "integer.*required.*got.*str"):
+            with self.assertRaisesRegexp(Exception, "integer.*required"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
@@ -383,6 +384,15 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(pdf, df_from_python.toPandas())
         assert_frame_equal(pdf, df_from_pandas.toPandas())
 
+    # Regression test for SPARK-28003
+    def test_timestamp_nat(self):
+        dt = [pd.NaT, pd.Timestamp('2019-06-11'), None] * 100
+        pdf = pd.DataFrame({'time': dt})
+        df_no_arrow, df_arrow = self._createDataFrame_toggle(pdf)
+
+        assert_frame_equal(pdf, df_no_arrow.toPandas())
+        assert_frame_equal(pdf, df_arrow.toPandas())
+
     def test_toPandas_batch_order(self):
 
         def delay_first_part(partition_index, iterator):
@@ -412,6 +422,32 @@ class ArrowTests(ReusedSQLTestCase):
             run_test(*case)
 
 
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message)
+class MaxResultArrowTests(unittest.TestCase):
+    # These tests are separate as 'spark.driver.maxResultSize' configuration
+    # is a static configuration to Spark context.
+
+    @classmethod
+    def setUpClass(cls):
+        cls.spark = SparkSession(SparkContext(
+            'local[4]', cls.__name__, conf=SparkConf().set("spark.driver.maxResultSize", "10k")))
+
+        # Explicitly enable Arrow and disable fallback.
+        cls.spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+        cls.spark.conf.set("spark.sql.execution.arrow.pyspark.fallback.enabled", "false")
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "spark"):
+            cls.spark.stop()
+
+    def test_exception_by_max_results(self):
+        with self.assertRaisesRegexp(Exception, "is bigger than"):
+            self.spark.range(0, 10000, 1, 100).toPandas()
+
+
 class EncryptionArrowTests(ArrowTests):
 
     @classmethod
@@ -424,7 +460,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -68,7 +68,7 @@ private[spark] case class SSLOptions(
    */
   def createJettySslContextFactory(): Option[SslContextFactory] = {
     if (enabled) {
-      val sslContextFactory = new SslContextFactory()
+      val sslContextFactory = new SslContextFactory.Server()
 
       keyStore.foreach(file => sslContextFactory.setKeyStorePath(file.getAbsolutePath))
       keyStorePassword.foreach(sslContextFactory.setKeyStorePassword)

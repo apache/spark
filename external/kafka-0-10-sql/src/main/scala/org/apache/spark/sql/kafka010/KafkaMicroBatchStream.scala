@@ -18,10 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.io._
-import java.nio.charset.StandardCharsets
 
-import org.apache.commons.io.IOUtils
 import org.apache.kafka.clients.consumer.ConsumerConfig
 
 import org.apache.spark.SparkEnv
@@ -29,13 +26,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchStream
-import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.UninterruptibleThread
 
@@ -56,19 +50,21 @@ import org.apache.spark.util.UninterruptibleThread
  * and not use wrong broker addresses.
  */
 private[kafka010] class KafkaMicroBatchStream(
-    kafkaOffsetReader: KafkaOffsetReader,
+    private[kafka010] val kafkaOffsetReader: KafkaOffsetReader,
     executorKafkaParams: ju.Map[String, Object],
     options: CaseInsensitiveStringMap,
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean) extends RateControlMicroBatchStream with Logging {
 
-  private val pollTimeoutMs = options.getLong(
+  private[kafka010] val pollTimeoutMs = options.getLong(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
     SparkEnv.get.conf.get(NETWORK_TIMEOUT) * 1000L)
 
-  private val maxOffsetsPerTrigger = Option(options.get(KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER))
-    .map(_.toLong)
+  private[kafka010] val maxOffsetsPerTrigger = Option(options.get(
+    KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER)).map(_.toLong)
+
+  private val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
 
   private val rangeCalculator = KafkaOffsetRangeCalculator(options)
 
@@ -118,7 +114,7 @@ private[kafka010] class KafkaMicroBatchStream(
     if (deletedPartitions.nonEmpty) {
       val message =
         if (kafkaOffsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-          s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
+          s"$deletedPartitions are gone. ${CUSTOM_GROUP_ID_ERROR_MESSAGE}"
         } else {
           s"$deletedPartitions are gone. Some data may have been missed."
         }
@@ -150,19 +146,15 @@ private[kafka010] class KafkaMicroBatchStream(
       untilOffsets = untilOffsets,
       executorLocations = getSortedExecutorList())
 
-    // Reuse Kafka consumers only when all the offset ranges have distinct TopicPartitions,
-    // that is, concurrent tasks will not read the same TopicPartitions.
-    val reuseKafkaConsumer = offsetRanges.map(_.topicPartition).toSet.size == offsetRanges.size
-
     // Generate factories based on the offset ranges
     offsetRanges.map { range =>
-      KafkaMicroBatchInputPartition(
-        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
+      KafkaBatchInputPartition(range, executorKafkaParams, pollTimeoutMs,
+        failOnDataLoss, includeHeaders)
     }.toArray
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    KafkaMicroBatchReaderFactory
+    KafkaBatchReaderFactory
   }
 
   override def deserializeOffset(json: String): Offset = {
@@ -200,6 +192,8 @@ private[kafka010] class KafkaMicroBatchStream(
           KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets(None))
         case SpecificOffsetRangeLimit(p) =>
           kafkaOffsetReader.fetchSpecificOffsets(p, reportDataLoss)
+        case SpecificTimestampRangeLimit(p) =>
+          kafkaOffsetReader.fetchSpecificTimestampBasedOffsets(p, failsOnNoMatchingOffset = true)
       }
       metadataLog.add(0, offsets)
       logInfo(s"Initial offsets: $offsets")
@@ -274,123 +268,6 @@ private[kafka010] class KafkaMicroBatchStream(
       throw new IllegalStateException(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE")
     } else {
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
-    }
-  }
-
-  /** A version of [[HDFSMetadataLog]] specialized for saving the initial offsets. */
-  class KafkaSourceInitialOffsetWriter(sparkSession: SparkSession, metadataPath: String)
-    extends HDFSMetadataLog[KafkaSourceOffset](sparkSession, metadataPath) {
-
-    val VERSION = 1
-
-    override def serialize(metadata: KafkaSourceOffset, out: OutputStream): Unit = {
-      out.write(0) // A zero byte is written to support Spark 2.1.0 (SPARK-19517)
-      val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
-      writer.write("v" + VERSION + "\n")
-      writer.write(metadata.json)
-      writer.flush
-    }
-
-    override def deserialize(in: InputStream): KafkaSourceOffset = {
-      in.read() // A zero byte is read to support Spark 2.1.0 (SPARK-19517)
-      val content = IOUtils.toString(new InputStreamReader(in, StandardCharsets.UTF_8))
-      // HDFSMetadataLog guarantees that it never creates a partial file.
-      assert(content.length != 0)
-      if (content(0) == 'v') {
-        val indexOfNewLine = content.indexOf("\n")
-        if (indexOfNewLine > 0) {
-          val version = parseVersion(content.substring(0, indexOfNewLine), VERSION)
-          KafkaSourceOffset(SerializedOffset(content.substring(indexOfNewLine + 1)))
-        } else {
-          throw new IllegalStateException(
-            s"Log file was malformed: failed to detect the log file version line.")
-        }
-      } else {
-        // The log was generated by Spark 2.1.0
-        KafkaSourceOffset(SerializedOffset(content))
-      }
-    }
-  }
-}
-
-/** A [[InputPartition]] for reading Kafka data in a micro-batch streaming query. */
-private[kafka010] case class KafkaMicroBatchInputPartition(
-    offsetRange: KafkaOffsetRange,
-    executorKafkaParams: ju.Map[String, Object],
-    pollTimeoutMs: Long,
-    failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends InputPartition
-
-private[kafka010] object KafkaMicroBatchReaderFactory extends PartitionReaderFactory {
-  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    val p = partition.asInstanceOf[KafkaMicroBatchInputPartition]
-    KafkaMicroBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.pollTimeoutMs,
-      p.failOnDataLoss, p.reuseKafkaConsumer)
-  }
-}
-
-/** A [[PartitionReader]] for reading Kafka data in a micro-batch streaming query. */
-private[kafka010] case class KafkaMicroBatchPartitionReader(
-    offsetRange: KafkaOffsetRange,
-    executorKafkaParams: ju.Map[String, Object],
-    pollTimeoutMs: Long,
-    failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends PartitionReader[InternalRow] with Logging {
-
-  private val consumer = KafkaDataConsumer.acquire(
-    offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
-
-  private val rangeToRead = resolveRange(offsetRange)
-  private val converter = new KafkaRecordToUnsafeRowConverter
-
-  private var nextOffset = rangeToRead.fromOffset
-  private var nextRow: UnsafeRow = _
-
-  override def next(): Boolean = {
-    if (nextOffset < rangeToRead.untilOffset) {
-      val record = consumer.get(nextOffset, rangeToRead.untilOffset, pollTimeoutMs, failOnDataLoss)
-      if (record != null) {
-        nextRow = converter.toUnsafeRow(record)
-        nextOffset = record.offset + 1
-        true
-      } else {
-        false
-      }
-    } else {
-      false
-    }
-  }
-
-  override def get(): UnsafeRow = {
-    assert(nextRow != null)
-    nextRow
-  }
-
-  override def close(): Unit = {
-    consumer.release()
-  }
-
-  private def resolveRange(range: KafkaOffsetRange): KafkaOffsetRange = {
-    if (range.fromOffset < 0 || range.untilOffset < 0) {
-      // Late bind the offset range
-      val availableOffsetRange = consumer.getAvailableOffsetRange()
-      val fromOffset = if (range.fromOffset < 0) {
-        assert(range.fromOffset == KafkaOffsetRangeLimit.EARLIEST,
-          s"earliest offset ${range.fromOffset} does not equal ${KafkaOffsetRangeLimit.EARLIEST}")
-        availableOffsetRange.earliest
-      } else {
-        range.fromOffset
-      }
-      val untilOffset = if (range.untilOffset < 0) {
-        assert(range.untilOffset == KafkaOffsetRangeLimit.LATEST,
-          s"latest offset ${range.untilOffset} does not equal ${KafkaOffsetRangeLimit.LATEST}")
-        availableOffsetRange.latest
-      } else {
-        range.untilOffset
-      }
-      KafkaOffsetRange(range.topicPartition, fromOffset, untilOffset, None)
-    } else {
-      range
     }
   }
 }

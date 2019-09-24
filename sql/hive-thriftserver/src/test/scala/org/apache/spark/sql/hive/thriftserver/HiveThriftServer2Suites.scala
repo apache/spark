@@ -21,7 +21,7 @@ import java.io.{File, FilenameFilter}
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
-import java.util.UUID
+import java.util.{Locale, UUID}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -44,6 +44,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -143,10 +144,17 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       def executeTest(hiveList: String): Unit = {
         hiveList.split(";").foreach{ m =>
           val kv = m.split("=")
-          // select "${a}"; ---> avalue
-          val resultSet = statement.executeQuery("select \"${" + kv(0) + "}\"")
+          val k = kv(0)
+          val v = kv(1)
+          val modValue = s"${v}_MOD_VALUE"
+          // select '${a}'; ---> avalue
+          val resultSet = statement.executeQuery(s"select '$${$k}'")
           resultSet.next()
-          assert(resultSet.getString(1) === kv(1))
+          assert(resultSet.getString(1) === v)
+          statement.executeQuery(s"set $k=$modValue")
+          val modResultSet = statement.executeQuery(s"select '$${$k}'")
+          modResultSet.next()
+          assert(modResultSet.getString(1) === s"$modValue")
         }
       }
     }
@@ -536,9 +544,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       if (HiveUtils.isHive23) {
-        assert(conf.get("spark.sql.hive.version") === Some("2.3.5"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.6"))
       } else {
-        assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
       }
     }
   }
@@ -553,9 +561,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       if (HiveUtils.isHive23) {
-        assert(conf.get("spark.sql.hive.version") === Some("2.3.5"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.6"))
       } else {
-        assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
       }
     }
   }
@@ -653,13 +661,36 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(resultSet.getString(1) === "4.56")
     }
   }
+
+  test("SPARK-28463: Thriftserver throws BigDecimal incompatible with HiveDecimal") {
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT CAST(1 AS decimal(38, 18))")
+      assert(rs.next())
+      assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.000000000000000000"))
+    }
+  }
+
+  test("Support interval type") {
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval 3 months 1 hours")
+      assert(rs.next())
+      assert(rs.getString(1) === "interval 3 months 1 hours")
+    }
+    // Invalid interval value
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 3 months 1 hou")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def extraConf: Seq[String] =
-    "--conf spark.sql.hive.thriftServer.singleSession=true" :: Nil
+    s"--conf ${HIVE_THRIFT_SERVER_SINGLESESSION.key}=true" :: Nil
 
   test("share the temporary functions across JDBC connections") {
     withMultipleConnectionJdbcStatement()(
@@ -820,7 +851,12 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
       statements.zip(fs).foreach { case (s, f) => f(s) }
     } finally {
       tableNames.foreach { name =>
-        statements(0).execute(s"DROP TABLE IF EXISTS $name")
+        // TODO: Need a better way to drop the view.
+        if (name.toUpperCase(Locale.ROOT).startsWith("VIEW")) {
+          statements(0).execute(s"DROP VIEW IF EXISTS $name")
+        } else {
+          statements(0).execute(s"DROP TABLE IF EXISTS $name")
+        }
       }
       statements.foreach(_.close())
       connections.foreach(_.close())

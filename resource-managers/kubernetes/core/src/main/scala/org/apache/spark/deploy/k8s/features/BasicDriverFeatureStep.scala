@@ -89,7 +89,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     }
 
     val driverResourceQuantities =
-      KubernetesUtils.buildResourcesQuantities(SPARK_DRIVER_RESOURCE_PREFIX, conf.sparkConf)
+      KubernetesUtils.buildResourcesQuantities(SPARK_DRIVER_PREFIX, conf.sparkConf)
 
     val driverPort = conf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
     val driverBlockManagerPort = conf.sparkConf.getInt(

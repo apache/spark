@@ -20,7 +20,7 @@ package org.apache.spark.ml.clustering
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.EPSILON
@@ -34,8 +34,9 @@ import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatr
   Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -109,11 +110,33 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val predUDF = udf((vector: Vector) => predict(vector))
-    val probUDF = udf((vector: Vector) => predictProbability(vector))
-    dataset
-      .withColumn($(predictionCol), predUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
-      .withColumn($(probabilityCol), probUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+
+    val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
+    var outputData = dataset
+    var numColsOutput = 0
+
+    if ($(probabilityCol).nonEmpty) {
+      val probUDF = udf((vector: Vector) => predictProbability(vector))
+      outputData = outputData.withColumn($(probabilityCol), probUDF(vectorCol))
+      numColsOutput += 1
+    }
+
+    if ($(predictionCol).nonEmpty) {
+      if ($(probabilityCol).nonEmpty) {
+        val predUDF = udf((vector: Vector) => vector.argmax)
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(probabilityCol))))
+      } else {
+        val predUDF = udf((vector: Vector) => predict(vector))
+        outputData = outputData.withColumn($(predictionCol), predUDF(vectorCol))
+      }
+      numColsOutput += 1
+    }
+
+    if (numColsOutput == 0) {
+      this.logWarning(s"$uid: GaussianMixtureModel.transform() does nothing" +
+        " because no output columns were set.")
+    }
+    outputData.toDF
   }
 
   @Since("2.0.0")
@@ -330,10 +353,15 @@ class GaussianMixture @Since("2.0.0") (
     val sc = dataset.sparkSession.sparkContext
     val numClusters = $(k)
 
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val instances = dataset
       .select(DatasetUtils.columnToVector(dataset, getFeaturesCol)).rdd.map {
       case Row(features: Vector) => features
-    }.cache()
+    }
+
+    if (handlePersistence) {
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
+    }
 
     // Extract the number of features.
     val numFeatures = instances.first().size
@@ -410,8 +438,10 @@ class GaussianMixture @Since("2.0.0") (
       logLikelihood = sums.logLikelihood  // this is the freshly computed log-likelihood
       iter += 1
     }
+    if (handlePersistence) {
+      instances.unpersist()
+    }
 
-    instances.unpersist()
     val gaussianDists = gaussians.map { case (mean, covVec) =>
       val cov = GaussianMixture.unpackUpperTriangularMatrix(numFeatures, covVec.values)
       new MultivariateGaussian(mean, cov)
@@ -671,7 +701,6 @@ private class ExpectationAggregator(
 }
 
 /**
- * :: Experimental ::
  * Summary of GaussianMixture.
  *
  * @param predictions  `DataFrame` produced by `GaussianMixtureModel.transform()`.
@@ -684,7 +713,6 @@ private class ExpectationAggregator(
  * @param numIter  Number of iterations.
  */
 @Since("2.0.0")
-@Experimental
 class GaussianMixtureSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,

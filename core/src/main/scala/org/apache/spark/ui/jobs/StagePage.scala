@@ -18,6 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
@@ -25,7 +26,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.xml.{Node, Unparsed}
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler.TaskLocality
@@ -506,7 +507,7 @@ private[ui] class TaskPagedTable(
     store)
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     basePath +
       s"&$pageNumberFormField=$page" +
       s"&task.sort=$encodedSortColumn" +
@@ -515,7 +516,7 @@ private[ui] class TaskPagedTable(
   }
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     s"$basePath&task.sort=$encodedSortColumn&task.desc=$desc"
   }
 
@@ -563,7 +564,7 @@ private[ui] class TaskPagedTable(
         if (header == sortColumn) {
           val headerLink = Unparsed(
             basePath +
-              s"&task.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&task.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&task.desc=${!desc}" +
               s"&task.pageSize=$pageSize")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
@@ -576,7 +577,7 @@ private[ui] class TaskPagedTable(
         } else {
           val headerLink = Unparsed(
             basePath +
-              s"&task.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&task.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&task.pageSize=$pageSize")
           <th class={cssClass}>
             <a href={headerLink}>
@@ -641,18 +642,22 @@ private[ui] class TaskPagedTable(
         <td>{accumulatorsInfo(task)}</td>
       }}
       {if (hasInput(stage)) {
-        metricInfo(task) { m =>
-          val bytesRead = Utils.bytesToString(m.inputMetrics.bytesRead)
-          val records = m.inputMetrics.recordsRead
-          <td>{bytesRead} / {records}</td>
-        }
+        <td>{
+          metricInfo(task) { m =>
+            val bytesRead = Utils.bytesToString(m.inputMetrics.bytesRead)
+            val records = m.inputMetrics.recordsRead
+            Unparsed(s"$bytesRead / $records")
+          }
+        }</td>
       }}
       {if (hasOutput(stage)) {
-        metricInfo(task) { m =>
-          val bytesWritten = Utils.bytesToString(m.outputMetrics.bytesWritten)
-          val records = m.outputMetrics.recordsWritten
-          <td>{bytesWritten} / {records}</td>
-        }
+        <td>{
+          metricInfo(task) { m =>
+            val bytesWritten = Utils.bytesToString(m.outputMetrics.bytesWritten)
+            val records = m.outputMetrics.recordsWritten
+            Unparsed(s"$bytesWritten / $records")
+          }
+        }</td>
       }}
       {if (hasShuffleRead(stage)) {
         <td class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>

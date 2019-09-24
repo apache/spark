@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.lang.{Iterable => JIterable}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
 
@@ -41,6 +42,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -190,8 +192,8 @@ private[hive] class HiveClientImpl(
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
     SessionState.start(state)
-    state.out = new PrintStream(outputBuffer, true, "UTF-8")
-    state.err = new PrintStream(outputBuffer, true, "UTF-8")
+    state.out = new PrintStream(outputBuffer, true, UTF_8.name())
+    state.err = new PrintStream(outputBuffer, true, UTF_8.name())
     state
   }
 
@@ -220,7 +222,7 @@ private[hive] class HiveClientImpl(
     hiveConf
   }
 
-  private val userName = conf.getUser
+  override val userName = UserGroupInformation.getCurrentUser.getShortUserName
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)

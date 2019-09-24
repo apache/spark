@@ -17,25 +17,28 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties, UUID}
+import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan, OverwriteByExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsWrite, TableCatalog, TableProvider, V1Table}
+import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -248,55 +251,33 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
-    val session = df.sparkSession
-    val useV1Sources =
-      session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
-    val lookupCls = DataSource.lookupDataSource(source, session.sessionState.conf)
-    val cls = lookupCls.newInstance() match {
-      case f: FileDataSourceV2 if useV1Sources.contains(f.shortName()) ||
-        useV1Sources.contains(lookupCls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
-        f.fallbackFileFormat
-      case _ => lookupCls
-    }
-    // In Data Source V2 project, partitioning is still under development.
-    // Here we fallback to V1 if partitioning columns are specified.
-    // TODO(SPARK-26778): use V2 implementations when partitioning feature is supported.
-    if (classOf[TableProvider].isAssignableFrom(cls) && partitioningColumns.isEmpty) {
-      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+    val maybeV2Provider = lookupV2Provider()
+    if (maybeV2Provider.isDefined) {
+      val provider = maybeV2Provider.get
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-        provider, session.sessionState.conf)
+        provider, df.sparkSession.sessionState.conf)
       val options = sessionOptions ++ extraOptions
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       provider.getTable(dsOptions) match {
-        // TODO (SPARK-27815): To not break existing tests, here we treat file source as a special
-        // case, and pass the save mode to file source directly. This hack should be removed.
-        case table: FileTable =>
-          val write = table.newWriteBuilder(dsOptions).asInstanceOf[FileWriteBuilder]
-            .mode(modeForDSV1) // should not change default mode for file source.
-            .withQueryId(UUID.randomUUID().toString)
-            .withInputDataSchema(df.logicalPlan.schema)
-            .buildForBatch()
-          // The returned `Write` can be null, which indicates that we can skip writing.
-          if (write != null) {
-            runCommand(df.sparkSession, "save") {
-              WriteToDataSourceV2(write, df.logicalPlan)
-            }
-          }
-
         case table: SupportsWrite if table.supports(BATCH_WRITE) =>
+          if (partitioningColumns.nonEmpty) {
+            throw new AnalysisException("Cannot write data to TableProvider implementation " +
+              "if partition columns are specified.")
+          }
           lazy val relation = DataSourceV2Relation.create(table, dsOptions)
           modeForDSV2 match {
             case SaveMode.Append =>
               runCommand(df.sparkSession, "save") {
-                AppendData.byName(relation, df.logicalPlan)
+                AppendData.byName(relation, df.logicalPlan, extraOptions.toMap)
               }
 
             case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
               // truncate the table
               runCommand(df.sparkSession, "save") {
-                OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
+                OverwriteByExpression.byName(
+                  relation, df.logicalPlan, Literal(true), extraOptions.toMap)
               }
 
             case other =>
@@ -357,10 +338,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    insertInto(df.sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName))
-  }
+    import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  private def insertInto(tableIdent: TableIdentifier): Unit = {
     assertNotBucketed("insertInto")
 
     if (partitioningColumns.isDefined) {
@@ -371,10 +351,65 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       )
     }
 
+    val session = df.sparkSession
+    val canUseV2 = lookupV2Provider().isDefined
+    val sessionCatalog = session.sessionState.analyzer.sessionCatalog
+
+    session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
+      case CatalogObjectIdentifier(Some(catalog), ident) =>
+        insertInto(catalog, ident)
+
+      case CatalogObjectIdentifier(None, ident) if canUseV2 && ident.namespace().length <= 1 =>
+        insertInto(sessionCatalog, ident)
+
+      case AsTableIdentifier(tableIdentifier) =>
+        insertInto(tableIdentifier)
+      case other =>
+        throw new AnalysisException(
+          s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
+    }
+  }
+
+  private def insertInto(catalog: CatalogPlugin, ident: Identifier): Unit = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    val table = catalog.asTableCatalog.loadTable(ident) match {
+      case _: V1Table =>
+        return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
+      case t =>
+        DataSourceV2Relation.create(t)
+    }
+
+    val command = modeForDSV2 match {
+      case SaveMode.Append =>
+        AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap)
+
+      case SaveMode.Overwrite =>
+        val conf = df.sparkSession.sessionState.conf
+        val dynamicPartitionOverwrite = table.table.partitioning.size > 0 &&
+          conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
+
+        if (dynamicPartitionOverwrite) {
+          OverwritePartitionsDynamic.byPosition(table, df.logicalPlan, extraOptions.toMap)
+        } else {
+          OverwriteByExpression.byPosition(table, df.logicalPlan, Literal(true), extraOptions.toMap)
+        }
+
+      case other =>
+        throw new AnalysisException(s"insertInto does not support $other mode, " +
+          s"please use Append or Overwrite mode instead.")
+    }
+
     runCommand(df.sparkSession, "insertInto") {
-      InsertIntoTable(
+      command
+    }
+  }
+
+  private def insertInto(tableIdent: TableIdentifier): Unit = {
+    runCommand(df.sparkSession, "insertInto") {
+      InsertIntoStatement(
         table = UnresolvedRelation(tableIdent),
-        partition = Map.empty[String, Option[String]],
+        partitionSpec = Map.empty[String, Option[String]],
         query = df.logicalPlan,
         overwrite = modeForDSV1 == SaveMode.Overwrite,
         ifPartitionNotExists = false)
@@ -446,7 +481,84 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    saveAsTable(df.sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName))
+    import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    val session = df.sparkSession
+    val canUseV2 = lookupV2Provider().isDefined
+    val sessionCatalog = session.sessionState.analyzer.sessionCatalog
+
+    session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
+      case CatalogObjectIdentifier(Some(catalog), ident) =>
+        saveAsTable(catalog.asTableCatalog, ident, modeForDSV2)
+
+      case CatalogObjectIdentifier(None, ident) if canUseV2 && ident.namespace().length <= 1 =>
+        // We pass in the modeForDSV1, as using the V2 session catalog should maintain compatibility
+        // for now.
+        saveAsTable(sessionCatalog.asTableCatalog, ident, modeForDSV1)
+
+      case AsTableIdentifier(tableIdentifier) =>
+        saveAsTable(tableIdentifier)
+
+      case other =>
+        throw new AnalysisException(
+          s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
+    }
+  }
+
+
+  private def saveAsTable(catalog: TableCatalog, ident: Identifier, mode: SaveMode): Unit = {
+    val partitioning = partitioningColumns.map { colNames =>
+      colNames.map(name => IdentityTransform(FieldReference(name)))
+    }.getOrElse(Seq.empty[Transform])
+    val bucketing = bucketColumnNames.map { cols =>
+      Seq(BucketTransform(LiteralValue(numBuckets.get, IntegerType), cols.map(FieldReference(_))))
+    }.getOrElse(Seq.empty[Transform])
+    val partitionTransforms = partitioning ++ bucketing
+
+    val tableOpt = try Option(catalog.loadTable(ident)) catch {
+      case _: NoSuchTableException => None
+    }
+
+    def getLocationIfExists: Option[(String, String)] = {
+      val opts = CaseInsensitiveMap(extraOptions.toMap)
+      opts.get("path").map("location" -> _)
+    }
+
+    val command = (mode, tableOpt) match {
+      case (_, Some(table: V1Table)) =>
+        return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
+
+      case (SaveMode.Append, Some(table)) =>
+        AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan)
+
+      case (SaveMode.Overwrite, _) =>
+        ReplaceTableAsSelect(
+          catalog,
+          ident,
+          partitionTransforms,
+          df.queryExecution.analyzed,
+          Map("provider" -> source) ++ getLocationIfExists,
+          extraOptions.toMap,
+          orCreate = true)      // Create the table if it doesn't exist
+
+      case (other, _) =>
+        // We have a potential race condition here in AppendMode, if the table suddenly gets
+        // created between our existence check and physical execution, but this can't be helped
+        // in any case.
+        CreateTableAsSelect(
+          catalog,
+          ident,
+          partitionTransforms,
+          df.queryExecution.analyzed,
+          Map("provider" -> source) ++ getLocationIfExists,
+          extraOptions.toMap,
+          ignoreIfExists = other == SaveMode.Ignore)
+    }
+
+    runCommand(df.sparkSession, "saveAsTable") {
+      command
+    }
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
@@ -569,10 +681,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * <li>`dateFormat` (default `uuuu-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `uuuu-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
@@ -688,10 +800,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * <li>`dateFormat` (default `uuuu-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `uuuu-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `true`): a flag indicating whether or not leading
@@ -721,6 +833,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def modeForDSV1 = mode.getOrElse(SaveMode.ErrorIfExists)
 
   private def modeForDSV2 = mode.getOrElse(SaveMode.Append)
+
+  private def lookupV2Provider(): Option[TableProvider] = {
+    DataSource.lookupDataSourceV2(source, df.sparkSession.sessionState.conf) match {
+      // TODO(SPARK-28396): File source v2 write path is currently broken.
+      case Some(_: FileDataSourceV2) => None
+      case other => other
+    }
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

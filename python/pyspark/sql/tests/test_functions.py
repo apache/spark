@@ -294,6 +294,22 @@ class FunctionsTests(ReusedSQLTestCase):
         for result in results:
             self.assertEqual(result[0], '')
 
+    def test_array_repeat(self):
+        from pyspark.sql.functions import array_repeat, lit
+
+        df = self.spark.range(1)
+
+        self.assertEquals(
+            df.select(array_repeat("id", 3)).toDF("val").collect(),
+            df.select(array_repeat("id", lit(3))).toDF("val").collect(),
+        )
+
+    def test_input_file_name_udf(self):
+        df = self.spark.read.text('python/test_support/hello/hello.txt')
+        df = df.select(udf(lambda x: x)("value"), input_file_name().alias('file'))
+        file_name = df.collect()[0].file
+        self.assertTrue("python/test_support/hello/hello.txt" in file_name)
+
 
 if __name__ == "__main__":
     import unittest
@@ -301,7 +317,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

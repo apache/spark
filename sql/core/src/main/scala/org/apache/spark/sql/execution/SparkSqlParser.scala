@@ -149,21 +149,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[ShowTablesCommand]] logical plan.
    * Example SQL :
    * {{{
-   *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
-   * }}}
-   */
-  override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
-    ShowTablesCommand(
-      Option(ctx.db).map(_.getText),
-      Option(ctx.pattern).map(string),
-      isExtended = false,
-      partitionSpec = None)
-  }
-
-  /**
-   * Create a [[ShowTablesCommand]] logical plan.
-   * Example SQL :
-   * {{{
    *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards'
    *   [PARTITION(partition_spec)];
    * }}}
@@ -308,13 +293,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create an [[ExplainCommand]] logical plan.
    * The syntax of using this command in SQL is:
    * {{{
-   *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
+   *   EXPLAIN (EXTENDED | CODEGEN | COST | FORMATTED) SELECT * FROM ...
    * }}}
    */
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.FORMATTED != null) {
-      operationNotAllowed("EXPLAIN FORMATTED", ctx)
-    }
     if (ctx.LOGICAL != null) {
       operationNotAllowed("EXPLAIN LOGICAL", ctx)
     }
@@ -327,39 +309,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         logicalPlan = statement,
         extended = ctx.EXTENDED != null,
         codegen = ctx.CODEGEN != null,
-        cost = ctx.COST != null)
-    }
-  }
-
-  /**
-   * Create a [[DescribeColumnCommand]] or [[DescribeTableCommand]] logical commands.
-   */
-  override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
-    val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
-    if (ctx.describeColName != null) {
-      if (ctx.partitionSpec != null) {
-        throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
-      } else {
-        DescribeColumnCommand(
-          visitTableIdentifier(ctx.tableIdentifier),
-          ctx.describeColName.nameParts.asScala.map(_.getText),
-          isExtended)
-      }
-    } else {
-      val partitionSpec = if (ctx.partitionSpec != null) {
-        // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
-        visitPartitionSpec(ctx.partitionSpec).map {
-          case (key, Some(value)) => key -> value
-          case (key, _) =>
-            throw new ParseException(s"PARTITION specification is incomplete: `$key`", ctx)
-        }
-      } else {
-        Map.empty[String, String]
-      }
-      DescribeTableCommand(
-        visitTableIdentifier(ctx.tableIdentifier),
-        partitionSpec,
-        isExtended)
+        cost = ctx.COST != null,
+        formatted = ctx.FORMATTED != null)
     }
   }
 
@@ -514,7 +465,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
 
     CreateDatabaseCommand(
-      ctx.identifier.getText,
+      ctx.db.getText,
       ctx.EXISTS != null,
       ctx.locationSpec.asScala.headOption.map(visitLocationSpec),
       Option(ctx.comment).map(string),
@@ -532,7 +483,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   override def visitSetDatabaseProperties(
       ctx: SetDatabasePropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterDatabasePropertiesCommand(
-      ctx.identifier.getText,
+      ctx.db.getText,
       visitPropertyKeyValues(ctx.tablePropertyList))
   }
 
@@ -545,7 +496,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitDropDatabase(ctx: DropDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DropDatabaseCommand(ctx.identifier.getText, ctx.EXISTS != null, ctx.CASCADE != null)
+    DropDatabaseCommand(ctx.db.getText, ctx.EXISTS != null, ctx.CASCADE != null)
   }
 
   /**
@@ -557,7 +508,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DescribeDatabaseCommand(ctx.identifier.getText, ctx.EXTENDED != null)
+    DescribeDatabaseCommand(ctx.db.getText, ctx.EXTENDED != null)
   }
 
   /**
@@ -811,7 +762,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     AlterTableChangeColumnCommand(
       tableName = visitTableIdentifier(ctx.tableIdentifier),
-      columnName = ctx.identifier.getText,
+      columnName = ctx.colName.getText,
       newColumn = visitColType(ctx.colType))
   }
 
@@ -1021,7 +972,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         } else {
           CreateTable(tableDescWithPartitionColNames, mode, Some(q))
         }
-      case None => CreateTable(tableDesc, mode, None)
+      case None =>
+        // When creating partitioned table, we must specify data type for the partition columns.
+        if (Option(ctx.partitionColumnNames).isDefined) {
+          val errorMessage = "Must specify a data type for each partition column while creating " +
+            "Hive partitioned table."
+          operationNotAllowed(errorMessage, ctx)
+        }
+
+        CreateTable(tableDesc, mode, None)
     }
   }
 

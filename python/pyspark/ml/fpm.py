@@ -125,8 +125,6 @@ class HasItemsCol(Params):
 
 class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by FPGrowth.
 
     .. versionadded:: 2.2.0
@@ -159,8 +157,6 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
                JavaMLWritable, JavaMLReadable):
 
     r"""
-    .. note:: Experimental
-
     A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
     Li et al., PFP: Parallel FP-Growth for Query Recommendation [LI2008]_.
     PFP distributes computation in such a way that each worker executes an
@@ -249,8 +245,6 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
 
 class PrefixSpan(JavaParams):
     """
-    .. note:: Experimental
-
     A parallel PrefixSpan algorithm to mine frequent sequential patterns.
     The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
     Efficiently by Prefix-Projected Pattern Growth
@@ -313,8 +307,6 @@ class PrefixSpan(JavaParams):
     @since("2.4.0")
     def findFrequentSequentialPatterns(self, dataset):
         """
-        .. note:: Experimental
-
         Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
 
         :param dataset: A dataframe containing a sequence column which is

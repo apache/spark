@@ -68,7 +68,8 @@ private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
     val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments, SparkEnv) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-        arguments.hostname, arguments.cores, arguments.userClassPath, env, arguments.resourcesFile)
+        arguments.hostname, arguments.cores, arguments.userClassPath, env,
+        arguments.resourcesFileOpt)
     }
     val backendArgs = CoarseGrainedExecutorBackend.parseArguments(args,
       this.getClass.getCanonicalName.stripSuffix("$"))

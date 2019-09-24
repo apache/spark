@@ -49,7 +49,7 @@ import org.apache.hive.service.cli.session.HiveSession;
  */
 public class GetColumnsOperation extends MetadataOperation {
 
-  private static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
+  protected static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
   .addPrimitiveColumn("TABLE_CAT", Type.STRING_TYPE,
       "Catalog name. NULL if not applicable")
   .addPrimitiveColumn("TABLE_SCHEM", Type.STRING_TYPE,
@@ -109,7 +109,7 @@ public class GetColumnsOperation extends MetadataOperation {
   private final String tableName;
   private final String columnName;
 
-  private final RowSet rowSet;
+  protected final RowSet rowSet;
 
   protected GetColumnsOperation(HiveSession parentSession, String catalogName, String schemaName,
       String tableName, String columnName) {
