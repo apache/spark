@@ -26,6 +26,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -50,7 +51,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -749,22 +750,31 @@ object DataSource extends Logging {
     // for globbed paths.
     val (globPaths, nonGlobPaths) = qualifiedPaths.partition(SparkHadoopUtil.get.isGlobPath)
 
-    val globbedPaths = globPaths.par.flatMap { globPath =>
-      val fs = globPath.getFileSystem(hadoopConf)
-      val globResult = SparkHadoopUtil.get.globPath(fs, globPath)
+    val globbedPaths = Try({
+      ThreadUtils.parmap(globPaths, "globPath", 8) { globPath =>
+        val fs = globPath.getFileSystem(hadoopConf)
+        val globResult = SparkHadoopUtil.get.globPath(fs, globPath)
 
-      if (checkEmptyGlobPath && globResult.isEmpty) {
-        throw new AnalysisException(s"Path does not exist: $globPath")
+        if (checkEmptyGlobPath && globResult.isEmpty) {
+          throw new AnalysisException(s"Path does not exist: $globPath")
+        }
+
+        globResult
+      }.flatten
+    }).recoverWith({
+      case e: SparkException => throw e.getCause
+    }).get
+
+
+    try {
+      ThreadUtils.parmap(nonGlobPaths, "checkPathsExist", 8) { path =>
+        val fs = path.getFileSystem(hadoopConf)
+        if (checkFilesExist && !fs.exists(path)) {
+          throw new AnalysisException(s"Path does not exist: $path")
+        }
       }
-
-      globResult
-    }
-
-    nonGlobPaths.par.foreach { path =>
-      val fs = path.getFileSystem(hadoopConf)
-      if (checkFilesExist && !fs.exists(path)) {
-        throw new AnalysisException(s"Path does not exist: $path")
-      }
+    } catch {
+      case e: SparkException => throw e.getCause
     }
 
     val allPaths = globbedPaths ++ nonGlobPaths
