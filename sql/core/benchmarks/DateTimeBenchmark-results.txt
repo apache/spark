@@ -385,19 +385,19 @@ to timestamp str:                        Best/Avg Time(ms)    Rate(M/s)   Per Ro
 to timestamp str wholestage off                165 /  166          6.1         164.7       1.0X
 to timestamp str wholestage on                 160 /  163          6.2         160.5       1.0X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-to_timestamp:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------
-to_timestamp wholestage off                   1316 / 1320          0.8        1315.7       1.0X
-to_timestamp wholestage on                    1288 / 1294          0.8        1287.5       1.0X
+to_timestamp:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+to_timestamp wholestage off                        1308           1353          64          0.8        1307.9       1.0X
+to_timestamp wholestage on                         1197           1230          21          0.8        1197.0       1.1X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-to_unix_timestamp:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------
-to_unix_timestamp wholestage off              1295 / 1297          0.8        1295.1       1.0X
-to_unix_timestamp wholestage on               1409 / 1414          0.7        1409.2       0.9X
+to_unix_timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+to_unix_timestamp wholestage off                   1221           1224           4          0.8        1221.0       1.0X
+to_unix_timestamp wholestage on                    1224           1228           4          0.8        1223.8       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.3
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
@@ -412,5 +412,14 @@ to_date:                                 Best/Avg Time(ms)    Rate(M/s)   Per Ro
 ------------------------------------------------------------------------------------------------
 to_date wholestage off                        1477 / 1479          0.7        1477.3       1.0X
 to_date wholestage on                         1468 / 1473          0.7        1468.2       1.0X
+
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+To/from java.sql.Timestamp:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+From java.sql.Timestamp                             283            301          19         17.7          56.6       1.0X
+Collect longs                                      1048           1087          36          4.8         209.6       0.3X
+Collect timestamps                                 1425           1479          56          3.5         285.1       0.2X
 
 

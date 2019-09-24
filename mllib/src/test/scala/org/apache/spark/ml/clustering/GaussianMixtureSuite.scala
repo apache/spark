@@ -17,15 +17,13 @@
 
 package org.apache.spark.ml.clustering
 
-import scala.language.existentials
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
 
 class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
@@ -35,11 +33,11 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
   final val k = 5
   private val seed = 538009335
-  @transient var dataset: Dataset[_] = _
-  @transient var denseDataset: Dataset[_] = _
-  @transient var sparseDataset: Dataset[_] = _
-  @transient var decompositionDataset: Dataset[_] = _
-  @transient var rDataset: Dataset[_] = _
+  @transient var dataset: DataFrame = _
+  @transient var denseDataset: DataFrame = _
+  @transient var sparseDataset: DataFrame = _
+  @transient var decompositionDataset: DataFrame = _
+  @transient var rDataset: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()

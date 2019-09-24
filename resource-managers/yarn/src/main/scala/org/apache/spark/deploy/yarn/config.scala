@@ -310,6 +310,12 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  /* Initially blacklisted YARN nodes. */
+  private[spark] val YARN_EXCLUDE_NODES = ConfigBuilder("spark.yarn.exclude.nodes")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
   private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."

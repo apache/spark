@@ -35,7 +35,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInp
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
 import org.apache.spark.internal.config._
-import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD, RDD}
+import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -200,30 +200,24 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("object files of classes from a JAR") {
-    // scalastyle:off classforname
-    val original = Thread.currentThread().getContextClassLoader
     val className = "FileSuiteObjectFileTest"
     val jar = TestUtils.createJarWithClasses(Seq(className))
     val loader = new java.net.URLClassLoader(Array(jar), Utils.getContextOrSparkClassLoader)
-    Thread.currentThread().setContextClassLoader(loader)
-    try {
+
+    Utils.withContextClassLoader(loader) {
       sc = new SparkContext("local", "test")
-      val objs = sc.makeRDD(1 to 3).map { x =>
-        val loader = Thread.currentThread().getContextClassLoader
-        Class.forName(className, true, loader).getConstructor().newInstance()
+      val objs = sc.makeRDD(1 to 3).map { _ =>
+        Utils.classForName[AnyRef](className, noSparkClassLoader = true).
+          getConstructor().newInstance()
       }
       val outputDir = new File(tempDir, "output").getAbsolutePath
       objs.saveAsObjectFile(outputDir)
       // Try reading the output back as an object file
-      val ct = reflect.ClassTag[Any](Class.forName(className, true, loader))
+      val ct = reflect.ClassTag[Any](Utils.classForName(className, noSparkClassLoader = true))
       val output = sc.objectFile[Any](outputDir)
       assert(output.collect().size === 3)
       assert(output.collect().head.getClass.getName === className)
     }
-    finally {
-      Thread.currentThread().setContextClassLoader(original)
-    }
-    // scalastyle:on classforname
   }
 
   test("write SequenceFile using new Hadoop API") {

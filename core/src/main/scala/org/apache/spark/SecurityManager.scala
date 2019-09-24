@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.{Authenticator, PasswordAuthentication}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.util.Base64
@@ -92,25 +91,6 @@ private[spark] class SecurityManager(
     "; groups with view permissions: " + viewAclsGroups.toString() +
     "; users  with modify permissions: " + modifyAcls.toString() +
     "; groups with modify permissions: " + modifyAclsGroups.toString())
-
-  // Set our own authenticator to properly negotiate user/password for HTTP connections.
-  // This is needed by the HTTP client fetching from the HttpServer. Put here so its
-  // only set once.
-  if (authOn) {
-    Authenticator.setDefault(
-      new Authenticator() {
-        override def getPasswordAuthentication(): PasswordAuthentication = {
-          var passAuth: PasswordAuthentication = null
-          val userInfo = getRequestingURL().getUserInfo()
-          if (userInfo != null) {
-            val  parts = userInfo.split(":", 2)
-            passAuth = new PasswordAuthentication(parts(0), parts(1).toCharArray())
-          }
-          return passAuth
-        }
-      }
-    )
-  }
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
@@ -234,6 +214,15 @@ private[spark] class SecurityManager(
   def aclsEnabled(): Boolean = aclsOn
 
   /**
+   * Checks whether the given user is an admin. This gives the user both view and
+   * modify permissions, and also allows the user to impersonate other users when
+   * making UI requests.
+   */
+  def checkAdminPermissions(user: String): Boolean = {
+    isUserInACL(user, adminAcls, adminAclsGroups)
+  }
+
+  /**
    * Checks the given user against the view acl and groups list to see if they have
    * authorization to view the UI. If the UI acls are disabled
    * via spark.acls.enable, all users have view access. If the user is null
@@ -246,13 +235,7 @@ private[spark] class SecurityManager(
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(",") + " viewAclsGroups=" + viewAclsGroups.mkString(","))
-    if (!aclsEnabled || user == null || viewAcls.contains(user) ||
-        viewAcls.contains(WILDCARD_ACL) || viewAclsGroups.contains(WILDCARD_ACL)) {
-      return true
-    }
-    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
-    logDebug("userGroups=" + currentUserGroups.mkString(","))
-    viewAclsGroups.exists(currentUserGroups.contains(_))
+    isUserInACL(user, viewAcls, viewAclsGroups)
   }
 
   /**
@@ -268,13 +251,7 @@ private[spark] class SecurityManager(
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(",") + " modifyAclsGroups=" + modifyAclsGroups.mkString(","))
-    if (!aclsEnabled || user == null || modifyAcls.contains(user) ||
-        modifyAcls.contains(WILDCARD_ACL) || modifyAclsGroups.contains(WILDCARD_ACL)) {
-      return true
-    }
-    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
-    logDebug("userGroups=" + currentUserGroups)
-    modifyAclsGroups.exists(currentUserGroups.contains(_))
+    isUserInACL(user, modifyAcls, modifyAclsGroups)
   }
 
   /**
@@ -290,13 +267,6 @@ private[spark] class SecurityManager(
   def isEncryptionEnabled(): Boolean = {
     sparkConf.get(Network.NETWORK_CRYPTO_ENABLED) || sparkConf.get(SASL_ENCRYPTION_ENABLED)
   }
-
-  /**
-   * Gets the user used for authenticating HTTP connections.
-   * For now use a single hardcoded user.
-   * @return the HTTP user as a String
-   */
-  def getHttpUser(): String = "sparkHttpUser"
 
   /**
    * Gets the user used for authenticating SASL connections.
@@ -394,6 +364,23 @@ private[spark] class SecurityManager(
           throw new IllegalArgumentException(
             "Secret keys provided via files is only allowed in Kubernetes mode.")
       }
+    }
+  }
+
+  private def isUserInACL(
+      user: String,
+      aclUsers: Set[String],
+      aclGroups: Set[String]): Boolean = {
+    if (user == null ||
+        !aclsEnabled ||
+        aclUsers.contains(WILDCARD_ACL) ||
+        aclUsers.contains(user) ||
+        aclGroups.contains(WILDCARD_ACL)) {
+      true
+    } else {
+      val userGroups = Utils.getCurrentUserGroups(sparkConf, user)
+      logDebug(s"user $user is in groups ${userGroups.mkString(",")}")
+      aclGroups.exists(userGroups.contains(_))
     }
   }
 

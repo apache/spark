@@ -34,9 +34,9 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.streaming.{Offset => _, _}
 import org.apache.spark.sql.execution.streaming.sources.TextSocketReader
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.RpcUtils
 
 
@@ -49,7 +49,7 @@ import org.apache.spark.util.RpcUtils
  * buckets and serves the messages to the executors via a RPC endpoint.
  */
 class TextSocketContinuousStream(
-    host: String, port: Int, numPartitions: Int, options: DataSourceOptions)
+    host: String, port: Int, numPartitions: Int, options: CaseInsensitiveStringMap)
   extends ContinuousStream with Logging {
 
   implicit val defaultFormats: DefaultFormats = DefaultFormats

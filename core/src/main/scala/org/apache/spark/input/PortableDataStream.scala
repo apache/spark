@@ -172,7 +172,7 @@ class PortableDataStream(
 
   @transient private lazy val conf = {
     val bais = new ByteArrayInputStream(confBytes)
-    val nconf = new Configuration()
+    val nconf = new Configuration(false)
     nconf.readFields(new DataInputStream(bais))
     nconf
   }

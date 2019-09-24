@@ -141,12 +141,15 @@ private[spark] class Client(
           throw e
       }
 
+      val sId = s"${Option(conf.namespace).map(_ + ":").getOrElse("")}" +
+        s"${resolvedDriverPod.getMetadata.getName}"
       if (waitForAppCompletion) {
-        logInfo(s"Waiting for application ${conf.appName} to finish...")
+        logInfo(s"Waiting for application ${conf.appName} with submission ID ${sId} to finish...")
         watcher.awaitCompletion()
-        logInfo(s"Application ${conf.appName} finished.")
+        logInfo(s"Application ${conf.appName} with submission ID ${sId} finished.")
       } else {
-        logInfo(s"Deployed Spark application ${conf.appName} into Kubernetes.")
+        logInfo(s"Deployed Spark application ${conf.appName} with " +
+          s"submission ID ${sId} into Kubernetes.")
       }
     }
   }
@@ -220,6 +223,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       master,
       Some(kubernetesConf.namespace),
       KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX,
+      SparkKubernetesClientFactory.ClientType.Submission,
       sparkConf,
       None,
       None)) { kubernetesClient =>

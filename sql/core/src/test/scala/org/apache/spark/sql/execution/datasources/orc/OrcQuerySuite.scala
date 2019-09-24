@@ -36,8 +36,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType, TestUDT}
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class AllDataTypesWithNonPrimitiveType(
@@ -580,7 +580,7 @@ abstract class OrcQueryTest extends OrcTest {
       val m1 = intercept[AnalysisException] {
         testAllCorruptFiles()
       }.getMessage
-      assert(m1.contains("Unable to infer schema"))
+      assert(m1.contains("Unable to infer schema for ORC"))
       testAllCorruptFilesWithoutSchemaInfer()
     }
 
@@ -603,9 +603,25 @@ abstract class OrcQueryTest extends OrcTest {
       assert(m4.contains("Malformed ORC file"))
     }
   }
+
+  test("SPARK-27160 Predicate pushdown correctness on DecimalType for ORC") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val path = dir.getCanonicalPath
+        Seq(BigDecimal(0.1), BigDecimal(0.2), BigDecimal(-0.3))
+          .toDF("x").write.orc(path)
+        val df = spark.read.orc(path)
+        checkAnswer(df.filter("x >= 0.1"), Seq(Row(0.1), Row(0.2)))
+        checkAnswer(df.filter("x > 0.1"), Seq(Row(0.2)))
+        checkAnswer(df.filter("x <= 0.15"), Seq(Row(0.1), Row(-0.3)))
+        checkAnswer(df.filter("x < 0.1"), Seq(Row(-0.3)))
+        checkAnswer(df.filter("x == 0.2"), Seq(Row(0.2)))
+      }
+    }
+  }
 }
 
-class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
+class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   import testImplicits._
 
   test("LZO compression options for writing to an ORC file") {
@@ -692,6 +708,5 @@ class OrcV1QuerySuite extends OrcQuerySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "orc")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }

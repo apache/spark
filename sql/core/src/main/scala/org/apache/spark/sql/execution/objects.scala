@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.{ByteArrayOutputStream, DataOutputStream}
+
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
@@ -60,7 +62,8 @@ trait ObjectConsumerExec extends UnaryExecNode {
   assert(child.output.length == 1)
 
   // This operator always need all columns of its child, even it doesn't reference to.
-  override def references: AttributeSet = child.outputSet
+  @transient
+  override lazy val references: AttributeSet = child.outputSet
 
   def inputObjectType: DataType = child.output.head.dataType
 }
@@ -188,7 +191,7 @@ case class MapPartitionsExec(
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
       val getObject = ObjectOperator.unwrapObjectFromRow(child.output.head.dataType)
-      val outputObject = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
+      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
       func(iter.map(getObject)).map(outputObject)
     }
   }
@@ -241,28 +244,11 @@ case class MapPartitionsInRWithArrowExec(
       // binary in a batch due to the limitation of R API. See also ARROW-4512.
       val columnarBatchIter = runner.compute(batchIter, -1)
       val outputProject = UnsafeProjection.create(output, output)
-      new Iterator[InternalRow] {
-
-        private var currentIter = if (columnarBatchIter.hasNext) {
-          val batch = columnarBatchIter.next()
-          val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-          assert(outputTypes == actualDataTypes, "Invalid schema from dapply(): " +
-            s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
-          batch.rowIterator.asScala
-        } else {
-          Iterator.empty
-        }
-
-        override def hasNext: Boolean = currentIter.hasNext || {
-          if (columnarBatchIter.hasNext) {
-            currentIter = columnarBatchIter.next().rowIterator.asScala
-            hasNext
-          } else {
-            false
-          }
-        }
-
-        override def next(): InternalRow = currentIter.next()
+      columnarBatchIter.flatMap { batch =>
+        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+        assert(outputTypes == actualDataTypes, "Invalid schema from dapply(): " +
+          s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+        batch.rowIterator.asScala
       }.map(outputProject)
     }
   }
@@ -292,10 +278,10 @@ case class MapElementsExec(
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val (funcClass, methodName) = func match {
       case m: MapFunction[_, _] => classOf[MapFunction[_, _]] -> "call"
-      case _ => FunctionUtils.getFunctionOneName(outputObjAttr.dataType, child.output(0).dataType)
+      case _ => FunctionUtils.getFunctionOneName(outputObjectType, child.output(0).dataType)
     }
     val funcObj = Literal.create(func, ObjectType(funcClass))
-    val callFunc = Invoke(funcObj, methodName, outputObjAttr.dataType, child.output)
+    val callFunc = Invoke(funcObj, methodName, outputObjectType, child.output)
 
     val result = BindReferences.bindReference(callFunc, child.output).genCode(ctx)
 
@@ -310,7 +296,7 @@ case class MapElementsExec(
 
     child.execute().mapPartitionsInternal { iter =>
       val getObject = ObjectOperator.unwrapObjectFromRow(child.output.head.dataType)
-      val outputObject = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
+      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
       iter.map(row => outputObject(callFunc(getObject(row))))
     }
   }
@@ -409,7 +395,7 @@ case class MapGroupsExec(
 
       val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
       val getValue = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
-      val outputObject = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
+      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
 
       grouped.flatMap { case (key, rowIter) =>
         val result = func(
@@ -461,11 +447,7 @@ case class FlatMapGroupsInRExec(
     outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec {
 
-  override def output: Seq[Attribute] = outputObjAttr :: Nil
-
   override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override def requiredChildDistribution: Seq[Distribution] =
     if (groupingAttributes.isEmpty) {
@@ -489,8 +471,8 @@ case class FlatMapGroupsInRExec(
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
       val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
       val getValue = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
-      val outputObject = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
-      val runner = new RRunner[Array[Byte]](
+      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
+      val runner = new RRunner[(Array[Byte], Iterator[Array[Byte]]), Array[Byte]](
         func, SerializationFormats.ROW, serializerForR, packageNames, broadcastVars,
         isDataFrame = true, colNames = inputSchema.fieldNames,
         mode = RRunnerModes.DATAFRAME_GAPPLY)
@@ -548,12 +530,22 @@ case class FlatMapGroupsInRWithArrowExec(
     child.execute().mapPartitionsInternal { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
       val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-      val runner = new ArrowRRunner(func, packageNames, broadcastVars, inputSchema,
-        SQLConf.get.sessionLocalTimeZone, RRunnerModes.DATAFRAME_GAPPLY)
 
-      val groupedByRKey = grouped.map { case (key, rowIter) =>
-        val newKey = rowToRBytes(getKey(key).asInstanceOf[Row])
-        (newKey, rowIter)
+      val keys = collection.mutable.ArrayBuffer.empty[Array[Byte]]
+      val groupedByRKey: Iterator[Iterator[InternalRow]] =
+        grouped.map { case (key, rowIter) =>
+          keys.append(rowToRBytes(getKey(key).asInstanceOf[Row]))
+          rowIter
+        }
+
+      val runner = new ArrowRRunner(func, packageNames, broadcastVars, inputSchema,
+        SQLConf.get.sessionLocalTimeZone, RRunnerModes.DATAFRAME_GAPPLY) {
+        protected override def bufferedWrite(
+            dataOut: DataOutputStream)(writeFunc: ByteArrayOutputStream => Unit): Unit = {
+          super.bufferedWrite(dataOut)(writeFunc)
+          // Don't forget we're sending keys additionally.
+          keys.foreach(dataOut.write)
+        }
       }
 
       // The communication mechanism is as follows:
@@ -612,7 +604,7 @@ case class CoGroupExec(
       val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, leftGroup)
       val getLeft = ObjectOperator.deserializeRowToObject(leftDeserializer, leftAttr)
       val getRight = ObjectOperator.deserializeRowToObject(rightDeserializer, rightAttr)
-      val outputObject = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
+      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
 
       new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
         case (key, leftResult, rightResult) =>

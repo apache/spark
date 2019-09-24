@@ -11,7 +11,7 @@ is subject to change. Note that currently the integration tests only run with Ja
 The simplest way to run the integration tests is to install and run Minikube, then run the following from this
 directory:
 
-    dev/dev-run-integration-tests.sh
+    ./dev/dev-run-integration-tests.sh
 
 The minimum tested version of Minikube is 0.23.0. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
@@ -28,7 +28,7 @@ The main useful options are outlined below.
 ## Using a different backend
 
 The integration test backend i.e. the K8S cluster used for testing is controlled by the `--deploy-mode` option.  By 
-default this is set to `minikube`, the available backends are their perequisites are as follows.  
+default this is set to `minikube`, the available backends are their prerequisites are as follows.  
 
 ### `minikube`
 
@@ -46,7 +46,7 @@ environment variable appropriately.
 
 ### `cloud` 
 
-These cloud backend configures the tests to use an arbitrary Kubernetes cluster running in the cloud or otherwise.
+The cloud backend configures the tests to use an arbitrary Kubernetes cluster running in the cloud or otherwise.
 
 The `cloud` backend auto-configures the cluster to use from your K8S config file, this is assumed to be `~/.kube/config`
 unless the `KUBECONFIG` environment variable is set to override this location.  By default this will use whatever your 
@@ -62,11 +62,23 @@ By default, the test framework will build new Docker images on every test execut
 and it is written to file at `target/imageTag.txt`. To reuse the images built in a previous run, or to use a Docker 
 image tag that you have built by other means already, pass the tag to the test script:
 
-    dev/dev-run-integration-tests.sh --image-tag <tag>
+    ./dev/dev-run-integration-tests.sh --image-tag <tag>
 
 where if you still want to use images that were built before by the test framework:
 
-    dev/dev-run-integration-tests.sh --image-tag $(cat target/imageTag.txt)
+    ./dev/dev-run-integration-tests.sh --image-tag $(cat target/imageTag.txt)
+    
+### Customising the Image Names
+
+If your image names do not follow the standard Spark naming convention - `spark`, `spark-py` and `spark-r` - then you can customise the names using several options.
+
+If you use the same basic pattern but a different prefix for the name e.g. `apache-spark` you can just set `--base-image-name <base-name>` e.g.
+
+    ./dev/dev-run-integration-tests.sh --base-image-name apache-spark
+    
+Alternatively if you use completely custom names then you can set each individually via the `--jvm-image-name <name>`, `--python-image-name <name>` and `--r-image-name <name>` arguments e.g.
+
+    ./dev/dev-run-integration-tests.sh --jvm-image-name jvm-spark --python-image-name pyspark --r-image-name sparkr
 
 ## Spark Distribution Under Test
 
@@ -105,7 +117,7 @@ configuration is provided in `dev/spark-rbac.yaml`.
 If you prefer to run just the integration tests directly, then you can customise the behaviour via passing system 
 properties to Maven.  For example:
 
-    mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.11 \
+    mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.12 \
                             -Pkubernetes -Pkubernetes-integration-tests \ 
                             -Phadoop-2.7 -Dhadoop.version=2.7.4 \
                             -Dspark.kubernetes.test.sparkTgz=spark-3.0.0-SNAPSHOT-bin-example.tgz \
@@ -188,6 +200,27 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
       images will be pushed to if fresh images are being built.
     </td>
     <td><code>docker.io/kubespark</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.jvmImage</code></td>
+    <td>
+      The image name for the JVM based Spark image to test
+    </td>
+    <td><code>spark</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.pythonImage</code></td>
+    <td>
+      The image name for the Python based Spark image to test
+    </td>
+    <td><code>spark-py</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.rImage</code></td>
+    <td>
+      The image name for the R based Spark image to test
+    </td>
+    <td><code>spark-r</code></td>
   </tr>
   <tr>
     <td><code>spark.kubernetes.test.namespace</code></td>

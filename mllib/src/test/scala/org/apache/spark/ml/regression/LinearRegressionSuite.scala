@@ -187,6 +187,18 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
     assert(model.numFeatures === numFeatures)
   }
 
+  test("linear regression: can transform data with LinearRegressionModel") {
+    withClue("training related params like loss are only validated during fitting phase") {
+      val original = new LinearRegression().fit(datasetWithDenseFeature)
+
+      val deserialized = new LinearRegressionModel(uid = original.uid,
+        coefficients = original.coefficients,
+        intercept = original.intercept)
+      val output = deserialized.transform(datasetWithDenseFeature)
+      assert(output.collect().size > 0) // simple assertion to ensure no exception thrown
+    }
+  }
+
   test("linear regression: illegal params") {
     withClue("LinearRegression with huber loss only supports L2 regularization") {
       intercept[IllegalArgumentException] {
@@ -892,6 +904,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
         .setRegParam(regParam)
         .setElasticNetParam(elasticNetParam)
         .setSolver(solver)
+        .setMaxIter(1)
       MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
         datasetWithStrongNoise.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](
@@ -908,6 +921,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
         .setFitIntercept(fitIntercept)
         .setStandardization(standardization)
         .setRegParam(regParam)
+        .setMaxIter(1)
       MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
         datasetWithOutlier.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -175,14 +175,20 @@ def run_apache_rat_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "check-license")])
 
 
-def run_scala_style_checks():
+def run_scala_style_checks(build_profiles):
     set_title_and_block("Running Scala style checks", "BLOCK_SCALA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
+    profiles = " ".join(build_profiles)
+    print("[info] Checking Scala style using SBT with these profiles: ", profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala"), profiles])
 
 
-def run_java_style_checks():
+def run_java_style_checks(build_profiles):
     set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle")])
+    # The same profiles used for building are used to run Checkstyle by SBT as well because
+    # the previous build looks reused for Checkstyle and affecting Checkstyle. See SPARK-27130.
+    profiles = " ".join(build_profiles)
+    print("[info] Checking Java style using SBT with these profiles: ", profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle"), profiles])
 
 
 def run_python_style_checks():
@@ -234,7 +240,7 @@ def exec_maven(mvn_args=()):
     zinc_port = get_zinc_port()
     os.environ["ZINC_PORT"] = "%s" % zinc_port
     zinc_flag = "-DzincPort=%s" % zinc_port
-    flags = [os.path.join(SPARK_HOME, "build", "mvn"), "--force", zinc_flag]
+    flags = [os.path.join(SPARK_HOME, "build", "mvn"), zinc_flag]
     run_cmd(flags + mvn_args)
 
 
@@ -274,6 +280,7 @@ def get_hadoop_profiles(hadoop_version):
 
     sbt_maven_hadoop_profiles = {
         "hadoop2.7": ["-Phadoop-2.7"],
+        "hadoop3.2": ["-Phadoop-3.2"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -290,8 +297,7 @@ def build_spark_maven(hadoop_version):
     mvn_goals = ["clean", "package", "-DskipTests"]
     profiles_and_goals = build_profiles + mvn_goals
 
-    print("[info] Building Spark (w/Hive 1.2.1) using Maven with these arguments: ",
-          " ".join(profiles_and_goals))
+    print("[info] Building Spark using Maven with these arguments: ", " ".join(profiles_and_goals))
 
     exec_maven(profiles_and_goals)
 
@@ -303,8 +309,7 @@ def build_spark_sbt(hadoop_version):
                  "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark (w/Hive 1.2.1) using SBT with these arguments: ",
-          " ".join(profiles_and_goals))
+    print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
 
@@ -316,7 +321,7 @@ def build_spark_unidoc_sbt(hadoop_version):
     sbt_goals = ["unidoc"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark unidoc (w/Hive 1.2.1) using SBT with these arguments: ",
+    print("[info] Building Spark unidoc using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
     exec_sbt(profiles_and_goals)
@@ -327,12 +332,12 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["assembly/package"]
     profiles_and_goals = build_profiles + sbt_goals
-    print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
+    print("[info] Building Spark assembly using SBT with these arguments: ",
           " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
 
     if checkstyle:
-        run_java_style_checks()
+        run_java_style_checks(build_profiles)
 
     build_spark_unidoc_sbt(hadoop_version)
 
@@ -354,7 +359,10 @@ def build_apache_spark(build_tool, hadoop_version):
 def detect_binary_inop_with_mima(hadoop_version):
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     set_title_and_block("Detecting binary incompatibilities with MiMa", "BLOCK_MIMA")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "mima")] + build_profiles)
+    profiles = " ".join(build_profiles)
+    print("[info] Detecting binary incompatibilities with MiMa using SBT with these profiles: ",
+          profiles)
+    run_cmd([os.path.join(SPARK_HOME, "dev", "mima"), profiles])
 
 
 def run_scala_tests_maven(test_profiles):
@@ -395,6 +403,13 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
 
     if excluded_tags:
         test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
+
+    # set up java11 env if this is a pull request build with 'test-java11' in the title
+    if "ghprbPullTitle" in os.environ:
+        if "test-java11" in os.environ["ghprbPullTitle"].lower():
+            os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
+            os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
+            test_profiles += ['-Djava.version=11']
 
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
@@ -461,6 +476,8 @@ def post_python_tests_results():
         run_cmd(["git", "push", "-f", "origin", "gh-pages"])
     finally:
         os.chdir("..")
+        # 10. Remove the cloned repository.
+        shutil.rmtree("pyspark-coverage-site")
 
 
 def run_python_packaging_tests():
@@ -536,7 +553,9 @@ def main():
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
-        os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
+        # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
+        # /home/jenkins/anaconda2/envs/py36/bin
+        os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
@@ -553,6 +572,7 @@ def main():
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
         excluded_tags = determine_tags_to_exclude(changed_modules)
+
     if not changed_modules:
         changed_modules = [modules.root]
         excluded_tags = []
@@ -577,7 +597,8 @@ def main():
     if not changed_files or any(f.endswith(".scala")
                                 or f.endswith("scalastyle-config.xml")
                                 for f in changed_files):
-        run_scala_style_checks()
+        build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+        run_scala_style_checks(build_profiles)
     should_run_java_style_checks = False
     if not changed_files or any(f.endswith(".java")
                                 or f.endswith("checkstyle.xml")

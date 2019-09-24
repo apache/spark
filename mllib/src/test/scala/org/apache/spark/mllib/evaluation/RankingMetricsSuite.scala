@@ -23,7 +23,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 
 class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("Ranking metrics: MAP, NDCG") {
+  test("Ranking metrics: MAP, NDCG, Recall") {
     val predictionAndLabels = sc.parallelize(
       Seq(
         (Array(1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Array(1, 2, 3, 4, 5)),
@@ -45,13 +45,25 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(map ~== 0.355026 absTol eps)
 
+    assert(metrics.meanAveragePrecisionAt(1) ~== 0.333334 absTol eps)
+    assert(metrics.meanAveragePrecisionAt(2) ~== 0.25 absTol eps)
+    assert(metrics.meanAveragePrecisionAt(3) ~== 0.24074 absTol eps)
+
     assert(metrics.ndcgAt(3) ~== 1.0/3 absTol eps)
     assert(metrics.ndcgAt(5) ~== 0.328788 absTol eps)
     assert(metrics.ndcgAt(10) ~== 0.487913 absTol eps)
     assert(metrics.ndcgAt(15) ~== metrics.ndcgAt(10) absTol eps)
+
+    assert(metrics.recallAt(1) ~== 1.0/15 absTol eps)
+    assert(metrics.recallAt(2) ~== 8.0/45 absTol eps)
+    assert(metrics.recallAt(3) ~== 11.0/45 absTol eps)
+    assert(metrics.recallAt(4) ~== 11.0/45 absTol eps)
+    assert(metrics.recallAt(5) ~== 16.0/45 absTol eps)
+    assert(metrics.recallAt(10) ~== 2.0/3 absTol eps)
+    assert(metrics.recallAt(15) ~== 2.0/3 absTol eps)
   }
 
-  test("MAP, NDCG with few predictions (SPARK-14886)") {
+  test("MAP, NDCG, Recall with few predictions (SPARK-14886)") {
     val predictionAndLabels = sc.parallelize(
       Seq(
         (Array(1, 6, 2), Array(1, 2, 3, 4, 5)),
@@ -64,6 +76,8 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(metrics.precisionAt(2) ~== 0.25 absTol eps)
     assert(metrics.ndcgAt(1) ~== 0.5 absTol eps)
     assert(metrics.ndcgAt(2) ~== 0.30657 absTol eps)
+    assert(metrics.recallAt(1) ~== 0.1 absTol eps)
+    assert(metrics.recallAt(2) ~== 0.1 absTol eps)
   }
 
 }

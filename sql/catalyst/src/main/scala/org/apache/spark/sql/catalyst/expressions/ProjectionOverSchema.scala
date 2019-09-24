@@ -49,6 +49,10 @@ case class ProjectionOverSchema(schema: StructType) {
               s"unmatched child schema for GetArrayStructFields: ${projSchema.toString}"
             )
         }
+      case MapKeys(child) =>
+        getProjection(child).map { projection => MapKeys(projection) }
+      case MapValues(child) =>
+        getProjection(child).map { projection => MapValues(projection) }
       case GetMapValue(child, key) =>
         getProjection(child).map { projection => GetMapValue(projection, key) }
       case GetStructFieldObject(child, field: StructField) =>

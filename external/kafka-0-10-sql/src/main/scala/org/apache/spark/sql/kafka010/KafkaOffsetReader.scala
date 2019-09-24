@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.{Executors, ThreadFactory}
+import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -30,6 +30,7 @@ import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsume
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 
@@ -47,21 +48,19 @@ import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 private[kafka010] class KafkaOffsetReader(
     consumerStrategy: ConsumerStrategy,
     val driverKafkaParams: ju.Map[String, Object],
-    readerOptions: Map[String, String],
+    readerOptions: CaseInsensitiveMap[String],
     driverGroupIdPrefix: String) extends Logging {
   /**
    * Used to ensure execute fetch operations execute in an UninterruptibleThread
    */
-  val kafkaReaderThread = Executors.newSingleThreadExecutor(new ThreadFactory {
-    override def newThread(r: Runnable): Thread = {
-      val t = new UninterruptibleThread("Kafka Offset Reader") {
-        override def run(): Unit = {
-          r.run()
-        }
+  val kafkaReaderThread = Executors.newSingleThreadExecutor((r: Runnable) => {
+    val t = new UninterruptibleThread("Kafka Offset Reader") {
+      override def run(): Unit = {
+        r.run()
       }
-      t.setDaemon(true)
-      t
     }
+    t.setDaemon(true)
+    t
   })
   val execContext = ExecutionContext.fromExecutorService(kafkaReaderThread)
 
@@ -90,11 +89,11 @@ private[kafka010] class KafkaOffsetReader(
     _consumer
   }
 
-  private val maxOffsetFetchAttempts =
-    readerOptions.getOrElse("fetchOffset.numRetries", "3").toInt
+  private[kafka010] val maxOffsetFetchAttempts =
+    readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
 
-  private val offsetFetchAttemptIntervalMs =
-    readerOptions.getOrElse("fetchOffset.retryIntervalMs", "1000").toLong
+  private[kafka010] val offsetFetchAttemptIntervalMs =
+    readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
 
   private def nextGroupId(): String = {
     groupId = driverGroupIdPrefix + "-" + nextId
@@ -122,6 +121,34 @@ private[kafka010] class KafkaOffsetReader(
     val partitions = consumer.assignment()
     consumer.pause(partitions)
     partitions.asScala.toSet
+  }
+
+  /**
+   * Fetch the partition offsets for the topic partitions that are indicated
+   * in the [[ConsumerStrategy]] and [[KafkaOffsetRangeLimit]].
+   */
+  def fetchPartitionOffsets(offsetRangeLimit: KafkaOffsetRangeLimit): Map[TopicPartition, Long] = {
+    def validateTopicPartitions(partitions: Set[TopicPartition],
+      partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+      assert(partitions == partitionOffsets.keySet,
+        "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
+          "Use -1 for latest, -2 for earliest, if you don't care.\n" +
+          s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions}")
+      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
+      partitionOffsets
+    }
+    val partitions = fetchTopicPartitions()
+    // Obtain TopicPartition offsets with late binding support
+    offsetRangeLimit match {
+      case EarliestOffsetRangeLimit => partitions.map {
+        case tp => tp -> KafkaOffsetRangeLimit.EARLIEST
+      }.toMap
+      case LatestOffsetRangeLimit => partitions.map {
+        case tp => tp -> KafkaOffsetRangeLimit.LATEST
+      }.toMap
+      case SpecificOffsetRangeLimit(partitionOffsets) =>
+        validateTopicPartitions(partitions, partitionOffsets)
+    }
   }
 
   /**

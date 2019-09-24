@@ -52,8 +52,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       // Set up the streaming context and input streams
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-        ssc.addStreamingListener(ssc.progressListener)
-
         val input = Seq(1, 2, 3, 4, 5)
         // Use "batchCount" to make sure we check the result after all batches finish
         val batchCounter = new BatchCounter(ssc)
@@ -106,8 +104,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       testServer.start()
 
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-        ssc.addStreamingListener(ssc.progressListener)
-
         val batchCounter = new BatchCounter(ssc)
         val networkStream = ssc.socketTextStream(
           "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
@@ -293,8 +289,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val textPath = new Path(generatedSubDir, "renamed.txt")
         write(textPath, "renamed\n")
         val now = clock.getTimeMillis()
-        val modTime = now + durationMs / 2
-        fs.setTimes(textPath, modTime, modTime)
+        fs.setTimes(textPath, now, now)
         val textFilestatus = fs.getFileStatus(existingFile)
         assert(textFilestatus.getModificationTime < now + durationMs)
 

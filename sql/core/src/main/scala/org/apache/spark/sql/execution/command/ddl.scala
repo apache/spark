@@ -28,9 +28,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -72,7 +73,7 @@ case class CreateDatabaseCommand(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        path.map(CatalogUtils.stringToURI(_)).getOrElse(catalog.getDefaultDBPath(databaseName)),
+        path.map(CatalogUtils.stringToURI).getOrElse(catalog.getDefaultDBPath(databaseName)),
         props),
       ifNotExists)
     Seq.empty[Row]
@@ -352,9 +353,8 @@ case class AlterTableChangeColumnCommand(
   }
 
   // Add the comment to a column, if comment is empty, return the original column.
-  private def addComment(column: StructField, comment: Option[String]): StructField = {
-    comment.map(column.withComment(_)).getOrElse(column)
-  }
+  private def addComment(column: StructField, comment: Option[String]): StructField =
+    comment.map(column.withComment).getOrElse(column)
 
   // Compare a [[StructField]] to another, return true if they have the same column
   // name(by resolver) and dataType.
@@ -584,14 +584,12 @@ case class AlterTableRecoverPartitionsCommand(
     // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
     val jobConf = new JobConf(hadoopConf, this.getClass)
     val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-    new PathFilter {
-      override def accept(path: Path): Boolean = {
-        val name = path.getName
-        if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
-          pathFilter == null || pathFilter.accept(path)
-        } else {
-          false
-        }
+    path: Path => {
+      val name = path.getName
+      if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
+        pathFilter == null || pathFilter.accept(path)
+      } else {
+        false
       }
     }
   }
@@ -616,7 +614,7 @@ case class AlterTableRecoverPartitionsCommand(
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
-    val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
+    val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
     val pathFilter = getPathFilter(hadoopConf)
 
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
@@ -886,7 +884,8 @@ object DDLUtils {
           if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
             OrcFileFormat.checkFieldNames(colNames)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
-              serde == Some("parquet.hive.serde.ParquetHiveSerDe")) {
+            serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
+            serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
             ParquetSchemaConverter.checkFieldNames(colNames)
           }
         case "parquet" => ParquetSchemaConverter.checkFieldNames(colNames)

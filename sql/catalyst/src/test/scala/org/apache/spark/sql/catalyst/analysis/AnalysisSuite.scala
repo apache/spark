@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
@@ -615,7 +616,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-25691: AliasViewChild with different nullabilities") {
     object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
-      val batches = Batch("View", Once, AliasViewChild(conf), EliminateView) :: Nil
+      val batches = Batch("View", Once, EliminateView) :: Nil
     }
     val relation = LocalRelation('a.int.notNull, 'b.string)
     val view = View(CatalogTable(
@@ -632,5 +633,21 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       relation)
     val res = ViewAnalyzer.execute(view)
     comparePlans(res, expected)
+  }
+
+  test("CTE with non-existing column alias") {
+    assertAnalysisError(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
+      Seq("cannot resolve '`y`' given input columns: [x]"))
+  }
+
+  test("CTE with non-matching column alias") {
+    assertAnalysisError(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
+      Seq("Number of column aliases does not match number of columns. Number of column aliases: " +
+        "2; number of columns: 1."))
+  }
+
+  test("SPARK-28251: Insert into non-existing table error message is user friendly") {
+    assertAnalysisError(parsePlan("INSERT INTO test VALUES (1)"),
+      Seq("Table not found: test"))
   }
 }

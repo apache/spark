@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.net.URI
 
-import scala.language.existentials
-
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
@@ -548,6 +546,14 @@ class HiveDDLSuite
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
     }
     assert(e.message == "Found duplicate column(s) in the table definition of `default`.`tbl`: `a`")
+  }
+
+  test("create partitioned table without specifying data type for the partition columns") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (b) STORED AS parquet")
+    }
+    assert(e.message.contains("Must specify a data type for each partition column while creating " +
+      "Hive partitioned table."))
   }
 
   test("add/drop partition with location - managed table") {

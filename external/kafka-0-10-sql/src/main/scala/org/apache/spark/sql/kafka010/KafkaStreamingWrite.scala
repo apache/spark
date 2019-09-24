@@ -20,17 +20,10 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
-
-/**
- * Dummy commit message. The DataSourceV2 framework requires a commit message implementation but we
- * don't need to really send one.
- */
-case object KafkaWriterCommitMessage extends WriterCommitMessage
 
 /**
  * A [[StreamingWrite]] for Kafka writing. Responsible for generating the writer factory.
@@ -40,7 +33,7 @@ case object KafkaWriterCommitMessage extends WriterCommitMessage
  * @param producerParams Parameters for Kafka producers in each task.
  * @param schema The schema of the input data.
  */
-class KafkaStreamingWrite(
+private[kafka010] class KafkaStreamingWrite(
     topic: Option[String],
     producerParams: ju.Map[String, Object],
     schema: StructType)
@@ -63,7 +56,7 @@ class KafkaStreamingWrite(
  * @param producerParams Parameters for Kafka producers in each task.
  * @param schema The schema of the input data.
  */
-case class KafkaStreamWriterFactory(
+private case class KafkaStreamWriterFactory(
     topic: Option[String],
     producerParams: ju.Map[String, Object],
     schema: StructType)
@@ -73,7 +66,8 @@ case class KafkaStreamWriterFactory(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
-    new KafkaStreamDataWriter(topic, producerParams, schema.toAttributes)
+    new KafkaDataWriter(topic, producerParams, schema.toAttributes)
+//    new KafkaStreamDataWriter(topic, producerParams, schema.toAttributes)
   }
 }
 

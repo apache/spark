@@ -24,13 +24,15 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StreamingAggregationStateManager}
 import org.apache.spark.sql.internal.SQLConf.{FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, _}
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, SparkDataStream}
+
 
 /**
  * An ordered collection of offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
  * vector clock that must progress linearly forward.
  */
-case class OffsetSeq(offsets: Seq[Option[Offset]], metadata: Option[OffsetSeqMetadata] = None) {
+case class OffsetSeq(offsets: Seq[Option[OffsetV2]], metadata: Option[OffsetSeqMetadata] = None) {
 
   /**
    * Unpacks an offset into [[StreamProgress]] by associating each offset with the ordered list of
@@ -39,7 +41,7 @@ case class OffsetSeq(offsets: Seq[Option[Offset]], metadata: Option[OffsetSeqMet
    * This method is typically used to associate a serialized offset with actual sources (which
    * cannot be serialized).
    */
-  def toStreamProgress(sources: Seq[BaseStreamingSource]): StreamProgress = {
+  def toStreamProgress(sources: Seq[SparkDataStream]): StreamProgress = {
     assert(sources.size == offsets.size, s"There are [${offsets.size}] sources in the " +
       s"checkpoint offsets and now there are [${sources.size}] sources requested by the query. " +
       s"Cannot continue.")
@@ -56,13 +58,13 @@ object OffsetSeq {
    * Returns a [[OffsetSeq]] with a variable sequence of offsets.
    * `nulls` in the sequence are converted to `None`s.
    */
-  def fill(offsets: Offset*): OffsetSeq = OffsetSeq.fill(None, offsets: _*)
+  def fill(offsets: OffsetV2*): OffsetSeq = OffsetSeq.fill(None, offsets: _*)
 
   /**
    * Returns a [[OffsetSeq]] with metadata and a variable sequence of offsets.
    * `nulls` in the sequence are converted to `None`s.
    */
-  def fill(metadata: Option[String], offsets: Offset*): OffsetSeq = {
+  def fill(metadata: Option[String], offsets: OffsetV2*): OffsetSeq = {
     OffsetSeq(offsets.map(Option(_)), metadata.map(OffsetSeqMetadata.apply))
   }
 }

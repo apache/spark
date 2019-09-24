@@ -250,7 +250,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(e.getMessage contains "cancel")
 
     // Once A is cancelled, job B should finish fairly quickly.
-    assert(ThreadUtils.awaitResult(jobB, 60.seconds) === 100)
+    assert(ThreadUtils.awaitResult(jobB, 1.minute) === 100)
   }
 
   test("task reaper will not kill JVM if spark.task.killTimeout == -1") {
@@ -290,7 +290,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(e.getMessage contains "cancel")
 
     // Once A is cancelled, job B should finish fairly quickly.
-    assert(ThreadUtils.awaitResult(jobB, 60.seconds) === 100)
+    assert(ThreadUtils.awaitResult(jobB, 1.minute) === 100)
   }
 
   test("two jobs sharing the same stage") {
@@ -365,7 +365,10 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       }.foreachAsync { x =>
         // Block this code from being executed, until the job get cancelled. In this case, if the
         // source iterator is interruptible, the max number of increment should be under
-        // `numElements`.
+        // `numElements`. We sleep a little to make sure that we leave enough time for the
+        // "kill" message to be delivered to the executor (10000 * 10ms = 100s allowance for
+        // delivery, which should be more than enough).
+        Thread.sleep(10)
         taskCancelledSemaphore.acquire()
         executionOfInterruptibleCounter.getAndIncrement()
     }

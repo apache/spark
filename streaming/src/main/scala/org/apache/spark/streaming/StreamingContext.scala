@@ -34,11 +34,10 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 
 import org.apache.spark._
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.UI._
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.SerializationDebugger
@@ -189,10 +188,9 @@ class StreamingContext private[streaming] (
   private[streaming] val progressListener = new StreamingJobProgressListener(this)
 
   private[streaming] val uiTab: Option[StreamingTab] =
-    if (conf.get(UI_ENABLED)) {
-      Some(new StreamingTab(this))
-    } else {
-      None
+    sparkContext.ui match {
+      case Some(ui) => Some(new StreamingTab(this, ui))
+      case None => None
     }
 
   /* Initializing a streamingSource to register metrics */
@@ -410,6 +408,8 @@ class StreamingContext private[streaming] (
    * as Text and input format as TextInputFormat). Files must be written to the
    * monitored directory by "moving" them from another location within the same
    * file system. File names starting with . are ignored.
+   * The text files must be encoded as UTF-8.
+   *
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): DStream[String] = withNamedScope("text file stream") {
@@ -509,6 +509,10 @@ class StreamingContext private[streaming] (
     scheduler.listenerBus.addListener(streamingListener)
   }
 
+  def removeStreamingListener(streamingListener: StreamingListener): Unit = {
+    scheduler.listenerBus.removeListener(streamingListener)
+  }
+
   private def validate() {
     assert(graph != null, "Graph is null")
     graph.validate()
@@ -572,6 +576,8 @@ class StreamingContext private[streaming] (
           StreamingContext.assertNoOtherContextIsActive()
           try {
             validate()
+
+            registerProgressListener()
 
             // Start the streaming scheduler in a new thread, so that thread local properties
             // like call sites and job groups can be reset without affecting those of the
@@ -688,6 +694,9 @@ class StreamingContext private[streaming] (
           Utils.tryLogNonFatalError {
             uiTab.foreach(_.detach())
           }
+          Utils.tryLogNonFatalError {
+            unregisterProgressListener()
+          }
           StreamingContext.setActiveContext(null)
           Utils.tryLogNonFatalError {
             waiter.notifyStop()
@@ -713,6 +722,18 @@ class StreamingContext private[streaming] (
     logInfo(s"Invoking stop(stopGracefully=$stopGracefully) from shutdown hook")
     // Do not stop SparkContext, let its own shutdown hook stop it
     stop(stopSparkContext = false, stopGracefully = stopGracefully)
+  }
+
+  private def registerProgressListener(): Unit = {
+    addStreamingListener(progressListener)
+    sc.addSparkListener(progressListener)
+    sc.ui.foreach(_.setStreamingJobProgressListener(progressListener))
+  }
+
+  private def unregisterProgressListener(): Unit = {
+    removeStreamingListener(progressListener)
+    sc.removeSparkListener(progressListener)
+    sc.ui.foreach(_.clearStreamingJobProgressListener())
   }
 }
 
@@ -751,11 +772,8 @@ object StreamingContext extends Logging {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Get the currently active context, if there is one. Active means started but not stopped.
    */
-  @Experimental
   def getActive(): Option[StreamingContext] = {
     ACTIVATION_LOCK.synchronized {
       Option(activeContext.get())
@@ -763,13 +781,10 @@ object StreamingContext extends Logging {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Either return the "active" StreamingContext (that is, started but not stopped), or create a
    * new StreamingContext that is
    * @param creatingFunc   Function to create a new StreamingContext
    */
-  @Experimental
   def getActiveOrCreate(creatingFunc: () => StreamingContext): StreamingContext = {
     ACTIVATION_LOCK.synchronized {
       getActive().getOrElse { creatingFunc() }
@@ -777,8 +792,6 @@ object StreamingContext extends Logging {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Either get the currently active StreamingContext (that is, started but not stopped),
    * OR recreate a StreamingContext from checkpoint data in the given path. If checkpoint data
    * does not exist in the provided, then create a new StreamingContext by calling the provided
@@ -792,7 +805,6 @@ object StreamingContext extends Logging {
    *                       error in reading checkpoint data. By default, an exception will be
    *                       thrown on error.
    */
-  @Experimental
   def getActiveOrCreate(
       checkpointPath: String,
       creatingFunc: () => StreamingContext,

@@ -25,6 +25,8 @@ import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.kafka010.KafkaConfigUpdater
+
 /**
  * Subscribe allows you to subscribe to a fixed collection of topics.
  * SubscribePattern allows you to use a regex to specify topics of interest.
@@ -34,7 +36,7 @@ import org.apache.kafka.common.TopicPartition
  * All three strategies have overloaded constructors that allow you to specify
  * the starting offset for a particular partition.
  */
-sealed trait ConsumerStrategy {
+private[kafka010] sealed trait ConsumerStrategy {
   /** Create a [[KafkaConsumer]] and subscribe to topics according to a desired strategy */
   def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]
 
@@ -51,7 +53,8 @@ sealed trait ConsumerStrategy {
 /**
  * Specify a fixed collection of partitions.
  */
-case class AssignStrategy(partitions: Array[TopicPartition]) extends ConsumerStrategy {
+private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
+    extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
     val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
@@ -66,7 +69,7 @@ case class AssignStrategy(partitions: Array[TopicPartition]) extends ConsumerStr
 /**
  * Subscribe to a fixed collection of topics.
  */
-case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
+private[kafka010] case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
     val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
@@ -81,7 +84,8 @@ case class SubscribeStrategy(topics: Seq[String]) extends ConsumerStrategy {
 /**
  * Use a regex to specify topics of interest.
  */
-case class SubscribePatternStrategy(topicPattern: String) extends ConsumerStrategy {
+private[kafka010] case class SubscribePatternStrategy(topicPattern: String)
+    extends ConsumerStrategy {
   override def createConsumer(
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
     val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)

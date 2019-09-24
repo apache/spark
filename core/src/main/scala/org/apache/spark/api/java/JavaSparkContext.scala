@@ -35,6 +35,7 @@ import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD}
+import org.apache.spark.resource.ResourceInformation
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
@@ -114,6 +115,8 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   def appName: String = sc.appName
 
+  def resources: JMap[String, ResourceInformation] = sc.resources.asJava
+
   def jars: util.List[String] = sc.jars.asJava
 
   def startTime: java.lang.Long = sc.startTime
@@ -167,12 +170,14 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   * The text files must be encoded as UTF-8.
    */
   def textFile(path: String): JavaRDD[String] = sc.textFile(path)
 
   /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   * The text files must be encoded as UTF-8.
    */
   def textFile(path: String, minPartitions: Int): JavaRDD[String] =
     sc.textFile(path, minPartitions)
@@ -183,6 +188,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI. Each file is read as a single record and returned in a
    * key-value pair, where the key is the path of each file, the value is the content of each file.
+   * The text files must be encoded as UTF-8.
    *
    * <p> For example, if you have the following files:
    * {{{
@@ -216,6 +222,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI. Each file is read as a single record and returned in a
    * key-value pair, where the key is the path of each file, the value is the content of each file.
+   * The text files must be encoded as UTF-8.
    *
    * @see `wholeTextFiles(path: String, minPartitions: Int)`.
    */

@@ -57,7 +57,7 @@ class JacksonParser(
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
-    options.timeZone,
+    options.zoneId,
     options.locale)
   private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
 

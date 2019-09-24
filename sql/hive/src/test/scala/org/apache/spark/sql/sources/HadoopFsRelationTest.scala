@@ -38,7 +38,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   val dataSourceName: String
 
-  protected val parquetDataSourceName: String = "parquet"
+  protected val parquetDataSourceName: String =
+    classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat].getCanonicalName
 
   private def isParquetDataSource: Boolean = dataSourceName == parquetDataSourceName
 
@@ -817,10 +818,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         assert(preferredLocations.distinct.length == 2)
       }
 
-      checkLocality()
-
-      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> dataSourceName) {
         checkLocality()
+
+        withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+          checkLocality()
+        }
       }
     }
   }

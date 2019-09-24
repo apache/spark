@@ -19,8 +19,6 @@ package org.apache.spark.util
 
 import java.io.NotSerializableException
 
-import scala.language.reflectiveCalls
-
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.partial.CountEvaluator
@@ -74,7 +72,7 @@ class ClosureCleanerSuite extends SparkFunSuite {
       try {
         body
       } catch {
-        case rse: ReturnStatementInClosureException => // Success!
+        case _: ReturnStatementInClosureException => // Success!
         case e @ (_: NotSerializableException | _: SparkException) =>
           fail(s"Expected ReturnStatementInClosureException, but got $e.\n" +
             "This means the closure provided by user is not actually cleaned.")
@@ -122,65 +120,6 @@ class ClosureCleanerSuite extends SparkFunSuite {
     new TestCreateNullValue().run()
   }
 
-  test("SPARK-22328: ClosureCleaner misses referenced superclass fields: case 1") {
-    assume(!ClosureCleanerSuite2.supportsLMFs)
-    val concreteObject = new TestAbstractClass {
-      val n2 = 222
-      val s2 = "bbb"
-      val d2 = 2.0d
-
-      def run(): Seq[(Int, Int, String, String, Double, Double)] = {
-        withSpark(new SparkContext("local", "test")) { sc =>
-          val rdd = sc.parallelize(1 to 1)
-          body(rdd)
-        }
-      }
-
-      def body(rdd: RDD[Int]): Seq[(Int, Int, String, String, Double, Double)] = rdd.map { _ =>
-        (n1, n2, s1, s2, d1, d2)
-      }.collect()
-    }
-    assert(concreteObject.run() === Seq((111, 222, "aaa", "bbb", 1.0d, 2.0d)))
-  }
-
-  test("SPARK-22328: ClosureCleaner misses referenced superclass fields: case 2") {
-    assume(!ClosureCleanerSuite2.supportsLMFs)
-    val concreteObject = new TestAbstractClass2 {
-      val n2 = 222
-      val s2 = "bbb"
-      val d2 = 2.0d
-      def getData: Int => (Int, Int, String, String, Double, Double) = _ => (n1, n2, s1, s2, d1, d2)
-    }
-    withSpark(new SparkContext("local", "test")) { sc =>
-      val rdd = sc.parallelize(1 to 1).map(concreteObject.getData)
-      assert(rdd.collect() === Seq((111, 222, "aaa", "bbb", 1.0d, 2.0d)))
-    }
-  }
-
-  test("SPARK-22328: multiple outer classes have the same parent class") {
-    assume(!ClosureCleanerSuite2.supportsLMFs)
-    val concreteObject = new TestAbstractClass2 {
-
-      val innerObject = new TestAbstractClass2 {
-        override val n1 = 222
-        override val s1 = "bbb"
-      }
-
-      val innerObject2 = new TestAbstractClass2 {
-        override val n1 = 444
-        val n3 = 333
-        val s3 = "ccc"
-        val d3 = 3.0d
-
-        def getData: Int => (Int, Int, String, String, Double, Double, Int, String) =
-          _ => (n1, n3, s1, s3, d1, d3, innerObject.n1, innerObject.s1)
-      }
-    }
-    withSpark(new SparkContext("local", "test")) { sc =>
-      val rdd = sc.parallelize(1 to 1).map(concreteObject.innerObject2.getData)
-      assert(rdd.collect() === Seq((444, 333, "aaa", "ccc", 1.0d, 3.0d, 222, "bbb")))
-    }
-  }
 }
 
 // A non-serializable class we create in closures to make sure that we aren't
@@ -328,13 +267,13 @@ private object TestUserClosuresActuallyCleaned {
     rdd.mapPartitionsWithIndex { (_, it) => return; it }.count()
   }
   def testZipPartitions2(rdd: RDD[Int]): Unit = {
-    rdd.zipPartitions(rdd) { case (it1, it2) => return; it1 }.count()
+    rdd.zipPartitions(rdd) { case (it1, _) => return; it1 }.count()
   }
   def testZipPartitions3(rdd: RDD[Int]): Unit = {
-    rdd.zipPartitions(rdd, rdd) { case (it1, it2, it3) => return; it1 }.count()
+    rdd.zipPartitions(rdd, rdd) { case (it1, _, _) => return; it1 }.count()
   }
   def testZipPartitions4(rdd: RDD[Int]): Unit = {
-    rdd.zipPartitions(rdd, rdd, rdd) { case (it1, it2, it3, it4) => return; it1 }.count()
+    rdd.zipPartitions(rdd, rdd, rdd) { case (it1, _, _, _) => return; it1 }.count()
   }
   def testForeach(rdd: RDD[Int]): Unit = { rdd.foreach { _ => return } }
   def testForeachPartition(rdd: RDD[Int]): Unit = { rdd.foreachPartition { _ => return } }
@@ -374,17 +313,17 @@ private object TestUserClosuresActuallyCleaned {
   // Test SparkContext runJob
   def testRunJob1(sc: SparkContext): Unit = {
     val rdd = sc.parallelize(1 to 10, 10)
-    sc.runJob(rdd, { (ctx: TaskContext, iter: Iterator[Int]) => return; 1 } )
+    sc.runJob(rdd, { (_: TaskContext, _: Iterator[Int]) => return; 1 } )
   }
   def testRunJob2(sc: SparkContext): Unit = {
     val rdd = sc.parallelize(1 to 10, 10)
-    sc.runJob(rdd, { iter: Iterator[Int] => return; 1 } )
+    sc.runJob(rdd, { _: Iterator[Int] => return; 1 } )
   }
   def testRunApproximateJob(sc: SparkContext): Unit = {
     val rdd = sc.parallelize(1 to 10, 10)
     val evaluator = new CountEvaluator(1, 0.5)
     sc.runApproximateJob(
-      rdd, { (ctx: TaskContext, iter: Iterator[Int]) => return; 1L }, evaluator, 1000)
+      rdd, { (_: TaskContext, _: Iterator[Int]) => return; 1L }, evaluator, 1000)
   }
   def testSubmitJob(sc: SparkContext): Unit = {
     val rdd = sc.parallelize(1 to 10, 10)

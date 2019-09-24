@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.util.{Timer, TimerTask}
 import java.util.concurrent.ConcurrentHashMap
-import java.util.function.{Consumer, Function}
+import java.util.function.Consumer
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -202,10 +202,8 @@ private[spark] class BarrierCoordinator(
     case request @ RequestToSync(numTasks, stageId, stageAttemptId, _, _) =>
       // Get or init the ContextBarrierState correspond to the stage attempt.
       val barrierId = ContextBarrierId(stageId, stageAttemptId)
-      states.computeIfAbsent(barrierId, new Function[ContextBarrierId, ContextBarrierState] {
-        override def apply(key: ContextBarrierId): ContextBarrierState =
-          new ContextBarrierState(key, numTasks)
-      })
+      states.computeIfAbsent(barrierId,
+        (key: ContextBarrierId) => new ContextBarrierState(key, numTasks))
       val barrierState = states.get(barrierId)
 
       barrierState.handleRequest(context, request)

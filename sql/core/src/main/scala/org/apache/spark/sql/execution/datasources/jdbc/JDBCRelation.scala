@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getTimeZone, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -187,7 +187,7 @@ private[sql] object JDBCRelation extends Logging {
     columnType match {
       case _: NumericType => value.toLong
       case DateType => parse(stringToDate).toLong
-      case TimestampType => parse(stringToTimestamp(_, getTimeZone(timeZoneId)))
+      case TimestampType => parse(stringToTimestamp(_, getZoneId(timeZoneId)))
     }
   }
 
@@ -199,7 +199,8 @@ private[sql] object JDBCRelation extends Logging {
       val dateTimeStr = columnType match {
         case DateType => DateFormatter().format(value.toInt)
         case TimestampType =>
-          val timestampFormatter = TimestampFormatter(DateTimeUtils.getTimeZone(timeZoneId))
+          val timestampFormatter = TimestampFormatter.getFractionFormatter(
+            DateTimeUtils.getZoneId(timeZoneId))
           DateTimeUtils.timestampToString(timestampFormatter, value)
       }
       s"'$dateTimeStr'"

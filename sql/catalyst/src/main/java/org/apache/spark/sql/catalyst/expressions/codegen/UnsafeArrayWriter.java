@@ -82,24 +82,28 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     BitSetMethods.set(getBuffer(), startingOffset + 8, ordinal);
   }
 
+  @Override
   public void setNull1Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
     writeByte(getElementOffset(ordinal), (byte)0);
   }
 
+  @Override
   public void setNull2Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
     writeShort(getElementOffset(ordinal), (short)0);
   }
 
+  @Override
   public void setNull4Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
     writeInt(getElementOffset(ordinal), 0);
   }
 
+  @Override
   public void setNull8Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
@@ -108,41 +112,49 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
 
   public void setNull(int ordinal) { setNull8Bytes(ordinal); }
 
+  @Override
   public void write(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
     writeBoolean(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
     writeByte(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, short value) {
     assertIndexIsValid(ordinal);
     writeShort(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, int value) {
     assertIndexIsValid(ordinal);
     writeInt(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, long value) {
     assertIndexIsValid(ordinal);
     writeLong(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     writeFloat(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     writeDouble(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, Decimal input, int precision, int scale) {
     // make sure Decimal object has the same scale as DecimalType
     assertIndexIsValid(ordinal);

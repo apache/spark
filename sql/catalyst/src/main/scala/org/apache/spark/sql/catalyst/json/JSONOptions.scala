@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.nio.charset.{Charset, StandardCharsets}
-import java.util.{Locale, TimeZone}
+import java.time.ZoneId
+import java.util.Locale
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 
@@ -78,13 +79,13 @@ private[sql] class JSONOptions(
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
-  val timeZone: TimeZone = DateTimeUtils.getTimeZone(
+  val zoneId: ZoneId = DateTimeUtils.getZoneId(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
-  val dateFormat: String = parameters.getOrElse("dateFormat", "yyyy-MM-dd")
+  val dateFormat: String = parameters.getOrElse("dateFormat", "uuuu-MM-dd")
 
   val timestampFormat: String =
-    parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+    parameters.getOrElse("timestampFormat", "uuuu-MM-dd'T'HH:mm:ss.SSSXXX")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
@@ -108,7 +109,7 @@ private[sql] class JSONOptions(
     .orElse(parameters.get("charset")).map(checkedEncoding)
 
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
-    lineSep.getBytes(encoding.getOrElse("UTF-8"))
+    lineSep.getBytes(encoding.getOrElse(StandardCharsets.UTF_8.name()))
   }
   val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 
