@@ -35,13 +35,27 @@ SHOW CREATE TABLE name
 
 ### Examples
 {% highlight sql %}
-create table test_table (c INT) using json;
+CREATE TABLE test (c INT) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+    STORED AS TEXTFILE
+    TBLPROPERTIES ('prop1' = 'value1', 'prop2' = 'value2');
 
-show create table test_table;
+show create table test;
 
--- the result of SHOW CREATE TABLE test_table
-CREATE TABLE `test_table` (`c` INT)
-USING json
+-- the result of SHOW CREATE TABLE test
+CREATE TABLE `test`(`c` INT)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+WITH SERDEPROPERTIES (
+  'field.delim' = ',',
+  'serialization.format' = ','
+)
+STORED AS
+  INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+TBLPROPERTIES (
+  'transient_lastDdlTime' = '1569350233',
+  'prop1' = 'value1',
+  'prop2' = 'value2'
+)
 
 {% endhighlight %}
 
