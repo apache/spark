@@ -129,7 +129,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         return self.getOrDefault(self.threshold)
 
 
-class LSHParams(JavaParams, HasInputCol, HasOutputCol):
+class LSHParams(HasInputCol, HasOutputCol):
     """
     Mixin for Locality Sensitive Hashing (LSH) algorithm parameters.
     """
@@ -203,7 +203,7 @@ class LSHModel(JavaModel, LSHParams):
         return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
 
 
-class BucketedRandomProjectionLSHParams(JavaParams):
+class BucketedRandomProjectionLSHParams():
     """
     (Private) Params for BucketedRandomProjectionParams.
     .. versionadded:: 3.0.0
@@ -1031,8 +1031,26 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         return self._java_obj.indexOf(term)
 
 
+class IDFParams(HasInputCol, HasOutputCol):
+    """
+    (Private) Params for IDFParams.
+    .. versionadded:: 3.0.0
+    """
+
+    minDocFreq = Param(Params._dummy(), "minDocFreq",
+                       "minimum number of documents in which a term should appear for filtering",
+                       typeConverter=TypeConverters.toInt)
+
+    @since("1.4.0")
+    def getMinDocFreq(self):
+        """
+        Gets the value of minDocFreq or its default value.
+        """
+        return self.getOrDefault(self.minDocFreq)
+
+
 @inherit_doc
-class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class IDF(JavaEstimator, IDFParams, JavaMLReadable, JavaMLWritable):
     """
     Compute the Inverse Document Frequency (IDF) given a collection of documents.
 
@@ -1041,6 +1059,8 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
     >>> idf = IDF(minDocFreq=3, inputCol="tf", outputCol="idf")
     >>> model = idf.fit(df)
+    >>> model.getMinDocFreq()
+    3
     >>> model.idf
     DenseVector([0.0, 0.0])
     >>> model.docFreq
@@ -1067,10 +1087,6 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
 
     .. versionadded:: 1.4.0
     """
-
-    minDocFreq = Param(Params._dummy(), "minDocFreq",
-                       "minimum number of documents in which a term should appear for filtering",
-                       typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, minDocFreq=0, inputCol=None, outputCol=None):
@@ -1100,18 +1116,11 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
         """
         return self._set(minDocFreq=value)
 
-    @since("1.4.0")
-    def getMinDocFreq(self):
-        """
-        Gets the value of minDocFreq or its default value.
-        """
-        return self.getOrDefault(self.minDocFreq)
-
     def _create_model(self, java_model):
         return IDFModel(java_model)
 
 
-class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class IDFModel(JavaModel, IDFParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`IDF`.
 
@@ -1143,7 +1152,7 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("numDocs")
 
 
-class ImputerParams(JavaParams, HasInputCols, HasOutputCols):
+class ImputerParams(HasInputCols, HasOutputCols):
     """
     (Private) Params for ImputerParams.
     .. versionadded:: 3.0.0
@@ -1343,7 +1352,7 @@ class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, J
         return self._set(**kwargs)
 
 
-class MaxAbsScalerParams(JavaParams, HasInputCol, HasOutputCol):
+class MaxAbsScalerParams(HasInputCol, HasOutputCol):
     """
     (Private) Params for MaxAbsScalerParams.
     .. versionadded:: 3.0.0
@@ -1362,15 +1371,15 @@ class MaxAbsScaler(JavaEstimator, MaxAbsScalerParams, JavaMLReadable, JavaMLWrit
     >>> df = spark.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
     >>> model = maScaler.fit(df)
-    >>> model.getOutputCol()
-    'scaled'
+    >>> model.setOutputCol("scaledOutput")
+    MaxAbsScaler...
     >>> model.transform(df).show()
-    +-----+------+
-    |    a|scaled|
-    +-----+------+
-    |[1.0]| [0.5]|
-    |[2.0]| [1.0]|
-    +-----+------+
+    +-----+------------+
+    |    a|scaledOutput|
+    +-----+------------+
+    |[1.0]|       [0.5]|
+    |[2.0]|       [1.0]|
+    +-----+------------+
     ...
     >>> scalerPath = temp_path + "/max-abs-scaler"
     >>> maScaler.save(scalerPath)
@@ -1524,7 +1533,7 @@ class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
     """
 
 
-class MinMaxScalerParams(JavaParams, HasInputCol, HasOutputCol):
+class MinMaxScalerParams(HasInputCol, HasOutputCol):
     """
     (Private) Params for MinMaxScalerParams.
     .. versionadded:: 3.0.0
@@ -1804,7 +1813,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return self.getOrDefault(self.p)
 
 
-class OneHotEncoderParams(JavaParams, HasInputCols, HasOutputCols, HasHandleInvalid):
+class OneHotEncoderParams(HasInputCols, HasOutputCols, HasHandleInvalid):
     """
     (Private) Params for OneHotEncoderParams.
     .. versionadded:: 3.0.0
@@ -2189,7 +2198,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
                               handleInvalid=self.getHandleInvalid())
 
 
-class RobustScalerParams(JavaParams, HasInputCol, HasOutputCol):
+class RobustScalerParams(HasInputCol, HasOutputCol):
     """
     (Private) Params for RobustScalerParams.
     .. versionadded:: 3.0.0
@@ -2548,7 +2557,7 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
         return self.getOrDefault(self.statement)
 
 
-class StandardScalerParams(JavaParams, HasInputCol, HasOutputCol):
+class StandardScalerParams(HasInputCol, HasOutputCol):
     """
     (Private) Params for StandardScalerParams.
     .. versionadded:: 3.0.0
@@ -3178,7 +3187,7 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
         return self._set(**kwargs)
 
 
-class VectorIndexerParams(JavaParams, HasInputCol, HasOutputCol, HasHandleInvalid):
+class VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
     """
     (Private) Params for VectorIndexerParams.
     .. versionadded:: 3.0.0
@@ -3445,7 +3454,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
         return self.getOrDefault(self.names)
 
 
-class Word2VecParams(JavaParams, HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
+class Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
     """
     (Private) Params for Word2VecParams.
     .. versionadded:: 3.0.0
@@ -3673,7 +3682,7 @@ class Word2VecModel(JavaModel, Word2VecParams, JavaMLReadable, JavaMLWritable):
         return list(map(lambda st: (st._1(), st._2()), list(tuples)))
 
 
-class PCAParams(JavaParams, HasInputCol, HasOutputCol):
+class PCAParams(HasInputCol, HasOutputCol):
     """
     (Private) Params for PCAParams.
     .. versionadded:: 3.0.0
@@ -3784,7 +3793,7 @@ class PCAModel(JavaModel, PCAParams, JavaMLReadable, JavaMLWritable):
         return self._call_java("explainedVariance")
 
 
-class RFormulaParams(JavaParams, HasFeaturesCol, HasLabelCol, HasHandleInvalid):
+class RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
     """
     (Private) Params for RFormulaParams.
     .. versionadded:: 3.0.0
@@ -3975,7 +3984,7 @@ class RFormulaModel(JavaModel, RFormulaParams, JavaMLReadable, JavaMLWritable):
         return "RFormulaModel(%s) (uid=%s)" % (resolvedFormula, self.uid)
 
 
-class ChiSqSelectorParams(JavaParams, HasFeaturesCol, HasOutputCol, HasLabelCol):
+class ChiSqSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
     """
     (Private) Params for ChiSqSelectorParams.
     .. versionadded:: 3.0.0
