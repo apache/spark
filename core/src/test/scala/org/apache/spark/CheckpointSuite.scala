@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.config.CACHE_CHECKPOINT_PREFERRED_LOCS
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd._
@@ -622,7 +623,7 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
   test("cache checkpoint preferred location") {
     withTempDir { checkpointDir =>
       val conf = new SparkConf()
-        .set("spark.rdd.checkpoint.cachePreferredLocs", "true")
+        .set(CACHE_CHECKPOINT_PREFERRED_LOCS.key, "true")
         .set(UI_ENABLED.key, "false")
       sc = new SparkContext("local", "test", conf)
       sc.setCheckpointDir(checkpointDir.toString)
