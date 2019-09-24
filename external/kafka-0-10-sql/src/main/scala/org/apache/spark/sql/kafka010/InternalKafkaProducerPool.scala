@@ -39,7 +39,7 @@ private[kafka010] class InternalKafkaProducerPool(
   }
 
   protected def createKey(producer: CachedKafkaProducer): CacheKey = {
-    producer.kafkaParams.asScala.toSeq.sortBy(x => x._1)
+    InternalKafkaProducerPool.toCacheKey(producer.kafkaParams)
   }
 }
 
@@ -52,10 +52,6 @@ private class ProducerPoolConfig(conf: SparkConf) extends PoolConfig[CachedKafka
 }
 
 private class ProducerObjectFactory extends ObjectFactory[CacheKey, CachedKafkaProducer] {
-  override def destroyObject(key: CacheKey, p: PooledObject[CachedKafkaProducer]): Unit = {
-    p.getObject.close()
-  }
-
   protected def createValue(
       key: CacheKey,
       kafkaParams: ju.Map[String, Object]): CachedKafkaProducer = {

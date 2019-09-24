@@ -621,6 +621,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
 
   private[kafka010] def clear(): Unit = {
     consumerPool.reset()
+    fetchedDataPool.reset()
   }
 
   private def reportDataLoss0(

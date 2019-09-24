@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.commons.pool2.{BaseKeyedPooledObjectFactory, PooledObject, SwallowedExceptionListener}
@@ -42,7 +43,7 @@ import org.apache.spark.internal.Logging
  * not yet returned, hence provide thread-safety usage of non-thread-safe objects unless caller
  * shares the object to multiple threads.
  */
-private[kafka010] abstract class InternalKafkaConnectorPool[K, V](
+private[kafka010] abstract class InternalKafkaConnectorPool[K, V <: Closeable](
     objectFactory: ObjectFactory[K, V],
     poolConfig: PoolConfig[V],
     swallowedExceptionListener: SwallowedExceptionListener) extends Logging {
@@ -177,7 +178,8 @@ private[kafka010] abstract class PoolConfig[V] extends GenericKeyedObjectPoolCon
   }
 }
 
-private[kafka010] abstract class ObjectFactory[K, V] extends BaseKeyedPooledObjectFactory[K, V] {
+private[kafka010] abstract class ObjectFactory[K, V <: Closeable]
+  extends BaseKeyedPooledObjectFactory[K, V] {
   val keyToKafkaParams = new ConcurrentHashMap[K, ju.Map[String, Object]]()
 
   override def create(key: K): V = {
@@ -190,6 +192,10 @@ private[kafka010] abstract class ObjectFactory[K, V] extends BaseKeyedPooledObje
 
   override def wrap(value: V): PooledObject[V] = {
     new DefaultPooledObject[V](value)
+  }
+
+  override def destroyObject(key: K, p: PooledObject[V]): Unit = {
+    p.getObject.close()
   }
 
   protected def createValue(key: K, kafkaParams: ju.Map[String, Object]): V

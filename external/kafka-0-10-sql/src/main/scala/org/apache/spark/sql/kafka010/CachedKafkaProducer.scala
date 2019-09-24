@@ -19,12 +19,10 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 import java.io.Closeable
-import java.util.concurrent.ExecutionException
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord}
 
 import org.apache.spark.SparkEnv
@@ -95,13 +93,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
         .setAuthenticationConfigIfNeeded()
         .build()
     val key = toCacheKey(updatedKafkaParams)
-    try {
-      producerPool.borrowObject(key, updatedKafkaParams)
-    } catch {
-      case e @ (_: ExecutionException | _: UncheckedExecutionException | _: ExecutionError)
-        if e.getCause != null =>
-        throw e.getCause
-    }
+    producerPool.borrowObject(key, updatedKafkaParams)
   }
 
   def release(producer: CachedKafkaProducer): Unit = {

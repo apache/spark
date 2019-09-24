@@ -55,10 +55,6 @@ private class ConsumerPoolConfig(conf: SparkConf) extends PoolConfig[InternalKaf
 }
 
 private class ConsumerObjectFactory extends ObjectFactory[CacheKey, InternalKafkaConsumer] {
-  override def destroyObject(key: CacheKey, p: PooledObject[InternalKafkaConsumer]): Unit = {
-    p.getObject.close()
-  }
-
   protected def createValue(
       key: CacheKey,
       kafkaParams: ju.Map[String, Object]): InternalKafkaConsumer = {
