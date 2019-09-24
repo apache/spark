@@ -39,7 +39,7 @@ SELECT boolean('   f           ') AS `false`
 -- !query 4 schema
 struct<false:boolean>
 -- !query 4 output
-NULL
+false
 
 
 -- !query 5
@@ -127,7 +127,7 @@ SELECT boolean('on') AS true
 -- !query 15 schema
 struct<true:boolean>
 -- !query 15 output
-NULL
+true
 
 
 -- !query 16
@@ -135,7 +135,7 @@ SELECT boolean('off') AS `false`
 -- !query 16 schema
 struct<false:boolean>
 -- !query 16 output
-NULL
+false
 
 
 -- !query 17
@@ -143,7 +143,7 @@ SELECT boolean('of') AS `false`
 -- !query 17 schema
 struct<false:boolean>
 -- !query 17 output
-NULL
+false
 
 
 -- !query 18
@@ -296,7 +296,7 @@ SELECT boolean(string('    true   ')) AS true,
 -- !query 36 schema
 struct<true:boolean,false:boolean>
 -- !query 36 output
-NULL	NULL
+true	false
 
 
 -- !query 37

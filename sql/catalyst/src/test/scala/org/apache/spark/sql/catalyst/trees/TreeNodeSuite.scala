@@ -680,12 +680,12 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("clone") {
-    def assertDifferentInstance(before: AnyRef, after: AnyRef): Unit = {
+    def assertDifferentInstance[T <: TreeNode[T]](before: TreeNode[T], after: TreeNode[T]): Unit = {
       assert(before.ne(after) && before == after)
-      before.asInstanceOf[TreeNode[_]].children.zip(
-          after.asInstanceOf[TreeNode[_]].children).foreach {
-        case (beforeChild: AnyRef, afterChild: AnyRef) =>
-          assertDifferentInstance(beforeChild, afterChild)
+      before.children.zip(after.children).foreach { case (beforeChild, afterChild) =>
+        assertDifferentInstance(
+          beforeChild.asInstanceOf[TreeNode[T]],
+          afterChild.asInstanceOf[TreeNode[T]])
       }
     }
 

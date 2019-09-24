@@ -204,8 +204,6 @@ class LSHModel(JavaModel):
 class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
                                   JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     LSH class for Euclidean distance metrics.
     The input is dense or sparse vectors, each of which represents a point in the Euclidean
     distance space. The output will be vectors of configurable dimension. Hash values in the same
@@ -318,8 +316,6 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
 
 class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
     r"""
-    .. note:: Experimental
-
     Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are
     stored. The vectors are normalized to be unit vectors and each vector is used in a hash
     function: :math:`h_i(x) = floor(r_i \cdot x / bucketLength)` where :math:`r_i` is the
@@ -331,26 +327,34 @@ class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable)
 
 
 @inherit_doc
-class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
-                 JavaMLReadable, JavaMLWritable):
+class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
+                 HasHandleInvalid, JavaMLReadable, JavaMLWritable):
     """
-    Maps a column of continuous features to a column of feature buckets.
+    Maps a column of continuous features to a column of feature buckets. Since 3.0.0,
+    :py:class:`Bucketizer` can map multiple columns at once by setting the :py:attr:`inputCols`
+    parameter. Note that when both the :py:attr:`inputCol` and :py:attr:`inputCols` parameters
+    are set, an Exception will be thrown. The :py:attr:`splits` parameter is only used for single
+    column usage, and :py:attr:`splitsArray` is for multiple columns.
 
-    >>> values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
-    >>> df = spark.createDataFrame(values, ["values"])
+    >>> values = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, float("nan")),
+    ...     (float("nan"), 1.0), (float("nan"), 0.0)]
+    >>> df = spark.createDataFrame(values, ["values1", "values2"])
     >>> bucketizer = Bucketizer(splits=[-float("inf"), 0.5, 1.4, float("inf")],
-    ...     inputCol="values", outputCol="buckets")
+    ...     inputCol="values1", outputCol="buckets")
     >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df).collect()
-    >>> len(bucketed)
-    6
-    >>> bucketed[0].buckets
-    0.0
-    >>> bucketed[1].buckets
-    0.0
-    >>> bucketed[2].buckets
-    1.0
-    >>> bucketed[3].buckets
-    2.0
+    >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df.select("values1"))
+    >>> bucketed.show(truncate=False)
+    +-------+-------+
+    |values1|buckets|
+    +-------+-------+
+    |0.1    |0.0    |
+    |0.4    |0.0    |
+    |1.2    |1.0    |
+    |1.5    |2.0    |
+    |NaN    |3.0    |
+    |NaN    |3.0    |
+    +-------+-------+
+    ...
     >>> bucketizer.setParams(outputCol="b").transform(df).head().b
     0.0
     >>> bucketizerPath = temp_path + "/bucketizer"
@@ -361,6 +365,22 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
     >>> bucketed = bucketizer.setHandleInvalid("skip").transform(df).collect()
     >>> len(bucketed)
     4
+    >>> bucketizer2 = Bucketizer(splitsArray=
+    ...     [[-float("inf"), 0.5, 1.4, float("inf")], [-float("inf"), 0.5, float("inf")]],
+    ...     inputCols=["values1", "values2"], outputCols=["buckets1", "buckets2"])
+    >>> bucketed2 = bucketizer2.setHandleInvalid("keep").transform(df)
+    >>> bucketed2.show(truncate=False)
+    +-------+-------+--------+--------+
+    |values1|values2|buckets1|buckets2|
+    +-------+-------+--------+--------+
+    |0.1    |0.0    |0.0     |0.0     |
+    |0.4    |1.0    |0.0     |1.0     |
+    |1.2    |1.3    |1.0     |1.0     |
+    |1.5    |NaN    |2.0     |2.0     |
+    |NaN    |1.0    |3.0     |1.0     |
+    |NaN    |0.0    |3.0     |0.0     |
+    +-------+-------+--------+--------+
+    ...
 
     .. versionadded:: 1.4.0
     """
@@ -378,14 +398,30 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries "
                           "containing NaN values. Values outside the splits will always be treated "
                           "as errors. Options are 'skip' (filter out rows with invalid values), " +
-                          "'error' (throw an error), or 'keep' (keep invalid values in a special " +
-                          "additional bucket).",
+                          "'error' (throw an error), or 'keep' (keep invalid values in a " +
+                          "special additional bucket). Note that in the multiple column " +
+                          "case, the invalid handling is applied to all columns. That said " +
+                          "for 'error' it will throw an error if any invalids are found in " +
+                          "any column, for 'skip' it will skip rows with any invalids in " +
+                          "any columns, etc.",
                           typeConverter=TypeConverters.toString)
 
+    splitsArray = Param(Params._dummy(), "splitsArray", "The array of split points for mapping " +
+                        "continuous features into buckets for multiple columns. For each input " +
+                        "column, with n+1 splits, there are n buckets. A bucket defined by " +
+                        "splits x,y holds values in the range [x,y) except the last bucket, " +
+                        "which also includes y. The splits should be of length >= 3 and " +
+                        "strictly increasing. Values at -inf, inf must be explicitly provided " +
+                        "to cover all Double values; otherwise, values outside the splits " +
+                        "specified will be treated as errors.",
+                        typeConverter=TypeConverters.toListListFloat)
+
     @keyword_only
-    def __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
+    def __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
+                 splitsArray=None, inputCols=None, outputCols=None):
         """
-        __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error")
+        __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error", \
+                 splitsArray=None, inputCols=None, outputCols=None)
         """
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
@@ -395,9 +431,11 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
+    def setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error",
+                  splitsArray=None, inputCols=None, outputCols=None):
         """
-        setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error")
+        setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error", \
+                  splitsArray=None, inputCols=None, outputCols=None)
         Sets params for this Bucketizer.
         """
         kwargs = self._input_kwargs
@@ -416,6 +454,20 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.splits)
+
+    @since("3.0.0")
+    def setSplitsArray(self, value):
+        """
+        Sets the value of :py:attr:`splitsArray`.
+        """
+        return self._set(splitsArray=value)
+
+    @since("3.0.0")
+    def getSplitsArray(self):
+        """
+        Gets the array of split points or its default value.
+        """
+        return self.getOrDefault(self.splitsArray)
 
 
 class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
@@ -796,8 +848,6 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
 class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures, JavaMLReadable,
                     JavaMLWritable):
     """
-    .. note:: Experimental
-
     Feature hashing projects a set of categorical or numerical features into a feature vector of
     specified dimension (typically substantially smaller than that of the original feature
     space). This is done using the hashing trick (https://en.wikipedia.org/wiki/Feature_hashing)
@@ -1083,8 +1133,6 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
 @inherit_doc
 class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Imputation estimator for completing missing values, either using the mean or the median
     of the columns in which the missing values are located. The input columns should be of
     DoubleType or FloatType. Currently Imputer does not support categorical features and
@@ -1222,8 +1270,6 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
 
 class ImputerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Model fitted by :py:class:`Imputer`.
 
     .. versionadded:: 2.2.0
@@ -1373,8 +1419,6 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
                  JavaMLReadable, JavaMLWritable):
 
     """
-    .. note:: Experimental
-
     LSH class for Jaccard distance.
     The input can be dense or sparse vectors, but it is more efficient if it is sparse.
     For example, `Vectors.sparse(10, [(2, 1.0), (3, 1.0), (5, 1.0)])` means there are 10 elements
@@ -1452,8 +1496,6 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
 
 class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
     r"""
-    .. note:: Experimental
-
     Model produced by :py:class:`MinHashLSH`, where where multiple hash functions are stored. Each
     hash function is picked from the following family of hash functions, where :math:`a_i` and
     :math:`b_i` are randomly chosen integers less than prime:
@@ -1917,19 +1959,22 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid,
-                          JavaMLReadable, JavaMLWritable):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
+                          HasHandleInvalid, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
-    `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
-    categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
-    It is possible that the number of buckets used will be less than this value, for example, if
-    there are too few distinct values of the input to create enough distinct quantiles.
+    :py:class:`QuantileDiscretizer` takes a column with continuous features and outputs a column
+    with binned categorical features. The number of bins can be set using the :py:attr:`numBuckets`
+    parameter. It is possible that the number of buckets used will be less than this value, for
+    example, if there are too few distinct values of the input to create enough distinct quantiles.
+    Since 3.0.0, :py:class:`QuantileDiscretizer` can map multiple columns at once by setting the
+    :py:attr:`inputCols` parameter. If both of the :py:attr:`inputCol` and :py:attr:`inputCols`
+    parameters are set, an Exception will be thrown. To specify the number of buckets for each
+    column, the :py:attr:`numBucketsArray` parameter can be set, or if the number of buckets
+    should be the same across columns, :py:attr:`numBuckets` can be set as a convenience.
 
     NaN handling: Note also that
-    QuantileDiscretizer will raise an error when it finds NaN values in the dataset, but the user
-    can also choose to either keep or remove NaN values within the dataset by setting
+    :py:class:`QuantileDiscretizer` will raise an error when it finds NaN values in the dataset,
+    but the user can also choose to either keep or remove NaN values within the dataset by setting
     :py:attr:`handleInvalid` parameter. If the user chooses to keep NaN values, they will be
     handled specially and placed into their own bucket, for example, if 4 buckets are used, then
     non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
@@ -1941,29 +1986,61 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
     The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
 
     >>> values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
-    >>> df = spark.createDataFrame(values, ["values"])
-    >>> qds = QuantileDiscretizer(numBuckets=2,
+    >>> df1 = spark.createDataFrame(values, ["values"])
+    >>> qds1 = QuantileDiscretizer(numBuckets=2,
     ...     inputCol="values", outputCol="buckets", relativeError=0.01, handleInvalid="error")
-    >>> qds.getRelativeError()
+    >>> qds1.getRelativeError()
     0.01
-    >>> bucketizer = qds.fit(df)
-    >>> qds.setHandleInvalid("keep").fit(df).transform(df).count()
+    >>> bucketizer = qds1.fit(df1)
+    >>> qds1.setHandleInvalid("keep").fit(df1).transform(df1).count()
     6
-    >>> qds.setHandleInvalid("skip").fit(df).transform(df).count()
+    >>> qds1.setHandleInvalid("skip").fit(df1).transform(df1).count()
     4
     >>> splits = bucketizer.getSplits()
     >>> splits[0]
     -inf
     >>> print("%2.1f" % round(splits[1], 1))
     0.4
-    >>> bucketed = bucketizer.transform(df).head()
+    >>> bucketed = bucketizer.transform(df1).head()
     >>> bucketed.buckets
     0.0
     >>> quantileDiscretizerPath = temp_path + "/quantile-discretizer"
-    >>> qds.save(quantileDiscretizerPath)
+    >>> qds1.save(quantileDiscretizerPath)
     >>> loadedQds = QuantileDiscretizer.load(quantileDiscretizerPath)
-    >>> loadedQds.getNumBuckets() == qds.getNumBuckets()
+    >>> loadedQds.getNumBuckets() == qds1.getNumBuckets()
     True
+    >>> inputs = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, 1.5),
+    ...     (float("nan"), float("nan")), (float("nan"), float("nan"))]
+    >>> df2 = spark.createDataFrame(inputs, ["input1", "input2"])
+    >>> qds2 = QuantileDiscretizer(relativeError=0.01, handleInvalid="error", numBuckets=2,
+    ...     inputCols=["input1", "input2"], outputCols=["output1", "output2"])
+    >>> qds2.getRelativeError()
+    0.01
+    >>> qds2.setHandleInvalid("keep").fit(df2).transform(df2).show()
+    +------+------+-------+-------+
+    |input1|input2|output1|output2|
+    +------+------+-------+-------+
+    |   0.1|   0.0|    0.0|    0.0|
+    |   0.4|   1.0|    1.0|    1.0|
+    |   1.2|   1.3|    1.0|    1.0|
+    |   1.5|   1.5|    1.0|    1.0|
+    |   NaN|   NaN|    2.0|    2.0|
+    |   NaN|   NaN|    2.0|    2.0|
+    +------+------+-------+-------+
+    ...
+    >>> qds3 = QuantileDiscretizer(relativeError=0.01, handleInvalid="error",
+    ...      numBucketsArray=[5, 10], inputCols=["input1", "input2"],
+    ...      outputCols=["output1", "output2"])
+    >>> qds3.setHandleInvalid("skip").fit(df2).transform(df2).show()
+    +------+------+-------+-------+
+    |input1|input2|output1|output2|
+    +------+------+-------+-------+
+    |   0.1|   0.0|    1.0|    1.0|
+    |   0.4|   1.0|    2.0|    2.0|
+    |   1.2|   1.3|    3.0|    3.0|
+    |   1.5|   1.5|    4.0|    4.0|
+    +------+------+-------+-------+
+    ...
 
     .. versionadded:: 2.0.0
     """
@@ -1981,15 +2058,26 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
                           "Options are skip (filter out rows with invalid values), " +
                           "error (throw an error), or keep (keep invalid values in a special " +
-                          "additional bucket).",
+                          "additional bucket). Note that in the multiple columns " +
+                          "case, the invalid handling is applied to all columns. That said " +
+                          "for 'error' it will throw an error if any invalids are found in " +
+                          "any columns, for 'skip' it will skip rows with any invalids in " +
+                          "any columns, etc.",
                           typeConverter=TypeConverters.toString)
+
+    numBucketsArray = Param(Params._dummy(), "numBucketsArray", "Array of number of buckets " +
+                            "(quantiles, or categories) into which data points are grouped. " +
+                            "This is for multiple columns input. If transforming multiple " +
+                            "columns and numBucketsArray is not set, but numBuckets is set, " +
+                            "then numBuckets will be applied across all columns.",
+                            typeConverter=TypeConverters.toListInt)
 
     @keyword_only
     def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
-                 handleInvalid="error"):
+                 handleInvalid="error", numBucketsArray=None, inputCols=None, outputCols=None):
         """
         __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
-                 handleInvalid="error")
+                 handleInvalid="error", numBucketsArray=None, inputCols=None, outputCols=None)
         """
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
@@ -2001,10 +2089,10 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
     @keyword_only
     @since("2.0.0")
     def setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
-                  handleInvalid="error"):
+                  handleInvalid="error", numBucketsArray=None, inputCols=None, outputCols=None):
         """
         setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
-                  handleInvalid="error")
+                  handleInvalid="error", numBucketsArray=None, inputCols=None, outputCols=None)
         Set the params for the QuantileDiscretizer
         """
         kwargs = self._input_kwargs
@@ -2024,6 +2112,20 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
         """
         return self.getOrDefault(self.numBuckets)
 
+    @since("3.0.0")
+    def setNumBucketsArray(self, value):
+        """
+        Sets the value of :py:attr:`numBucketsArray`.
+        """
+        return self._set(numBucketsArray=value)
+
+    @since("3.0.0")
+    def getNumBucketsArray(self):
+        """
+        Gets the value of numBucketsArray or its default value.
+        """
+        return self.getOrDefault(self.numBucketsArray)
+
     @since("2.0.0")
     def setRelativeError(self, value):
         """
@@ -2042,10 +2144,17 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
         """
         Private method to convert the java_model to a Python model.
         """
-        return Bucketizer(splits=list(java_model.getSplits()),
-                          inputCol=self.getInputCol(),
-                          outputCol=self.getOutputCol(),
-                          handleInvalid=self.getHandleInvalid())
+        if (self.isSet(self.inputCol)):
+            return Bucketizer(splits=list(java_model.getSplits()),
+                              inputCol=self.getInputCol(),
+                              outputCol=self.getOutputCol(),
+                              handleInvalid=self.getHandleInvalid())
+        else:
+            splitsArrayList = [list(x) for x in list(java_model.getSplitsArray())]
+            return Bucketizer(splitsArray=splitsArrayList,
+                              inputCols=self.getInputCols(),
+                              outputCols=self.getOutputCols(),
+                              handleInvalid=self.getHandleInvalid())
 
 
 @inherit_doc
@@ -3591,8 +3700,6 @@ class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
 class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
                JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Implements the transforms required for fitting a dataset against an
     R model formula. Currently we support a limited subset of the R
     operators, including '~', '.', ':', '+', '-', '*', and '^'.
@@ -3761,8 +3868,6 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
 
 class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Model fitted by :py:class:`RFormula`. Fitting is required to determine the
     factor levels of formula terms.
 
@@ -3778,8 +3883,6 @@ class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
 class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, JavaMLReadable,
                     JavaMLWritable):
     """
-    .. note:: Experimental
-
     Chi-Squared feature selection, which selects categorical features to use for predicting a
     categorical label.
     The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
@@ -3979,8 +4082,6 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
 
 class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Model fitted by :py:class:`ChiSqSelector`.
 
     .. versionadded:: 2.0.0
@@ -3999,8 +4100,6 @@ class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
 class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReadable,
                      JavaMLWritable):
     """
-    .. note:: Experimental
-
     A feature transformer that adds size information to the metadata of a vector column.
     VectorAssembler needs size information for its input columns and cannot be used on streaming
     dataframes without this metadata.

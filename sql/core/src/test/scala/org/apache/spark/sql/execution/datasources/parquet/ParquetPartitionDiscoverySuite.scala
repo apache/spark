@@ -58,7 +58,7 @@ abstract class ParquetPartitionDiscoverySuite
   val defaultPartitionName = ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 
   val timeZoneId = ZoneId.systemDefault()
-  val df = DateFormatter()
+  val df = DateFormatter(timeZoneId)
   val tf = TimestampFormatter(timestampPartitionPattern, timeZoneId)
 
   protected override def beforeAll(): Unit = {
@@ -1047,8 +1047,7 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "parquet")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "parquet")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
@@ -1195,7 +1194,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>

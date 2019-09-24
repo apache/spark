@@ -179,7 +179,7 @@ class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTe
   }
 
   test("failOnDataLoss=false should not return duplicated records: batch v1") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "kafka") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "kafka") {
       verifyMissingOffsetsDontCauseDuplicatedRecords(testStreamingQuery = false) { (df, table) =>
         df.write.saveAsTable(table)
       }
@@ -187,7 +187,7 @@ class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTe
   }
 
   test("failOnDataLoss=false should not return duplicated records: batch v2") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       verifyMissingOffsetsDontCauseDuplicatedRecords(testStreamingQuery = false) { (df, table) =>
         df.write.saveAsTable(table)
       }

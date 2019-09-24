@@ -18,22 +18,23 @@
 package org.apache.spark.deploy.master
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
+import org.apache.spark.deploy.StandaloneResourceUtils.MutableResourceInfo
 import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String])
-  extends ResourceAllocator(name, addresses) {
+  extends ResourceAllocator {
 
-  def toResourceInformation(): ResourceInformation = {
-    new ResourceInformation(name, addresses.toArray)
-  }
+  override protected def resourceName = this.name
+  override protected def resourceAddresses = this.addresses
 
   def acquire(amount: Int): ResourceInformation = {
     val allocated = availableAddrs.take(amount)
     acquire(allocated)
-    new ResourceInformation(name, allocated.toArray)
+    new ResourceInformation(resourceName, allocated.toArray)
   }
 }
 
@@ -45,8 +46,7 @@ private[spark] class WorkerInfo(
     val memory: Int,
     val endpoint: RpcEndpointRef,
     val webUiAddress: String,
-    val resources: Map[String, WorkerResourceInfo],
-    val pid: Int = 0)
+    val resources: Map[String, WorkerResourceInfo])
   extends Serializable {
 
   Utils.checkHost(host)
@@ -64,9 +64,27 @@ private[spark] class WorkerInfo(
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
-  def resourcesFree: Map[String, Int] = {
+  def resourcesAmountFree: Map[String, Int] = {
     resources.map { case (rName, rInfo) =>
       rName -> rInfo.availableAddrs.length
+    }
+  }
+
+  def resourcesInfo: Map[String, ResourceInformation] = {
+    resources.map { case (rName, rInfo) =>
+      rName -> new ResourceInformation(rName, rInfo.addresses.toArray)
+    }
+  }
+
+  def resourcesInfoFree: Map[String, ResourceInformation] = {
+    resources.map { case (rName, rInfo) =>
+      rName -> new ResourceInformation(rName, rInfo.availableAddrs.toArray)
+    }
+  }
+
+  def resourcesInfoUsed: Map[String, ResourceInformation] = {
+    resources.map { case (rName, rInfo) =>
+      rName -> new ResourceInformation(rName, rInfo.assignedAddrs.toArray)
     }
   }
 

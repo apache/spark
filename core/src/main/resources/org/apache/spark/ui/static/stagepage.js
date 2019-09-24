@@ -286,7 +286,7 @@ $(document).ready(function () {
         " Show Additional Metrics" +
         "</a></div>" +
         "<div class='container-fluid container-fluid-div' id='toggle-metrics' hidden>" +
-        "<div><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
+        "<div id='select_all' class='select-all-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
         "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11'> Scheduler Delay</div>" +
         "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12'> Task Deserialization Time</div>" +
         "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13'> Shuffle Read Blocked Time</div>" +

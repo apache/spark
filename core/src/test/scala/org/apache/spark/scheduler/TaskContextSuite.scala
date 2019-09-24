@@ -176,7 +176,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       if (stageAttemptNumber < 2) {
         // Throw FetchFailedException to explicitly trigger stage resubmission. A normal exception
         // will only trigger task resubmission in the same stage.
-        throw new FetchFailedException(null, 0, 0, 0, "Fake")
+        throw new FetchFailedException(null, 0, 0L, 0, 0, "Fake")
       }
       Seq(stageAttemptNumber).iterator
     }.collect()

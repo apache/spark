@@ -32,15 +32,14 @@ import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, Univocit
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
+import org.apache.spark.sql.connector.catalog.SupportsRead
+import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
-import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -204,16 +203,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    val useV1Sources =
-      sparkSession.sessionState.conf.useV1SourceReaderList.toLowerCase(Locale.ROOT).split(",")
-    val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
-    val shouldUseV1Source = cls.newInstance() match {
-      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => true
-      case _ => useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT))
-    }
-
-    if (!shouldUseV1Source && classOf[TableProvider].isAssignableFrom(cls)) {
-      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+    DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
       val pathsOption = if (paths.isEmpty) {
@@ -236,9 +226,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
         case _ => loadV1Source(paths: _*)
       }
-    } else {
-      loadV1Source(paths: _*)
-    }
+    }.getOrElse(loadV1Source(paths: _*))
   }
 
   private def loadV1Source(paths: String*) = {
@@ -277,7 +265,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param url JDBC database url of the form `jdbc:subprotocol:subname`.
    * @param table Name of the table in the external database.
-   * @param columnName the name of a column of integral type that will be used for partitioning.
+   * @param columnName the name of a column of numeric, date, or timestamp type
+   *                   that will be used for partitioning.
    * @param lowerBound the minimum value of `columnName` used to decide partition stride.
    * @param upperBound the maximum value of `columnName` used to decide partition stride.
    * @param numPartitions the number of partitions. This, along with `lowerBound` (inclusive),

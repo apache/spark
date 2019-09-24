@@ -17,25 +17,24 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableStatement, InsertIntoStatement}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
 trait CheckAnalysis extends PredicateHelper {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -93,6 +92,9 @@ trait CheckAnalysis extends PredicateHelper {
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
+        failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -355,6 +357,9 @@ trait CheckAnalysis extends PredicateHelper {
               case _ =>
             }
 
+          case alter: AlterTableStatement =>
+            alter.failAnalysis(s"Table or view not found: ${alter.tableName.quoted}")
+
           case alter: AlterTable if alter.childrenResolved =>
             val table = alter.table
             def findField(operation: String, fieldName: Array[String]): StructField = {
@@ -487,9 +492,6 @@ trait CheckAnalysis extends PredicateHelper {
           case _: UnresolvedHint =>
             throw new IllegalStateException(
               "Internal error: logical hint operator should have been removed during analysis")
-
-          case InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-            failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>

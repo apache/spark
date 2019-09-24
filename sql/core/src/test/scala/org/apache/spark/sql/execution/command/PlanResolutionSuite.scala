@@ -25,14 +25,14 @@ import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogNotFoundException, Identifier, TableCatalog, TestTableCatalog}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
+import org.apache.spark.sql.connector.{InMemoryTableCatalog, InMemoryTableProvider}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, TableCatalog}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceResolution}
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf.DEFAULT_V2_CATALOG
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -40,16 +40,16 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
 
-  private val orc2 = classOf[OrcDataSourceV2].getName
+  private val v2Format = classOf[InMemoryTableProvider].getName
 
   private val testCat: TableCatalog = {
-    val newCatalog = new TestTableCatalog
+    val newCatalog = new InMemoryTableCatalog
     newCatalog.initialize("testcat", CaseInsensitiveStringMap.empty())
     newCatalog
   }
 
   private val v2SessionCatalog = {
-    val newCatalog = new TestTableCatalog
+    val newCatalog = new InMemoryTableCatalog
     newCatalog.initialize("session", CaseInsensitiveStringMap.empty())
     newCatalog
   }
@@ -60,14 +60,12 @@ class PlanResolutionSuite extends AnalysisTest {
       invocation.getArgument[String](0) match {
         case "testcat" =>
           testCat
-        case "session" =>
-          v2SessionCatalog
         case name =>
           throw new CatalogNotFoundException(s"No such catalog: $name")
       }
     })
     when(manager.defaultCatalog).thenReturn(Some(testCat))
-    when(manager.v2SessionCatalog).thenCallRealMethod()
+    when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
     manager
   }
 
@@ -77,14 +75,12 @@ class PlanResolutionSuite extends AnalysisTest {
       invocation.getArgument[String](0) match {
         case "testcat" =>
           testCat
-        case "session" =>
-          v2SessionCatalog
         case name =>
           throw new CatalogNotFoundException(s"No such catalog: $name")
       }
     })
     when(manager.defaultCatalog).thenReturn(None)
-    when(manager.v2SessionCatalog).thenCallRealMethod()
+    when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
     manager
   }
 
@@ -427,7 +423,7 @@ class PlanResolutionSuite extends AnalysisTest {
          |    id bigint,
          |    description string,
          |    point struct<x: double, y: double>)
-         |USING $orc2
+         |USING $v2Format
          |COMMENT 'This is the staging page view table'
          |LOCATION '/user/external/page_view'
          |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
@@ -436,7 +432,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val expectedProperties = Map(
       "p1" -> "v1",
       "p2" -> "v2",
-      "provider" -> orc2,
+      "provider" -> v2Format,
       "location" -> "/user/external/page_view",
       "comment" -> "This is the staging page view table")
 
@@ -530,7 +526,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql =
       s"""
         |CREATE TABLE IF NOT EXISTS mydb.page_view
-        |USING $orc2
+        |USING $v2Format
         |COMMENT 'This is the staging page view table'
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
@@ -540,7 +536,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val expectedProperties = Map(
       "p1" -> "v1",
       "p2" -> "v2",
-      "provider" -> orc2,
+      "provider" -> v2Format,
       "location" -> "/user/external/page_view",
       "comment" -> "This is the staging page view table")
 

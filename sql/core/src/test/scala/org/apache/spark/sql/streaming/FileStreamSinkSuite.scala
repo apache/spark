@@ -479,8 +479,7 @@ class FileStreamSinkV1Suite extends FileStreamSinkSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "csv,json,orc,text,parquet")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "csv,json,orc,text,parquet")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "csv,json,orc,text,parquet")
 
   override def checkQueryExecution(df: DataFrame): Unit = {
     // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
@@ -530,8 +529,7 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   override def checkQueryExecution(df: DataFrame): Unit = {
     // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has

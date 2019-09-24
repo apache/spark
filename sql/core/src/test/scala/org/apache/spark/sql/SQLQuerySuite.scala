@@ -2609,14 +2609,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
 
     // Make sure no spurious job starts are pending in the listener bus.
-    sparkContext.listenerBus.waitUntilEmpty(500)
+    sparkContext.listenerBus.waitUntilEmpty()
     sparkContext.addSparkListener(listener)
     try {
       // Execute the command.
       sql("show databases").head()
 
       // Make sure we have seen all events triggered by DataFrame.show()
-      sparkContext.listenerBus.waitUntilEmpty(500)
+      sparkContext.listenerBus.waitUntilEmpty()
     } finally {
       sparkContext.removeSparkListener(listener)
     }
@@ -2999,7 +2999,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
 
     Seq("orc", "parquet").foreach { format =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         withTempPath { dir =>
           spark.range(10).map(i => (i, i.toString)).toDF("id", "s")
             .write
@@ -3024,7 +3024,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
         withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key ->
           enableOptimizeMetadataOnlyQuery.toString) {
@@ -3179,6 +3179,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       }
     }
 
+  }
+
+  test("SPARK-29000: arithmetic computation overflow when don't allow decimal precision loss ") {
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "false") {
+      val df1 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * 1")
+      checkAnswer(df1, Array(Row(100)))
+      val df2 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * " +
+        "case when 1=2 then 2 else 1 end")
+      checkAnswer(df2, Array(Row(100)))
+      val df3 = sql("select case when 1=2 then 1 else 1.000000000000000000000001 end / 10")
+      checkAnswer(df3, Array(Row(new java.math.BigDecimal("0.100000000000000000000000100"))))
+    }
   }
 }
 

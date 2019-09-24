@@ -1749,7 +1749,7 @@ class HiveDDLSuite
   test("create hive serde table with Catalog") {
     withTable("t") {
       withTempDir { dir =>
-        val df = spark.catalog.createExternalTable(
+        val df = spark.catalog.createTable(
           "t",
           "hive",
           new StructType().add("i", "int"),
@@ -2366,10 +2366,11 @@ class HiveDDLSuite
             checkAnswer(spark.table("t"), Row(1))
             val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
 
-            val reader = getReader(maybeFile.head.getCanonicalPath)
-            assert(reader.getCompressionKind.name === "ZLIB")
-            assert(reader.getCompressionSize == 1001)
-            assert(reader.getRowIndexStride == 2002)
+            Utils.tryWithResource(getReader(maybeFile.head.getCanonicalPath)) { reader =>
+              assert(reader.getCompressionKind.name === "ZLIB")
+              assert(reader.getCompressionSize == 1001)
+              assert(reader.getRowIndexStride == 2002)
+            }
           }
         }
       }
@@ -2435,7 +2436,7 @@ class HiveDDLSuite
         .select("data_type")
       // check if the last access time doesnt have the default date of year
       // 1970 as its a wrong access time
-      assert(!(desc.first.toString.contains("1970")))
+      assert((desc.first.toString.contains("UNKNOWN")))
     }
   }
 

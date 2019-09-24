@@ -32,6 +32,8 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.shuffle.MetadataFetchFailedException
@@ -83,13 +85,15 @@ class JsonProtocolSuite extends SparkFunSuite {
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
+    val resources = Map(ResourceUtils.GPU ->
+      new ResourceInformation(ResourceUtils.GPU, Array("0", "1")))
     val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"))
     val applicationStartWithLogs = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes))
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
     val executorUnblacklisted =
@@ -175,7 +179,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testJobResult(jobFailed)
 
     // TaskEndReason
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L, 18, 19,
       "Some exception")
     val fetchMetadataFailed = new MetadataFetchFailedException(17,
       19, "metadata Fetch failed exception").toTaskFailedReason
@@ -292,12 +296,12 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("FetchFailed backwards compatibility") {
     // FetchFailed in Spark 1.1.0 does not have a "Message" property.
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L, 18, 19,
       "ignored")
     val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
       .removeField({ _._1 == "Message" })
-    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
-      "Unknown reason")
+    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L,
+      18, 19, "Unknown reason")
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
@@ -728,6 +732,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case (r1: FetchFailed, r2: FetchFailed) =>
         assert(r1.shuffleId === r2.shuffleId)
         assert(r1.mapId === r2.mapId)
+        assert(r1.mapIndex === r2.mapIndex)
         assert(r1.reduceId === r2.reduceId)
         assert(r1.bmAddress === r2.bmAddress)
         assert(r1.message === r2.message)
@@ -1947,6 +1952,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Attributes" : {
       |      "ContainerId" : "ct1",
       |      "User" : "spark"
+      |    },
+      |    "Resources" : {
+      |      "gpu" : {
+      |        "name" : "gpu",
+      |        "addresses" : [ "0", "1" ]
+      |      }
       |    }
       |  }
       |}

@@ -27,7 +27,7 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax
+import org.apache.hadoop.hive.contrib.udf.example.UDFExampleFormat
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
@@ -218,8 +218,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
-      "SELECT count(key) FROM t1;"
-        -> "5",
+      "SELECT collect_list(array(val)) FROM t1;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
       "DROP TABLE t1;"
         -> "",
       "DROP TABLE sourceTable;"
@@ -301,8 +301,35 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(
       1.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
-      s"CREATE TEMPORARY FUNCTION example_max AS '${classOf[UDAFExampleMax].getName}';" -> "",
-      "SELECT example_max(1);" -> "1"
+      s"CREATE TEMPORARY FUNCTION example_format AS '${classOf[UDFExampleFormat].getName}';" -> "",
+      "SELECT example_format('%o', 93);" -> "135"
+    )
+  }
+
+  test("SPARK-28840 test --jars command") {
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--jars", s"$jarFile"))(
+      "CREATE TEMPORARY FUNCTION testjar AS" +
+        " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840"
+    )
+  }
+
+  test("SPARK-28840 test --jars and hive.aux.jars.path command") {
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--jars", s"$jarFile", "--conf",
+        s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      "CREATE TEMPORARY FUNCTION testjar AS" +
+        " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840",
+      "CREATE TEMPORARY FUNCTION example_max AS " +
+        "'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax';" -> "",
+      "SELECT concat_ws(',', 'First', example_max(1234321), 'Third');" -> "First,1234321,Third"
     )
   }
 }

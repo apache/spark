@@ -333,6 +333,19 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(idleDeadline) === Seq("1"))
   }
 
+
+  test("SPARK-28839: Avoids NPE in context cleaner when shuffle service is on") {
+    val bus = mockListenerBus()
+    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING, true).set(SHUFFLE_SERVICE_ENABLED, true)
+    monitor = new ExecutorMonitor(conf, client, bus, clock) {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        throw new IllegalStateException("No event should be sent.")
+      }
+    }
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", null))
+    monitor.shuffleCleaned(0)
+  }
+
   test("shuffle tracking with multiple executors and concurrent jobs") {
     val bus = mockListenerBus()
     conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING, true).set(SHUFFLE_SERVICE_ENABLED, false)
