@@ -96,7 +96,7 @@ class SQLHadoopMapReduceCommitProtocol(
    * Called on the driver after a task commits. This can be used to access task commit messages
    * before the job has finished. These same task commit messages will be passed to commitJob()
    * if the entire job succeeds.
-   * Override it to check dynamic partition limitation on driver size.
+   * Override it to check dynamic partition limitation on driver side.
    */
   override def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {
     logDebug(s"onTaskCommit($taskCommit)")
@@ -118,7 +118,7 @@ class SQLHadoopMapReduceCommitProtocol(
       }
       totalCreatedFiles += 1 // onTaskCommit means a file created by a task
       if (totalCreatedFiles > maxCreatedFilesInDynamicPartition) {
-        throw new SparkException(s"Total number of created files now is " +
+        throw new SparkException(s"Total number of created files now is" +
           s" $totalCreatedFiles, which exceeds $maxCreatedFilesInDynamicPartition." +
           s" To solve this try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key}")
       }
