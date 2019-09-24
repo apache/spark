@@ -1983,7 +1983,8 @@ object SQLConf {
   private[spark] val ADDITIONAL_REMOTE_REPOSITORIES =
     ConfigBuilder("spark.sql.additionalRemoteRepositories")
       .doc("A comma-delimited string config of the optional additional remote maven mirror " +
-        "repositories, this can be used for downloading Hive jars in IsolatedClientLoader.")
+        "repositories, this can be used for downloading Hive jars in IsolatedClientLoader " +
+        "if the default maven central repo is unreachable.")
       .stringConf
       .createWithDefault("")
 }
