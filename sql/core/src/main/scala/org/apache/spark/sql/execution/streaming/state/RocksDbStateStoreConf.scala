@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 class RocksDbStateStoreConf(@transient private val stateStoreConf: StateStoreConf)
@@ -26,26 +25,26 @@ class RocksDbStateStoreConf(@transient private val stateStoreConf: StateStoreCon
   private val DEFAULT_BLOCKSIZE_IN_KB = 32
   private val DEFAULT_MEMTABLE_BUDGET_IN_MB = 1024
   private val DEFAULT_CACHE_SIZE_IN_MB = 512
-
   def this() = this(StateStoreConf.empty)
 
-  val blockSizeInKB: Int = stateStoreConf.sqlConf
-    .getConf(SQLConf.ROCKSDB_STATE_STORE_DATA_BLOCK_SIZE)
-    .getOrElse(DEFAULT_BLOCKSIZE_IN_KB)
+  val BLOCK_SIZE_KEY = "spark.sql.streaming.stateStore.rocksDb.blockSizeInKB"
+  val MEMTABLE_BUDGET_KEY = "spark.sql.streaming.stateStore.rocksDb.memtableBudgetInMB"
+  val CACHE_SIZE_KEY = "spark.sql.streaming.stateStore.rocksDb.cacheSizeInMB"
+  val ENABLE_STATS_KEY = "spark.sql.streaming.stateStore.rocksDb.enableDbStats"
+  val LOCAL_DIR_KEY = "spark.sql.streaming.stateStore.rocksDb.localDir"
 
-  val memtableBudgetInMB: Int = stateStoreConf.sqlConf
-    .getConf(SQLConf.ROCKSDB_STATE_STORE_MEMTABLE_BUDGET)
-    .getOrElse(DEFAULT_MEMTABLE_BUDGET_IN_MB)
+  val blockSizeInKB: Int = stateStoreConf.confs
+    .getOrElse(BLOCK_SIZE_KEY, DEFAULT_BLOCKSIZE_IN_KB.toString).toInt
 
-  val cacheSizeInMB: Int = stateStoreConf.sqlConf
-    .getConf(SQLConf.ROCKSDB_STATE_STORE_CACHE_SIZE)
-    .getOrElse(DEFAULT_CACHE_SIZE_IN_MB)
+  val memtableBudgetInMB: Int = stateStoreConf.confs
+    .getOrElse(MEMTABLE_BUDGET_KEY, DEFAULT_MEMTABLE_BUDGET_IN_MB.toString).toInt
 
-  val enableStats: Boolean = stateStoreConf.sqlConf
-    .getConf(SQLConf.ROCKSDB_STATE_STORE_ENABLE_STATS)
-    .getOrElse(false)
+  val cacheSizeInMB: Int = stateStoreConf.confs
+    .getOrElse(CACHE_SIZE_KEY, DEFAULT_CACHE_SIZE_IN_MB.toString).toInt
 
-  val localDir: String = stateStoreConf.sqlConf
-    .getConf(SQLConf.ROCKSDB_STATE_STORE_DATA_LOCAL_DIR)
-    .getOrElse(Utils.createTempDir().getAbsolutePath)
+  val enableStats: Boolean = stateStoreConf.confs
+    .getOrElse(ENABLE_STATS_KEY, "false").toBoolean
+
+  val localDir: String = stateStoreConf.confs
+    .getOrElse(LOCAL_DIR_KEY, Utils.createTempDir().getAbsolutePath)
 }
