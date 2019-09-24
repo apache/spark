@@ -28,7 +28,14 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * A thread-safe manager for [[CatalogPlugin]]s. It tracks all the registered catalogs, and allow
  * the caller to look up a catalog by name.
+ *
+ * There are still many commands (e.g. ANALYZE TABLE) that do not support v2 catalog API. They
+ * ignore the current catalog and blindly go to the v1 `SessionCatalog`. To avoid tracking current
+ * namespace in both `SessionCatalog` and `CatalogManger`, we let `CatalogManager` to set/get
+ * current database of `SessionCatalog` when the current catalog is the session catalog.
  */
+// TODO: all commands should look up table from the current catalog. The `SessionCatalog` doesn't
+//       need to track current database at all.
 private[sql]
 class CatalogManager(
     conf: SQLConf,
@@ -39,7 +46,7 @@ class CatalogManager(
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
   def catalog(name: String): CatalogPlugin = synchronized {
-    if (name.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
+    if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
       v2SessionCatalog
     } else {
       catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
@@ -59,7 +66,7 @@ class CatalogManager(
   }
 
   private def loadV2SessionCatalog(): CatalogPlugin = {
-    Catalogs.load(CatalogManager.SESSION_CATALOG_NAME, conf) match {
+    Catalogs.load(SESSION_CATALOG_NAME, conf) match {
       case extension: CatalogExtension =>
         extension.setDelegateCatalog(defaultSessionCatalog)
         extension
@@ -72,7 +79,7 @@ class CatalogManager(
   def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG).map { customV2SessionCatalog =>
       try {
-        catalogs.getOrElseUpdate(CatalogManager.SESSION_CATALOG_NAME, loadV2SessionCatalog())
+        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
       } catch {
         case NonFatal(_) =>
           logError(
@@ -91,11 +98,6 @@ class CatalogManager(
 
   def currentNamespace: Array[String] = synchronized {
     _currentNamespace.getOrElse {
-      // For session catalog, the current namespace is kept in `SessionCatalog`. There are many
-      // commands that do not support v2 catalog API. They ignore the current catalog and blindly
-      // go to `SessionCatalog`. This means, we must keep track of the current namespace of session
-      // catalog even if the current catalog is not session catalog. `CatalogManager` only tracks
-      // the current namespace of the current catalog.
       if (currentCatalog.name() == SESSION_CATALOG_NAME) {
         Array(v1SessionCatalog.getCurrentDatabase)
       } else {
@@ -105,11 +107,6 @@ class CatalogManager(
   }
 
   def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
-    // For session catalog, the current namespace is kept in `SessionCatalog`. There are many
-    // commands that do not support v2 catalog API. They ignore the current catalog and blindly
-    // go to `SessionCatalog`. This means, we must keep track of the current namespace of session
-    // catalog even if the current catalog is not session catalog. `CatalogManager` only tracks
-    // the current namespace of the current catalog.
     if (currentCatalog.name() == SESSION_CATALOG_NAME) {
       if (namespace.length != 1) {
         throw new NoSuchNamespaceException(namespace)
@@ -131,6 +128,9 @@ class CatalogManager(
   def setCurrentCatalog(catalogName: String): Unit = synchronized {
     _currentCatalogName = Some(catalogName)
     _currentNamespace = None
+    // Reset the current database of v1 `SessionCatalog` when switching current catalog, so that
+    // when we switch back to session catalog, the current namespace definitely is ["default"].
+    v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
   }
 
   // Clear all the registered catalogs. Only used in tests.
@@ -138,6 +138,7 @@ class CatalogManager(
     catalogs.clear()
     _currentNamespace = None
     _currentCatalogName = None
+    v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
   }
 }
 

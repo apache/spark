@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.net.URI
 import java.util
 
 import org.apache.spark.SparkFunSuite
@@ -27,10 +28,17 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CatalogManagerSuite extends SparkFunSuite {
 
+  private def createSessionCatalog(conf: SQLConf): SessionCatalog = {
+    val catalog = new InMemoryCatalog()
+    catalog.createDatabase(
+      CatalogDatabase(SessionCatalog.DEFAULT_DATABASE, "", new URI("fake"), Map.empty),
+      ignoreIfExists = true)
+    new SessionCatalog(catalog, EmptyFunctionRegistry, conf)
+  }
+
   test("CatalogManager should reflect the changes of default catalog") {
     val conf = new SQLConf
-    val v1SessionCatalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-    val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog, v1SessionCatalog)
+    val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog, createSessionCatalog(conf))
     assert(catalogManager.currentCatalog.name() == CatalogManager.SESSION_CATALOG_NAME)
     assert(catalogManager.currentNamespace.sameElements(Array("default")))
 
@@ -44,8 +52,7 @@ class CatalogManagerSuite extends SparkFunSuite {
 
   test("CatalogManager should keep the current catalog once set") {
     val conf = new SQLConf
-    val v1SessionCatalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-    val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog, v1SessionCatalog)
+    val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog, createSessionCatalog(conf))
     assert(catalogManager.currentCatalog.name() == CatalogManager.SESSION_CATALOG_NAME)
     conf.setConfString("spark.sql.catalog.dummy", classOf[DummyCatalog].getName)
     catalogManager.setCurrentCatalog("dummy")
@@ -60,24 +67,21 @@ class CatalogManagerSuite extends SparkFunSuite {
 
   test("current namespace should be updated when switching current catalog") {
     val conf = new SQLConf
-    val v1SessionCatalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-    v1SessionCatalog.createDatabase(
-      CatalogDatabase(
-        "test", "", v1SessionCatalog.getDefaultDBPath("test"), Map.empty),
-      ignoreIfExists = false)
-
-    val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog, v1SessionCatalog)
-    catalogManager.setCurrentNamespace(Array("test"))
-    assert(catalogManager.currentNamespace.sameElements(Array("test")))
-
+    val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog, createSessionCatalog(conf))
     conf.setConfString("spark.sql.catalog.dummy", classOf[DummyCatalog].getName)
     catalogManager.setCurrentCatalog("dummy")
+    assert(catalogManager.currentNamespace.sameElements(Array("a", "b")))
+    catalogManager.setCurrentNamespace(Array("a"))
+    assert(catalogManager.currentNamespace.sameElements(Array("a")))
+
+    conf.setConfString("spark.sql.catalog.dummy2", classOf[DummyCatalog].getName)
+    catalogManager.setCurrentCatalog("dummy2")
     assert(catalogManager.currentNamespace.sameElements(Array("a", "b")))
   }
 
   test("set current namespace") {
     val conf = new SQLConf
-    val v1SessionCatalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
+    val v1SessionCatalog = createSessionCatalog(conf)
     v1SessionCatalog.createDatabase(
       CatalogDatabase(
         "test", "", v1SessionCatalog.getDefaultDBPath("test"), Map.empty),
@@ -94,12 +98,12 @@ class CatalogManagerSuite extends SparkFunSuite {
       catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
     }
 
-    // If the current catalog is not session catalog, setting current namespace won't affect
-    // `SessionCatalog.currentDb`.
+    // when switching current catalog, `SessionCatalog.currentDb` should be reset.
     conf.setConfString("spark.sql.catalog.dummy", classOf[DummyCatalog].getName)
     catalogManager.setCurrentCatalog("dummy")
+    assert(v1SessionCatalog.getCurrentDatabase == "default")
     catalogManager.setCurrentNamespace(Array("test2"))
-    assert(v1SessionCatalog.getCurrentDatabase == "test")
+    assert(v1SessionCatalog.getCurrentDatabase == "default")
   }
 }
 
