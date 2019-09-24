@@ -37,7 +37,7 @@ case class LocalTableScanExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   @transient private lazy val unsafeRows: Array[InternalRow] = {
-    if (rows.isEmpty) {
+    if (rows == null || rows.isEmpty) {
       Array.empty
     } else {
       val proj = UnsafeProjection.create(output, output)
@@ -59,7 +59,9 @@ case class LocalTableScanExec(
   }
 
   override protected def stringArgs: Iterator[Any] = {
-    if (rows.isEmpty) {
+    if (rows == null) {
+      Iterator("<unknown>", output)
+    } else if (rows.isEmpty) {
       Iterator("<empty>", output)
     } else {
       Iterator(output)
