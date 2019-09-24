@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import sys
 
 from pyspark import since
 from pyspark.rdd import PythonEvalType
@@ -70,10 +71,10 @@ class CoGroupedData(object):
         >>> df2 = spark.createDataFrame(
         ...     [(20000101, 1, "x"), (20000101, 2, "y")],
         ...     ("time", "id", "v2"))
-        >>> @pandas_udf("time int, id int, v1 double, v2 string", PandasUDFType.COGROUPED_MAP)
+        >>> @pandas_udf("time int, id int, v1 double, v2 string", PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
         ... def asof_join(l, r):
         ...     return pd.merge_asof(l, r, on="time", by="id")
-        >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()
+        >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()  # doctest: +SKIP
         +--------+---+---+---+
         |    time| id| v1| v2|
         +--------+---+---+---+
@@ -82,13 +83,13 @@ class CoGroupedData(object):
         |20000101|  2|2.0|  y|
         |20000102|  2|4.0|  y|
         +--------+---+---+---+
-        >>> @pandas_udf("time int, id int, v1 double, v2 string", PandasUDFType.COGROUPED_MAP)
+        >>> @pandas_udf("time int, id int, v1 double, v2 string", PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
         ... def asof_join(k, l, r):
         ...    if k == (1,):
         ...         return pd.merge_asof(l, r, on="time", by="id")
         ...    else:
         ...        return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
-        >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()
+        >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()  # doctest: +SKIP
         +--------+---+---+---+
         |    time| id| v1| v2|
         +--------+---+---+---+
@@ -113,3 +114,27 @@ class CoGroupedData(object):
     def _extract_cols(gd):
         df = gd._df
         return [df[col] for col in df.columns]
+
+
+def _test():
+    import doctest
+    from pyspark.sql import SparkSession
+    import pyspark.sql.cogroup
+    globs = pyspark.sql.cogroup.__dict__.copy()
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("sql.cogroup tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
+    globs['sc'] = sc
+    globs['spark'] = spark
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.cogroup, globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
