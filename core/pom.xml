@@ -385,6 +385,11 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minikdc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>net.razorvine</groupId>
       <artifactId>pyrolite</artifactId>
       <version>4.30</version>
