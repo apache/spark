@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql.internal.SQLConf
 
@@ -36,12 +35,31 @@ class SQLHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
     dynamicPartitionOverwrite: Boolean = false,
-    maxDynamicPartitions: Int = Int.MaxValue,
-    maxDynamicPartitionsPerTask: Int = Int.MaxValue)
+    restrictions: Map[String, Object] = Map.empty)
   extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
-  private var totalPartitions: AtomicInteger = _
+  private val maxDynamicPartitions = restrictions.get(
+    SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key) match {
+      case Some(value) => value.asInstanceOf[Int]
+      case None => Int.MaxValue
+    }
+
+  private val maxDynamicPartitionsPerTask = restrictions.get(
+    SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key) match {
+      case Some(value) => value.asInstanceOf[Int]
+      case None => Int.MaxValue
+  }
+
+  private val maxCreatedFilesInDynamicPartition = restrictions.get(
+    SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key) match {
+    case Some(value) => value.asInstanceOf[Int]
+    case None => Int.MaxValue
+  }
+
+  // They are only used in driver
+  private var totalPartitions: Set[String] = Set.empty
+  private var totalCreatedFiles: Int = 0
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)
@@ -70,29 +88,40 @@ class SQLHadoopMapReduceCommitProtocol(
         committer = ctor.newInstance()
       }
     }
-    totalPartitions = new AtomicInteger(0)
     logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
     committer
   }
 
-  override def newTaskTempFile(
-      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
-    val path = super.newTaskTempFile(taskContext, dir, ext)
-    totalPartitions.incrementAndGet()
-    if (dynamicPartitionOverwrite) {
-      if (totalPartitions.get > maxDynamicPartitions) {
-        throw new SparkException(s"Total number of dynamic partitions created is" +
-          s" ${totalPartitions.get}, which is more than $maxDynamicPartitions." +
-          s" To solve this try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key}")
-      }
-      val numParts = partitionPaths.size
-      if (numParts > maxDynamicPartitionsPerTask) {
-        throw new SparkException(s"Task ${taskContext.getTaskAttemptID.getTaskID.toString}" +
-          s" tried to create $numParts dynamic partitions," +
+  /**
+   * Called on the driver after a task commits. This can be used to access task commit messages
+   * before the job has finished. These same task commit messages will be passed to commitJob()
+   * if the entire job succeeds.
+   * Override it to check dynamic partition limitation on driver size.
+   */
+  override def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {
+    logDebug(s"onTaskCommit($taskCommit)")
+    if (dynamicPartitionOverwrite && hasValidPath) {
+      val (_, allPartitionPaths) =
+        taskCommit.obj.asInstanceOf[(Map[String, String], Set[String])]
+      val partitionsPerTask = allPartitionPaths.size
+      if (partitionsPerTask > maxDynamicPartitionsPerTask) {
+        throw new SparkException(s"Task tried to create $partitionsPerTask dynamic partitions," +
           s" which is more than $maxDynamicPartitionsPerTask. To solve this" +
           s" try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key}")
       }
+      totalPartitions ++= allPartitionPaths
+      val totalPartitionNum = totalPartitions.size
+      if (totalPartitionNum > maxDynamicPartitions) {
+        throw new SparkException(s"Total number of dynamic partitions created is" +
+          s" $totalPartitionNum, which is more than $maxDynamicPartitions." +
+          s" To solve this try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key}")
+      }
+      totalCreatedFiles += 1 // onTaskCommit means a file created by a task
+      if (totalCreatedFiles > maxCreatedFilesInDynamicPartition) {
+        throw new SparkException(s"Total number of created files now is " +
+          s" $totalCreatedFiles, which exceeds $maxCreatedFilesInDynamicPartition." +
+          s" To solve this try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key}")
+      }
     }
-    path
   }
 }

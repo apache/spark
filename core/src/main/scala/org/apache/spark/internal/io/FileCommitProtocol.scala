@@ -148,28 +148,27 @@ object FileCommitProtocol extends Logging {
       jobId: String,
       outputPath: String,
       dynamicPartitionOverwrite: Boolean = false,
-      maxDynamicPartitions: Int = Int.MaxValue,
-      maxDynamicPartitionsPerTask: Int = Int.MaxValue): FileCommitProtocol = {
+      restrictions: Map[String, _] = Map.empty): FileCommitProtocol = {
 
     logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
       s" dynamic=$dynamicPartitionOverwrite")
     val clazz = Utils.classForName[FileCommitProtocol](className)
     // First try the constructor with arguments (jobId: String, outputPath: String,
     // dynamicPartitionOverwrite: Boolean,
-    // maxDynamicPartitions: Int, maxDynamicPartitionsPerTask: Int).
+    // restrictions: Map[String, _]).
     // If that doesn't exist, try the one with (jobId: String, outputPath: String,
     // dynamicPartitionOverwrite: Boolean).
     // If that still doesn't exist, try the one with (jobId: string, outputPath: String).
     try {
       val ctor = clazz.getDeclaredConstructor(
-        classOf[String], classOf[String], classOf[Boolean], classOf[Int], classOf[Int])
-      logDebug("Using (String, String, Boolean, Int, Int) constructor")
+        classOf[String], classOf[String], classOf[Boolean],
+        classOf[Map[String, _]])
+      logDebug("Using (String, String, Boolean, Map[String, _]) constructor")
       ctor.newInstance(
         jobId,
         outputPath,
         dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean],
-        maxDynamicPartitions.asInstanceOf[java.lang.Integer],
-        maxDynamicPartitionsPerTask.asInstanceOf[java.lang.Integer]
+        restrictions.asInstanceOf[Map[String, _]]
       )
     } catch {
       case _: NoSuchMethodException =>

@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -104,16 +105,21 @@ case class InsertIntoHadoopFsRelationCommand(
     // partition columns.
     val dynamicPartitionOverwrite = enableDynamicOverwrite && mode == SaveMode.Overwrite &&
       staticPartitions.size < partitionColumns.length
-    val maxDynamicPartitions = sparkSession.sessionState.conf.maxDynamicPartitions
-    val maxDynamicPartitionsPerTask = sparkSession.sessionState.conf.maxDynamicPartitionsPerTask
+    val dymamicPartitionRestrictions: Map[String, _] = Map(
+      SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key ->
+          sparkSession.sessionState.conf.maxDynamicPartitions,
+      SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key ->
+        sparkSession.sessionState.conf.maxDynamicPartitionsPerTask,
+      SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key ->
+        sparkSession.sessionState.conf.maxCreatedFilesInDynamicPartition
+    )
 
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite,
-      maxDynamicPartitions = maxDynamicPartitions,
-      maxDynamicPartitionsPerTask = maxDynamicPartitionsPerTask)
+      restrictions = dymamicPartitionRestrictions)
 
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>

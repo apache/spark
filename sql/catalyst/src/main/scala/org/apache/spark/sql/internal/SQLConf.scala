@@ -1715,6 +1715,14 @@ object SQLConf {
       .intConf
       .createWithDefault(Int.MaxValue)
 
+  val DYNAMIC_PARTITION_MAX_CREATED_FILES =
+    buildConf("spark.sql.dynamic.partition.maxCreatedFiles")
+      .doc("Maximum total number of files allowed to be created in dynamic partitions write " +
+        "by one DML. This only takes effect when ${FILE_COMMIT_PROTOCOL_CLASS.key} set to " +
+        s"org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
   }
@@ -2470,6 +2478,8 @@ class SQLConf extends Serializable with Logging {
   def maxDynamicPartitions: Int = getConf(DYNAMIC_PARTITION_MAX_PARTITIONS)
 
   def maxDynamicPartitionsPerTask: Int = getConf(DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK)
+
+  def maxCreatedFilesInDynamicPartition: Int = getConf(DYNAMIC_PARTITION_MAX_CREATED_FILES)
 
   def storeAssignmentPolicy: Option[StoreAssignmentPolicy.Value] =
     getConf(STORE_ASSIGNMENT_POLICY).map(StoreAssignmentPolicy.withName)
