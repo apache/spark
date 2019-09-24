@@ -739,7 +739,7 @@ object DataSource extends Logging {
       checkEmptyGlobPath: Boolean,
       checkFilesExist: Boolean): Seq[Path] = {
     val qualifiedPaths = pathStrings
-      .map{pathString =>
+      .map { pathString =>
         val path = new Path(pathString)
         val fs = path.getFileSystem(hadoopConf)
         path.makeQualified(fs.getUri, fs.getWorkingDirectory)
