@@ -323,7 +323,10 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
   private def prepareTestTopicHavingTestMessages(topic: String) = {
     val data = (1 to 1000).map(i => (i.toString, Seq[(String, Array[Byte])]()))
     testUtils.createTopic(topic, 1)
-    testUtils.sendMessages(topic, data.toArray, None)
+    val messages = data.map { case (value, hdrs) =>
+      new RecordBuilder(topic, value).headers(hdrs).build()
+    }
+    testUtils.sendMessages(messages)
     data
   }
 
