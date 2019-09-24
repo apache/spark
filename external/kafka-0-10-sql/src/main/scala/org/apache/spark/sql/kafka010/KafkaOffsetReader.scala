@@ -21,7 +21,7 @@ import java.{util => ju}
 import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
@@ -347,7 +347,7 @@ private[kafka010] class KafkaOffsetReader(
          * latest offset (offset in `knownOffsets` is great than the one in `partitionOffsets`).
          */
         def findIncorrectOffsets(): Seq[(TopicPartition, Long, Long)] = {
-          var incorrectOffsets = mutable.ArrayBuffer[(TopicPartition, Long, Long)]()
+          var incorrectOffsets = ArrayBuffer[(TopicPartition, Long, Long)]()
           partitionOffsets.foreach { case (tp, offset) =>
             knownOffsets.foreach(_.get(tp).foreach { knownOffset =>
               if (knownOffset > offset) {
