@@ -297,10 +297,8 @@ case class ArrayTransform(
     "comparator function. The comparator will take two nullable arguments " +
     "representing two nullable elements of the array." +
     "It returns -1, 0, or 1 as the first nullable element is less than, equal to, or greater " +
-    "than the second nullable element. Null elements will be placed at the end of the returned " +
-    "array. If the comparator function returns other values (including NULL), " +
-    "the query will fail and raise an error. By the default it will sort the array in " +
-    "ascending mode",
+    "than the second nullable element. If the comparator function returns other " +
+    "values (including NULL), the query will fail and raise an error.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(5, 6, 1), (x, y) -> f(x, y));
