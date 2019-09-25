@@ -2,6 +2,21 @@
 layout: global
 title: "ML Tuning"
 displayTitle: "ML Tuning: model selection and hyperparameter tuning"
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 `\[
@@ -103,7 +118,7 @@ Refer to the [`CrossValidator` Python docs](api/python/pyspark.ml.html#pyspark.m
 
 In addition to  `CrossValidator` Spark also offers `TrainValidationSplit` for hyper-parameter tuning.
 `TrainValidationSplit` only evaluates each combination of parameters once, as opposed to k times in
- the case of `CrossValidator`. It is therefore less expensive,
+ the case of `CrossValidator`. It is, therefore, less expensive,
  but will not produce as reliable results when the training dataset is not sufficiently large.
 
 Unlike `CrossValidator`, `TrainValidationSplit` creates a single (training, test) dataset pair.

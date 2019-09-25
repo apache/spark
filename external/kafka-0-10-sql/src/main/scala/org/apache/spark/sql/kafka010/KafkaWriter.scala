@@ -21,9 +21,10 @@ import java.{util => ju}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.types.{BinaryType, StringType}
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.types.{BinaryType, MapType, StringType}
 import org.apache.spark.util.Utils
 
 /**
@@ -39,6 +40,7 @@ private[kafka010] object KafkaWriter extends Logging {
   val TOPIC_ATTRIBUTE_NAME: String = "topic"
   val KEY_ATTRIBUTE_NAME: String = "key"
   val VALUE_ATTRIBUTE_NAME: String = "value"
+  val HEADERS_ATTRIBUTE_NAME: String = "headers"
 
   override def toString: String = "KafkaWriter"
 
@@ -52,12 +54,12 @@ private[kafka010] object KafkaWriter extends Logging {
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present. Use the " +
           s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a topic.")
       } else {
-        Literal(topic.get, StringType)
+        Literal.create(topic.get, StringType)
       }
     ).dataType match {
       case StringType => // good
       case _ =>
-        throw new AnalysisException(s"Topic type must be a String")
+        throw new AnalysisException(s"Topic type must be a ${StringType.catalogString}")
     }
     schema.find(_.name == KEY_ATTRIBUTE_NAME).getOrElse(
       Literal(null, StringType)
@@ -65,7 +67,7 @@ private[kafka010] object KafkaWriter extends Logging {
       case StringType | BinaryType => // good
       case _ =>
         throw new AnalysisException(s"$KEY_ATTRIBUTE_NAME attribute type " +
-          s"must be a String or BinaryType")
+          s"must be a ${StringType.catalogString} or ${BinaryType.catalogString}")
     }
     schema.find(_.name == VALUE_ATTRIBUTE_NAME).getOrElse(
       throw new AnalysisException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
@@ -73,7 +75,16 @@ private[kafka010] object KafkaWriter extends Logging {
       case StringType | BinaryType => // good
       case _ =>
         throw new AnalysisException(s"$VALUE_ATTRIBUTE_NAME attribute type " +
-          s"must be a String or BinaryType")
+          s"must be a ${StringType.catalogString} or ${BinaryType.catalogString}")
+    }
+    schema.find(_.name == HEADERS_ATTRIBUTE_NAME).getOrElse(
+      Literal(CatalystTypeConverters.convertToCatalyst(null),
+        KafkaRecordToRowConverter.headersType)
+    ).dataType match {
+      case KafkaRecordToRowConverter.headersType => // good
+      case _ =>
+        throw new AnalysisException(s"$HEADERS_ATTRIBUTE_NAME attribute type " +
+          s"must be a ${KafkaRecordToRowConverter.headersType.catalogString}")
     }
   }
 

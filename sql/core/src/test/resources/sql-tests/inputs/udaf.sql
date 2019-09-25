@@ -11,3 +11,6 @@ SELECT default.myDoubleAvg(int_col1, 3) as my_avg from t1;
 CREATE FUNCTION udaf1 AS 'test.non.existent.udaf';
 
 SELECT default.udaf1(int_col1) as udaf1 from t1;
+
+DROP FUNCTION myDoubleAvg;
+DROP FUNCTION udaf1;

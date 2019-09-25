@@ -17,9 +17,11 @@
 
 package org.apache.spark.unsafe.types;
 
-import org.apache.spark.unsafe.Platform;
-
 import java.util.Arrays;
+
+import com.google.common.primitives.Ints;
+
+import org.apache.spark.unsafe.Platform;
 
 public final class ByteArray {
 
@@ -77,17 +79,17 @@ public final class ByteArray {
 
   public static byte[] concat(byte[]... inputs) {
     // Compute the total length of the result
-    int totalLength = 0;
+    long totalLength = 0;
     for (int i = 0; i < inputs.length; i++) {
       if (inputs[i] != null) {
-        totalLength += inputs[i].length;
+        totalLength += (long)inputs[i].length;
       } else {
         return null;
       }
     }
 
     // Allocate a new byte array, and copy the inputs one by one into it
-    final byte[] result = new byte[totalLength];
+    final byte[] result = new byte[Ints.checkedCast(totalLength)];
     int offset = 0;
     for (int i = 0; i < inputs.length; i++) {
       int len = inputs[i].length;

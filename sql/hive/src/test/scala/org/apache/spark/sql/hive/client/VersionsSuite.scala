@@ -20,7 +20,9 @@ package org.apache.spark.sql.hive.client
 import java.io.{ByteArrayOutputStream, File, PrintStream, PrintWriter}
 import java.net.URI
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
@@ -53,15 +55,6 @@ class VersionsSuite extends SparkFunSuite with Logging {
   override protected val enableAutoThreadAudit = false
 
   import HiveClientBuilder.buildClient
-
-  /**
-   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
-   * returns.
-   */
-  protected def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
-  }
 
   /**
    * Drops table `tableName` after calling `f`.
@@ -110,7 +103,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1")
+  private val versions = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+    Seq("2.0", "2.1", "2.2", "2.3", "3.0", "3.1")
+  } else {
+    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3", "3.0", "3.1")
+  }
 
   private var client: HiveClient = null
 
@@ -125,15 +122,22 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // Hive changed the default of datanucleus.schema.autoCreateAll from true to false and
       // hive.metastore.schema.verification from false to true since 2.0
       // For details, see the JIRA HIVE-6113 and HIVE-12463
-      if (version == "2.0" || version == "2.1") {
+      if (version == "2.0" || version == "2.1" || version == "2.2" || version == "2.3" ||
+          version == "3.0" || version == "3.1") {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
         hadoopConf.set("hive.metastore.schema.verification", "false")
+      }
+      if (version == "3.0" || version == "3.1") {
+        // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
+        hadoopConf.set("hive.in.test", "true")
+        // Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
+        hadoopConf.set("hive.query.reexecution.enabled", "false")
       }
       client = buildClient(version, hadoopConf, HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
       if (versionSpark != null) versionSpark.reset()
       versionSpark = TestHiveVersion(client)
-      assert(versionSpark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
-        .version.fullVersion.startsWith(version))
+      assert(versionSpark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+        .client.version.fullVersion.startsWith(version))
     }
 
     def table(database: String, tableName: String): CatalogTable = {
@@ -185,7 +189,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: databaseExists") {
-      assert(client.databaseExists("default") == true)
+      assert(client.databaseExists("default"))
       assert(client.databaseExists("nonexist") == false)
     }
 
@@ -200,7 +204,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: dropDatabase") {
-      assert(client.databaseExists("temporary") == true)
+      assert(client.databaseExists("temporary"))
       client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
       assert(client.databaseExists("temporary") == false)
     }
@@ -235,6 +239,33 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: getTableOption") {
       assert(client.getTableOption("default", "src").isDefined)
+    }
+
+    test(s"$version: getTablesByName") {
+      assert(client.getTablesByName("default", Seq("src")).head
+        == client.getTableOption("default", "src").get)
+    }
+
+    test(s"$version: getTablesByName when multiple tables") {
+      assert(client.getTablesByName("default", Seq("src", "temporary"))
+        .map(_.identifier.table) == Seq("src", "temporary"))
+    }
+
+    test(s"$version: getTablesByName when some tables do not exist") {
+      assert(client.getTablesByName("default", Seq("src", "notexist"))
+        .map(_.identifier.table) == Seq("src"))
+    }
+
+    test(s"$version: getTablesByName when contains invalid name") {
+      // scalastyle:off
+      val name = "砖"
+      // scalastyle:on
+      assert(client.getTablesByName("default", Seq("src", name))
+        .map(_.identifier.table) == Seq("src"))
+    }
+
+    test(s"$version: getTablesByName when empty") {
+      assert(client.getTablesByName("default", Seq.empty).isEmpty)
     }
 
     test(s"$version: alterTable(table: CatalogTable)") {
@@ -296,7 +327,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: dropTable") {
-      val versionsWithoutPurge = versions.takeWhile(_ != "0.14")
+      val versionsWithoutPurge =
+        if (versions.contains("0.14")) versions.takeWhile(_ != "0.14") else Nil
       // First try with the purge option set. This should fail if the version is < 0.14, in which
       // case we check the version and try without it.
       try {
@@ -325,7 +357,20 @@ class VersionsSuite extends SparkFunSuite with Logging {
       properties = Map.empty)
 
     test(s"$version: sql create partitioned table") {
-      client.runSqlHive("CREATE TABLE src_part (value INT) PARTITIONED BY (key1 INT, key2 INT)")
+      val table = CatalogTable(
+        identifier = TableIdentifier("src_part", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        schema = new StructType().add("value", "int").add("key1", "int").add("key2", "int"),
+        partitionColumnNames = Seq("key1", "key2"),
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = Some(classOf[TextInputFormat].getName),
+          outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+          serde = Some(classOf[LazySimpleSerDe].getName()),
+          compressed = false,
+          properties = Map.empty
+        ))
+      client.createTable(table, ignoreIfExists = false)
     }
 
     val testPartitionCount = 2
@@ -422,20 +467,24 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
+      val parameters = Map(StatsSetupConst.TOTAL_SIZE -> "0", StatsSetupConst.NUM_FILES -> "1")
       val newLocation = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
       val storage = storageFormat.copy(
         locationUri = Some(newLocation),
         // needed for 0.12 alter partitions
         serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-      val partition = CatalogTablePartition(spec, storage)
+      val partition = CatalogTablePartition(spec, storage, parameters)
       client.alterPartitions("default", "src_part", Seq(partition))
       assert(client.getPartition("default", "src_part", spec)
         .storage.locationUri == Some(newLocation))
+      assert(client.getPartition("default", "src_part", spec)
+        .parameters.get(StatsSetupConst.TOTAL_SIZE) == Some("0"))
     }
 
     test(s"$version: dropPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "3")
-      val versionsWithoutPurge = versions.takeWhile(_ != "1.2")
+      val versionsWithoutPurge =
+        if (versions.contains("1.2")) versions.takeWhile(_ != "1.2") else Nil
       // Similar to dropTable; try with purge set, and if it fails, make sure we're running
       // with a version that is older than the minimum (1.2 in this case).
       try {
@@ -478,7 +527,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         // Hive 0.12 doesn't allow customized permanent functions
         assert(client.functionExists("default", "func1") == false)
       } else {
-        assert(client.functionExists("default", "func1") == true)
+        assert(client.functionExists("default", "func1"))
       }
     }
 
@@ -490,7 +539,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         }
       } else {
         client.renameFunction("default", "func1", "func2")
-        assert(client.functionExists("default", "func2") == true)
+        assert(client.functionExists("default", "func2"))
       }
     }
 
@@ -560,9 +609,27 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: sql create index and reset") {
-      client.runSqlHive("CREATE TABLE indexed_table (key INT)")
-      client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
-        "as 'COMPACT' WITH DEFERRED REBUILD")
+      // HIVE-18448 Since Hive 3.0, INDEX is not supported.
+      if (version != "3.0" && version != "3.1") {
+        client.runSqlHive("CREATE TABLE indexed_table (key INT)")
+        client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
+          "as 'COMPACT' WITH DEFERRED REBUILD")
+      }
+    }
+
+    test(s"$version: sql read hive materialized view") {
+      // HIVE-14249 Since Hive 2.3.0, materialized view is supported.
+      if (version == "2.3" || version == "3.0" || version == "3.1") {
+        // Since Hive 3.0(HIVE-19383), we can not run local MR by `client.runSqlHive` with JDK 11.
+        assume(version == "2.3" || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
+        // Since HIVE-18394(Hive 3.1), "Create Materialized View" should default to rewritable ones
+        val disableRewrite = if (version == "2.3" || version == "3.0") "" else "DISABLE REWRITE"
+        client.runSqlHive("CREATE TABLE materialized_view_tbl (c1 INT)")
+        client.runSqlHive(
+          s"CREATE MATERIALIZED VIEW mv1 $disableRewrite AS SELECT * FROM materialized_view_tbl")
+        val e = intercept[AnalysisException](versionSpark.table("mv1").collect()).getMessage
+        assert(e.contains("Hive materialized view is not supported"))
+      }
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -629,6 +696,46 @@ class VersionsSuite extends SparkFunSuite with Logging {
           assert(totalSize.isEmpty)
         } else {
           assert(totalSize.nonEmpty && totalSize.get > 0)
+        }
+      }
+    }
+
+    test(s"$version: CREATE Partitioned TABLE AS SELECT") {
+      withTable("tbl") {
+        versionSpark.sql(
+          """
+            |CREATE TABLE tbl(c1 string)
+            |PARTITIONED BY (ds STRING)
+          """.stripMargin)
+        versionSpark.sql("INSERT OVERWRITE TABLE tbl partition (ds='2') SELECT '1'")
+
+        assert(versionSpark.table("tbl").collect().toSeq == Seq(Row("1", "2")))
+        val partMeta = versionSpark.sessionState.catalog.getPartition(
+          TableIdentifier("tbl"), spec = Map("ds" -> "2")).parameters
+        val totalSize = partMeta.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        val numFiles = partMeta.get(StatsSetupConst.NUM_FILES).map(_.toLong)
+        // Except 0.12, all the following versions will fill the Hive-generated statistics
+        if (version == "0.12") {
+          assert(totalSize.isEmpty && numFiles.isEmpty)
+        } else {
+          assert(totalSize.nonEmpty && numFiles.nonEmpty)
+        }
+
+        versionSpark.sql(
+          """
+            |ALTER TABLE tbl PARTITION (ds='2')
+            |SET SERDEPROPERTIES ('newKey' = 'vvv')
+          """.stripMargin)
+        val newPartMeta = versionSpark.sessionState.catalog.getPartition(
+          TableIdentifier("tbl"), spec = Map("ds" -> "2")).parameters
+
+        val newTotalSize = newPartMeta.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        val newNumFiles = newPartMeta.get(StatsSetupConst.NUM_FILES).map(_.toLong)
+        // Except 0.12, all the following versions will fill the Hive-generated statistics
+        if (version == "0.12") {
+          assert(newTotalSize.isEmpty && newNumFiles.isEmpty)
+        } else {
+          assert(newTotalSize.nonEmpty && newNumFiles.nonEmpty)
         }
       }
     }
@@ -876,9 +983,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
             |}
           """.stripMargin
         val schemaFile = new File(dir, "avroDecimal.avsc")
-        val writer = new PrintWriter(schemaFile)
-        writer.write(avroSchema)
-        writer.close()
+        Utils.tryWithResource(new PrintWriter(schemaFile)) { writer =>
+          writer.write(avroSchema)
+        }
         val schemaPath = schemaFile.toURI.toString
 
         val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")

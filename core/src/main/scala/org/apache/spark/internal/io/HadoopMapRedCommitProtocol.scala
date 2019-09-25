@@ -31,6 +31,8 @@ class HadoopMapRedCommitProtocol(jobId: String, path: String)
 
   override def setupCommitter(context: NewTaskAttemptContext): OutputCommitter = {
     val config = context.getConfiguration.asInstanceOf[JobConf]
-    config.getOutputCommitter
+    val committer = config.getOutputCommitter
+    logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
+    committer
   }
 }

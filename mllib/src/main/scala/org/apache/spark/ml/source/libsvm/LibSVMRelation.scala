@@ -154,7 +154,7 @@ private[libsvm] class LibSVMFileFormat
 
     (file: PartitionedFile) => {
       val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
 
       val points = linesReader
           .map(_.toString.trim)

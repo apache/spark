@@ -31,7 +31,7 @@ import scala.collection.immutable.IndexedSeq
  */
 private[spark] class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) {
   require(startIdx < endIdx)
-  def this(data: Traversable[Double]) = this(data.toArray, 0, data.size)
+  def this(data: Iterable[Double]) = this(data.toArray, 0, data.size)
   java.util.Arrays.sort(data, startIdx, endIdx)
   val length = endIdx - startIdx
 
@@ -42,7 +42,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
    * given from 0 to 1
    * @param probabilities
    */
-  def getQuantiles(probabilities: Traversable[Double] = defaultProbabilities)
+  def getQuantiles(probabilities: Iterable[Double] = defaultProbabilities)
       : IndexedSeq[Double] = {
     probabilities.toIndexedSeq.map { p: Double => data(closestIndex(p)) }
   }
@@ -75,7 +75,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
 
 private[spark] object Distribution {
 
-  def apply(data: Traversable[Double]): Option[Distribution] = {
+  def apply(data: Iterable[Double]): Option[Distribution] = {
     if (data.size > 0) {
       Some(new Distribution(data))
     } else {
@@ -83,7 +83,7 @@ private[spark] object Distribution {
     }
   }
 
-  def showQuantiles(out: PrintStream = System.out, quantiles: Traversable[Double]) {
+  def showQuantiles(out: PrintStream = System.out, quantiles: Iterable[Double]) {
     // scalastyle:off println
     out.println("min\t25%\t50%\t75%\tmax")
     quantiles.foreach{q => out.print(q + "\t")}

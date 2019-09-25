@@ -28,9 +28,9 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
+class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedSparkSession {
   test("parquet files with different physical schemas but share the same logical schema") {
     import ParquetCompatibilityTest._
 
@@ -118,8 +118,12 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       ).map { s => java.sql.Timestamp.valueOf(s) }
       import testImplicits._
       // match the column names of the file from impala
-      val df = spark.createDataset(ts).toDF().repartition(1).withColumnRenamed("value", "ts")
-      df.write.parquet(tableDir.getAbsolutePath)
+      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+        SQLConf.ParquetOutputTimestampType.INT96.toString) {
+        val df = spark.createDataset(ts).toDF().repartition(1)
+          .withColumnRenamed("value", "ts")
+        df.write.parquet(tableDir.getAbsolutePath)
+      }
       FileUtils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
 
       Seq(false, true).foreach { int96TimestampConversion =>
@@ -163,7 +167,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // Just to be defensive in case anything ever changes in parquet, this test checks
               // the assumption on column stats, and also the end-to-end behavior.
 
-              val hadoopConf = sparkContext.hadoopConfiguration
+              val hadoopConf = spark.sessionState.newHadoopConf()
               val fs = FileSystem.get(hadoopConf)
               val parts = fs.listStatus(new Path(tableDir.getAbsolutePath), new PathFilter {
                 override def accept(path: Path): Boolean = !path.getName.startsWith("_")
@@ -175,16 +179,16 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
                 val oneFooter =
                   ParquetFileReader.readFooter(hadoopConf, part.getPath, NO_FILTER)
                 assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 1)
-                assert(oneFooter.getFileMetaData.getSchema.getColumns.get(0).getType() ===
-                  PrimitiveTypeName.INT96)
+                val typeName = oneFooter
+                  .getFileMetaData.getSchema.getColumns.get(0).getPrimitiveType.getPrimitiveTypeName
+                assert(typeName === PrimitiveTypeName.INT96)
                 val oneBlockMeta = oneFooter.getBlocks().get(0)
                 val oneBlockColumnMeta = oneBlockMeta.getColumns().get(0)
-                val columnStats = oneBlockColumnMeta.getStatistics
                 // This is the important assert.  Column stats are written, but they are ignored
                 // when the data is read back as mentioned above, b/c int96 is unsigned.  This
                 // assert makes sure this holds even if we change parquet versions (if eg. there
                 // were ever statistics even on unsigned columns).
-                assert(columnStats.isEmpty)
+                assert(!oneBlockColumnMeta.getStatistics.hasNonNullValue)
               }
 
               // These queries should return the entire dataset with the conversion applied,

@@ -270,21 +270,23 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private void initializeInternal() throws IOException, UnsupportedOperationException {
     // Check that the requested schema is supported.
     missingColumns = new boolean[requestedSchema.getFieldCount()];
+    List<ColumnDescriptor> columns = requestedSchema.getColumns();
+    List<String[]> paths = requestedSchema.getPaths();
     for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
       Type t = requestedSchema.getFields().get(i);
       if (!t.isPrimitive() || t.isRepetition(Type.Repetition.REPEATED)) {
         throw new UnsupportedOperationException("Complex types not supported.");
       }
 
-      String[] colPath = requestedSchema.getPaths().get(i);
+      String[] colPath = paths.get(i);
       if (fileSchema.containsPath(colPath)) {
         ColumnDescriptor fd = fileSchema.getColumnDescription(colPath);
-        if (!fd.equals(requestedSchema.getColumns().get(i))) {
+        if (!fd.equals(columns.get(i))) {
           throw new UnsupportedOperationException("Schema evolution not supported.");
         }
         missingColumns[i] = false;
       } else {
-        if (requestedSchema.getColumns().get(i).getMaxDefinitionLevel() == 0) {
+        if (columns.get(i).getMaxDefinitionLevel() == 0) {
           // Column is missing in data but the required data is non-nullable. This file is invalid.
           throw new IOException("Required column is missing in data file. Col: " +
             Arrays.toString(colPath));

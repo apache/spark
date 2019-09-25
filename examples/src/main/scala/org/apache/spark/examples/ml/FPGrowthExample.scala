@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml
 
-// scalastyle:off println
-
 // $example on$
 import org.apache.spark.ml.fpm.FPGrowth
 // $example off$
@@ -64,4 +62,3 @@ object FPGrowthExample {
     spark.stop()
   }
 }
-// scalastyle:on println

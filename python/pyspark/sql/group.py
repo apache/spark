@@ -15,12 +15,14 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
+from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import *
+from pyspark.sql.cogroup import CoGroupedData
 
 __all__ = ["GroupedData"]
 
@@ -49,8 +51,6 @@ class GroupedData(object):
     """
     A set of methods for aggregations on a :class:`DataFrame`,
     created by :func:`DataFrame.groupBy`.
-
-    .. note:: Experimental
 
     .. versionadded:: 1.3
     """
@@ -210,12 +210,23 @@ class GroupedData(object):
 
         >>> df4.groupBy("year").pivot("course").sum("earnings").collect()
         [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
+        >>> df5.groupBy("sales.year").pivot("sales.course").sum("sales.earnings").collect()
+        [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
         """
         if values is None:
             jgd = self._jgd.pivot(pivot_col)
         else:
             jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self._df)
+
+    @since(3.0)
+    def cogroup(self, other):
+        """
+        Cogroups this group with another group so that we can run cogrouped operations.
+
+        See :class:`CoGroupedData` for the operations that can be run.
+        """
+        return CoGroupedData(self, other)
 
     @since(2.3)
     def apply(self, udf):
@@ -231,7 +242,7 @@ class GroupedData(object):
         The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
         returnType of the pandas udf.
 
-        .. note:: This function requires a full shuffle. all the data of a group will be loaded
+        .. note:: This function requires a full shuffle. All the data of a group will be loaded
             into memory, so the user should be aware of the potential OOM risk if data is skewed
             and certain groups are too large to fit in memory.
 
@@ -293,13 +304,19 @@ def _test():
                                    Row(course="dotNET", year=2012, earnings=5000),
                                    Row(course="dotNET", year=2013, earnings=48000),
                                    Row(course="Java",   year=2013, earnings=30000)]).toDF()
+    globs['df5'] = sc.parallelize([
+        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=10000)),
+        Row(training="junior", sales=Row(course="Java",   year=2012, earnings=20000)),
+        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
+        Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
+        Row(training="expert", sales=Row(course="Java",   year=2013, earnings=30000))]).toDF()
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.group, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

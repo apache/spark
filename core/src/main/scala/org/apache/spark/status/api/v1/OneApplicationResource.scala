@@ -25,7 +25,6 @@ import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkContext}
-import org.apache.spark.ui.UIUtils
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AbstractApplicationResource extends BaseAppResource {
@@ -140,11 +139,8 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
         .header("Content-Type", MediaType.APPLICATION_OCTET_STREAM)
         .build()
     } catch {
-      case NonFatal(e) =>
-        Response.serverError()
-          .entity(s"Event logs are not available for app: $appId.")
-          .status(Response.Status.SERVICE_UNAVAILABLE)
-          .build()
+      case NonFatal(_) =>
+        throw new ServiceUnavailable(s"Event logs are not available for app: $appId.")
     }
   }
 
@@ -178,7 +174,7 @@ private[v1] class OneApplicationAttemptResource extends AbstractApplicationResou
   def getAttempt(): ApplicationAttemptInfo = {
     uiRoot.getApplicationInfo(appId)
       .flatMap { app =>
-        app.attempts.filter(_.attemptId == attemptId).headOption
+        app.attempts.find(_.attemptId.contains(attemptId))
       }
       .getOrElse {
         throw new NotFoundException(s"unknown app $appId, attempt $attemptId")

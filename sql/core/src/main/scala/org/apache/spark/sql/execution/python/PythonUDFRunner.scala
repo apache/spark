@@ -29,12 +29,10 @@ import org.apache.spark.api.python._
  */
 class PythonUDFRunner(
     funcs: Seq[ChainedPythonFunctions],
-    bufferSize: Int,
-    reuseWorker: Boolean,
     evalType: Int,
     argOffsets: Array[Array[Int]])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, bufferSize, reuseWorker, evalType, argOffsets) {
+    funcs, evalType, argOffsets) {
 
   protected override def newWriterThread(
       env: SparkEnv,
@@ -61,9 +59,9 @@ class PythonUDFRunner(
       startTime: Long,
       env: SparkEnv,
       worker: Socket,
-      released: AtomicBoolean,
+      releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
-    new ReaderIterator(stream, writerThread, startTime, env, worker, released, context) {
+    new ReaderIterator(stream, writerThread, startTime, env, worker, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
         if (writerThread.exception.isDefined) {

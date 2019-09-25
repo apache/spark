@@ -40,8 +40,9 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test error message for invalid XML document
     val e1 = intercept[RuntimeException] { testExpr("<a>/a>", "a", null.asInstanceOf[T]) }
-    assert(e1.getCause.getMessage.contains("Invalid XML document") &&
-      e1.getCause.getMessage.contains("<a>/a>"))
+    assert(e1.getCause.getCause.getMessage.contains(
+      "XML document structures must start and end within the same entity."))
+    assert(e1.getMessage.contains("<a>/a>"))
 
     // Test error message for invalid xpath
     val e2 = intercept[RuntimeException] { testExpr("<a></a>", "!#$", null.asInstanceOf[T]) }

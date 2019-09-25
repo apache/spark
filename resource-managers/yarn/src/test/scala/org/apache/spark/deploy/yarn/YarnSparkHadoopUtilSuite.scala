@@ -21,7 +21,6 @@ import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.io.Text
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
@@ -29,6 +28,8 @@ import org.scalatest.Matchers
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
@@ -82,7 +83,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
     // spark acls on, just pick up default user
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.acls.enable", "true")
+    sparkConf.set(ACLS_ENABLE, true)
 
     val securityMgr = new SecurityManager(sparkConf)
     val acls = YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr)
@@ -110,9 +111,9 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
     // default spark acls are on and specify acls
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.acls.enable", "true")
-    sparkConf.set("spark.ui.view.acls", "user1,user2")
-    sparkConf.set("spark.modify.acls", "user3,user4")
+    sparkConf.set(ACLS_ENABLE, true)
+    sparkConf.set(UI_VIEW_ACLS, Seq("user1", "user2"))
+    sparkConf.set(MODIFY_ACLS, Seq("user3", "user4"))
 
     val securityMgr = new SecurityManager(sparkConf)
     val acls = YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr)
@@ -141,4 +142,30 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
   }
 
+  test("executorOffHeapMemorySizeAsMb when MEMORY_OFFHEAP_ENABLED is false") {
+    val executorOffHeapMemory = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(new SparkConf())
+    assert(executorOffHeapMemory == 0)
+  }
+
+  test("executorOffHeapMemorySizeAsMb when MEMORY_OFFHEAP_ENABLED is true") {
+    val offHeapMemoryInMB = 50
+    val offHeapMemory: Long = offHeapMemoryInMB * 1024 * 1024
+    val sparkConf = new SparkConf()
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+      .set(MEMORY_OFFHEAP_SIZE, offHeapMemory)
+    val executorOffHeapMemory = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf)
+    assert(executorOffHeapMemory == offHeapMemoryInMB)
+  }
+
+  test("executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is true, " +
+    "but MEMORY_OFFHEAP_SIZE not config scene") {
+    val sparkConf = new SparkConf()
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+    val expected =
+      s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true"
+    val message = intercept[IllegalArgumentException] {
+      YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf)
+    }.getMessage
+    assert(message.contains(expected))
+  }
 }

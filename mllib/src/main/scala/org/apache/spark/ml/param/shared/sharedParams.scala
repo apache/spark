@@ -275,6 +275,25 @@ trait HasOutputCols extends Params {
 }
 
 /**
+ * Trait for shared param numFeatures (default: 262144). This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasNumFeatures extends Params {
+
+  /**
+   * Param for Number of features. Should be greater than 0.
+   * @group param
+   */
+  final val numFeatures: IntParam = new IntParam(this, "numFeatures", "Number of features. Should be greater than 0", ParamValidators.gt(0))
+
+  setDefault(numFeatures, 262144)
+
+  /** @group getParam */
+  final def getNumFeatures: Int = $(numFeatures)
+}
+
+/**
  * Trait for shared param checkpointInterval. This trait may be changed or
  * removed between minor versions.
  */
@@ -503,5 +522,41 @@ trait HasLoss extends Params {
 
   /** @group getParam */
   final def getLoss: String = $(loss)
+}
+
+/**
+ * Trait for shared param distanceMeasure (default: "euclidean"). This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasDistanceMeasure extends Params {
+
+  /**
+   * Param for The distance measure. Supported options: 'euclidean' and 'cosine'.
+   * @group param
+   */
+  final val distanceMeasure: Param[String] = new Param[String](this, "distanceMeasure", "The distance measure. Supported options: 'euclidean' and 'cosine'", ParamValidators.inArray(Array("euclidean", "cosine")))
+
+  setDefault(distanceMeasure, "euclidean")
+
+  /** @group getParam */
+  final def getDistanceMeasure: String = $(distanceMeasure)
+}
+
+/**
+ * Trait for shared param validationIndicatorCol. This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasValidationIndicatorCol extends Params {
+
+  /**
+   * Param for name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation..
+   * @group param
+   */
+  final val validationIndicatorCol: Param[String] = new Param[String](this, "validationIndicatorCol", "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.")
+
+  /** @group getParam */
+  final def getValidationIndicatorCol: String = $(validationIndicatorCol)
 }
 // scalastyle:on

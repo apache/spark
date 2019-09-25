@@ -17,10 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import org.json4s.JsonDSL._
-import org.json4s.JValue
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
@@ -171,25 +167,38 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   @Since("2.3.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  private[feature] def getInOutCols: (Array[String], Array[String]) = {
-    require((isSet(inputCol) && isSet(outputCol) && !isSet(inputCols) && !isSet(outputCols)) ||
-      (!isSet(inputCol) && !isSet(outputCol) && isSet(inputCols) && isSet(outputCols)),
-      "QuantileDiscretizer only supports setting either inputCol/outputCol or" +
-        "inputCols/outputCols."
-    )
-
-    if (isSet(inputCol)) {
-      (Array($(inputCol)), Array($(outputCol)))
-    } else {
-      require($(inputCols).length == $(outputCols).length,
-        "inputCols number do not match outputCols")
-      ($(inputCols), $(outputCols))
-    }
-  }
-
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    val (inputColNames, outputColNames) = getInOutCols
+    ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol),
+      Seq(outputCols))
+
+    if (isSet(inputCol)) {
+      require(!isSet(numBucketsArray),
+        s"numBucketsArray can't be set for single-column QuantileDiscretizer.")
+    }
+
+    if (isSet(inputCols)) {
+      require(getInputCols.length == getOutputCols.length,
+        s"QuantileDiscretizer $this has mismatched Params " +
+          s"for multi-column transform.  Params (inputCols, outputCols) should have " +
+          s"equal lengths, but they have different lengths: " +
+          s"(${getInputCols.length}, ${getOutputCols.length}).")
+      if (isSet(numBucketsArray)) {
+        require(getInputCols.length == getNumBucketsArray.length,
+          s"QuantileDiscretizer $this has mismatched Params " +
+            s"for multi-column transform.  Params (inputCols, outputCols, numBucketsArray) " +
+            s"should have equal lengths, but they have different lengths: " +
+            s"(${getInputCols.length}, ${getOutputCols.length}, ${getNumBucketsArray.length}).")
+        require(!isSet(numBuckets),
+          s"exactly one of numBuckets, numBucketsArray Params to be set, but both are set." )
+      }
+    }
+
+    val (inputColNames, outputColNames) = if (isSet(inputCols)) {
+      ($(inputCols).toSeq, $(outputCols).toSeq)
+    } else {
+      (Seq($(inputCol)), Seq($(outputCol)))
+    }
     val existingFields = schema.fields
     var outputFields = existingFields
     inputColNames.zip(outputColNames).foreach { case (inputColName, outputColName) =>
@@ -209,7 +218,7 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     if (isSet(inputCols)) {
       val splitsArray = if (isSet(numBucketsArray)) {
         val probArrayPerCol = $(numBucketsArray).map { numOfBuckets =>
-          (0.0 to 1.0 by 1.0 / numOfBuckets).toArray
+          (0 to numOfBuckets).map(_.toDouble / numOfBuckets).toArray
         }
 
         val probabilityArray = probArrayPerCol.flatten.sorted.distinct
@@ -229,12 +238,12 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
         }
       } else {
         dataset.stat.approxQuantile($(inputCols),
-          (0.0 to 1.0 by 1.0 / $(numBuckets)).toArray, $(relativeError))
+          (0 to $(numBuckets)).map(_.toDouble / $(numBuckets)).toArray, $(relativeError))
       }
       bucketizer.setSplitsArray(splitsArray.map(getDistinctSplits))
     } else {
       val splits = dataset.stat.approxQuantile($(inputCol),
-        (0.0 to 1.0 by 1.0 / $(numBuckets)).toArray, $(relativeError))
+        (0 to $(numBuckets)).map(_.toDouble / $(numBuckets)).toArray, $(relativeError))
       bucketizer.setSplits(getDistinctSplits(splits))
     }
     copyValues(bucketizer.setParent(this))
@@ -253,34 +262,10 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
-
-  override def write: MLWriter = new QuantileDiscretizer.QuantileDiscretizerWriter(this)
 }
 
 @Since("1.6.0")
 object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] with Logging {
-
-  private[QuantileDiscretizer]
-  class QuantileDiscretizerWriter(instance: QuantileDiscretizer) extends MLWriter {
-
-    override protected def saveImpl(path: String): Unit = {
-      // SPARK-23377: The default params will be saved and loaded as user-supplied params.
-      // Once `inputCols` is set, the default value of `outputCol` param causes the error
-      // when checking exclusive params. As a temporary to fix it, we skip the default value
-      // of `outputCol` if `inputCols` is set when saving the metadata.
-      // TODO: If we modify the persistence mechanism later to better handle default params,
-      // we can get rid of this.
-      var paramWithoutOutputCol: Option[JValue] = None
-      if (instance.isSet(instance.inputCols)) {
-        val params = instance.extractParamMap().toSeq
-        val jsonParams = params.filter(_.param != instance.outputCol).map { case ParamPair(p, v) =>
-          p.name -> parse(p.jsonEncode(v))
-        }.toList
-        paramWithoutOutputCol = Some(render(jsonParams))
-      }
-      DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap = paramWithoutOutputCol)
-    }
-  }
 
   @Since("1.6.0")
   override def load(path: String): QuantileDiscretizer = super.load(path)

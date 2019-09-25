@@ -38,6 +38,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TestMemoryManager;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.JavaSerializer;
 import org.apache.spark.serializer.SerializerInstance;
@@ -58,11 +59,11 @@ public class UnsafeExternalSorterSuite {
 
   final LinkedList<File> spillFilesCreated = new LinkedList<>();
   final TestMemoryManager memoryManager =
-    new TestMemoryManager(conf.clone().set("spark.memory.offHeap.enabled", "false"));
+    new TestMemoryManager(conf.clone().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   final SerializerManager serializerManager = new SerializerManager(
     new JavaSerializer(conf),
-    conf.clone().set("spark.shuffle.spill.compress", "false"));
+    conf.clone().set(package$.MODULE$.SHUFFLE_SPILL_COMPRESS(), false));
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = PrefixComparators.LONG;
   // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
@@ -87,7 +88,8 @@ public class UnsafeExternalSorterSuite {
 
   protected boolean shouldUseRadixSort() { return false; }
 
-  private final long pageSizeBytes = conf.getSizeAsBytes("spark.buffer.pageSize", "4m");
+  private final long pageSizeBytes = conf.getSizeAsBytes(
+          package$.MODULE$.BUFFER_PAGESIZE().key(), "4m");
 
   private final int spillThreshold =
     (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());
@@ -534,10 +536,10 @@ public class UnsafeExternalSorterSuite {
       insertNumber(sorter, 1024);
       fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
     }
-    // we expect an OutOfMemoryError here, anything else (i.e the original NPE is a failure)
-    catch (OutOfMemoryError oom){
+    // we expect an SparkOutOfMemoryError here, anything else (i.e the original NPE is a failure)
+    catch (SparkOutOfMemoryError oom){
       String oomStackTrace = Utils.exceptionString(oom);
-      assertThat("expected OutOfMemoryError in " +
+      assertThat("expected SparkOutOfMemoryError in " +
         "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
         oomStackTrace,
         Matchers.containsString(

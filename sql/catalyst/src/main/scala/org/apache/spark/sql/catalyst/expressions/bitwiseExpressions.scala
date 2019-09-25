@@ -95,7 +95,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 5;
-       2
+       6
   """)
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
 
@@ -147,7 +147,7 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dataType)}) ~($c)")
+    defineCodeGen(ctx, ev, c => s"(${CodeGenerator.javaType(dataType)}) ~($c)")
   }
 
   protected override def nullSafeEval(input: Any): Any = not(input)

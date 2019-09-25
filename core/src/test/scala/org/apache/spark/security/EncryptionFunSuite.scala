@@ -28,11 +28,15 @@ trait EncryptionFunSuite {
    * for the test to modify the provided SparkConf.
    */
   final protected def encryptionTest(name: String)(fn: SparkConf => Unit) {
+    encryptionTestHelper(name) { case (name, conf) =>
+      test(name)(fn(conf))
+    }
+  }
+
+  final protected def encryptionTestHelper(name: String)(fn: (String, SparkConf) => Unit): Unit = {
     Seq(false, true).foreach { encrypt =>
-      test(s"$name (encryption = ${ if (encrypt) "on" else "off" })") {
-        val conf = new SparkConf().set(IO_ENCRYPTION_ENABLED, encrypt)
-        fn(conf)
-      }
+      val conf = new SparkConf().set(IO_ENCRYPTION_ENABLED, encrypt)
+      fn(s"$name (encryption = ${ if (encrypt) "on" else "off" })", conf)
     }
   }
 

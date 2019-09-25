@@ -57,6 +57,20 @@ def basic_datasource_example(spark):
                          format="csv", sep=":", inferSchema="true", header="true")
     # $example off:manual_load_options_csv$
 
+    # $example on:load_with_path_glob_filter$
+    df = spark.read.load("examples/src/main/resources/partitioned_users.orc",
+                         format="orc", pathGlobFilter="*.orc")
+    # $example off:load_with_path_glob_filter$
+
+    # $example on:manual_save_options_orc$
+    df = spark.read.orc("examples/src/main/resources/users.orc")
+    (df.write.format("orc")
+        .option("orc.bloom.filter.columns", "favorite_color")
+        .option("orc.dictionary.key.threshold", "1.0")
+        .option("orc.column.encoding.direct", "name")
+        .save("users_with_options.orc"))
+    # $example off:manual_save_options_orc$
+
     # $example on:write_sorting_and_bucketing$
     df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
     # $example off:write_sorting_and_bucketing$

@@ -37,7 +37,6 @@ setOldClass("jobj")
 #' @name crosstab
 #' @aliases crosstab,SparkDataFrame,character,character-method
 #' @family stat functions
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- read.json("/path/to/file.json")
@@ -63,7 +62,6 @@ setMethod("crosstab",
 #' @rdname cov
 #' @aliases cov,SparkDataFrame-method
 #' @family stat functions
-#' @export
 #' @examples
 #'
 #' \dontrun{
@@ -92,7 +90,6 @@ setMethod("cov",
 #' @name corr
 #' @aliases corr,SparkDataFrame-method
 #' @family stat functions
-#' @export
 #' @examples
 #'
 #' \dontrun{
@@ -112,7 +109,7 @@ setMethod("corr",
 #'
 #' Finding frequent items for columns, possibly with false positives.
 #' Using the frequent element count algorithm described in
-#' \url{http://dx.doi.org/10.1145/762471.762473}, proposed by Karp, Schenker, and Papadimitriou.
+#' \url{https://doi.org/10.1145/762471.762473}, proposed by Karp, Schenker, and Papadimitriou.
 #'
 #' @param x A SparkDataFrame.
 #' @param cols A vector column names to search frequent items in.
@@ -124,7 +121,6 @@ setMethod("corr",
 #' @name freqItems
 #' @aliases freqItems,SparkDataFrame,character-method
 #' @family stat functions
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- read.json("/path/to/file.json")
@@ -147,7 +143,7 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' *exact* rank of x is close to (p * N). More precisely,
 #'   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
 #' This method implements a variation of the Greenwald-Khanna algorithm (with some speed
-#' optimizations). The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670
+#' optimizations). The algorithm was first present in [[https://doi.org/10.1145/375663.375670
 #' Space-efficient Online Computation of Quantile Summaries]] by Greenwald and Khanna.
 #' Note that NA values will be ignored in numerical columns before calculation. For
 #'   columns only containing NA values, an empty list is returned.
@@ -168,7 +164,6 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' @name approxQuantile
 #' @aliases approxQuantile,SparkDataFrame,character,numeric,numeric-method
 #' @family stat functions
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- read.json("/path/to/file.json")
@@ -205,7 +200,6 @@ setMethod("approxQuantile",
 #' @aliases sampleBy,SparkDataFrame,character,list,numeric-method
 #' @name sampleBy
 #' @family stat functions
-#' @export
 #' @examples
 #'\dontrun{
 #' df <- read.json("/path/to/file.json")

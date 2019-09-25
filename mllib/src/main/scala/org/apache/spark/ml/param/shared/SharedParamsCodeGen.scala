@@ -22,6 +22,8 @@ import java.io.PrintWriter
 import scala.reflect.ClassTag
 import scala.xml.Utility
 
+import org.apache.spark.util.Utils
+
 /**
  * Code generator for shared params (sharedParams.scala). Run under the Spark folder with
  * {{{
@@ -61,6 +63,8 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
       ParamDesc[Array[String]]("outputCols", "output column names"),
+      ParamDesc[Int]("numFeatures", "Number of features. Should be greater than 0",
+        Some("262144"), isValid = "ParamValidators.gt(0)"),
       ParamDesc[Int]("checkpointInterval", "set checkpoint interval (>= 1) or " +
         "disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed " +
         "every 10 iterations. Note: this setting will be ignored if the checkpoint directory " +
@@ -91,14 +95,20 @@ private[shared] object SharedParamsCodeGen {
         "after fitting. If set to true, then all sub-models will be available. Warning: For " +
         "large models, collecting all sub-models can cause OOMs on the Spark driver",
         Some("false"), isExpertParam = true),
-      ParamDesc[String]("loss", "the loss function to be optimized", finalFields = false)
+      ParamDesc[String]("loss", "the loss function to be optimized", finalFields = false),
+      ParamDesc[String]("distanceMeasure", "The distance measure. Supported options: 'euclidean'" +
+        " and 'cosine'", Some("\"euclidean\""),
+        isValid = "ParamValidators.inArray(Array(\"euclidean\", \"cosine\"))"),
+      ParamDesc[String]("validationIndicatorCol", "name of the column that indicates whether " +
+        "each row is for training or for validation. False indicates training; true indicates " +
+        "validation.")
     )
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
-    val writer = new PrintWriter(file)
-    writer.write(code)
-    writer.close()
+    Utils.tryWithResource(new PrintWriter(file)) { writer =>
+      writer.write(code)
+    }
   }
 
   /** Description of a param. */

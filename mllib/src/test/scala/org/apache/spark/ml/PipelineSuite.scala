@@ -20,7 +20,7 @@ package org.apache.spark.ml
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.when
 import org.scalatest.mockito.MockitoSugar.mock
 

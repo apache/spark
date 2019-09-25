@@ -51,15 +51,19 @@ public class UTF8StringSuite {
 
     assertTrue(s1.contains(s2));
     assertTrue(s2.contains(s1));
-    assertTrue(s1.startsWith(s1));
-    assertTrue(s1.endsWith(s1));
+    assertTrue(s1.startsWith(s2));
+    assertTrue(s1.endsWith(s2));
   }
 
   @Test
   public void basicTest() {
     checkBasic("", 0);
-    checkBasic("hello", 5);
+    checkBasic("¡", 1); // 2 bytes char
+    checkBasic("ку", 2); // 2 * 2 bytes chars
+    checkBasic("hello", 5); // 5 * 1 byte chars
     checkBasic("大 千 世 界", 7);
+    checkBasic("︽﹋％", 3); // 3 * 3 bytes chars
+    checkBasic("\uD83E\uDD19", 1); // 4 bytes char
   }
 
   @Test
@@ -389,12 +393,52 @@ public class UTF8StringSuite {
 
   @Test
   public void split() {
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), -1),
-      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi")}));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
+    UTF8String[] negativeAndZeroLimitCase =
+      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 0),
+      negativeAndZeroLimitCase));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), -1),
+      negativeAndZeroLimitCase));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 2),
+      new UTF8String[]{fromString("ab"), fromString("def,ghi,")}));
+  }
+
+  @Test
+  public void replace() {
+    assertEquals(
+      fromString("re123ace"),
+      fromString("replace").replace(fromString("pl"), fromString("123")));
+    assertEquals(
+      fromString("reace"),
+      fromString("replace").replace(fromString("pl"), fromString("")));
+    assertEquals(
+      fromString("replace"),
+      fromString("replace").replace(fromString(""), fromString("123")));
+    // tests for multiple replacements
+    assertEquals(
+      fromString("a12ca12c"),
+      fromString("abcabc").replace(fromString("b"), fromString("12")));
+    assertEquals(
+      fromString("adad"),
+      fromString("abcdabcd").replace(fromString("bc"), fromString("")));
+    // tests for single character search and replacement strings
+    assertEquals(
+      fromString("AbcAbc"),
+      fromString("abcabc").replace(fromString("a"), fromString("A")));
+    assertEquals(
+      fromString("abcabc"),
+      fromString("abcabc").replace(fromString("Z"), fromString("A")));
+    // Tests with non-ASCII characters
+    assertEquals(
+      fromString("花ab界"),
+      fromString("花花世界").replace(fromString("花世"), fromString("ab")));
+    assertEquals(
+      fromString("a水c"),
+      fromString("a火c").replace(fromString("火"), fromString("水")));
+    // Tests for a large number of replacements, triggering UTF8StringBuilder resize
+    assertEquals(
+      fromString("abcd").repeat(17),
+      fromString("a").repeat(17).replace(fromString("a"), fromString("abcd")));
   }
 
   @Test
@@ -423,7 +467,7 @@ public class UTF8StringSuite {
       )));
     assertEquals(
       fromString("translate"),
-      fromString("translate").translate(new HashMap<Character, Character>()));
+      fromString("translate").translate(new HashMap<>()));
     assertEquals(
       fromString("asae"),
       fromString("translate").translate(ImmutableMap.of(
@@ -577,13 +621,13 @@ public class UTF8StringSuite {
   public void writeToOutputStream() throws IOException {
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     EMPTY_UTF8.writeTo(outputStream);
-    assertEquals("", outputStream.toString("UTF-8"));
+    assertEquals("", outputStream.toString(StandardCharsets.UTF_8.name()));
     outputStream.reset();
 
     fromString("数据砖很重").writeTo(outputStream);
     assertEquals(
         "数据砖很重",
-        outputStream.toString("UTF-8"));
+        outputStream.toString(StandardCharsets.UTF_8.name()));
     outputStream.reset();
   }
 
@@ -607,7 +651,7 @@ public class UTF8StringSuite {
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     fromAddress(array, Platform.INT_ARRAY_OFFSET, length)
         .writeTo(outputStream);
-    assertEquals("大千世界", outputStream.toString("UTF-8"));
+    assertEquals("大千世界", outputStream.toString(StandardCharsets.UTF_8.name()));
   }
 
   @Test
@@ -790,5 +834,22 @@ public class UTF8StringSuite {
     assertEquals(fromString(""), fromString("数数数据砖ab").trimRight(fromString("数据砖ab")));
     assertEquals(fromString("头"), fromString("头a???/").trimRight(fromString("数?/*&^%a")));
     assertEquals(fromString("头"), fromString("头数b数数 [").trimRight(fromString(" []数b")));
+  }
+
+  @Test
+  public void skipWrongFirstByte() {
+    int[] wrongFirstBytes = {
+      0x80, 0x9F, 0xBF, // Skip Continuation bytes
+      0xC0, 0xC2, // 0xC0..0xC1 - disallowed in UTF-8
+      // 0xF5..0xFF - disallowed in UTF-8
+      0xF5, 0xF6, 0xF7, 0xF8, 0xF9,
+      0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF
+    };
+    byte[] c = new byte[1];
+
+    for (int i = 0; i < wrongFirstBytes.length; ++i) {
+      c[0] = (byte)wrongFirstBytes[i];
+      assertEquals(fromBytes(c).numChars(), 1);
+    }
   }
 }

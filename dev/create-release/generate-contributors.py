@@ -67,7 +67,7 @@ print("JIRA server: %s" % JIRA_API_BASE)
 print("Release tag: %s" % RELEASE_TAG)
 print("Previous release tag: %s" % PREVIOUS_RELEASE_TAG)
 print("Number of commits in this range: %s" % len(new_commits))
-print
+print("")
 
 
 def print_indented(_list):
@@ -88,10 +88,10 @@ filtered_commits = []
 
 
 def is_release(commit_title):
-    return re.findall("\[release\]", commit_title.lower()) or \
-        "preparing spark release" in commit_title.lower() or \
-        "preparing development version" in commit_title.lower() or \
-        "CHANGES.txt" in commit_title
+    return ("[release]" in commit_title.lower() or
+            "preparing spark release" in commit_title.lower() or
+            "preparing development version" in commit_title.lower() or
+            "CHANGES.txt" in commit_title)
 
 
 def is_maintenance(commit_title):

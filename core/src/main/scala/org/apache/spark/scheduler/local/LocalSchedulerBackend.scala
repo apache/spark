@@ -24,11 +24,12 @@ import java.nio.ByteBuffer
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.util.Utils
 
 private case class ReviveOffers()
 
@@ -54,7 +55,7 @@ private[spark] class LocalEndpoint(
   private var freeCores = totalCores
 
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER
-  val localExecutorHostname = "localhost"
+  val localExecutorHostname = Utils.localCanonicalHostName()
 
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, userClassPath, isLocal = true)
@@ -81,7 +82,9 @@ private[spark] class LocalEndpoint(
   }
 
   def reviveOffers() {
-    val offers = IndexedSeq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
+    // local mode doesn't support extra resources like GPUs right now
+    val offers = IndexedSeq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores,
+      Some(rpcEnv.address.hostPort)))
     for (task <- scheduler.resourceOffers(offers).flatten) {
       freeCores -= scheduler.CPUS_PER_TASK
       executor.launchTask(executorBackend, task)
@@ -115,7 +118,7 @@ private[spark] class LocalSchedulerBackend(
    * @param conf Spark configuration.
    */
   def getUserClasspath(conf: SparkConf): Seq[URL] = {
-    val userClassPathStr = conf.getOption("spark.executor.extraClassPath")
+    val userClassPathStr = conf.get(config.EXECUTOR_CLASS_PATH)
     userClassPathStr.map(_.split(File.pathSeparator)).toSeq.flatten.map(new File(_).toURI.toURL)
   }
 
@@ -128,7 +131,8 @@ private[spark] class LocalSchedulerBackend(
     listenerBus.post(SparkListenerExecutorAdded(
       System.currentTimeMillis,
       executorEndpoint.localExecutorId,
-      new ExecutorInfo(executorEndpoint.localExecutorHostname, totalCores, Map.empty)))
+      new ExecutorInfo(executorEndpoint.localExecutorHostname, totalCores, Map.empty,
+        Map.empty)))
     launcherBackend.setAppId(appId)
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
@@ -154,6 +158,8 @@ private[spark] class LocalSchedulerBackend(
   }
 
   override def applicationId(): String = appId
+
+  override def maxNumConcurrentTasks(): Int = totalCores / scheduler.CPUS_PER_TASK
 
   private def stop(finalState: SparkAppHandle.State): Unit = {
     localEndpoint.ask(StopExecutor)

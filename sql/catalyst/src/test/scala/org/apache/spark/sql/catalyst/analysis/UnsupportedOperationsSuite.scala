@@ -404,7 +404,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     _.join(_, joinType = Inner),
     outputMode = Update,
     streamStreamSupported = false,
-    expectedMsg = "inner join")
+    expectedMsg = "is not supported in Update output mode")
 
   // Full outer joins: only batch-batch is allowed
   testBinaryOperationInStreamingPlan(
@@ -421,6 +421,20 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     batchStreamSupported = false,
     streamStreamSupported = false,
     expectedMsg = "outer join")
+
+  // Left outer joins: update and complete mode not allowed
+  assertNotSupportedInStreamingPlan(
+    s"left outer join with stream-stream relations and update mode",
+    streamRelation.join(streamRelation, joinType = LeftOuter,
+      condition = Some(attribute === attribute)),
+    OutputMode.Update(),
+    Seq("is not supported in Update output mode"))
+  assertNotSupportedInStreamingPlan(
+    s"left outer join with stream-stream relations and complete mode",
+    Aggregate(Nil, aggExprs("d"), streamRelation.join(streamRelation, joinType = LeftOuter,
+      condition = Some(attribute === attribute))),
+    OutputMode.Complete(),
+    Seq("is not supported in Complete output mode"))
 
   // Left outer joins: stream-stream allowed with join on watermark attribute
   // Note that the attribute need not be watermarked on both sides.
@@ -575,14 +589,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Except: *-stream not supported
   testBinaryOperationInStreamingPlan(
     "except",
-    _.except(_),
+    _.except(_, isAll = false),
     streamStreamSupported = false,
     batchStreamSupported = false)
 
   // Intersect: stream-stream not supported
   testBinaryOperationInStreamingPlan(
     "intersect",
-    _.intersect(_),
+    _.intersect(_, isAll = false),
     streamStreamSupported = false)
 
   // Sort: supported only on batch subplans and after aggregation on streaming plan + complete mode
@@ -621,6 +635,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append,
     expectedMsgs = Seq("monotonically_increasing_id"))
 
+  assertSupportedForContinuousProcessing(
+    "TypedFilter", TypedFilter(
+      null,
+      null,
+      null,
+      null,
+      new TestStreamingRelationV2(attribute)), OutputMode.Append())
 
   /*
     =======================================================================================
@@ -759,7 +780,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
    *
    * To test this correctly, the given logical plan is wrapped in a fake operator that makes the
    * whole plan look like a streaming plan. Otherwise, a batch plan may throw not supported
-   * exception simply for not being a streaming plan, even though that plan could exists as batch
+   * exception simply for not being a streaming plan, even though that plan could exist as batch
    * subplan inside some streaming plan.
    */
   def assertSupportedInStreamingPlan(
@@ -771,12 +792,22 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     }
   }
 
+  /** Assert that the logical plan is supported for continuous procsssing mode */
+  def assertSupportedForContinuousProcessing(
+    name: String,
+    plan: LogicalPlan,
+    outputMode: OutputMode): Unit = {
+    test(s"continuous processing - $name: supported") {
+      UnsupportedOperationChecker.checkForContinuous(plan, outputMode)
+    }
+  }
+
   /**
    * Assert that the logical plan is not supported inside a streaming plan.
    *
    * To test this correctly, the given logical plan is wrapped in a fake operator that makes the
    * whole plan look like a streaming plan. Otherwise, a batch plan may throw not supported
-   * exception simply for not being a streaming plan, even though that plan could exists as batch
+   * exception simply for not being a streaming plan, even though that plan could exist as batch
    * subplan inside some streaming plan.
    */
   def assertNotSupportedInStreamingPlan(
@@ -839,5 +870,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {
     def this(attribute: Attribute) = this(Seq(attribute))
     override def isStreaming: Boolean = true
+  }
+
+  case class TestStreamingRelationV2(output: Seq[Attribute]) extends LeafNode {
+    def this(attribute: Attribute) = this(Seq(attribute))
+    override def isStreaming: Boolean = true
+    override def nodeName: String = "StreamingRelationV2"
   }
 }

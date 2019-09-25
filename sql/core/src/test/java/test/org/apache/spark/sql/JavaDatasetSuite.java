@@ -21,6 +21,8 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.*;
 
 import org.apache.spark.sql.streaming.GroupStateTimeout;
@@ -34,6 +36,7 @@ import com.google.common.base.Objects;
 import org.junit.*;
 import org.junit.rules.ExpectedException;
 
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.sql.*;
@@ -337,6 +340,23 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testTupleEncoderSchema() {
+    Encoder<Tuple2<String, Tuple2<String,String>>> encoder =
+      Encoders.tuple(Encoders.STRING(), Encoders.tuple(Encoders.STRING(), Encoders.STRING()));
+    List<Tuple2<String, Tuple2<String, String>>> data = Arrays.asList(tuple2("1", tuple2("a", "b")),
+      tuple2("2", tuple2("c", "d")));
+    Dataset<Row> ds1 = spark.createDataset(data, encoder).toDF("value1", "value2");
+
+    JavaPairRDD<String, Tuple2<String, String>> pairRDD = jsc.parallelizePairs(data);
+    Dataset<Row> ds2 = spark.createDataset(JavaPairRDD.toRDD(pairRDD), encoder)
+      .toDF("value1", "value2");
+
+    Assert.assertEquals(ds1.schema(), ds2.schema());
+    Assert.assertEquals(ds1.select(expr("value2._1")).collectAsList(),
+      ds2.select(expr("value2._1")).collectAsList());
+  }
+
+  @Test
   public void testNestedTupleEncoder() {
     // test ((int, string), string)
     Encoder<Tuple2<Tuple2<Integer, String>, String>> encoder =
@@ -378,6 +398,16 @@ public class JavaDatasetSuite implements Serializable {
           Date.valueOf("1970-01-01"), new Timestamp(System.currentTimeMillis()), Float.MAX_VALUE));
     Dataset<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> ds =
       spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testLocalDateAndInstantEncoders() {
+    Encoder<Tuple2<LocalDate, Instant>> encoder =
+      Encoders.tuple(Encoders.LOCALDATE(), Encoders.INSTANT());
+    List<Tuple2<LocalDate, Instant>> data =
+      Arrays.asList(new Tuple2<>(LocalDate.ofEpochDay(0), Instant.ofEpochSecond(0)));
+    Dataset<Tuple2<LocalDate, Instant>> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
 

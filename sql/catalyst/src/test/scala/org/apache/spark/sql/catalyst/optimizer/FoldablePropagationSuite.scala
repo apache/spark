@@ -132,10 +132,10 @@ class FoldablePropagationSuite extends PlanTest {
 
   test("Propagate in inner join") {
     val ta = testRelation.select('a, Literal(1).as('tag))
-      .union(testRelation.select('a, Literal(2).as('tag)))
+      .union(testRelation.select('a.as('a), Literal(2).as('tag)))
       .subquery('ta)
     val tb = testRelation.select('a, Literal(1).as('tag))
-      .union(testRelation.select('a, Literal(2).as('tag)))
+      .union(testRelation.select('a.as('a), Literal(2).as('tag)))
       .subquery('tb)
     val query = ta.join(tb, Inner,
       Some("ta.a".attr === "tb.a".attr && "ta.tag".attr === "tb.tag".attr))

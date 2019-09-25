@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.io.File
+import java.io.{File, FilenameFilter}
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
+import java.util.{Locale, UUID}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -34,7 +35,6 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.{FetchOrientation, FetchType, GetInfoType}
-import org.apache.hive.service.cli.thrift.TCLIService.Client
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
@@ -43,6 +43,8 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -64,7 +66,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     val user = System.getProperty("user.name")
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val protocol = new TBinaryProtocol(transport)
-    val client = new ThriftCLIServiceClient(new Client(protocol))
+    val client = new ThriftCLIServiceClient(new ThriftserverShimUtils.Client(protocol))
 
     transport.open()
     try f(client) finally transport.close()
@@ -142,10 +144,17 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       def executeTest(hiveList: String): Unit = {
         hiveList.split(";").foreach{ m =>
           val kv = m.split("=")
-          // select "${a}"; ---> avalue
-          val resultSet = statement.executeQuery("select \"${" + kv(0) + "}\"")
+          val k = kv(0)
+          val v = kv(1)
+          val modValue = s"${v}_MOD_VALUE"
+          // select '${a}'; ---> avalue
+          val resultSet = statement.executeQuery(s"select '$${$k}'")
           resultSet.next()
-          assert(resultSet.getString(1) === kv(1))
+          assert(resultSet.getString(1) === v)
+          statement.executeQuery(s"set $k=$modValue")
+          val modResultSet = statement.executeQuery(s"select '$${$k}'")
+          modResultSet.next()
+          assert(modResultSet.getString(1) === s"$modValue")
         }
       }
     }
@@ -279,7 +288,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     var defaultV2: String = null
     var data: ArrayBuffer[Int] = null
 
-    withMultipleConnectionJdbcStatement("test_map")(
+    withMultipleConnectionJdbcStatement("test_map", "db1.test_map2")(
       // create table
       { statement =>
 
@@ -294,7 +303,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val plan = statement.executeQuery("explain select * from test_table")
         plan.next()
         plan.next()
-        assert(plan.getString(1).contains("InMemoryTableScan"))
+        assert(plan.getString(1).contains("Scan In-memory table `test_table`"))
 
         val rs1 = statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
         val buf1 = new collection.mutable.ArrayBuffer[Int]()
@@ -380,7 +389,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val plan = statement.executeQuery("explain select key from test_map ORDER BY key DESC")
         plan.next()
         plan.next()
-        assert(plan.getString(1).contains("InMemoryTableScan"))
+        assert(plan.getString(1).contains("Scan In-memory table `test_table`"))
 
         val rs = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
         val buf = new collection.mutable.ArrayBuffer[Int]()
@@ -483,10 +492,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withMultipleConnectionJdbcStatement("smallKV", "addJar")(
       {
         statement =>
-          val jarFile =
-            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
-              .split("/")
-              .mkString(File.separator)
+          val jarFile = HiveTestUtils.getHiveHcatalogCoreJar.getCanonicalPath
 
           statement.executeQuery(s"ADD JAR $jarFile")
       },
@@ -537,7 +543,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      if (HiveUtils.isHive23) {
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.6"))
+      } else {
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
+      }
     }
   }
 
@@ -550,7 +560,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+      if (HiveUtils.isHive23) {
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.6"))
+      } else {
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
+      }
     }
   }
 
@@ -613,13 +627,70 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       bufferSrc.close()
     }
   }
+
+  test("SPARK-23547 Cleanup the .pipeout file when the Hive Session closed") {
+    def pipeoutFileList(sessionID: UUID): Array[File] = {
+      lScratchDir.listFiles(new FilenameFilter {
+        override def accept(dir: File, name: String): Boolean = {
+          name.startsWith(sessionID.toString) && name.endsWith(".pipeout")
+        }
+      })
+    }
+
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+      val sessionID = sessionHandle.getSessionId
+
+      if (HiveUtils.isHive23) {
+        assert(pipeoutFileList(sessionID).length == 2)
+      } else {
+        assert(pipeoutFileList(sessionID).length == 1)
+      }
+
+      client.closeSession(sessionHandle)
+
+      assert(pipeoutFileList(sessionID).length == 0)
+    }
+  }
+
+  test("SPARK-24829 Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
+    }
+  }
+
+  test("SPARK-28463: Thriftserver throws BigDecimal incompatible with HiveDecimal") {
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT CAST(1 AS decimal(38, 18))")
+      assert(rs.next())
+      assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.000000000000000000"))
+    }
+  }
+
+  test("Support interval type") {
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval 3 months 1 hours")
+      assert(rs.next())
+      assert(rs.getString(1) === "interval 3 months 1 hours")
+    }
+    // Invalid interval value
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 3 months 1 hou")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def extraConf: Seq[String] =
-    "--conf spark.sql.hive.thriftServer.singleSession=true" :: Nil
+    s"--conf ${HIVE_THRIFT_SERVER_SINGLESESSION.key}=true" :: Nil
 
   test("share the temporary functions across JDBC connections") {
     withMultipleConnectionJdbcStatement()(
@@ -743,6 +814,14 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
+
+  test("SPARK-24829 Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
+    }
+  }
 }
 
 object ServerMode extends Enumeration {
@@ -772,7 +851,28 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
       statements.zip(fs).foreach { case (s, f) => f(s) }
     } finally {
       tableNames.foreach { name =>
-        statements(0).execute(s"DROP TABLE IF EXISTS $name")
+        // TODO: Need a better way to drop the view.
+        if (name.toUpperCase(Locale.ROOT).startsWith("VIEW")) {
+          statements(0).execute(s"DROP VIEW IF EXISTS $name")
+        } else {
+          statements(0).execute(s"DROP TABLE IF EXISTS $name")
+        }
+      }
+      statements.foreach(_.close())
+      connections.foreach(_.close())
+    }
+  }
+
+  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*) {
+    val user = System.getProperty("user.name")
+    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
+    val statements = connections.map(_.createStatement())
+
+    try {
+      statements.zip(fs).foreach { case (s, f) => f(s) }
+    } finally {
+      dbNames.foreach { name =>
+        statements(0).execute(s"DROP DATABASE IF EXISTS $name")
       }
       statements.foreach(_.close())
       connections.foreach(_.close())
@@ -804,9 +904,10 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   protected var metastorePath: File = _
   protected def metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
 
-  private val pidDir: File = Utils.createTempDir("thriftserver-pid")
+  private val pidDir: File = Utils.createTempDir(namePrefix = "thriftserver-pid")
   protected var logPath: File = _
   protected var operationLogPath: File = _
+  protected var lScratchDir: File = _
   private var logTailingProcess: Process = _
   private var diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
 
@@ -844,6 +945,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
+       |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
        |  --hiveconf $portConf=$port
        |  --driver-class-path $driverClassPath
        |  --driver-java-options -Dlog4j.debug
@@ -873,6 +975,8 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     metastorePath.delete()
     operationLogPath = Utils.createTempDir()
     operationLogPath.delete()
+    lScratchDir = Utils.createTempDir()
+    lScratchDir.delete()
     logPath = null
     logTailingProcess = null
 
@@ -955,6 +1059,9 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
     operationLogPath.delete()
     operationLogPath = null
+
+    lScratchDir.delete()
+    lScratchDir = null
 
     Option(logPath).foreach(_.delete())
     logPath = null

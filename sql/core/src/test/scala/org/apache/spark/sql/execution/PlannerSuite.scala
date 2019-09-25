@@ -18,21 +18,21 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, Row}
+import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Sort, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class PlannerSuite extends SharedSQLContext {
+class PlannerSuite extends SharedSparkSession {
   import testImplicits._
 
   setupTestData()
@@ -67,6 +67,27 @@ class PlannerSuite extends SharedSQLContext {
     val query =
       testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)
+  }
+
+  test("mixed aggregates with same distinct columns") {
+    def assertNoExpand(plan: SparkPlan): Unit = {
+      assert(plan.collect { case e: ExpandExec => e }.isEmpty)
+    }
+
+    withTempView("v") {
+      Seq((1, 1.0, 1.0), (1, 2.0, 2.0)).toDF("i", "j", "k").createTempView("v")
+      // one distinct column
+      val query1 = sql("SELECT sum(DISTINCT j), max(DISTINCT j) FROM v GROUP BY i")
+      assertNoExpand(query1.queryExecution.executedPlan)
+
+      // 2 distinct columns
+      val query2 = sql("SELECT corr(DISTINCT j, k), count(DISTINCT j, k) FROM v GROUP BY i")
+      assertNoExpand(query2.queryExecution.executedPlan)
+
+      // 2 distinct columns with different order
+      val query3 = sql("SELECT corr(DISTINCT j, k), count(DISTINCT k, j) FROM v GROUP BY i")
+      assertNoExpand(query3.queryExecution.executedPlan)
+    }
   }
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
@@ -151,15 +172,17 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("SPARK-11390 explain should print PushedFilters of PhysicalRDD") {
-    withTempPath { file =>
-      val path = file.getCanonicalPath
-      testData.write.parquet(path)
-      val df = spark.read.parquet(path)
-      df.createOrReplaceTempView("testPushed")
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        testData.write.parquet(path)
+        val df = spark.read.parquet(path)
+        df.createOrReplaceTempView("testPushed")
 
-      withTempView("testPushed") {
-        val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
-        assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
+        withTempView("testPushed") {
+          val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
+          assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
+        }
       }
     }
   }
@@ -194,7 +217,32 @@ class PlannerSuite extends SharedSQLContext {
   test("CollectLimit can appear in the middle of a plan when caching is used") {
     val query = testData.select('key, 'value).limit(2).cache()
     val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
-    assert(planned.child.isInstanceOf[CollectLimitExec])
+    assert(planned.cachedPlan.isInstanceOf[CollectLimitExec])
+  }
+
+  test("TakeOrderedAndProjectExec appears only when number of limit is below the threshold.") {
+    withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1000") {
+      val query0 = testData.select('value).orderBy('key).limit(100)
+      val planned0 = query0.queryExecution.executedPlan
+      assert(planned0.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
+
+      val query1 = testData.select('value).orderBy('key).limit(2000)
+      val planned1 = query1.queryExecution.executedPlan
+      assert(planned1.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isEmpty)
+    }
+  }
+
+  test("SPARK-23375: Cached sorted data doesn't need to be re-sorted") {
+    val query = testData.select('key, 'value).sort('key.desc).cache()
+    assert(query.queryExecution.optimizedPlan.isInstanceOf[InMemoryRelation])
+    val resorted = query.sort('key.desc)
+    assert(resorted.queryExecution.optimizedPlan.collect { case s: Sort => s}.isEmpty)
+    assert(resorted.select('key).collect().map(_.getInt(0)).toSeq ==
+      (1 to 100).reverse)
+    // with a different order, the sort is needed
+    val sortedAsc = query.sort('key)
+    assert(sortedAsc.queryExecution.optimizedPlan.collect { case s: Sort => s}.size == 1)
+    assert(sortedAsc.select('key).collect().map(_.getInt(0)).toSeq == (1 to 100))
   }
 
   test("PartitioningCollection") {
@@ -247,7 +295,7 @@ class PlannerSuite extends SharedSQLContext {
       case Repartition (numPartitions, shuffle, Repartition(_, shuffleChild, _)) =>
         assert(numPartitions === 5)
         assert(shuffle === false)
-        assert(shuffleChild === true)
+        assert(shuffleChild)
     }
   }
 
@@ -365,8 +413,7 @@ class PlannerSuite extends SharedSQLContext {
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
-      DummySparkPlan(outputPartitioning = partitioning),
-      None)
+      DummySparkPlan(outputPartitioning = partitioning))
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 2) {
@@ -381,8 +428,7 @@ class PlannerSuite extends SharedSQLContext {
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
-      DummySparkPlan(outputPartitioning = partitioning),
-      None)
+      DummySparkPlan(outputPartitioning = partitioning))
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 1) {
@@ -404,7 +450,7 @@ class PlannerSuite extends SharedSQLContext {
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     val shuffle = outputPlan.collect { case e: ShuffleExchangeExec => e }
     assert(shuffle.size === 1)
-    assert(shuffle.head.newPartitioning === finalPartitioning)
+    assert(shuffle.head.outputPartitioning === finalPartitioning)
   }
 
   test("Reuse exchanges") {
@@ -416,8 +462,7 @@ class PlannerSuite extends SharedSQLContext {
       DummySparkPlan(
         children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
         requiredChildDistribution = Seq(distribution),
-        requiredChildOrdering = Seq(Seq.empty)),
-      None)
+        requiredChildOrdering = Seq(Seq.empty)))
 
     val inputPlan = SortMergeJoinExec(
       Literal(1) :: Nil,
@@ -578,7 +623,7 @@ class PlannerSuite extends SharedSQLContext {
         dataType = LongType,
         nullable = false
       ) (exprId = exprId,
-        qualifier = Some("col1_qualifier")
+        qualifier = Seq("col1_qualifier")
       )
 
     val attribute2 =
@@ -608,6 +653,209 @@ class PlannerSuite extends SharedSQLContext {
       requiredOrdering = Seq(orderingA, orderingB),
       shouldHaveSort = true)
   }
+
+  test("SPARK-24242: RangeExec should have correct output ordering and partitioning") {
+    val df = spark.range(10)
+    val rangeExec = df.queryExecution.executedPlan.collect {
+      case r: RangeExec => r
+    }
+    val range = df.queryExecution.optimizedPlan.collect {
+      case r: Range => r
+    }
+    assert(rangeExec.head.outputOrdering == range.head.outputOrdering)
+    assert(rangeExec.head.outputPartitioning ==
+      RangePartitioning(rangeExec.head.outputOrdering, df.rdd.getNumPartitions))
+
+    val rangeInOnePartition = spark.range(1, 10, 1, 1)
+    val rangeExecInOnePartition = rangeInOnePartition.queryExecution.executedPlan.collect {
+      case r: RangeExec => r
+    }
+    assert(rangeExecInOnePartition.head.outputPartitioning == SinglePartition)
+
+    val rangeInZeroPartition = spark.range(-10, -9, -20, 1)
+    val rangeExecInZeroPartition = rangeInZeroPartition.queryExecution.executedPlan.collect {
+      case r: RangeExec => r
+    }
+    assert(rangeExecInZeroPartition.head.outputPartitioning == UnknownPartitioning(0))
+  }
+
+  test("SPARK-24495: EnsureRequirements can return wrong plan when reusing the same key in join") {
+    val plan1 = DummySparkPlan(outputOrdering = Seq(orderingA),
+      outputPartitioning = HashPartitioning(exprA :: exprA :: Nil, 5))
+    val plan2 = DummySparkPlan(outputOrdering = Seq(orderingB),
+      outputPartitioning = HashPartitioning(exprB :: Nil, 5))
+    val smjExec = SortMergeJoinExec(
+      exprA :: exprA :: Nil, exprB :: exprC :: Nil, Inner, None, plan1, plan2)
+
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    outputPlan match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _, _, _) =>
+        assert(leftKeys == Seq(exprA, exprA))
+        assert(rightKeys == Seq(exprB, exprC))
+      case _ => fail()
+    }
+  }
+
+  test("SPARK-27485: EnsureRequirements.reorder should handle duplicate expressions") {
+    val plan1 = DummySparkPlan(
+      outputPartitioning = HashPartitioning(exprA :: exprB :: exprA :: Nil, 5))
+    val plan2 = DummySparkPlan()
+    val smjExec = SortMergeJoinExec(
+      leftKeys = exprA :: exprB :: exprB :: Nil,
+      rightKeys = exprA :: exprC :: exprC :: Nil,
+      joinType = Inner,
+      condition = None,
+      left = plan1,
+      right = plan2)
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    outputPlan match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+             SortExec(_, _,
+               ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
+             SortExec(_, _,
+               ShuffleExchangeExec(HashPartitioning(rightPartitioningExpressions, _), _, _), _)) =>
+        assert(leftKeys === smjExec.leftKeys)
+        assert(rightKeys === smjExec.rightKeys)
+        assert(leftKeys === leftPartitioningExpressions)
+        assert(rightKeys === rightPartitioningExpressions)
+      case _ => fail(outputPlan.toString)
+    }
+  }
+
+  test("SPARK-24500: create union with stream of children") {
+    val df = Union(Stream(
+      Range(1, 1, 1, 1),
+      Range(1, 2, 1, 1)))
+    df.queryExecution.executedPlan.execute()
+  }
+
+  test("SPARK-25278: physical nodes should be different instances for same logical nodes") {
+    val range = Range(1, 1, 1, 1)
+    val df = Union(range, range)
+    val ranges = df.queryExecution.optimizedPlan.collect {
+      case r: Range => r
+    }
+    assert(ranges.length == 2)
+    // Ensure the two Range instances are equal according to their equal method
+    assert(ranges.head == ranges.last)
+    val execRanges = df.queryExecution.sparkPlan.collect {
+      case r: RangeExec => r
+    }
+    assert(execRanges.length == 2)
+    // Ensure the two RangeExec instances are different instances
+    assert(!execRanges.head.eq(execRanges.last))
+  }
+
+  test("SPARK-24556: always rewrite output partitioning in ReusedExchangeExec " +
+    "and InMemoryTableScanExec") {
+    def checkOutputPartitioningRewrite(
+        plans: Seq[SparkPlan],
+        expectedPartitioningClass: Class[_]): Unit = {
+      assert(plans.size == 1)
+      val plan = plans.head
+      val partitioning = plan.outputPartitioning
+      assert(partitioning.getClass == expectedPartitioningClass)
+      val partitionedAttrs = partitioning.asInstanceOf[Expression].references
+      assert(partitionedAttrs.subsetOf(plan.outputSet))
+    }
+
+    def checkReusedExchangeOutputPartitioningRewrite(
+        df: DataFrame,
+        expectedPartitioningClass: Class[_]): Unit = {
+      val reusedExchange = df.queryExecution.executedPlan.collect {
+        case r: ReusedExchangeExec => r
+      }
+      checkOutputPartitioningRewrite(reusedExchange, expectedPartitioningClass)
+    }
+
+    def checkInMemoryTableScanOutputPartitioningRewrite(
+        df: DataFrame,
+        expectedPartitioningClass: Class[_]): Unit = {
+      val inMemoryScan = df.queryExecution.executedPlan.collect {
+        case m: InMemoryTableScanExec => m
+      }
+      checkOutputPartitioningRewrite(inMemoryScan, expectedPartitioningClass)
+    }
+
+    // ReusedExchange is HashPartitioning
+    val df1 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
+    val df2 = Seq(1 -> "a").toDF("i", "j").repartition($"i")
+    checkReusedExchangeOutputPartitioningRewrite(df1.union(df2), classOf[HashPartitioning])
+
+    // ReusedExchange is RangePartitioning
+    val df3 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
+    val df4 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
+    checkReusedExchangeOutputPartitioningRewrite(df3.union(df4), classOf[RangePartitioning])
+
+    // InMemoryTableScan is HashPartitioning
+    Seq(1 -> "a").toDF("i", "j").repartition($"i").persist()
+    checkInMemoryTableScanOutputPartitioningRewrite(
+      Seq(1 -> "a").toDF("i", "j").repartition($"i"), classOf[HashPartitioning])
+
+    // InMemoryTableScan is RangePartitioning
+    spark.range(1, 100, 1, 10).toDF().persist()
+    checkInMemoryTableScanOutputPartitioningRewrite(
+      spark.range(1, 100, 1, 10).toDF(), classOf[RangePartitioning])
+
+    // InMemoryTableScan is PartitioningCollection
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m").persist()
+      checkInMemoryTableScanOutputPartitioningRewrite(
+        Seq(1 -> "a").toDF("i", "j").join(Seq(1 -> "a").toDF("m", "n"), $"i" === $"m"),
+        classOf[PartitioningCollection])
+    }
+  }
+
+  test("SPARK-26812: wrong nullability for complex datatypes in union") {
+    def testUnionOutputType(input1: DataType, input2: DataType, output: DataType): Unit = {
+      val query = Union(
+        LocalRelation(StructField("a", input1)), LocalRelation(StructField("a", input2)))
+      assert(query.output.head.dataType == output)
+    }
+
+    // Map
+    testUnionOutputType(
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = true),
+      MapType(StringType, StringType, valueContainsNull = true))
+    testUnionOutputType(
+      MapType(StringType, StringType, valueContainsNull = true),
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = true))
+    testUnionOutputType(
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = false),
+      MapType(StringType, StringType, valueContainsNull = false))
+
+    // Array
+    testUnionOutputType(
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = true),
+      ArrayType(StringType, containsNull = true))
+    testUnionOutputType(
+      ArrayType(StringType, containsNull = true),
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = true))
+    testUnionOutputType(
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = false),
+      ArrayType(StringType, containsNull = false))
+
+    // Struct
+    testUnionOutputType(
+      StructType(Seq(
+        StructField("f1", StringType, nullable = false),
+        StructField("f2", StringType, nullable = true),
+        StructField("f3", StringType, nullable = false))),
+      StructType(Seq(
+        StructField("f1", StringType, nullable = true),
+        StructField("f2", StringType, nullable = false),
+        StructField("f3", StringType, nullable = false))),
+      StructType(Seq(
+        StructField("f1", StringType, nullable = true),
+        StructField("f2", StringType, nullable = true),
+        StructField("f3", StringType, nullable = false))))
+  }
 }
 
 // Used for unit-testing EnsureRequirements
@@ -618,6 +866,6 @@ private case class DummySparkPlan(
     override val requiredChildDistribution: Seq[Distribution] = Nil,
     override val requiredChildOrdering: Seq[Seq[SortOrder]] = Nil
   ) extends SparkPlan {
-  override protected def doExecute(): RDD[InternalRow] = throw new NotImplementedError
+  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
   override def output: Seq[Attribute] = Seq.empty
 }

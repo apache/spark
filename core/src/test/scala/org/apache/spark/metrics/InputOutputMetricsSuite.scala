@@ -51,13 +51,13 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     testTempDir.mkdir()
 
     tmpFile = new File(testTempDir, getClass.getSimpleName + ".txt")
-    val pw = new PrintWriter(new FileWriter(tmpFile))
-    for (x <- 1 to numRecords) {
-      // scalastyle:off println
-      pw.println(RandomUtils.nextInt(0, numBuckets))
-      // scalastyle:on println
+    Utils.tryWithResource(new PrintWriter(tmpFile)) { pw =>
+      for (x <- 1 to numRecords) {
+        // scalastyle:off println
+        pw.println(RandomUtils.nextInt(0, numBuckets))
+        // scalastyle:on println
+      }
     }
-    pw.close()
 
     // Path to tmpFile
     tmpFilePath = tmpFile.toURI.toString
@@ -182,7 +182,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
       .reduceByKey(_ + _)
       .saveAsTextFile(tmpFile.toURI.toString)
 
-    sc.listenerBus.waitUntilEmpty(500)
+    sc.listenerBus.waitUntilEmpty()
     assert(inputRead == numRecords)
 
     assert(outputWritten == numBuckets)
@@ -243,7 +243,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     val taskMetrics = new ArrayBuffer[Long]()
 
     // Avoid receiving earlier taskEnd events
-    sc.listenerBus.waitUntilEmpty(500)
+    sc.listenerBus.waitUntilEmpty()
 
     sc.addSparkListener(new SparkListener() {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
@@ -253,7 +253,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
 
     job
 
-    sc.listenerBus.waitUntilEmpty(500)
+    sc.listenerBus.waitUntilEmpty()
     taskMetrics.sum
   }
 
@@ -293,7 +293,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
 
     try {
       rdd.saveAsTextFile(outPath.toString)
-      sc.listenerBus.waitUntilEmpty(500)
+      sc.listenerBus.waitUntilEmpty()
       assert(taskBytesWritten.length == 2)
       val outFiles = fs.listStatus(outPath).filter(_.getPath.getName != "_SUCCESS")
       taskBytesWritten.zip(outFiles).foreach { case (bytes, fileStatus) =>

@@ -20,6 +20,7 @@ package org.apache.spark.deploy.master.ui
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_KILL_ENABLED
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 
@@ -34,7 +35,7 @@ class MasterWebUI(
     requestedPort, master.conf, name = "MasterUI") with Logging {
 
   val masterEndpointRef = master.self
-  val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
+  val killEnabled = master.conf.get(UI_KILL_ENABLED)
 
   initialize()
 
@@ -43,7 +44,7 @@ class MasterWebUI(
     val masterPage = new MasterPage(this)
     attachPage(new ApplicationPage(this))
     attachPage(masterPage)
-    attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
+    addStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)
     attachHandler(createRedirectHandler(
       "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
     attachHandler(createRedirectHandler(

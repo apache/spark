@@ -41,7 +41,7 @@ class ExpressionSetSuite extends SparkFunSuite {
           // maxHash's hashcode is calculated based on this exprId's hashcode, so we set this
           // exprId's hashCode to this specific value to make sure maxHash's hashcode is
           // `Int.MaxValue`
-          override def hashCode: Int = -1030353449
+          override def hashCode: Int = 1394598635
           // We are implementing this equals() only because the style-checking rule "you should
           // implement equals and hashCode together" requires us to
           override def equals(obj: Any): Boolean = super.equals(obj)
@@ -57,7 +57,7 @@ class ExpressionSetSuite extends SparkFunSuite {
           // minHash's hashcode is calculated based on this exprId's hashcode, so we set this
           // exprId's hashCode to this specific value to make sure minHash's hashcode is
           // `Int.MinValue`
-          override def hashCode: Int = 1407330692
+          override def hashCode: Int = -462684520
           // We are implementing this equals() only because the style-checking rule "you should
           // implement equals and hashCode together" requires us to
           override def equals(obj: Any): Boolean = super.equals(obj)

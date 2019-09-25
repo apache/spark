@@ -76,9 +76,9 @@ public class TestShuffleDataContext {
 
     try {
       dataStream = new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
       indexStream = new DataOutputStream(new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
 
       long offset = 0;
       indexStream.writeLong(offset);
@@ -91,6 +91,44 @@ public class TestShuffleDataContext {
     } finally {
       Closeables.close(dataStream, suppressExceptionsDuringClose);
       Closeables.close(indexStream, suppressExceptionsDuringClose);
+    }
+  }
+
+  /** Creates spill file(s) within the local dirs. */
+  public void insertSpillData() throws IOException {
+    String filename = "temp_local_uuid";
+    insertFile(filename);
+  }
+
+  public void insertBroadcastData() throws IOException {
+    String filename = "broadcast_12_uuid";
+    insertFile(filename);
+  }
+
+  public void insertTempShuffleData() throws IOException {
+    String filename = "temp_shuffle_uuid";
+    insertFile(filename);
+  }
+
+  public void insertCachedRddData(int rddId, int splitId, byte[] block) throws IOException {
+    String blockId = "rdd_" + rddId + "_" + splitId;
+    insertFile(blockId, block);
+  }
+
+  private void insertFile(String filename) throws IOException {
+    insertFile(filename, new byte[] { 42 });
+  }
+
+  private void insertFile(String filename, byte[] block) throws IOException {
+    OutputStream dataStream = null;
+    File file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, filename);
+    assert(!file.exists()) : "this test file has been already generated";
+    try {
+      dataStream = new FileOutputStream(
+        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, filename));
+      dataStream.write(block);
+    } finally {
+      Closeables.close(dataStream, false);
     }
   }
 

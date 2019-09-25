@@ -23,9 +23,9 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, PartitionOffset}
-import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset}
+import org.apache.spark.sql.connector.write.WriterCommitMessage
+import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.util.RpcUtils
 
 private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
@@ -82,15 +82,15 @@ private[sql] object EpochCoordinatorRef extends Logging {
    * Create a reference to a new [[EpochCoordinator]].
    */
   def create(
-      writer: StreamWriter,
-      reader: ContinuousReader,
+      writeSupport: StreamingWrite,
+      stream: ContinuousStream,
       query: ContinuousExecution,
       epochCoordinatorId: String,
       startEpoch: Long,
       session: SparkSession,
       env: SparkEnv): RpcEndpointRef = synchronized {
     val coordinator = new EpochCoordinator(
-      writer, reader, query, startEpoch, session, env.rpcEnv)
+      writeSupport, stream, query, startEpoch, session, env.rpcEnv)
     val ref = env.rpcEnv.setupEndpoint(endpointName(epochCoordinatorId), coordinator)
     logInfo("Registered EpochCoordinator endpoint")
     ref
@@ -115,13 +115,16 @@ private[sql] object EpochCoordinatorRef extends Logging {
  *   have both committed and reported an end offset for a given epoch.
  */
 private[continuous] class EpochCoordinator(
-    writer: StreamWriter,
-    reader: ContinuousReader,
+    writeSupport: StreamingWrite,
+    stream: ContinuousStream,
     query: ContinuousExecution,
     startEpoch: Long,
     session: SparkSession,
     override val rpcEnv: RpcEnv)
   extends ThreadSafeRpcEndpoint with Logging {
+
+  private val epochBacklogQueueSize =
+    session.sqlContext.conf.continuousStreamingEpochBacklogQueueSize
 
   private var queryWritesStopped: Boolean = false
 
@@ -137,28 +140,69 @@ private[continuous] class EpochCoordinator(
   private val partitionOffsets =
     mutable.Map[(Long, Int), PartitionOffset]()
 
+  private var lastCommittedEpoch = startEpoch - 1
+  // Remembers epochs that have to wait for previous epochs to be committed first.
+  private val epochsWaitingToBeCommitted = mutable.HashSet.empty[Long]
+
   private def resolveCommitsAtEpoch(epoch: Long) = {
-    val thisEpochCommits =
-      partitionCommits.collect { case ((e, _), msg) if e == epoch => msg }
+    val thisEpochCommits = findPartitionCommitsForEpoch(epoch)
     val nextEpochOffsets =
       partitionOffsets.collect { case ((e, _), o) if e == epoch => o }
 
     if (thisEpochCommits.size == numWriterPartitions &&
       nextEpochOffsets.size == numReaderPartitions) {
-      logDebug(s"Epoch $epoch has received commits from all partitions. Committing globally.")
-      // Sequencing is important here. We must commit to the writer before recording the commit
-      // in the query, or we will end up dropping the commit if we restart in the middle.
-      writer.commit(epoch, thisEpochCommits.toArray)
-      query.commit(epoch)
 
-      // Cleanup state from before this epoch, now that we know all partitions are forever past it.
-      for (k <- partitionCommits.keys.filter { case (e, _) => e < epoch }) {
-        partitionCommits.remove(k)
-      }
-      for (k <- partitionOffsets.keys.filter { case (e, _) => e < epoch }) {
-        partitionOffsets.remove(k)
+      // Check that last committed epoch is the previous one for sequencing of committed epochs.
+      // If not, add the epoch being currently processed to epochs waiting to be committed,
+      // otherwise commit it.
+      if (lastCommittedEpoch != epoch - 1) {
+        logDebug(s"Epoch $epoch has received commits from all partitions " +
+          s"and is waiting for epoch ${epoch - 1} to be committed first.")
+        epochsWaitingToBeCommitted.add(epoch)
+      } else {
+        commitEpoch(epoch, thisEpochCommits)
+        lastCommittedEpoch = epoch
+
+        // Commit subsequent epochs that are waiting to be committed.
+        var nextEpoch = lastCommittedEpoch + 1
+        while (epochsWaitingToBeCommitted.contains(nextEpoch)) {
+          val nextEpochCommits = findPartitionCommitsForEpoch(nextEpoch)
+          commitEpoch(nextEpoch, nextEpochCommits)
+
+          epochsWaitingToBeCommitted.remove(nextEpoch)
+          lastCommittedEpoch = nextEpoch
+          nextEpoch += 1
+        }
+
+        // Cleanup state from before last committed epoch,
+        // now that we know all partitions are forever past it.
+        for (k <- partitionCommits.keys.filter { case (e, _) => e < lastCommittedEpoch }) {
+          partitionCommits.remove(k)
+        }
+        for (k <- partitionOffsets.keys.filter { case (e, _) => e < lastCommittedEpoch }) {
+          partitionOffsets.remove(k)
+        }
       }
     }
+  }
+
+  /**
+   * Collect per-partition commits for an epoch.
+   */
+  private def findPartitionCommitsForEpoch(epoch: Long): Iterable[WriterCommitMessage] = {
+    partitionCommits.collect { case ((e, _), msg) if e == epoch => msg }
+  }
+
+  /**
+   * Commit epoch to the offset log.
+   */
+  private def commitEpoch(epoch: Long, messages: Iterable[WriterCommitMessage]): Unit = {
+    logDebug(s"Epoch $epoch has received commits from all partitions " +
+      s"and is ready to be committed. Committing epoch $epoch.")
+    // Sequencing is important here. We must commit to the writer before recording the commit
+    // in the query, or we will end up dropping the commit if we restart in the middle.
+    writeSupport.commit(epoch, messages.toArray)
+    query.commit(epoch)
   }
 
   override def receive: PartialFunction[Any, Unit] = {
@@ -171,6 +215,7 @@ private[continuous] class EpochCoordinator(
       if (!partitionCommits.isDefinedAt((epoch, partitionId))) {
         partitionCommits.put((epoch, partitionId), message)
         resolveCommitsAtEpoch(epoch)
+        checkProcessingQueueBoundaries()
       }
 
     case ReportPartitionOffset(partitionId, epoch, offset) =>
@@ -179,9 +224,25 @@ private[continuous] class EpochCoordinator(
         partitionOffsets.collect { case ((e, _), o) if e == epoch => o }
       if (thisEpochOffsets.size == numReaderPartitions) {
         logDebug(s"Epoch $epoch has offsets reported from all partitions: $thisEpochOffsets")
-        query.addOffset(epoch, reader, thisEpochOffsets.toSeq)
+        query.addOffset(epoch, stream, thisEpochOffsets.toSeq)
         resolveCommitsAtEpoch(epoch)
       }
+      checkProcessingQueueBoundaries()
+  }
+
+  private def checkProcessingQueueBoundaries() = {
+    if (partitionOffsets.size > epochBacklogQueueSize) {
+      query.stopInNewThread(new IllegalStateException("Size of the partition offset queue has " +
+        "exceeded its maximum"))
+    }
+    if (partitionCommits.size > epochBacklogQueueSize) {
+      query.stopInNewThread(new IllegalStateException("Size of the partition commit queue has " +
+        "exceeded its maximum"))
+    }
+    if (epochsWaitingToBeCommitted.size > epochBacklogQueueSize) {
+      query.stopInNewThread(new IllegalStateException("Size of the epoch queue has " +
+        "exceeded its maximum"))
+    }
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

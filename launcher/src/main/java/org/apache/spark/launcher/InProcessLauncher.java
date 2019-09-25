@@ -89,10 +89,18 @@ public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
     }
 
     Class<?> sparkSubmit;
+    // SPARK-22941: first try the new SparkSubmit interface that has better error handling,
+    // but fall back to the old interface in case someone is mixing & matching launcher and
+    // Spark versions.
     try {
-      sparkSubmit = cl.loadClass("org.apache.spark.deploy.SparkSubmit");
-    } catch (Exception e) {
-      throw new IOException("Cannot find SparkSubmit; make sure necessary jars are available.", e);
+      sparkSubmit = cl.loadClass("org.apache.spark.deploy.InProcessSparkSubmit");
+    } catch (Exception e1) {
+      try {
+        sparkSubmit = cl.loadClass("org.apache.spark.deploy.SparkSubmit");
+      } catch (Exception e2) {
+        throw new IOException("Cannot find SparkSubmit; make sure necessary jars are available.",
+          e2);
+      }
     }
 
     Method main;

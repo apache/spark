@@ -20,10 +20,10 @@ package org.apache.spark.sql
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 
-class ConfigBehaviorSuite extends QueryTest with SharedSQLContext {
+class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
@@ -39,7 +39,9 @@ class ConfigBehaviorSuite extends QueryTest with SharedSQLContext {
     def computeChiSquareTest(): Double = {
       val n = 10000
       // Trigger a sort
-      val data = spark.range(0, n, 1, 1).sort('id)
+      // Range has range partitioning in its output now. To have a range shuffle, we
+      // need to run a repartition first.
+      val data = spark.range(0, n, 1, 1).repartition(10).sort('id.desc)
         .selectExpr("SPARK_PARTITION_ID() pid", "id").as[(Int, Long)].collect()
 
       // Compute histogram for the number of records per partition post sort

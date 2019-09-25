@@ -470,15 +470,12 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("zero-partition RDD") {
-    val emptyDir = Utils.createTempDir()
-    try {
+    withTempDir { emptyDir =>
       val file = sc.textFile(emptyDir.getAbsolutePath)
       assert(file.partitions.isEmpty)
       assert(file.collect().toList === Nil)
       // Test that a shuffle on the file works, because this used to be a bug
       assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
-    } finally {
-      Utils.deleteRecursively(emptyDir)
     }
   }
 
@@ -574,7 +571,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("saveNewAPIHadoopFile should call setConf if format is configurable") {
-    val pairs = sc.parallelize(Array((new Integer(1), new Integer(1))))
+    val pairs = sc.parallelize(Array((Integer.valueOf(1), Integer.valueOf(1))))
 
     // No error, non-configurable formats still work
     pairs.saveAsNewAPIHadoopFile[NewFakeFormat]("ignored")
@@ -591,14 +588,14 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   test("The JobId on the driver and executors should be the same during the commit") {
     // Create more than one rdd to mimic stageId not equal to rddId
     val pairs = sc.parallelize(Array((1, 2), (2, 3)), 2)
-      .map { p => (new Integer(p._1 + 1), new Integer(p._2 + 1)) }
+      .map { p => (Integer.valueOf(p._1 + 1), Integer.valueOf(p._2 + 1)) }
       .filter { p => p._1 > 0 }
     pairs.saveAsNewAPIHadoopFile[YetAnotherFakeFormat]("ignored")
     assert(JobID.jobid != -1)
   }
 
   test("saveAsHadoopFile should respect configured output committers") {
-    val pairs = sc.parallelize(Array((new Integer(1), new Integer(1))))
+    val pairs = sc.parallelize(Array((Integer.valueOf(1), Integer.valueOf(1))))
     val conf = new JobConf()
     conf.setOutputCommitter(classOf[FakeOutputCommitter])
 
@@ -610,7 +607,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("failure callbacks should be called before calling writer.close() in saveNewAPIHadoopFile") {
-    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
+    val pairs = sc.parallelize(Array((Integer.valueOf(1), Integer.valueOf(2))), 1)
 
     FakeWriterWithCallback.calledBy = ""
     FakeWriterWithCallback.exception = null
@@ -625,7 +622,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("failure callbacks should be called before calling writer.close() in saveAsHadoopFile") {
-    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
+    val pairs = sc.parallelize(Array((Integer.valueOf(1), Integer.valueOf(2))), 1)
     val conf = new JobConf()
 
     FakeWriterWithCallback.calledBy = ""
@@ -643,7 +640,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
 
   test("saveAsNewAPIHadoopDataset should support invalid output paths when " +
     "there are no files to be committed to an absolute output location") {
-    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
+    val pairs = sc.parallelize(Array((Integer.valueOf(1), Integer.valueOf(2))), 1)
 
     def saveRddWithPath(path: String): Unit = {
       val job = NewJob.getInstance(new Configuration(sc.hadoopConfiguration))
@@ -671,7 +668,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   // for non-null invalid paths.
   test("saveAsHadoopDataset should respect empty output directory when " +
     "there are no files to be committed to an absolute output location") {
-    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
+    val pairs = sc.parallelize(Array((Integer.valueOf(1), Integer.valueOf(2))), 1)
 
     val conf = new JobConf()
     conf.setOutputKeyClass(classOf[Integer])
@@ -742,7 +739,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
         val dist = new BinomialDistribution(trials, p)
         val q = dist.cumulativeProbability(actual)
         withClue(s"p = $p: trials = $trials") {
-          assert(q >= 0.001 && q <= 0.999)
+          assert(0.0 < q && q < 1.0)
         }
       }
     }

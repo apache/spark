@@ -138,6 +138,8 @@ trait StateStoreCustomMetric {
   def name: String
   def desc: String
 }
+
+case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric
 case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric
 case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric
 
@@ -211,7 +213,7 @@ object StateStoreProvider {
    */
   def create(providerClassName: String): StateStoreProvider = {
     val providerClass = Utils.classForName(providerClassName)
-    providerClass.newInstance().asInstanceOf[StateStoreProvider]
+    providerClass.getConstructor().newInstance().asInstanceOf[StateStoreProvider]
   }
 
   /**
@@ -459,21 +461,18 @@ object StateStore extends Logging {
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      logInfo("Env is not null")
       val isDriver =
-        env.executorId == SparkContext.DRIVER_IDENTIFIER ||
-          env.executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
+        env.executorId == SparkContext.DRIVER_IDENTIFIER
       // If running locally, then the coordinator reference in _coordRef may be have become inactive
       // as SparkContext + SparkEnv may have been restarted. Hence, when running in driver,
       // always recreate the reference.
       if (isDriver || _coordRef == null) {
-        logInfo("Getting StateStoreCoordinatorRef")
+        logDebug("Getting StateStoreCoordinatorRef")
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
       logInfo(s"Retrieved reference to StateStoreCoordinator: ${_coordRef}")
       Some(_coordRef)
     } else {
-      logInfo("Env is null")
       _coordRef = null
       None
     }

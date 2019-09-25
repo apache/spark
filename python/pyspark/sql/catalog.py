@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import warnings
 from collections import namedtuple
 
@@ -137,26 +138,6 @@ class Catalog(object):
                 isBucket=jcolumn.isBucket()))
         return columns
 
-    @since(2.0)
-    def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
-        """Creates a table based on the dataset in a data source.
-
-        It returns the DataFrame associated with the external table.
-
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
-
-        Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
-        created external table.
-
-        :return: :class:`DataFrame`
-        """
-        warnings.warn(
-            "createExternalTable is deprecated since Spark 2.2, please use createTable instead.",
-            DeprecationWarning)
-        return self.createTable(tableName, path, source, schema, **options)
-
     @since(2.2)
     def createTable(self, tableName, path=None, source=None, schema=None, **options):
         """Creates a table based on the dataset in a data source.
@@ -176,8 +157,7 @@ class Catalog(object):
         if path is not None:
             options["path"] = path
         if source is None:
-            source = self._sparkSession.conf.get(
-                "spark.sql.sources.default", "org.apache.spark.sql.parquet")
+            source = self._sparkSession._wrapped._conf.defaultDataSourceName()
         if schema is None:
             df = self._jcatalog.createTable(tableName, source, options)
         else:
@@ -306,7 +286,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

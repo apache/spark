@@ -62,7 +62,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
           {retryTable}
         </div>
       </div>;
-    UIUtils.basicSparkPage(content, "Spark Drivers for Mesos cluster")
+    UIUtils.basicSparkPage(request, content, "Spark Drivers for Mesos cluster")
   }
 
   private def queuedRow(submission: MesosDriverDescription): Seq[Node] = {
@@ -77,7 +77,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
 
   private def driverRow(state: MesosClusterSubmissionState): Seq[Node] = {
     val id = state.driverDescription.submissionId
-    val proxy = parent.conf.getOption("spark.mesos.proxy.baseURL")
+    val proxy = parent.conf.get(PROXY_BASE_URL)
 
     val sandboxCol = if (proxy.isDefined) {
       val clusterSchedulerId = parent.scheduler.getSchedulerState().frameworkId

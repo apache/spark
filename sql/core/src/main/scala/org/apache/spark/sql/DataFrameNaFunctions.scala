@@ -22,18 +22,17 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-
 
 /**
  * Functionality for working with missing data in `DataFrame`s.
  *
  * @since 1.3.1
  */
-@InterfaceStability.Stable
+@Stable
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
@@ -489,19 +488,17 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     }
 
     val columnEquals = df.sparkSession.sessionState.analyzer.resolver
-    val projections = df.schema.fields.map { f =>
+    val filledColumns = df.schema.fields.filter { f =>
       val typeMatches = (targetType, f.dataType) match {
         case (NumericType, dt) => dt.isInstanceOf[NumericType]
         case (StringType, dt) => dt == StringType
         case (BooleanType, dt) => dt == BooleanType
+        case _ =>
+          throw new IllegalArgumentException(s"$targetType is not matched at fillValue")
       }
       // Only fill if the column is part of the cols list.
-      if (typeMatches && cols.exists(col => columnEquals(f.name, col))) {
-        fillCol[T](f, value)
-      } else {
-        df.col(f.name)
-      }
+      typeMatches && cols.exists(col => columnEquals(f.name, col))
     }
-    df.select(projections : _*)
+    df.withColumns(filledColumns.map(_.name), filledColumns.map(fillCol[T](_, value)))
   }
 }

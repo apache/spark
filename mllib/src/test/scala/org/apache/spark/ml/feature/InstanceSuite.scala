@@ -18,13 +18,14 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.serializer.KryoSerializer
 
 class InstanceSuite extends SparkFunSuite{
   test("Kryo class register") {
     val conf = new SparkConf(false)
-    conf.set("spark.kryo.registrationRequired", "true")
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
 

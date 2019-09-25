@@ -19,15 +19,30 @@ package org.apache.spark.sql.execution
 
 import scala.util.Random
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
+class RanColumnar extends RuntimeException
+class RanRowBased extends RuntimeException
+
+case class ColumnarExchange(child: SparkPlan) extends Exchange {
+
+  override def supportsColumnar: Boolean = true
+
+  override protected def doExecute(): RDD[InternalRow] = throw new RanRowBased
+
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] = throw new RanColumnar
+}
+
+class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits._
 
   test("shuffling UnsafeRows in exchange") {
@@ -105,6 +120,15 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     assert(exchange5 sameResult exchange4)
   }
 
+  test("Columnar exchange works") {
+    val df = spark.range(10)
+    val plan = df.queryExecution.executedPlan
+    val exchange = ColumnarExchange(plan)
+    val reused = ReusedExchangeExec(plan.output, exchange)
+
+    assertThrows[RanColumnar](reused.executeColumnar())
+  }
+
   test("SPARK-23207: Make repartition() generate consistent output") {
     def assertConsistency(ds: Dataset[java.lang.Long]): Unit = {
       ds.persist()
@@ -124,5 +148,12 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
       // case when input contains duplicated rows.
       assertConsistency(spark.range(10000).map(i => Random.nextInt(1000).toLong))
     }
+  }
+
+  test("SPARK-23614: Fix incorrect reuse exchange when caching is used") {
+    val cached = spark.createDataset(Seq((1, 2, 3), (4, 5, 6))).cache()
+    val projection1 = cached.select("_1", "_2").queryExecution.executedPlan
+    val projection2 = cached.select("_1", "_3").queryExecution.executedPlan
+    assert(!projection1.sameResult(projection2))
   }
 }

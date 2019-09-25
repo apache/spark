@@ -65,11 +65,17 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
   extends Model[T] with LSHParams with MLWritable {
   self: T =>
 
+  /** @group setParam */
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
   /**
    * The hash function of LSH, mapping an input feature vector to multiple hash vectors.
    * @return The mapping of LSH function.
    */
-  protected[ml] val hashFunction: Vector => Array[Vector]
+  protected[ml] def hashFunction(elems: Vector): Array[Vector]
 
   /**
    * Calculate the distance between two different keys using the distance metric corresponding
@@ -91,7 +97,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val transformUDF = udf(hashFunction, DataTypes.createArrayType(new VectorUDT))
+    val transformUDF = udf(hashFunction(_: Vector), DataTypes.createArrayType(new VectorUDT))
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 

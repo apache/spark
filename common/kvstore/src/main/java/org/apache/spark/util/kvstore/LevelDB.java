@@ -19,10 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -188,16 +185,36 @@ public class LevelDB implements KVStore {
 
   @Override
   public <T> KVStoreView<T> view(Class<T> type) throws Exception {
-    return new KVStoreView<T>(type) {
+    return new KVStoreView<T>() {
       @Override
       public Iterator<T> iterator() {
         try {
-          return new LevelDBIterator<>(LevelDB.this, this);
+          return new LevelDBIterator<>(type, LevelDB.this, this);
         } catch (Exception e) {
           throw Throwables.propagate(e);
         }
       }
     };
+  }
+
+  @Override
+  public <T> boolean removeAllByIndexValues(
+      Class<T> klass,
+      String index,
+      Collection<?> indexValues) throws Exception {
+    LevelDBTypeInfo.Index naturalIndex = getTypeInfo(klass).naturalIndex();
+    boolean removed = false;
+    KVStoreView<T> view = view(klass).index(index);
+
+    for (Object indexValue : indexValues) {
+      for (T value: view.first(indexValue).last(indexValue)) {
+        Object itemKey = naturalIndex.getValue(value);
+        delete(klass, itemKey);
+        removed = true;
+      }
+    }
+
+    return removed;
   }
 
   @Override
@@ -234,7 +251,7 @@ public class LevelDB implements KVStore {
    * Closes the given iterator if the DB is still open. Trying to close a JNI LevelDB handle
    * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
    */
-  void closeIterator(LevelDBIterator it) throws IOException {
+  void closeIterator(LevelDBIterator<?> it) throws IOException {
     synchronized (this._db) {
       DB _db = this._db.get();
       if (_db != null) {

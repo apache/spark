@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
+import java.util.concurrent.TimeUnit
+
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
@@ -49,11 +51,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.util.SystemClock")
     try {
-      Utils.classForName(clockClass).newInstance().asInstanceOf[Clock]
+      Utils.classForName[Clock](clockClass).getConstructor().newInstance()
     } catch {
       case e: ClassNotFoundException if clockClass.startsWith("org.apache.spark.streaming") =>
         val newClockClass = clockClass.replace("org.apache.spark.streaming", "org.apache.spark")
-        Utils.classForName(newClockClass).newInstance().asInstanceOf[Clock]
+        Utils.classForName[Clock](newClockClass).getConstructor().newInstance()
     }
   }
 
@@ -75,7 +77,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private var eventLoop: EventLoop[JobGeneratorEvent] = null
 
   // last batch whose completion,checkpointing and metadata cleanup has been completed
-  private var lastProcessedBatch: Time = null
+  @volatile private[streaming] var lastProcessedBatch: Time = null
 
   /** Start generation of jobs */
   def start(): Unit = synchronized {
@@ -111,14 +113,15 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
-      val timeWhenStopStarted = System.currentTimeMillis()
+      val timeWhenStopStarted = System.nanoTime()
       val stopTimeoutMs = conf.getTimeAsMs(
         "spark.streaming.gracefulStopTimeout", s"${10 * ssc.graph.batchDuration.milliseconds}ms")
       val pollTime = 100
 
       // To prevent graceful stop to get stuck permanently
       def hasTimedOut: Boolean = {
-        val timedOut = (System.currentTimeMillis() - timeWhenStopStarted) > stopTimeoutMs
+        val diff = TimeUnit.NANOSECONDS.toMillis((System.nanoTime() - timeWhenStopStarted))
+        val timedOut = diff > stopTimeoutMs
         if (timedOut) {
           logWarning("Timed out while stopping the job generator (timeout = " + stopTimeoutMs + ")")
         }
@@ -135,7 +138,6 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
       // Stop generating jobs
       val stopTime = timer.stop(interruptTimer = false)
-      graph.stop()
       logInfo("Stopped generation timer")
 
       // Wait for the jobs to complete and checkpoints to be written
@@ -147,6 +149,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         Thread.sleep(pollTime)
       }
       logInfo("Waited for jobs to be processed and checkpoints to be written")
+      graph.stop()
     } else {
       logInfo("Stopping JobGenerator immediately")
       // Stop timer and graph immediately, ignore unprocessed data and pending jobs

@@ -27,21 +27,27 @@ import org.apache.spark.sql.types.DataType
 object PythonUDF {
   private[this] val SCALAR_TYPES = Set(
     PythonEvalType.SQL_BATCHED_UDF,
-    PythonEvalType.SQL_SCALAR_PANDAS_UDF
+    PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {
     e.isInstanceOf[PythonUDF] && SCALAR_TYPES.contains(e.asInstanceOf[PythonUDF].evalType)
   }
 
-  def isGroupAggPandasUDF(e: Expression): Boolean = {
+  def isGroupedAggPandasUDF(e: Expression): Boolean = {
     e.isInstanceOf[PythonUDF] &&
       e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
   }
+
+  // This is currently same as GroupedAggPandasUDF, but we might support new types in the future,
+  // e.g, N -> N transform.
+  def isWindowPandasUDF(e: Expression): Boolean = isGroupedAggPandasUDF(e)
 }
 
 /**
- * A serialized version of a Python lambda function.
+ * A serialized version of a Python lambda function. This is a special expression, which needs a
+ * dedicated physical operator to execute it, and thus can't be pushed down to data sources.
  */
 case class PythonUDF(
     name: String,
@@ -61,4 +67,10 @@ case class PythonUDF(
     exprId = resultId)
 
   override def nullable: Boolean = true
+
+  override lazy val canonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    // `resultId` can be seen as cosmetic variation in PythonUDF, as it doesn't affect the result.
+    this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
+  }
 }

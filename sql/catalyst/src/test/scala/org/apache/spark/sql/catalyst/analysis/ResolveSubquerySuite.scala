@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{In, ListQuery, OuterReference}
+import org.apache.spark.sql.catalyst.expressions.{InSubquery, ListQuery}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Project}
 
 /**
@@ -33,7 +33,8 @@ class ResolveSubquerySuite extends AnalysisTest {
   val t2 = LocalRelation(b)
 
   test("SPARK-17251 Improve `OuterReference` to be `NamedExpression`") {
-    val expr = Filter(In(a, Seq(ListQuery(Project(Seq(UnresolvedAttribute("a")), t2)))), t1)
+    val expr = Filter(
+      InSubquery(Seq(a), ListQuery(Project(Seq(UnresolvedAttribute("a")), t2))), t1)
     val m = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(SimpleAnalyzer.ResolveSubquery(expr))
     }.getMessage

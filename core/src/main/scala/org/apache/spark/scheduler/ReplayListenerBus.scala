@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.{EOFException, InputStream, IOException}
 
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
@@ -54,7 +54,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       sourceName: String,
       maybeTruncated: Boolean = false,
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
-    val lines = Source.fromInputStream(logData).getLines()
+    val lines = Source.fromInputStream(logData)(Codec.UTF8).getLines()
     replay(lines, sourceName, maybeTruncated, eventsFilter)
   }
 
@@ -115,6 +115,8 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
         }
       }
     } catch {
+      case e: HaltReplayException =>
+        // Just stop replay.
       case _: EOFException if maybeTruncated =>
       case ioe: IOException =>
         throw ioe
@@ -124,8 +126,17 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
     }
   }
 
+  override protected def isIgnorableException(e: Throwable): Boolean = {
+    e.isInstanceOf[HaltReplayException]
+  }
+
 }
 
+/**
+ * Exception that can be thrown by listeners to halt replay. This is handled by ReplayListenerBus
+ * only, and will cause errors if thrown when using other bus implementations.
+ */
+private[spark] class HaltReplayException extends RuntimeException
 
 private[spark] object ReplayListenerBus {
 

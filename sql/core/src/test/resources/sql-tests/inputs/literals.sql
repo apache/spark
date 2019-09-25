@@ -105,3 +105,10 @@ select X'XuZ';
 
 -- Hive literal_double test.
 SELECT 3.14, -3.14, 3.14e8, 3.14e-8, -3.14e8, -3.14e-8, 3.14e+8, 3.14E8, 3.14E-8;
+
+-- map + interval test
+select map(1, interval 1 day, 2, interval 3 week);
+
+-- typed interval expression
+select interval 'interval 3 year 1 hour';
+select interval '3 year 1 hour';
