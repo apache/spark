@@ -253,140 +253,180 @@ insert into numerics values
 (5, 1.12, 1.12, 1.12),
 (6, 2, 2, 2),
 (7, 100, 100, 100)
-(8, 'infinity', 'infinity', '1000'),
-(9, 'NaN', 'NaN', 'NaN')
 -- !query 16 schema
 struct<>
 -- !query 16 output
-org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input '(' expecting {<EOF>, ',', '.', '[', 'ADD', 'AFTER', 'ALL', 'ALTER', 'ANALYZE', 'AND', 'ANY', 'ARCHIVE', 'ARRAY', 'AS', 'ASC', 'AT', 'AUTHORIZATION', 'BETWEEN', 'BOTH', 'BUCKET', 'BUCKETS', 'BY', 'CACHE', 'CASCADE', 'CASE', 'CAST', 'CHANGE', 'CHECK', 'CLEAR', 'CLUSTER', 'CLUSTERED', 'CODEGEN', 'COLLATE', 'COLLECTION', 'COLUMN', 'COLUMNS', 'COMMENT', 'COMMIT', 'COMPACT', 'COMPACTIONS', 'COMPUTE', 'CONCATENATE', 'CONSTRAINT', 'COST', 'CREATE', 'CUBE', 'CURRENT', 'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP', 'CURRENT_USER', 'DATA', 'DATABASE', DATABASES, 'DAY', 'DAYS', 'DBPROPERTIES', 'DEFINED', 'DELETE', 'DELIMITED', 'DESC', 'DESCRIBE', 'DFS', 'DIRECTORIES', 'DIRECTORY', 'DISTINCT', 'DISTRIBUTE', 'DROP', 'ELSE', 'END', 'ESCAPED', 'EXCEPT', 'EXCHANGE', 'EXISTS', 'EXPLAIN', 'EXPORT', 'EXTENDED', 'EXTERNAL', 'EXTRACT', 'FALSE', 'FETCH', 'FIELDS', 'FILEFORMAT', 'FIRST', 'FIRST_VALUE', 'FOLLOWING', 'FOR', 'FOREIGN', 'FORMAT', 'FORMATTED', 'FROM', 'FUNCTION', 'FUNCTIONS', 'GLOBAL', 'GRANT', 'GROUP', 'GROUPING', 'HAVING', 'HOUR', 'HOURS', 'IF', 'IGNORE', 'IMPORT', 'IN', 'INDEX', 'INDEXES', 'INPATH', 'INPUTFORMAT', 'INSERT', 'INTERSECT', 'INTERVAL', 'INTO', 'IS', 'ITEMS', 'KEYS', 'LAST', 'LAST_VALUE', 'LATERAL', 'LAZY', 'LEADING', 'LIKE', 'LIMIT', 'LINES', 'LIST', 'LOAD', 'LOCAL', 'LOCATION', 'LOCK', 'LOCKS', 'LOGICAL', 'MACRO', 'MAP', 'MICROSECOND', 'MICROSECONDS', 'MILLISECOND', 'MILLISECONDS', 'MINUTE', 'MINUTES', 'MONTH', 'MONTHS', 'MSCK', 'NAMESPACES', 'NO', NOT, 'NULL', 'NULLS', 'OF', 'ONLY', 'OPTION', 'OPTIONS', 'OR', 'ORDER', 'OUT', 'OUTER', 'OUTPUTFORMAT', 'OVER', 'OVERLAPS', 'OVERLAY', 'OVERWRITE', 'PARTITION', 'PARTITIONED', 'PARTITIONS', 'PERCENT', 'PIVOT', 'PLACING', 'POSITION', 'PRECEDING', 'PRIMARY', 'PRINCIPALS', 'PURGE', 'QUERY', 'RANGE', 'RECORDREADER', 'RECORDWRITER', 'RECOVER', 'REDUCE', 'REFERENCES', 'REFRESH', 'RENAME', 'REPAIR', 'REPLACE', 'RESET', 'RESPECT', 'RESTRICT', 'REVOKE', RLIKE, 'ROLE', 'ROLES', 'ROLLBACK', 'ROLLUP', 'ROW', 'ROWS', 'SCHEMA', 'SECOND', 'SECONDS', 'SELECT', 'SEPARATED', 'SERDE', 'SERDEPROPERTIES', 'SESSION_USER', 'SET', 'MINUS', 'SETS', 'SHOW', 'SKEWED', 'SOME', 'SORT', 'SORTED', 'START', 'STATISTICS', 'STORED', 'STRATIFY', 'STRUCT', 'SUBSTR', 'SUBSTRING', 'TABLE', 'TABLES', 'TABLESAMPLE', 'TBLPROPERTIES', TEMPORARY, 'TERMINATED', 'THEN', 'TO', 'TOUCH', 'TRAILING', 'TRANSACTION', 'TRANSACTIONS', 'TRANSFORM', 'TRIM', 'TRUE', 'TRUNCATE', 'TYPE', 'UNARCHIVE', 'UNBOUNDED', 'UNCACHE', 'UNION', 'UNIQUE', 'UNKNOWN', 'UNLOCK', 'UNSET', 'USE', 'USER', 'VALUES', 'VIEW', 'WEEK', 'WEEKS', 'WHEN', 'WHERE', 'WINDOW', 'WITH', 'YEAR', 'YEARS', EQ, '<=>', '<>', '!=', '<', LTE, '>', GTE, '+', '-', '*', '/', '%', 'DIV', '&', '|', '||', '^', IDENTIFIER, BACKQUOTED_IDENTIFIER}(line 9, pos 0)
-
-== SQL ==
-insert into numerics values
-(1, -3, -3, -3),
-(2, -1, -1, -1),
-(3, 0, 0, 0),
-(4, 1.1, 1.1, 1.1),
-(5, 1.12, 1.12, 1.12),
-(6, 2, 2, 2),
-(7, 100, 100, 100)
-(8, 'infinity', 'infinity', '1000'),
-^^^
-(9, 'NaN', 'NaN', 'NaN')
 
 
 -- !query 17
-(0, '-infinity', '-infinity', '-1000')
+select id, f_float4, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_float4 range between
+             1 preceding and 1 following)
 -- !query 17 schema
-struct<>
+struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int>
 -- !query 17 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-mismatched input '0' expecting {'(', 'FROM', 'MAP', 'REDUCE', 'SELECT', 'TABLE', 'VALUES', 'WITH'}(line 1, pos 1)
-
-== SQL ==
-(0, '-infinity', '-infinity', '-1000')
--^^^
+1	-3.0	1	1
+2	-1.0	2	3
+3	0.0	2	3
+4	1.1	4	6
+5	1.12	4	6
+6	2.0	4	6
+7	100.0	7	7
 
 
 -- !query 18
 select id, f_float4, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float4 range between
-             1 preceding and 1 following)
+             1 preceding and 1.1 following)
 -- !query 18 schema
-struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int>
+struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int>
 -- !query 18 output
-
+1	-3.0	1	1
+2	-1.0	2	3
+3	0.0	2	4
+4	1.1	4	6
+5	1.12	4	6
+6	2.0	4	6
+7	100.0	7	7
 
 
 -- !query 19
 select id, f_float4, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float4 range between
-             1 preceding and 1.1 following)
+             'inf' preceding and 'inf' following)
 -- !query 19 schema
-struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int>
+struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int>
 -- !query 19 output
-
+1	-3.0	1	7
+2	-1.0	1	7
+3	0.0	1	7
+4	1.1	1	7
+5	1.12	1	7
+6	2.0	1	7
+7	100.0	1	7
 
 
 -- !query 20
 select id, f_float4, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float4 range between
-             'inf' preceding and 'inf' following)
+             1.1 preceding and 'NaN' following)
 -- !query 20 schema
-struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int>
+struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int>
 -- !query 20 output
-
+1	-3.0	1	7
+2	-1.0	2	7
+3	0.0	2	7
+4	1.1	3	7
+5	1.12	4	7
+6	2.0	4	7
+7	100.0	7	7
 
 
 -- !query 21
-select id, f_float4, first(id) over w, last(id) over w
+select id, f_float8, first(id) over w, last(id) over w
 from numerics
-window w as (order by f_float4 range between
-             1.1 preceding and 'NaN' following)
+window w as (order by f_float8 range between
+             1 preceding and 1 following)
 -- !query 21 schema
-struct<id:int,f_float4:float,first(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float4 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int>
+struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int>
 -- !query 21 output
-
+1	-3.0	1	1
+2	-1.0	2	3
+3	0.0	2	3
+4	1.1	4	6
+5	1.12	4	6
+6	2.0	4	6
+7	100.0	7	7
 
 
 -- !query 22
 select id, f_float8, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float8 range between
-             1 preceding and 1 following)
+             1 preceding and 1.1 following)
 -- !query 22 schema
-struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1 AS FLOAT) FOLLOWING):int>
+struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int>
 -- !query 22 output
-
+1	-3.0	1	1
+2	-1.0	2	3
+3	0.0	2	4
+4	1.1	4	6
+5	1.12	4	6
+6	2.0	4	6
+7	100.0	7	7
 
 
 -- !query 23
 select id, f_float8, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float8 range between
-             1 preceding and 1.1 following)
+             'inf' preceding and 'inf' following)
 -- !query 23 schema
-struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS FLOAT) FOLLOWING AND CAST(1.1 AS FLOAT) FOLLOWING):int>
+struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int>
 -- !query 23 output
-
+1	-3.0	1	7
+2	-1.0	1	7
+3	0.0	1	7
+4	1.1	1	7
+5	1.12	1	7
+6	2.0	1	7
+7	100.0	1	7
 
 
 -- !query 24
 select id, f_float8, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_float8 range between
-             'inf' preceding and 'inf' following)
+             1.1 preceding and 'NaN' following)
 -- !query 24 schema
-struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- CAST(inf AS DOUBLE)) AS FLOAT) FOLLOWING AND CAST(inf AS FLOAT) FOLLOWING):int>
+struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int>
 -- !query 24 output
-
+1	-3.0	1	7
+2	-1.0	2	7
+3	0.0	2	7
+4	1.1	3	7
+5	1.12	4	7
+6	2.0	4	7
+7	100.0	7	7
 
 
 -- !query 25
-select id, f_float8, first(id) over w, last(id) over w
+select id, f_numeric, first(id) over w, last(id) over w
 from numerics
-window w as (order by f_float8 range between
-             1.1 preceding and 'NaN' following)
+window w as (order by f_numeric range between
+             1 preceding and 1 following)
 -- !query 25 schema
-struct<id:int,f_float8:float,first(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_float8 ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS FLOAT) FOLLOWING AND CAST(NaN AS FLOAT) FOLLOWING):int>
+struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING):int>
 -- !query 25 output
-
+1	-3	1	1
+2	-1	2	3
+3	0	2	5
+4	1	3	6
+5	1	3	6
+6	2	4	6
+7	100	7	7
 
 
 -- !query 26
 select id, f_numeric, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_numeric range between
-             1 preceding and 1 following)
+             1 preceding and 1.1 following)
 -- !query 26 schema
-struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING):int>
+struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CAST(1.1 AS INT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CAST(1.1 AS INT) FOLLOWING):int>
 -- !query 26 output
-
+1	-3	1	1
+2	-1	2	3
+3	0	2	5
+4	1	3	6
+5	1	3	6
+6	2	4	6
+7	100	7	7
 
 
 -- !query 27
@@ -397,33 +437,42 @@ window w as (order by f_numeric range between
 -- !query 27 schema
 struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CAST(1.1 AS INT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CAST(1.1 AS INT) FOLLOWING):int>
 -- !query 27 output
-
+1	-3	1	1
+2	-1	2	3
+3	0	2	5
+4	1	3	6
+5	1	3	6
+6	2	4	6
+7	100	7	7
 
 
 -- !query 28
 select id, f_numeric, first(id) over w, last(id) over w
 from numerics
 window w as (order by f_numeric range between
-             1 preceding and 1.1 following)
+             1.1 preceding and 'NaN' following)
 -- !query 28 schema
-struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CAST(1.1 AS INT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CAST(1.1 AS INT) FOLLOWING):int>
+struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS INT) FOLLOWING AND CAST(NaN AS INT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS INT) FOLLOWING AND CAST(NaN AS INT) FOLLOWING):int>
 -- !query 28 output
-
+1	-3	NULL	NULL
+2	-1	NULL	NULL
+3	0	NULL	NULL
+4	1	NULL	NULL
+5	1	NULL	NULL
+6	2	NULL	NULL
+7	100	NULL	NULL
 
 
 -- !query 29
-select id, f_numeric, first(id) over w, last(id) over w
-from numerics
-window w as (order by f_numeric range between
-             1.1 preceding and 'NaN' following)
+drop table empsalary
 -- !query 29 schema
-struct<id:int,f_numeric:int,first(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS INT) FOLLOWING AND CAST(NaN AS INT) FOLLOWING):int,last(id, false) OVER (ORDER BY f_numeric ASC NULLS FIRST RANGE BETWEEN CAST((- 1.1) AS INT) FOLLOWING AND CAST(NaN AS INT) FOLLOWING):int>
+struct<>
 -- !query 29 output
 
 
 
 -- !query 30
-drop table empsalary
+drop table numerics
 -- !query 30 schema
 struct<>
 -- !query 30 output

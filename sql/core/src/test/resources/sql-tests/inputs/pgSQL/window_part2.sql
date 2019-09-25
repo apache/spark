@@ -216,10 +216,10 @@ insert into numerics values
 (4, 1.1, 1.1, 1.1),
 (5, 1.12, 1.12, 1.12),
 (6, 2, 2, 2),
-(7, 100, 100, 100)
-(8, 'infinity', 'infinity', '1000'),
-(9, 'NaN', 'NaN', 'NaN');
-(0, '-infinity', '-infinity', '-1000');  -- numeric type lacks infinities
+(7, 100, 100, 100);
+-- (8, 'infinity', 'infinity', '1000'),
+-- (9, 'NaN', 'NaN', 'NaN'),
+-- (0, '-infinity', '-infinity', '-1000');  -- numeric type lacks infinities
 
 select id, f_float4, first(id) over w, last(id) over w
 from numerics
@@ -282,3 +282,4 @@ window w as (order by f_numeric range between
              1.1 preceding and 'NaN' following);  -- error, NaN disallowed
 
 drop table empsalary;
+drop table numerics;
