@@ -26,19 +26,23 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType}
 
 object PostgreSQLDialect {
-  def postgreSQLDialectRules(conf: SQLConf): List[Rule[LogicalPlan]] =
-    if (conf.usePostgreSQLDialect) {
-      CastStringToBoolean(conf) ::
-        Nil
-    } else {
+  val postgreSQLDialectRules: List[Rule[LogicalPlan]] =
+    CastStringToBoolean ::
       Nil
-    }
 
-  case class CastStringToBoolean(conf: SQLConf) extends Rule[LogicalPlan] with Logging {
+  object CastStringToBoolean extends Rule[LogicalPlan] with Logging {
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      plan.transformExpressions {
-        case Cast(child, dataType, _) if dataType == BooleanType && child.dataType == StringType =>
-          PostgreCastStringToBoolean(child)
+      // The SQL configuration `spark.sql.dialect` can be changed in runtime.
+      // To make sure the configuration is effective, we have to check it during rule execution.
+      val conf = SQLConf.get
+      if (conf.usePostgreSQLDialect) {
+        plan.transformExpressions {
+          case Cast(child, dataType, _)
+              if dataType == BooleanType && child.dataType == StringType =>
+            PostgreCastStringToBoolean(child)
+        }
+      } else {
+        plan
       }
     }
   }
