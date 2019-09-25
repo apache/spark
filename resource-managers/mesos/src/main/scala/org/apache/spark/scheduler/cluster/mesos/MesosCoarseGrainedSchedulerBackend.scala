@@ -375,6 +375,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
       logDebug(s"Received ${offers.size} resource offers.")
 
+      // nodeBlacklist() currently only gets updated based on failures in spark tasks.
+      // If a mesos task fails to even start -- that is,
+      // if a spark executor fails to launch on a node -- nodeBlacklist does not get updated
+      // see SPARK-24567 for details
       val blacklist = scheduler.nodeBlacklist()
       val (matchedOffers, unmatchedOffers) = offers.asScala.partition { offer =>
         if (blacklist.contains(offer.getHostname)) {
