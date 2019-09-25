@@ -84,23 +84,23 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
   /** List of test cases to ignore, in lower cases. */
   override def blackList: Set[String] = Set(
-    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
+    "blacklist",   // Do NOT remove this one. It is here to test the blacklist functionality.
     // Missing UDF
-    "pgSQL/boolean.sql",
-    "pgSQL/case.sql",
+    "pgSQL/boolean",
+    "pgSQL/case",
     // SPARK-28624
-    "date.sql",
+    "date",
     // SPARK-28620
-    "pgSQL/float4.sql",
+    "pgSQL/float4",
     // SPARK-28636
-    "decimalArithmeticOperations.sql",
-    "literals.sql",
-    "subquery/scalar-subquery/scalar-subquery-predicate.sql",
-    "subquery/in-subquery/in-limit.sql",
-    "subquery/in-subquery/in-group-by.sql",
-    "subquery/in-subquery/simple-in.sql",
-    "subquery/in-subquery/in-order-by.sql",
-    "subquery/in-subquery/in-set-operations.sql"
+    "decimalArithmeticOperations",
+    "literals",
+    "subquery/scalar-subquery/scalar-subquery-predicate",
+    "subquery/in-subquery/in-limit",
+    "subquery/in-subquery/in-group-by",
+    "subquery/in-subquery/simple-in",
+    "subquery/in-subquery/in-order-by",
+    "subquery/in-subquery/in-set-operations"
   )
 
   override def runQueries(
@@ -234,7 +234,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
-      val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+      val testCaseName = extractTestCaseName(absPath)
 
       if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
         Seq.empty

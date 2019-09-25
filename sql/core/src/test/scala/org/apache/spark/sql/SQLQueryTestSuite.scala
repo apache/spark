@@ -201,30 +201,26 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       udf: TestUDF) extends TestCase with UDFTest with PgSQLTest
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
-    // Removing last '.sql' is an workaround of sbt bug which removes test name
-    // prior to the last dot in JUnitXmlReportPlugin.
-    // Please refer https://github.com/sbt/sbt/issues/2949
-    val refinedTestCaseName = testCase.name.stripSuffix(validFileExtensions)
     if (blackList.exists(t =>
-        refinedTestCaseName.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
+        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
-      ignore(refinedTestCaseName) { /* Do nothing */ }
+      ignore(testCase.name) { /* Do nothing */ }
     } else testCase match {
       case udfTestCase: UDFTest
           if udfTestCase.udf.isInstanceOf[TestPythonUDF] && !shouldTestPythonUDFs =>
-        ignore(s"${refinedTestCaseName} is skipped because " +
+        ignore(s"${testCase.name} is skipped because " +
           s"[$pythonExec] and/or pyspark were not available.") {
           /* Do nothing */
         }
       case udfTestCase: UDFTest
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestScalarPandasUDFs =>
-        ignore(s"${refinedTestCaseName} is skipped because pyspark," +
+        ignore(s"${testCase.name} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
         }
       case _ =>
         // Create a test case to run this case.
-        test(refinedTestCaseName) {
+        test(testCase.name) {
           runTest(testCase)
         }
     }
@@ -449,11 +445,20 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
   }
 
+  protected def extractTestCaseName(absolutePath: String): String = {
+    // Removing last '.sql' is an workaround of sbt bug which removes test name
+    // prior to the last dot in JUnitXmlReportPlugin.
+    // Please refer https://github.com/sbt/sbt/issues/2949
+    absolutePath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+      .stripSuffix(validFileExtensions)
+  }
+
   protected def listTestCases(): Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
-      val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+      val testCaseName = extractTestCaseName(absPath)
+
       if (file.getAbsolutePath.startsWith(
         s"$inputFilePath${File.separator}udf${File.separator}pgSQL")) {
         Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
