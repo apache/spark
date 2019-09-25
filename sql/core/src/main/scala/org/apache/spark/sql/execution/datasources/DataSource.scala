@@ -739,12 +739,11 @@ object DataSource extends Logging {
       hadoopConf: Configuration,
       checkEmptyGlobPath: Boolean,
       checkFilesExist: Boolean): Seq[Path] = {
-    val qualifiedPaths = pathStrings
-      .map { pathString =>
-        val path = new Path(pathString)
-        val fs = path.getFileSystem(hadoopConf)
-        path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      }
+    val qualifiedPaths = pathStrings.map { pathString =>
+      val path = new Path(pathString)
+      val fs = path.getFileSystem(hadoopConf)
+      path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    }
 
     // Split the paths into glob and non glob paths, because we don't need to do an existence check
     // for globbed paths.
