@@ -1123,7 +1123,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
        4
       > SELECT _FUNC_('bar', 'foobarbar', 5);
        7
-      > SELECT POSITION('bar' IN 'foobarbar');
+      > SELECT _FUNC_('bar' IN 'foobarbar');
        4
   """,
   since = "1.5.0")
@@ -1732,9 +1732,9 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
     Examples:
       > SELECT _FUNC_('Spark SQL ');
        10
-      > SELECT CHAR_LENGTH('Spark SQL ');
+      > SELECT _FUNC_('Spark SQL ');
        10
-      > SELECT CHARACTER_LENGTH('Spark SQL ');
+      > SELECT _FUNC_('Spark SQL ');
        10
   """,
   since = "1.5.0")
