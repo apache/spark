@@ -190,7 +190,7 @@ private[hive] class HiveClientImpl(
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
-    // For hive version higher then 2.3, when we initial SessionState, it will set
+    // For hive version >= 2.0, when we initial SessionState, it will set
     // a new UDFClassLoader to hiveConf's classLoader, when we use ADDJarCommand to
     // add jar, it will be added to clientLoader.classLoader, then the jar won't be find
     // in hiveConf's ClassLoader, here we rest it with clientLoader.ClassLoader which contains
