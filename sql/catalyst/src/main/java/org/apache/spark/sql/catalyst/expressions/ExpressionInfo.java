@@ -56,6 +56,8 @@ public class ExpressionInfo {
         return arguments;
     }
 
+    public String getOriginalExamples() { return examples; }
+
     public String getExamples() {
         return replaceFunctionName(examples);
     }
