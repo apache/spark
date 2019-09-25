@@ -449,6 +449,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+        .replace('.', '_')
 
       if (file.getAbsolutePath.startsWith(
         s"$inputFilePath${File.separator}udf${File.separator}pgSQL")) {
