@@ -122,7 +122,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       // `CASE WHEN ... THEN ... WHEN ... THEN ... END`
       "org.apache.spark.sql.catalyst.expressions.CaseWhen",
       // _FUNC_ is replaced by `locate` but `locate(... IN ...)` is not supported
-      "org.apache.spark.sql.catalyst.expressions.StringLocate")
+      "org.apache.spark.sql.catalyst.expressions.StringLocate",
+      // _FUNC_ is replaced by `%` which causes a parsing error on `SELECT %(2, 1.8)`
+      "org.apache.spark.sql.catalyst.expressions.Remainder")
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName

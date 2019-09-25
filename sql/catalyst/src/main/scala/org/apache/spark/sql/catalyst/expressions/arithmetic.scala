@@ -450,7 +450,7 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
     Examples:
       > SELECT 2 _FUNC_ 1.8;
        0.2
-      > SELECT _FUNC_(2, 1.8);
+      > SELECT MOD(2, 1.8);
        0.2
   """)
 case class Remainder(left: Expression, right: Expression) extends DivModLike {
