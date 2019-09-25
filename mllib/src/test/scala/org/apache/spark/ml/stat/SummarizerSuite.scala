@@ -531,7 +531,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
   }
 
-  ignore("performance test") {
+  test("performance test") {
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.12
     MacBook Pro (15-inch, 2016) CPU 2.9 GHz Intel Core i7

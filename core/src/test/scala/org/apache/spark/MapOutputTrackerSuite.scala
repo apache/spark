@@ -333,4 +333,27 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
+  test("performance test in serialization") {
+    val numOfTry = 20
+    val numOfWarmUp = 10
+
+//    val tracker: MapOutputTrackerMaster = newTrackerMaster()
+//    val shuffleId = 10
+//    val numMaps = 20000
+//    tracker.registerShuffle(shuffleId, numMaps)
+//    val compressedSize10000 = MapStatus.compressSize(10000L)
+//
+//    (0 until numMaps).foreach { i =>
+//      tracker.registerMapOutput(10, i,
+//        MapStatus(BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000),
+//        Array(compressedSize10000, compressedSize10000), 5))
+//    }
+//
+//   val shuffleStatus: ShuffleStatus = tracker.shuffleStatuses.get(shuffleId).head
+//
+//
+//    shuffleStatus.serializedMapStatus(tracker.broadcastManager, tracker.isLocal, 1000000)
+//    shuffleStatus.invalidateSerializedMapOutputStatusCache()
+//    tracker.stop()
+  }
 }
