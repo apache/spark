@@ -20,11 +20,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetInputFormat
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetReadSupport, ParquetWriteSupport}
-import org.apache.spark.sql.execution.datasources.v2.FileScan
+import org.apache.spark.sql.execution.datasources.v2.{BroadcastedHadoopConfBatch, FileScan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -40,10 +41,12 @@ case class ParquetScan(
     readPartitionSchema: StructType,
     pushedFilters: Array[Filter],
     options: CaseInsensitiveStringMap)
-  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
+    extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema)
+    with BroadcastedHadoopConfBatch {
+
   override def isSplitable(path: Path): Boolean = true
 
-  override def createReaderFactory(): PartitionReaderFactory = {
+  override protected def updateHadoopConf(conf: Configuration): Configuration = {
     val readDataSchemaAsJson = readDataSchema.json
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(
@@ -72,8 +75,11 @@ case class ParquetScan(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
 
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
+    hadoopConf
+  }
+
+  override def createReaderFactory(broadcastedConf: Broadcast[SerializableConfiguration]):
+      PartitionReaderFactory = {
     ParquetPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, pushedFilters)
   }

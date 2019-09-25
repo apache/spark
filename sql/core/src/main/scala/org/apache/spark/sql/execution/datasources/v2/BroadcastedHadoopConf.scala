@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.annotation.Evolving
+import org.apache.spark.annotation.{DeveloperApi}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, PartitionReaderFactory}
@@ -27,20 +27,21 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A helper trait to serialize and broadcast the Hadoop configuration for readers.
  */
-@Evolving
+@DeveloperApi
 trait BroadcastedHadoopConfBatch extends Batch {
   val sparkSession: SparkSession;
-  val conf: Configuration;
+  val hadoopConf: Configuration;
   // Override this if you need to set custom keys on the Hadoop configuration
-  def updateHadoopConf(conf: Configuration): Configuration = {
+  protected def updateHadoopConf(conf: Configuration): Configuration = {
     conf
   }
 
   override final def createReaderFactory(): PartitionReaderFactory = {
     val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(updateHadoopConf(conf)))
+      new SerializableConfiguration(updateHadoopConf(hadoopConf)))
     createReaderFactory(broadcastedConf)
   }
 
-  def createReaderFactory(broadcastedConf: Broadcast[SerializableConfiguration]): PartitionReaderFactory
+  def createReaderFactory(broadcastedConf: Broadcast[SerializableConfiguration]):
+      PartitionReaderFactory
 }
