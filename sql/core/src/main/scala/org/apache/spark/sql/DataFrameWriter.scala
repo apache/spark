@@ -319,6 +319,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @note Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
    * resolution. For example:
    *
+   * @note SaveMode.ErrorIfExists and SaveMode.Ignore behave as SaveMode.Append in `insertInto` as
+   *       `insertInto` is not a table creating operation.
+   *
    * {{{
    *    scala> Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("t1")
    *    scala> Seq((3, 4)).toDF("j", "i").write.insertInto("t1")

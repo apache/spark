@@ -400,6 +400,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", topic)
+      .mode("append")
       .save()
     checkAnswer(
       createKafkaReader(topic, includeHeaders = true).selectExpr(
@@ -423,6 +424,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
       df.write
         .format("kafka")
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .mode("append")
         .save()
     }
     TestUtils.assertExceptionMsg(ex, "null topic present in the data")
@@ -457,6 +459,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", topic)
+      .mode("append")
       .save()
   }
 }
