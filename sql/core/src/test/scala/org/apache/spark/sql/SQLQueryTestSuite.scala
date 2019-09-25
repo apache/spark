@@ -41,6 +41,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *
  * Each case is loaded from a file in "spark/sql/core/src/test/resources/sql-tests/inputs".
  * Each case has a golden result file in "spark/sql/core/src/test/resources/sql-tests/results".
+ * Please note that the test name is constructed via actual file name with excluding '.sql' suffix.
  *
  * To run the entire test suite:
  * {{{
@@ -49,7 +50,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *
  * To run a single test file upon change:
  * {{{
- *   build/sbt "~sql/test-only *SQLQueryTestSuite -- -z inline-table.sql"
+ *   build/sbt "~sql/test-only *SQLQueryTestSuite -- -z inline-table"
  * }}}
  *
  * To re-generate golden files for entire suite, run:
@@ -59,7 +60,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *
  * To re-generate golden file for a single test, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite -- -z describe.sql"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite -- -z describe"
  * }}}
  *
  * The format for input files is simple:
@@ -141,7 +142,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   /** List of test cases to ignore, in lower cases. */
   protected def blackList: Set[String] = Set(
-    "blacklist.sql"   // Do NOT remove this one. It is here to test the blacklist functionality.
+    "blacklist"   // Do NOT remove this one. It is here to test the blacklist functionality.
   )
 
   // Create all the test cases.
@@ -200,26 +201,30 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       udf: TestUDF) extends TestCase with UDFTest with PgSQLTest
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
+    // Removing last '.sql' is an workaround of sbt bug which removes test name
+    // prior to the last dot in JUnitXmlReportPlugin.
+    // Please refer https://github.com/sbt/sbt/issues/2949
+    val refinedTestCaseName = testCase.name.stripSuffix(validFileExtensions)
     if (blackList.exists(t =>
-        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
+        refinedTestCaseName.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
-      ignore(testCase.name) { /* Do nothing */ }
+      ignore(refinedTestCaseName) { /* Do nothing */ }
     } else testCase match {
       case udfTestCase: UDFTest
           if udfTestCase.udf.isInstanceOf[TestPythonUDF] && !shouldTestPythonUDFs =>
-        ignore(s"${testCase.name} is skipped because " +
+        ignore(s"${refinedTestCaseName} is skipped because " +
           s"[$pythonExec] and/or pyspark were not available.") {
           /* Do nothing */
         }
       case udfTestCase: UDFTest
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestScalarPandasUDFs =>
-        ignore(s"${testCase.name} is skipped because pyspark," +
+        ignore(s"${refinedTestCaseName} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
         }
       case _ =>
         // Create a test case to run this case.
-        test(testCase.name) {
+        test(refinedTestCaseName) {
           runTest(testCase)
         }
     }
@@ -448,13 +453,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
-
-      // Replacing '.' to '_' is an workaround of sbt bug which removes test name prior to the
-      // last dot in JUnitXmlReportPlugin.
-      // Please refer https://github.com/sbt/sbt/issues/2949
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
-        .replace('.', '_')
-
       if (file.getAbsolutePath.startsWith(
         s"$inputFilePath${File.separator}udf${File.separator}pgSQL")) {
         Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
