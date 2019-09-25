@@ -1986,7 +1986,8 @@ object SQLConf {
         "repositories, this can be used for downloading Hive jars in IsolatedClientLoader " +
         "if the default maven central repo is unreachable.")
       .stringConf
-      .createWithDefault("")
+      .createWithDefault(
+        "https://maven-central.storage-download.googleapis.com/repos/central/data/")
 }
 
 /**
