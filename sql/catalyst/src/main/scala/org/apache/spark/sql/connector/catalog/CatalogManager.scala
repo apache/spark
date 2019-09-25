@@ -126,11 +126,14 @@ class CatalogManager(
   }
 
   def setCurrentCatalog(catalogName: String): Unit = synchronized {
-    _currentCatalogName = Some(catalogName)
-    _currentNamespace = None
-    // Reset the current database of v1 `SessionCatalog` when switching current catalog, so that
-    // when we switch back to session catalog, the current namespace definitely is ["default"].
-    v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
+    // `setCurrentCatalog` is noop if it doesn't switch to a different catalog.
+    if (currentCatalog.name() != catalogName) {
+      _currentCatalogName = Some(catalogName)
+      _currentNamespace = None
+      // Reset the current database of v1 `SessionCatalog` when switching current catalog, so that
+      // when we switch back to session catalog, the current namespace definitely is ["default"].
+      v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
+    }
   }
 
   // Clear all the registered catalogs. Only used in tests.

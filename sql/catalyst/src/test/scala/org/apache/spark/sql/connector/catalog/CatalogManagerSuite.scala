@@ -74,6 +74,11 @@ class CatalogManagerSuite extends SparkFunSuite {
     catalogManager.setCurrentNamespace(Array("a"))
     assert(catalogManager.currentNamespace.sameElements(Array("a")))
 
+    // If we set current catalog to the same catalog, current namespace should stay the same.
+    catalogManager.setCurrentCatalog("dummy")
+    assert(catalogManager.currentNamespace.sameElements(Array("a")))
+
+    // If we switch to a different catalog, current namespace should be reset.
     conf.setConfString("spark.sql.catalog.dummy2", classOf[DummyCatalog].getName)
     catalogManager.setCurrentCatalog("dummy2")
     assert(catalogManager.currentNamespace.sameElements(Array("a", "b")))
