@@ -448,6 +448,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
+
+      // Replacing '.' to '_' is an workaround of sbt bug which removes test name prior to the
+      // last dot in JUnitXmlReportPlugin.
+      // Please refer https://github.com/sbt/sbt/issues/2949
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
         .replace('.', '_')
 
