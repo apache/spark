@@ -1,7 +1,7 @@
 -- Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
 --
 -- Window Functions Testing
--- https://github.com/postgres/postgres/blob/REL_12_BETA3/src/test/regress/sql/window.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA3/src/test/regress/sql/window.sql#L320-562
 
 CREATE TABLE empsalary (
     depname string,
