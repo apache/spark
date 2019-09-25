@@ -389,7 +389,7 @@ object RollingEventLogFilesWriter {
       appAttemptId: Option[String],
       index: Long,
       codecName: Option[String]): Path = {
-    val base = s"${EVENT_LOG_FILE_NAME_PREFIX}_${index}_" +
+    val base = s"${EVENT_LOG_FILE_NAME_PREFIX}${index}_" +
       EventLogFileWriter.nameForAppAndAttempt(appId, appAttemptId)
     val codec = codecName.map("." + _).getOrElse("")
     new Path(appLogDir, base + codec)
@@ -417,7 +417,7 @@ object RollingEventLogFilesWriter {
 
   def getSequence(eventLogFileName: String): Long = {
     require(eventLogFileName.startsWith(EVENT_LOG_FILE_NAME_PREFIX), "Not a event log file!")
-    val seq = eventLogFileName.stripPrefix(EVENT_LOG_DIR_NAME_PREFIX).split("_")(0)
+    val seq = eventLogFileName.stripPrefix(EVENT_LOG_FILE_NAME_PREFIX).split("_")(0)
     seq.toLong
   }
 }
