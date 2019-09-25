@@ -34,7 +34,7 @@ case class ParquetScanBuilder(
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-    extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
 
   lazy val pushedParquetFilters = {
     val sqlConf = sparkSession.sessionState.conf
