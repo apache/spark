@@ -1162,7 +1162,7 @@ class DataSourceV2SQLSuite
 
 /** Used as a V2 DataSource for V2SessionCatalog DDL */
 class FakeV2Provider extends TableProvider {
-  override def loadTable(properties: java.util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }
 }

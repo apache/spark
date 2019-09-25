@@ -21,7 +21,7 @@ import java.util.regex.Pattern
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsSpecifiedSchemaPartitioning, Table, TableProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -63,18 +63,18 @@ private[sql] object DataSourceV2Utils extends Logging {
 
   def loadTableWithUserSpecifiedSchema(
       provider: TableProvider,
-      providerName: String,
       schema: StructType,
       options: CaseInsensitiveStringMap): Table = {
-    // TODO: `DataFrameReader`/`DataStreamReader` should have an API to set user-specified
-    //       partitioning.
-    val table = provider.loadTable(schema, Array.empty, options)
-    if (table.schema().asNullable != schema.asNullable) {
-      throw new AnalysisException(s"Table provider '$providerName' returns a table which " +
-        "has inappropriate schema:\n" +
-        s"user-specified schema:\t$schema\n" +
-        s"schema from table provider:\t${table.schema()}")
+    provider match {
+      case s: SupportsSpecifiedSchemaPartitioning =>
+        // TODO: `DataFrameReader`/`DataStreamReader` should have an API to set user-specified
+        //       partitioning.
+        s.getTable(schema, Array.empty, options)
+
+      case _ =>
+        throw new UnsupportedOperationException(
+          provider.getClass.getSimpleName + " source does not support user-specified schema");
+
     }
-    table
   }
 }

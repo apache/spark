@@ -175,13 +175,13 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
   test("params not given") {
     val provider = new TextSocketSourceProvider
     intercept[AnalysisException] {
-      provider.loadTable(CaseInsensitiveStringMap.empty())
+      provider.getTable(CaseInsensitiveStringMap.empty())
     }
     intercept[AnalysisException] {
-      provider.loadTable(new CaseInsensitiveStringMap(Map("host" -> "localhost").asJava))
+      provider.getTable(new CaseInsensitiveStringMap(Map("host" -> "localhost").asJava))
     }
     intercept[AnalysisException] {
-      provider.loadTable(new CaseInsensitiveStringMap(Map("port" -> "1234").asJava))
+      provider.getTable(new CaseInsensitiveStringMap(Map("port" -> "1234").asJava))
     }
   }
 
@@ -189,20 +189,8 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
     val provider = new TextSocketSourceProvider
     val params = Map("host" -> "localhost", "port" -> "1234", "includeTimestamp" -> "fasle")
     intercept[AnalysisException] {
-      provider.loadTable(new CaseInsensitiveStringMap(params.asJava))
+      provider.getTable(new CaseInsensitiveStringMap(params.asJava))
     }
-  }
-
-  test("user-specified schema given") {
-    val provider = new TextSocketSourceProvider
-    val userSpecifiedSchema = StructType(
-      StructField("name", StringType) ::
-      StructField("area", StringType) :: Nil)
-    val exception = intercept[UnsupportedOperationException] {
-      provider.loadTable(userSpecifiedSchema, Array.empty, CaseInsensitiveStringMap.empty())
-    }
-    assert(exception.getMessage.contains(
-      "TextSocketSourceProvider source does not support user-specified schema"))
   }
 
   test("input row metrics") {

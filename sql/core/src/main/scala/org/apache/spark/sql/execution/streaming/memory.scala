@@ -95,7 +95,7 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
 // This class is used to indicate the memory stream data source. We don't actually use it, as
 // memory stream is for test only and we never look it up by name.
 object MemoryStreamTableProvider extends TableProvider {
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new IllegalStateException("MemoryStreamTableProvider should not be used.")
   }
 }

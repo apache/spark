@@ -260,7 +260,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      provider.loadTable(dsOptions) match {
+      provider.getTable(dsOptions) match {
         case table: SupportsWrite if table.supports(BATCH_WRITE) =>
           if (partitioningColumns.nonEmpty) {
             throw new AnalysisException("Cannot write data to TableProvider implementation " +

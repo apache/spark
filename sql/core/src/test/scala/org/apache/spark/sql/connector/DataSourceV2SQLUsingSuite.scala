@@ -23,11 +23,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsSpecifiedSchemaPartitioning, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2SQLUsingSuite extends QueryTest with SharedSparkSession {
 
@@ -221,7 +222,7 @@ object ReadWriteV2Source {
 class ReadWriteV2Source extends TableProvider {
   // `TableProvider` will be instantiated by reflection every time it's accessed. To keep the data
   // of in-memory table, we keep the table instance in an object.
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     ReadWriteV2Source.table
   }
 }
@@ -238,13 +239,13 @@ object PartitionedV2Source {
 class PartitionedV2Source extends TableProvider {
   // `TableProvider` will be instantiated by reflection every time it's accessed. To keep the data
   // of in-memory table, we keep the table instance in an object.
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     PartitionedV2Source.table
   }
 }
 
 class ReadOnlyV2Source extends TableProvider {
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     val schema = new StructType().add("i", "int")
     val partitions = Array.empty[Transform]
     val properties = util.Collections.emptyMap[String, String]
@@ -260,7 +261,7 @@ class ReadOnlyV2Source extends TableProvider {
 }
 
 class WriteOnlyV2Source extends TableProvider {
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     val schema = new StructType().add("i", "int")
     val partitions = Array.empty[Transform]
     val properties = util.Collections.emptyMap[String, String]
@@ -272,12 +273,12 @@ class WriteOnlyV2Source extends TableProvider {
   }
 }
 
-class DynamicSchemaV2Source extends TableProvider {
-  override def loadTable(properties: util.Map[String, String]): Table = {
-    new InMemoryTable("dynamic-schema", new StructType(), Array.empty, properties) {}
+class DynamicSchemaV2Source extends TableProvider with SupportsSpecifiedSchemaPartitioning {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new InMemoryTable("dynamic-schema", new StructType(), Array.empty, options) {}
   }
 
-  override def loadTable(
+  override def getTable(
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {

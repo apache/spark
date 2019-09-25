@@ -92,7 +92,7 @@ class DataSourceV2DataFrameSessionCatalogSuite
 }
 
 class InMemoryTableProvider extends TableProvider {
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new UnsupportedOperationException("D'oh!")
   }
 }

@@ -54,7 +54,7 @@ public class JavaReportStatisticsDataSource implements TableProvider {
   }
 
   @Override
-  public Table loadTable(java.util.Map<String, String> options) {
+  public Table getTable(CaseInsensitiveStringMap options) {
     return new JavaSimpleBatchTable() {
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {

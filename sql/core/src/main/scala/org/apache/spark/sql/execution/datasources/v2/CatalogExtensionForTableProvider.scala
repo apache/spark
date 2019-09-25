@@ -22,11 +22,12 @@ import java.util
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, Table}
+import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, SupportsSpecifiedSchemaPartitioning, Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CatalogExtensionForTableProvider extends DelegatingCatalogExtension {
 
@@ -49,7 +50,7 @@ class CatalogExtensionForTableProvider extends DelegatingCatalogExtension {
       assert(partitions.isEmpty)
       // If `CREATE TABLE ... USING` does not specify table metadata, get the table metadata from
       // data source first.
-      val table = maybeProvider.get.loadTable(properties)
+      val table = maybeProvider.get.getTable(new CaseInsensitiveStringMap(properties))
       table.schema() -> table.partitioning()
     } else {
       schema -> partitions
@@ -70,26 +71,28 @@ class CatalogExtensionForTableProvider extends DelegatingCatalogExtension {
   private def tryResolveTableProvider(table: Table): Table = {
     val providerName = table.properties().get("provider")
     assert(providerName != null)
-    DataSource.lookupDataSourceV2(providerName, conf).map { provider =>
+    DataSource.lookupDataSourceV2(providerName, conf).map {
       // TODO: support file source v2 in CREATE TABLE USING.
-      if (provider.isInstanceOf[FileDataSourceV2]) {
-        table
-      } else {
-        val loaded = provider.loadTable(table.schema, table.partitioning, table.properties)
-        if (loaded.schema().asNullable != table.schema.asNullable) {
+      case _: FileDataSourceV2 => table
+
+      case s: SupportsSpecifiedSchemaPartitioning =>
+        s.getTable(table.schema, table.partitioning, table.properties)
+
+      case provider =>
+        val actualTable = provider.getTable(new CaseInsensitiveStringMap(table.properties))
+        if (actualTable.schema() != table.schema) {
           throw new AnalysisException(s"Table provider '$providerName' returns a table " +
             "which has inappropriate schema:\n" +
             s"schema in Spark meta-store:\t${table.schema}\n" +
-            s"schema from table provider:\t${loaded.schema()}")
+            s"schema from table provider:\t${actualTable.schema}")
         }
-        if (!loaded.partitioning().sameElements(table.partitioning)) {
+        if (!actualTable.partitioning.sameElements(table.partitioning)) {
           throw new AnalysisException(s"Table provider '$providerName' returns a table " +
             "which has inappropriate partitioning:\n" +
-            s"partitioning in Spark meta-store:\t${table.partitioning.mkString(", ")}\n" +
-            s"partitioning from table provider:\t${loaded.partitioning.mkString(", ")}")
+            s"partitioning in Spark meta-store: ${table.partitioning.mkString(", ")}\n" +
+            s"partitioning from table provider: ${actualTable.partitioning.mkString(", ")}")
         }
-        loaded
-      }
+        actualTable
     }.getOrElse(table)
   }
 }

@@ -20,7 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.catalog.TableProvider
+import org.apache.spark.sql.connector.catalog.{SupportsSpecifiedSchemaPartitioning, TableProvider}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.util.Utils
@@ -28,7 +28,9 @@ import org.apache.spark.util.Utils
 /**
  * A base interface for data source v2 implementations of the built-in file-based data sources.
  */
-trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
+trait FileDataSourceV2 extends TableProvider
+  with SupportsSpecifiedSchemaPartitioning with DataSourceRegister {
+
   /**
    * Returns a V1 [[FileFormat]] class of the same file data source.
    * This is a solution for the following cases:

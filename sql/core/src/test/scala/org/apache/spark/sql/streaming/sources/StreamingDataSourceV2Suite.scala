@@ -86,7 +86,6 @@ trait FakeStreamingWriteTable extends Table with SupportsWrite {
     Set(STREAMING_WRITE).asJava
   }
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
-    LastWriteOptions.options = options
     new FakeWriteBuilder
   }
 }
@@ -99,7 +98,8 @@ class FakeReadMicroBatchOnly
 
   override def keyPrefix: String = shortName()
 
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    LastReadOptions.options = options
     new Table with SupportsRead {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Seq())
@@ -107,7 +107,6 @@ class FakeReadMicroBatchOnly
         Set(MICRO_BATCH_READ).asJava
       }
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-        LastReadOptions.options = options
         new FakeScanBuilder
       }
     }
@@ -122,7 +121,8 @@ class FakeReadContinuousOnly
 
   override def keyPrefix: String = shortName()
 
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    LastReadOptions.options = options
     new Table with SupportsRead {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Seq())
@@ -130,7 +130,6 @@ class FakeReadContinuousOnly
         Set(CONTINUOUS_READ).asJava
       }
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-        LastReadOptions.options = options
         new FakeScanBuilder
       }
     }
@@ -140,7 +139,7 @@ class FakeReadContinuousOnly
 class FakeReadBothModes extends DataSourceRegister with TableProvider {
   override def shortName(): String = "fake-read-microbatch-continuous"
 
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     new Table with SupportsRead {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Seq())
@@ -157,7 +156,7 @@ class FakeReadBothModes extends DataSourceRegister with TableProvider {
 class FakeReadNeitherMode extends DataSourceRegister with TableProvider {
   override def shortName(): String = "fake-read-neither-mode"
 
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     new Table {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
@@ -174,7 +173,8 @@ class FakeWriteOnly
 
   override def keyPrefix: String = shortName()
 
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    LastWriteOptions.options = options
     new Table with FakeStreamingWriteTable {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
@@ -184,7 +184,7 @@ class FakeWriteOnly
 
 class FakeNoWrite extends DataSourceRegister with TableProvider {
   override def shortName(): String = "fake-write-neither-mode"
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     new Table {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
@@ -212,7 +212,7 @@ class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
 
   override def shortName(): String = "fake-write-v1-fallback"
 
-  override def loadTable(properties: util.Map[String, String]): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     new Table with FakeStreamingWriteTable {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
@@ -377,10 +377,10 @@ class StreamingDataSourceV2Suite extends StreamTest {
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
       val sourceTable = DataSource.lookupDataSource(read, spark.sqlContext.conf).getConstructor()
-        .newInstance().asInstanceOf[TableProvider].loadTable(CaseInsensitiveStringMap.empty())
+        .newInstance().asInstanceOf[TableProvider].getTable(CaseInsensitiveStringMap.empty())
 
       val sinkTable = DataSource.lookupDataSource(write, spark.sqlContext.conf).getConstructor()
-        .newInstance().asInstanceOf[TableProvider].loadTable(CaseInsensitiveStringMap.empty())
+        .newInstance().asInstanceOf[TableProvider].getTable(CaseInsensitiveStringMap.empty())
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       trigger match {

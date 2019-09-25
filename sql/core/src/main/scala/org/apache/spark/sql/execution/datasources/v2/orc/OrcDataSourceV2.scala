@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class OrcDataSourceV2 extends FileDataSourceV2 {
 
@@ -31,13 +32,13 @@ class OrcDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "orc"
 
-  override def loadTable(properties: util.Map[String, String]): Table = {
-    val paths = getPaths(properties)
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    val paths = getPaths(options)
     val tableName = getTableName(paths)
-    OrcTable(tableName, sparkSession, properties, paths, None, fallbackFileFormat)
+    OrcTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
   }
 
-  override def loadTable(
+  override def getTable(
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {

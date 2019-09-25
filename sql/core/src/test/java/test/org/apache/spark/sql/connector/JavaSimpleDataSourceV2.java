@@ -17,8 +17,6 @@
 
 package test.org.apache.spark.sql.connector;
 
-import java.util.Map;
-
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableProvider;
 import org.apache.spark.sql.connector.read.InputPartition;
@@ -39,7 +37,7 @@ public class JavaSimpleDataSourceV2 implements TableProvider {
   }
 
   @Override
-  public Table loadTable(Map<String, String> properties) {
+  public Table getTable(CaseInsensitiveStringMap options) {
     return new JavaSimpleBatchTable() {
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {

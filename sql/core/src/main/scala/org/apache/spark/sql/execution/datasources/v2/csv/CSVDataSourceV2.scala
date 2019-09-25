@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CSVDataSourceV2 extends FileDataSourceV2 {
 
@@ -31,13 +32,13 @@ class CSVDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "csv"
 
-  override def loadTable(properties: util.Map[String, String]): Table = {
-    val paths = getPaths(properties)
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    val paths = getPaths(options)
     val tableName = getTableName(paths)
-    CSVTable(tableName, sparkSession, properties, paths, None, fallbackFileFormat)
+    CSVTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
   }
 
-  override def loadTable(
+  override def getTable(
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
