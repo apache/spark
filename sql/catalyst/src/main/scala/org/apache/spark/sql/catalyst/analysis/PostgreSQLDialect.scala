@@ -38,7 +38,7 @@ object PostgreSQLDialect {
       if (conf.usePostgreSQLDialect) {
         plan.transformExpressions {
           case Cast(child, dataType, _)
-              if dataType == BooleanType && child.dataType == StringType =>
+            if dataType == BooleanType && child.dataType == StringType =>
             PostgreCastStringToBoolean(child)
         }
       } else {
