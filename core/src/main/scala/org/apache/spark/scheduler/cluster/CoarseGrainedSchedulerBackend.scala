@@ -68,10 +68,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
   private val createTimeNs = System.nanoTime()
 
-  // Accessing `executorDataMap` in `DriverEndpoint.receive/receiveAndReply` doesn't need any
-  // protection. But accessing `executorDataMap` out of `DriverEndpoint.receive/receiveAndReply`
-  // must be protected by `CoarseGrainedSchedulerBackend.this`. Besides, `executorDataMap` should
-  // only be modified in `DriverEndpoint.receive/receiveAndReply` with protection by
+  // Accessing `executorDataMap` in the inherited methods from ThreadSafeRpcEndpoint doesn't need
+  // any protection. But accessing `executorDataMap` out of the inherited methods must be
+  // protected by `CoarseGrainedSchedulerBackend.this`. Besides, `executorDataMap` should only
+  // be modified in the inherited methods from ThreadSafeRpcEndpoint with protection by
   // `CoarseGrainedSchedulerBackend.this`.
   private val executorDataMap = new HashMap[String, ExecutorData]
 
@@ -535,7 +535,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   /**
    * Return the number of executors currently registered with this backend.
    */
-  private def numExistingExecutors: Int = executorDataMap.size
+  private def numExistingExecutors: Int = synchronized { executorDataMap.size }
 
   override def getExecutorIds(): Seq[String] = synchronized {
     executorDataMap.keySet.toSeq
