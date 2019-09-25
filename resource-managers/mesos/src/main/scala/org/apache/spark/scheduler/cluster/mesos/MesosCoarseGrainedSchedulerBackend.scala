@@ -61,9 +61,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
-  private lazy val hadoopDelegationTokenManager: MesosHadoopDelegationTokenManager =
-    new MesosHadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint)
-      
   private val maxCoresOption = conf.get(config.CORES_MAX)
 
   private val executorCoresOption = conf.getOption(config.EXECUTOR_CORES.key).map(_.toInt)
