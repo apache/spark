@@ -433,7 +433,7 @@ class FileIndexSuite extends SharedSparkSession {
           listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
 
         withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true",
-                     "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+           "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
           val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
           val withoutBlockLocations = fileIndex.
             listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
