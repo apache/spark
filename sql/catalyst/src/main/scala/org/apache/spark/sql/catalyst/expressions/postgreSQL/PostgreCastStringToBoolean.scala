@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.util.postgreSQL.StringUtils
 import org.apache.spark.sql.types.{BooleanType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
-case class PostgreCastStringToBoolean(child: Expression) extends UnaryExpression {
+case class PostgreCastStringToBoolean(child: Expression)
+  extends UnaryExpression with NullIntolerant {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType == StringType) {
