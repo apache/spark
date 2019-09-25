@@ -299,7 +299,7 @@ class RollingEventLogFilesWriter(
 
   // seq and event log path will be updated soon in rollEventLogFile, which `start` will call
   private var index: Long = 0L
-  private var currentEventLogFilePath: Path = logDirForAppPath
+  private var currentEventLogFilePath: Path = _
 
   override def start(): Unit = {
     requireLogBaseDirAsDirectory()
@@ -368,8 +368,12 @@ class RollingEventLogFilesWriter(
 }
 
 object RollingEventLogFilesWriter {
+  private val EVENT_LOG_DIR_NAME_PREFIX = "eventlog_v2_"
+  private val EVENT_LOG_FILE_NAME_PREFIX = "events_"
+  private val APPSTATUS_FILE_NAME_PREFIX = "appstatus_"
+
   def getAppEventLogDirPath(logBaseDir: URI, appId: String, appAttemptId: Option[String]): Path =
-    new Path(new Path(logBaseDir), "eventlog_v2_" +
+    new Path(new Path(logBaseDir), EVENT_LOG_DIR_NAME_PREFIX +
       EventLogFileWriter.nameForAppAndAttempt(appId, appAttemptId))
 
   def getAppStatusFilePath(
@@ -377,7 +381,8 @@ object RollingEventLogFilesWriter {
       appId: String,
       appAttemptId: Option[String],
       inProgress: Boolean): Path = {
-    val base = "appstatus_" + EventLogFileWriter.nameForAppAndAttempt(appId, appAttemptId)
+    val base = APPSTATUS_FILE_NAME_PREFIX +
+      EventLogFileWriter.nameForAppAndAttempt(appId, appAttemptId)
     val name = if (inProgress) base + EventLogFileWriter.IN_PROGRESS else base
     new Path(appLogDir, name)
   }
@@ -388,13 +393,14 @@ object RollingEventLogFilesWriter {
       appAttemptId: Option[String],
       index: Long,
       codecName: Option[String]): Path = {
-    val base = s"events_${index}_" + EventLogFileWriter.nameForAppAndAttempt(appId, appAttemptId)
+    val base = s"${EVENT_LOG_FILE_NAME_PREFIX}_${index}_" +
+      EventLogFileWriter.nameForAppAndAttempt(appId, appAttemptId)
     val codec = codecName.map("." + _).getOrElse("")
     new Path(appLogDir, base + codec)
   }
 
   def isEventLogDir(status: FileStatus): Boolean = {
-    status.isDirectory && status.getPath.getName.startsWith("eventlog_v2_")
+    status.isDirectory && status.getPath.getName.startsWith(EVENT_LOG_DIR_NAME_PREFIX)
   }
 
   def isEventLogFile(status: FileStatus): Boolean = {
@@ -402,7 +408,7 @@ object RollingEventLogFilesWriter {
   }
 
   def isEventLogFile(path: Path): Boolean = {
-    path.getName.startsWith("events_")
+    path.getName.startsWith(EVENT_LOG_FILE_NAME_PREFIX)
   }
 
   def isAppStatusFile(status: FileStatus): Boolean = {
@@ -410,12 +416,12 @@ object RollingEventLogFilesWriter {
   }
 
   def isAppStatusFile(path: Path): Boolean = {
-    path.getName.startsWith("appstatus")
+    path.getName.startsWith(APPSTATUS_FILE_NAME_PREFIX)
   }
 
   def getSequence(eventLogFileName: String): Long = {
-    require(eventLogFileName.startsWith("events_"), "Not a event log file!")
-    val seq = eventLogFileName.stripPrefix("events_").split("_")(0)
+    require(eventLogFileName.startsWith(EVENT_LOG_FILE_NAME_PREFIX), "Not a event log file!")
+    val seq = eventLogFileName.stripPrefix(EVENT_LOG_DIR_NAME_PREFIX).split("_")(0)
     seq.toLong
   }
 }
