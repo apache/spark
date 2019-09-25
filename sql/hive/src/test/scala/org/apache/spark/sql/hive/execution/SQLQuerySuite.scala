@@ -2412,29 +2412,4 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
-
-  test("SPARK-29213 Make it consistent when get notnull output and generate null " +
-    "checks in FilterExec") {
-    withTable("table_29213_1", "table_29213_2", "table_29213_3") {
-      sql("create table table_29213_1(x string)")
-      sql("create table table_29213_2(x bigint)")
-      sql("create table table_29213_3(x string)")
-      sql("insert into table_29213_2 select null as x")
-      sql(
-        """
-          |select t1.x
-          |from (
-          |    select x from table_29213_1) t1
-          |left join (
-          |    select x from (
-          |        select x from table_29213_2
-          |        union all
-          |        select substr(x,5) x from table_29213_3
-          |    ) a
-          |    where length(x)>0
-          |) t3
-          |on t1.x=t3.x
-        """.stripMargin).collect()
-    }
-  }
 }

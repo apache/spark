@@ -3233,6 +3233,33 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-29213 Make it consistent when get notnull output and generate null " +
+    "checks in FilterExec") {
+    withView("t1", "t2", "t3") {
+      sql("select ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t1")
+      sql("select * from values 0, cast(null as bigint)")
+        .as[java.lang.Long]
+        .map(identity)
+        .toDF("x")
+        .createOrReplaceTempView("t2")
+      sql("select ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t3")
+      sql(
+        """
+          |select t1.x
+          |from t1
+          |left join (
+          |    select x from (
+          |        select x from t2
+          |        union all
+          |        select substr(x,5) x from t3
+          |    ) a
+          |    where length(x)>0
+          |) t3
+          |on t1.x=t3.x
+        """.stripMargin).collect()
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
