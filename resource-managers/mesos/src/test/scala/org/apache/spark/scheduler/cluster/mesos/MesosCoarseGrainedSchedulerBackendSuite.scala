@@ -841,7 +841,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.nodeBlacklist).thenReturn(Set[String]())
     when(taskScheduler.sc).thenReturn(sc)
-    when(taskScheduler.nodeBlacklist()).thenReturn(Set[String]())
 
     externalShuffleClient = mock[MesosExternalBlockStoreClient]
 
