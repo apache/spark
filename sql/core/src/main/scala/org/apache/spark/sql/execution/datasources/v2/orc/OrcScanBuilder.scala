@@ -37,14 +37,9 @@ case class OrcScanBuilder(
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
-  lazy val hadoopConf = {
-    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-    // Hadoop Configurations are case sensitive.
-    sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-  }
 
   override def build(): Scan = {
-    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema,
+    OrcScan(sparkSession, fileIndex, dataSchema,
       readDataSchema(), readPartitionSchema(), options, pushedFilters())
   }
 
@@ -52,11 +47,6 @@ case class OrcScanBuilder(
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
-      OrcFilters.createFilter(schema, filters).foreach { f =>
-        // The pushed filters will be set in `hadoopConf`. After that, we can simply use the
-        // changed `hadoopConf` in executors.
-        OrcInputFormat.setSearchArgument(hadoopConf, f, schema.fieldNames)
-      }
       val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
       _pushedFilters = OrcFilters.convertibleFilters(schema, dataTypeMap, filters).toArray
     }
