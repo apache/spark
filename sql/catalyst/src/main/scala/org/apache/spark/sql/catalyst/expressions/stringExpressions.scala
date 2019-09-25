@@ -1732,9 +1732,9 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
     Examples:
       > SELECT _FUNC_('Spark SQL ');
        10
-      > SELECT _FUNC_('Spark SQL ');
-       10
-      > SELECT _FUNC_('Spark SQL ');
+      > SELECT _FUNC_('Spark SQL');
+       9
+      > SELECT _FUNC_(binary('Spark SQL\\000'));
        10
   """,
   since = "1.5.0")
