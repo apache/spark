@@ -190,13 +190,13 @@ private[hive] class HiveClientImpl(
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
-    // For hive version >= 2.0, when we initial SessionState, it will set
-    // a new UDFClassLoader to hiveConf's classLoader, when we use ADDJarCommand to
-    // add jar, it will be added to clientLoader.classLoader, then the jar won't be find
-    // in hiveConf's ClassLoader, here we rest it with clientLoader.ClassLoader which contains
-    // jars passed by --jars loaded by main thread ClassLoader. Thus we can load all jars
-    // passed by --jars and AddJarCommand.
-    state.getConf.setClassLoader(clientLoader.classLoader)
+    // Hive 2.3 will set UDFClassLoader to hiveConf when initializing SessionState
+    // since HIVE-11878, and ADDJarCommand will add jars to clientLoader.classLoader.
+    // For this reason we cannot load the jars added by ADDJarCommand because of class loader
+    // got changed. We reset it to clientLoader.ClassLoader here.
+    if (HiveUtils.isHive23) {
+      state.getConf.setClassLoader(clientLoader.classLoader)
+    }
     SessionState.start(state)
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
     state.err = new PrintStream(outputBuffer, true, UTF_8.name())
