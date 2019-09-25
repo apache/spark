@@ -208,9 +208,9 @@ rect.getting-result-time-proportion {
 }
 
 .vis-timeline .vis-item.executor.added.vis-selected {
-    background-color: #00AAFF;
-    border-color: #184C66;
-    z-index: 2;
+  background-color: #00AAFF;
+  border-color: #184C66;
+  z-index: 2;
 }
 
 .legend-area rect.executor-added-legend {
@@ -224,9 +224,9 @@ rect.getting-result-time-proportion {
 }
 
 .vis-timeline .vis-item.executor.removed.vis-selected {
-    background-color: #FF6680;
-    border-color: #661F2C;
-    z-index: 2;
+  background-color: #FF6680;
+  border-color: #661F2C;
+  z-index: 2;
 }
 
 .legend-area rect.executor-removed-legend {
