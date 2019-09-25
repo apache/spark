@@ -20,16 +20,14 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.orc.mapreduce.OrcInputFormat
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
-import org.apache.spark.sql.execution.datasources.v2.{BroadcastedHadoopConfBatch, FileScan}
+import org.apache.spark.sql.execution.datasources.v2.{BroadcastedHadoopConf, FileScan}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.SerializableConfiguration
 
 case class OrcScan(
     sparkSession: SparkSession,
@@ -40,7 +38,7 @@ case class OrcScan(
     options: CaseInsensitiveStringMap,
     pushedFilters: Array[Filter])
   extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema)
-  with BroadcastedHadoopConfBatch {
+  with BroadcastedHadoopConf {
 
   override def isSplitable(path: Path): Boolean = true
 
@@ -53,8 +51,7 @@ case class OrcScan(
     hadoopConf
   }
 
-  override def createReaderFactory(broadcastedConf: Broadcast[SerializableConfiguration]):
-      PartitionReaderFactory = {
+  override def createReaderFactory(): PartitionReaderFactory = {
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,

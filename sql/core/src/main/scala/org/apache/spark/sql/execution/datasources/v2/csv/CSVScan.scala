@@ -20,17 +20,15 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
-import org.apache.spark.sql.execution.datasources.v2.{BroadcastedHadoopConfBatch, TextBasedFileScan}
+import org.apache.spark.sql.execution.datasources.v2.{BroadcastedHadoopConf, TextBasedFileScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.SerializableConfiguration
 
 case class CSVScan(
     sparkSession: SparkSession,
@@ -40,7 +38,7 @@ case class CSVScan(
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap)
   extends TextBasedFileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options)
-  with BroadcastedHadoopConfBatch {
+  with BroadcastedHadoopConf {
 
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
     options.asScala.toMap,
@@ -61,8 +59,7 @@ case class CSVScan(
     }
   }
 
-  override def createReaderFactory(broadcastedConf: Broadcast[SerializableConfiguration]):
-      PartitionReaderFactory = {
+  override def createReaderFactory(): PartitionReaderFactory = {
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
 

@@ -20,17 +20,15 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetInputFormat
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetReadSupport, ParquetWriteSupport}
-import org.apache.spark.sql.execution.datasources.v2.{BroadcastedHadoopConfBatch, FileScan}
+import org.apache.spark.sql.execution.datasources.v2.{BroadcastedHadoopConf, FileScan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.SerializableConfiguration
 
 case class ParquetScan(
     sparkSession: SparkSession,
@@ -41,7 +39,7 @@ case class ParquetScan(
     pushedFilters: Array[Filter],
     options: CaseInsensitiveStringMap)
     extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema)
-    with BroadcastedHadoopConfBatch {
+    with BroadcastedHadoopConf {
 
   override def isSplitable(path: Path): Boolean = true
 
@@ -77,8 +75,7 @@ case class ParquetScan(
     hadoopConf
   }
 
-  override def createReaderFactory(broadcastedConf: Broadcast[SerializableConfiguration]):
-      PartitionReaderFactory = {
+  override def createReaderFactory(): PartitionReaderFactory = {
     ParquetPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, pushedFilters)
   }

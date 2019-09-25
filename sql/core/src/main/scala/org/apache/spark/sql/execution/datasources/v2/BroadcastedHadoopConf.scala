@@ -23,7 +23,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.annotation.{DeveloperApi}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.{Batch, PartitionReaderFactory}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
 
@@ -31,7 +30,7 @@ import org.apache.spark.util.SerializableConfiguration
  * A helper trait to serialize and broadcast the Hadoop configuration for readers.
  */
 @DeveloperApi
-trait BroadcastedHadoopConfBatch extends Batch {
+trait BroadcastedHadoopConf {
   val sparkSession: SparkSession
   val options: CaseInsensitiveStringMap
 
@@ -42,16 +41,11 @@ trait BroadcastedHadoopConfBatch extends Batch {
   }
 
 
+  // Override if you need to set some custom hadoop params beyond the map
   protected def updateHadoopConf(): Configuration = {
     hadoopConf
   }
 
-  override final def createReaderFactory(): PartitionReaderFactory = {
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
+  lazy val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(updateHadoopConf()))
-    createReaderFactory(broadcastedConf)
-  }
-
-  def createReaderFactory(broadcastedConf: Broadcast[SerializableConfiguration]):
-      PartitionReaderFactory
 }
