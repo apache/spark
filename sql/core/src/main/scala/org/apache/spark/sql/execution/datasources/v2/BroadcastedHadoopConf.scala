@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, PartitionReaderFactory}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -29,16 +32,23 @@ import org.apache.spark.util.SerializableConfiguration
  */
 @DeveloperApi
 trait BroadcastedHadoopConfBatch extends Batch {
-  val sparkSession: SparkSession;
-  val hadoopConf: Configuration;
-  // Override this if you need to set custom keys on the Hadoop configuration
-  protected def updateHadoopConf(conf: Configuration): Configuration = {
-    conf
+  val sparkSession: SparkSession
+  val options: CaseInsensitiveStringMap
+
+  lazy val hadoopConf = {
+    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+    // Hadoop Configurations are case sensitive.
+    sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+  }
+
+
+  protected def updateHadoopConf(): Configuration = {
+    hadoopConf
   }
 
   override final def createReaderFactory(): PartitionReaderFactory = {
     val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(updateHadoopConf(hadoopConf)))
+      new SerializableConfiguration(updateHadoopConf()))
     createReaderFactory(broadcastedConf)
   }
 

@@ -20,6 +20,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JSONOptionsInRead
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.json.JsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
+import org.apache.spark.sql.execution.datasources.v2.{BroadcastedHadoopConfBatch, TextBasedFileScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -39,7 +40,8 @@ case class JsonScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends TextBasedFileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options) {
+  extends TextBasedFileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options)
+  with BroadcastedHadoopConfBatch {
 
   private val parsedOptions = new JSONOptionsInRead(
     CaseInsensitiveMap(options.asScala.toMap),
@@ -59,7 +61,8 @@ case class JsonScan(
     }
   }
 
-  override def createReaderFactory(): PartitionReaderFactory = {
+  override def createReaderFactory(broadcastedConf: Broadcast[SerializableConfiguration]):
+      PartitionReaderFactory = {
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
 
@@ -76,11 +79,6 @@ case class JsonScan(
           "df.filter($\"_corrupt_record\".isNotNull).count()."
       )
     }
-    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-    // Hadoop Configurations are case sensitive.
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     JsonPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,

@@ -34,12 +34,7 @@ case class ParquetScanBuilder(
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
-  lazy val hadoopConf = {
-    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-    // Hadoop Configurations are case sensitive.
-    sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-  }
+    extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
 
   lazy val pushedParquetFilters = {
     val sqlConf = sparkSession.sessionState.conf
@@ -69,7 +64,7 @@ case class ParquetScanBuilder(
   override def pushedFilters(): Array[Filter] = pushedParquetFilters
 
   override def build(): Scan = {
-    ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
+    ParquetScan(sparkSession, fileIndex, dataSchema, readDataSchema(),
       readPartitionSchema(), pushedParquetFilters, options)
   }
 }

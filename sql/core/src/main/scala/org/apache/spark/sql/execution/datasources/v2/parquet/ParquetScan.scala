@@ -34,7 +34,6 @@ import org.apache.spark.util.SerializableConfiguration
 
 case class ParquetScan(
     sparkSession: SparkSession,
-    hadoopConf: Configuration,
     fileIndex: PartitioningAwareFileIndex,
     dataSchema: StructType,
     readDataSchema: StructType,
@@ -46,7 +45,7 @@ case class ParquetScan(
 
   override def isSplitable(path: Path): Boolean = true
 
-  override protected def updateHadoopConf(conf: Configuration): Configuration = {
+  override protected def updateHadoopConf(): Configuration = {
     val readDataSchemaAsJson = readDataSchema.json
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(
