@@ -34,10 +34,6 @@ import org.apache.spark.sql.types._
 class HiveUserDefinedTypeSuite extends QueryTest {
   private[this] val functionClass = classOf[org.apache.spark.sql.hive.TestUDF].getCanonicalName
 
-  override def afterAll(): Unit = {
-    spark.stop()
-  }
-
   test("Support UDT in Hive UDF") {
     val functionName = "get_point_x"
     val sql = spark.sql _
