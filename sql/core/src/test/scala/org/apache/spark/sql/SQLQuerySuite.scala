@@ -117,7 +117,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
 
   test("using _FUNC_ instead of function names in examples") {
     val exampleRe = "(>.*;)".r
-    val ignoreSet = Set("org.apache.spark.sql.catalyst.expressions.CaseWhen")
+    val ignoreSet = Set(
+      // Examples for CaseWhen show simpler syntax:
+      // `CASE WHEN ... THEN ... WHEN ... THEN ... END`
+      "org.apache.spark.sql.catalyst.expressions.CaseWhen",
+      // _FUNC_ is replaced by `locate` but `locate(... IN ...)` is not supported
+      "org.apache.spark.sql.catalyst.expressions.StringLocate")
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName

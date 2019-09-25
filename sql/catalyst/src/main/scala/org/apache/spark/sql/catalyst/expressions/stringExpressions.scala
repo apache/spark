@@ -1123,7 +1123,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
        4
       > SELECT _FUNC_('bar', 'foobarbar', 5);
        7
-      > SELECT _FUNC_('bar' IN 'foobarbar');
+      > SELECT POSITION('bar' IN 'foobarbar');
        4
   """,
   since = "1.5.0")
