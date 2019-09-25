@@ -110,9 +110,9 @@ private[spark] object GradientBoostedTrees extends Logging {
       initTreeWeight: Double,
       initTree: DecisionTreeRegressionModel,
       loss: OldLoss): RDD[(Double, Double)] = {
-    data.map { instance =>
-      val pred = updatePrediction(instance.features, 0.0, initTree, initTreeWeight)
-      val error = loss.computeError(pred, instance.label)
+    data.map { case Instance(label, _, features) =>
+      val pred = updatePrediction(features, 0.0, initTree, initTreeWeight)
+      val error = loss.computeError(pred, label)
       (pred, error)
     }
   }
@@ -134,15 +134,13 @@ private[spark] object GradientBoostedTrees extends Logging {
       treeWeight: Double,
       tree: DecisionTreeRegressionModel,
       loss: OldLoss): RDD[(Double, Double)] = {
-
-    val newPredError = data.zip(predictionAndError).mapPartitions { iter =>
-      iter.map { case (instance, (pred, error)) =>
-        val newPred = updatePrediction(instance.features, pred, tree, treeWeight)
-        val newError = loss.computeError(newPred, instance.label)
+    data.zip(predictionAndError).mapPartitions { iter =>
+      iter.map { case (Instance(label, _, features), (pred, _)) =>
+        val newPred = updatePrediction(features, pred, tree, treeWeight)
+        val newError = loss.computeError(newPred, label)
         (newPred, newError)
       }
     }
-    newPredError
   }
 
   /**
@@ -177,12 +175,15 @@ private[spark] object GradientBoostedTrees extends Logging {
       trees: Array[DecisionTreeRegressionModel],
       treeWeights: Array[Double],
       loss: OldLoss): Double = {
-    data.map { instance =>
+    val (errSum, weightSum) = data.map { case Instance(label, weight, features) =>
       val predicted = trees.zip(treeWeights).foldLeft(0.0) { case (acc, (model, weight)) =>
-        updatePrediction(instance.features, acc, model, weight)
+        updatePrediction(features, acc, model, weight)
       }
-      loss.computeError(predicted, instance.label) * instance.weight
-    }.mean()
+      (loss.computeError(predicted, label) * weight, weight)
+    }.treeReduce{ case ((err1, weight1), (err2, weight2)) =>
+        (err1 + err2, weight1 + weight2)
+    }
+    errSum / weightSum
   }
 
   /**
@@ -215,15 +216,15 @@ private[spark] object GradientBoostedTrees extends Logging {
     val numTrees = trees.length
 
     val (errSum, weightSum) = remappedData.mapPartitions { iter =>
-      val localTrees = broadcastTrees.value
-      iter.map { point =>
+      val trees = broadcastTrees.value
+      iter.map { case Instance(label, weight, features) =>
         val pred = Array.tabulate(numTrees) { i =>
-          localTrees(i).rootNode.predictImpl(point.features)
+          trees(i).rootNode.predictImpl(features)
             .prediction * localTreeWeights(i)
         }
         val err = pred.scanLeft(0.0)(_ + _).drop(1)
-          .map(p => loss.computeError(p, point.label) * point.weight)
-        (err, point.weight)
+          .map(p => loss.computeError(p, label) * weight)
+        (err, weight)
       }
     }.treeReduce { case ((err1, weight1), (err2, weight2)) =>
       (0 until numTrees).foreach(i => err1(i) += err2(i))
@@ -317,8 +318,8 @@ private[spark] object GradientBoostedTrees extends Logging {
     var doneLearning = false
     while (m < numIterations && !doneLearning) {
       // Update data with pseudo-residuals
-      val data = predError.zip(input).map { case ((pred, _), point) =>
-        Instance(-loss.gradient(pred, point.label), point.weight, point.features)
+      val data = predError.zip(input).map { case ((pred, _), Instance(label, weight, features)) =>
+        Instance(-loss.gradient(pred, label), weight, features)
       }
 
       timer.start(s"building tree $m")
