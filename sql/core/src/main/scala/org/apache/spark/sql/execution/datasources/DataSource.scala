@@ -765,15 +765,17 @@ object DataSource extends Logging {
     }).get
 
 
-    try {
-      ThreadUtils.parmap(nonGlobPaths, "checkPathsExist", 20) { path =>
-        val fs = path.getFileSystem(hadoopConf)
-        if (checkFilesExist && !fs.exists(path)) {
-          throw new AnalysisException(s"Path does not exist: $path")
+    if (checkFilesExist) {
+      try {
+        ThreadUtils.parmap(nonGlobPaths, "checkPathsExist", 20) { path =>
+          val fs = path.getFileSystem(hadoopConf)
+          if (!fs.exists(path)) {
+            throw new AnalysisException(s"Path does not exist: $path")
+          }
         }
+      } catch {
+        case e: SparkException => throw e.getCause
       }
-    } catch {
-      case e: SparkException => throw e.getCause
     }
 
     val allPaths = globbedPaths ++ nonGlobPaths

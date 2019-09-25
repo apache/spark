@@ -82,6 +82,27 @@ class DataSourceSuite extends SharedSparkSession {
     )
   }
 
+  test("test non glob paths checkFilesExist=false") {
+    val resultPaths = DataSource.checkAndGlobPathIfNecessary(
+      Seq(
+        path1.toString,
+        path2.toString,
+        nonExistentPath.toString
+      ),
+      hadoopConf,
+      checkEmptyGlobPath = true,
+      checkFilesExist = false
+    )
+
+    assert(
+      resultPaths.toSet === Set(
+        path1,
+        path2,
+        nonExistentPath
+      )
+    )
+  }
+
   test("test non existent paths") {
     assertThrows[AnalysisException](
       DataSource.checkAndGlobPathIfNecessary(
