@@ -37,7 +37,8 @@ case class LocalTableScanExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   @transient private lazy val unsafeRows: Array[InternalRow] = {
-    if (rows == null || rows.isEmpty) {
+    assert(rows != null)
+    if (rows.isEmpty) {
       Array.empty
     } else {
       val proj = UnsafeProjection.create(output, output)
