@@ -68,7 +68,7 @@ class GradientBoostedTrees private[spark] (
   def run(input: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
     val (trees, treeWeights) = NewGBT.run(input.map { point =>
-      NewLabeledPoint(point.label, point.features.asML)
+      NewLabeledPoint(point.label, point.features.asML).toInstance
     }, boostingStrategy, seed.toLong, "all")
     new GradientBoostedTreesModel(algo, trees.map(_.toOld), treeWeights)
   }
@@ -98,9 +98,9 @@ class GradientBoostedTrees private[spark] (
       validationInput: RDD[LabeledPoint]): GradientBoostedTreesModel = {
     val algo = boostingStrategy.treeStrategy.algo
     val (trees, treeWeights) = NewGBT.runWithValidation(input.map { point =>
-      NewLabeledPoint(point.label, point.features.asML)
+      NewLabeledPoint(point.label, point.features.asML).toInstance
     }, validationInput.map { point =>
-      NewLabeledPoint(point.label, point.features.asML)
+      NewLabeledPoint(point.label, point.features.asML).toInstance
     }, boostingStrategy, seed.toLong, "all")
     new GradientBoostedTreesModel(algo, trees.map(_.toOld), treeWeights)
   }

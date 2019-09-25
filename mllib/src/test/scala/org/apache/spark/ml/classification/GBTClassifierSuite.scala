@@ -20,6 +20,7 @@ package org.apache.spark.ml.classification
 import com.github.fommil.netlib.BLAS
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.classification.LinearSVCSuite.generateSVMInput
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
@@ -52,8 +53,10 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   private var data: RDD[LabeledPoint] = _
   private var trainData: RDD[LabeledPoint] = _
   private var validationData: RDD[LabeledPoint] = _
+  private var binaryDataset: DataFrame = _
   private val eps: Double = 1e-5
   private val absEps: Double = 1e-8
+  private val seed = 42
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -65,6 +68,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     validationData =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80), 2)
         .map(_.asML)
+    binaryDataset = generateSVMInput(0.01, Array[Double](-1.5, 1.0), 1000, seed).toDF()
   }
 
   test("params") {
@@ -313,21 +317,21 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       val e: SparkException = intercept[SparkException] {
         gbt.fit(df1)
       }
-      assert(e.getMessage.contains("currently only supports binary classification"))
+      assert(e.getMessage.contains("Labels must be integers in range [0, 2)"))
     }
     val df2 = getTestData(Seq(0.0, 0.1, 1.0, 0.0))
     withClue("Classifier should fail if label is not an integer") {
       val e: SparkException = intercept[SparkException] {
         gbt.fit(df2)
       }
-      assert(e.getMessage.contains("currently only supports binary classification"))
+      assert(e.getMessage.contains("Labels must be integers in range [0, 2)"))
     }
     val df3 = getTestData(Seq(0.0, 2.0, 1.0, 0.0))
     withClue("Classifier should fail if label is >= 2") {
       val e: SparkException = intercept[SparkException] {
         gbt.fit(df3)
       }
-      assert(e.getMessage.contains("currently only supports binary classification"))
+      assert(e.getMessage.contains("Labels must be integers in range [0, 2)"))
     }
   }
 
@@ -362,7 +366,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   test("Tests of feature subset strategy") {
     val numClasses = 2
     val gbt = new GBTClassifier()
-      .setSeed(42)
+      .setSeed(seed)
       .setMaxDepth(3)
       .setMaxIter(5)
       .setFeatureSubsetStrategy("all")
@@ -398,7 +402,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     val evalArr = model3.evaluateEachIteration(validationData.toDF)
     val remappedValidationData = validationData.map(
-      x => new LabeledPoint((x.label * 2) - 1, x.features))
+      x => LabeledPoint((x.label * 2) - 1, x.features).toInstance)
     val lossErr1 = GradientBoostedTrees.computeError(remappedValidationData,
       model1.trees, model1.treeWeights, model1.getOldLossType)
     val lossErr2 = GradientBoostedTrees.computeError(remappedValidationData,
@@ -433,7 +437,8 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       assert(modelWithValidation.numTrees < numIter)
 
       val (errorWithoutValidation, errorWithValidation) = {
-        val remappedRdd = validationData.map(x => new LabeledPoint(2 * x.label - 1, x.features))
+        val remappedRdd = validationData.map(x =>
+          LabeledPoint(2 * x.label - 1, x.features).toInstance)
         (GradientBoostedTrees.computeError(remappedRdd, modelWithoutValidation.trees,
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType),
           GradientBoostedTrees.computeError(remappedRdd, modelWithValidation.trees,
@@ -442,7 +447,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       assert(errorWithValidation < errorWithoutValidation)
 
       val evaluationArray = GradientBoostedTrees
-        .evaluateEachIteration(validationData, modelWithoutValidation.trees,
+        .evaluateEachIteration(validationData.map(_.toInstance), modelWithoutValidation.trees,
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType,
           OldAlgo.Classification)
       assert(evaluationArray.length === numIter)
@@ -470,6 +475,36 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       assert(i.getCheckpointInterval === model.getCheckpointInterval)
       assert(i.getSeed === model.getSeed)
     })
+  }
+
+  test("training with sample weights") {
+    val df = binaryDataset
+    val numClasses = 2
+    val predEquals = (x: Double, y: Double) => x == y
+    // (maxIter, maxDepth)
+    val testParams = Seq(
+      (5, 5),
+      (5, 10)
+    )
+
+    for ((maxIter, maxDepth) <- testParams) {
+      val estimator = new GBTClassifier()
+        .setMaxIter(maxIter)
+        .setMaxDepth(maxDepth)
+        .setSeed(seed)
+        .setMinWeightFractionPerNode(0.049)
+
+      MLTestingUtils.testArbitrarilyScaledWeights[GBTClassificationModel,
+        GBTClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.7))
+      MLTestingUtils.testOutliersWithSmallWeights[GBTClassificationModel,
+        GBTClassifier](df.as[LabeledPoint], estimator,
+        numClasses, MLTestingUtils.modelPredictionEquals(df, predEquals, 0.8),
+        outlierRatio = 2)
+      MLTestingUtils.testOversamplingVsWeighting[GBTClassificationModel,
+        GBTClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.7), seed)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
