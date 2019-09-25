@@ -20,11 +20,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.text.TextOptions
-import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
+import org.apache.spark.sql.execution.datasources.v2.{BroadcastedHadoopConfBatch, TextBasedFileScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -35,7 +36,8 @@ case class TextScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends TextBasedFileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options) {
+  extends TextBasedFileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema, options)
+  with BroadcastedHadoopConfBatch {
 
   private val optionsAsScala = options.asScala.toMap
   private lazy val textOptions: TextOptions = new TextOptions(optionsAsScala)
@@ -53,17 +55,11 @@ case class TextScan(
     }
   }
 
-  override def createReaderFactory(): PartitionReaderFactory = {
+  override def createReaderFactory(broadcastedConf: Broadcast[SerializableConfiguration]):
+      PartitionReaderFactory = {
     assert(
       readDataSchema.length <= 1,
       "Text data source only produces a single data column named \"value\".")
-    val hadoopConf = {
-      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-      // Hadoop Configurations are case sensitive.
-      sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    }
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
     TextPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf, readDataSchema,
       readPartitionSchema, textOptions)
   }
