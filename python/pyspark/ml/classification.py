@@ -941,8 +941,7 @@ class BinaryLogisticRegressionTrainingSummary(BinaryLogisticRegressionSummary,
 
 
 @inherit_doc
-class DecisionTreeClassifierParams(DecisionTreeParams, TreeClassifierParams,
-                                   JavaProbabilisticClassifierParams):
+class DecisionTreeClassifierParams(DecisionTreeParams, TreeClassifierParams):
     """
     (Private) Params for DecisionTree Classifier.
     """
