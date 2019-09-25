@@ -70,13 +70,17 @@ abstract class EventLogFileWriter(
     CompressionCodec.getShortName(c.getClass.getName)
   }
 
+  // Only defined if the file system scheme is not local
+  protected var hadoopDataStream: Option[FSDataOutputStream] = None
+  protected var writer: Option[PrintWriter] = None
+
   protected def requireLogBaseDirAsDirectory(): Unit = {
     if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
       throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
     }
   }
 
-  protected def initLogFile(path: Path): (Option[FSDataOutputStream], OutputStream) = {
+  protected def initLogFile(path: Path, fnSetupWriter: OutputStream => PrintWriter): Unit = {
     if (shouldOverwrite && fileSystem.delete(path, true)) {
       logWarning(s"Event log $path already exists. Overwriting...")
     }
@@ -85,7 +89,6 @@ abstract class EventLogFileWriter(
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
     val uri = path.toUri
 
-    var hadoopDataStream: Option[FSDataOutputStream] = None
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
      * Therefore, for local files, use FileOutputStream instead. */
     val dstream =
@@ -103,12 +106,26 @@ abstract class EventLogFileWriter(
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
       fileSystem.setPermission(path, EventLogFileWriter.LOG_FILE_PERMISSIONS)
       logInfo(s"Logging events to $path")
-      (hadoopDataStream, bstream)
+      writer = Some(fnSetupWriter(bstream))
     } catch {
       case e: Exception =>
         dstream.close()
         throw e
     }
+  }
+
+  protected def writeJson(json: String, flushLogger: Boolean = false): Unit = {
+    // scalastyle:off println
+    writer.foreach(_.println(json))
+    // scalastyle:on println
+    if (flushLogger) {
+      writer.foreach(_.flush())
+      hadoopDataStream.foreach(_.hflush())
+    }
+  }
+
+  protected def closeWriter(): Unit = {
+    writer.foreach(_.close())
   }
 
   protected def renameFile(src: Path, dest: Path, overwrite: Boolean): Unit = {
@@ -197,27 +214,15 @@ class SingleEventLogFileWriter(
 
   private val inProgressPath = logPath + EventLogFileWriter.IN_PROGRESS
 
-  // Only defined if the file system scheme is not local
-  private var hadoopDataStream: Option[FSDataOutputStream] = None
-
-  private var writer: Option[PrintWriter] = None
-
   override def start(): Unit = {
     requireLogBaseDirAsDirectory()
 
-    val (hadoopStream, outputStream) = initLogFile(new Path(inProgressPath))
-    hadoopDataStream = hadoopStream
-    writer = Some(new PrintWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)))
+    initLogFile(new Path(inProgressPath),
+      ostream => new PrintWriter(new OutputStreamWriter(ostream, StandardCharsets.UTF_8)))
   }
 
   override def writeEvent(eventJson: String, flushLogger: Boolean = false): Unit = {
-    // scalastyle:off println
-    writer.foreach(_.println(eventJson))
-    // scalastyle:on println
-    if (flushLogger) {
-      writer.foreach(_.flush())
-      hadoopDataStream.foreach(_.hflush())
-    }
+    writeJson(eventJson, flushLogger)
   }
 
   /**
@@ -225,7 +230,7 @@ class SingleEventLogFileWriter(
    * ".inprogress" suffix.
    */
   override def stop(): Unit = {
-    writer.foreach(_.close())
+    closeWriter()
     renameFile(new Path(inProgressPath), new Path(logPath), shouldOverwrite)
   }
 }
@@ -292,10 +297,7 @@ class RollingEventLogFilesWriter(
 
   private val logDirForAppPath = getAppEventLogDirPath(logBaseDir, appId, appAttemptId)
 
-  // Only defined if the file system scheme is not local
-  private var hadoopDataStream: Option[FSDataOutputStream] = None
   private var countingOutputStream: Option[CountingOutputStream] = None
-  private var writer: Option[PrintWriter] = None
 
   // seq and event log path will be updated soon in rollEventLogFile, which `start` will call
   private var index: Long = 0L
@@ -325,31 +327,25 @@ class RollingEventLogFilesWriter(
       }
     }
 
-    // scalastyle:off println
-    writer.foreach(_.println(eventJson))
-    // scalastyle:on println
-    if (flushLogger) {
-      writer.foreach(_.flush())
-      hadoopDataStream.foreach(_.hflush())
-    }
+    writeJson(eventJson, flushLogger)
   }
 
   private def rollEventLogFile(): Unit = {
-    writer.foreach(_.close())
+    closeWriter()
 
     index += 1
     currentEventLogFilePath = getEventLogFilePath(logDirForAppPath, appId, appAttemptId, index,
       compressionCodecName)
 
-    val (hadoopStream, outputStream) = initLogFile(currentEventLogFilePath)
-    hadoopDataStream = hadoopStream
-    countingOutputStream = Some(new CountingOutputStream(outputStream))
-    writer = Some(new PrintWriter(
-      new OutputStreamWriter(countingOutputStream.get, StandardCharsets.UTF_8)))
+    initLogFile(currentEventLogFilePath, ostream => {
+      countingOutputStream = Some(new CountingOutputStream(ostream))
+      new PrintWriter(
+        new OutputStreamWriter(countingOutputStream.get, StandardCharsets.UTF_8))
+    })
   }
 
   override def stop(): Unit = {
-    writer.foreach(_.close())
+    closeWriter()
     val appStatusPathIncomplete = getAppStatusFilePath(logDirForAppPath, appId, appAttemptId,
       inProgress = true)
     val appStatusPathComplete = getAppStatusFilePath(logDirForAppPath, appId, appAttemptId,
