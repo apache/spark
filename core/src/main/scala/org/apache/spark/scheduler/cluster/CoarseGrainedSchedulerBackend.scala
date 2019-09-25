@@ -537,7 +537,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   private def numExistingExecutors: Int = executorDataMap.size
 
-  override def getExecutorIds(): Seq[String] = {
+  override def getExecutorIds(): Seq[String] = synchronized {
     executorDataMap.keySet.toSeq
   }
 
@@ -545,14 +545,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.contains(id) && !executorsPendingToRemove.contains(id)
   }
 
-  override def maxNumConcurrentTasks(): Int = {
+  override def maxNumConcurrentTasks(): Int = synchronized {
     executorDataMap.values.map { executor =>
       executor.totalCores / scheduler.CPUS_PER_TASK
     }.sum
   }
 
   // this function is for testing only
-  def getExecutorAvailableResources(executorId: String): Map[String, ExecutorResourceInfo] = {
+  def getExecutorAvailableResources(
+      executorId: String): Map[String, ExecutorResourceInfo] = synchronized {
     executorDataMap.get(executorId).map(_.resourcesInfo).getOrElse(Map.empty)
   }
 
