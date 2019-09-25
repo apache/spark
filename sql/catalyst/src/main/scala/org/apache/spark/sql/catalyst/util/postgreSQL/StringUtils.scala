@@ -22,7 +22,7 @@ import org.apache.spark.unsafe.types.UTF8String
 object StringUtils {
   // "true", "yes", "1", "false", "no", "0", and unique prefixes of these strings are accepted.
   private[this] val trueStrings =
-    Set("true", "tru", "tr", "t", "yes", "ye", "y", "on", "1").map (UTF8String.fromString)
+    Set("true", "tru", "tr", "t", "yes", "ye", "y", "on", "1").map(UTF8String.fromString)
 
   private[this] val falseStrings =
     Set("false", "fals", "fal", "fa", "f", "no", "n", "off", "of", "0").map(UTF8String.fromString)

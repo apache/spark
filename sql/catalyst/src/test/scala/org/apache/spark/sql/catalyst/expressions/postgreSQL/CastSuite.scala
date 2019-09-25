@@ -24,7 +24,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(PostgreCastStringToBoolean(Literal(v)), expected)
   }
 
-  test("cast string to boolean with PostgreSQL dialect") {
+  test("cast string to boolean") {
     checkPostgreCastStringToBoolean("true", true)
     checkPostgreCastStringToBoolean("tru", true)
     checkPostgreCastStringToBoolean("tr", true)

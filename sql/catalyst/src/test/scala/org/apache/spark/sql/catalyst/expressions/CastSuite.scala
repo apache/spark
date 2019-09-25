@@ -818,7 +818,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       "interval 1 years 3 months -3 days")
   }
 
-  test("cast string to boolean with Spark dialect") {
+  test("cast string to boolean") {
     checkCast("t", true)
     checkCast("true", true)
     checkCast("tRUe", true)
