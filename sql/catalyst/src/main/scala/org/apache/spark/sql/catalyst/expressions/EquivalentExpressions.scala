@@ -72,7 +72,10 @@ class EquivalentExpressions {
     val skip = expr.isInstanceOf[LeafExpression] ||
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
-      expr.find(_.isInstanceOf[LambdaVariable]).isDefined
+      expr.find(_.isInstanceOf[LambdaVariable]).isDefined ||
+      // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
+      // can cause unexpected error.
+      expr.isInstanceOf[PlanExpression[_]]
 
     // There are some special expressions that we should not recurse into all of its children.
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
