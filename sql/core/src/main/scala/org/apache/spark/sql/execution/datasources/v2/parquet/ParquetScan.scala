@@ -38,8 +38,8 @@ case class ParquetScan(
     readPartitionSchema: StructType,
     pushedFilters: Array[Filter],
     options: CaseInsensitiveStringMap)
-    extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema)
-    with BroadcastedHadoopConf {
+  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema)
+  with BroadcastedHadoopConf {
 
   override def isSplitable(path: Path): Boolean = true
 
