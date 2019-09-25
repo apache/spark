@@ -31,7 +31,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 
 /**
@@ -123,7 +123,7 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
     instr.logPipelineStage(this)
     instr.logDataset(instances)
-    instr.logParams(this, labelCol, featuresCol, predictionCol, impurity, numTrees,
+    instr.logParams(this, labelCol, featuresCol, predictionCol, leafCol, impurity, numTrees,
       featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, seed, subsamplingRate, cacheNodeIds, checkpointInterval)
 
@@ -191,12 +191,33 @@ class RandomForestRegressionModel private[ml] (
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+
+    var predictionColNames = Seq.empty[String]
+    var predictionColumns = Seq.empty[Column]
+
     val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
-    val predictUDF = udf { (features: Any) =>
-      bcastModel.value.predict(features.asInstanceOf[Vector])
+
+    if ($(predictionCol).nonEmpty) {
+      val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
+      predictionColNames :+= $(predictionCol)
+      predictionColumns :+= predictUDF(col($(featuresCol)))
     }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+
+    if ($(leafCol).nonEmpty) {
+      val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
+      predictionColNames :+= $(leafCol)
+      predictionColumns :+= leafUDF(col($(featuresCol)))
+    }
+
+    if (predictionColNames.nonEmpty) {
+      dataset.withColumns(predictionColNames, predictionColumns)
+    } else {
+      this.logWarning(s"$uid: RandomForestRegressionModel.transform() does nothing" +
+        " because no output columns were set.")
+      dataset.toDF()
+    }
   }
 
   override def predict(features: Vector): Double = {

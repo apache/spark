@@ -36,14 +36,22 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
 
   def set(key: String, value: Object): this.type = {
     map.put(key, value)
-    logDebug(s"$module: Set $key to $value, earlier value: ${kafkaParams.getOrElse(key, "")}")
+    if (log.isDebugEnabled()) {
+      val redactedValue = KafkaRedactionUtil.redactParams(Seq((key, value))).head._2
+      val redactedOldValue = KafkaRedactionUtil
+        .redactParams(Seq((key, kafkaParams.getOrElse(key, "")))).head._2
+      logDebug(s"$module: Set $key to $redactedValue, earlier value: $redactedOldValue")
+    }
     this
   }
 
   def setIfUnset(key: String, value: Object): this.type = {
     if (!map.containsKey(key)) {
       map.put(key, value)
-      logDebug(s"$module: Set $key to $value")
+      if (log.isDebugEnabled()) {
+        val redactedValue = KafkaRedactionUtil.redactParams(Seq((key, value))).head._2
+        logDebug(s"$module: Set $key to $redactedValue")
+      }
     }
     this
   }
@@ -62,6 +70,7 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
         map.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
       clusterConfig.foreach { clusterConf =>
         logDebug("Delegation token detected, using it for login.")
+        setIfUnset(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, clusterConf.securityProtocol)
         val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
         set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
         require(clusterConf.tokenMechanism.startsWith("SCRAM"),

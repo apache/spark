@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.StatCounter
 
 object EnsembleTestHelper {
@@ -43,8 +44,8 @@ object EnsembleTestHelper {
       values ++= row
     }
     val stats = new StatCounter(values)
-    assert(math.abs(stats.mean - expectedMean) < epsilon)
-    assert(math.abs(stats.stdev - expectedStddev) < epsilon)
+    assert(stats.mean ~== expectedMean absTol epsilon)
+    assert(stats.stdev ~== expectedStddev absTol epsilon)
   }
 
   def validateClassifier(

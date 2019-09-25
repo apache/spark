@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil, SparkSubmit}
+import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util._
@@ -91,7 +91,7 @@ object DriverWrapper extends Logging {
     val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(packagesExclusions,
       packages, repositories, ivyRepoPath, Option(ivySettingsPath))
     val jars = {
-      val jarsProp = sys.props.get("spark.jars").orNull
+      val jarsProp = sys.props.get(config.JARS.key).orNull
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
         DependencyUtils.mergeFileLists(jarsProp, resolvedMavenCoordinates)
       } else {

@@ -42,9 +42,9 @@ class PythonBroadcastSuite extends SparkFunSuite with Matchers with SharedSparkC
     withTempDir { tempDir =>
       val broadcastDataFile: File = {
         val file = new File(tempDir, "broadcastData")
-        val printWriter = new PrintWriter(file)
-        printWriter.write(broadcastedString)
-        printWriter.close()
+        Utils.tryWithResource(new PrintWriter(file)) { printWriter =>
+          printWriter.write(broadcastedString)
+        }
         file
       }
       val broadcast = new PythonBroadcast(broadcastDataFile.getAbsolutePath)

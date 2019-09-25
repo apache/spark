@@ -25,7 +25,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.server.OneForOneStreamManager
-import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleBlockResolver}
+import org.apache.spark.network.shuffle.{ExternalBlockHandler, ExternalShuffleBlockResolver}
 
 class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
 
@@ -33,13 +33,13 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
   val blockResolver = mock(classOf[ExternalShuffleBlockResolver])
   when(blockResolver.getRegisteredExecutorsSize).thenReturn(42)
 
-  val metrics = new ExternalShuffleBlockHandler(streamManager, blockResolver).getAllMetrics
+  val metrics = new ExternalBlockHandler(streamManager, blockResolver).getAllMetrics
 
   test("metrics named as expected") {
     val allMetrics = Set(
       "openBlockRequestLatencyMillis", "registerExecutorRequestLatencyMillis",
       "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections",
-      "numRegisteredConnections")
+      "numRegisteredConnections", "numCaughtExceptions")
 
     metrics.getMetrics.keySet().asScala should be (allMetrics)
   }

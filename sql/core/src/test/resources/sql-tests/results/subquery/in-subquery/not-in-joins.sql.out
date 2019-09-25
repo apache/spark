@@ -169,7 +169,7 @@ GROUP  BY t1b,
 HAVING t1d NOT IN (SELECT t2d
                    FROM   t2
                    WHERE  t1d = t2d)
-ORDER BY t1b DESC
+ORDER BY t1b DESC, t1d ASC
 -- !query 6 schema
 struct<count(DISTINCT t1a):bigint,t1b:smallint,t1c:int,t1d:bigint>
 -- !query 6 output

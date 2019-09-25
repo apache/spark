@@ -22,7 +22,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState, SessionInfo}
@@ -70,8 +70,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   private def generateSQLStatsTable(request: HttpServletRequest): Seq[Node] = {
     val numStatement = listener.getExecutionList.size
     val table = if (numStatement > 0) {
-      val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
-        "Statement", "State", "Detail")
+      val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Close Time",
+        "Execution Time", "Duration", "Statement", "State", "Detail")
       val dataRows = listener.getExecutionList.sortBy(_.startTimestamp).reverse
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
@@ -81,7 +81,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
             [{id}]
           </a>
         }
-        val detail = if (info.state == ExecutionState.FAILED) info.detail else info.executePlan
+        val detail = Option(info.detail).filter(!_.isEmpty).getOrElse(info.executePlan)
         <tr>
           <td>{info.userName}</td>
           <td>
@@ -90,7 +90,11 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           <td>{info.groupId}</td>
           <td>{formatDate(info.startTimestamp)}</td>
           <td>{if (info.finishTimestamp > 0) formatDate(info.finishTimestamp)}</td>
-          <td>{formatDurationOption(Some(info.totalTime))}</td>
+          <td>{if (info.closeTimestamp > 0) formatDate(info.closeTimestamp)}</td>
+          <td sorttable_customkey={info.totalTime(info.finishTimestamp).toString}>
+            {formatDurationOption(Some(info.totalTime(info.finishTimestamp)))} </td>
+          <td sorttable_customkey={info.totalTime(info.closeTimestamp).toString}>
+            {formatDurationOption(Some(info.totalTime(info.closeTimestamp)))} </td>
           <td>{info.statement}</td>
           <td>{info.state}</td>
           {errorMessageCell(detail)}
@@ -155,7 +159,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           <td> <a href={sessionLink}> {session.sessionId} </a> </td>
           <td> {formatDate(session.startTimestamp)} </td>
           <td> {if (session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
-          <td> {formatDurationOption(Some(session.totalTime))} </td>
+          <td sorttable_customkey={session.totalTime.toString}>
+            {formatDurationOption(Some(session.totalTime))} </td>
           <td> {session.totalExecution.toString} </td>
         </tr>
       }

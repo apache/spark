@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.util.Utils
@@ -45,7 +45,7 @@ class TestFileFilter extends PathFilter {
   override def accept(path: Path): Boolean = path.getParent.getName != "p=2"
 }
 
-class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
+class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
   import testImplicits._
 
   test("Type promotion") {
@@ -2041,8 +2041,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     // that whole test file is mapped to only one partition. This will guarantee
     // reliable sampling of the input file.
     withSQLConf(
-      "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
-      "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> (128 * 1024 * 1024).toString,
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (4 * 1024 * 1024).toString
     )(withTempPath { path =>
       val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
@@ -2199,7 +2199,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
 
     val baos = new ByteArrayOutputStream()
-    val ps = new PrintStream(baos, true, "UTF-8")
+    val ps = new PrintStream(baos, true, StandardCharsets.UTF_8.name())
     exception.printStackTrace(ps)
     ps.flush()
 

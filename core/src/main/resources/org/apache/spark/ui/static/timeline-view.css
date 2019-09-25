@@ -223,8 +223,8 @@ rect.getting-result-time-proportion {
 }
 
 .vis-timeline .vis-item.executor.vis-selected {
-  background-color: #A2FCC0;
-  border-color: #36F572;
+  background-color: #00AAFF;
+  border-color: #184C66;
   z-index: 2;
 }
 

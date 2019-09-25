@@ -561,34 +561,29 @@ object DecisionTreeSuite extends SparkFunSuite {
    * Create an internal node with the given node ID and feature type.
    * Note: This does NOT set the child nodes.
    */
-  private def createInternalNode(id: Int, featureType: FeatureType): Node = {
+  private def createInternalNode(
+      id: Int, featureType: FeatureType, left: Node, right: Node): Node = {
     val node = Node(nodeIndex = id, new Predict(0.0, 1.0), impurity = 0.5, isLeaf = false)
-    featureType match {
-      case Continuous =>
-        node.split = Some(new Split(feature = 0, threshold = 0.5, Continuous,
-          categories = List.empty[Double]))
-      case Categorical =>
-        node.split = Some(new Split(feature = 1, threshold = 0.0, Categorical,
-          categories = List(0.0, 1.0)))
-    }
-    // TODO: The information gain stats should be consistent with info in children: SPARK-7131
-    node.stats = Some(new InformationGainStats(gain = 0.1, impurity = 0.2,
-      leftImpurity = 0.3, rightImpurity = 0.4, new Predict(1.0, 0.4), new Predict(0.0, 0.6)))
+    node.split = Some(featureType match {
+      case Continuous => Split(feature = 0, threshold = 0.5, featureType, List.empty[Double])
+      case Categorical => Split(feature = 1, threshold = 0.0, featureType, List(0.0, 1.0))
+    })
+    node.stats = Some(new InformationGainStats(gain = 0.1, impurity = node.impurity,
+      leftImpurity = left.impurity, rightImpurity = right.impurity,
+      left.predict, right.predict))
+    node.leftNode = Some(left)
+    node.rightNode = Some(right)
     node
   }
 
   /**
    * Create a tree model.  This is deterministic and contains a variety of node and feature types.
-   * TODO: Update to be a correct tree (with matching probabilities, impurities, etc.): SPARK-7131
    */
   private[spark] def createModel(algo: Algo): DecisionTreeModel = {
-    val topNode = createInternalNode(id = 1, Continuous)
-    val (node2, node3) = (createLeafNode(id = 2), createInternalNode(id = 3, Categorical))
-    val (node6, node7) = (createLeafNode(id = 6), createLeafNode(id = 7))
-    topNode.leftNode = Some(node2)
-    topNode.rightNode = Some(node3)
-    node3.leftNode = Some(node6)
-    node3.rightNode = Some(node7)
+    val (node6, node7) = (createLeafNode(6), createLeafNode(7))
+    val node3 = createInternalNode(3, Categorical, node6, node7)
+    val node2 = createLeafNode(2)
+    val topNode = createInternalNode(1, Continuous, node2, node3)
     new DecisionTreeModel(topNode, algo)
   }
 
@@ -625,8 +620,7 @@ object DecisionTreeSuite extends SparkFunSuite {
     assert(a.isLeaf === b.isLeaf)
     assert(a.split === b.split)
     (a.stats, b.stats) match {
-      // TODO: Check other fields besides the information gain.
-      case (Some(aStats), Some(bStats)) => assert(aStats.gain === bStats.gain)
+      case (Some(aStats), Some(bStats)) => assert(aStats === bStats)
       case (None, None) =>
       case _ => fail(s"Only one instance has stats defined. (a.stats: ${a.stats}, " +
         s"b.stats: ${b.stats})")

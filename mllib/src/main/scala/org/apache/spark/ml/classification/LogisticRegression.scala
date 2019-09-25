@@ -26,7 +26,7 @@ import breeze.optimize.{CachedDiffFunction, LBFGS => BreezeLBFGS, LBFGSB => Bree
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
@@ -40,9 +40,8 @@ import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, Multiclas
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils
@@ -492,12 +491,7 @@ class LogisticRegression @Since("1.2.0") (
   protected[spark] def train(
       dataset: Dataset[_],
       handlePersistence: Boolean): LogisticRegressionModel = instrumented { instr =>
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
+    val instances = extractInstances(dataset)
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -1349,12 +1343,10 @@ private[ml] class MultiClassSummarizer extends Serializable {
 }
 
 /**
- * :: Experimental ::
  * Abstraction for logistic regression results for a given model.
  *
  * Currently, the summary ignores the instance weights.
  */
-@Experimental
 sealed trait LogisticRegressionSummary extends Serializable {
 
   /**
@@ -1482,12 +1474,10 @@ sealed trait LogisticRegressionSummary extends Serializable {
 }
 
 /**
- * :: Experimental ::
  * Abstraction for multiclass logistic regression training results.
  * Currently, the training summary ignores the training weights except
  * for the objective trace.
  */
-@Experimental
 sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary {
 
   /** objective function (scaled loss + regularization) at each iteration. */
@@ -1501,12 +1491,10 @@ sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
 }
 
 /**
- * :: Experimental ::
  * Abstraction for binary logistic regression results for a given model.
  *
  * Currently, the summary ignores the instance weights.
  */
-@Experimental
 sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
 
   private val sparkSession = predictions.sparkSession
@@ -1590,12 +1578,10 @@ sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
 }
 
 /**
- * :: Experimental ::
  * Abstraction for binary logistic regression training results.
  * Currently, the training summary ignores the training weights except
  * for the objective trace.
  */
-@Experimental
 sealed trait BinaryLogisticRegressionTrainingSummary extends BinaryLogisticRegressionSummary
   with LogisticRegressionTrainingSummary
 

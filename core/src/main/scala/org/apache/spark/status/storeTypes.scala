@@ -402,7 +402,9 @@ private[spark] class RDDOperationClusterWrapper(
     val childClusters: Seq[RDDOperationClusterWrapper]) {
 
   def toRDDOperationCluster(): RDDOperationCluster = {
-    val cluster = new RDDOperationCluster(id, name)
+    val isBarrier = childNodes.exists(_.barrier)
+    val name = if (isBarrier) this.name + "\n(barrier mode)" else this.name
+    val cluster = new RDDOperationCluster(id, isBarrier, name)
     childNodes.foreach(cluster.attachChildNode)
     childClusters.foreach { child =>
       cluster.attachChildCluster(child.toRDDOperationCluster())

@@ -354,12 +354,14 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    val value = eval.isNull match {
-      case TrueLiteral => FalseLiteral
-      case FalseLiteral => TrueLiteral
-      case v => JavaCode.isNullExpression(s"!$v")
+    val (value, newCode) = eval.isNull match {
+      case TrueLiteral => (FalseLiteral, EmptyBlock)
+      case FalseLiteral => (TrueLiteral, EmptyBlock)
+      case v =>
+        val value = ctx.freshName("value")
+        (JavaCode.variable(value, BooleanType), code"boolean $value = !$v;")
     }
-    ExprCode(code = eval.code, isNull = FalseLiteral, value = value)
+    ExprCode(code = eval.code + newCode, isNull = FalseLiteral, value = value)
   }
 
   override def sql: String = s"(${child.sql} IS NOT NULL)"
