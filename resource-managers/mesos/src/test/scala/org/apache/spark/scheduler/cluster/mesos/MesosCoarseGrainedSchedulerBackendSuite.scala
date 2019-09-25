@@ -107,7 +107,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyTaskLaunched(driver, "o2")
   }
 
-  test("mesos declines offers from blacklisted slave") {
+  test("SPARK-19755 mesos declines offers from blacklisted slave") {
     setBackend()
 
     // launches a task on a valid offer on slave s1
