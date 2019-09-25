@@ -67,25 +67,14 @@ object StringUtils extends Logging {
 
   private[this] val trueStrings =
     Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
-  // "true", "yes", "1", "false", "no", "0", and unique prefixes of these strings are accepted.
-  private[this] val trueStringsOfPostgreSQL =
-    Set("true", "tru", "tr", "t", "yes", "ye", "y", "on", "1").map (UTF8String.fromString)
 
   private[this] val falseStrings =
     Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
-  private[this] val falseStringsOfPostgreSQL =
-    Set("false", "fals", "fal", "fa", "f", "no", "n", "off", "of", "0").map(UTF8String.fromString)
 
   // scalastyle:off caselocale
   def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.toLowerCase)
 
   def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.toLowerCase)
-
-  def postgreIsTrueString(s: UTF8String): Boolean =
-    trueStringsOfPostgreSQL.contains(s.toLowerCase.trim())
-
-  def postgreIsFalseString(s: UTF8String): Boolean =
-    falseStringsOfPostgreSQL.contains(s.toLowerCase.trim())
   // scalastyle:on caselocale
 
   /**

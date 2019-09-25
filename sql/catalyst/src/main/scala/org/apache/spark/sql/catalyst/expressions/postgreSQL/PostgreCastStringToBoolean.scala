@@ -20,12 +20,11 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{Expression, NullIntolerant, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.catalyst.util.postgreSQL.StringUtils
 import org.apache.spark.sql.types.{BooleanType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
-case class PostgreCastStringToBoolean(child: Expression)
-  extends UnaryExpression {
+case class PostgreCastStringToBoolean(child: Expression) extends UnaryExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType == StringType) {
@@ -38,9 +37,9 @@ case class PostgreCastStringToBoolean(child: Expression)
 
   override def nullSafeEval(input: Any): Any = {
     val s = input.asInstanceOf[UTF8String]
-    if (StringUtils.postgreIsTrueString(s)) {
+    if (StringUtils.isTrueString(s)) {
       true
-    } else if (StringUtils.postgreIsFalseString(s)) {
+    } else if (StringUtils.isFalseString(s)) {
       false
     } else {
       null
@@ -56,9 +55,9 @@ case class PostgreCastStringToBoolean(child: Expression)
         boolean ${ev.isNull} = ${eval.isNull};
         $javaType ${ev.value} = false;
         if (!${eval.isNull}) {
-          if ($stringUtils.postgreIsTrueString(${eval.value})) {
+          if ($stringUtils.isTrueString(${eval.value})) {
             ${ev.value} = true;
-          } else if ($stringUtils.postgreIsFalseString(${eval.value})) {
+          } else if ($stringUtils.isFalseString(${eval.value})) {
             ${ev.value} = false;
           } else {
             ${ev.isNull} = true;
@@ -72,7 +71,7 @@ case class PostgreCastStringToBoolean(child: Expression)
 
   override def nullable: Boolean = true
 
-  override def toString: String = s"postgreCastStringToBoolean($child as ${dataType.simpleString})"
+  override def toString: String = s"PostgreCastStringToBoolean($child as ${dataType.simpleString})"
 
   override def sql: String = s"CAST(${child.sql} AS ${dataType.sql})"
 }
