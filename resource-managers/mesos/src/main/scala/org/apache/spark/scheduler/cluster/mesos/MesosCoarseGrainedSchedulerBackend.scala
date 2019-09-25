@@ -38,7 +38,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
-import org.apache.spark.rpc.{RpcEndpointAddress, RpcEndpointRef}
+import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -375,9 +375,14 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
       logDebug(s"Received ${offers.size} resource offers.")
 
+      val blacklist = scheduler.nodeBlacklist()
       val (matchedOffers, unmatchedOffers) = offers.asScala.partition { offer =>
-        val offerAttributes = toAttributeMap(offer.getAttributesList)
-        matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
+        if (blacklist.contains(offer.getHostname)) {
+          false
+        } else {
+          val offerAttributes = toAttributeMap(offer.getAttributesList)
+          matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
+        }
       }
 
       declineUnmatchedOffers(d, unmatchedOffers)
@@ -580,11 +585,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
       numExecutors < executorLimit &&
-      // nodeBlacklist() currently only gets updated based on failures in spark tasks.
-      // If a mesos task fails to even start -- that is,
-      // if a spark executor fails to launch on a node -- nodeBlacklist does not get updated
-      // see SPARK-24567 for details
-      !scheduler.nodeBlacklist().contains(offerHostname) &&
       meetsPortRequirements &&
       satisfiesLocality(offerHostname)
   }

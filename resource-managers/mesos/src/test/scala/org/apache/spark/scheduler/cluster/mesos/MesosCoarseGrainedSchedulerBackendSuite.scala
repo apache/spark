@@ -36,7 +36,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 import org.apache.spark.scheduler.cluster.mesos.Utils._
 
 class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
@@ -126,7 +126,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     // Offer resources from the same slave
     offerResources(List(offer2))
     // but since it's blacklisted the offer is declined
-    verifyDeclinedOffer(driver, createOfferId("o1"))
+    verifyDeclinedOffer(driver, createOfferId("o1"), true)
   }
 
   test("mesos supports spark.executor.cores") {
