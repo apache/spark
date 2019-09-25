@@ -215,11 +215,8 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
   }
 
   test("wrap / unwrap UDT Type") {
-    case object TestUserClassUDT extends TestUserClassUDT
-
-    val dt = TestUserClassUDT
-    val d = 1
-    checkValue(d, unwrap(wrap(d, toInspector(dt), dt), toInspector(dt)))
+    val dt = new TestUserClassUDT
+    checkValue(1, unwrap(wrap(1, toInspector(dt), dt), toInspector(dt)))
     checkValue(null, unwrap(wrap(null, toInspector(dt), dt), toInspector(dt)))
   }
 
