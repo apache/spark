@@ -1097,7 +1097,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   usage = "_FUNC_(timestamp, timezone) - Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14 03:40:00.0'.",
   examples = """
     Examples:
-      > SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul');
+      > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-31 09:00:00
   """,
   since = "1.5.0",
