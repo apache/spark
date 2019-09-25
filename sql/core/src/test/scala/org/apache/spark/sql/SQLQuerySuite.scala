@@ -115,6 +115,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("using _FUNC_ instead of function names in examples") {
+    val exampleRe = "(>.*;)".r
+    val ignoreSet = Set("org.apache.spark.sql.catalyst.expressions.CaseWhen")
+    spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
+      val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
+      val className = info.getClassName
+      withClue(s"Expression class '$className'") {
+        val exprExamples = info.getOriginalExamples
+        if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
+          assert(exampleRe.findAllIn(exprExamples).toSet.forall(_.contains("_FUNC_")))
+        }
+      }
+    }
+  }
+
   test("SPARK-6743: no columns from cache") {
     Seq(
       (83, 0, 38),
