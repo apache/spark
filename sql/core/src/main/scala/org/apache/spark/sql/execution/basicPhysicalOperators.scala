@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
@@ -110,7 +111,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
   private val notNullAttributes = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
-    .diff(otherPreds.flatMap(_.references).distinct.map(_.exprId))
 
   // Mark this as empty. We'll evaluate the input during doConsume(). We don't want to evaluate
   // all the variables at the beginning to take advantage of short circuiting.
@@ -172,6 +172,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // This is very perf sensitive.
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
+
+    val extraIsNotNullReferences = mutable.Set[Attribute]()
+
+    def outputContainsNotNull(ref: Attribute): Boolean = {
+      output.exists { attr => attr.exprId == ref.exprId }
+    }
+
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
         val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
@@ -179,6 +186,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           generatedIsNotNullChecks(idx) = true
           // Use the child's output. The nullability is what the child produced.
           genPredicate(notNullPreds(idx), input, child.output)
+        } else if (outputContainsNotNull(r) && !extraIsNotNullReferences.contains(r)) {
+          extraIsNotNullReferences += r
+          genPredicate(IsNotNull(r), input, child.output)
         } else {
           ""
         }
