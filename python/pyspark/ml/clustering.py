@@ -96,10 +96,10 @@ class ClusteringSummary(JavaWrapper):
 
 
 @inherit_doc
-class GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
-                            HasProbabilityCol, HasTol):
+class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
+                             HasProbabilityCol, HasTol):
     """
-    (Private) Params for GaussianMixture.
+    Params for :py:attr:`GaussianMixture` and :py:attr:`GaussianMixtureModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -115,7 +115,7 @@ class GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCo
         return self.getOrDefault(self.k)
 
 
-class GaussianMixtureModel(JavaModel, GaussianMixtureParams, JavaMLWritable, JavaMLReadable,
+class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, JavaMLReadable,
                            HasTrainingSummary):
     """
     Model fitted by GaussianMixture.
@@ -172,7 +172,7 @@ class GaussianMixtureModel(JavaModel, GaussianMixtureParams, JavaMLWritable, Jav
 
 
 @inherit_doc
-class GaussianMixture(JavaEstimator, GaussianMixtureParams, JavaMLWritable, JavaMLReadable):
+class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, JavaMLReadable):
     """
     GaussianMixture clustering.
     This class performs expectation maximization for multivariate Gaussian
@@ -341,10 +341,10 @@ class KMeansSummary(ClusteringSummary):
 
 
 @inherit_doc
-class KMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol,
-                   HasDistanceMeasure):
+class _KMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol,
+                    HasDistanceMeasure):
     """
-    (Private) Params for KMeans.
+    Params for :py:attr:`KMeans` and :py:attr:`KMeansModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -381,7 +381,7 @@ class KMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol
         return self.getOrDefault(self.initSteps)
 
 
-class KMeansModel(JavaModel, KMeansParams, GeneralJavaMLWritable, JavaMLReadable,
+class KMeansModel(JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadable,
                   HasTrainingSummary):
     """
     Model fitted by KMeans.
@@ -416,7 +416,7 @@ class KMeansModel(JavaModel, KMeansParams, GeneralJavaMLWritable, JavaMLReadable
 
 
 @inherit_doc
-class KMeans(JavaEstimator, KMeansParams, JavaMLWritable, JavaMLReadable):
+class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     """
     K-means clustering with a k-means++ like initialization mode
     (the k-means|| algorithm by Bahmani et al).
@@ -533,10 +533,10 @@ class KMeans(JavaEstimator, KMeansParams, JavaMLWritable, JavaMLReadable):
 
 
 @inherit_doc
-class BisectingKMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
-                            HasDistanceMeasure):
+class _BisectingKMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
+                             HasDistanceMeasure):
     """
-    (Private) Params for BisectingKMeans.
+    Params for :py:attr:`BisectingKMeans` and :py:attr:`BisectingKMeansModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -563,7 +563,7 @@ class BisectingKMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCo
         return self.getOrDefault(self.minDivisibleClusterSize)
 
 
-class BisectingKMeansModel(JavaModel, BisectingKMeansParams, JavaMLWritable, JavaMLReadable,
+class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, JavaMLReadable,
                            HasTrainingSummary):
     """
     Model fitted by BisectingKMeans.
@@ -613,7 +613,7 @@ class BisectingKMeansModel(JavaModel, BisectingKMeansParams, JavaMLWritable, Jav
 
 
 @inherit_doc
-class BisectingKMeans(JavaEstimator, BisectingKMeansParams, JavaMLWritable, JavaMLReadable):
+class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, JavaMLReadable):
     """
     A bisecting k-means algorithm based on the paper "A comparison of document clustering
     techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
@@ -745,9 +745,9 @@ class BisectingKMeansSummary(ClusteringSummary):
 
 
 @inherit_doc
-class LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
+class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
     """
-    (Private) Params for LDA.
+    Params for :py:attr:`LDA` and :py:attr:`LDAModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -864,7 +864,7 @@ class LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
 
 
 @inherit_doc
-class LDAModel(JavaModel, LDAParams):
+class LDAModel(JavaModel, _LDAParams):
     """
     Latent Dirichlet Allocation (LDA) model.
     This abstraction permits for different underlying representations,
@@ -1019,7 +1019,7 @@ class LocalLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class LDA(JavaEstimator, LDAParams, JavaMLReadable, JavaMLWritable):
+class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     """
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
 
@@ -1238,9 +1238,9 @@ class LDA(JavaEstimator, LDAParams, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
+class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
     """
-    (Private) Params for PowerIterationClustering.
+    Params for :py:attr:`PowerIterationClustering` and :py:attr:`PowerIterationClusteringModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -1291,7 +1291,7 @@ class PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
 
 
 @inherit_doc
-class PowerIterationClustering(PowerIterationClusteringParams, JavaParams, JavaMLReadable,
+class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, JavaMLReadable,
                                JavaMLWritable):
     """
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
