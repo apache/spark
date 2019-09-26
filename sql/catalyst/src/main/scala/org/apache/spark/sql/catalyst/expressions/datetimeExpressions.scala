@@ -631,7 +631,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
-       1460041200
+       1460098800
   """,
   since = "1.6.0")
 case class ToUnixTimestamp(
