@@ -42,13 +42,12 @@ abstract class EventLogFileReadersSuite extends SparkFunSuite with LocalSparkCon
   with BeforeAndAfter with Logging {
 
   protected val fileSystem = Utils.getHadoopFileSystem("/",
-    SparkHadoopUtil.get.newConfiguration(new SparkConf()))
+    SparkHadoopUtil.get.conf)
   protected var testDir: File = _
   protected var testDirPath: Path = _
 
   before {
     testDir = Utils.createTempDir(namePrefix = s"event log")
-    testDir.deleteOnExit()
     testDirPath = new Path(testDir.getAbsolutePath())
   }
 

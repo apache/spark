@@ -18,9 +18,8 @@
 package org.apache.spark.deploy.history
 
 import java.io.{BufferedInputStream, InputStream}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
-
-import scala.collection.mutable
 
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -96,13 +95,13 @@ abstract class EventLogFileReader(
 
 object EventLogFileReader {
   // A cache for compression codecs to avoid creating the same codec many times
-  private val codecMap = mutable.HashMap.empty[String, CompressionCodec]
+  private val codecMap = new ConcurrentHashMap[String, CompressionCodec]()
 
   def apply(
       fs: FileSystem,
       path: Path,
-      lastSequenceNumber: Option[Long]): EventLogFileReader = {
-    lastSequenceNumber match {
+      lastIndex: Option[Long]): EventLogFileReader = {
+    lastIndex match {
       case Some(_) => new RollingEventLogFilesFileReader(fs, path)
       case None => new SingleFileEventLogFileReader(fs, path)
     }
@@ -131,7 +130,7 @@ object EventLogFileReader {
     val in = new BufferedInputStream(fs.open(log))
     try {
       val codec = codecName(log).map { c =>
-        codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
+        codecMap.computeIfAbsent(c, CompressionCodec.createCodec(new SparkConf, _))
       }
       codec.map(_.compressedContinuousInputStream(in)).getOrElse(in)
     } catch {
@@ -158,7 +157,6 @@ object EventLogFileReader {
 class SingleFileEventLogFileReader(
     fs: FileSystem,
     path: Path) extends EventLogFileReader(fs, path) {
-  // TODO: get stats with constructor and only call if it's needed?
   private lazy val status = fileSystem.getFileStatus(rootPath)
 
   override def lastIndex: Option[Long] = None
@@ -177,8 +175,9 @@ class SingleFileEventLogFileReader(
 
   override def modificationTime: Long = status.getModificationTime
 
-  override def zipEventLogFiles(zipStream: ZipOutputStream): Unit =
+  override def zipEventLogFiles(zipStream: ZipOutputStream): Unit = {
     addFileAsZipEntry(zipStream, rootPath, rootPath.getName)
+  }
 
   override def listEventLogFiles: Seq[FileStatus] = Seq(status)
 
@@ -202,7 +201,7 @@ class RollingEventLogFilesFileReader(
 
   override def lastIndex: Option[Long] = {
     val maxSeq = files.filter(isEventLogFile)
-      .map { stats => getSequence(stats.getPath.getName) }
+      .map { status => getSequence(status.getPath.getName) }
       .max
     Some(maxSeq)
   }
@@ -235,13 +234,14 @@ class RollingEventLogFilesFileReader(
 
   override def listEventLogFiles: Seq[FileStatus] = eventLogFiles
 
-  override def compressionCodec: Option[String] = EventLogFileWriter.codecName(
-    eventLogFiles.head.getPath)
+  override def compressionCodec: Option[String] = {
+    EventLogFileWriter.codecName(eventLogFiles.head.getPath)
+  }
 
   override def totalSize: Long = eventLogFiles.map(_.getLen).sum
 
   private def eventLogFiles: Seq[FileStatus] = {
-    files.filter(isEventLogFile).sortBy { stats => getSequence(stats.getPath.getName) }
+    files.filter(isEventLogFile).sortBy { status => getSequence(status.getPath.getName) }
   }
 
   private def lastEventLogFile: FileStatus = eventLogFiles.reverse.head

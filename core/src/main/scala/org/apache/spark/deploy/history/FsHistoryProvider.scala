@@ -451,7 +451,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // case the code below decides we don't need to parse the log.
               listing.write(info.copy(lastProcessed = newLastScanTime,
                 fileSize = reader.fileSizeForLastIndex,
-                lastSequenceNum = reader.lastIndex,
+                lastIndex = reader.lastIndex,
                 isComplete = reader.completed))
             }
 
@@ -472,7 +472,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                       attempt.info.copy(lastUpdated = new Date(newLastScanTime)),
                       attempt.logPath,
                       attempt.fileSize,
-                      attempt.lastSequenceNum,
+                      attempt.lastIndex,
                       attempt.adminAcls,
                       attempt.viewAcls,
                       attempt.adminAclsGroups,
@@ -580,10 +580,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     if (info.isComplete != reader.completed) {
       true
     } else {
-      var result = if (info.lastSequenceNum.isDefined) {
+      var result = if (info.lastIndex.isDefined) {
         require(reader.lastIndex.isDefined)
-        info.lastSequenceNum.get < reader.lastIndex.get ||
-          info.fileSize < reader.fileSizeForLastIndex
+        info.lastIndex.get < reader.lastIndex.get || info.fileSize < reader.fileSizeForLastIndex
       } else {
         info.fileSize < reader.fileSizeForLastIndex
       }
@@ -657,7 +656,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .getOrElse(app.attempts)
         .foreach { attempt =>
           val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
-            attempt.lastSequenceNum)
+            attempt.lastIndex)
           reader.zipEventLogFiles(zipStream)
         }
     } finally {
@@ -1070,7 +1069,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // load, so the event log needs to be replayed.
 
     val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
-      attempt.lastSequenceNum)
+      attempt.lastIndex)
     val isCompressed = reader.compressionCodec.isDefined
     logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
     val lease = dm.lease(reader.totalSize, isCompressed)
@@ -1091,7 +1090,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def createInMemoryStore(attempt: AttemptInfoWrapper): KVStore = {
     val store = new InMemoryStore()
     val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),
-      attempt.lastSequenceNum)
+      attempt.lastIndex)
     rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
     store
   }
@@ -1163,14 +1162,14 @@ private[history] case class LogInfo(
     appId: Option[String],
     attemptId: Option[String],
     fileSize: Long,
-    lastSequenceNum: Option[Long],
+    lastIndex: Option[Long],
     isComplete: Boolean)
 
 private[history] class AttemptInfoWrapper(
     val info: ApplicationAttemptInfo,
     val logPath: String,
     val fileSize: Long,
-    val lastSequenceNum: Option[Long],
+    val lastIndex: Option[Long],
     val adminAcls: Option[String],
     val viewAcls: Option[String],
     val adminAclsGroups: Option[String],
@@ -1285,7 +1284,7 @@ private[history] class AppListingListener(
 
   }
 
-  private class MutableAttemptInfo(logPath: String, fileSize: Long, lastSequence: Option[Long]) {
+  private class MutableAttemptInfo(logPath: String, fileSize: Long, lastIndex: Option[Long]) {
     var attemptId: Option[String] = None
     var startTime = new Date(-1)
     var endTime = new Date(-1)
@@ -1314,7 +1313,7 @@ private[history] class AppListingListener(
         apiInfo,
         logPath,
         fileSize,
-        lastSequence,
+        lastIndex,
         adminAcls,
         viewAcls,
         adminAclsGroups,

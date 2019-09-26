@@ -56,7 +56,6 @@ abstract class EventLogFileWriter(
 
   protected val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS)
   protected val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
-  protected val shouldAllowECLogs = sparkConf.get(EVENT_LOG_ALLOW_EC)
   protected val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
   protected val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
   protected val compressionCodec =
@@ -80,7 +79,7 @@ abstract class EventLogFileWriter(
     }
   }
 
-  protected def initLogFile(path: Path, fnSetupWriter: OutputStream => PrintWriter): Unit = {
+  protected def initLogFile(path: Path)(fnSetupWriter: OutputStream => PrintWriter): Unit = {
     if (shouldOverwrite && fileSystem.delete(path, true)) {
       logWarning(s"Event log $path already exists. Overwriting...")
     }
@@ -141,7 +140,7 @@ abstract class EventLogFileWriter(
     }
     fileSystem.rename(src, dest)
     // touch file to ensure modtime is current across those filesystems where rename()
-    // does not set it, -and which support setTimes(); it's a no-op on most object stores
+    // does not set it but support setTimes() instead; it's a no-op on most object stores
     try {
       fileSystem.setTimes(dest, System.currentTimeMillis(), -1)
     } catch {
@@ -217,8 +216,9 @@ class SingleEventLogFileWriter(
   override def start(): Unit = {
     requireLogBaseDirAsDirectory()
 
-    initLogFile(new Path(inProgressPath),
-      ostream => new PrintWriter(new OutputStreamWriter(ostream, StandardCharsets.UTF_8)))
+    initLogFile(new Path(inProgressPath)) { os =>
+      new PrintWriter(new OutputStreamWriter(os, StandardCharsets.UTF_8))
+    }
   }
 
   override def writeEvent(eventJson: String, flushLogger: Boolean = false): Unit = {
@@ -293,7 +293,7 @@ class RollingEventLogFilesWriter(
 
   import RollingEventLogFilesWriter._
 
-  private val eventFileMaxLengthKiB = sparkConf.get(EVENT_LOG_ROLLED_EVENT_LOG_MAX_FILE_SIZE)
+  private val eventFileMaxLength = sparkConf.get(EVENT_LOG_ROLLED_EVENT_LOG_MAX_FILE_SIZE)
 
   private val logDirForAppPath = getAppEventLogDirPath(logBaseDir, appId, appAttemptId)
 
@@ -322,7 +322,7 @@ class RollingEventLogFilesWriter(
   override def writeEvent(eventJson: String, flushLogger: Boolean = false): Unit = {
     writer.foreach { w =>
       val currentLen = countingOutputStream.get.getBytesWritten
-      if (currentLen + eventJson.length > eventFileMaxLengthKiB * 1024) {
+      if (currentLen + eventJson.length > eventFileMaxLength * 1024 * 1024) {
         rollEventLogFile()
       }
     }
@@ -337,11 +337,11 @@ class RollingEventLogFilesWriter(
     currentEventLogFilePath = getEventLogFilePath(logDirForAppPath, appId, appAttemptId, index,
       compressionCodecName)
 
-    initLogFile(currentEventLogFilePath, ostream => {
-      countingOutputStream = Some(new CountingOutputStream(ostream))
+    initLogFile(currentEventLogFilePath) { os =>
+      countingOutputStream = Some(new CountingOutputStream(os))
       new PrintWriter(
         new OutputStreamWriter(countingOutputStream.get, StandardCharsets.UTF_8))
-    })
+    }
   }
 
   override def stop(): Unit = {
@@ -400,19 +400,11 @@ object RollingEventLogFilesWriter {
   }
 
   def isEventLogFile(status: FileStatus): Boolean = {
-    status.isFile && isEventLogFile(status.getPath)
-  }
-
-  def isEventLogFile(path: Path): Boolean = {
-    path.getName.startsWith(EVENT_LOG_FILE_NAME_PREFIX)
+    status.isFile && status.getPath.getName.startsWith(EVENT_LOG_FILE_NAME_PREFIX)
   }
 
   def isAppStatusFile(status: FileStatus): Boolean = {
-    status.isFile && isAppStatusFile(status.getPath)
-  }
-
-  def isAppStatusFile(path: Path): Boolean = {
-    path.getName.startsWith(APPSTATUS_FILE_NAME_PREFIX)
+    status.isFile && status.getPath.getName.startsWith(APPSTATUS_FILE_NAME_PREFIX)
   }
 
   def getSequence(eventLogFileName: String): Long = {
