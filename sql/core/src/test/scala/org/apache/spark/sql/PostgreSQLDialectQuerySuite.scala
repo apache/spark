@@ -23,13 +23,12 @@ import org.apache.spark.sql.test.SharedSparkSession
 class PostgreSQLDialectQuerySuite extends QueryTest with SharedSparkSession {
 
   override def sparkConf: SparkConf =
-    super.sparkConf
-      .set(SQLConf.DIALECT.key, SQLConf.Dialect.POSTGRESQL.toString)
+    super.sparkConf.set(SQLConf.DIALECT.key, SQLConf.Dialect.POSTGRESQL.toString)
 
   test("cast string to boolean") {
-   Seq("true", "tru", "tr", "t", "    tRue   ", "    tRu   ", "yes", "ye",
-     "y", "1", "on").foreach { input =>
-     checkAnswer(sql(s"select cast('$input' as boolean)"), Row(true))
+    Seq("true", "tru", "tr", "t", "    tRue   ", "    tRu   ", "yes", "ye",
+      "y", "1", "on").foreach { input =>
+      checkAnswer(sql(s"select cast('$input' as boolean)"), Row(true))
    }
     Seq("false", "fals", "fal", "fa", "f", "    fAlse   ", "    fAls   ", "no", "n",
       "0", "off", "of").foreach { input =>
