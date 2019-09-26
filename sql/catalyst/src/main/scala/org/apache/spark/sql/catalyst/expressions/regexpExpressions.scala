@@ -153,6 +153,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   }
 }
 
+// scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.",
   arguments = """
@@ -183,6 +184,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
     Use LIKE to match with simple string pattern.
   """,
   since = "1.0.0")
+// scalastyle:on line.contains.tab
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v
