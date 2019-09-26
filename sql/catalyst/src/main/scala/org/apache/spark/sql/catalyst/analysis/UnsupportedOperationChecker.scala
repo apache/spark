@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -30,7 +31,7 @@ import org.apache.spark.sql.streaming.OutputMode
 /**
  * Analyzes the presence of unsupported operations in a logical plan.
  */
-object UnsupportedOperationChecker {
+object UnsupportedOperationChecker extends Logging {
 
   def checkForBatch(plan: LogicalPlan): Unit = {
     plan.foreachUp {
@@ -41,8 +42,48 @@ object UnsupportedOperationChecker {
     }
   }
 
-  def checkForStreaming(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+  def warnStreamingQueryGlobalWatermarkLimit(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    def isStatefulOperationPossiblyEmitLateRows(p: LogicalPlan): Boolean = p match {
+      case s: Aggregate
+        if s.isStreaming && outputMode == InternalOutputModes.Append => true
+      case ExtractEquiJoinKeys(joinType, _, _, _, left, right, _)
+        if left.isStreaming && right.isStreaming && joinType != Inner => true
+      case f: FlatMapGroupsWithState
+        if f.isStreaming && f.outputMode == OutputMode.Append() => true
+      case _ => false
+    }
 
+    def isStatefulOperation(p: LogicalPlan): Boolean = p match {
+      case s: Aggregate if s.isStreaming => true
+      case _ @ ExtractEquiJoinKeys(_, _, _, _, left, right, _)
+        if left.isStreaming && right.isStreaming => true
+      case f: FlatMapGroupsWithState if f.isStreaming => true
+      case d: Deduplicate if d.isStreaming => true
+      case _ => false
+    }
+
+    var loggedWarnMessage = false
+    plan.foreach { subPlan =>
+      if (isStatefulOperation(subPlan)) {
+        subPlan.find { p =>
+          (p ne subPlan) && isStatefulOperationPossiblyEmitLateRows(p)
+        } match {
+          case Some(_) if !loggedWarnMessage =>
+            logWarning("Detected pattern of possible 'correctness' issue " +
+              "due to global watermark. " +
+              "The query contains stateful operation which can possibly emit late rows, and " +
+              "downstream stateful operation which drop emitted late rows. " +
+              "Please refer the programming guide doc for more details." +
+              s";\n$plan")
+            loggedWarnMessage = true
+
+          case _ =>
+        }
+      }
+    }
+  }
+
+  def checkForStreaming(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     if (!plan.isStreaming) {
       throwError(
         "Queries without streaming sources cannot be executed with writeStream.start()")(plan)
@@ -339,6 +380,8 @@ object UnsupportedOperationChecker {
       // Check if there are unsupported expressions in streaming query plan.
       checkUnsupportedExpressions(subPlan)
     }
+
+    warnStreamingQueryGlobalWatermarkLimit(plan, outputMode)
   }
 
   def checkForContinuous(plan: LogicalPlan, outputMode: OutputMode): Unit = {
