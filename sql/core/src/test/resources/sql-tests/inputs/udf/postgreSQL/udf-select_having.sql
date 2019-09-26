@@ -5,7 +5,7 @@
 -- SELECT_HAVING
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/select_having.sql
 --
--- This test file was converted from inputs/pgSQL/select_having.sql
+-- This test file was converted from inputs/postgreSQL/select_having.sql
 -- TODO: We should add UDFs in GROUP BY clause when [SPARK-28386] and [SPARK-26741] is resolved.
 
 -- load test data
