@@ -819,35 +819,23 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to boolean") {
-    checkCast("true", true)
-    checkCast("tru", true)
-    checkCast("tr", true)
     checkCast("t", true)
+    checkCast("true", true)
     checkCast("tRUe", true)
-    checkCast("    tRue   ", true)
-    checkCast("    tRu   ", true)
-    checkCast("yes", true)
-    checkCast("ye", true)
     checkCast("y", true)
+    checkCast("yes", true)
     checkCast("1", true)
-    checkCast("on", true)
 
-    checkCast("false", false)
-    checkCast("fals", false)
-    checkCast("fal", false)
-    checkCast("fa", false)
     checkCast("f", false)
-    checkCast("    fAlse    ", false)
-    checkCast("    fAls    ", false)
-    checkCast("    FAlsE    ", false)
-    checkCast("no", false)
+    checkCast("false", false)
+    checkCast("FAlsE", false)
     checkCast("n", false)
+    checkCast("no", false)
     checkCast("0", false)
-    checkCast("off", false)
-    checkCast("of", false)
 
-    checkEvaluation(cast("o", BooleanType), null)
     checkEvaluation(cast("abc", BooleanType), null)
+    checkEvaluation(cast("tru", BooleanType), null)
+    checkEvaluation(cast("fla", BooleanType), null)
     checkEvaluation(cast("", BooleanType), null)
   }
 
