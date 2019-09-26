@@ -15,14 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.tags;
 
-import org.apache.spark.ShuffleDependency
+import org.scalatest.TagAnnotation;
 
-/**
- * A basic ShuffleHandle implementation that just captures registerShuffle's parameters.
- */
-private[spark] class BaseShuffleHandle[K, V, C](
-    shuffleId: Int,
-    val dependency: ShuffleDependency[K, V, C])
-  extends ShuffleHandle(shuffleId)
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface ExtendedSQLTest { }

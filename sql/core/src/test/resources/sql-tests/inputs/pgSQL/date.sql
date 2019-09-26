@@ -208,20 +208,19 @@ SELECT date '5874898-01-01';  -- out of range
 
 SELECT f1 - date '2000-01-01' AS `Days From 2K` FROM DATE_TBL;
 
--- [SPARK-28141] Date type can not accept special values
--- SELECT f1 - date 'epoch' AS "Days From Epoch" FROM DATE_TBL;
+SELECT f1 - date 'epoch' AS `Days From Epoch` FROM DATE_TBL;
 
--- SELECT date 'yesterday' - date 'today' AS "One day";
+SELECT date 'yesterday' - date 'today' AS `One day`;
 
--- SELECT date 'today' - date 'tomorrow' AS "One day";
+SELECT date 'today' - date 'tomorrow' AS `One day`;
 
--- SELECT date 'yesterday' - date 'tomorrow' AS "Two days";
+SELECT date 'yesterday' - date 'tomorrow' AS `Two days`;
 
--- SELECT date 'tomorrow' - date 'today' AS "One day";
+SELECT date 'tomorrow' - date 'today' AS `One day`;
 
--- SELECT date 'today' - date 'yesterday' AS "One day";
+SELECT date 'today' - date 'yesterday' AS `One day`;
 
--- SELECT date 'tomorrow' - date 'yesterday' AS "Two days";
+SELECT date 'tomorrow' - date 'yesterday' AS `Two days`;
 
 -- [SPARK-28017] Enhance date EXTRACT
 --
@@ -290,7 +289,7 @@ SELECT DATE_TRUNC('DECADE', DATE '1993-12-25'); -- 1990-01-01
 SELECT DATE_TRUNC('DECADE', DATE '0004-12-25'); -- 0001-01-01 BC
 SELECT DATE_TRUNC('DECADE', TO_DATE('0002-12-31 BC', 'yyyy-MM-dd G')); -- 0011-01-01 BC
 
--- [SPARK-28141] Date type can not accept special values
+-- [SPARK-29006] Support special date/timestamp values `infinity`/`-infinity`
 --
 -- test infinity
 --

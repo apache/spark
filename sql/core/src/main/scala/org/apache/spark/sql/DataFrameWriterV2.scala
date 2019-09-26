@@ -52,9 +52,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private val (catalog, identifier) = {
     val CatalogObjectIdentifier(maybeCatalog, identifier) = tableName
-    val catalog = maybeCatalog.getOrElse(catalogManager.currentCatalog)
-      .asTableCatalog
-
+    val catalog = maybeCatalog.getOrElse(catalogManager.currentCatalog).asTableCatalog
     (catalog, identifier)
   }
 

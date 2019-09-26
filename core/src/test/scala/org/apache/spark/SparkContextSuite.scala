@@ -705,7 +705,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       if (context.stageAttemptNumber == 0) {
         if (context.partitionId == 0) {
           // Make the first task in the first stage attempt fail.
-          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 0, 0, 0,
+          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 0, 0L, 0, 0,
             new java.io.IOException("fake"))
         } else {
           // Make the second task in the first stage attempt sleep to generate a zombie task

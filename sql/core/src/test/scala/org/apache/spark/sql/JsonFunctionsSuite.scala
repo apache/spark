@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -616,6 +616,15 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       val readback = input.select(from_json($"value", lit("t timestamp"),
         Map.empty[String, String].asJava)).collect()
       assert(readback(0).getAs[Row](0).getAs[Timestamp](0).getTime >= 0)
+    }
+  }
+
+  test("special date values") {
+    Seq("now", "today", "epoch", "tomorrow", "yesterday").foreach { specialValue =>
+      val input = Seq(s"""{"d": "$specialValue"}""").toDS()
+      val readback = input.select(from_json($"value", lit("d date"),
+        Map.empty[String, String].asJava)).collect()
+      assert(readback(0).getAs[Row](0).getAs[Date](0).getTime >= 0)
     }
   }
 }

@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+package org.apache.spark.sql.catalyst.plans.logical.sql
 
-import org.apache.spark.ShuffleDependency
+import org.apache.spark.sql.catalyst.expressions.Expression
 
-/**
- * A basic ShuffleHandle implementation that just captures registerShuffle's parameters.
- */
-private[spark] class BaseShuffleHandle[K, V, C](
-    shuffleId: Int,
-    val dependency: ShuffleDependency[K, V, C])
-  extends ShuffleHandle(shuffleId)
+case class UpdateTableStatement(
+    tableName: Seq[String],
+    tableAlias: Option[String],
+    attrs: Seq[Seq[String]],
+    values: Seq[Expression],
+    condition: Option[Expression]) extends ParsedStatement

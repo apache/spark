@@ -1053,6 +1053,14 @@ package object config {
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
 
+  private[spark] val SHUFFLE_USE_OLD_FETCH_PROTOCOL =
+    ConfigBuilder("spark.shuffle.useOldFetchProtocol")
+      .doc("Whether to use the old protocol while doing the shuffle block fetching. " +
+        "It is only enabled while we need the compatibility in the scenario of new Spark " +
+        "version job fetching shuffle blocks from old version external shuffle service.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val MEMORY_MAP_LIMIT_FOR_TESTS =
     ConfigBuilder("spark.storage.memoryMapLimitForTests")
       .internal()

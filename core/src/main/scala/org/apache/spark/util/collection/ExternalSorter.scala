@@ -727,7 +727,7 @@ private[spark] class ExternalSorter[K, V, C](
    */
   def writePartitionedMapOutput(
       shuffleId: Int,
-      mapId: Int,
+      mapId: Long,
       mapOutputWriter: ShuffleMapOutputWriter): Unit = {
     var nextPartitionId = 0
     if (spills.isEmpty) {

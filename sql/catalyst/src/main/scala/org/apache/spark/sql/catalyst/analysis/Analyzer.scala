@@ -121,7 +121,7 @@ class Analyzer(
     this(catalog, v2SessionCatalog, conf, conf.optimizerMaxIterations)
   }
 
-  override val catalogManager: CatalogManager = new CatalogManager(conf, v2SessionCatalog)
+  override val catalogManager: CatalogManager = new CatalogManager(conf, v2SessionCatalog, catalog)
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {
@@ -168,8 +168,7 @@ class Analyzer(
   lazy val batches: Seq[Batch] = Seq(
     Batch("Hints", fixedPoint,
       new ResolveHints.ResolveJoinStrategyHints(conf),
-      ResolveHints.ResolveCoalesceHints,
-      new ResolveHints.RemoveAllHints(conf)),
+      ResolveHints.ResolveCoalesceHints),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Substitution", fixedPoint,
@@ -216,6 +215,8 @@ class Analyzer(
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
+    Batch("Remove Unresolved Hints", Once,
+      new ResolveHints.RemoveAllHints(conf)),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,

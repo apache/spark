@@ -89,7 +89,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveParameters)
 
     val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-      caseInsensitiveParameters, STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+      caseInsensitiveParameters, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
+      STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
     val kafkaOffsetReader = new KafkaOffsetReader(
       strategy(caseInsensitiveParameters),
@@ -126,11 +127,13 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveParameters)
 
     val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-      caseInsensitiveParameters, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
+      caseInsensitiveParameters, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
+      STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
     assert(startingRelationOffsets != LatestOffsetRangeLimit)
 
     val endingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-      caseInsensitiveParameters, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+      caseInsensitiveParameters, ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
+      ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
     assert(endingRelationOffsets != EarliestOffsetRangeLimit)
 
     val includeHeaders = caseInsensitiveParameters.getOrElse(INCLUDE_HEADERS, "false").toBoolean
@@ -321,13 +324,17 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // Stream specific options
     params.get(ENDING_OFFSETS_OPTION_KEY).map(_ =>
       throw new IllegalArgumentException("ending offset not valid in streaming queries"))
+    params.get(ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY).map(_ =>
+      throw new IllegalArgumentException("ending timestamp not valid in streaming queries"))
+
     validateGeneralOptions(params)
   }
 
   private def validateBatchOptions(params: CaseInsensitiveMap[String]) = {
     // Batch specific options
     KafkaSourceProvider.getKafkaOffsetRangeLimit(
-      params, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit) match {
+      params, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY, STARTING_OFFSETS_OPTION_KEY,
+      EarliestOffsetRangeLimit) match {
       case EarliestOffsetRangeLimit => // good to go
       case LatestOffsetRangeLimit =>
         throw new IllegalArgumentException("starting offset can't be latest " +
@@ -339,10 +346,12 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
               "be latest for batch queries on Kafka")
           case _ => // ignore
         }
+      case _: SpecificTimestampRangeLimit => // good to go
     }
 
     KafkaSourceProvider.getKafkaOffsetRangeLimit(
-      params, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit) match {
+      params, ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY, ENDING_OFFSETS_OPTION_KEY,
+      LatestOffsetRangeLimit) match {
       case EarliestOffsetRangeLimit =>
         throw new IllegalArgumentException("ending offset can't be earliest " +
           "for batch queries on Kafka")
@@ -354,6 +363,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
               "earliest for batch queries on Kafka")
           case _ => // ignore
         }
+      case _: SpecificTimestampRangeLimit => // good to go
     }
 
     validateGeneralOptions(params)
@@ -420,10 +430,12 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveOptions)
 
       val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-        caseInsensitiveOptions, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
+        caseInsensitiveOptions, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
+        STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
 
       val endingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-        caseInsensitiveOptions, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+        caseInsensitiveOptions, ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
+        ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
       new KafkaBatch(
         strategy(caseInsensitiveOptions),
@@ -446,7 +458,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveOptions)
 
       val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-        caseInsensitiveOptions, STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+        caseInsensitiveOptions, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
+        STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
       val kafkaOffsetReader = new KafkaOffsetReader(
         strategy(caseInsensitiveOptions),
@@ -474,7 +487,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveOptions)
 
       val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-        caseInsensitiveOptions, STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+        caseInsensitiveOptions, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
+        STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
       val kafkaOffsetReader = new KafkaOffsetReader(
         strategy(caseInsensitiveOptions),
@@ -500,6 +514,8 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private val STRATEGY_OPTION_KEYS = Set(SUBSCRIBE, SUBSCRIBE_PATTERN, ASSIGN)
   private[kafka010] val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private[kafka010] val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
+  private[kafka010] val STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY = "startingoffsetsbytimestamp"
+  private[kafka010] val ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY = "endingoffsetsbytimestamp"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
   private[kafka010] val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
   private[kafka010] val MAX_OFFSET_PER_TRIGGER = "maxoffsetspertrigger"
@@ -543,15 +559,20 @@ private[kafka010] object KafkaSourceProvider extends Logging {
 
   def getKafkaOffsetRangeLimit(
       params: CaseInsensitiveMap[String],
+      offsetByTimestampOptionKey: String,
       offsetOptionKey: String,
       defaultOffsets: KafkaOffsetRangeLimit): KafkaOffsetRangeLimit = {
-    params.get(offsetOptionKey).map(_.trim) match {
-      case Some(offset) if offset.toLowerCase(Locale.ROOT) == "latest" =>
-        LatestOffsetRangeLimit
-      case Some(offset) if offset.toLowerCase(Locale.ROOT) == "earliest" =>
-        EarliestOffsetRangeLimit
-      case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
-      case None => defaultOffsets
+    params.get(offsetByTimestampOptionKey).map(_.trim) match {
+      case Some(json) => SpecificTimestampRangeLimit(JsonUtils.partitionTimestamps(json))
+      case None =>
+        params.get(offsetOptionKey).map(_.trim) match {
+          case Some(offset) if offset.toLowerCase(Locale.ROOT) == "latest" =>
+            LatestOffsetRangeLimit
+          case Some(offset) if offset.toLowerCase(Locale.ROOT) == "earliest" =>
+            EarliestOffsetRangeLimit
+          case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
+          case None => defaultOffsets
+        }
     }
   }
 
