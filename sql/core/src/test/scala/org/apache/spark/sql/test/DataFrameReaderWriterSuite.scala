@@ -289,18 +289,20 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       assert(plan.isInstanceOf[OverwriteByExpression])
 
       // By default the save mode is `ErrorIfExists` for data source v2.
-      spark.range(10).write
-        .format(classOf[NoopDataSource].getName)
-        .save()
-      sparkContext.listenerBus.waitUntilEmpty()
-      assert(plan.isInstanceOf[AppendData])
+      val e = intercept[AnalysisException] {
+        spark.range(10).write
+          .format(classOf[NoopDataSource].getName)
+          .save()
+      }
+      assert(e.getMessage.contains("ErrorIfExists"))
 
-      spark.range(10).write
-        .format(classOf[NoopDataSource].getName)
-        .mode("default")
-        .save()
-      sparkContext.listenerBus.waitUntilEmpty()
-      assert(plan.isInstanceOf[AppendData])
+      val e2 = intercept[AnalysisException] {
+        spark.range(10).write
+          .format(classOf[NoopDataSource].getName)
+          .mode("default")
+          .save()
+      }
+      assert(e2.getMessage.contains("ErrorIfExists"))
     } finally {
       spark.listenerManager.unregister(listener)
     }
