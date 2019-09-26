@@ -20,91 +20,232 @@ license: |
 ---
 
 ### Description
-ALTER TABLE statement changes the schema or properties of a table.
+`ALTER TABLE` statement changes the schema or properties of a table.
 
-### Syntax
+### RENAME 
+`ALTER TABLE RENAME` statement changes the table name of an exsisting table in the Database.
+#### Syntax
 {% highlight sql %}
---Rename a table
-ALTER TABLE [old_db_name.]old_table_name RENAME TO [new_db_name.]new_table_name
-ALTER TABLE table PARTITION spec1 RENAME TO PARTITION spec2
+ALTER TABLE [db_name.]old_table_name RENAME TO [db_name.]new_table_name
 
---Add columns to an existing table
-ALTER TABLE table_name ADD COLUMNS (col_spec[, col_spec ...])
+ALTER TABLE table_name PARTITION partition_spec RENAME TO PARTITION partition_spec;
 
---Drop columns of an existing table
-ALTER TABLE table_name DROP [COLUMN] column_name
-
---Add or drop partition
-ALTER TABLE table_name { ADD [IF NOT EXISTS] | DROP [IF EXISTS] } PARTITION (partition_spec) [PURGE]
-
---Change a column definition of an existing table
-ALTER TABLE table [PARTITION partition_spec] CHANGE [COLUMN] column_old_name column_new_name column_dataType [COMMENT column_comment] [FIRST | AFTER column_name];
-
-ALTER TABLE table_name REPLACE COLUMNS (col_spec[, col_spec ...])
-
---RECOVER PARTITIONS clause scans the table data directory to find any new partition directories
-ALTER TABLE table_name RECOVER PARTITIONS
-
---Drop one or more properties of an existing table
-ALTER (TABLE) table_name UNSET TBLPROPERTIES [IF EXISTS] (key1, key2, ...)
-
---Set the SerDe or the SerDe properties of a table or partition
-ALTER TABLE table_name [PARTITION spec] SET SERDE serde_name [WITH SERDEPROPERTIES props];
-ALTER TABLE table_name [PARTITION spec] SET SERDEPROPERTIES serde_properties;
-
---Set the properties of an existing table or view. If a particular property was already set, this overrides the old value with the new one.
-ALTER [TABLE] table_name [PARTITION (partition_spec)] SET TBLPROPERTIES (key1=val1, key2=val2, ...)
-
---To change the file format of data to be in, for a table or partition:
-ALTER TABLE table_name [PARTITION (partition_spec)]
-  SET { FILEFORMAT file_format
-  | LOCATION 'hdfs_path_of_directory' }
-
-new_name ::= [new_database.]new_table_name
-
-col_spec ::= col_name type_name  COMMENT 'column-comment' [kudu_attributes]
-
-kudu_attributes ::= { [NOT] NULL | ENCODING codec | COMPRESSION algorithm |
-  DEFAULT constant | BLOCK_SIZE number }
-
-partition_spec ::= partition_col=constant_value
-
-table_properties ::= 'name'='value'[, 'name'='value' ...]
-
-serde_properties ::= 'name'='value'[, 'name'='value' ...]
-
-file_format :: like { PARQUET | TEXTFILE | RCFILE | SEQUENCEFILE | AVRO }
 {% endhighlight %}
+
+#### Parameters
+<dl>
+  <dt><code><em>old_table_name</em></code></dt>
+  <dd>Name of an existing table.</dd>
+</dl>
+<dl>
+  <dt><code><em>db_name</em></code></dt>
+  <dd>Name of the  exsisting database.</dd>
+</dl>
+
+<dl>
+  <dt><code><em>new_table_name</em></code></dt>
+  <dd>New name using which the table has to be renamed.</dd>
+</dl>
+
+<dl>
+  <dt><code><em>partition_spec</em></code></dt>
+  <dd>Partition to be renamed.</dd>
+</dl>
+
+
+### ADD COLUMNS
+`ALTER TABLE ADD COLUMNS` statement adds mentioned columns to an exsisting table.
+
+#### Syntax
+{% highlight sql %}
+ALTER TABLE table_name ADD COLUMNS (col_spec[, col_spec ...])
+{% endhighlight %}
+
+#### Parameters
+<dl>
+  <dt><code><em>table_name</em></code></dt>
+  <dd>The name of an existing table.</dd>
+</dl>
+
+
+<dl>
+  <dt><code><em>COLUMNS (col_spec)</em></code></dt>
+  <dd>Specifies the columns to be added to be renamed.</dd>
+</dl>
+
+
+### SET AND UNSET
+
+#### SET TABLE PROPERTIES
+`ALTER TABLE SET` command is used for setting the Table properties.If a particular property was already set, 
+this overrides the old value with the new one.
+
+`ALTER TABLE USET` is used to drop the table Property. 
+
+##### Syntax
+{% highlight sql %}
+
+--Set Table Properties
+ALTER TABLE table_name SET TBLPROPERTIES (key1=val1, key2=val2, ...)
+
+--Unset Table Properties
+ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] (key1, key2, ...)
+
+{% endhighlight %}
+
+#### SET SERDE
+`ALTER TABLE SET` command is used for setting the SERDE or SERDE Propeties in Hive tables.If a particular property was already set, 
+this overrides the old value with the new one.
+
+##### Syntax
+{% highlight sql %}
+
+--Set SERDE Propeties
+ALTER TABLE table_name [PARTITION part_spec]
+    SET SERDEPROPERTIES (key1=val1, key2=val2, ...)
+
+ALTER TABLE table_name [PARTITION part_spec] SET SERDE serde_class_name
+    [WITH SERDEPROPERTIES (key1=val1, key2=val2, ...)]
+
+{% endhighlight %}
+
+#### SET LOCATION And SET FILE FORMAT
+`ALTER TABLE SET` command can also be used for changing the file location and file format for 
+exsisting tables. 
+
+##### Syntax
+{% highlight sql %}
+
+--Changing File Format
+ALTER TABLE table_name [PARTITION partition_spec] SET FILEFORMAT file_format;
+
+--Changing File Location
+ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION 'new_location';
+
+{% endhighlight %}
+
+#### Parameters
+<dl>
+  <dt><code><em>table_name</em></code></dt>
+  <dd>The name of an existing table.</dd>
+</dl>
+
+<dl>
+  <dt><code><em>PARTITION (part_spec)</em></code></dt>
+  <dd>Specifies the partition on which the property has to be set.</dd>
+</dl>
+
+<dl>
+  <dt><code><em>SERDEPROPERTIES (key1=val1, key2=val2, ...)</em></code></dt>
+  <dd>Specifices the SERDE properties to be set.</dd>
+</dl>
 
 
 ### Examples
 {% highlight sql %}
--- add new column to a table
-ALTER TABLE t1 ADD columns (s string, t timestamp);
-ALTER TABLE srcpart ADD partition (ds='2008-04-08', hr='11'); 
 
---Drop a column
-ALTER TABLE p2 DROP column x;
-ALTER TABLE tab1 DROP PARTITION (a='300')
+--RENAME table 
+desc student;
++--------------------------+------------+----------+--+
+|         col_name         | data_type  | comment  |
++--------------------------+------------+----------+--+
+| name                     | string     | NULL     |
+| rollno                   | int        | NULL     |
+| age                      | int        | NULL     |
+| # Partition Information  |            |          |
+| # col_name               | data_type  | comment  |
+| age                      | int        | NULL     |
++--------------------------+------------+----------+--+
 
---change the fileformat
+ALTER TABLE Student RENAME TO StudentInfo;
+
+--After Renaming the table
+
+desc studentInfo;
++--------------------------+------------+----------+--+
+|         col_name         | data_type  | comment  |
++--------------------------+------------+----------+--+
+| name                     | string     | NULL     |
+| rollno                   | int        | NULL     |
+| age                      | int        | NULL     |
+| # Partition Information  |            |          |
+| # col_name               | data_type  | comment  |
+| age                      | int        | NULL     |
++--------------------------+------------+----------+--+
+
+--RENAME partition
+
+show partitions StudentInfo;
++------------+--+
+| partition  |
++------------+--+
+| age=10     |
+| age=11     |
+| age=12     |
++------------+--+
+
+ALTER TABLE default.StudentInfo PARTITION (age='10') RENAME TO PARTITION (age='15');
+
+--After renaming Partition
+show partitions StudentInfo;
++------------+--+
+| partition  |
++------------+--+
+| age=11     |
+| age=12     |
+| age=15     |
++------------+--+
+
+-- Add new column to a table
+
+desc studentInfo;
++--------------------------+------------+----------+--+
+|         col_name         | data_type  | comment  |
++--------------------------+------------+----------+--+
+| name                     | string     | NULL     |
+| rollno                   | int        | NULL     |
+| age                      | int        | NULL     |
+| # Partition Information  |            |          |
+| # col_name               | data_type  | comment  |
+| age                      | int        | NULL     |
++--------------------------+------------+----------+
+
+ALTER TABLE StudentINfo ADD columns (LastName string, DOB timestamp);
+
+--After Adding New columns to the table
+desc studentInfo;
++--------------------------+------------+----------+--+
+|         col_name         | data_type  | comment  |
++--------------------------+------------+----------+--+
+| name                     | string     | NULL     |
+| rollno                   | int        | NULL     |
+| LastName                 | string     | NULL     |
+| DOB                      | timestamp  | NULL     |
+| age                      | int        | NULL     |
+| # Partition Information  |            |          |
+| # col_name               | data_type  | comment  |
+| age                      | int        | NULL     |
++--------------------------+------------+----------+--+
+
+
+--Change the fileformat
 ALTER TABLE loc_orc SET fileformat orc;
+
 ALTER TABLE p1 partition (month=2, day=2) SET fileformat parquet;
 
--- set Properties
-ALTER TABLE test_tab SET SERDE 'org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe';
-ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('winner' = 'loser')
+--Change the file Location
 ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'
+
+-- SET SERDE/ SERDE Properties
+ALTER TABLE test_tab SET SERDE 'org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe';
+
 ALTER TABLE dbx.tab1 SET SERDE 'org.apache.madoop' WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')
 
---drop property
+--SET TABLE PROPERTIES
+ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('winner' = 'loser')
+
+--DROP TABLE PROPERTIES
 ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('winner')
-
---rename partition
-ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')
-
---change Column
-ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'
 
 {% endhighlight %}
 
