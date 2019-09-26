@@ -129,7 +129,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         return self.getOrDefault(self.threshold)
 
 
-class LSHParams(HasInputCol, HasOutputCol):
+class _LSHParams(HasInputCol, HasOutputCol):
     """
     Mixin for Locality Sensitive Hashing (LSH) algorithm parameters.
     """
@@ -146,7 +146,7 @@ class LSHParams(HasInputCol, HasOutputCol):
         return self.getOrDefault(self.numHashTables)
 
 
-class LSH(JavaEstimator, LSHParams, JavaMLReadable, JavaMLWritable):
+class LSH(JavaEstimator, _LSHParams, JavaMLReadable, JavaMLWritable):
     """
     Mixin for Locality Sensitive Hashing (LSH).
     """
@@ -158,7 +158,7 @@ class LSH(JavaEstimator, LSHParams, JavaMLReadable, JavaMLWritable):
         return self._set(numHashTables=value)
 
 
-class LSHModel(JavaModel, LSHParams):
+class LSHModel(JavaModel, _LSHParams):
     """
     Mixin for Locality Sensitive Hashing (LSH) models.
     """
@@ -203,9 +203,10 @@ class LSHModel(JavaModel, LSHParams):
         return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
 
 
-class BucketedRandomProjectionLSHParams():
+class _BucketedRandomProjectionLSHParams():
     """
-    (Private) Params for BucketedRandomProjectionParams.
+    Params for :py:attr:`BucketedRandomProjectionLSH` and
+    :py:attr:`BucketedRandomProjectionLSHModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -222,7 +223,7 @@ class BucketedRandomProjectionLSHParams():
 
 
 @inherit_doc
-class BucketedRandomProjectionLSH(LSH, BucketedRandomProjectionLSHParams,
+class BucketedRandomProjectionLSH(LSH, _BucketedRandomProjectionLSHParams,
                                   HasSeed, JavaMLReadable, JavaMLWritable):
     """
     LSH class for Euclidean distance metrics.
@@ -326,7 +327,7 @@ class BucketedRandomProjectionLSH(LSH, BucketedRandomProjectionLSHParams,
         return BucketedRandomProjectionLSHModel(java_model)
 
 
-class BucketedRandomProjectionLSHModel(LSHModel, BucketedRandomProjectionLSHParams, JavaMLReadable,
+class BucketedRandomProjectionLSHModel(LSHModel, _BucketedRandomProjectionLSHParams, JavaMLReadable,
                                        JavaMLWritable):
     r"""
     Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are
@@ -1031,9 +1032,9 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         return self._java_obj.indexOf(term)
 
 
-class IDFParams(HasInputCol, HasOutputCol):
+class _IDFParams(HasInputCol, HasOutputCol):
     """
-    (Private) Params for IDFParams.
+    Params for :py:attr:`IDF` and :py:attr:`IDFModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -1050,7 +1051,7 @@ class IDFParams(HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class IDF(JavaEstimator, IDFParams, JavaMLReadable, JavaMLWritable):
+class IDF(JavaEstimator, _IDFParams, JavaMLReadable, JavaMLWritable):
     """
     Compute the Inverse Document Frequency (IDF) given a collection of documents.
 
@@ -1120,7 +1121,7 @@ class IDF(JavaEstimator, IDFParams, JavaMLReadable, JavaMLWritable):
         return IDFModel(java_model)
 
 
-class IDFModel(JavaModel, IDFParams, JavaMLReadable, JavaMLWritable):
+class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`IDF`.
 
@@ -1152,9 +1153,9 @@ class IDFModel(JavaModel, IDFParams, JavaMLReadable, JavaMLWritable):
         return self._call_java("numDocs")
 
 
-class ImputerParams(HasInputCols, HasOutputCols):
+class _ImputerParams(HasInputCols, HasOutputCols):
     """
-    (Private) Params for ImputerParams.
+    Params for :py:attr:`Imputer` and :py:attr:`ImputerModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -1184,7 +1185,7 @@ class ImputerParams(HasInputCols, HasOutputCols):
 
 
 @inherit_doc
-class Imputer(JavaEstimator, ImputerParams, JavaMLReadable, JavaMLWritable):
+class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     """
     Imputation estimator for completing missing values, either using the mean or the median
     of the columns in which the missing values are located. The input columns should be of
@@ -1282,7 +1283,7 @@ class Imputer(JavaEstimator, ImputerParams, JavaMLReadable, JavaMLWritable):
         return ImputerModel(java_model)
 
 
-class ImputerModel(JavaModel, ImputerParams, JavaMLReadable, JavaMLWritable):
+class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`Imputer`.
 
@@ -1352,16 +1353,16 @@ class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, J
         return self._set(**kwargs)
 
 
-class MaxAbsScalerParams(HasInputCol, HasOutputCol):
+class _MaxAbsScalerParams(HasInputCol, HasOutputCol):
     """
-    (Private) Params for MaxAbsScalerParams.
+    Params for :py:attr:`MaxAbsScaler` and :py:attr:`MaxAbsScalerModel`.
     .. versionadded:: 3.0.0
     """
     pass
 
 
 @inherit_doc
-class MaxAbsScaler(JavaEstimator, MaxAbsScalerParams, JavaMLReadable, JavaMLWritable):
+class MaxAbsScaler(JavaEstimator, _MaxAbsScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Rescale each feature individually to range [-1, 1] by dividing through the largest maximum
     absolute value in each feature. It does not shift/center the data, and thus does not destroy
@@ -1422,7 +1423,7 @@ class MaxAbsScaler(JavaEstimator, MaxAbsScalerParams, JavaMLReadable, JavaMLWrit
         return MaxAbsScalerModel(java_model)
 
 
-class MaxAbsScalerModel(JavaModel, MaxAbsScalerParams, JavaMLReadable, JavaMLWritable):
+class MaxAbsScalerModel(JavaModel, _MaxAbsScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`MaxAbsScaler`.
 
@@ -1439,7 +1440,7 @@ class MaxAbsScalerModel(JavaModel, MaxAbsScalerParams, JavaMLReadable, JavaMLWri
 
 
 @inherit_doc
-class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
+class MinHashLSH(JavaEstimator, _LSHParams, HasInputCol, HasOutputCol, HasSeed,
                  JavaMLReadable, JavaMLWritable):
 
     """
@@ -1533,9 +1534,9 @@ class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
     """
 
 
-class MinMaxScalerParams(HasInputCol, HasOutputCol):
+class _MinMaxScalerParams(HasInputCol, HasOutputCol):
     """
-    (Private) Params for MinMaxScalerParams.
+    Params for :py:attr:`MinMaxScaler` and :py:attr:`MinMaxScalerModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -1560,7 +1561,7 @@ class MinMaxScalerParams(HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class MinMaxScaler(JavaEstimator, MinMaxScalerParams, JavaMLReadable, JavaMLWritable):
+class MinMaxScaler(JavaEstimator, _MinMaxScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Rescale each feature individually to a common range [min, max] linearly using column summary
     statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
@@ -1648,7 +1649,7 @@ class MinMaxScaler(JavaEstimator, MinMaxScalerParams, JavaMLReadable, JavaMLWrit
         return MinMaxScalerModel(java_model)
 
 
-class MinMaxScalerModel(JavaModel, MinMaxScalerParams, JavaMLReadable, JavaMLWritable):
+class MinMaxScalerModel(JavaModel, _MinMaxScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`MinMaxScaler`.
 
@@ -1813,9 +1814,9 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return self.getOrDefault(self.p)
 
 
-class OneHotEncoderParams(HasInputCols, HasOutputCols, HasHandleInvalid):
+class _OneHotEncoderParams(HasInputCols, HasOutputCols, HasHandleInvalid):
     """
-    (Private) Params for OneHotEncoderParams.
+    Params for :py:attr:`OneHotEncoder` and :py:attr:`OneHotEncoderModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -1838,7 +1839,7 @@ class OneHotEncoderParams(HasInputCols, HasOutputCols, HasHandleInvalid):
 
 
 @inherit_doc
-class OneHotEncoder(JavaEstimator, OneHotEncoderParams, JavaMLReadable, JavaMLWritable):
+class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLWritable):
     """
     A one-hot encoder that maps a column of category indices to a column of binary vectors, with
     at most a single one-value per row that indicates the input category index.
@@ -1916,7 +1917,7 @@ class OneHotEncoder(JavaEstimator, OneHotEncoderParams, JavaMLReadable, JavaMLWr
         return OneHotEncoderModel(java_model)
 
 
-class OneHotEncoderModel(JavaModel, OneHotEncoderParams, JavaMLReadable, JavaMLWritable):
+class OneHotEncoderModel(JavaModel, _OneHotEncoderParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`OneHotEncoder`.
 
@@ -2198,9 +2199,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
                               handleInvalid=self.getHandleInvalid())
 
 
-class RobustScalerParams(HasInputCol, HasOutputCol):
+class _RobustScalerParams(HasInputCol, HasOutputCol):
     """
-    (Private) Params for RobustScalerParams.
+    Params for :py:attr:`RobustScaler` and :py:attr:`RobustScalerModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -2243,7 +2244,7 @@ class RobustScalerParams(HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class RobustScaler(JavaEstimator, RobustScalerParams, JavaMLReadable, JavaMLWritable):
+class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWritable):
     """
     RobustScaler removes the median and scales the data according to the quantile range.
     The quantile range is by default IQR (Interquartile Range, quantile range between the
@@ -2344,7 +2345,7 @@ class RobustScaler(JavaEstimator, RobustScalerParams, JavaMLReadable, JavaMLWrit
         return RobustScalerModel(java_model)
 
 
-class RobustScalerModel(JavaModel, RobustScalerParams, JavaMLReadable, JavaMLWritable):
+class RobustScalerModel(JavaModel, _RobustScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`RobustScaler`.
 
@@ -2557,9 +2558,9 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
         return self.getOrDefault(self.statement)
 
 
-class StandardScalerParams(HasInputCol, HasOutputCol):
+class _StandardScalerParams(HasInputCol, HasOutputCol):
     """
-    (Private) Params for StandardScalerParams.
+    Params for :py:attr:`StandardScaler` and :py:attr:`StandardScalerModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -2584,7 +2585,7 @@ class StandardScalerParams(HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class StandardScaler(JavaEstimator, StandardScalerParams, JavaMLReadable, JavaMLWritable):
+class StandardScaler(JavaEstimator, _StandardScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Standardizes features by removing the mean and scaling to unit variance using column summary
     statistics on the samples in the training set.
@@ -2664,7 +2665,7 @@ class StandardScaler(JavaEstimator, StandardScalerParams, JavaMLReadable, JavaML
         return StandardScalerModel(java_model)
 
 
-class StandardScalerModel(JavaModel, StandardScalerParams, JavaMLReadable, JavaMLWritable):
+class StandardScalerModel(JavaModel, _StandardScalerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`StandardScaler`.
 
@@ -3187,9 +3188,9 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
         return self._set(**kwargs)
 
 
-class VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
+class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
     """
-    (Private) Params for VectorIndexerParams.
+    Params for :py:attr:`VectorIndexer` and :py:attr:`VectorIndexerModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -3214,7 +3215,7 @@ class VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
 
 
 @inherit_doc
-class VectorIndexer(JavaEstimator, VectorIndexerParams, JavaMLReadable, JavaMLWritable):
+class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLWritable):
     """
     Class for indexing categorical feature columns in a dataset of `Vector`.
 
@@ -3328,7 +3329,7 @@ class VectorIndexer(JavaEstimator, VectorIndexerParams, JavaMLReadable, JavaMLWr
         return VectorIndexerModel(java_model)
 
 
-class VectorIndexerModel(JavaModel, VectorIndexerParams, JavaMLReadable, JavaMLWritable):
+class VectorIndexerModel(JavaModel, _VectorIndexerParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`VectorIndexer`.
 
@@ -3454,9 +3455,9 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
         return self.getOrDefault(self.names)
 
 
-class Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
+class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
     """
-    (Private) Params for Word2VecParams.
+    Params for :py:attr:`Word2Vec` and :py:attr:`Word2VecModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -3516,7 +3517,7 @@ class Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol
 
 @inherit_doc
 @ignore_unicode_prefix
-class Word2Vec(JavaEstimator, Word2VecParams, JavaMLReadable, JavaMLWritable):
+class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     """
     Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
     natural language processing or machine learning process.
@@ -3641,7 +3642,7 @@ class Word2Vec(JavaEstimator, Word2VecParams, JavaMLReadable, JavaMLWritable):
         return Word2VecModel(java_model)
 
 
-class Word2VecModel(JavaModel, Word2VecParams, JavaMLReadable, JavaMLWritable):
+class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`Word2Vec`.
 
@@ -3682,9 +3683,9 @@ class Word2VecModel(JavaModel, Word2VecParams, JavaMLReadable, JavaMLWritable):
         return list(map(lambda st: (st._1(), st._2()), list(tuples)))
 
 
-class PCAParams(HasInputCol, HasOutputCol):
+class _PCAParams(HasInputCol, HasOutputCol):
     """
-    (Private) Params for PCAParams.
+    Params for :py:attr:`PCA` and :py:attr:`PCAModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -3700,7 +3701,7 @@ class PCAParams(HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class PCA(JavaEstimator, PCAParams, JavaMLReadable, JavaMLWritable):
+class PCA(JavaEstimator, _PCAParams, JavaMLReadable, JavaMLWritable):
     """
     PCA trains a model to project vectors to a lower dimensional space of the
     top :py:attr:`k` principal components.
@@ -3767,7 +3768,7 @@ class PCA(JavaEstimator, PCAParams, JavaMLReadable, JavaMLWritable):
         return PCAModel(java_model)
 
 
-class PCAModel(JavaModel, PCAParams, JavaMLReadable, JavaMLWritable):
+class PCAModel(JavaModel, _PCAParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`PCA`. Transforms vectors to a lower dimensional space.
 
@@ -3793,9 +3794,9 @@ class PCAModel(JavaModel, PCAParams, JavaMLReadable, JavaMLWritable):
         return self._call_java("explainedVariance")
 
 
-class RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
+class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
     """
-    (Private) Params for RFormulaParams.
+    Params for :py:attr:`RFormula` and :py:attr:`RFormula`.
     .. versionadded:: 3.0.0
     """
 
@@ -3844,7 +3845,7 @@ class RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
 
 
 @inherit_doc
-class RFormula(JavaEstimator, RFormulaParams, JavaMLReadable, JavaMLWritable):
+class RFormula(JavaEstimator, _RFormulaParams, JavaMLReadable, JavaMLWritable):
     """
     Implements the transforms required for fitting a dataset against an
     R model formula. Currently we support a limited subset of the R
@@ -3971,7 +3972,7 @@ class RFormula(JavaEstimator, RFormulaParams, JavaMLReadable, JavaMLWritable):
         return "RFormula(%s) (uid=%s)" % (formulaStr, self.uid)
 
 
-class RFormulaModel(JavaModel, RFormulaParams, JavaMLReadable, JavaMLWritable):
+class RFormulaModel(JavaModel, _RFormulaParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`RFormula`. Fitting is required to determine the
     factor levels of formula terms.
@@ -3984,9 +3985,9 @@ class RFormulaModel(JavaModel, RFormulaParams, JavaMLReadable, JavaMLWritable):
         return "RFormulaModel(%s) (uid=%s)" % (resolvedFormula, self.uid)
 
 
-class ChiSqSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
+class _ChiSqSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
     """
-    (Private) Params for ChiSqSelectorParams.
+    Params for :py:attr:`ChiSqSelector` and :py:attr:`ChiSqSelectorModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -4058,7 +4059,7 @@ class ChiSqSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
 
 
 @inherit_doc
-class ChiSqSelector(JavaEstimator, ChiSqSelectorParams, JavaMLReadable, JavaMLWritable):
+class ChiSqSelector(JavaEstimator, _ChiSqSelectorParams, JavaMLReadable, JavaMLWritable):
     """
     Chi-Squared feature selection, which selects categorical features to use for predicting a
     categorical label.
@@ -4193,7 +4194,7 @@ class ChiSqSelector(JavaEstimator, ChiSqSelectorParams, JavaMLReadable, JavaMLWr
         return ChiSqSelectorModel(java_model)
 
 
-class ChiSqSelectorModel(JavaModel, ChiSqSelectorParams, JavaMLReadable, JavaMLWritable):
+class ChiSqSelectorModel(JavaModel, _ChiSqSelectorParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`ChiSqSelector`.
 
