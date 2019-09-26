@@ -28,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState}
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
+import org.apache.spark.sql.hive.thriftserver.ui.ToolTips._
 
 /** Page for Spark Web UI that shows statistics of jobs running in the thrift server */
 private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
@@ -81,9 +82,9 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     val table = if (numStatement > 0) {
       val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Close Time",
         "Execution Time", "Duration", "Statement", "State", "Detail")
-      val tooltips = Seq(None, None, None, None, Some(ToolTips.THRIFT_SERVER_FINISH_TIME),
-        Some(ToolTips.THRIFT_SERVER_CLOSE_TIME), Some(ToolTips.THRIFT_SERVER_EXECUTION),
-        Some(ToolTips.THRIFT_SERVER_DURATION), None, None, None)
+      val tooltips = Seq(None, None, None, None, Some(THRIFT_SERVER_FINISH_TIME),
+        Some(THRIFT_SERVER_CLOSE_TIME), Some(THRIFT_SERVER_EXECUTION),
+        Some(THRIFT_SERVER_DURATION), None, None, None)
       assert(headerRow.length == tooltips.length)
       val dataRows = executionList.sortBy(_.startTimestamp).reverse
 
