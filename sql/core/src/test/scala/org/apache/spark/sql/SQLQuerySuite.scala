@@ -164,17 +164,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Uuid",
       // The example calls methods that return unstable results.
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
-      // Fails on parsing `SELECT 2 mod 1.8`:
-      //  org.apache.spark.sql.catalyst.parser.ParseException:
-      //  extraneous input '1.8' expecting <EOF>(line 1, pos 14)
-      "org.apache.spark.sql.catalyst.expressions.Remainder",
-      // Fails on `SELECT make_timestamp(2019, 13, 1, 10, 11, 12, 13)`:
-      //  Invalid ID for region-based ZoneId, invalid format: 13
-      //  java.time.DateTimeException: Invalid ID for region-based ZoneId, invalid format: 13
-      "org.apache.spark.sql.catalyst.expressions.MakeTimestamp",
-      // Fails on `SELECT '%SystemDrive%\Users\John' like '\%SystemDrive\%\\Users%'`
-      //  the pattern '\%SystemDrive\%\Users%' is invalid, ...
-      "org.apache.spark.sql.catalyst.expressions.Like",
       // Unsupported format of the examples,
       // and `SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'` fails:
       //  Error in query:
