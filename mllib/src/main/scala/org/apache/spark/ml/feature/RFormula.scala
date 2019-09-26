@@ -30,6 +30,7 @@ import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasHandleInvalid, HasLabelCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 
 /**
@@ -214,8 +215,11 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       col
     }
 
+    val terms = resolvedFormula.terms.flatten.distinct
+    lazy val firstRow = dataset.select(terms.map(col): _*).first()
+
     // First we index each string column referenced by the input terms.
-    val indexed: Map[String, String] = resolvedFormula.terms.flatten.distinct.map { term =>
+    val indexed = terms.zipWithIndex.map { case (term, i) =>
       dataset.schema(term).dataType match {
         case _: StringType =>
           val indexCol = tmpColumn("stridx")
@@ -229,7 +233,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(dataset.schema(term))
           val size = if (group.size < 0) {
-            dataset.select(term).first().getAs[Vector](0).size
+            firstRow.getAs[Vector](i).size
           } else {
             group.size
           }
