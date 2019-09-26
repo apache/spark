@@ -110,7 +110,7 @@ class KafkaDataConsumerSuite
       val consumer2Underlying = initSingleConsumer(kafkaParams, key)
 
       // here we expect different consumer as pool will invalidate for task reattempt
-      assert(consumer2Underlying.get.ne(consumer1Underlying.get))
+      assert(consumer2Underlying.ne(consumer1Underlying))
     } finally {
       TaskContext.unset()
     }
@@ -132,7 +132,7 @@ class KafkaDataConsumerSuite
       val consumer1Underlying = initSingleConsumer(kafkaParams, key)
       val consumer2Underlying = initSingleConsumer(kafkaParams, key)
 
-      assert(consumer2Underlying.get.eq(consumer1Underlying.get))
+      assert(consumer2Underlying.eq(consumer1Underlying))
     } finally {
       TaskContext.unset()
     }
@@ -155,7 +155,7 @@ class KafkaDataConsumerSuite
       addTokenToUGI(tokenService1, tokenId2, tokenPassword2)
       val consumer2Underlying = initSingleConsumer(kafkaParams, key)
 
-      assert(consumer2Underlying.get.ne(consumer1Underlying.get))
+      assert(consumer2Underlying.ne(consumer1Underlying))
     } finally {
       TaskContext.unset()
     }
@@ -163,7 +163,7 @@ class KafkaDataConsumerSuite
 
   private def initSingleConsumer(
       kafkaParams: ju.Map[String, Object],
-      key: CacheKey): Option[InternalKafkaConsumer] = {
+      key: CacheKey): InternalKafkaConsumer = {
     val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams)
 
     // any method call which requires consumer is necessary
@@ -180,7 +180,7 @@ class KafkaDataConsumerSuite
     assert(consumerUnderlying.get.eq(pooledObj))
     consumerPool.returnObject(pooledObj)
 
-    consumerUnderlying
+    consumerUnderlying.get
   }
 
   test("SPARK-23623: concurrent use of KafkaDataConsumer") {
