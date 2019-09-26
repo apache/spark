@@ -51,6 +51,9 @@ The information that is displayed in this section is
   <img src="img/AllJobsPageDetail2.png" title="Event timeline" alt="Event timeline"/>
 </p>
 
+
+When you click on a executor, you can change the color to point it out.
+
 * Details of jobs grouped by status: Displays detailed information of the jobs including Job ID, description (with a link to detailed job page), submitted time, duration, stages summary and tasks progress bar
 
 <p style="text-align: center;">
