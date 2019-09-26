@@ -241,8 +241,8 @@ private[spark] object KafkaTokenUtil extends Logging {
         "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
       val tokenInfo = token.tokenInfo
       logDebug("%-15s %-15s %-15s %-25s %-15s %-15s %-15s".format(
-        REDACTION_REPLACEMENT_TEXT,
         tokenInfo.tokenId,
+        REDACTION_REPLACEMENT_TEXT,
         tokenInfo.owner,
         tokenInfo.renewersAsString,
         dateFormat.format(tokenInfo.issueTimestamp),
