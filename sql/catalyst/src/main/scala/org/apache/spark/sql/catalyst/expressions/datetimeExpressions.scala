@@ -842,7 +842,7 @@ abstract class UnixTime extends ToTimestamp {
   examples = """
     Examples:
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
-       1970-01-01 00:00:00
+       1969-12-31 16:00:00
   """,
   since = "1.5.0")
 case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[String] = None)

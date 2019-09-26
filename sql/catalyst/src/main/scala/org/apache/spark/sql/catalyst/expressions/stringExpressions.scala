@@ -949,7 +949,7 @@ object StringTrimRight {
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
 
-    _FUNC_(trimStr, str) - Removes the trailing string which contains the characters from the trim string from the `str`
+    _FUNC_(str, trimStr) - Removes the trailing string which contains the characters from the trim string from the `str`
   """,
   arguments = """
     Arguments:
@@ -960,7 +960,7 @@ object StringTrimRight {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('LQSa', 'SSparkSQLS');
+      > SELECT _FUNC_('SSparkSQLS', 'SQLS');
        SSpark
   """,
   since = "1.5.0")
