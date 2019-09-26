@@ -847,7 +847,7 @@ object StringTrimLeft {
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
 
-    _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string
+    _FUNC_(str, trimStr) - Removes the leading string contains the characters from the trim string
   """,
   arguments = """
     Arguments:
@@ -858,7 +858,7 @@ object StringTrimLeft {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('Sp', 'SSparkSQLS');
+      > SELECT _FUNC_('SparkSQLS', 'Sp');
        arkSQLS
   """,
   since = "1.5.0")
