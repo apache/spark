@@ -85,7 +85,7 @@ class CoGroupedData(object):
         the grouping key(s) will be passed as the first argument and the data will be passed as the
         second and third arguments.  The grouping key(s) will be  passed as a tuple of numpy data
         types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in as two
-        `pandas.DataFrame`s containing all columns from the original Spark DataFrames.
+        `pandas.DataFrame` containing all columns from the original Spark DataFrames.
 
         >>> @pandas_udf("time int, id int, v1 double, v2 string",
         ...             PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
