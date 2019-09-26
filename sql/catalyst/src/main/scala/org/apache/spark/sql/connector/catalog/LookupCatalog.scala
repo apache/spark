@@ -135,7 +135,7 @@ private[sql] trait LookupCatalog extends Logging {
   /**
    * Extract catalog and the rest name parts from a multi-part identifier.
    */
-  object CatalogAndRestNameParts {
+  object CatalogAndIdentifierParts {
     def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = {
       assert(nameParts.nonEmpty)
       try {
@@ -159,7 +159,7 @@ private[sql] trait LookupCatalog extends Logging {
     def unapply(nameParts: Seq[String]): Option[(TableCatalog, Seq[String], Table)] = {
       assert(nameParts.nonEmpty)
       nameParts match {
-        case CatalogAndRestNameParts(catalog, restNameParts) =>
+        case CatalogAndIdentifierParts(catalog, restNameParts) =>
           loadTable(catalog, restNameParts.asIdentifier).map { table =>
             (catalog.asTableCatalog, restNameParts, table)
           }

@@ -92,14 +92,15 @@ private[sql] object CatalogV2Implicits {
       }
     }
   }
-  implicit class MultiPartIdentifierHelper(nameParts: Seq[String]) {
-    if (nameParts.isEmpty) {
+
+  implicit class MultiPartIdentifierHelper(parts: Seq[String]) {
+    if (parts.isEmpty) {
       throw new AnalysisException("multi-part identifier cannot be empty.")
     }
 
-    def asIdentifier: Identifier = Identifier.of(nameParts.init.toArray, nameParts.last)
+    def asIdentifier: Identifier = Identifier.of(parts.init.toArray, parts.last)
 
-    def asTableIdentifier: TableIdentifier = nameParts match {
+    def asTableIdentifier: TableIdentifier = parts match {
       case Seq(tblName) => TableIdentifier(tblName)
       case Seq(dbName, tblName) => TableIdentifier(tblName, Some(dbName))
       case _ =>
@@ -107,7 +108,7 @@ private[sql] object CatalogV2Implicits {
           s"$quoted is not a valid TableIdentifier as it has more than 2 name parts.")
     }
 
-    def quoted: String = nameParts.map(quote).mkString(".")
+    def quoted: String = parts.map(quote).mkString(".")
   }
 
   private def quote(part: String): String = {

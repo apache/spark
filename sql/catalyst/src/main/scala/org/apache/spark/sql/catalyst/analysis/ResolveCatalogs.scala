@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.plans.logical.{DropTable, LogicalPlan, ShowNamespaces, ShowTables}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{DropTableStatement, DropViewStatement, ShowNamespacesStatement, ShowTablesStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, ShowNamespaces, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
 
@@ -30,22 +30,72 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
 class ResolveCatalogs(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util.isSessionCatalog
+  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case c @ CreateTableStatement(
+         CatalogAndIdentifierParts(catalog, tableName), _, _, _, _, _, _, _, _, _)
+         if !isSessionCatalog(catalog) =>
+      CreateV2Table(
+        catalog.asTableCatalog,
+        tableName.asIdentifier,
+        c.tableSchema,
+        // convert the bucket spec and add it as a transform
+        c.partitioning ++ c.bucketSpec.map(_.asTransform),
+        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+        ignoreIfExists = c.ifNotExists)
+
+    case c @ CreateTableAsSelectStatement(
+         CatalogAndIdentifierParts(catalog, tableName), _, _, _, _, _, _, _, _, _)
+         if !isSessionCatalog(catalog) =>
+      CreateTableAsSelect(
+        catalog.asTableCatalog,
+        tableName.asIdentifier,
+        // convert the bucket spec and add it as a transform
+        c.partitioning ++ c.bucketSpec.map(_.asTransform),
+        c.asSelect,
+        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+        writeOptions = c.options.filterKeys(_ != "path"),
+        ignoreIfExists = c.ifNotExists)
+
+    case c @ ReplaceTableStatement(
+         CatalogAndIdentifierParts(catalog, tableName), _, _, _, _, _, _, _, _, _)
+         if !isSessionCatalog(catalog) =>
+      ReplaceTable(
+        catalog.asTableCatalog,
+        tableName.asIdentifier,
+        c.tableSchema,
+        // convert the bucket spec and add it as a transform
+        c.partitioning ++ c.bucketSpec.map(_.asTransform),
+        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+        orCreate = c.orCreate)
+
+    case c @ ReplaceTableAsSelectStatement(
+         CatalogAndIdentifierParts(catalog, tableName), _, _, _, _, _, _, _, _, _)
+         if !isSessionCatalog(catalog) =>
+      ReplaceTableAsSelect(
+        catalog.asTableCatalog,
+        tableName.asIdentifier,
+        // convert the bucket spec and add it as a transform
+        c.partitioning ++ c.bucketSpec.map(_.asTransform),
+        c.asSelect,
+        convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+        writeOptions = c.options.filterKeys(_ != "path"),
+        orCreate = c.orCreate)
+
     case DropTableStatement(
-         CatalogAndRestNameParts(c, restNameParts), ifExists, purge) if !isSessionCatalog(c) =>
-      DropTable(c.asTableCatalog, restNameParts.asIdentifier, ifExists)
+         CatalogAndIdentifierParts(c, tableName), ifExists, purge) if !isSessionCatalog(c) =>
+      DropTable(c.asTableCatalog, tableName.asIdentifier, ifExists)
 
     case DropViewStatement(
-         CatalogAndRestNameParts(c, restNameParts), _) if !isSessionCatalog(c) =>
+         CatalogAndIdentifierParts(c, viewName), _) if !isSessionCatalog(c) =>
       throw new AnalysisException(
-        s"Can not specify catalog `${c.name}` for view ${restNameParts.quoted} " +
+        s"Can not specify catalog `${c.name}` for view ${viewName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
     case ShowNamespacesStatement(
-         Some(CatalogAndRestNameParts(c, restNameParts)), pattern) if !isSessionCatalog(c) =>
-      val namespace = if (restNameParts.isEmpty) None else Some(restNameParts)
+         Some(CatalogAndIdentifierParts(c, identParts)), pattern) if !isSessionCatalog(c) =>
+      val namespace = if (identParts.isEmpty) None else Some(identParts)
       ShowNamespaces(c.asNamespaceCatalog, namespace, pattern)
 
     // TODO (SPARK-29014): we should check if the current catalog is not session catalog here.
@@ -53,8 +103,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       ShowNamespaces(defaultCatalog.get.asNamespaceCatalog, None, pattern)
 
     case ShowTablesStatement(
-         Some(CatalogAndRestNameParts(c, restNameParts)), pattern) if !isSessionCatalog(c) =>
-      ShowTables(c.asTableCatalog, restNameParts, pattern)
+         Some(CatalogAndIdentifierParts(c, identParts)), pattern) if !isSessionCatalog(c) =>
+      ShowTables(c.asTableCatalog, identParts, pattern)
 
     // TODO (SPARK-29014): we should check if the current catalog is not session catalog here.
     case ShowTablesStatement(None, pattern) if defaultCatalog.isDefined =>

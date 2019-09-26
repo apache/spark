@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
@@ -35,113 +33,104 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
- * to the corresponding v1 commands if the resolved catalog is not the session catalog.
+ * to the corresponding v1 commands if the resolved catalog is the session catalog.
  *
  * We can remove this rule once we implement all the catalog functionality in `V2SessionCatalog`.
  */
 class ResolveCatalogsForV1Commands(val catalogManager: CatalogManager, conf: SQLConf)
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util.isSessionCatalog
+  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    // TODO: we should convert CREATE/REPLACE TABLE statements to v2 commands in the rule
-    //       `ResolveCatalogs`. However, it's not doable right now because we need to look up the
-    //       table provider. Table provider lookup is implemented in sql/core and relies on a v1
-    //       interface `DataSourceRegister`.
-
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c: CreateTableStatement =>
-      c.tableName match {
-        case CatalogAndRestNameParts(catalog, restNameParts) =>
-          if (isSessionCatalog(catalog) && !isV2Provider(c.provider)) {
-            val tableDesc = buildCatalogTable(c.tableName.asTableIdentifier, c.tableSchema,
-              c.partitioning, c.bucketSpec, c.properties, c.provider, c.options, c.location,
-              c.comment, c.ifNotExists)
-            val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-            CreateTable(tableDesc, mode, None)
-          } else {
-            CreateV2Table(
-              catalog.asTableCatalog,
-              restNameParts.asIdentifier,
-              c.tableSchema,
-              // convert the bucket spec and add it as a transform
-              c.partitioning ++ c.bucketSpec.map(_.asTransform),
-              convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-              ignoreIfExists = c.ifNotExists)
-          }
+    case c @ CreateTableStatement(
+         CatalogAndIdentifierParts(catalog, tableName), _, _, _, _, _, _, _, _, _)
+         if isSessionCatalog(catalog) =>
+      if (!isV2Provider(c.provider)) {
+        val tableDesc = buildCatalogTable(c.tableName.asTableIdentifier, c.tableSchema,
+          c.partitioning, c.bucketSpec, c.properties, c.provider, c.options, c.location,
+          c.comment, c.ifNotExists)
+        val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+        CreateTable(tableDesc, mode, None)
+      } else {
+        CreateV2Table(
+          catalog.asTableCatalog,
+          tableName.asIdentifier,
+          c.tableSchema,
+          // convert the bucket spec and add it as a transform
+          c.partitioning ++ c.bucketSpec.map(_.asTransform),
+          convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+          ignoreIfExists = c.ifNotExists)
       }
 
-    case c: CreateTableAsSelectStatement =>
-      c.tableName match {
-        case CatalogAndRestNameParts(catalog, restNameParts) =>
-          if (isSessionCatalog(catalog) && !isV2Provider(c.provider)) {
-            val tableDesc = buildCatalogTable(c.tableName.asTableIdentifier, new StructType,
-              c.partitioning, c.bucketSpec, c.properties, c.provider, c.options, c.location,
-              c.comment, c.ifNotExists)
-            val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-            CreateTable(tableDesc, mode, Some(c.asSelect))
-          } else {
-            CreateTableAsSelect(
-              catalog.asTableCatalog,
-              restNameParts.asIdentifier,
-              // convert the bucket spec and add it as a transform
-              c.partitioning ++ c.bucketSpec.map(_.asTransform),
-              c.asSelect,
-              convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-              writeOptions = c.options.filterKeys(_ != "path"),
-              ignoreIfExists = c.ifNotExists)
-          }
+    case c @ CreateTableAsSelectStatement(
+         CatalogAndIdentifierParts(catalog, tableName), _, _, _, _, _, _, _, _, _)
+         if isSessionCatalog(catalog) =>
+      if (!isV2Provider(c.provider)) {
+        val tableDesc = buildCatalogTable(c.tableName.asTableIdentifier, new StructType,
+          c.partitioning, c.bucketSpec, c.properties, c.provider, c.options, c.location,
+          c.comment, c.ifNotExists)
+        val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+        CreateTable(tableDesc, mode, Some(c.asSelect))
+      } else {
+        CreateTableAsSelect(
+          catalog.asTableCatalog,
+          tableName.asIdentifier,
+          // convert the bucket spec and add it as a transform
+          c.partitioning ++ c.bucketSpec.map(_.asTransform),
+          c.asSelect,
+          convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+          writeOptions = c.options.filterKeys(_ != "path"),
+          ignoreIfExists = c.ifNotExists)
       }
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c: ReplaceTableStatement =>
-      c.tableName match {
-        case CatalogAndRestNameParts(catalog, restNameParts) =>
-          if (isSessionCatalog(catalog) && !isV2Provider(c.provider)) {
-            throw new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
-          } else {
-            ReplaceTable(
-              catalog.asTableCatalog,
-              restNameParts.asIdentifier,
-              c.tableSchema,
-              // convert the bucket spec and add it as a transform
-              c.partitioning ++ c.bucketSpec.map(_.asTransform),
-              convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-              orCreate = c.orCreate)
-          }
+    case c @ ReplaceTableStatement(
+         CatalogAndIdentifierParts(catalog, tableName), _, _, _, _, _, _, _, _, _)
+         if isSessionCatalog(catalog) =>
+      if (!isV2Provider(c.provider)) {
+        throw new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
+      } else {
+        ReplaceTable(
+          catalog.asTableCatalog,
+          tableName.asIdentifier,
+          c.tableSchema,
+          // convert the bucket spec and add it as a transform
+          c.partitioning ++ c.bucketSpec.map(_.asTransform),
+          convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+          orCreate = c.orCreate)
       }
 
-    case c: ReplaceTableAsSelectStatement =>
-      c.tableName match {
-        case CatalogAndRestNameParts(catalog, restNameParts) =>
-          if (isSessionCatalog(catalog) && !isV2Provider(c.provider)) {
-            throw new AnalysisException("REPLACE TABLE AS SELECT is only supported with v2 tables.")
-          } else {
-            ReplaceTableAsSelect(
-              catalog.asTableCatalog,
-              restNameParts.asIdentifier,
-              // convert the bucket spec and add it as a transform
-              c.partitioning ++ c.bucketSpec.map(_.asTransform),
-              c.asSelect,
-              convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
-              writeOptions = c.options.filterKeys(_ != "path"),
-              orCreate = c.orCreate)
-          }
+    case c @ ReplaceTableAsSelectStatement(
+         CatalogAndIdentifierParts(catalog, tableName), _, _, _, _, _, _, _, _, _)
+         if isSessionCatalog(catalog) =>
+      if (!isV2Provider(c.provider)) {
+        throw new AnalysisException("REPLACE TABLE AS SELECT is only supported with v2 tables.")
+      } else {
+        ReplaceTableAsSelect(
+          catalog.asTableCatalog,
+          tableName.asIdentifier,
+          // convert the bucket spec and add it as a transform
+          c.partitioning ++ c.bucketSpec.map(_.asTransform),
+          c.asSelect,
+          convertTableProperties(c.properties, c.options, c.location, c.comment, c.provider),
+          writeOptions = c.options.filterKeys(_ != "path"),
+          orCreate = c.orCreate)
       }
 
     case d @ DropTableStatement(
-         CatalogAndRestNameParts(c, restNameParts), ifExists, purge) if isSessionCatalog(c) =>
+         CatalogAndIdentifierParts(c, tableName), ifExists, purge) if isSessionCatalog(c) =>
       DropTableCommand(d.tableName.asTableIdentifier, ifExists, isView = false, purge = purge)
 
     case DropViewStatement(
-         CatalogAndRestNameParts(c, restNameParts), ifExists) if isSessionCatalog(c) =>
-      DropTableCommand(restNameParts.asTableIdentifier, ifExists, isView = true, purge = false)
+         CatalogAndIdentifierParts(c, tableName), ifExists) if isSessionCatalog(c) =>
+      DropTableCommand(tableName.asTableIdentifier, ifExists, isView = true, purge = false)
 
     case ShowNamespacesStatement(
-         Some(CatalogAndRestNameParts(c, restNameParts)), pattern) if isSessionCatalog(c) =>
+         Some(CatalogAndIdentifierParts(c, identParts)), pattern) if isSessionCatalog(c) =>
       throw new AnalysisException(
         "SHOW NAMESPACES is not supported with the session catalog.")
 
@@ -151,56 +140,16 @@ class ResolveCatalogsForV1Commands(val catalogManager: CatalogManager, conf: SQL
         "SHOW NAMESPACES is not supported with the session catalog.")
 
     case ShowTablesStatement(
-         Some(CatalogAndRestNameParts(c, restNameParts)), pattern) if isSessionCatalog(c) =>
-      if (restNameParts.length != 1) {
+         Some(CatalogAndIdentifierParts(c, identParts)), pattern) if isSessionCatalog(c) =>
+      if (identParts.length != 1) {
         throw new AnalysisException(
-          s"The database name is not valid: ${restNameParts.quoted}")
+          s"The database name is not valid: ${identParts.quoted}")
       }
-      ShowTablesCommand(Some(restNameParts.head), pattern)
+      ShowTablesCommand(Some(identParts.head), pattern)
 
     // TODO (SPARK-29014): we should check if the current catalog is session catalog here.
     case ShowTablesStatement(None, pattern) if defaultCatalog.isEmpty =>
       ShowTablesCommand(None, pattern)
-  }
-
-  private def convertTableProperties(
-      properties: Map[String, String],
-      options: Map[String, String],
-      location: Option[String],
-      comment: Option[String],
-      provider: String): Map[String, String] = {
-    if (options.contains("path") && location.isDefined) {
-      throw new AnalysisException(
-        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
-          "you can only specify one of them.")
-    }
-
-    if ((options.contains("comment") || properties.contains("comment"))
-      && comment.isDefined) {
-      throw new AnalysisException(
-        "COMMENT and option/property 'comment' are both used to set the table comment, you can " +
-          "only specify one of them.")
-    }
-
-    if (options.contains("provider") || properties.contains("provider")) {
-      throw new AnalysisException(
-        "USING and option/property 'provider' are both used to set the provider implementation, " +
-          "you can only specify one of them.")
-    }
-
-    val filteredOptions = options.filterKeys(_ != "path")
-
-    // create table properties from TBLPROPERTIES and OPTIONS clauses
-    val tableProperties = new mutable.HashMap[String, String]()
-    tableProperties ++= properties
-    tableProperties ++= filteredOptions
-
-    // convert USING, LOCATION, and COMMENT clauses to table properties
-    tableProperties += ("provider" -> provider)
-    comment.map(text => tableProperties += ("comment" -> text))
-    location.orElse(options.get("path")).map(loc => tableProperties += ("location" -> loc))
-
-    tableProperties.toMap
   }
 
   private def buildCatalogTable(
