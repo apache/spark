@@ -27,7 +27,7 @@ object StringUtils {
   private[this] val falseStrings =
     Set("false", "fals", "fal", "fa", "f", "no", "n", "off", "of", "0").map(UTF8String.fromString)
 
-  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.trim().toLowerCase())
+  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s)
 
-  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.trim().toLowerCase())
+  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s)
 }

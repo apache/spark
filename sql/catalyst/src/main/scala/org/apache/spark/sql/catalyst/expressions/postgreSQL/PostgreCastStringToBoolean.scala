@@ -37,7 +37,7 @@ case class PostgreCastStringToBoolean(child: Expression)
   }
 
   override def nullSafeEval(input: Any): Any = {
-    val s = input.asInstanceOf[UTF8String]
+    val s = input.asInstanceOf[UTF8String].trim().toLowerCase()
     if (StringUtils.isTrueString(s)) {
       true
     } else if (StringUtils.isFalseString(s)) {
@@ -51,14 +51,16 @@ case class PostgreCastStringToBoolean(child: Expression)
     val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
     val eval = child.genCode(ctx)
     val javaType = JavaCode.javaType(dataType)
+    val preprocessedString = ctx.freshName("preprocessedString")
     val castCode =
       code"""
         boolean ${ev.isNull} = ${eval.isNull};
         $javaType ${ev.value} = false;
         if (!${eval.isNull}) {
-          if ($stringUtils.isTrueString(${eval.value})) {
+          UTF8String $preprocessedString = ${eval.value}.trim().toLowerCase();
+          if ($stringUtils.isTrueString($preprocessedString)) {
             ${ev.value} = true;
-          } else if ($stringUtils.isFalseString(${eval.value})) {
+          } else if ($stringUtils.isFalseString($preprocessedString)) {
             ${ev.value} = false;
           } else {
             ${ev.isNull} = true;
