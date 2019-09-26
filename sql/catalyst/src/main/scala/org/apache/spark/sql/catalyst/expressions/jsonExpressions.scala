@@ -331,7 +331,7 @@ case class GetJsonObject(json: Expression, path: Expression)
   }
 }
 
-// scalastyle:off line.size.limit
+// scalastyle:off
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
   examples = """
@@ -339,7 +339,7 @@ case class GetJsonObject(json: Expression, path: Expression)
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
        1	2
   """)
-// scalastyle:on line.size.limit
+// scalastyle:on
 case class JsonTuple(children: Seq[Expression])
   extends Generator with CodegenFallback {
 
