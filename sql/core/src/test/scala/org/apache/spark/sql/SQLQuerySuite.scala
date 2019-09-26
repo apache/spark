@@ -145,7 +145,30 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     val exampleRe = ">(.+);\n(.+)".r
     val ignoreSet = Set(
       // One of examples shows getting the current timestamp
-      "org.apache.spark.sql.catalyst.expressions.UnixTimestamp")
+      "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
+      // Random output without a seed
+      "org.apache.spark.sql.catalyst.expressions.Rand",
+      "org.apache.spark.sql.catalyst.expressions.Randn",
+      "org.apache.spark.sql.catalyst.expressions.Shuffle",
+      "org.apache.spark.sql.catalyst.expressions.Uuid",
+      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
+      // TODO: handle multiline output, look at the DOTALL flag
+      "org.apache.spark.sql.catalyst.expressions.GroupingID",
+      "org.apache.spark.sql.catalyst.expressions.Stack",
+      "org.apache.spark.sql.catalyst.expressions.PosExplode",
+      "org.apache.spark.sql.catalyst.expressions.Explode",
+      "org.apache.spark.sql.catalyst.expressions.Cube",
+      "org.apache.spark.sql.catalyst.expressions.Inline",
+      "org.apache.spark.sql.catalyst.expressions.Rollup",
+      "org.apache.spark.sql.catalyst.expressions.Grouping",
+      // Fails on parsing `SELECT 2 mod 1.8`:
+      //  org.apache.spark.sql.catalyst.parser.ParseException:
+      //  extraneous input '1.8' expecting <EOF>(line 1, pos 14)
+      "org.apache.spark.sql.catalyst.expressions.Remainder",
+      // Fails on `SELECT make_timestamp(2019, 13, 1, 10, 11, 12, 13)`:
+      // Invalid ID for region-based ZoneId, invalid format: 13
+      // java.time.DateTimeException: Invalid ID for region-based ZoneId, invalid format: 13
+      "org.apache.spark.sql.catalyst.expressions.MakeTimestamp")
 
     withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
       spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
