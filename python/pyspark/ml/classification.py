@@ -941,15 +941,15 @@ class BinaryLogisticRegressionTrainingSummary(BinaryLogisticRegressionSummary,
 
 
 @inherit_doc
-class DecisionTreeClassifierParams(DecisionTreeParams, TreeClassifierParams):
+class _DecisionTreeClassifierParams(DecisionTreeParams, TreeClassifierParams):
     """
-    (Private) Params for DecisionTree Classifier.
+    Params for :py:attr:`DecisionTreeClassifier` and :py:attr:`DecisionTreeClassificationModel`.
     """
     pass
 
 
 @inherit_doc
-class DecisionTreeClassifier(JavaProbabilisticClassifier, DecisionTreeClassifierParams,
+class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifierParams,
                              JavaMLWritable, JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
@@ -1121,7 +1121,7 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, DecisionTreeClassifier
 
 @inherit_doc
 class DecisionTreeClassificationModel(DecisionTreeModel, JavaProbabilisticClassificationModel,
-                                      DecisionTreeClassifierParams, JavaMLWritable,
+                                      _DecisionTreeClassifierParams, JavaMLWritable,
                                       JavaMLReadable):
     """
     Model fitted by DecisionTreeClassifier.
@@ -1152,15 +1152,15 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaProbabilisticClassi
 
 
 @inherit_doc
-class RandomForestClassifierParams(RandomForestParams, TreeClassifierParams):
+class _RandomForestClassifierParams(RandomForestParams, TreeClassifierParams):
     """
-    (Private) Params for RandomForest Classifier.
+    Params for :py:attr:`RandomForestClassifier` and :py:attr:`RandomForestClassificationModel`.
     """
     pass
 
 
 @inherit_doc
-class RandomForestClassifier(JavaProbabilisticClassifier, RandomForestClassifierParams,
+class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifierParams,
                              JavaMLWritable, JavaMLReadable):
     """
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
@@ -1338,7 +1338,7 @@ class RandomForestClassifier(JavaProbabilisticClassifier, RandomForestClassifier
 
 
 class RandomForestClassificationModel(TreeEnsembleModel, JavaProbabilisticClassificationModel,
-                                      RandomForestClassifierParams, JavaMLWritable,
+                                      _RandomForestClassifierParams, JavaMLWritable,
                                       JavaMLReadable):
     """
     Model fitted by RandomForestClassifier.

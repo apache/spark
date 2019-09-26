@@ -594,9 +594,9 @@ class IsotonicRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadabl
         return self._call_java("predictions")
 
 
-class DecisionTreeRegressorParams(DecisionTreeParams, TreeRegressorParams, HasVarianceCol):
+class _DecisionTreeRegressorParams(DecisionTreeParams, TreeRegressorParams, HasVarianceCol):
     """
-    (Private) Params for DecisionTree Regressor.
+    Params for :py:attr:`DecisionTreeRegressor` and :py:attr:`DecisionTreeRegressionModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -605,7 +605,7 @@ class DecisionTreeRegressorParams(DecisionTreeParams, TreeRegressorParams, HasVa
 
 
 @inherit_doc
-class DecisionTreeRegressor(JavaPredictor, DecisionTreeRegressorParams, JavaMLWritable,
+class DecisionTreeRegressor(JavaPredictor, _DecisionTreeRegressorParams, JavaMLWritable,
                             JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
@@ -765,7 +765,7 @@ class DecisionTreeRegressor(JavaPredictor, DecisionTreeRegressorParams, JavaMLWr
 
 
 @inherit_doc
-class DecisionTreeRegressionModel(DecisionTreeModel, DecisionTreeRegressorParams,
+class DecisionTreeRegressionModel(DecisionTreeModel, _DecisionTreeRegressorParams,
                                   JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`DecisionTreeRegressor`.
@@ -795,16 +795,16 @@ class DecisionTreeRegressionModel(DecisionTreeModel, DecisionTreeRegressorParams
         return self._call_java("featureImportances")
 
 
-class RandomForestRegressorParams(RandomForestParams, TreeRegressorParams):
+class _RandomForestRegressorParams(RandomForestParams, TreeRegressorParams):
     """
-    (Private) Params for RandomForest Regressor.
+    Params for :py:attr:`RandomForestRegressor` and :py:attr:`RandomForestRegressionModel`.
     .. versionadded:: 3.0.0
     """
     pass
 
 
 @inherit_doc
-class RandomForestRegressor(JavaPredictor, RandomForestRegressorParams, JavaMLWritable,
+class RandomForestRegressor(JavaPredictor, _RandomForestRegressorParams, JavaMLWritable,
                             JavaMLReadable):
     """
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
@@ -968,7 +968,7 @@ class RandomForestRegressor(JavaPredictor, RandomForestRegressorParams, JavaMLWr
         return self._set(featureSubsetStrategy=value)
 
 
-class RandomForestRegressionModel(TreeEnsembleModel, RandomForestRegressorParams,
+class RandomForestRegressionModel(TreeEnsembleModel, _RandomForestRegressorParams,
                                   JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`RandomForestRegressor`.
