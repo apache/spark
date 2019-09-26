@@ -21,12 +21,11 @@ import java.io._
 import java.nio.channels.Channels
 import java.nio.file.Files
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -35,8 +34,9 @@ import org.apache.spark.util.Utils
  * Data of shuffle blocks from the same map task are stored in a single consolidated data file.
  * The offsets of the data blocks in the data file are stored in a separate index file.
  *
- * We use the name of the shuffle data's shuffleBlockId with reduce ID set to 0 and add ".data"
- * as the filename postfix for data file, and ".index" as the filename postfix for index file.
+ * We use the name of the shuffle data's shuffleBlockId with reduce ID set to task attempt number
+ * and add ".data" as the filename postfix for data file, and ".index" as the filename postfix for
+ * index file.
  *
  */
 // Note: Changes to the format in this file should be kept in sync with
@@ -51,12 +51,23 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
+  // No-op reduce ID used in interactions with disk store.
+  // The disk store currently expects puts to relate to a (map, reduce) pair, but in the sort
+  // shuffle outputs for several reduces are glommed into a single file.
+  // SPARK-29257: the noop reduce id used to be 0, which results a fixed index or data file name.
+  // When the nodes in your cluster has more than one disks, if one of them is broken and the fixed
+  // file name's hash code % disk number just point to it, all attempts of one task will inevitably
+  // access the broken disk, which lead to meaningless task failure or even tear down the whole job.
+  // Here we change the noop reduce id to task attempt number to produce different file name, which
+  // may try another healthy disk.
+  private def noopReduceId: Int = Option(TaskContext.get()).map(_.attemptNumber()).getOrElse(0)
+
   def getDataFile(shuffleId: Int, mapId: Long): File = {
-    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, noopReduceId))
   }
 
   private def getIndexFile(shuffleId: Int, mapId: Long): File = {
-    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, noopReduceId))
   }
 
   /**
@@ -224,11 +235,4 @@ private[spark] class IndexShuffleBlockResolver(
   }
 
   override def stop(): Unit = {}
-}
-
-private[spark] object IndexShuffleBlockResolver {
-  // No-op reduce ID used in interactions with disk store.
-  // The disk store currently expects puts to relate to a (map, reduce) pair, but in the sort
-  // shuffle outputs for several reduces are glommed into a single file.
-  val NOOP_REDUCE_ID = 0
 }
