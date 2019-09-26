@@ -1766,7 +1766,7 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
        2014-12-28 06:30:45.887
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
-       2014-12-28 10:30:45.887
+       2014-12-27 21:30:45.887
       > SELECT _FUNC_(2019, 6, 30, 23, 59, 60)
        2019-07-01 00:00:00
       > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 13);
