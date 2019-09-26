@@ -8,7 +8,7 @@
 -- avoid bit-exact output here because operations may not be bit-exact.
 -- SET extra_float_digits = 0;
 
--- This test file was converted from pgSQL/aggregates_part1.sql.
+-- This test file was converted from postgreSQL/aggregates_part1.sql.
 
 SELECT avg(udf(four)) AS avg_1 FROM onek;
 
