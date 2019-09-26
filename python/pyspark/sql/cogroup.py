@@ -44,13 +44,9 @@ class CoGroupedData(object):
         as a `DataFrame`.
 
         The user-defined function should take two `pandas.DataFrame` and return another
-        `pandas.DataFrame`. Alternatively, a user-defined function which additionally takes
-        a Tuple can be provided, in which case the cogroup key will be passed in as the Tuple
-        parameter.
-
-        For each side of the cogroup, all columns are passed together as a `pandas.DataFrame`
-        to the user-function and the returned `pandas.DataFrame` are combined as a
-        :class:`DataFrame`.
+        `pandas.DataFrame`.  For each side of the cogroup, all columns are passed together as a
+        `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame` are combined as
+        a :class:`DataFrame`.
 
         The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
         returnType of the pandas udf.
@@ -84,6 +80,13 @@ class CoGroupedData(object):
         |20000101|  2|2.0|  y|
         |20000102|  2|4.0|  y|
         +--------+---+---+---+
+
+        Alternatively, the user can define a function that takes three arguments.  In this case,
+        the grouping key(s) will be passed as the first argument and the data will be passed as the
+        second and third arguments.  The grouping key(s) will be  passed as a tuple of numpy data
+        types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in as two
+        `pandas.DataFrame`s containing all columns from the original Spark DataFrames.
+
         >>> @pandas_udf("time int, id int, v1 double, v2 string",
         ...             PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
         ... def asof_join(k, l, r):
