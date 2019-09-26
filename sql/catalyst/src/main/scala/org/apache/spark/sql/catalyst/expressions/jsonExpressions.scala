@@ -337,7 +337,7 @@ case class GetJsonObject(json: Expression, path: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
-       1  2
+       1	2
   """)
 // scalastyle:on line.size.limit
 case class JsonTuple(children: Seq[Expression])
