@@ -36,6 +36,7 @@ if have_pyarrow:
 # From kwargs w/ Python 2, so need to set check_column_type=False and avoid this check
 _check_column_type = sys.version >= '3'
 
+
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message)
