@@ -239,7 +239,8 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
     >>> evaluator = RegressionEvaluator(predictionCol="raw", weightCol="weight")
     >>> evaluator.evaluate(dataset)
     2.740...
-    >>> evaluator.throughOrigin
+    >>> evaluator.getThroughOrigin
+    False
 
     .. versionadded:: 1.4.0
     """
@@ -254,7 +255,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
 
     throughOrigin = Param(Params._dummy(), "throughOrigin",
                           "whether the regression is through the origin.",
-                         typeConverter=TypeConverters.toBoolean)
+                          typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
