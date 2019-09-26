@@ -1852,7 +1852,11 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 3.0.0
    */
-  def agg(col: String, cols: String*): DataFrame = agg(Column(col), cols.map(Column(_)) : _*)
+  def agg(expr: String, exprs: String*): DataFrame = {
+    agg(
+      Column(sparkSession.sessionState.sqlParser.parseExpression(expr)),
+      exprs.map(expr => Column(sparkSession.sessionState.sqlParser.parseExpression(expr))) : _*)
+  }
 
   /**
    * Returns a new Dataset by taking the first `n` rows. The difference between this function

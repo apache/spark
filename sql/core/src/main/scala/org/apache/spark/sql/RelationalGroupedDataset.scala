@@ -228,6 +228,12 @@ class RelationalGroupedDataset protected[sql](
     })
   }
 
+  def agg(expr: String, exprs: String*): DataFrame = {
+    agg(
+      Column(df.sparkSession.sessionState.sqlParser.parseExpression(expr)),
+      exprs.map(expr => Column(df.sparkSession.sessionState.sqlParser.parseExpression(expr))) : _*)
+  }
+
   /**
    * Count the number of rows for each group.
    * The resulting `DataFrame` will also contain the grouping columns.
