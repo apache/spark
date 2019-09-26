@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution.datasources
 import java.io.IOException
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -109,20 +108,14 @@ case class InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
-    val pathExists = () => fs.exists(qualifiedOutputPath)
-
-    val doInsertion = mode match {
-      case SaveMode.Append =>
-        true
-      case SaveMode.Ignore =>
-        !pathExists()
-      case SaveMode.ErrorIfExists =>
-        if (pathExists()) {
+    val doInsertion = if (mode == SaveMode.Append) {
+      true
+    } else {
+      val pathExists = fs.exists(qualifiedOutputPath)
+      (mode, pathExists) match {
+        case (SaveMode.ErrorIfExists, true) =>
           throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
-        }
-        true
-      case SaveMode.Overwrite =>
-        if (pathExists()) {
+        case (SaveMode.Overwrite, true) =>
           if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
             false
           } else if (dynamicPartitionOverwrite) {
@@ -132,12 +125,13 @@ case class InsertIntoHadoopFsRelationCommand(
             deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
             true
           }
-        } else {
+        case (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
           true
-        }
-      case s =>
-        val exists = pathExists()
-        throw new IllegalStateException(s"unsupported save mode $s ($exists)")
+        case (SaveMode.Ignore, exists) =>
+          !exists
+        case (s, exists) =>
+          throw new IllegalStateException(s"unsupported save mode $s ($exists)")
+      }
     }
 
     if (doInsertion) {
