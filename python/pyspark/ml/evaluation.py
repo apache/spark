@@ -139,7 +139,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     0.70...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
     0.82...
-    >>> evaluator.getNumBins
+    >>> evaluator.getNumBins()
     1000
 
     .. versionadded:: 1.4.0
@@ -239,7 +239,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
     >>> evaluator = RegressionEvaluator(predictionCol="raw", weightCol="weight")
     >>> evaluator.evaluate(dataset)
     2.740...
-    >>> evaluator.getThroughOrigin
+    >>> evaluator.getThroughOrigin()
     False
 
     .. versionadded:: 1.4.0
