@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
 import org.json4s.jackson.JsonMethods._
@@ -608,6 +609,101 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       time))
     assert(statusStore.executionsCount === 2)
     assert(statusStore.execution(2) === None)
+  }
+
+  test("recover live entities from KVStore") {
+    def assertSQLListenerEquals(live: SQLAppStatusListener, nonLive: SQLAppStatusListener)
+    : Unit = {
+      // ensures all live entities are wrote into KVStore
+      live.flush()
+      nonLive.clearLiveEntities()
+      nonLive.recoverLiveEntities()
+      assertSQLLiveEntityEquals(live, nonLive)
+    }
+    val conf = sparkContext.conf
+    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val liveListener = new SQLAppStatusListener(conf, kvstore, live = true)
+    val nonLiveListener = new SQLAppStatusListener(conf, kvstore, live = false)
+    var time = 1
+
+    liveListener.onOtherEvent(SparkListenerSQLExecutionStart(
+      0, "desc", "details", "planDesc",
+      new SparkPlanInfo("node", "test", Nil, null, Nil), time
+    ))
+    assert(liveListener.liveExecutions.size() === 1)
+    assertSQLListenerEquals(liveListener, nonLiveListener)
+    time += 1
+
+    val stage0 = createStageInfo(stageId = 0, attemptId = 0)
+    val stage1 = createStageInfo(stageId = 1, attemptId = 0)
+    val properties = createProperties(executionId = 0)
+    liveListener.onJobStart(SparkListenerJobStart(
+      0, time, Seq(stage0, stage1), properties))
+    assert(liveListener.stageMetrics.size() === 2)
+    assertSQLListenerEquals(liveListener, nonLiveListener)
+    time += 1
+
+    liveListener.onStageSubmitted(SparkListenerStageSubmitted(stage0))
+    liveListener.onStageSubmitted(SparkListenerStageSubmitted(stage1))
+    liveListener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
+      "execId-0", Seq((0, 0, 0, createAccumulatorInfos(Map((0, 0), (1, 1)))))))
+    liveListener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
+      "execId-0", Seq((0, 1, 1, createAccumulatorInfos(Map((0, 0), (1, 1)))))))
+    assertSQLListenerEquals(liveListener, nonLiveListener)
+
+    liveListener.onJobEnd(SparkListenerJobEnd(0, time, JobSucceeded))
+    assertSQLListenerEquals(liveListener, nonLiveListener)
+    time += 1
+
+    liveListener.onOtherEvent(SparkListenerSQLExecutionEnd(0, time))
+    assert(liveListener.liveExecutions.size() === 0)
+    assertSQLListenerEquals(liveListener, nonLiveListener)
+
+    // SQLStageMetricsWrapper should be clean up after SQL executions end
+    assert(kvstore.count(classOf[SQLStageMetricsWrapper]) === 0)
+  }
+
+  private def assertSQLLiveEntityEquals(src: SQLAppStatusListener, dest: SQLAppStatusListener)
+    : Unit = {
+    val srcExecutions = src.liveExecutions
+    val destExecutions = dest.liveExecutions
+    assert(srcExecutions.size() === destExecutions.size())
+    srcExecutions.keys().asScala.foreach { id =>
+      val srcExec = srcExecutions.get(id)
+      val destExec = destExecutions.get(id)
+      assert(srcExec.executionId === destExec.executionId)
+      assert(srcExec.description === destExec.description)
+      assert(srcExec.details === destExec.details)
+      assert(srcExec.physicalPlanDescription === destExec.physicalPlanDescription)
+      assert(srcExec.metrics === destExec.metrics)
+      assert(srcExec.submissionTime === destExec.submissionTime)
+      assert(srcExec.completionTime === destExec.completionTime)
+      assert(srcExec.jobs === destExec.jobs)
+      assert(srcExec.stages === destExec.stages)
+      assert(srcExec.driverAccumUpdates === destExec.driverAccumUpdates)
+      assert(srcExec.metricsValues === destExec.metricsValues)
+      assert(srcExec.endEvents === destExec.endEvents)
+    }
+    val srcStageMetrics = src.stageMetrics
+    val destStageMetrics = dest.stageMetrics
+    assert(srcStageMetrics.size() === destStageMetrics.size())
+    srcStageMetrics.keys().asScala.foreach { id =>
+      val srcStageM = srcStageMetrics.get(id)
+      val destStageM = destStageMetrics.get(id)
+      assert(srcStageM.stageId === destStageM.stageId)
+      assert(srcStageM.attemptId === destStageM.attemptId)
+      assert(srcStageM.accumulatorIds === destStageM.accumulatorIds)
+      val srcTaskMetrics = srcStageM.taskMetrics
+      val destTaskMetrics = destStageM.taskMetrics
+      assert(srcTaskMetrics.size() === destTaskMetrics.size())
+      srcTaskMetrics.keys().asScala.foreach { id =>
+        val srcTaskM = srcTaskMetrics.get(id)
+        val destTaskM = destTaskMetrics.get(id)
+        assert(srcTaskM.ids === destTaskM.ids)
+        assert(srcTaskM.values === destTaskM.values)
+        assert(srcTaskM.succeeded === destTaskM.succeeded)
+      }
+    }
   }
 }
 

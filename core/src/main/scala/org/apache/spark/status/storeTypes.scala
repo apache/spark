@@ -23,8 +23,11 @@ import java.util.Date
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
+import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.scheduler.{StageInfo, TaskInfo, TaskLocality}
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1._
+import org.apache.spark.storage.{RDDInfo, StorageLevel}
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.kvstore.KVIndex
 
@@ -59,6 +62,36 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
   @JsonIgnore @KVIndex("host")
   val host: String = info.hostPort.split(":")(0)
 
+  def toLiveExecutor: LiveExecutor = {
+    val liveExecutor = new LiveExecutor(info.id, info.addTime.getTime)
+    liveExecutor.hostPort = info.hostPort
+    liveExecutor.host = info.hostPort.split(":")(0)
+    liveExecutor.totalCores = info.totalCores
+    liveExecutor.rddBlocks = info.rddBlocks
+    liveExecutor.memoryUsed = info.memoryUsed
+    liveExecutor.diskUsed = info.diskUsed
+    liveExecutor.maxTasks = info.maxTasks
+    liveExecutor.maxMemory = info.maxMemory
+    liveExecutor.totalTasks = info.totalTasks
+    liveExecutor.activeTasks = info.activeTasks
+    liveExecutor.completedTasks = info.completedTasks
+    liveExecutor.failedTasks = info.failedTasks
+    liveExecutor.totalDuration = info.totalDuration
+    liveExecutor.totalGcTime = info.totalGCTime
+    liveExecutor.totalInputBytes = info.totalInputBytes
+    liveExecutor.totalShuffleRead = info.totalShuffleRead
+    liveExecutor.totalShuffleWrite = info.totalShuffleWrite
+    liveExecutor.isBlacklisted = info.isBlacklisted
+    liveExecutor.blacklistedInStages = info.blacklistedInStages
+    liveExecutor.executorLogs = info.executorLogs
+    liveExecutor.attributes = info.attributes
+    liveExecutor.totalOnHeap = info.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(-1)
+    liveExecutor.totalOffHeap = info.memoryMetrics.map(_.totalOffHeapStorageMemory).getOrElse(0)
+    liveExecutor.usedOnHeap = info.memoryMetrics.map(_.usedOnHeapStorageMemory).getOrElse(0)
+    liveExecutor.usedOffHeap = info.memoryMetrics.map(_.usedOffHeapStorageMemory).getOrElse(0)
+    liveExecutor.peakExecutorMetrics = info.peakMemoryMetrics.getOrElse(new ExecutorMetrics())
+    liveExecutor
+  }
 }
 
 /**
@@ -76,6 +109,29 @@ private[spark] class JobDataWrapper(
 
   @JsonIgnore @KVIndex("completionTime")
   private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
+
+  def toLiveJob: LiveJob = {
+    val liveJob = new LiveJob(
+      info.jobId,
+      info.name,
+      info.submissionTime,
+      info.stageIds,
+      info.jobGroup,
+      info.numTasks,
+      sqlExecutionId)
+    liveJob.activeTasks = info.numActiveTasks
+    liveJob.completedTasks = info.numCompletedTasks
+    liveJob.failedTasks = info.numFailedTasks
+    liveJob.completedIndicesNum = info.numCompletedIndices
+    liveJob.killedTasks = info.numKilledTasks
+    liveJob.killedSummary = info.killedTasksSummary
+    liveJob.skippedTasks = info.numSkippedTasks
+    liveJob.skippedStages = skippedStages
+    liveJob.completedStagesNum = info.numCompletedStages
+    liveJob.activeStages = info.numActiveStages
+    liveJob.failedStages = info.numFailedStages
+    liveJob
+  }
 }
 
 private[spark] class StageDataWrapper(
@@ -95,6 +151,65 @@ private[spark] class StageDataWrapper(
 
   @JsonIgnore @KVIndex("completionTime")
   private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
+
+  def toLiveStage(jobs: Seq[LiveJob]): LiveStage = {
+    val liveStage = new LiveStage
+    val firstLaunchTime = if (info.firstTaskLaunchedTime.isEmpty) {
+      Long.MaxValue
+    } else {
+      info.firstTaskLaunchedTime.get.getTime
+    }
+    val metrics = LiveEntityHelpers.createMetrics(
+      info.executorDeserializeTime,
+      info.executorDeserializeCpuTime,
+      info.executorRunTime,
+      info.executorCpuTime,
+      info.resultSize,
+      info.jvmGcTime,
+      info.resultSerializationTime,
+      info.memoryBytesSpilled,
+      info.diskBytesSpilled,
+      info.peakExecutionMemory,
+      info.inputBytes,
+      info.inputRecords,
+      info.outputBytes,
+      info.outputRecords,
+      info.shuffleRemoteBlocksFetched,
+      info.shuffleLocalBlocksFetched,
+      info.shuffleFetchWaitTime,
+      info.shuffleRemoteBytesRead,
+      info.shuffleRemoteBytesReadToDisk,
+      info.shuffleLocalBytesRead,
+      info.shuffleReadRecords,
+      info.shuffleWriteBytes,
+      info.shuffleWriteTime,
+      info.shuffleWriteRecords
+    )
+    val stageInfo = new StageInfo(
+      info.stageId,
+      info.attemptId,
+      info.name,
+      info.numTasks,
+      Nil, // rddInfo
+      Nil, // parentIds
+      info.details)
+    liveStage.jobs = jobs
+    liveStage.jobIds = jobs.map(_.jobId).toSet
+    liveStage.info = stageInfo
+    liveStage.status = info.status
+    liveStage.description = info.description
+    liveStage.schedulingPool = info.schedulingPool
+    liveStage.activeTasks = info.numActiveTasks
+    liveStage.completedTasks = info.numCompleteTasks
+    liveStage.failedTasks = info.numFailedTasks
+    liveStage.completedIndicesNum = info.numCompletedIndices
+    liveStage.killedTasks = info.numKilledTasks
+    liveStage.killedSummary = info.killedTasksSummary
+    liveStage.firstLaunchTime = firstLaunchTime
+    liveStage.localitySummary = locality
+    liveStage.metrics = metrics
+    liveStage
+  }
 }
 
 /**
@@ -290,6 +405,23 @@ private[spark] class TaskDataWrapper(
       gettingResultTime = 0L)
   }
 
+  def toLiveTask: LiveTask = {
+    val taskInfo =
+      new TaskInfo(
+        taskId,
+        index,
+        attempt,
+        launchTime,
+        executorId,
+        host,
+        TaskLocality.withName(taskLocality),
+        speculative)
+    taskInfo.gettingResultTime = gettingResultTime
+    val lastUpdateTime = duration + launchTime
+    val liveTask = new LiveTask(taskInfo, stageId, stageAttemptId, Some(lastUpdateTime))
+    liveTask
+  }
+
   @JsonIgnore @KVIndex(TaskIndexNames.STAGE)
   private def stage: Array[Int] = Array(stageId, stageAttemptId)
 
@@ -360,6 +492,31 @@ private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
   @JsonIgnore @KVIndex("cached")
   def cached: Boolean = info.numCachedPartitions > 0
 
+  def toLiveRDD(executors: scala.collection.Map[String, LiveExecutor]): LiveRDD = {
+    val rddInfo = new RDDInfo(
+      info.id,
+      info.name,
+      info.numPartitions,
+      StorageLevel.fromDescription(info.storageLevel),
+      false,
+      Nil)
+    val liveRDD = new LiveRDD(rddInfo)
+    liveRDD.memoryUsed = info.memoryUsed
+    liveRDD.diskUsed = info.diskUsed
+    info.partitions.get.foreach { rddPartition =>
+      val liveRDDPartition = rddPartition.toLiveRDDPartition
+      liveRDD.partitions.put(rddPartition.blockName, liveRDDPartition)
+      liveRDD.partitionSeq.addPartition(liveRDDPartition)
+    }
+    if (info.dataDistribution.nonEmpty) {
+      info.dataDistribution.get.foreach { rddDist =>
+        val liveRDDDist = rddDist.toLiveRDDDistribution(executors)
+        liveRDD.distributions.put(liveRDDDist.executorId, liveRDDDist)
+      }
+    }
+    liveRDD
+  }
+
 }
 
 private[spark] class ExecutorStageSummaryWrapper(
@@ -376,6 +533,41 @@ private[spark] class ExecutorStageSummaryWrapper(
 
   @JsonIgnore
   def id: Array[Any] = _id
+
+  def toLiveExecutorStageSummary: LiveExecutorStageSummary = {
+    val liveESSummary = new LiveExecutorStageSummary(stageId, stageAttemptId, executorId)
+    val metrics = LiveEntityHelpers.createMetrics(
+      executorDeserializeTime = 0,
+      executorDeserializeCpuTime = 0,
+      executorRunTime = 0,
+      executorCpuTime = 0,
+      resultSize = 0,
+      jvmGcTime = 0,
+      resultSerializationTime = 0,
+      memoryBytesSpilled = info.memoryBytesSpilled,
+      diskBytesSpilled = info.diskBytesSpilled,
+      peakExecutionMemory = 0,
+      inputBytesRead = info.inputBytes,
+      inputRecordsRead = info.inputRecords,
+      outputBytesWritten = info.outputBytes,
+      outputRecordsWritten = info.outputRecords,
+      shuffleRemoteBlocksFetched = 0,
+      shuffleLocalBlocksFetched = 0,
+      shuffleFetchWaitTime = 0,
+      shuffleRemoteBytesRead = info.shuffleRead,
+      shuffleRemoteBytesReadToDisk = 0,
+      shuffleLocalBytesRead = 0,
+      shuffleRecordsRead = info.shuffleReadRecords,
+      shuffleBytesWritten = info.shuffleWrite,
+      shuffleWriteTime = 0,
+      shuffleRecordsWritten = info.shuffleWriteRecords)
+    liveESSummary.taskTime = info.taskTime
+    liveESSummary.succeededTasks = info.succeededTasks
+    liveESSummary.failedTasks = info.failedTasks
+    liveESSummary.isBlacklisted = info.isBlacklistedForStage
+    liveESSummary.metrics = metrics
+    liveESSummary
+  }
 
 }
 
@@ -429,7 +621,14 @@ private[spark] class RDDOperationGraphWrapper(
 
 private[spark] class PoolData(
     @KVIndexParam val name: String,
-    val stageIds: Set[Int])
+    val stageIds: Set[Int]) {
+
+  def toSchedulerPool: SchedulerPool = {
+    val pool = new SchedulerPool(name)
+    pool.stageIds = stageIds
+    pool
+  }
+}
 
 /**
  * A class with information about an app, to be used by the UI. There's only one instance of

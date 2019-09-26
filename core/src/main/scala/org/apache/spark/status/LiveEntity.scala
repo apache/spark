@@ -59,14 +59,14 @@ private[spark] abstract class LiveEntity {
 
 }
 
-private class LiveJob(
+private[spark] class LiveJob(
     val jobId: Int,
-    name: String,
+    val name: String,
     val submissionTime: Option[Date],
     val stageIds: Seq[Int],
-    jobGroup: Option[String],
-    numTasks: Int,
-    sqlExecutionId: Option[Long]) extends LiveEntity {
+    val jobGroup: Option[String],
+    val numTasks: Int,
+    val sqlExecutionId: Option[Long]) extends LiveEntity {
 
   var activeTasks = 0
   var completedTasks = 0
@@ -74,6 +74,8 @@ private class LiveJob(
 
   // Holds both the stage ID and the task index, packed into a single long value.
   val completedIndices = new OpenHashSet[Long]()
+  // will only be set when recover LiveJob is needed.
+  var completedIndicesNum = 0
 
   var killedTasks = 0
   var killedSummary: Map[String, Int] = Map()
@@ -85,6 +87,8 @@ private class LiveJob(
   var completionTime: Option[Date] = None
 
   var completedStages: Set[Int] = Set()
+  // will only be set when recover LiveJob is needed.
+  var completedStagesNum = 0
   var activeStages = 0
   var failedStages = 0
 
@@ -104,9 +108,9 @@ private class LiveJob(
       skippedTasks,
       failedTasks,
       killedTasks,
-      completedIndices.size,
+      completedIndices.size + completedIndicesNum,
       activeStages,
-      completedStages.size,
+      completedStages.size + completedStagesNum,
       skippedStages.size,
       failedStages,
       killedSummary)
@@ -115,7 +119,7 @@ private class LiveJob(
 
 }
 
-private class LiveTask(
+private[spark] class LiveTask(
     var info: TaskInfo,
     stageId: Int,
     stageAttemptId: Int,
@@ -229,7 +233,7 @@ private class LiveTask(
 
 }
 
-private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveEntity {
+private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extends LiveEntity {
 
   var hostPort: String = null
   var host: String = null
@@ -272,7 +276,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
   def hasMemoryInfo: Boolean = totalOnHeap >= 0L
 
   // peak values for executor level metrics
-  val peakExecutorMetrics = new ExecutorMetrics()
+  var peakExecutorMetrics = new ExecutorMetrics()
 
   def hostname: String = if (host != null) host else hostPort.split(":")(0)
 
@@ -316,10 +320,10 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
   }
 }
 
-private class LiveExecutorStageSummary(
+private[spark] class LiveExecutorStageSummary(
     stageId: Int,
     attemptId: Int,
-    executorId: String) extends LiveEntity {
+    val executorId: String) extends LiveEntity {
 
   import LiveEntityHelpers._
 
@@ -353,7 +357,7 @@ private class LiveExecutorStageSummary(
 
 }
 
-private class LiveStage extends LiveEntity {
+private[spark] class LiveStage extends LiveEntity {
 
   import LiveEntityHelpers._
 
@@ -370,6 +374,8 @@ private class LiveStage extends LiveEntity {
   var completedTasks = 0
   var failedTasks = 0
   val completedIndices = new OpenHashSet[Int]()
+  // will only be set when recover LiveStage is needed.
+  var completedIndicesNum = 0
 
   var killedTasks = 0
   var killedSummary: Map[String, Int] = Map()
@@ -405,7 +411,7 @@ private class LiveStage extends LiveEntity {
       numCompleteTasks = completedTasks,
       numFailedTasks = failedTasks,
       numKilledTasks = killedTasks,
-      numCompletedIndices = completedIndices.size,
+      numCompletedIndices = completedIndices.size + completedIndicesNum,
 
       submissionTime = info.submissionTime.map(new Date(_)),
       firstTaskLaunchedTime =
@@ -458,7 +464,7 @@ private class LiveStage extends LiveEntity {
 
 }
 
-private class LiveRDDPartition(val blockName: String) {
+private[spark] class LiveRDDPartition(val blockName: String) {
 
   import LiveEntityHelpers._
 
@@ -489,7 +495,7 @@ private class LiveRDDPartition(val blockName: String) {
 
 }
 
-private class LiveRDDDistribution(exec: LiveExecutor) {
+private[spark] class LiveRDDDistribution(exec: LiveExecutor) {
 
   import LiveEntityHelpers._
 
@@ -506,6 +512,7 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
   def toApi(): v1.RDDDataDistribution = {
     if (lastUpdate == null) {
       lastUpdate = new v1.RDDDataDistribution(
+        executorId,
         weakIntern(exec.hostPort),
         memoryUsed,
         exec.maxMemory - exec.memoryUsed,
@@ -520,7 +527,7 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
 
 }
 
-private class LiveRDD(val info: RDDInfo) extends LiveEntity {
+private[spark] class LiveRDD(val info: RDDInfo) extends LiveEntity {
 
   import LiveEntityHelpers._
 
@@ -528,10 +535,10 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
   var memoryUsed = 0L
   var diskUsed = 0L
 
-  private val partitions = new HashMap[String, LiveRDDPartition]()
-  private val partitionSeq = new RDDPartitionSeq()
+  private[spark] val partitions = new HashMap[String, LiveRDDPartition]()
+  private[spark] val partitionSeq = new RDDPartitionSeq()
 
-  private val distributions = new HashMap[String, LiveRDDDistribution]()
+  private[spark] val distributions = new HashMap[String, LiveRDDDistribution]()
 
   def setStorageLevel(level: String): Unit = {
     this.storageLevel = weakIntern(level)
@@ -589,7 +596,7 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
 
 }
 
-private class SchedulerPool(name: String) extends LiveEntity {
+private[spark] class SchedulerPool(val name: String) extends LiveEntity {
 
   var stageIds = Set[Int]()
 
@@ -739,7 +746,7 @@ private object LiveEntityHelpers {
  * Internally, the sequence is mutable, and elements can modify the data they expose. Additions and
  * removals are O(1). It is not safe to do multiple writes concurrently.
  */
-private class RDDPartitionSeq extends Seq[v1.RDDPartitionInfo] {
+private[spark] class RDDPartitionSeq extends Seq[v1.RDDPartitionInfo] {
 
   @volatile private var _head: LiveRDDPartition = null
   @volatile private var _tail: LiveRDDPartition = null

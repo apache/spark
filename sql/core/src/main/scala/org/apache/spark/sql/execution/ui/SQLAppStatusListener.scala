@@ -42,8 +42,9 @@ class SQLAppStatusListener(
   // Live tracked data is needed by the SQL status store to calculate metrics for in-flight
   // executions; that means arbitrary threads may be querying these maps, so they need to be
   // thread-safe.
-  private val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
-  private val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
+  // variables are visible for tests.
+  private[spark] val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
+  private[spark] val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
 
   // Returns true if this listener has no live data. Exposed for tests only.
   private[sql] def noLiveData(): Boolean = {
@@ -67,6 +68,27 @@ class SQLAppStatusListener(
     }
   }
 
+  // visible for tests
+  private[spark] def recoverLiveEntities(): Unit = {
+    if (!live) {
+      kvstore.view(classOf[SQLExecutionUIData])
+        // null metricValues potentially indicates a live SQLExecutionUIData
+        .asScala.filter(_.metricValues == null)
+        .map(_.toLiveExecutionData)
+        .foreach(execData => liveExecutions.put(execData.executionId, execData))
+      kvstore.view(classOf[SQLStageMetricsWrapper])
+        .asScala.map(_.toLiveStageMetrics)
+        .foreach(metrics => stageMetrics.put(metrics.stageId, metrics))
+    }
+  }
+
+  // used for tests only
+  private[spark] def clearLiveEntities(): Unit = {
+    liveExecutions.clear()
+    stageMetrics.clear()
+  }
+
+
   override def onJobStart(event: SparkListenerJobStart): Unit = {
     val executionIdString = event.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
     if (executionIdString == null) {
@@ -82,17 +104,7 @@ class SQLAppStatusListener(
           // Should not overwrite the kvstore with new entry, if it already has the SQLExecution
           // data corresponding to the execId.
           val sqlStoreData = kvstore.read(classOf[SQLExecutionUIData], executionId)
-          val executionData = new LiveExecutionData(executionId)
-          executionData.description = sqlStoreData.description
-          executionData.details = sqlStoreData.details
-          executionData.physicalPlanDescription = sqlStoreData.physicalPlanDescription
-          executionData.metrics = sqlStoreData.metrics
-          executionData.submissionTime = sqlStoreData.submissionTime
-          executionData.completionTime = sqlStoreData.completionTime
-          executionData.jobs = sqlStoreData.jobs
-          executionData.stages = sqlStoreData.stages
-          executionData.metricsValues = sqlStoreData.metricValues
-          executionData.endEvents = sqlStoreData.jobs.size + 1
+          val executionData = sqlStoreData.toLiveExecutionData
           liveExecutions.put(executionId, executionData)
           Some(executionData)
         } catch {
@@ -328,7 +340,18 @@ class SQLAppStatusListener(
     }.toSet
     stageMetrics.keySet().asScala
       .filter(!activeStages.contains(_))
-      .foreach(stageMetrics.remove)
+      .foreach { stageId =>
+        stageMetrics.remove(stageId)
+        if (live) {
+          try {
+            kvstore.delete(classOf[SQLStageMetricsWrapper], stageId)
+          } catch {
+            case _: NoSuchElementException =>
+            // Ignore. It's possible that LiveStageMetrics is removed
+            // before its first time to write to KVStore
+          }
+        }
+      }
   }
 
   private def onDriverAccumUpdates(event: SparkListenerDriverAccumUpdates): Unit = {
@@ -367,6 +390,16 @@ class SQLAppStatusListener(
     }
   }
 
+  // visible for tests
+  private[spark] def flush(): Unit = {
+    if (live) {
+      // TODO (wuyi) is this thread safe ?
+      val now = System.nanoTime()
+      liveExecutions.values().asScala.foreach(_.write(kvstore, now))
+      stageMetrics.values().asScala.foreach(_.write(kvstore, now))
+    }
+  }
+
   private def isSQLStage(stageId: Int): Boolean = {
     liveExecutions.values().asScala.exists { exec =>
       exec.stages.contains(stageId)
@@ -389,7 +422,7 @@ class SQLAppStatusListener(
 
 }
 
-private class LiveExecutionData(val executionId: Long) extends LiveEntity {
+private[spark] class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
   var description: String = null
   var details: String = null
@@ -424,13 +457,28 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
 }
 
-private class LiveStageMetrics(
+private[spark] class LiveStageMetrics (
     val stageId: Int,
     var attemptId: Int,
     val accumulatorIds: Set[Long],
     val taskMetrics: ConcurrentHashMap[Long, LiveTaskMetrics])
+  extends LiveEntity {
 
-private class LiveTaskMetrics(
+  override protected def doUpdate() = {
+    new SQLStageMetricsWrapper(
+      stageId,
+      attemptId,
+      accumulatorIds,
+      taskMetrics.asScala.map { case (taskId, metrics) =>
+        (taskId, metrics.toApi)
+      }.toMap
+    )
+  }
+}
+
+private[spark] class LiveTaskMetrics(
     val ids: Array[Long],
     val values: Array[Long],
-    val succeeded: Boolean)
+    val succeeded: Boolean) {
+  def toApi: SQLTaskMetricsWrapper = new SQLTaskMetricsWrapper(ids, values, succeeded)
+}

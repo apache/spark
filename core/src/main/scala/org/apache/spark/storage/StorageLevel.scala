@@ -165,6 +165,20 @@ object StorageLevel {
 
   /**
    * :: DeveloperApi ::
+   * Return the StorageLevel object with the specified description.
+   */
+  @DeveloperApi
+  def fromDescription(desc: String): StorageLevel = {
+    val (useDisk_, useMemory_, useOffHeap_, deserialized_) = {
+      (desc.contains("Disk"), desc.contains("Memory"),
+        desc.contains("off heap"), desc.contains("Deserialized"))
+    }
+    val replication_ = desc.split(" ").takeRight(2)(0).dropRight(1).toInt
+    new StorageLevel(useDisk_, useMemory_, useOffHeap_, deserialized_, replication_)
+  }
+
+  /**
+   * :: DeveloperApi ::
    * Return the StorageLevel object with the specified name.
    */
   @DeveloperApi

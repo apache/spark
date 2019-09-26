@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.ui
 
 import java.lang.{Long => JLong}
 import java.util.Date
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -99,7 +100,57 @@ class SQLExecutionUIData(
 
   @JsonIgnore @KVIndex("completionTime")
   private def completionTimeIndex: Long = completionTime.map(_.getTime).getOrElse(-1L)
+
+  def toLiveExecutionData: LiveExecutionData = {
+    val liveExecutionData = new LiveExecutionData(executionId)
+    liveExecutionData.description = description
+    liveExecutionData.details = details
+    liveExecutionData.physicalPlanDescription = physicalPlanDescription
+    liveExecutionData.metrics = metrics
+    liveExecutionData.submissionTime = submissionTime
+    liveExecutionData.completionTime = completionTime
+    liveExecutionData.jobs = jobs
+    liveExecutionData.stages = stages
+    liveExecutionData.metricsValues = metricValues
+    val endNum = jobs.count { case (_, status) =>
+      status == JobExecutionStatus.SUCCEEDED || status == JobExecutionStatus.FAILED }
+    liveExecutionData.endEvents = endNum + { if (completionTime.isDefined) 1 else 0 }
+    liveExecutionData
+  }
 }
+
+/**
+ * Used to recover LiveStageMetrics in SQLAppStatusListener. It would be wrote into KVStore
+ * continuously and deleted when related LiveStageMetrics is no longer used in SQLAppStatusListener
+ */
+class SQLStageMetricsWrapper(
+    @KVIndexParam
+    val stageId: Int,
+    val attemptId: Int,
+    @JsonDeserialize(contentAs = classOf[Long])
+    val accumulatorIds: Set[Long],
+    @JsonDeserialize(keyAs = classOf[Long], contentAs = classOf[LiveTaskMetrics])
+    val taskMetrics: Map[Long, SQLTaskMetricsWrapper]) {
+  def toLiveStageMetrics: LiveStageMetrics = {
+    val liveTaskMetrics = new ConcurrentHashMap[Long, LiveTaskMetrics]()
+    val metricsMap = taskMetrics.map { case (taskId, metrics) =>
+      (taskId, new LiveTaskMetrics(metrics.ids, metrics.values, metrics.succeeded))
+    }
+    liveTaskMetrics.putAll(metricsMap.asJava)
+    new LiveStageMetrics(
+      stageId,
+      attemptId,
+      accumulatorIds,
+      liveTaskMetrics)
+  }
+}
+
+class SQLTaskMetricsWrapper(
+    @JsonDeserialize(contentAs = classOf[Long])
+    val ids: Array[Long],
+    @JsonDeserialize(contentAs = classOf[Long])
+    val values: Array[Long],
+    val succeeded: Boolean)
 
 class SparkPlanGraphWrapper(
     @KVIndexParam val executionId: Long,

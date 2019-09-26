@@ -31,6 +31,7 @@ import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.status.{LiveExecutor, LiveRDDDistribution, LiveRDDPartition}
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -181,6 +182,7 @@ class RDDStorageInfo private[spark](
     val partitions: Option[Seq[RDDPartitionInfo]])
 
 class RDDDataDistribution private[spark](
+    val executorId: String,
     val address: String,
     val memoryUsed: Long,
     val memoryRemaining: Long,
@@ -192,14 +194,34 @@ class RDDDataDistribution private[spark](
     @JsonDeserialize(contentAs = classOf[JLong])
     val onHeapMemoryRemaining: Option[Long],
     @JsonDeserialize(contentAs = classOf[JLong])
-    val offHeapMemoryRemaining: Option[Long])
+    val offHeapMemoryRemaining: Option[Long]) {
+
+  def toLiveRDDDistribution(executors: scala.collection.Map[String, LiveExecutor])
+  : LiveRDDDistribution = {
+    val exec = executors.get(executorId).get
+    val liveRDDDistribution = new LiveRDDDistribution(exec)
+    liveRDDDistribution.memoryUsed = memoryUsed
+    liveRDDDistribution.diskUsed = diskUsed
+    liveRDDDistribution.onHeapUsed = onHeapMemoryUsed.getOrElse(0)
+    liveRDDDistribution.offHeapUsed = offHeapMemoryUsed.getOrElse(0)
+    liveRDDDistribution.lastUpdate = this
+    liveRDDDistribution
+  }
+}
 
 class RDDPartitionInfo private[spark](
     val blockName: String,
     val storageLevel: String,
     val memoryUsed: Long,
     val diskUsed: Long,
-    val executors: Seq[String])
+    val executors: Seq[String]) {
+
+  def toLiveRDDPartition: LiveRDDPartition = {
+    val liveRDDPartition = new LiveRDDPartition(blockName)
+    liveRDDPartition.value = this
+    liveRDDPartition
+  }
+}
 
 class StageData private[spark](
     val status: StageStatus,

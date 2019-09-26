@@ -69,13 +69,14 @@ private[spark] class AppStatusListener(
 
   // Keep track of live entities, so that task metrics can be efficiently updated (without
   // causing too many writes to the underlying store, and other expensive operations).
-  private val liveStages = new ConcurrentHashMap[(Int, Int), LiveStage]()
-  private val liveJobs = new HashMap[Int, LiveJob]()
-  private val liveExecutors = new HashMap[String, LiveExecutor]()
-  private val deadExecutors = new HashMap[String, LiveExecutor]()
-  private val liveTasks = new HashMap[Long, LiveTask]()
-  private val liveRDDs = new HashMap[Int, LiveRDD]()
-  private val pools = new HashMap[String, SchedulerPool]()
+  // variables are visible for tests.
+  private[spark] val liveStages = new ConcurrentHashMap[(Int, Int), LiveStage]()
+  private[spark] val liveJobs = new HashMap[Int, LiveJob]()
+  private[spark] val liveExecutors = new HashMap[String, LiveExecutor]()
+  private[spark] val deadExecutors = new HashMap[String, LiveExecutor]()
+  private[spark] val liveTasks = new HashMap[Long, LiveTask]()
+  private[spark] val liveRDDs = new HashMap[Int, LiveRDD]()
+  private[spark] val pools = new HashMap[String, SchedulerPool]()
 
   private val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   // Keep the active executor count as a separate variable to avoid having to do synchronization
@@ -101,6 +102,81 @@ private[spark] class AppStatusListener(
       val now = System.nanoTime()
       flush(update(_, now))
     }
+  }
+
+  // visible for tests
+  private[spark] def recoverLiveEntities(): Unit = {
+    if (!live) {
+      kvstore.view(classOf[JobDataWrapper])
+        .asScala.filter(_.info.status == JobExecutionStatus.RUNNING)
+        .map(_.toLiveJob).foreach(job => liveJobs.put(job.jobId, job))
+
+      kvstore.view(classOf[StageDataWrapper]).asScala
+        .filter { stageData =>
+          stageData.info.status == v1.StageStatus.PENDING ||
+            stageData.info.status == v1.StageStatus.ACTIVE
+        }
+        .map { stageData =>
+          val stageId = stageData.info.stageId
+          val jobs = liveJobs.values.filter(_.stageIds.contains(stageId)).toSeq
+          stageData.toLiveStage(jobs)
+        }.foreach { stage =>
+        val stageId = stage.info.stageId
+        val stageAttempt = stage.info.attemptNumber()
+        liveStages.put((stageId, stageAttempt), stage)
+
+        kvstore.view(classOf[ExecutorStageSummaryWrapper])
+          .index("stage")
+          .first(Array(stageId, stageAttempt))
+          .last(Array(stageId, stageAttempt))
+          .asScala
+          .map(_.toLiveExecutorStageSummary)
+          .foreach { esummary =>
+            stage.executorSummaries.put(esummary.executorId, esummary)
+            if (esummary.isBlacklisted) {
+              stage.blackListedExecutors += esummary.executorId
+              liveExecutors(esummary.executorId).isBlacklisted = true
+              liveExecutors(esummary.executorId).blacklistedInStages += stageId
+            }
+          }
+
+
+        kvstore.view(classOf[TaskDataWrapper])
+          .parent(Array(stageId, stageAttempt))
+          .index(TaskIndexNames.STATUS)
+          .first(TaskState.RUNNING.toString)
+          .last(TaskState.RUNNING.toString)
+          .closeableIterator().asScala
+          .map(_.toLiveTask)
+          .foreach { task =>
+            liveTasks.put(task.info.taskId, task)
+            stage.activeTasksPerExecutor(task.info.executorId) += 1
+          }
+        stage.savedTasks.addAndGet(kvstore.count(classOf[TaskDataWrapper]).intValue())
+      }
+      kvstore.view(classOf[ExecutorSummaryWrapper]).asScala.filter(_.info.isActive)
+        .map(_.toLiveExecutor).foreach(exec => liveExecutors.put(exec.executorId, exec))
+      kvstore.view(classOf[RDDStorageInfoWrapper]).asScala
+        .foreach { rddWrapper =>
+          val liveRdd = rddWrapper.toLiveRDD(liveExecutors)
+          liveRDDs.put(liveRdd.info.id, liveRdd)
+        }
+      kvstore.view(classOf[PoolData]).asScala.foreach { poolData =>
+        val schedulerPool = poolData.toSchedulerPool
+        pools.put(schedulerPool.name, schedulerPool)
+      }
+    }
+  }
+
+  // used for tests only
+  private[spark] def clearLiveEntities(): Unit = {
+    liveStages.clear()
+    liveJobs.clear()
+    liveExecutors.clear()
+    deadExecutors.clear()
+    liveTasks.clear()
+    liveRDDs.clear()
+    pools.clear()
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
@@ -875,6 +951,12 @@ private[spark] class AppStatusListener(
       case broadcast: BroadcastBlockId => updateBroadcastBlock(event, broadcast)
       case _ =>
     }
+  }
+
+  // used in tests only
+  private[spark] def flush(): Unit = {
+    val now = System.nanoTime()
+    flush(update(_, now))
   }
 
   /** Go through all `LiveEntity`s and use `entityFlushFunc(entity)` to flush them. */

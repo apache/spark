@@ -23,6 +23,7 @@ import java.util.{Date, Properties}
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import scala.reflect.{classTag, ClassTag}
+import scala.util.Random
 
 import org.scalatest.BeforeAndAfter
 
@@ -35,6 +36,7 @@ import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.kvstore.InMemoryStore
 
 class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -1624,6 +1626,337 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("recover live entities from KVStore") {
+    def assertListenerEquals(live: AppStatusListener, nonLive: AppStatusListener)
+      : Unit = {
+      // ensures all live entities are wrote into KVStore
+      live.flush()
+      nonLive.clearLiveEntities()
+      nonLive.recoverLiveEntities()
+      assertLiveEntityEquals(live, nonLive)
+    }
+
+    val kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val liveListener = new AppStatusListener(kvstore, conf, live = true)
+    val nonLiveListener = new AppStatusListener(kvstore, conf, live = false)
+    var time = 1L
+    liveListener.onApplicationStart(SparkListenerApplicationStart(
+      "test", Some("appId"), time, "spark", Some("appId-attempt")))
+    time += 1
+
+    val exec0 = createExecutorAddedEvent(0)
+    val exec1 = createExecutorAddedEvent(1)
+    liveListener.onExecutorAdded(exec0)
+    liveListener.onExecutorAdded(exec1)
+    assert(liveListener.liveExecutors.size === 2)
+    // hostPort is needed in LiveRDDDistribution
+    liveListener.liveExecutors.get("0").get.hostPort = exec0.executorInfo.executorHost
+    liveListener.liveExecutors.get("1").get.hostPort = exec1.executorInfo.executorHost
+    assertListenerEquals(liveListener, nonLiveListener)
+
+    val level = StorageLevel.MEMORY_AND_DISK
+    val rddInfo0 = new RDDInfo(0, "rdd-0", 1, level, false, Nil)
+    val rddInfo1 = new RDDInfo(1, "rdd-1", 1, level, false, Nil)
+    val stage0 = createStageInfo(stageId = 0, attemptId = 0, 2, Seq(rddInfo0))
+    val stage1 = createStageInfo(stageId = 1, attemptId = 0, 2, Seq(rddInfo1))
+    val jobId = 0
+    liveListener.onJobStart(SparkListenerJobStart(jobId, time, Seq(stage0, stage1)))
+    assert(liveListener.liveJobs.size === 1)
+    assert(liveListener.liveStages.size === 2)
+    assertListenerEquals(liveListener, nonLiveListener)
+    time +=1
+
+    liveListener.onStageSubmitted(SparkListenerStageSubmitted(stage0))
+    liveListener.onStageSubmitted(SparkListenerStageSubmitted(stage1))
+    assert(liveListener.liveRDDs.size === 2)
+    assertListenerEquals(liveListener, nonLiveListener)
+    time +=1
+
+    liveListener.onExecutorBlacklisted(SparkListenerExecutorBlacklisted(time, "0", 0))
+    assert(liveListener.liveExecutors.get("0").get.isBlacklisted)
+    assertListenerEquals(liveListener, nonLiveListener)
+    time += 1
+    liveListener.onExecutorUnblacklisted(SparkListenerExecutorUnblacklisted(time, "0"))
+    assert(!liveListener.liveExecutors.get("0").get.isBlacklisted)
+    assertListenerEquals(liveListener, nonLiveListener)
+    time += 1
+
+    val tasks = createTasks(4, Array("0", "1"))
+    // update some metrics for stages in order to validate metrics equation below
+    liveListener.liveStages.values().asScala.foreach { stage =>
+      stage.metrics = createRandomV1TaskMetrics()
+    }
+    Seq(stage0, stage1).foreach { stage =>
+      liveListener.onTaskStart(SparkListenerTaskStart(
+        stage.stageId, stage.attemptNumber(), tasks(stage.stageId * 2)))
+      liveListener.onTaskStart(SparkListenerTaskStart(
+        stage.stageId, stage.attemptNumber(), tasks(stage.stageId * 2 + 1)))
+    }
+    assert(liveListener.liveTasks.size === 4)
+    assertListenerEquals(liveListener, nonLiveListener)
+    time +=1
+
+    val bm0 = BlockManagerId("0", exec0.executorInfo.executorHost, 1234)
+    val rdd0 = RddBlock(0, 0, 1L, 2L)
+    val bm1 = BlockManagerId("1", exec1.executorInfo.executorHost, 4321)
+    val rdd1 = RddBlock(1, 0, 3L, 4L)
+    liveListener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm0, rdd0.blockId, level, rdd0.memSize, rdd0.diskSize)))
+    liveListener.onBlockUpdated(SparkListenerBlockUpdated(
+      BlockUpdatedInfo(bm1, rdd1.blockId, level, rdd1.memSize, rdd1.diskSize)))
+    assertListenerEquals(liveListener, nonLiveListener)
+
+    liveListener.onUnpersistRDD(SparkListenerUnpersistRDD(rddInfo0.id))
+    assert(liveListener.liveRDDs.size === 1)
+    assertListenerEquals(liveListener, nonLiveListener)
+    liveListener.onUnpersistRDD(SparkListenerUnpersistRDD(rddInfo1.id))
+    assert(liveListener.liveRDDs.size === 0)
+    assertListenerEquals(liveListener, nonLiveListener)
+
+    val executorMetrics = new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L,
+      30L, 100L, 55L, 70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L))
+    // finish task 0 and task 2 in stages
+    val task0 = tasks(stage0.stageId * 2)
+    val task2 = tasks(stage1.stageId * 2)
+    task0.finishTime = time
+    task2.finishTime = time
+    liveListener.onTaskEnd(SparkListenerTaskEnd(stage0.stageId, stage0.attemptNumber(), "task 0",
+      Success, task0, executorMetrics, createRandomTaskMetrics()))
+    liveListener.onTaskEnd(SparkListenerTaskEnd(stage1.stageId, stage1.attemptNumber(), "task 2",
+      Success, task2, executorMetrics, createRandomTaskMetrics()))
+    assert(liveListener.liveTasks.size === 2)
+    assertListenerEquals(liveListener, nonLiveListener)
+    time += 1
+
+    // finish task 1 and task 3 in stages
+    val task1 = tasks(stage0.stageId * 2 + 1)
+    val task3 = tasks(stage1.stageId * 2 + 1)
+    task1.finishTime = time
+    task3.finishTime = time
+    liveListener.onTaskEnd(SparkListenerTaskEnd(stage0.stageId, stage0.attemptNumber(), "task 1",
+      Success, task1, executorMetrics, createRandomTaskMetrics()))
+    liveListener.onTaskEnd(SparkListenerTaskEnd(stage1.stageId, stage1.attemptNumber(), "task 3",
+      Success, task3, executorMetrics, createRandomTaskMetrics()))
+    assert(liveListener.liveTasks.size === 0)
+    assertListenerEquals(liveListener, nonLiveListener)
+
+    liveListener.onStageCompleted(SparkListenerStageCompleted(stage0))
+    liveListener.onStageCompleted(SparkListenerStageCompleted(stage1))
+    assert(liveListener.liveStages.size === 0)
+    assertListenerEquals(liveListener, nonLiveListener)
+    time += 1
+
+    liveListener.onJobEnd(SparkListenerJobEnd(jobId, time, JobSucceeded))
+    assert(liveListener.liveJobs.size === 0)
+    assertListenerEquals(liveListener, nonLiveListener)
+    time += 1
+
+    liveListener.onApplicationEnd(SparkListenerApplicationEnd(time))
+    assertListenerEquals(liveListener, nonLiveListener)
+  }
+
+  private def assertLiveEntityEquals(src: AppStatusListener, dest: AppStatusListener)
+    : Unit = {
+    def assertLiveJobEquals(sJob: LiveJob, dJob: LiveJob): Unit = {
+      assert(sJob.jobId === dJob.jobId)
+      assert(sJob.name === dJob.name)
+      assert(sJob.submissionTime === dJob.submissionTime)
+      assert(sJob.stageIds === dJob.stageIds)
+      assert(sJob.jobGroup == dJob.jobGroup)
+      assert(sJob.numTasks == dJob.numTasks)
+      assert(sJob.sqlExecutionId == dJob.sqlExecutionId)
+    }
+
+    def assertStageInfoEquals(sSInfo: StageInfo, dSInfo: StageInfo): Unit = {
+      assert(sSInfo.stageId === dSInfo.stageId)
+      assert(sSInfo.attemptNumber() === dSInfo.attemptNumber())
+      assert(sSInfo.name === dSInfo.name)
+      assert(sSInfo.numTasks === dSInfo.numTasks)
+      assert(sSInfo.details === dSInfo.details)
+    }
+
+    def assertTaskMetricsEquals(
+        sTM: v1.TaskMetrics,
+        dTM: v1.TaskMetrics): Unit = {
+      assert(sTM.executorDeserializeTime === dTM.executorDeserializeTime)
+      assert(sTM.executorDeserializeCpuTime === dTM.executorDeserializeCpuTime)
+      assert(sTM.executorRunTime === dTM.executorRunTime)
+      assert(sTM.executorCpuTime === dTM.executorCpuTime)
+      assert(sTM.resultSize === dTM.resultSize)
+      assert(sTM.jvmGcTime === dTM.jvmGcTime)
+      assert(sTM.resultSerializationTime === dTM.resultSerializationTime)
+      assert(sTM.memoryBytesSpilled === dTM.memoryBytesSpilled)
+      assert(sTM.diskBytesSpilled === dTM.diskBytesSpilled)
+      assert(sTM.peakExecutionMemory === dTM.peakExecutionMemory)
+
+      val sIM = sTM.inputMetrics
+      val dIM = dTM.inputMetrics
+      assert(sIM.bytesRead === dIM.bytesRead)
+      assert(sIM.recordsRead === dIM.recordsRead)
+
+      val sOM = sTM.outputMetrics
+      val dOM = dTM.outputMetrics
+      assert(sOM.bytesWritten === dOM.bytesWritten)
+      assert(sOM.recordsWritten === dOM.recordsWritten)
+
+      val sRM = sTM.shuffleReadMetrics
+      val dRM = dTM.shuffleReadMetrics
+      assert(sRM.remoteBlocksFetched === dRM.remoteBlocksFetched)
+      assert(sRM.localBlocksFetched === dRM.localBlocksFetched)
+      assert(sRM.fetchWaitTime === dRM.fetchWaitTime)
+      assert(sRM.remoteBytesRead === dRM.remoteBytesRead)
+      assert(sRM.remoteBytesReadToDisk === dRM.remoteBytesReadToDisk)
+      assert(sRM.localBytesRead === dRM.localBytesRead)
+      assert(sRM.recordsRead === dRM.recordsRead)
+
+      val sWM = sTM.shuffleWriteMetrics
+      val dWM = sTM.shuffleWriteMetrics
+      assert(sWM.bytesWritten === dWM.bytesWritten)
+      assert(sWM.writeTime === dWM.writeTime)
+      assert(sWM.recordsWritten === dWM.recordsWritten)
+    }
+
+    def assertTaskInfoEquals(sTInfo: TaskInfo, dTInfo: TaskInfo): Unit = {
+      assert(sTInfo.taskId === dTInfo.taskId)
+      assert(sTInfo.index === dTInfo.index)
+      assert(sTInfo.attemptNumber === dTInfo.attemptNumber)
+      assert(sTInfo.launchTime === dTInfo.launchTime)
+      assert(sTInfo.executorId === dTInfo.executorId)
+      assert(sTInfo.host === dTInfo.host)
+      assert(sTInfo.taskLocality === dTInfo.taskLocality)
+      assert(sTInfo.speculative === dTInfo.speculative)
+    }
+    val srcExecutors = src.liveExecutors
+    val destExecutors = dest.liveExecutors
+    assert(srcExecutors.size === destExecutors.size)
+    srcExecutors.keys.foreach { execId =>
+      val sExec = srcExecutors.get(execId).get
+      val dExec = destExecutors.get(execId).get
+      assert(sExec.addTime === dExec.addTime)
+      assert(sExec.host === dExec.host)
+      assert(sExec.hostPort === dExec.hostPort)
+      assert(sExec.totalCores === dExec.totalCores)
+      assert(sExec.rddBlocks === dExec.rddBlocks)
+      assert(sExec.memoryUsed === dExec.memoryUsed)
+      assert(sExec.diskUsed === dExec.diskUsed)
+      assert(sExec.maxTasks === dExec.maxTasks)
+      assert(sExec.maxMemory === dExec.maxMemory)
+      assert(sExec.totalTasks === dExec.totalTasks)
+      assert(sExec.activeTasks === dExec.activeTasks)
+      assert(sExec.completedTasks === dExec.completedTasks)
+      assert(sExec.failedTasks === dExec.failedTasks)
+      assert(sExec.totalDuration === dExec.totalDuration)
+      assert(sExec.totalGcTime === dExec.totalGcTime)
+      assert(sExec.totalInputBytes === dExec.totalInputBytes)
+      assert(sExec.totalShuffleRead === dExec.totalShuffleRead)
+      assert(sExec.totalShuffleWrite === dExec.totalShuffleWrite)
+      assert(sExec.isBlacklisted === dExec.isBlacklisted)
+      assert(sExec.blacklistedInStages === dExec.blacklistedInStages)
+      // return false indicates that there're no updates between these two metrics
+      assert(!sExec.peakExecutorMetrics.compareAndUpdatePeakValues(dExec.peakExecutorMetrics))
+    }
+
+    val srcJobs = src.liveJobs
+    val destJobs = dest.liveJobs
+    assert(srcJobs.size === destJobs.size)
+    srcJobs.keys.foreach { jobId =>
+      val sJob = srcJobs.get(jobId).get
+      val dJob = destJobs.get(jobId).get
+      assertLiveJobEquals(sJob, dJob)
+    }
+    val srcStages = src.liveStages
+    val destStages = dest.liveStages
+    assert(srcStages.size() === destStages.size())
+    srcStages.keys().asScala.foreach { stageId =>
+      val sStage = srcStages.get(stageId)
+      val dStage = destStages.get(stageId)
+      val sStageJobs = sStage.jobs.sortBy(_.jobId)
+      val dStageJobs = dStage.jobs.sortBy(_.jobId)
+      assert(sStageJobs.size === dStageJobs.size)
+      sStageJobs.zip(dStageJobs).foreach {case (sJob, dJob) =>
+        assertLiveJobEquals(sJob, dJob) }
+      assert(sStage.jobIds.size === dStage.jobs.size)
+      assert(sStage.jobIds === dStage.jobIds)
+      assertStageInfoEquals(sStage.info, dStage.info)
+      assert(sStage.status === dStage.status)
+      assert(sStage.description === dStage.description)
+      assert(sStage.schedulingPool === dStage.schedulingPool)
+      assert(sStage.activeTasks === dStage.activeTasks)
+      assert(sStage.completedTasks === dStage.completedTasks)
+      assert(sStage.completedIndices.size === dStage.completedIndicesNum)
+      assert(sStage.killedTasks === dStage.killedTasks)
+      assert(sStage.killedSummary === dStage.killedSummary)
+      assert(sStage.firstLaunchTime === dStage.firstLaunchTime)
+      assert(sStage.localitySummary === dStage.localitySummary)
+      assertTaskMetricsEquals(sStage.metrics, dStage.metrics)
+      val sSummaries = sStage.executorSummaries
+      val dSummaries = dStage.executorSummaries
+      assert(sSummaries.size === dSummaries.size)
+      sSummaries.keys.foreach { execId =>
+        val sSummary = sSummaries.get(execId).get
+        val dSummary = dSummaries.get(execId).get
+        assert(sSummary.executorId === dSummary.executorId)
+        assert(sSummary.taskTime === dSummary.taskTime)
+        assert(sSummary.succeededTasks === dSummary.succeededTasks)
+        assert(sSummary.failedTasks === dSummary.failedTasks)
+        assert(sSummary.killedTasks === dSummary.killedTasks)
+        assert(sSummary.isBlacklisted === dSummary.isBlacklisted)
+      }
+      // we only compare executors with active tasks to those recovered executors,
+      // because executors with non active tasks wouldn't be recovered.
+      assert(sStage.activeTasksPerExecutor.filter(_._2 > 0) === dStage.activeTasksPerExecutor)
+      assert(sStage.blackListedExecutors === dStage.blackListedExecutors)
+    }
+    val srcTasks = src.liveTasks
+    val destTasks = dest.liveTasks
+    assert(srcTasks.size === destTasks.size)
+    srcTasks.keys.foreach { taskId =>
+      val sTask = srcTasks.get(taskId).get
+      val dTask = destTasks.get(taskId).get
+      assertTaskInfoEquals(sTask.info, dTask.info)
+    }
+    val srcRDDs = src.liveRDDs
+    val destRDDs = dest.liveRDDs
+    assert(srcRDDs.size === destRDDs.size)
+    srcRDDs.keys.foreach { rddId =>
+      val sRDD = srcRDDs.get(rddId).get
+      val dRDD = destRDDs.get(rddId).get
+      assert(sRDD.info.id === dRDD.info.id)
+      assert(sRDD.info.name === dRDD.info.name)
+      assert(sRDD.info.numPartitions === dRDD.info.numPartitions)
+      assert(sRDD.info.storageLevel === dRDD.info.storageLevel)
+      assert(sRDD.memoryUsed === dRDD.memoryUsed)
+      assert(sRDD.diskUsed === dRDD.diskUsed)
+      val sRDDPartitions = sRDD.partitions
+      val dRDDPartitions = dRDD.partitions
+      assert(sRDDPartitions.size === dRDDPartitions.size)
+      sRDDPartitions.keys.foreach { block =>
+        val sPartition = sRDDPartitions.get(block).get
+        val dPartition = dRDDPartitions.get(block).get
+        assert(sPartition.executors === dPartition.executors)
+        assert(sPartition.memoryUsed === dPartition.memoryUsed)
+        assert(sPartition.diskUsed === dPartition.diskUsed)
+      }
+      val sRDDDists = sRDD.distributions
+      val dRDDDists = dRDD.distributions
+      assert(sRDDDists.size === dRDDDists.size)
+      sRDDDists.keys.foreach { execId =>
+        val sDist = sRDDDists.get(execId).get
+        val dDist = dRDDDists.get(execId).get
+        assert(sDist.executorId === dDist.executorId)
+        assert(sDist.memoryUsed === dDist.memoryUsed)
+        assert(sDist.diskUsed === dDist.diskUsed)
+      }
+    }
+    val srcPools = src.pools
+    val destPools = dest.pools
+    srcPools.keys.foreach { name =>
+      val sPool = srcPools.get(name).get
+      val dPool = destPools.get(name).get
+      assert(sPool.name === dPool.name)
+      assert(sPool.stageIds === dPool.stageIds)
+    }
+  }
 
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
 
@@ -1696,5 +2029,43 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
     val executorUpdates = Map((stageId, 0) -> new ExecutorMetrics(executorMetrics))
     SparkListenerExecutorMetricsUpdate(executorId.toString, accum, executorUpdates)
+  }
+
+  private def createStageInfo(stageId: Int, attemptId: Int, numTasks: Int, rddInfos: Seq[RDDInfo])
+    : StageInfo = {
+    new StageInfo(stageId = stageId,
+      attemptId = attemptId,
+      name = s"stage-$stageId-$attemptId",
+      numTasks = numTasks,
+      rddInfos = rddInfos,
+      parentIds = Nil,
+      details = s"stage-$stageId-$attemptId")
+  }
+
+  private def createRandomV1TaskMetrics(): v1.TaskMetrics = {
+    val rnd = new Random(System.nanoTime())
+    LiveEntityHelpers.createMetrics(
+      rnd.nextLong(), rnd.nextLong(), rnd.nextLong(), rnd.nextLong(), rnd.nextLong(),
+      rnd.nextLong(), rnd.nextLong(), rnd.nextLong(), rnd.nextLong(), rnd.nextLong(),
+      rnd.nextLong(), rnd.nextLong(), rnd.nextLong(), rnd.nextLong(), rnd.nextLong(),
+      rnd.nextLong(), rnd.nextLong(), rnd.nextLong(), rnd.nextLong(), rnd.nextLong(),
+      rnd.nextLong(), rnd.nextLong(), rnd.nextLong(), rnd.nextLong()
+    )
+  }
+
+  private def createRandomTaskMetrics(): TaskMetrics = {
+    val rnd = new Random(System.nanoTime())
+    val taskMetrics = new TaskMetrics()
+    taskMetrics.setExecutorDeserializeTime(rnd.nextLong())
+    taskMetrics.setExecutorDeserializeCpuTime(rnd.nextLong())
+    taskMetrics.setExecutorRunTime(rnd.nextLong())
+    taskMetrics.setExecutorCpuTime(rnd.nextLong())
+    taskMetrics.setResultSize(rnd.nextLong())
+    taskMetrics.setJvmGCTime(rnd.nextLong())
+    taskMetrics.setResultSerializationTime(rnd.nextLong())
+    taskMetrics.incMemoryBytesSpilled(rnd.nextLong())
+    taskMetrics.incDiskBytesSpilled(rnd.nextLong())
+    taskMetrics.incPeakExecutionMemory(rnd.nextLong())
+    taskMetrics
   }
 }
