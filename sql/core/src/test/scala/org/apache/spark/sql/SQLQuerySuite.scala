@@ -3234,8 +3234,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-29213 Make it consistent when get notnull output and generate null " +
-    "checks in FilterExec") {
+  test("SPARK-29213: FilterExec should not throw NPE") {
     withView("t1", "t2", "t3") {
       sql("select ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t1")
       sql("select * from values 0, cast(null as bigint)")

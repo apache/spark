@@ -173,11 +173,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
 
-    val extraIsNotNullReferences = mutable.Set[Attribute]()
-
-    def outputContainsNotNull(ref: Attribute): Boolean = {
-      output.exists { attr => attr.exprId == ref.exprId }
-    }
+    val extraIsNotNullAttrs = mutable.Set[Attribute]()
 
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
@@ -186,8 +182,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           generatedIsNotNullChecks(idx) = true
           // Use the child's output. The nullability is what the child produced.
           genPredicate(notNullPreds(idx), input, child.output)
-        } else if (outputContainsNotNull(r) && !extraIsNotNullReferences.contains(r)) {
-          extraIsNotNullReferences += r
+        } else if (notNullAttributes.contains(r.exprId) && !extraIsNotNullAttrs.contains(r)) {
+          extraIsNotNullAttrs += r
           genPredicate(IsNotNull(r), input, child.output)
         } else {
           ""
