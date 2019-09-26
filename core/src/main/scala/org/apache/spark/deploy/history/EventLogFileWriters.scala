@@ -407,7 +407,7 @@ object RollingEventLogFilesWriter {
     status.isFile && status.getPath.getName.startsWith(APPSTATUS_FILE_NAME_PREFIX)
   }
 
-  def getSequence(eventLogFileName: String): Long = {
+  def getIndex(eventLogFileName: String): Long = {
     require(eventLogFileName.startsWith(EVENT_LOG_FILE_NAME_PREFIX), "Not a event log file!")
     val seq = eventLogFileName.stripPrefix(EVENT_LOG_FILE_NAME_PREFIX).split("_")(0)
     seq.toLong

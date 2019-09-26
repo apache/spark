@@ -297,13 +297,13 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
     assert(stats.isDirectory)
 
     val statsInDir = fileSystem.listStatus(logPath)
-    val eventFiles = statsInDir.filter(isEventLogFile).sortBy(s => getSequence(s.getPath.getName))
+    val eventFiles = statsInDir.filter(isEventLogFile).sortBy(s => getIndex(s.getPath.getName))
     assert(eventFiles.nonEmpty)
     val lastEventFile = eventFiles.last
     val allLen = eventFiles.map(_.getLen).sum
 
     assert(reader.rootPath === fileSystem.makeQualified(logPath))
-    assert(reader.lastIndex === Some(getSequence(lastEventFile.getPath.getName)))
+    assert(reader.lastIndex === Some(getIndex(lastEventFile.getPath.getName)))
     assert(reader.fileSizeForLastIndex === lastEventFile.getLen)
     assert(reader.completed === isCompleted)
     assert(reader.modificationTime === lastEventFile.getModificationTime)

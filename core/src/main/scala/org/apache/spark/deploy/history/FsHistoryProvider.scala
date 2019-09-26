@@ -759,7 +759,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // the file is really gone.
         // The logic is only valid for single event log, as root path doesn't change for
         // rolled event logs.
-        if (appCompleted && reader.lastIndex.isDefined) {
+        if (appCompleted && reader.lastIndex.isEmpty) {
           val inProgressLog = logPath.toString() + EventLogFileWriter.IN_PROGRESS
           try {
             // Fetch the entry first to avoid an RPC when it's already removed.

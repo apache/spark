@@ -73,7 +73,7 @@ abstract class EventLogFileReader(
    */
   def fileSizeForLastIndexForDFS: Option[Long]
 
-  /** Returns the modification time for the last sequence number of event log files. */
+  /** Returns the modification time for the last index of event log files. */
   def modificationTime: Long
 
   /**
@@ -153,7 +153,14 @@ object EventLogFileReader {
   }
 }
 
-/** The reader which will read the information of single event log file. */
+/**
+ * The reader which will read the information of single event log file.
+ *
+ * This reader gets the status of event log file only once when required;
+ * It may not give "live" status of file that could be changing concurrently, and
+ * FileNotFoundException could occur if the log file is renamed before getting the
+ * status of log file.
+ */
 class SingleFileEventLogFileReader(
     fs: FileSystem,
     path: Path) extends EventLogFileReader(fs, path) {
@@ -186,7 +193,12 @@ class SingleFileEventLogFileReader(
   override def totalSize: Long = fileSizeForLastIndex
 }
 
-/** The reader which will read the information of rolled multiple event log files. */
+/**
+ * The reader which will read the information of rolled multiple event log files.
+ *
+ * This reader lists the files only once; if caller would like to play with updated list,
+ * it needs to create another reader instance.
+ */
 class RollingEventLogFilesFileReader(
     fs: FileSystem,
     path: Path) extends EventLogFileReader(fs, path) {
@@ -199,9 +211,11 @@ class RollingEventLogFilesFileReader(
     ret
   }
 
+  private lazy val appStatusFile = files.find(isAppStatusFile).get
+
   override def lastIndex: Option[Long] = {
     val maxSeq = files.filter(isEventLogFile)
-      .map { status => getSequence(status.getPath.getName) }
+      .map { status => getIndex(status.getPath.getName) }
       .max
     Some(maxSeq)
   }
@@ -209,9 +223,7 @@ class RollingEventLogFilesFileReader(
   override def fileSizeForLastIndex: Long = lastEventLogFile.getLen
 
   override def completed: Boolean = {
-    val appStatsFile = files.find(isAppStatusFile)
-    require(appStatsFile.isDefined)
-    appStatsFile.exists(!_.getPath.getName.endsWith(EventLogFileWriter.IN_PROGRESS))
+    !appStatusFile.getPath.getName.endsWith(EventLogFileWriter.IN_PROGRESS)
   }
 
   override def fileSizeForLastIndexForDFS: Option[Long] = {
@@ -241,7 +253,7 @@ class RollingEventLogFilesFileReader(
   override def totalSize: Long = eventLogFiles.map(_.getLen).sum
 
   private def eventLogFiles: Seq[FileStatus] = {
-    files.filter(isEventLogFile).sortBy { status => getSequence(status.getPath.getName) }
+    files.filter(isEventLogFile).sortBy { status => getIndex(status.getPath.getName) }
   }
 
   private def lastEventLogFile: FileStatus = eventLogFiles.reverse.head
