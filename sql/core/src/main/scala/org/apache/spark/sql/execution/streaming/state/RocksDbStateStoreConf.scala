@@ -17,36 +17,51 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.util.Utils
-
-class RocksDbStateStoreConf(@transient private val stateStoreConf: StateStoreConf)
-  extends Serializable {
-
-  import RocksDbStateStoreConf._
-
-  def this() = this(StateStoreConf.empty)
-
-  val blockSizeInKB: Int = stateStoreConf.confs
-    .getOrElse(BLOCK_SIZE_KEY, DEFAULT_BLOCKSIZE_IN_KB.toString).toInt
-
-  val memtableBudgetInMB: Int = stateStoreConf.confs
-    .getOrElse(MEMTABLE_BUDGET_KEY, DEFAULT_MEMTABLE_BUDGET_IN_MB.toString).toInt
-
-  val enableStats: Boolean = stateStoreConf.confs
-    .getOrElse(ENABLE_STATS_KEY, "false").toBoolean
-
-  val localDir: String = stateStoreConf.confs
-    .getOrElse(LOCAL_DIR_KEY, Utils.createTempDir().getAbsolutePath)
-}
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.config.ConfigBuilder
 
 object RocksDbStateStoreConf {
-  val DEFAULT_BLOCKSIZE_IN_KB = 32
-  val DEFAULT_MEMTABLE_BUDGET_IN_MB = 1024
-  val DEFAULT_CACHE_SIZE_IN_MB = 512
 
-  val BLOCK_SIZE_KEY = "spark.sql.streaming.stateStore.rocksDb.blockSizeInKB"
-  val MEMTABLE_BUDGET_KEY = "spark.sql.streaming.stateStore.rocksDb.memtableBudgetInMB"
-  val CACHE_SIZE_KEY = "spark.sql.streaming.stateStore.rocksDb.cacheSizeInMB"
-  val ENABLE_STATS_KEY = "spark.sql.streaming.stateStore.rocksDb.enableDbStats"
-  val LOCAL_DIR_KEY = "spark.sql.streaming.stateStore.rocksDb.localDir"
+  private[spark] val ROCKSDB_STATE_STORE_DATA_BLOCK_SIZE =
+    ConfigBuilder("spark.sql.streaming.stateStore.rocksDb.blockSizeInKB")
+      .doc(
+        "The maximum size (in KB) of packed data in a block of a table file. " +
+          "When reading from a table, an entire block is loaded into memory")
+      .intConf
+      .createWithDefault(32)
+
+  private[spark] val ROCKSDB_STATE_STORE_MEMTABLE_BUDGET =
+    ConfigBuilder("spark.sql.streaming.stateStore.rocksDb.memtableBudgetInMB")
+      .doc("The maximum size (in MB) of memory to be used to optimize level style compaction")
+      .intConf
+      .createWithDefault(1024)
+
+  private[spark] val ROCKSDB_STATE_STORE_CACHE_SIZE =
+    ConfigBuilder("spark.sql.streaming.stateStore.rocksDb.cacheSizeInMB")
+      .doc("The maximum size (in MB) of in-memory LRU cache for RocksDB operations")
+      .intConf
+      .createWithDefault(512)
+
+  private[spark] val ROCKSDB_STATE_STORE_ENABLE_STATS =
+    ConfigBuilder("spark.sql.streaming.stateStore.rocksDb.enableDbStats")
+      .doc("Enable statistics for rocksdb for debugging and reporting")
+      .booleanConf
+      .createWithDefault(false)
+
+  val blockSizeInKB: Int = Option(SparkEnv.get)
+    .map(_.conf.get(ROCKSDB_STATE_STORE_DATA_BLOCK_SIZE))
+    .getOrElse(32)
+
+  val memtableBudgetInMB: Int = Option(SparkEnv.get)
+    .map(_.conf.get(ROCKSDB_STATE_STORE_MEMTABLE_BUDGET))
+    .getOrElse(1024)
+
+  val cacheSize: Int = Option(SparkEnv.get)
+    .map(_.conf.get(RocksDbStateStoreConf.ROCKSDB_STATE_STORE_CACHE_SIZE))
+    .getOrElse(512)
+
+  val enableStats: Boolean = Option(SparkEnv.get)
+    .map(_.conf.get(ROCKSDB_STATE_STORE_ENABLE_STATS))
+    .getOrElse(false)
+
 }

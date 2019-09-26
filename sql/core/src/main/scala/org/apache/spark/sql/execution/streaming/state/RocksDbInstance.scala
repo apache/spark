@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
-import java.util.Locale
 
 import scala.collection.JavaConverters._
 
@@ -28,18 +27,13 @@ import org.apache.commons.io.FileUtils
 import org.rocksdb._
 import org.rocksdb.RocksDB
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-class RocksDbInstance(
-                       keySchema: StructType,
-                       valueSchema: StructType,
-                       version: String,
-                       conf: RocksDbStateStoreConf)
-  extends Logging {
+class RocksDbInstance(keySchema: StructType, valueSchema: StructType, version: String)
+    extends Logging {
 
   import RocksDbInstance._
   RocksDB.loadLibrary()
@@ -195,9 +189,9 @@ class RocksDbInstance(
     }
   }
 
-  private val dataBlockSize = conf.blockSizeInKB
-  private val memTableMemoryBudget = conf.memtableBudgetInMB
-  private val enableStats = conf.enableStats
+  private val dataBlockSize = RocksDbStateStoreConf.blockSizeInKB
+  private val memTableMemoryBudget = RocksDbStateStoreConf.memtableBudgetInMB
+  private val enableStats = RocksDbStateStoreConf.enableStats
 
   protected def setOptions(): Unit = {
 
@@ -255,15 +249,10 @@ class RocksDbInstance(
 }
 
 class OptimisticTransactionDbInstance(
-                                       keySchema: StructType,
-                                       valueSchema: StructType,
-                                       version: String,
-                                       conf: RocksDbStateStoreConf)
-  extends RocksDbInstance(
     keySchema: StructType,
     valueSchema: StructType,
-    version: String,
-    conf: RocksDbStateStoreConf) {
+    version: String)
+    extends RocksDbInstance(keySchema: StructType, valueSchema: StructType, version: String) {
   import RocksDbInstance._
   RocksDB.loadLibrary()
 
@@ -409,15 +398,7 @@ object RocksDbInstance {
 
   val COMMIT_FILE_NAME = "commit"
 
-  private val rocksDbCacheSizeInMB: Int = if (SparkEnv.get != null) {
-    SparkEnv.get.conf.getInt(
-      RocksDbStateStoreConf.CACHE_SIZE_KEY,
-      RocksDbStateStoreConf.DEFAULT_CACHE_SIZE_IN_MB)
-  } else {
-    RocksDbStateStoreConf.DEFAULT_CACHE_SIZE_IN_MB
-  }
-
-  lazy val rocksDbLRUCache = new LRUCache(rocksDbCacheSizeInMB * 1024 * 1024, 6, false)
+  lazy val rocksDbLRUCache = new LRUCache(RocksDbStateStoreConf.cacheSize * 1024 * 1024, 6, false)
 
   def destroyDB(path: String): Unit = {
     val f: File = new File(path)
