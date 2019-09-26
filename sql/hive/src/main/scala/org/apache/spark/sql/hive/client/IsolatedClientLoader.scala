@@ -83,10 +83,21 @@ private[hive] object IsolatedClientLoader extends Logging {
       resolvedVersions((resolvedVersion, actualHadoopVersion))
     }
 
+    // HiveMetastoreConnection using maven missed the jars in classpath which passed
+    // through --jars. They need to be added back before new IsolatedClientLoader()
+    val jarsInClasspath = Utils.getContextOrSparkClassLoader match {
+      case m: MutableURLClassLoader =>
+        val jars = m.getURLs.toSeq
+        logInfo(s"Added jars in classpath to IsolatedClientLoader: $jars")
+        jars
+      case _ =>
+        Seq.empty
+    }
+
     new IsolatedClientLoader(
       hiveVersion(hiveMetastoreVersion),
       sparkConf,
-      execJars = files,
+      execJars = files ++ jarsInClasspath,
       hadoopConf = hadoopConf,
       config = config,
       sharesHadoopClasses = _sharesHadoopClasses,
