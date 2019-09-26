@@ -96,7 +96,7 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   examples = """
     Examples:
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
       true
   """,
   note = """

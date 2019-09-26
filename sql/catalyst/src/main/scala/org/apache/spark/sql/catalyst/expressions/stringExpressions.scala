@@ -1299,11 +1299,11 @@ object ParseUrl {
   usage = "_FUNC_(url, partToExtract[, key]) - Extracts a part from a URL.",
   examples = """
     Examples:
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');
        spark.apache.org
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY');
        query=1
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query');
        1
   """,
   since = "2.0.0")
