@@ -1240,7 +1240,7 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
 @inherit_doc
 class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
     """
-    Params for :py:attr:`PowerIterationClustering` and :py:attr:`PowerIterationClusteringModel`.
+    Params for :py:attr:`PowerIterationClustering`.
 
     .. versionadded:: 3.0.0
     """
