@@ -161,7 +161,7 @@ private[regression] trait FactorizationMachinesParams
    * @group param
    */
   @Since("2.4.3")
-  final val verbose: Param[Boolean] = new Param[Boolean](this, "verbose",
+  final val verbose: BooleanParam = new BooleanParam(this, "verbose",
     "whether to print information per iteration step")
 
   /** @group getParam */
