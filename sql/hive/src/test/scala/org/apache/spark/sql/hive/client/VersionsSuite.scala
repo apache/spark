@@ -205,7 +205,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
       // test alter database location
       val tempDatabasePath2 = Utils.createTempDir().toURI
-      // Hive support alter database location since HIVE-8472(Hive 3.0).
+      // Hive support altering database location since HIVE-8472.
       if (version == "3.0" || version == "3.1") {
         client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
         val uriInCatalog = client.getDatabase("temporary").locationUri
