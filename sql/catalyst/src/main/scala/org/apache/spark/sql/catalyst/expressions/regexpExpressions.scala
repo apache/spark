@@ -170,12 +170,13 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   """,
   examples = """
     Examples:
-      When spark.sql.parser.escapedStringLiterals is disabled (default).
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'
+      > SET spark.sql.parser.escapedStringLiterals=true;
+      spark.sql.parser.escapedStringLiterals	true
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*';
       true
-
-      When spark.sql.parser.escapedStringLiterals is enabled.
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\Users.*'
+      > SET spark.sql.parser.escapedStringLiterals=false;
+      spark.sql.parser.escapedStringLiterals	false
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\Users.*';
       true
   """,
   note = """

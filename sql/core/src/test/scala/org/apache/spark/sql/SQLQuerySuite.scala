@@ -163,12 +163,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Shuffle",
       "org.apache.spark.sql.catalyst.expressions.Uuid",
       // The example calls methods that return unstable results.
-      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
-      // Unsupported format of the examples,
-      // and `SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'` fails:
-      //  Error in query:
-      //    extraneous input ''%SystemDrive%\\Users.*'' expecting <EOF>(line 1, pos 41)
-      "org.apache.spark.sql.catalyst.expressions.RLike")
+      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
 
     withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
       spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
