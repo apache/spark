@@ -128,7 +128,7 @@ GROUP  BY t1b,
 HAVING t1d NOT IN (SELECT t2d
                    FROM   t2
                    WHERE  t1d = t2d)
-ORDER BY t1b DESC;
+ORDER BY t1b DESC, t1d ASC;
 
 -- TC 01.05
 SELECT   COUNT(DISTINCT(t1a)),

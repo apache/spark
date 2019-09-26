@@ -22,11 +22,13 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeTableCommand}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -97,6 +99,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
   private val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
   private val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
+
+  override def sparkConf: SparkConf = super.sparkConf
+    // Fewer shuffle partitions to speed up testing.
+    .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
   /** List of test cases to ignore, in lower cases. */
   private val blackList = Set(
