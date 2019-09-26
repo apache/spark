@@ -226,6 +226,7 @@ class Analyzer(
       ResolveRandomSeed ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
+    Batch("PostgreSQL Dialect", Once, PostgreSQLDialect.postgreSQLDialectRules: _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints(conf)),
