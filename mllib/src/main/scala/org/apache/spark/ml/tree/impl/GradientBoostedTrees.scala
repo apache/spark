@@ -134,12 +134,11 @@ private[spark] object GradientBoostedTrees extends Logging {
       treeWeight: Double,
       tree: DecisionTreeRegressionModel,
       loss: OldLoss): RDD[(Double, Double)] = {
-    data.zip(predictionAndError).mapPartitions { iter =>
-      iter.map { case (Instance(label, _, features), (pred, _)) =>
+    data.zip(predictionAndError).map {
+      case (Instance(label, _, features), (pred, _)) =>
         val newPred = updatePrediction(features, pred, tree, treeWeight)
         val newError = loss.computeError(newPred, label)
         (newPred, newError)
-      }
     }
   }
 
