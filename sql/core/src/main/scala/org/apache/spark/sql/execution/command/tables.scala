@@ -961,6 +961,11 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     Seq(Row(stmt))
   }
 
+  // For test only
+  private[sql] def showCreateHiveTableTest(metadata: CatalogTable): String = {
+    showCreateHiveTable(metadata)
+  }
+
   private def showCreateHiveTable(metadata: CatalogTable): String = {
     def reportUnsupportedError(features: Seq[String]): Unit = {
       throw new AnalysisException(
@@ -1007,7 +1012,12 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showHiveTableHeader(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val columns = metadata.schema.filterNot { column =>
       metadata.partitionColumnNames.contains(column.name)
-    }.map(_.toDDL)
+    }.map {
+      // compatible with hive
+      case sf @ StructField(_, NullType, _, _) =>
+        s"${quoteIdentifier(sf.name)} void${sf.getComment().getOrElse("")}"
+      case other => other.toDDL
+    }
 
     if (columns.nonEmpty) {
       builder ++= columns.mkString("(", ", ", ")\n")

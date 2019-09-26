@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
+import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils, ShowCreateTableCommand}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
@@ -2515,5 +2515,20 @@ class HiveDDLSuite
         }
       }
     }
+  }
+
+  test("show create hive table with void type") {
+    val showCreateTableCommand = ShowCreateTableCommand(TableIdentifier("t1"))
+    val schema = new StructType()
+      .add("c1", NullType)
+      .add("c2", IntegerType)
+    val table = CatalogTable(
+      identifier = TableIdentifier("t1"),
+      tableType = CatalogTableType.MANAGED,
+      provider = Option(DDLUtils.HIVE_PROVIDER),
+      storage = CatalogStorageFormat.empty,
+      schema = schema)
+    val res = showCreateTableCommand.showCreateHiveTableTest(table)
+    assert(res.contains("`show create table: CREATE TABLE `t1`(`c1` void, `c2` INT)"))
   }
 }

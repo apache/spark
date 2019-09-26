@@ -961,7 +961,11 @@ private[hive] object HiveClientImpl {
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
   private def getSparkSQLDataType(hc: FieldSchema): DataType = {
     try {
-      CatalystSqlParser.parseDataType(hc.getType)
+      hc.getType match {
+        // SPARK-28313 compatible hive void type
+        case "void" => NullType
+        case other => CatalystSqlParser.parseDataType(other)
+      }
     } catch {
       case e: ParseException =>
         throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
