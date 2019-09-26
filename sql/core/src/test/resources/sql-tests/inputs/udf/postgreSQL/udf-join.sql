@@ -6,7 +6,7 @@
 -- Test JOIN clauses
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/join.sql
 --
--- This test file was converted from pgSQL/join.sql.
+-- This test file was converted from postgreSQL/join.sql.
 
 CREATE OR REPLACE TEMPORARY VIEW INT4_TBL AS SELECT * FROM
   (VALUES (0), (123456), (-123456), (2147483647), (-2147483647))
