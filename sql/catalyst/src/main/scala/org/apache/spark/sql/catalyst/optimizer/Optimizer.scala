@@ -175,7 +175,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder) :+
     Batch("Remove Redundant Sorts", Once,
-      RemoveRedundantSorts) :+
+      RemoveRedundantSorts,
+      RemoveSortInSubquery) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
