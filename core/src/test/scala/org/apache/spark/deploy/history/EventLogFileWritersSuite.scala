@@ -96,13 +96,9 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
       val dummyData = Seq("dummy1", "dummy2", "dummy3")
       dummyData.foreach(writer.writeEvent(_, flushLogger = true))
 
-      verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri, codecShortName,
-        isCompleted = false, dummyData)
-
       writer.stop()
 
-      verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri, codecShortName,
-        isCompleted = true, dummyData)
+      verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri, codecShortName, dummyData)
     }
   }
 
@@ -140,25 +136,16 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
       sparkConf: SparkConf,
       hadoopConf: Configuration): EventLogFileWriter
 
+  /**
+   * This should be called with "closed" event log file; No guarantee on reading event log file
+   * which is being written, especially the file is compressed. SHS also does the best it can.
+   */
   protected def verifyWriteEventLogFile(
       appId: String,
       appAttemptId : Option[String],
       logBaseDir: URI,
       compressionCodecShortName: Option[String],
-      isCompleted: Boolean,
       expectedLines: Seq[String] = Seq.empty): Unit
-
-  protected def skipVerifyEventLogFile(
-      compressionCodecShortName: Option[String],
-      isCompleted: Boolean): Boolean = {
-    // Spark initializes LZ4BlockOutputStream with syncFlush=false, so we can't force
-    // pending bytes to be flushed. It's only guaranteed when stream is closed, so
-    // we only check for lz4 when isCompleted = true.
-
-    // zstd seems to have issue in reading while write stream is in progress of writing
-    !isCompleted &&
-      (compressionCodecShortName.contains("lz4") || compressionCodecShortName.contains("zstd"))
-  }
 }
 
 class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
@@ -223,22 +210,14 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
       appAttemptId: Option[String],
       logBaseDir: URI,
       compressionCodecShortName: Option[String],
-      isCompleted: Boolean,
       expectedLines: Seq[String]): Unit = {
     // read single event log file
     val logPath = SingleEventLogFileWriter.getLogPath(logBaseDir, appId, appAttemptId,
       compressionCodecShortName)
 
-    val finalLogPath = if (!isCompleted) {
-      new Path(logPath + EventLogFileWriter.IN_PROGRESS)
-    } else {
-      new Path(logPath)
-    }
-
+    val finalLogPath = new Path(logPath)
     assert(fileSystem.exists(finalLogPath) && fileSystem.isFile(finalLogPath))
-    if (!skipVerifyEventLogFile(compressionCodecShortName, isCompleted)) {
-      assert(expectedLines === readLinesFromEventLogFile(finalLogPath, fileSystem))
-    }
+    assert(expectedLines === readLinesFromEventLogFile(finalLogPath, fileSystem))
   }
 }
 
@@ -346,16 +325,13 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
       val eventLogFiles = listEventLogFiles(logDirPath)
       assertEventLogFilesSequence(eventLogFiles, 3, 1024 * 1024)
 
-      verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri,
-        codecShortName, isCompleted = false, expectedLines)
-
       writer.stop()
 
       val eventLogFiles2 = listEventLogFiles(logDirPath)
       assertEventLogFilesSequence(eventLogFiles2, 3, 1024 * 1024)
 
       verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri,
-        codecShortName, isCompleted = true, expectedLines)
+        codecShortName, expectedLines)
     }
   }
 
@@ -373,24 +349,21 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
       appAttemptId: Option[String],
       logBaseDir: URI,
       compressionCodecShortName: Option[String],
-      isCompleted: Boolean,
       expectedLines: Seq[String]): Unit = {
     val logDirPath = getAppEventLogDirPath(logBaseDir, appId, appAttemptId)
 
     assert(fileSystem.exists(logDirPath) && fileSystem.isDirectory(logDirPath))
 
-    val appStatusFile = getAppStatusFilePath(logDirPath, appId, appAttemptId, !isCompleted)
+    val appStatusFile = getAppStatusFilePath(logDirPath, appId, appAttemptId, inProgress = false)
     assert(fileSystem.exists(appStatusFile) && fileSystem.isFile(appStatusFile))
 
     val eventLogFiles = listEventLogFiles(logDirPath)
-    if (!skipVerifyEventLogFile(compressionCodecShortName, isCompleted)) {
-      val allLines = mutable.ArrayBuffer[String]()
-      eventLogFiles.foreach { file =>
-        allLines.appendAll(readLinesFromEventLogFile(file.getPath, fileSystem))
-      }
-
-      assert(expectedLines === allLines)
+    val allLines = mutable.ArrayBuffer[String]()
+    eventLogFiles.foreach { file =>
+      allLines.appendAll(readLinesFromEventLogFile(file.getPath, fileSystem))
     }
+
+    assert(expectedLines === allLines)
   }
 
   private def listEventLogFiles(logDirPath: Path): Seq[FileStatus] = {
