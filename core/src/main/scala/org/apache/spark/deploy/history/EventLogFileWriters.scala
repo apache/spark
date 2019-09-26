@@ -322,7 +322,7 @@ class RollingEventLogFilesWriter(
   override def writeEvent(eventJson: String, flushLogger: Boolean = false): Unit = {
     writer.foreach { w =>
       val currentLen = countingOutputStream.get.getBytesWritten
-      if (currentLen + eventJson.length > eventFileMaxLength * 1024 * 1024) {
+      if (currentLen + eventJson.length > eventFileMaxLength) {
         rollEventLogFile()
       }
     }
