@@ -48,9 +48,9 @@ class CoGroupedData(object):
         a Tuple can be provided, in which case the cogroup key will be passed in as the Tuple
         parameter.
 
-        For each side of the cogroup, all columns are passed together
-        as a `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame`
-        are combined as a :class:`DataFrame`.
+        For each side of the cogroup, all columns are passed together as a `pandas.DataFrame`
+        to the user-function and the returned `pandas.DataFrame` are combined as a
+        :class:`DataFrame`.
 
         The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
         returnType of the pandas udf.
