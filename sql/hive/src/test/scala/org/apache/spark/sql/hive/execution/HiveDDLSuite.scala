@@ -2529,6 +2529,6 @@ class HiveDDLSuite
       storage = CatalogStorageFormat.empty,
       schema = schema)
     val res = showCreateTableCommand.showCreateHiveTableTest(table)
-    assert(res.contains("`show create table: CREATE TABLE `t1`(`c1` void, `c2` INT)"))
+    assert(res.contains("CREATE TABLE `t1`(`c1` void, `c2` INT)"))
   }
 }
