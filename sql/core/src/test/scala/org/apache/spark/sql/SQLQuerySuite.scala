@@ -26,6 +26,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -135,6 +136,32 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         val exprExamples = info.getOriginalExamples
         if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
           assert(exampleRe.findAllIn(exprExamples).toSet.forall(_.contains("_FUNC_")))
+        }
+      }
+    }
+  }
+
+  test("check outputs of expression examples") {
+    val exampleRe = ">(.+);\n(.+)".r
+    val ignoreSet = Set(
+      // One of examples shows getting the current timestamp
+      "org.apache.spark.sql.catalyst.expressions.UnixTimestamp")
+
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
+        val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
+        val className = info.getClassName
+        if (!ignoreSet.contains(className)) {
+          withClue(s"Function '${info.getName}', Expression class '$className'") {
+            exampleRe.findAllIn(info.getExamples).toList.foreach(_ match {
+              case exampleRe(sql, output) =>
+                val df = spark.sql(sql)
+                val actual = hiveResultString(df.queryExecution.executedPlan).mkString("\n").trim
+                val expected = output.trim
+                assert(actual === expected)
+              case other => throw new IllegalArgumentException(other)
+            })
+          }
         }
       }
     }
