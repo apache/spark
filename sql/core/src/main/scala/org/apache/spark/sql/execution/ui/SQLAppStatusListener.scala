@@ -393,7 +393,6 @@ class SQLAppStatusListener(
   // visible for tests
   private[spark] def flush(): Unit = {
     if (live) {
-      // TODO (wuyi) is this thread safe ?
       val now = System.nanoTime()
       liveExecutions.values().asScala.foreach(_.write(kvstore, now))
       stageMetrics.values().asScala.foreach(_.write(kvstore, now))
