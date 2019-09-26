@@ -71,7 +71,8 @@ class CoGroupedData(object):
         >>> df2 = spark.createDataFrame(
         ...     [(20000101, 1, "x"), (20000101, 2, "y")],
         ...     ("time", "id", "v2"))
-        >>> @pandas_udf("time int, id int, v1 double, v2 string", PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
+        >>> @pandas_udf("time int, id int, v1 double, v2 string",
+        ...             PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
         ... def asof_join(l, r):
         ...     return pd.merge_asof(l, r, on="time", by="id")
         >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()  # doctest: +SKIP
@@ -83,12 +84,13 @@ class CoGroupedData(object):
         |20000101|  2|2.0|  y|
         |20000102|  2|4.0|  y|
         +--------+---+---+---+
-        >>> @pandas_udf("time int, id int, v1 double, v2 string", PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
+        >>> @pandas_udf("time int, id int, v1 double, v2 string",
+        ...             PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
         ... def asof_join(k, l, r):
-        ...    if k == (1,):
+        ...     if k == (1,):
         ...         return pd.merge_asof(l, r, on="time", by="id")
-        ...    else:
-        ...        return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
+        ...     else:
+        ...         return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
         >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()  # doctest: +SKIP
         +--------+---+---+---+
         |    time| id| v1| v2|
