@@ -172,9 +172,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // This is very perf sensitive.
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
-
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
-
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
         val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
