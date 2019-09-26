@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import com.google.common.annotations.VisibleForTesting;
+
 /**
  * Expression information, will be used to describe a expression.
  */
@@ -54,6 +56,11 @@ public class ExpressionInfo {
 
     public String getArguments() {
         return arguments;
+    }
+
+    @VisibleForTesting
+    public String getOriginalExamples() {
+        return examples;
     }
 
     public String getExamples() {

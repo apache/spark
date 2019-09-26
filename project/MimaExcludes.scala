@@ -445,7 +445,10 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.FetchFailed.copy$default$5"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.copy"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.FetchFailed.copy$default$3"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.this")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.this"),
+
+    // [SPARK-28957][SQL] Copy any "spark.hive.foo=bar" spark properties into hadoop conf as "hive.foo=bar"
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.appendS3AndSparkHadoopConfigurations")
   )
 
   // Exclude rules for 2.4.x
