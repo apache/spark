@@ -142,6 +142,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("check outputs of expression examples") {
+    def unindentAndTrim(s: String): String = {
+      s.replaceAll("\n\\s+", "\n").trim
+    }
     val exampleRe = """^(.+);\n(?s)(.+)$""".r
     val ignoreSet = Set(
       // One of examples shows getting the current timestamp
@@ -180,10 +183,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
             info.getExamples.split("  > ").toList.foreach(_ match {
               case exampleRe(sql, output) =>
                 val df = spark.sql(sql)
-                val actual = hiveResultString(df.queryExecution.executedPlan)
-                  .mkString("\n").replaceAll("\n\\s+", "\n").trim
+                val actual = unindentAndTrim(
+                  hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
                 logTrace(s"Actual: $actual")
-                val expected = output.replaceAll("\n\\s+", "\n").trim
+                val expected = unindentAndTrim(output)
                 logTrace(s"Expected: $expected")
                 assert(actual === expected)
               case notMatched => logTrace(notMatched)
