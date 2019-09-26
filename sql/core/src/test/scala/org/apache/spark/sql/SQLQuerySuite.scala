@@ -142,7 +142,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("check outputs of expression examples") {
-    val exampleRe = ">(.+);\n(.+)".r
+    val exampleRe = """^(.+);\n(?s)(.+)$""".r
     val ignoreSet = Set(
       // One of examples shows getting the current timestamp
       "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
@@ -151,24 +151,24 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Randn",
       "org.apache.spark.sql.catalyst.expressions.Shuffle",
       "org.apache.spark.sql.catalyst.expressions.Uuid",
+      // The example call methods that return unstable results.
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
-      // TODO: handle multiline output, look at the DOTALL flag
-      "org.apache.spark.sql.catalyst.expressions.GroupingID",
-      "org.apache.spark.sql.catalyst.expressions.Stack",
-      "org.apache.spark.sql.catalyst.expressions.PosExplode",
-      "org.apache.spark.sql.catalyst.expressions.Explode",
-      "org.apache.spark.sql.catalyst.expressions.Cube",
-      "org.apache.spark.sql.catalyst.expressions.Inline",
-      "org.apache.spark.sql.catalyst.expressions.Rollup",
-      "org.apache.spark.sql.catalyst.expressions.Grouping",
       // Fails on parsing `SELECT 2 mod 1.8`:
       //  org.apache.spark.sql.catalyst.parser.ParseException:
       //  extraneous input '1.8' expecting <EOF>(line 1, pos 14)
       "org.apache.spark.sql.catalyst.expressions.Remainder",
       // Fails on `SELECT make_timestamp(2019, 13, 1, 10, 11, 12, 13)`:
-      // Invalid ID for region-based ZoneId, invalid format: 13
-      // java.time.DateTimeException: Invalid ID for region-based ZoneId, invalid format: 13
-      "org.apache.spark.sql.catalyst.expressions.MakeTimestamp")
+      //  Invalid ID for region-based ZoneId, invalid format: 13
+      //  java.time.DateTimeException: Invalid ID for region-based ZoneId, invalid format: 13
+      "org.apache.spark.sql.catalyst.expressions.MakeTimestamp",
+      // Fails on `SELECT '%SystemDrive%\Users\John' like '\%SystemDrive\%\\Users%'`
+      //  the pattern '\%SystemDrive\%\Users%' is invalid, ...
+      "org.apache.spark.sql.catalyst.expressions.Like",
+      // Unsupported format of the examples,
+      // and `SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'` fails:
+      //  Error in query:
+      //    extraneous input ''%SystemDrive%\\Users.*'' expecting <EOF>(line 1, pos 41)
+      "org.apache.spark.sql.catalyst.expressions.RLike")
 
     withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
       spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
@@ -176,13 +176,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         val className = info.getClassName
         if (!ignoreSet.contains(className)) {
           withClue(s"Function '${info.getName}', Expression class '$className'") {
-            exampleRe.findAllIn(info.getExamples).toList.foreach(_ match {
+            logTrace(info.getExamples)
+            info.getExamples.split("  > ").toList.foreach(_ match {
               case exampleRe(sql, output) =>
                 val df = spark.sql(sql)
-                val actual = hiveResultString(df.queryExecution.executedPlan).mkString("\n").trim
-                val expected = output.trim
+                val actual = hiveResultString(df.queryExecution.executedPlan)
+                  .mkString("\n").replaceAll("\n\\s+", "\n").trim
+                logTrace(s"Actual: $actual")
+                val expected = output.replaceAll("\n\\s+", "\n").trim
+                logTrace(s"Expected: $expected")
                 assert(actual === expected)
-              case other => throw new IllegalArgumentException(other)
+              case notMatched => logTrace(notMatched)
             })
           }
         }
