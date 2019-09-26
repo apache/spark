@@ -26,9 +26,10 @@ import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState}
+import org.apache.spark.sql.hive.thriftserver.ui.ToolTips._
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
-import org.apache.spark.sql.hive.thriftserver.ui.ToolTips._
+
 
 /** Page for Spark Web UI that shows statistics of jobs running in the thrift server */
 private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
