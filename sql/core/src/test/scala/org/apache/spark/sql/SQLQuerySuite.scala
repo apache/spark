@@ -3235,27 +3235,27 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-29213: FilterExec should not throw NPE") {
-    withView("t1", "t2", "t3") {
-      sql("select ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t1")
-      sql("select * from values 0, cast(null as bigint)")
+    withTempView("t1", "t2", "t3") {
+      sql("SELECT ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t1")
+      sql("SELECT * FROM VALUES 0, CAST(NULL AS BIGINT)")
         .as[java.lang.Long]
         .map(identity)
         .toDF("x")
         .createOrReplaceTempView("t2")
-      sql("select ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t3")
+      sql("SELECT ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t3")
       sql(
         """
-          |select t1.x
-          |from t1
-          |left join (
-          |    select x from (
-          |        select x from t2
-          |        union all
-          |        select substr(x,5) x from t3
+          |SELECT t1.x
+          |FROM t1
+          |LEFT JOIN (
+          |    SELECT x FROM (
+          |        SELECT x FROM t2
+          |        UNION ALL
+          |        SELECT SUBSTR(x,5) x FROM t3
           |    ) a
-          |    where length(x)>0
+          |    WHERE LENGTH(x)>0
           |) t3
-          |on t1.x=t3.x
+          |ON t1.x=t3.x
         """.stripMargin).collect()
     }
   }
