@@ -223,7 +223,7 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (-10), (-20), (100), (1000) AS tab(col);
-       1.1135657469022013
+       1.1135657469022011
       > SELECT _FUNC_(col) FROM VALUES (-1000), (-100), (10), (20) AS tab(col);
        -1.1135657469022011
   """,
