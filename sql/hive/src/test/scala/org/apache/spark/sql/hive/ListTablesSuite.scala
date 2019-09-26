@@ -58,10 +58,10 @@ class ListTablesSuite extends QueryTest with TestHiveSingleton with BeforeAndAft
         // We are using default DB.
         checkAnswer(
           allTables.filter("tableName = 'listtablessuitetable'"),
-          Row("", "listtablessuitetable", true))
+          Row("", "listtablessuitetable"))
         checkAnswer(
           allTables.filter("tableName = 'hivelisttablessuitetable'"),
-          Row("default", "hivelisttablessuitetable", false))
+          Row("default", "hivelisttablessuitetable"))
         assert(allTables.filter("tableName = 'hiveindblisttablessuitetable'").count() === 0)
     }
   }
@@ -71,11 +71,11 @@ class ListTablesSuite extends QueryTest with TestHiveSingleton with BeforeAndAft
       case allTables =>
         checkAnswer(
           allTables.filter("tableName = 'listtablessuitetable'"),
-          Row("", "listtablessuitetable", true))
+          Row("", "listtablessuitetable"))
         assert(allTables.filter("tableName = 'hivelisttablessuitetable'").count() === 0)
         checkAnswer(
           allTables.filter("tableName = 'hiveindblisttablessuitetable'"),
-          Row("listtablessuitedb", "hiveindblisttablessuitetable", false))
+          Row("listtablessuitedb", "hiveindblisttablessuitetable"))
     }
   }
 }

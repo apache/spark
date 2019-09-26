@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{FakeV2SessionCatalog, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
@@ -41,7 +42,12 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
     }
   }
 
-  object Optimize extends Optimizer(new CatalogManager(new SQLConf(), FakeV2SessionCatalog)) {
+  object Optimize
+      extends Optimizer(
+        new CatalogManager(
+          new SQLConf(),
+          FakeV2SessionCatalog,
+          new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, new SQLConf()))) {
     val newBatch = Batch("OptimizeRuleBreakSI", Once, OptimizeRuleBreakSI)
     override def defaultBatches: Seq[Batch] = Seq(newBatch) ++ super.defaultBatches
   }

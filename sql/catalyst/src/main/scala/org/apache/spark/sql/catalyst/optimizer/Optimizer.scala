@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
@@ -321,7 +322,8 @@ class SimpleTestOptimizer
     extends Optimizer(
       new CatalogManager(
         new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true),
-        FakeV2SessionCatalog))
+        FakeV2SessionCatalog,
+        new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, new SQLConf())))
 
 /**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
