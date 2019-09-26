@@ -145,6 +145,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     def unindentAndTrim(s: String): String = {
       s.replaceAll("\n\\s+", "\n").trim
     }
+    val beginSqlStmtRe = "  > ".r
+    val endSqlStmtRe = ";\n".r
+    def checkExampleSyntax(example: String): Unit = {
+      val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
+      val endStmtNum = endSqlStmtRe.findAllIn(example).length
+      assert(beginStmtNum === endStmtNum,
+        "The number of ` > ` does not match to the number of `;`")
+    }
     val exampleRe = """^(.+);\n(?s)(.+)$""".r
     val ignoreSet = Set(
       // One of examples shows getting the current timestamp
@@ -154,7 +162,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.Randn",
       "org.apache.spark.sql.catalyst.expressions.Shuffle",
       "org.apache.spark.sql.catalyst.expressions.Uuid",
-      // The example call methods that return unstable results.
+      // The example calls methods that return unstable results.
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection",
       // Fails on parsing `SELECT 2 mod 1.8`:
       //  org.apache.spark.sql.catalyst.parser.ParseException:
@@ -179,8 +187,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         val className = info.getClassName
         if (!ignoreSet.contains(className)) {
           withClue(s"Function '${info.getName}', Expression class '$className'") {
-            logTrace(info.getExamples)
-            info.getExamples.split("  > ").toList.foreach(_ match {
+            val example = info.getExamples
+            logTrace(example)
+            checkExampleSyntax(example)
+            example.split("  > ").toList.foreach(_ match {
               case exampleRe(sql, output) =>
                 val df = spark.sql(sql)
                 val actual = unindentAndTrim(
