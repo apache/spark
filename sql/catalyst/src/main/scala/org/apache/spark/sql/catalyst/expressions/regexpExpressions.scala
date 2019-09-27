@@ -96,7 +96,7 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   examples = """
     Examples:
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\Users%';
       true
   """,
   note = """
@@ -153,6 +153,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   }
 }
 
+// scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.",
   arguments = """
@@ -170,18 +171,20 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   """,
   examples = """
     Examples:
-      When spark.sql.parser.escapedStringLiterals is disabled (default).
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'
+      > SET spark.sql.parser.escapedStringLiterals=true;
+      spark.sql.parser.escapedStringLiterals	true
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*';
       true
-
-      When spark.sql.parser.escapedStringLiterals is enabled.
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\Users.*'
+      > SET spark.sql.parser.escapedStringLiterals=false;
+      spark.sql.parser.escapedStringLiterals	false
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\Users.*';
       true
   """,
   note = """
     Use LIKE to match with simple string pattern.
   """,
   since = "1.0.0")
+// scalastyle:on line.contains.tab
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v

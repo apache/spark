@@ -631,7 +631,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
-       1460041200
+       1460098800
   """,
   since = "1.6.0")
 case class ToUnixTimestamp(
@@ -842,7 +842,7 @@ abstract class UnixTime extends ToTimestamp {
   examples = """
     Examples:
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
-       1970-01-01 00:00:00
+       1969-12-31 16:00:00
   """,
   since = "1.5.0")
 case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[String] = None)
@@ -1766,10 +1766,10 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
        2014-12-28 06:30:45.887
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
-       2014-12-28 10:30:45.887
-      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60)
+       2014-12-27 21:30:45.887
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
        2019-07-01 00:00:00
-      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 13);
+      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 'PST');
        NULL
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL

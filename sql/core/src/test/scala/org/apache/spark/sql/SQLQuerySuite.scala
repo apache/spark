@@ -26,6 +26,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -127,7 +128,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       // _FUNC_ is replaced by `%` which causes a parsing error on `SELECT %(2, 1.8)`
       "org.apache.spark.sql.catalyst.expressions.Remainder",
       // Examples demonstrate alternative names, see SPARK-20749
-      "org.apache.spark.sql.catalyst.expressions.Length")
+      "org.apache.spark.sql.catalyst.expressions.Length",
+      // Uses settings without _FUNC_ in `SET spark.sql.parser.escapedStringLiterals=true`
+      "org.apache.spark.sql.catalyst.expressions.RLike")
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName
@@ -135,6 +138,53 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         val exprExamples = info.getOriginalExamples
         if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
           assert(exampleRe.findAllIn(exprExamples).toSet.forall(_.contains("_FUNC_")))
+        }
+      }
+    }
+  }
+
+  test("check outputs of expression examples") {
+    def unindentAndTrim(s: String): String = {
+      s.replaceAll("\n\\s+", "\n").trim
+    }
+    val beginSqlStmtRe = "  > ".r
+    val endSqlStmtRe = ";\n".r
+    def checkExampleSyntax(example: String): Unit = {
+      val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
+      val endStmtNum = endSqlStmtRe.findAllIn(example).length
+      assert(beginStmtNum === endStmtNum,
+        "The number of ` > ` does not match to the number of `;`")
+    }
+    val exampleRe = """^(.+);\n(?s)(.+)$""".r
+    val ignoreSet = Set(
+      // One of examples shows getting the current timestamp
+      "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
+      // Random output without a seed
+      "org.apache.spark.sql.catalyst.expressions.Rand",
+      "org.apache.spark.sql.catalyst.expressions.Randn",
+      "org.apache.spark.sql.catalyst.expressions.Shuffle",
+      "org.apache.spark.sql.catalyst.expressions.Uuid",
+      // The example calls methods that return unstable results.
+      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
+
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      spark.sessionState.functionRegistry.listFunction().par.foreach { funcId =>
+        val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
+        val className = info.getClassName
+        if (!ignoreSet.contains(className)) {
+          withClue(s"Function '${info.getName}', Expression class '$className'") {
+            val example = info.getExamples
+            checkExampleSyntax(example)
+            example.split("  > ").toList.foreach(_ match {
+              case exampleRe(sql, output) =>
+                val df = spark.sql(sql)
+                val actual = unindentAndTrim(
+                  hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
+                val expected = unindentAndTrim(output)
+                assert(actual === expected)
+              case _ =>
+            })
+          }
         }
       }
     }
