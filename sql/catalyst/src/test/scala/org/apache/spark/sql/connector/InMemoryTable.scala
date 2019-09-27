@@ -98,6 +98,9 @@ class InMemoryTable(
 
     new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
       private var writer: BatchWrite = Append
+      private var numPartitionsProvided = false
+      private var queryIdProvided = false
+      private var inputDataSchemaProvided = false
 
       override def truncate(): WriteBuilder = {
         assert(writer == Append)
@@ -117,7 +120,36 @@ class InMemoryTable(
         this
       }
 
-      override def buildForBatch(): BatchWrite = writer
+      override def withNumPartitions(numPartitions: Int): WriteBuilder = {
+        assert(!numPartitionsProvided, "numPartitions provided twice")
+        numPartitionsProvided = true
+        this
+      }
+
+      override def withQueryId(queryId: String): WriteBuilder = {
+        assert(!queryIdProvided, "queryId provided twice")
+        queryIdProvided = true
+        this
+      }
+
+      override def withInputDataSchema(schema: StructType): WriteBuilder = {
+        assert(!queryIdProvided, "schema provided twice")
+        inputDataSchemaProvided = true
+        this
+      }
+
+      override def buildForBatch(): BatchWrite = {
+        assert(
+          inputDataSchemaProvided,
+          "Input data schema wasn't provided before calling buildForBatch")
+        assert(
+          queryIdProvided,
+          "Query id wasn't provided before calling buildForBatch")
+        assert(
+          numPartitionsProvided,
+          "Number of partitions schema wasn't provided before calling buildForBatch")
+        writer
+      }
     }
   }
 
