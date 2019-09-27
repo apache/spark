@@ -103,6 +103,17 @@ abstract class RDD[T: ClassTag](
     _sc
   }
 
+  /**
+   * Lock for all mutable state of this RDD (persistence, partitions, dependencies, etc.).  We do
+   * not use `this` because RDDs are user-visible, so users might have added their own locking on
+   * RDDs; sharing that could lead to a deadlock.
+   *
+   * One thread might hold the lock on many of these, for a chain of RDD dependencies; but
+   * because DAGs are acyclic, and we only ever hold locks for one path in that DAG, there is no
+   * chance of deadlock.
+   */
+  private val stateLock = new Object()
+
   /** Construct an RDD with just a one-to-one dependency on one parent */
   def this(@transient oneParent: RDD[_]) =
     this(oneParent.context, List(new OneToOneDependency(oneParent)))
@@ -167,7 +178,9 @@ abstract class RDD[T: ClassTag](
    * @param newLevel the target storage level
    * @param allowOverride whether to override any existing level with the new one
    */
-  private def persist(newLevel: StorageLevel, allowOverride: Boolean): this.type = {
+  private def persist(
+      newLevel: StorageLevel,
+      allowOverride: Boolean): this.type = stateLock.synchronized {
     // TODO: Handle changes of StorageLevel
     if (storageLevel != StorageLevel.NONE && newLevel != storageLevel && !allowOverride) {
       throw new UnsupportedOperationException(
@@ -223,12 +236,12 @@ abstract class RDD[T: ClassTag](
   }
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
-  def getStorageLevel: StorageLevel = storageLevel
+  def getStorageLevel: StorageLevel = stateLock.synchronized { storageLevel }
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
-  private var dependencies_ : Seq[Dependency[_]] = _
-  @transient private var partitions_ : Array[Partition] = _
+  @volatile private var dependencies_ : Seq[Dependency[_]] = _
+  @volatile @transient private var partitions_ : Array[Partition] = _
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
   private def checkpointRDD: Option[CheckpointRDD[T]] = checkpointData.flatMap(_.checkpointRDD)
@@ -240,7 +253,11 @@ abstract class RDD[T: ClassTag](
   final def dependencies: Seq[Dependency[_]] = {
     checkpointRDD.map(r => List(new OneToOneDependency(r))).getOrElse {
       if (dependencies_ == null) {
-        dependencies_ = getDependencies
+        stateLock.synchronized {
+          if (dependencies_ == null) {
+            dependencies_ = getDependencies
+          }
+        }
       }
       dependencies_
     }
@@ -253,10 +270,14 @@ abstract class RDD[T: ClassTag](
   final def partitions: Array[Partition] = {
     checkpointRDD.map(_.partitions).getOrElse {
       if (partitions_ == null) {
-        partitions_ = getPartitions
-        partitions_.zipWithIndex.foreach { case (partition, index) =>
-          require(partition.index == index,
-            s"partitions($index).partition == ${partition.index}, but it should equal $index")
+        stateLock.synchronized {
+          if (partitions_ == null) {
+            partitions_ = getPartitions
+            partitions_.zipWithIndex.foreach { case (partition, index) =>
+              require(partition.index == index,
+                s"partitions($index).partition == ${partition.index}, but it should equal $index")
+            }
+          }
         }
       }
       partitions_
@@ -285,7 +306,7 @@ abstract class RDD[T: ClassTag](
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
-    if (storageLevel != StorageLevel.NONE) {
+    if (getStorageLevel != StorageLevel.NONE) {
       getOrCompute(split, context)
     } else {
       computeOrReadCheckpoint(split, context)
@@ -335,7 +356,7 @@ abstract class RDD[T: ClassTag](
     val blockId = RDDBlockId(id, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
-    SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, elementClassTag, () => {
+    SparkEnv.get.blockManager.getOrElseUpdate(blockId, getStorageLevel, elementClassTag, () => {
       readCachedBlock = false
       computeOrReadCheckpoint(partition, context)
     }) match {
@@ -1606,10 +1627,12 @@ abstract class RDD[T: ClassTag](
     // the storage level he/she specified to one that is appropriate for local checkpointing
     // (i.e. uses disk) to guarantee correctness.
 
-    if (storageLevel == StorageLevel.NONE) {
-      persist(LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
-    } else {
-      persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
+    stateLock.synchronized {
+      if (storageLevel == StorageLevel.NONE) {
+        persist(LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
+      } else {
+        persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
+      }
     }
 
     // If this RDD is already checkpointed and materialized, its lineage is already truncated.
@@ -1807,7 +1830,7 @@ abstract class RDD[T: ClassTag](
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString: String = {
     // Get a debug description of an rdd without its children
-    def debugSelf(rdd: RDD[_]): Seq[String] = {
+    def debugSelf(rdd: RDD[_]): Seq[String] = stateLock.synchronized {
       import Utils.bytesToString
 
       val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
