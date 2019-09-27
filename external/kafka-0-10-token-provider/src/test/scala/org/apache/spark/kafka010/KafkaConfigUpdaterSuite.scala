@@ -65,7 +65,9 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
   }
 
   test("setAuthenticationConfigIfNeeded with global security should not set values") {
-    val params = Map.empty[String, String]
+    val params = Map(
+      CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
+    )
     setGlobalKafkaClientConfig()
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
