@@ -1830,10 +1830,11 @@ abstract class RDD[T: ClassTag](
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString: String = {
     // Get a debug description of an rdd without its children
-    def debugSelf(rdd: RDD[_]): Seq[String] = stateLock.synchronized {
+    def debugSelf(rdd: RDD[_]): Seq[String] = {
       import Utils.bytesToString
 
-      val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
+      val sl = getStorageLevel
+      val persistence = if (sl != StorageLevel.NONE) sl.description else ""
       val storageInfo = rdd.context.getRDDStorageInfo(_.id == rdd.id).map(info =>
         "    CachedPartitions: %d; MemorySize: %s; ExternalBlockStoreSize: %s; DiskSize: %s".format(
           info.numCachedPartitions, bytesToString(info.memSize),
