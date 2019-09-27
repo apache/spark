@@ -96,7 +96,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
     assert(e.message.contains("system preserved database"))
 
     val e2 = intercept[AnalysisException](sql(s"USE $globalTempDB"))
-    assert(e2.message.contains("system preserved database"))
+    assert(e2.message.contains("'global_temp' not found"))
   }
 
   test("CREATE GLOBAL TEMP VIEW USING") {
