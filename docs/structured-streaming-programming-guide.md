@@ -1503,6 +1503,7 @@ Additional details on supported joins:
 
   - Cannot use streaming aggregations before joins.
 
+  - Cannot use mapGroupsWithState and flatMapGroupsWithState in Update mode before joins.
 
 ### Streaming Deduplication
 You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
