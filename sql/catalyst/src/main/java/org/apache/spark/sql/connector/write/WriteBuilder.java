@@ -34,28 +34,6 @@ import org.apache.spark.sql.types.StructType;
 public interface WriteBuilder {
 
   /**
-   * Passes the `queryId` from Spark to data source. `queryId` is a unique string of the query. It's
-   * possible that there are many queries running at the same time, or a query is restarted and
-   * resumed. {@link BatchWrite} can use this id to identify the query.
-   *
-   * @return a new builder with the `queryId`. By default it returns `this`, which means the given
-   *         `queryId` is ignored. Please override this method to take the `queryId`.
-   */
-  default WriteBuilder withQueryId(String queryId) {
-    return this;
-  }
-
-  /**
-   * Passes the schema of the input data from Spark to data source.
-   *
-   * @return a new builder with the `schema`. By default it returns `this`, which means the given
-   *         `schema` is ignored. Please override this method to take the `schema`.
-   */
-  default WriteBuilder withInputDataSchema(StructType schema) {
-    return this;
-  }
-
-  /**
    * Returns a {@link BatchWrite} to write data to batch source. By default this method throws
    * exception, data sources must overwrite this method to provide an implementation, if the
    * {@link Table} that creates this write returns {@link TableCapability#BATCH_WRITE} support in

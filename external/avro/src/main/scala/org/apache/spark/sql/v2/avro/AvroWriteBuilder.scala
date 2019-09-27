@@ -19,6 +19,7 @@ package org.apache.spark.sql.v2.avro
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.sql.avro.AvroUtils
+import org.apache.spark.sql.connector.write.WriteInfo
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
 import org.apache.spark.sql.internal.SQLConf
@@ -29,8 +30,9 @@ class AvroWriteBuilder(
     options: CaseInsensitiveStringMap,
     paths: Seq[String],
     formatName: String,
-    supportsDataType: DataType => Boolean)
-  extends FileWriteBuilder(options, paths, formatName, supportsDataType) {
+    supportsDataType: DataType => Boolean,
+    writeInfo: WriteInfo)
+  extends FileWriteBuilder(options, paths, formatName, supportsDataType, writeInfo) {
   override def prepareWrite(
       sqlConf: SQLConf,
       job: Job,

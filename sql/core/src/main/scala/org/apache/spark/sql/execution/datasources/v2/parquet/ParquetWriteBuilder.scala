@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
-import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.{Job, OutputCommitter, TaskAttemptContext}
 import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
@@ -25,6 +24,7 @@ import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.connector.write.WriteInfo
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
@@ -36,8 +36,9 @@ class ParquetWriteBuilder(
     options: CaseInsensitiveStringMap,
     paths: Seq[String],
     formatName: String,
-    supportsDataType: DataType => Boolean)
-  extends FileWriteBuilder(options, paths, formatName, supportsDataType) with Logging {
+    supportsDataType: DataType => Boolean,
+    writeInfo: WriteInfo)
+  extends FileWriteBuilder(options, paths, formatName, supportsDataType, writeInfo) with Logging {
 
   override def prepareWrite(
       sqlConf: SQLConf,

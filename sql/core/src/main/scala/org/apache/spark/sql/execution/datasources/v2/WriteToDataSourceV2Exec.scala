@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriteInfoImpl, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -84,9 +84,11 @@ case class CreateTableAsSelectExec(
       catalog.createTable(
         ident, schema, partitioning.toArray, properties.asJava) match {
         case table: SupportsWrite =>
-          val writeBuilder = table.newWriteBuilder(writeOptions)
-            .withInputDataSchema(schema)
-            .withQueryId(UUID.randomUUID().toString)
+          val writeInfo = WriteInfoImpl(
+            queryId = UUID.randomUUID().toString,
+            schema,
+            rdd.getNumPartitions)
+          val writeBuilder = table.newWriteBuilder(writeOptions, writeInfo)
 
           writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
@@ -179,9 +181,11 @@ case class ReplaceTableAsSelectExec(
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       createdTable match {
         case table: SupportsWrite =>
-          val writeBuilder = table.newWriteBuilder(writeOptions)
-            .withInputDataSchema(schema)
-            .withQueryId(UUID.randomUUID().toString)
+          val writeInfo = WriteInfoImpl(
+            queryId = UUID.randomUUID().toString,
+            schema,
+            rdd.getNumPartitions)
+          val writeBuilder = table.newWriteBuilder(writeOptions, writeInfo)
 
           writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
@@ -332,21 +336,37 @@ case class WriteToDataSourceV2Exec(
 trait BatchWriteHelper {
   def table: SupportsWrite
   def query: SparkPlan
+  def rdd: RDD[InternalRow]
   def writeOptions: CaseInsensitiveStringMap
 
   def newWriteBuilder(): WriteBuilder = {
-    table.newWriteBuilder(writeOptions)
-      .withInputDataSchema(query.schema)
-      .withQueryId(UUID.randomUUID().toString)
+    val writeInfo = WriteInfoImpl(
+      queryId = UUID.randomUUID().toString,
+      query.schema,
+      rdd.getNumPartitions)
+    table.newWriteBuilder(writeOptions, writeInfo)
+  }
+}
+
+trait WriteBase { this: SparkPlan =>
+  def query: SparkPlan
+
+  lazy val rdd: RDD[InternalRow] = {
+    val tempRdd = query.execute()
+    // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
+    // partition rdd to make sure we at least set up one write task to write the metadata.
+    if (tempRdd.partitions.length == 0) {
+      sparkContext.parallelize(Array.empty[InternalRow], 1)
+    } else {
+      tempRdd
+    }
   }
 }
 
 /**
  * The base physical plan for writing data into data source v2.
  */
-trait V2TableWriteExec extends UnaryExecNode {
-  def query: SparkPlan
-
+trait V2TableWriteExec extends UnaryExecNode with WriteBase {
   var commitProgress: Option[StreamWriterCommitProgress] = None
 
   override def child: SparkPlan = query
@@ -355,15 +375,7 @@ trait V2TableWriteExec extends UnaryExecNode {
   protected def writeWithV2(batchWrite: BatchWrite): RDD[InternalRow] = {
     val writerFactory = batchWrite.createBatchWriterFactory()
     val useCommitCoordinator = batchWrite.useCommitCoordinator
-    val rdd = query.execute()
-    // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
-    // partition rdd to make sure we at least set up one write task to write the metadata.
-    val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
-      sparkContext.parallelize(Array.empty[InternalRow], 1)
-    } else {
-      rdd
-    }
-    val messages = new Array[WriterCommitMessage](rddWithNonEmptyPartitions.partitions.length)
+    val messages = new Array[WriterCommitMessage](rdd.partitions.length)
     val totalNumRowsAccumulator = new LongAccumulator()
 
     logInfo(s"Start processing data source write support: $batchWrite. " +
@@ -371,10 +383,10 @@ trait V2TableWriteExec extends UnaryExecNode {
 
     try {
       sparkContext.runJob(
-        rddWithNonEmptyPartitions,
+        rdd,
         (context: TaskContext, iter: Iterator[InternalRow]) =>
           DataWritingSparkTask.run(writerFactory, context, iter, useCommitCoordinator),
-        rddWithNonEmptyPartitions.partitions.indices,
+        rdd.partitions.indices,
         (index, result: DataWritingSparkTaskResult) => {
           val commitMessage = result.writerCommitMessage
           messages(index) = commitMessage
@@ -478,9 +490,11 @@ private[v2] trait AtomicTableWriteExec extends V2TableWriteExec with SupportsV1W
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       stagedTable match {
         case table: SupportsWrite =>
-          val writeBuilder = table.newWriteBuilder(writeOptions)
-            .withInputDataSchema(query.schema)
-            .withQueryId(UUID.randomUUID().toString)
+          val writeInfo = WriteInfoImpl(
+            queryId = UUID.randomUUID().toString,
+            query.schema,
+            rdd.getNumPartitions)
+          val writeBuilder = table.newWriteBuilder(writeOptions, writeInfo)
 
           val writtenRows = writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())

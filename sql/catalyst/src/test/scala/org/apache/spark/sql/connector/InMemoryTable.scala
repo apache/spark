@@ -93,7 +93,7 @@ class InMemoryTable(
     override def createReaderFactory(): PartitionReaderFactory = BufferedRowsReaderFactory
   }
 
-  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
+  override def newWriteBuilder(options: CaseInsensitiveStringMap, info: WriteInfo): WriteBuilder = {
     InMemoryTable.maybeSimulateFailedTableWrite(options)
 
     new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
