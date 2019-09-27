@@ -168,7 +168,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
 
     withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
+      spark.sessionState.functionRegistry.listFunction().par.foreach { funcId =>
         val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
         val className = info.getClassName
         if (!ignoreSet.contains(className)) {
