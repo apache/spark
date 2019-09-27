@@ -64,8 +64,20 @@ object SimpleAnalyzer
         }),
       new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
-object FakeV2SessionCatalog extends CatalogPlugin {
+object FakeV2SessionCatalog extends TableCatalog {
   private def fail() = throw new UnsupportedOperationException
+  override def listTables(namespace: Array[String]): Array[Identifier] = fail()
+  override def loadTable(ident: Identifier): Table = {
+    throw new NoSuchTableException(ident.toString)
+  }
+  override def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = fail()
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = fail()
+  override def dropTable(ident: Identifier): Boolean = fail()
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
   override def name(): String = CatalogManager.SESSION_CATALOG_NAME
 }
