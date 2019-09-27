@@ -289,12 +289,12 @@ private[spark] object KafkaTokenUtil extends Logging {
     params
   }
 
-  def isConnectorUsingCurrentToken(params: ju.Map[String, Object]): Boolean = {
+  def isConnectorUsingCurrentToken(
+      params: ju.Map[String, Object],
+      clusterConfig: Option[KafkaTokenClusterConf]): Boolean = {
     if (params.containsKey(SaslConfigs.SASL_JAAS_CONFIG)) {
       logDebug("Delegation token used by connector, checking if uses the latest token.")
       val consumerJaasParams = params.get(SaslConfigs.SASL_JAAS_CONFIG).asInstanceOf[String]
-      val clusterConfig = findMatchingTokenClusterConfig(SparkEnv.get.conf,
-        params.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
       require(clusterConfig.isDefined, "Delegation token must exist for this connector.")
       val currentJaasParams = getTokenJaasParams(clusterConfig.get)
       consumerJaasParams.equals(currentJaasParams)

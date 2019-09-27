@@ -28,7 +28,7 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.{SaslConfigs, SslConfigs}
 import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
 import org.apache.spark.internal.config._
 
 class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
@@ -236,7 +236,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   test("isConnectorUsingCurrentToken without security should return true") {
     val kafkaParams = Map[String, Object]().asJava
 
-    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams))
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, None))
   }
 
   test("isConnectorUsingCurrentToken with same token should return true") {
@@ -247,8 +247,10 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     )
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
     val kafkaParams = getKafkaParams()
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
+      kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
 
-    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams))
+    assert(KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, clusterConfig))
   }
 
   test("isConnectorUsingCurrentToken with different token should return false") {
@@ -260,8 +262,10 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
     val kafkaParams = getKafkaParams()
     addTokenToUGI(tokenService1, tokenId2, tokenPassword2)
+    val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
+      kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
 
-    assert(!KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams))
+    assert(!KafkaTokenUtil.isConnectorUsingCurrentToken(kafkaParams, clusterConfig))
   }
 
   private def getKafkaParams(): ju.Map[String, Object] = {
