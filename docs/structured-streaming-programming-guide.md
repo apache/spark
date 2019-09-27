@@ -1660,9 +1660,9 @@ Any of the following stateful operation(s) after any of below stateful operation
 
 * streaming aggregation in Append mode
 * stream-stream outer join
-* mapGroupsWithState and flatMapGroupsWithState in Append mode (depending on the implementation of state function)
+* `mapGroupsWithState` and `flatMapGroupsWithState` in Append mode (depending on the implementation of state function)
 
-As Spark cannot check the state function of mapGroupsWithState/flatMapGroupsWithState, Spark assumes that the state function
+As Spark cannot check the state function of `mapGroupsWithState`/`flatMapGroupsWithState`, Spark assumes that the state function
 could emit late rows if the operator uses Append mode.
 
 There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
