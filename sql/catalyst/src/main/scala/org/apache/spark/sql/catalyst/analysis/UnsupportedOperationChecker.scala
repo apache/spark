@@ -42,11 +42,14 @@ object UnsupportedOperationChecker extends Logging {
     }
   }
 
-  def warnStreamingQueryGlobalWatermarkLimit(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+  def checkStreamingQueryGlobalWatermarkLimit(
+      plan: LogicalPlan,
+      outputMode: OutputMode,
+      failWhenDetected: Boolean): Unit = {
     def isStatefulOperationPossiblyEmitLateRows(p: LogicalPlan): Boolean = p match {
       case s: Aggregate
         if s.isStreaming && outputMode == InternalOutputModes.Append => true
-      case ExtractEquiJoinKeys(joinType, _, _, _, left, right, _)
+      case Join(left, right, joinType, _, _)
         if left.isStreaming && right.isStreaming && joinType != Inner => true
       case f: FlatMapGroupsWithState
         if f.isStreaming && f.outputMode == OutputMode.Append() => true
@@ -55,8 +58,7 @@ object UnsupportedOperationChecker extends Logging {
 
     def isStatefulOperation(p: LogicalPlan): Boolean = p match {
       case s: Aggregate if s.isStreaming => true
-      case _ @ ExtractEquiJoinKeys(_, _, _, _, left, right, _)
-        if left.isStreaming && right.isStreaming => true
+      case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => true
       case f: FlatMapGroupsWithState if f.isStreaming => true
       case d: Deduplicate if d.isStreaming => true
       case _ => false
@@ -68,14 +70,21 @@ object UnsupportedOperationChecker extends Logging {
         subPlan.find { p =>
           (p ne subPlan) && isStatefulOperationPossiblyEmitLateRows(p)
         } match {
-          case Some(_) if !loggedWarnMessage =>
-            logWarning("Detected pattern of possible 'correctness' issue " +
+          case Some(_) =>
+            val errorMsg = "Detected pattern of possible 'correctness' issue " +
               "due to global watermark. " +
               "The query contains stateful operation which can possibly emit late rows, and " +
               "downstream stateful operation which drop emitted late rows. " +
-              "Please refer the programming guide doc for more details." +
-              s";\n$plan")
-            loggedWarnMessage = true
+              "Please refer the programming guide doc for more details."
+
+            if (failWhenDetected) {
+              throwError(errorMsg)(plan)
+            } else {
+              if (!loggedWarnMessage) {
+                logWarning(s"$errorMsg;\n$plan")
+                loggedWarnMessage = true
+              }
+            }
 
           case _ =>
         }
@@ -381,7 +390,7 @@ object UnsupportedOperationChecker extends Logging {
       checkUnsupportedExpressions(subPlan)
     }
 
-    warnStreamingQueryGlobalWatermarkLimit(plan, outputMode)
+    checkStreamingQueryGlobalWatermarkLimit(plan, outputMode, failWhenDetected = false)
   }
 
   def checkForContinuous(plan: LogicalPlan, outputMode: OutputMode): Unit = {
