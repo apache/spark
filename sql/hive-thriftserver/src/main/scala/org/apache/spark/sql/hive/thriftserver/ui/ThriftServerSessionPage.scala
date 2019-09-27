@@ -30,7 +30,6 @@ import org.apache.spark.sql.hive.thriftserver.ui.ToolTips._
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
 
-
 /** Page for Spark Web UI that shows statistics of jobs running in the thrift server */
 private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
   extends WebUIPage("session") with Logging {
