@@ -304,7 +304,7 @@ case class ArrayTransform(
       > SELECT _FUNC_(array(5, 6, 1), (x, y) -> f(x, y));
        [1,5,6]
       > SELECT _FUNC_(array('bc', 'ab', 'dc'), (x, y) -> f(x, y));
-       ['dc', 'bc', 'ab']
+       ["dc", "bc", "ab"]
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
  |     ["d", "c", "b", "a", null]
   """,
