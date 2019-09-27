@@ -343,22 +343,6 @@ class JavaMLReadable(MLReadable):
 
 
 @inherit_doc
-class JavaPredictionModel():
-    """
-    (Private) Java Model for prediction tasks (regression and classification).
-    To be mixed in with class:`pyspark.ml.JavaModel`
-    """
-
-    @property
-    @since("2.1.0")
-    def numFeatures(self):
-        """
-        Returns the number of features the model was trained on. If unknown, returns -1
-        """
-        return self._call_java("numFeatures")
-
-
-@inherit_doc
 class DefaultParamsWritable(MLWritable):
     """
     .. note:: DeveloperApi

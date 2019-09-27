@@ -90,8 +90,6 @@ case class InsertIntoHadoopFsRelationCommand(
         fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
     }
 
-    val pathExists = fs.exists(qualifiedOutputPath)
-
     val parameters = CaseInsensitiveMap(options)
 
     val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
@@ -111,25 +109,30 @@ case class InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
-    val doInsertion = (mode, pathExists) match {
-      case (SaveMode.ErrorIfExists, true) =>
-        throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
-      case (SaveMode.Overwrite, true) =>
-        if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
-          false
-        } else if (dynamicPartitionOverwrite) {
-          // For dynamic partition overwrite, do not delete partition directories ahead.
+    val doInsertion = if (mode == SaveMode.Append) {
+      true
+    } else {
+      val pathExists = fs.exists(qualifiedOutputPath)
+      (mode, pathExists) match {
+        case (SaveMode.ErrorIfExists, true) =>
+          throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
+        case (SaveMode.Overwrite, true) =>
+          if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
+            false
+          } else if (dynamicPartitionOverwrite) {
+            // For dynamic partition overwrite, do not delete partition directories ahead.
+            true
+          } else {
+            deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
+            true
+          }
+        case (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
           true
-        } else {
-          deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
-          true
-        }
-      case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
-        true
-      case (SaveMode.Ignore, exists) =>
-        !exists
-      case (s, exists) =>
-        throw new IllegalStateException(s"unsupported save mode $s ($exists)")
+        case (SaveMode.Ignore, exists) =>
+          !exists
+        case (s, exists) =>
+          throw new IllegalStateException(s"unsupported save mode $s ($exists)")
+      }
     }
 
     if (doInsertion) {

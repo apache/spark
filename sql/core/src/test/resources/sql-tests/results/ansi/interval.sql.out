@@ -3,11 +3,11 @@
 
 
 -- !query 0
-SET spark.sql.parser.ansi.enabled=true
+SET spark.sql.ansi.enabled=true
 -- !query 0 schema
 struct<key:string,value:string>
 -- !query 0 output
-spark.sql.parser.ansi.enabled	true
+spark.sql.ansi.enabled	true
 
 
 -- !query 1
@@ -432,8 +432,8 @@ select date '2012-01-01' + (a + 1) day from t
 
 
 -- !query 34
-SET spark.sql.parser.ansi.enabled=false
+SET spark.sql.ansi.enabled=false
 -- !query 34 schema
 struct<key:string,value:string>
 -- !query 34 output
-spark.sql.parser.ansi.enabled	false
+spark.sql.ansi.enabled	false

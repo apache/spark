@@ -29,8 +29,6 @@ import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.SerializationUtils
-
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -698,7 +696,7 @@ private[spark] class DAGScheduler(
     if (partitions.isEmpty) {
       val time = clock.getTimeMillis()
       listenerBus.post(
-        SparkListenerJobStart(jobId, time, Seq[StageInfo](), SerializationUtils.clone(properties)))
+        SparkListenerJobStart(jobId, time, Seq[StageInfo](), Utils.cloneProperties(properties)))
       listenerBus.post(
         SparkListenerJobEnd(jobId, time, JobSucceeded))
       // Return immediately if the job is running 0 tasks
@@ -710,7 +708,7 @@ private[spark] class DAGScheduler(
     val waiter = new JobWaiter[U](this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
-      SerializationUtils.clone(properties)))
+      Utils.cloneProperties(properties)))
     waiter
   }
 
@@ -782,7 +780,7 @@ private[spark] class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, rdd.partitions.indices.toArray, callSite, listener,
-      SerializationUtils.clone(properties)))
+      Utils.cloneProperties(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -819,7 +817,7 @@ private[spark] class DAGScheduler(
       this, jobId, 1,
       (_: Int, r: MapOutputStatistics) => callback(r))
     eventProcessLoop.post(MapStageSubmitted(
-      jobId, dependency, callSite, waiter, SerializationUtils.clone(properties)))
+      jobId, dependency, callSite, waiter, Utils.cloneProperties(properties)))
     waiter
   }
 
@@ -1105,7 +1103,16 @@ private[spark] class DAGScheduler(
   private def submitMissingTasks(stage: Stage, jobId: Int) {
     logDebug("submitMissingTasks(" + stage + ")")
 
-    // First figure out the indexes of partition ids to compute.
+    // Before find missing partition, do the intermediate state clean work first.
+    // The operation here can make sure for the partially completed intermediate stage,
+    // `findMissingPartitions()` returns all partitions every time.
+    stage match {
+      case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
+        mapOutputTracker.unregisterAllMapOutput(sms.shuffleDep.shuffleId)
+      case _ =>
+    }
+
+    // Figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
 
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
@@ -1500,7 +1507,7 @@ private[spark] class DAGScheduler(
             }
         }
 
-      case FetchFailed(bmAddress, shuffleId, mapId, _, failureMessage) =>
+      case FetchFailed(bmAddress, shuffleId, _, mapIndex, _, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 
@@ -1523,17 +1530,17 @@ private[spark] class DAGScheduler(
             markStageAsFinished(failedStage, errorMessage = Some(failureMessage),
               willRetry = !shouldAbortStage)
           } else {
-            logDebug(s"Received fetch failure from $task, but its from $failedStage which is no " +
-              s"longer running")
+            logDebug(s"Received fetch failure from $task, but it's from $failedStage which is no " +
+              "longer running")
           }
 
           if (mapStage.rdd.isBarrier()) {
             // Mark all the map as broken in the map stage, to ensure retry all the tasks on
             // resubmitted stage attempt.
             mapOutputTracker.unregisterAllMapOutput(shuffleId)
-          } else if (mapId != -1) {
+          } else if (mapIndex != -1) {
             // Mark the map whose fetch failed as broken in the map stage
-            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+            mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmAddress)
           }
 
           if (failedStage.rdd.isBarrier()) {
@@ -1575,7 +1582,7 @@ private[spark] class DAGScheduler(
               // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
-              if (mapStage.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
+              if (mapStage.isIndeterminate) {
                 // It's a little tricky to find all the succeeding stages of `mapStage`, because
                 // each stage only know its parents not children. Here we traverse the stages from
                 // the leaf nodes (the result stages of active jobs), and rollback all the stages
@@ -1603,15 +1610,22 @@ private[spark] class DAGScheduler(
 
                 activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
 
+                // The stages will be rolled back after checking
+                val rollingBackStages = HashSet[Stage](mapStage)
                 stagesToRollback.foreach {
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
                     if (numMissingPartitions < mapStage.numTasks) {
-                      // TODO: support to rollback shuffle files.
-                      // Currently the shuffle writing is "first write wins", so we can't re-run a
-                      // shuffle map stage and overwrite existing shuffle files. We have to finish
-                      // SPARK-8029 first.
-                      abortStage(mapStage, generateErrorMessage(mapStage), None)
+                      if (sc.getConf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+                        val reason = "A shuffle map stage with indeterminate output was failed " +
+                          "and retried. However, Spark can only do this while using the new " +
+                          "shuffle block fetching protocol. Please check the config " +
+                          "'spark.shuffle.useOldFetchProtocol', see more detail in " +
+                          "SPARK-27665 and SPARK-25341."
+                        abortStage(mapStage, reason, None)
+                      } else {
+                        rollingBackStages += mapStage
+                      }
                     }
 
                   case resultStage: ResultStage if resultStage.activeJob.isDefined =>
@@ -1623,6 +1637,9 @@ private[spark] class DAGScheduler(
 
                   case _ =>
                 }
+                logInfo(s"The shuffle map stage $mapStage with indeterminate output was failed, " +
+                  s"we will roll back and rerun below stages which include itself and all its " +
+                  s"indeterminate child stages: $rollingBackStages")
               }
 
               // We expect one executor failure to trigger many FetchFailures in rapid succession,

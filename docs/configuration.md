@@ -411,6 +411,16 @@ of the most common options to set are:
     use the default layout.
   </td>
 </tr>
+<tr>
+  <td><code>spark.driver.log.allowErasureCoding</code></td>
+  <td>false</td>
+  <td>
+    Whether to allow driver logs to use erasure coding.  On HDFS, erasure coded files will not
+    update as quickly as regular replicated files, so they make take longer to reflect changes
+    written by the application. Note that even if this is true, Spark will still not force the
+    file to use erasure coding, it will simply use file system defaults.
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
@@ -866,7 +876,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.service.index.cache.size</code></td>
   <td>100m</td>
   <td>
-    Cache entries limited to the specified memory footprint in bytes.
+    Cache entries limited to the specified memory footprint, in bytes unless otherwise specified.
   </td>
 </tr>
 <tr>
@@ -1207,16 +1217,18 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.io.compression.lz4.blockSize</code></td>
   <td>32k</td>
   <td>
-    Block size in bytes used in LZ4 compression, in the case when LZ4 compression codec
+    Block size used in LZ4 compression, in the case when LZ4 compression codec
     is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
+    Default unit is bytes, unless otherwise specified.
   </td>
 </tr>
 <tr>
   <td><code>spark.io.compression.snappy.blockSize</code></td>
   <td>32k</td>
   <td>
-    Block size in bytes used in Snappy compression, in the case when Snappy compression codec
-    is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
+    Block size in Snappy compression, in the case when Snappy compression codec is used. 
+    Lowering this block size will also lower shuffle memory usage when Snappy is used.
+    Default unit is bytes, unless otherwise specified.
   </td>
 </tr>
 <tr>
@@ -1384,7 +1396,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.offHeap.size</code></td>
   <td>0</td>
   <td>
-    The absolute amount of memory in bytes which can be used for off-heap allocation.
+    The absolute amount of memory which can be used for off-heap allocation, in bytes unless otherwise specified.
     This setting has no impact on heap memory usage, so if your executors' total memory consumption 
     must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
     This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
@@ -1568,9 +1580,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.storage.memoryMapThreshold</code></td>
   <td>2m</td>
   <td>
-    Size in bytes of a block above which Spark memory maps when reading a block from disk.
-    This prevents Spark from memory mapping very small blocks. In general, memory
-    mapping has high overhead for blocks close to or below the page size of the operating system.
+    Size of a block above which Spark memory maps when reading a block from disk. Default unit is bytes,
+    unless specified otherwise. This prevents Spark from memory mapping very small blocks. In general, 
+    memory mapping has high overhead for blocks close to or below the page size of the operating system.
   </td>
 </tr>
 <tr>
@@ -2596,11 +2608,14 @@ You can copy and modify `hdfs-site.xml`, `core-site.xml`, `yarn-site.xml`, `hive
 Spark's classpath for each application. In a Spark cluster running on YARN, these configuration
 files are set cluster-wide, and cannot safely be changed by the application.
 
-The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
+The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`, and use
+spark hive properties in the form of `spark.hive.*`.
+For example, adding configuration "spark.hadoop.abc.def=xyz" represents adding hadoop property "abc.def=xyz",
+and adding configuration "spark.hive.abc=xyz" represents adding hive property "hive.abc=xyz".
 They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defaults.conf`
 
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
-instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.
+instance, Spark allows you to simply create an empty conf and set spark/spark hadoop/spark hive properties.
 
 {% highlight scala %}
 val conf = new SparkConf().set("spark.hadoop.abc.def", "xyz")
@@ -2614,7 +2629,8 @@ Also, you can modify or add configurations at runtime:
   --master local[4] \  
   --conf spark.eventLog.enabled=false \ 
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \ 
-  --conf spark.hadoop.abc.def=xyz \ 
+  --conf spark.hadoop.abc.def=xyz \
+  --conf spark.hive.abc=xyz
   myApp.jar
 {% endhighlight %}
 

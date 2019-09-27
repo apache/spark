@@ -2950,6 +2950,13 @@ private[spark] object Utils extends Logging {
     val codec = codecFactory.getCodec(path)
     codec == null || codec.isInstanceOf[SplittableCompressionCodec]
   }
+
+  /** Create a new properties object with the same values as `props` */
+  def cloneProperties(props: Properties): Properties = {
+    val resultProps = new Properties()
+    props.forEach((k, v) => resultProps.put(k, v))
+    resultProps
+  }
 }
 
 private[util] object CallerContext extends Logging {

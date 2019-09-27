@@ -31,7 +31,7 @@ import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SPARK_EXECUTOR_PREFIX
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.resource.{ResourceInformation, ResourceUtils}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender

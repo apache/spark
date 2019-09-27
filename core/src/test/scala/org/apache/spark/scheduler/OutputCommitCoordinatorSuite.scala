@@ -254,7 +254,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       .reduceByKey { case (_, _) =>
         val ctx = TaskContext.get()
         if (ctx.stageAttemptNumber() == 0) {
-          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 1, 1, 1,
+          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 1, 1L, 1, 1,
             new Exception("Failure for test."))
         } else {
           ctx.stageId()

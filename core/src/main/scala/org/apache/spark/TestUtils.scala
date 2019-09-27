@@ -42,7 +42,6 @@ import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
@@ -264,7 +263,7 @@ private[spark] object TestUtils {
     try {
       body(listener)
     } finally {
-      sc.listenerBus.waitUntilEmpty(TimeUnit.SECONDS.toMillis(10))
+      sc.listenerBus.waitUntilEmpty()
       sc.listenerBus.removeListener(listener)
     }
   }

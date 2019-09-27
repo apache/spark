@@ -66,6 +66,7 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
+  private val malformedRowFile = "test-data/malformedRow.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -2107,6 +2108,19 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
 
       assert(errMsg.contains("..."),
         "expect the TextParsingException truncate the error content to be 1000 length.")
+    }
+  }
+
+  test("SPARK-29101 test count with DROPMALFORMED mode") {
+    Seq((true, 4), (false, 3)).foreach { case (csvColumnPruning, expectedCount) =>
+      withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> csvColumnPruning.toString) {
+        val count = spark.read
+          .option("header", "true")
+          .option("mode", "DROPMALFORMED")
+          .csv(testFile(malformedRowFile))
+          .count()
+        assert(expectedCount == count)
+      }
     }
   }
 }

@@ -18,7 +18,6 @@
 package org.apache.spark.executor
 
 import java.io._
-import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
 import java.util.Locale

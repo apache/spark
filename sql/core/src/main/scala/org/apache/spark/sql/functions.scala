@@ -69,6 +69,7 @@ import org.apache.spark.util.Utils
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
  * @groupname collection_funcs Collection functions
+ * @groupname partition_transforms Partition transform functions
  * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */
@@ -2634,8 +2635,8 @@ object functions {
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
-   *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
+   *                 can be cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   * @param format A pattern `dd.MM.uuuu` would return a string like `18.03.1993`
    * @return A string, or null if `dateExpr` was a string that could not be cast to a timestamp
    * @note Use specialized functions like [[year]] whenever possible as they benefit from a
    * specialized implementation.
@@ -3941,6 +3942,63 @@ object functions {
    * @since 3.0.0
    */
   def to_csv(e: Column): Column = to_csv(e, Map.empty[String, String].asJava)
+
+  /**
+   * A transform for timestamps and dates to partition data into years.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def years(e: Column): Column = withExpr { Years(e.expr) }
+
+  /**
+   * A transform for timestamps and dates to partition data into months.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def months(e: Column): Column = withExpr { Months(e.expr) }
+
+  /**
+   * A transform for timestamps and dates to partition data into days.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def days(e: Column): Column = withExpr { Days(e.expr) }
+
+  /**
+   * A transform for timestamps to partition data into hours.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+  /**
+   * A transform for any type that partitions by a hash of the input column.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def bucket(numBuckets: Column, e: Column): Column = withExpr {
+    numBuckets.expr match {
+      case lit @ Literal(_, IntegerType) =>
+        Bucket(lit, e.expr)
+      case _ =>
+        throw new AnalysisException(s"Invalid number of buckets: bucket($numBuckets, $e)")
+    }
+  }
+
+  /**
+   * A transform for any type that partitions by a hash of the input column.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def bucket(numBuckets: Int, e: Column): Column = withExpr {
+    Bucket(Literal(numBuckets), e.expr)
+  }
 
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number

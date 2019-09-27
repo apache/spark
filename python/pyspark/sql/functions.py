@@ -1969,7 +1969,7 @@ def arrays_overlap(a1, a2):
 def slice(x, start, length):
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
-    (or starting from the end if `start` is negative) with the specified `length`.
+    (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
     >>> df = spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
     >>> df.select(slice(df.x, 2, 2).alias("sliced")).collect()
     [Row(sliced=[2, 3]), Row(sliced=[5])]
@@ -2814,6 +2814,8 @@ class PandasUDFType(object):
 
     GROUPED_MAP = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
 
+    COGROUPED_MAP = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
+
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
     MAP_ITER = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
@@ -3320,7 +3322,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
                          PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                          PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                          PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-                         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF]:
+                         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+                         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF]:
         raise ValueError("Invalid functionType: "
                          "functionType must be one the values from PandasUDFType")
 

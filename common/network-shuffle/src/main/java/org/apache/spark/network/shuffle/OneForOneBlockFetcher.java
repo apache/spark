@@ -24,6 +24,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 
 import com.google.common.primitives.Ints;
+import com.google.common.primitives.Longs;
+import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,21 +113,21 @@ public class OneForOneBlockFetcher {
    */
   private FetchShuffleBlocks createFetchShuffleBlocksMsg(
       String appId, String execId, String[] blockIds) {
-    int shuffleId = splitBlockId(blockIds[0])[0];
-    HashMap<Integer, ArrayList<Integer>> mapIdToReduceIds = new HashMap<>();
+    int shuffleId = splitBlockId(blockIds[0]).left;
+    HashMap<Long, ArrayList<Integer>> mapIdToReduceIds = new HashMap<>();
     for (String blockId : blockIds) {
-      int[] blockIdParts = splitBlockId(blockId);
-      if (blockIdParts[0] != shuffleId) {
+      ImmutableTriple<Integer, Long, Integer> blockIdParts = splitBlockId(blockId);
+      if (blockIdParts.left != shuffleId) {
         throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
           ", got:" + blockId);
       }
-      int mapId = blockIdParts[1];
+      long mapId = blockIdParts.middle;
       if (!mapIdToReduceIds.containsKey(mapId)) {
         mapIdToReduceIds.put(mapId, new ArrayList<>());
       }
-      mapIdToReduceIds.get(mapId).add(blockIdParts[2]);
+      mapIdToReduceIds.get(mapId).add(blockIdParts.right);
     }
-    int[] mapIds = Ints.toArray(mapIdToReduceIds.keySet());
+    long[] mapIds = Longs.toArray(mapIdToReduceIds.keySet());
     int[][] reduceIdArr = new int[mapIds.length][];
     for (int i = 0; i < mapIds.length; i++) {
       reduceIdArr[i] = Ints.toArray(mapIdToReduceIds.get(mapIds[i]));
@@ -134,17 +136,16 @@ public class OneForOneBlockFetcher {
   }
 
   /** Split the shuffleBlockId and return shuffleId, mapId and reduceId. */
-  private int[] splitBlockId(String blockId) {
+  private ImmutableTriple<Integer, Long, Integer> splitBlockId(String blockId) {
     String[] blockIdParts = blockId.split("_");
     if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);
     }
-    return new int[] {
-      Integer.parseInt(blockIdParts[1]),
-      Integer.parseInt(blockIdParts[2]),
-      Integer.parseInt(blockIdParts[3])
-    };
+    return new ImmutableTriple<>(
+        Integer.parseInt(blockIdParts[1]),
+        Long.parseLong(blockIdParts[2]),
+        Integer.parseInt(blockIdParts[3]));
   }
 
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */

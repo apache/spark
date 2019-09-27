@@ -18,7 +18,6 @@
 package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
-import java.util.UUID
 
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
