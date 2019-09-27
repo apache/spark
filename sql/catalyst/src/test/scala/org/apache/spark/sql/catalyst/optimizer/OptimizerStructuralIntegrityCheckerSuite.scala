@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 
+
 class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   object OptimizeRuleBreakSI extends Rule[LogicalPlan] {
@@ -42,12 +43,11 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
     }
   }
 
-  object Optimize
-      extends Optimizer(
-        new CatalogManager(
-          new SQLConf(),
-          FakeV2SessionCatalog,
-          new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, new SQLConf()))) {
+  object Optimize extends Optimizer(
+    new CatalogManager(
+      new SQLConf(),
+      FakeV2SessionCatalog,
+      new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, new SQLConf()))) {
     val newBatch = Batch("OptimizeRuleBreakSI", Once, OptimizeRuleBreakSI)
     override def defaultBatches: Seq[Batch] = Seq(newBatch) ++ super.defaultBatches
   }
