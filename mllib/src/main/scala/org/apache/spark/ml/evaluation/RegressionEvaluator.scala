@@ -118,8 +118,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("1.4.0")
   override def isLargerBetter: Boolean = $(metricName) match {
-    case "r2" => true
-    case "var" => true
+    case "r2" | "var" => true
     case _ => false
   }
 
