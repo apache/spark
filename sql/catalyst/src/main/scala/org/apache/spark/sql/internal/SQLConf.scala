@@ -1989,6 +1989,15 @@ object SQLConf {
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
       .createWithDefault(true)
+
+  val ADDITIONAL_REMOTE_REPOSITORIES =
+    buildConf("spark.sql.additionalRemoteRepositories")
+      .doc("A comma-delimited string config of the optional additional remote Maven mirror " +
+        "repositories. This is only used for downloading Hive jars in IsolatedClientLoader " +
+        "if the default Maven Central repo is unreachable.")
+      .stringConf
+      .createWithDefault(
+        "https://maven-central.storage-download.googleapis.com/repos/central/data/")
 }
 
 /**
