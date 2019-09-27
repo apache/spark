@@ -511,12 +511,16 @@ abstract class FileStreamSinkSuite extends StreamTest {
         }
 
         import PendingCommitFilesTrackingManifestFileCommitProtocol._
-        val outputFiles = Files.walk(outputDir.toPath).iterator().asScala
+        val outputFileNames = Files.walk(outputDir.toPath).iterator().asScala
           .filter(_.toString.endsWith(".parquet"))
+          .map(_.getFileName.toString)
+          .toSet
+        val trackingFileNames = tracking.map(new Path(_).getName).toSet
+
         // there would be possible to have race condition:
         // - some tasks complete while abortJob is being called
         // we can't delete complete files for these tasks (it's OK since this is a best effort)
-        assert(!outputFiles.toList.exists(f => tracking.contains(f.toUri.getPath)),
+        assert(outputFileNames.intersect(trackingFileNames).isEmpty,
           "abortJob should clean up files reported as successful.")
       }
     }
