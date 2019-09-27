@@ -77,7 +77,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
-    val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
+    setupSchedulerWithMaster("local", confs: _*)
+  }
+
+  def setupSchedulerWithMaster(master: String, confs: (String, String)*): TaskSchedulerImpl = {
+    val conf = new SparkConf().setMaster(master).setAppName("TaskSchedulerImplSuite")
     confs.foreach { case (k, v) => conf.set(k, v) }
     sc = new SparkContext(conf)
     taskScheduler = new TaskSchedulerImpl(sc)
@@ -1129,7 +1133,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // you'd need the previous stage to also get restarted, and then succeed, in between each
     // attempt, but that happens outside what we're mocking here.)
     val zombieAttempts = (0 until 2).map { stageAttempt =>
-      val attempt = FakeTask.createTaskSet(10, stageAttemptId = stageAttempt)
+      val attempt = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = stageAttempt)
       taskScheduler.submitTasks(attempt)
       val tsm = taskScheduler.taskSetManagerForAttempt(0, stageAttempt).get
       val offers = (0 until 10).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
@@ -1148,7 +1152,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // we've now got 2 zombie attempts, each with 9 tasks still active.  Submit the 3rd attempt for
     // the stage, but this time with insufficient resources so not all tasks are active.
 
-    val finalAttempt = FakeTask.createTaskSet(10, stageAttemptId = 2)
+    val finalAttempt = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 2)
     taskScheduler.submitTasks(finalAttempt)
     val finalTsm = taskScheduler.taskSetManagerForAttempt(0, 2).get
     val offers = (0 until 5).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
