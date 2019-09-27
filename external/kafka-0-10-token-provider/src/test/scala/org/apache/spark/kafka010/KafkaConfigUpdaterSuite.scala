@@ -19,9 +19,11 @@ package org.apache.spark.kafka010
 
 import java.{util => ju}
 
+import scala.collection.JavaConverters._
+
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
-import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL}
+import org.apache.kafka.common.security.auth.SecurityProtocol.SASL_PLAINTEXT
 
 import org.apache.spark.SparkFunSuite
 
@@ -68,13 +70,18 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
     val params = Map(
       CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
     )
+    setSparkEnv(
+      Map(
+        s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
+      )
+    )
     setGlobalKafkaClientConfig()
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
       .setAuthenticationConfigIfNeeded()
       .build()
 
-    assert(updatedParams.size() === 0)
+    assert(updatedParams.asScala === params)
   }
 
   test("setAuthenticationConfigIfNeeded with token should set values") {
