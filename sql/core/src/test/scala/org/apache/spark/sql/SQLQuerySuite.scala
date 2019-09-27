@@ -174,18 +174,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         if (!ignoreSet.contains(className)) {
           withClue(s"Function '${info.getName}', Expression class '$className'") {
             val example = info.getExamples
-            logTrace(example)
             checkExampleSyntax(example)
             example.split("  > ").toList.foreach(_ match {
               case exampleRe(sql, output) =>
                 val df = spark.sql(sql)
                 val actual = unindentAndTrim(
                   hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
-                logTrace(s"Actual: $actual")
                 val expected = unindentAndTrim(output)
-                logTrace(s"Expected: $expected")
                 assert(actual === expected)
-              case notMatched => logTrace(notMatched)
+              case _ =>
             })
           }
         }
