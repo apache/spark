@@ -89,7 +89,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     this
   }
 
-  override def tableProperty(property: String, value: String): DataFrameWriterV2[T] = {
+  override def tableProperty(property: String, value: String): CreateTableWriter[T] = {
     this.properties.put(property, value)
     this
   }

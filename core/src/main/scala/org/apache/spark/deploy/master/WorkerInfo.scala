@@ -18,9 +18,7 @@
 package org.apache.spark.deploy.master
 
 import scala.collection.mutable
-import scala.reflect.ClassTag
 
-import org.apache.spark.deploy.StandaloneResourceUtils.MutableResourceInfo
 import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
