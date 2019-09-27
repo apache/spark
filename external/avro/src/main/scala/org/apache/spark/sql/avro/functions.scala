@@ -67,12 +67,11 @@ object functions {
    * Converts a column into binary of avro format.
    *
    * @param data the data column.
-   *
    * @since 3.0.0
    */
   @Experimental
   def to_avro(data: Column): Column = {
-    new Column(CatalystDataToAvro(data.expr, None))
+    new Column(CatalystDataToAvro(data.expr, None, Map.empty))
   }
 
   /**
@@ -80,11 +79,26 @@ object functions {
    *
    * @param data the data column.
    * @param jsonFormatSchema user-specified output avro schema in JSON string format.
-   *
    * @since 3.0.0
    */
   @Experimental
   def to_avro(data: Column, jsonFormatSchema: String): Column = {
-    new Column(CatalystDataToAvro(data.expr, Some(jsonFormatSchema)))
+    new Column(CatalystDataToAvro(data.expr, Some(jsonFormatSchema), Map.empty))
+  }
+
+  /**
+   * Converts a column into binary of avro format.
+   *
+   * @param data the data column.
+   * @param jsonFormatSchema user-specified output avro schema in JSON string format.
+   * @param options options to control how the Avro record is parsed.
+   * @since 3.0.0
+   */
+  @Experimental
+  def to_avro(
+     data: Column,
+     jsonFormatSchema: String,
+     options: java.util.Map[String, String]): Column = {
+    new Column(CatalystDataToAvro(data.expr, Some(jsonFormatSchema), options.asScala.toMap))
   }
 }

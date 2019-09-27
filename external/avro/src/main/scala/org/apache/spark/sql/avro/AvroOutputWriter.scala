@@ -36,10 +36,12 @@ private[avro] class AvroOutputWriter(
     path: String,
     context: TaskAttemptContext,
     schema: StructType,
-    avroSchema: Schema) extends OutputWriter {
+    avroSchema: Schema,
+    options: AvroOptions) extends OutputWriter {
 
   // The input rows will never be null.
-  private lazy val serializer = new AvroSerializer(schema, avroSchema, nullable = false)
+  private lazy val serializer = new AvroSerializer(schema, avroSchema, nullable = false,
+    options.logicalTypeCatalystUpdater)
 
   /**
    * Overrides the couple of methods responsible for generating the output streams / files so

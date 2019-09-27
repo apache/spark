@@ -56,7 +56,8 @@ object AvroUtils extends Logging {
           spark.sessionState.conf.ignoreCorruptFiles)
       }
 
-    SchemaConverters.toSqlType(avroSchema).dataType match {
+    SchemaConverters.toSqlType(avroSchema,
+      parsedOptions.logicalTypeCatalystUpdater.toSqlType).dataType match {
       case t: StructType => Some(t)
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:
@@ -92,7 +93,8 @@ object AvroUtils extends Logging {
     val outputAvroSchema: Schema = parsedOptions.schema
       .map(new Schema.Parser().parse)
       .getOrElse(SchemaConverters.toAvroType(dataSchema, nullable = false,
-        parsedOptions.recordName, parsedOptions.recordNamespace))
+        parsedOptions.recordName, parsedOptions.recordNamespace,
+        parsedOptions.logicalTypeCatalystUpdater.toAvroSchema))
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
 
@@ -113,7 +115,7 @@ object AvroUtils extends Logging {
       job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codec)
     }
 
-    new AvroOutputWriterFactory(dataSchema, outputAvroSchema.toString)
+    new AvroOutputWriterFactory(dataSchema, outputAvroSchema.toString, parsedOptions)
   }
 
   private def inferAvroSchemaFromFiles(

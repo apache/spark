@@ -20,7 +20,7 @@ package org.apache.spark.sql.avro
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
+import org.apache.avro.{LogicalType, LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{Date, Decimal, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
@@ -42,12 +42,18 @@ object SchemaConverters {
   /**
    * This function takes an avro schema and returns a sql schema.
    */
-  def toSqlType(avroSchema: Schema): SchemaType = {
-    toSqlTypeHelper(avroSchema, Set.empty)
+  def toSqlType(avroSchema: Schema,
+                logicalTypeMappings: PartialFunction[LogicalType, SchemaType] = Map.empty)
+  : SchemaType = {
+    toSqlTypeHelper(avroSchema, Set.empty, logicalTypeMappings)
   }
 
-  def toSqlTypeHelper(avroSchema: Schema, existingRecordNames: Set[String]): SchemaType = {
+  def toSqlTypeHelper(avroSchema: Schema,
+                      existingRecordNames: Set[String],
+                      logicalTypeMappings: PartialFunction[LogicalType, SchemaType]): SchemaType = {
     avroSchema.getType match {
+      case _ if logicalTypeMappings.isDefinedAt(avroSchema.getLogicalType) =>
+        logicalTypeMappings(avroSchema.getLogicalType)
       case INT => avroSchema.getLogicalType match {
         case _: Date => SchemaType(DateType, nullable = false)
         case _ => SchemaType(IntegerType, nullable = false)
@@ -81,20 +87,22 @@ object SchemaConverters {
         }
         val newRecordNames = existingRecordNames + avroSchema.getFullName
         val fields = avroSchema.getFields.asScala.map { f =>
-          val schemaType = toSqlTypeHelper(f.schema(), newRecordNames)
+          val schemaType = toSqlTypeHelper(f.schema(), newRecordNames, logicalTypeMappings)
           StructField(f.name, schemaType.dataType, schemaType.nullable)
         }
 
         SchemaType(StructType(fields), nullable = false)
 
       case ARRAY =>
-        val schemaType = toSqlTypeHelper(avroSchema.getElementType, existingRecordNames)
+        val schemaType = toSqlTypeHelper(avroSchema.getElementType,
+          existingRecordNames, logicalTypeMappings)
         SchemaType(
           ArrayType(schemaType.dataType, containsNull = schemaType.nullable),
           nullable = false)
 
       case MAP =>
-        val schemaType = toSqlTypeHelper(avroSchema.getValueType, existingRecordNames)
+        val schemaType = toSqlTypeHelper(avroSchema.getValueType,
+          existingRecordNames, logicalTypeMappings)
         SchemaType(
           MapType(StringType, schemaType.dataType, valueContainsNull = schemaType.nullable),
           nullable = false)
@@ -104,14 +112,16 @@ object SchemaConverters {
           // In case of a union with null, eliminate it and make a recursive call
           val remainingUnionTypes = avroSchema.getTypes.asScala.filterNot(_.getType == NULL)
           if (remainingUnionTypes.size == 1) {
-            toSqlTypeHelper(remainingUnionTypes.head, existingRecordNames).copy(nullable = true)
+            toSqlTypeHelper(remainingUnionTypes.head, existingRecordNames,
+              logicalTypeMappings).copy(nullable = true)
           } else {
-            toSqlTypeHelper(Schema.createUnion(remainingUnionTypes.asJava), existingRecordNames)
+            toSqlTypeHelper(Schema.createUnion(remainingUnionTypes.asJava),
+              existingRecordNames, logicalTypeMappings)
               .copy(nullable = true)
           }
         } else avroSchema.getTypes.asScala.map(_.getType) match {
           case Seq(t1) =>
-            toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames)
+            toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames, logicalTypeMappings)
           case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) =>
             SchemaType(LongType, nullable = false)
           case Seq(t1, t2) if Set(t1, t2) == Set(FLOAT, DOUBLE) =>
@@ -121,7 +131,7 @@ object SchemaConverters {
             // This is consistent with the behavior when converting between Avro and Parquet.
             val fields = avroSchema.getTypes.asScala.zipWithIndex.map {
               case (s, i) =>
-                val schemaType = toSqlTypeHelper(s, existingRecordNames)
+                val schemaType = toSqlTypeHelper(s, existingRecordNames, logicalTypeMappings)
                 // All fields are nullable because only one of them is set at a time
                 StructField(s"member$i", schemaType.dataType, nullable = true)
             }
@@ -137,11 +147,14 @@ object SchemaConverters {
       catalystType: DataType,
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
-      nameSpace: String = "")
+      nameSpace: String = "",
+      logicalTypeMappings: PartialFunction[(AbstractDataType, String, String), Schema] = Map.empty)
     : Schema = {
     val builder = SchemaBuilder.builder()
 
     val schema = catalystType match {
+      case t if logicalTypeMappings.isDefinedAt((t, recordName, nameSpace)) =>
+        logicalTypeMappings((t, recordName, nameSpace))
       case BooleanType => builder.booleanType()
       case ByteType | ShortType | IntegerType => builder.intType()
       case LongType => builder.longType()
@@ -167,16 +180,16 @@ object SchemaConverters {
       case BinaryType => builder.bytesType()
       case ArrayType(et, containsNull) =>
         builder.array()
-          .items(toAvroType(et, containsNull, recordName, nameSpace))
+          .items(toAvroType(et, containsNull, recordName, nameSpace, logicalTypeMappings))
       case MapType(StringType, vt, valueContainsNull) =>
         builder.map()
-          .values(toAvroType(vt, valueContainsNull, recordName, nameSpace))
+          .values(toAvroType(vt, valueContainsNull, recordName, nameSpace, logicalTypeMappings))
       case st: StructType =>
         val childNameSpace = if (nameSpace != "") s"$nameSpace.$recordName" else recordName
         val fieldsAssembler = builder.record(recordName).namespace(nameSpace).fields()
         st.foreach { f =>
           val fieldAvroType =
-            toAvroType(f.dataType, f.nullable, f.name, childNameSpace)
+            toAvroType(f.dataType, f.nullable, f.name, childNameSpace, logicalTypeMappings)
           fieldsAssembler.name(f.name).`type`(fieldAvroType).noDefault()
         }
         fieldsAssembler.endRecord()

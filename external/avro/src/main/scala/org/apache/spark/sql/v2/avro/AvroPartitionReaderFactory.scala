@@ -90,7 +90,8 @@ case class AvroPartitionReaderFactory(
       val stop = partitionedFile.start + partitionedFile.length
 
       val deserializer =
-        new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), readDataSchema)
+        new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), readDataSchema,
+          parsedOptions.logicalTypeCatalystUpdater)
 
       val fileReader = new PartitionReader[InternalRow] {
         private[this] var completed = false

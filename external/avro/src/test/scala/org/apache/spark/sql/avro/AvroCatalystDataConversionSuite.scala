@@ -36,9 +36,10 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     checkResult(data, avroType.toString, data.eval())
   }
 
-  private def checkResult(data: Literal, schema: String, expected: Any): Unit = {
+  private def checkResult(data: Literal, schema: String, expected: Any,
+                          options: Map[String, String] = Map.empty): Unit = {
     checkEvaluation(
-      AvroDataToCatalyst(CatalystDataToAvro(data, None), schema, Map.empty),
+      AvroDataToCatalyst(CatalystDataToAvro(data, None), schema, options),
       prepareExpectedResult(expected))
   }
 
@@ -246,4 +247,5 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     }.getMessage
     assert(message ==  "Cannot convert Catalyst type StringType to Avro type \"long\".")
   }
+
 }

@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
@@ -52,6 +53,19 @@ class AvroOptions(
    * See Avro spec for details: https://avro.apache.org/docs/1.8.2/spec.html#schema_record .
    */
   val recordNamespace: String = parameters.getOrElse("recordNamespace", "")
+
+  /**
+   * Avro logical type converter class name.
+   * Default value is "[[org.apache.spark.sql.avro.DefaultAvroLogicalTypeCatalystMapper]]".
+   */
+  val logicalTypeCatalystUpdater: AvroLogicalTypeCatalystMapper = {
+    parameters.get("logicalTypeMapper")
+      .map(Utils.classForName[AvroLogicalTypeCatalystMapper](_)
+        .getDeclaredConstructor()
+        .newInstance()
+      ).getOrElse(new DefaultAvroLogicalTypeCatalystMapper())
+  }
+
 
   /**
    * The `ignoreExtension` option controls ignoring of files without `.avro` extensions in read.

@@ -18,18 +18,22 @@ package org.apache.spark.sql.avro
 
 import java.io.File
 import java.sql.Timestamp
+import java.time.{OffsetDateTime, ZoneOffset}
 
-import org.apache.avro.{LogicalTypes, Schema}
+import org.apache.avro.{LogicalType, LogicalTypes, Schema}
 import org.apache.avro.Conversions.DecimalConversion
 import org.apache.avro.file.DataFileWriter
 import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord}
+import org.apache.avro.util.Utf8
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.avro.SchemaConverters.SchemaType
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
 abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -346,6 +350,70 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
         spark.read.format("avro").load(s"$dir.avro").collect()
       }.getCause.getMessage
       assert(msg.contains("Unscaled value too large for precision"))
+    }
+  }
+
+  test("Custom logical type: datetime") {
+
+    ISODatetimeLogicalType.register()
+
+    val isoDatetimeInputData = Seq("2019-09-27T15:00:00Z", "2019-09-26T12:00:00Z")
+    val datetimeSchema = s"""
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "date", "type": {"type": "string", "logicalType": "datetime"}}
+        ]
+      }
+      """
+
+    def isoDatetimeFile(path: String): String = {
+
+      val schema = new Schema.Parser().parse(datetimeSchema)
+      val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+      val isoDatatimeFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+      val result = s"$path/test.avro"
+      isoDatatimeFileWriter.create(schema, new File(result))
+
+      isoDatetimeInputData.foreach { x =>
+        val record = new GenericData.Record(schema)
+        record.put("date", x)
+        isoDatatimeFileWriter.append(record)
+      }
+      isoDatatimeFileWriter.flush()
+      isoDatatimeFileWriter.close()
+      result
+    }
+
+    withTempDir { dir =>
+      val expected = isoDatetimeInputData.map(t =>
+        Row(Timestamp.from(
+          OffsetDateTime.parse(t)
+            .atZoneSameInstant(ZoneOffset.UTC)
+            .toInstant
+        )))
+      val dateAvro = isoDatetimeFile(dir.getAbsolutePath)
+
+      val df = spark.read.format("avro")
+        .option("logicalTypeMapper",
+          "org.apache.spark.sql.avro.TestSuitAvroLogicalCatalystMapper")
+        .load(dateAvro)
+      checkAnswer(df, expected)
+
+      checkAnswer(
+        spark.read.format("avro")
+          .option("avroSchema", datetimeSchema)
+          .option("logicalTypeMapper",
+            "org.apache.spark.sql.avro.TestSuitAvroLogicalCatalystMapper")
+          .load(dateAvro),
+        expected)
+
+      withTempPath { path =>
+        df.write.format("avro").save(path.toString)
+        checkAnswer(spark.read.format("avro").load(path.toString), expected)
+      }
     }
   }
 }

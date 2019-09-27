@@ -39,7 +39,10 @@ import org.apache.spark.sql.types._
 /**
  * A serializer to serialize data in catalyst format to data in avro format.
  */
-class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean)
+class AvroSerializer(rootCatalystType: DataType,
+                     rootAvroType: Schema,
+                     nullable: Boolean,
+                     logicalTypeUpdater: AvroLogicalTypeCatalystMapper)
   extends Logging {
 
   def serialize(catalystData: Any): Any = {
@@ -76,6 +79,8 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
 
   private def newConverter(catalystType: DataType, avroType: Schema): Converter = {
     (catalystType, avroType.getType) match {
+      case _ if logicalTypeUpdater.serialize.isDefinedAt(avroType.getLogicalType) =>
+        logicalTypeUpdater.serialize(avroType.getLogicalType)
       case (NullType, NULL) =>
         (getter, ordinal) => null
       case (BooleanType, BOOLEAN) =>

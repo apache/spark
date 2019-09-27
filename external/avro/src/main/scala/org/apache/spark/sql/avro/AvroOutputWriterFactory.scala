@@ -30,7 +30,8 @@ import org.apache.spark.sql.types.StructType
  */
 private[sql] class AvroOutputWriterFactory(
     catalystSchema: StructType,
-    avroSchemaAsJsonString: String) extends OutputWriterFactory {
+    avroSchemaAsJsonString: String,
+    options: AvroOptions) extends OutputWriterFactory {
 
   private lazy val avroSchema = new Schema.Parser().parse(avroSchemaAsJsonString)
 
@@ -40,6 +41,6 @@ private[sql] class AvroOutputWriterFactory(
       path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
-    new AvroOutputWriter(path, context, catalystSchema, avroSchema)
+    new AvroOutputWriter(path, context, catalystSchema, avroSchema, options)
   }
 }

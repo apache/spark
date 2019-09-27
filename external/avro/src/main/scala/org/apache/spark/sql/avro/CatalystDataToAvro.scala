@@ -29,17 +29,23 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
 
 case class CatalystDataToAvro(
     child: Expression,
-    jsonFormatSchema: Option[String]) extends UnaryExpression {
+    jsonFormatSchema: Option[String],
+    options: Map[String, String] = Map.empty) extends UnaryExpression {
 
   override def dataType: DataType = BinaryType
+
+  @transient private lazy val avroOptions = AvroOptions(options)
 
   @transient private lazy val avroType =
     jsonFormatSchema
       .map(new Schema.Parser().parse)
-      .getOrElse(SchemaConverters.toAvroType(child.dataType, child.nullable))
+      .getOrElse(SchemaConverters.toAvroType(child.dataType, child.nullable,
+        avroOptions.recordName, avroOptions.recordNamespace,
+        avroOptions.logicalTypeCatalystUpdater.toAvroSchema))
 
   @transient private lazy val serializer =
-    new AvroSerializer(child.dataType, avroType, child.nullable)
+    new AvroSerializer(child.dataType, avroType, child.nullable,
+      avroOptions.logicalTypeCatalystUpdater)
 
   @transient private lazy val writer =
     new GenericDatumWriter[Any](avroType)

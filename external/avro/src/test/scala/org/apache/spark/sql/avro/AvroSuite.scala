@@ -1072,7 +1072,8 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
         avro <- Seq(avroType, avroArrayType, avroMapType, avroRecordType)
         catalyst <- Seq(catalystType, catalystArrayType, catalystMapType, catalystStructType)
       } {
-        assertException(() => new AvroSerializer(catalyst, avro, nullable))
+        assertException(() => new AvroSerializer(catalyst, avro, nullable,
+          new DefaultAvroLogicalTypeCatalystMapper))
       }
     }
   }
@@ -1491,6 +1492,48 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       |  ]
       |}
     """.stripMargin)
+  }
+
+  test("check struct type conversion with avro custom logical type - toSqlType") {
+
+    ISODatetimeLogicalType.register()
+    val datetimeSchema = s"""
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "date", "type": {"type": "string", "logicalType": "datetime"}}
+        ]
+      }
+      """
+    val struct = SchemaConverters.toSqlType(
+      new Schema.Parser().parse(datetimeSchema),
+      new TestSuitAvroLogicalCatalystMapper().toSqlType
+    ).dataType.asInstanceOf[StructType]
+
+    assert(struct.find(field => field.name == "date")
+      .map(struct => struct.dataType)
+      .contains(TimestampType)
+    )
+  }
+
+  test("check struct type conversion with avro custom logical type - toAvroType") {
+
+    ISODatetimeLogicalType.register()
+
+    val sparkSchema = StructType(Seq(StructField("date", TimestampType, nullable = false)))
+
+    val datetimeType = SchemaConverters.toAvroType(
+      sparkSchema,
+      nullable = false,
+      "datetime",
+      "foo.bar",
+      new TestSuitAvroLogicalCatalystMapper().toAvroSchema)
+
+    val addressType = datetimeType.getField("date").schema()
+    assert(addressType.getLogicalType == ISODatetimeLogicalType)
+    assert(addressType.getType == STRING)
   }
 }
 

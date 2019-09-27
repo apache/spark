@@ -124,7 +124,8 @@ private[sql] class AvroFileFormat extends FileFormat
         val stop = file.start + file.length
 
         val deserializer =
-          new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), requiredSchema)
+          new AvroDeserializer(userProvidedSchema.getOrElse(reader.getSchema), requiredSchema,
+            parsedOptions.logicalTypeCatalystUpdater)
 
         new Iterator[InternalRow] {
           private[this] var completed = false
