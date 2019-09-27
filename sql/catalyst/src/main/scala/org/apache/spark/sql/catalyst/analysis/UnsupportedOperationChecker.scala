@@ -64,31 +64,24 @@ object UnsupportedOperationChecker extends Logging {
       case _ => false
     }
 
-    var loggedWarnMessage = false
-    plan.foreach { subPlan =>
-      if (isStatefulOperation(subPlan)) {
-        subPlan.find { p =>
-          (p ne subPlan) && isStatefulOperationPossiblyEmitLateRows(p)
-        } match {
-          case Some(_) =>
+    try {
+      plan.foreach { subPlan =>
+        if (isStatefulOperation(subPlan)) {
+          subPlan.find { p =>
+            (p ne subPlan) && isStatefulOperationPossiblyEmitLateRows(p)
+          }.foreach {
             val errorMsg = "Detected pattern of possible 'correctness' issue " +
               "due to global watermark. " +
-              "The query contains stateful operation which can possibly emit late rows, and " +
-              "downstream stateful operation which drop emitted late rows. " +
+              "The query contains stateful operation which can emit rows older than " +
+              "the current watermark plus allowed late record delay, which are \"late rows\"" +
+              " in downstream stateful operations and these rows can be discarded. " +
               "Please refer the programming guide doc for more details."
-
-            if (failWhenDetected) {
-              throwError(errorMsg)(plan)
-            } else {
-              if (!loggedWarnMessage) {
-                logWarning(s"$errorMsg;\n$plan")
-                loggedWarnMessage = true
-              }
-            }
-
-          case _ =>
+            throwError(errorMsg)(plan)
+          }
         }
       }
+    } catch {
+      case e: AnalysisException if !failWhenDetected => logWarning(s"${e.message};\n$plan")
     }
   }
 
