@@ -157,7 +157,7 @@ abstract class EventLogFileWriter(
   /** stops writer - indicating the application has been completed */
   def stop(): Unit
 
-  /** returns representative path of log */
+  /** returns representative path of log. for tests only. */
   def logPath: String
 }
 
