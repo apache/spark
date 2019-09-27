@@ -647,6 +647,13 @@ private[spark] object JsonProtocol {
     val taskInfo = taskInfoFromJson(json \ "Task Info")
     val executorMetrics = executorMetricsFromJson(json \ "Task Executor Metrics")
     val taskMetrics = taskMetricsFromJson(json \ "Task Metrics")
+    val peakExecutionMemory = taskInfo.accumulables.find(accInfo => {
+      accInfo.name.get.equals("internal.metrics.peakExecutionMemory")
+    }) match {
+      case Some(accInfo) => accInfo.value.getOrElse(0L).toString.toLong
+      case None => 0L
+    }
+    taskMetrics.setPeakExecutionMemory(peakExecutionMemory)
     SparkListenerTaskEnd(stageId, stageAttemptId, taskType, taskEndReason, taskInfo,
       executorMetrics, taskMetrics)
   }
