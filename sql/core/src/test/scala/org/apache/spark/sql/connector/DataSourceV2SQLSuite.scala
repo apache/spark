@@ -674,27 +674,29 @@ class DataSourceV2SQLSuite
     runShowTablesSql("SHOW TABLES FROM testcat.unknown", Seq())
   }
 
-  test("ShowTables: using v2 session catalog") {
+  test("ShowTables: using v1 catalog") {
     runShowTablesSql(
       "SHOW TABLES FROM default",
-      Seq(Row("", "source"), Row("", "source2")))
+      Seq(Row("", "source", true), Row("", "source2", true)),
+      expectV2Catalog = false)
   }
 
-  test("ShowTables: using v2 session catalog, db doesn't exist ") {
-    // 'db' below resolves to a database name and v2 session catalog is used.
+  test("ShowTables: using v1 catalog, db doesn't exist ") {
+    // 'db' below resolves to a database name for v1 catalog because there is no catalog named
+    // 'db' and there is no default catalog set.
     val exception = intercept[NoSuchDatabaseException] {
-      sql("SHOW TABLES FROM db")
+      runShowTablesSql("SHOW TABLES FROM db", Seq(), expectV2Catalog = false)
     }
 
     assert(exception.getMessage.contains("Database 'db' not found"))
   }
 
-  test("ShowTables: using v2 session catalog, namespace ('a.b') is not allowed.") {
-    val exception = intercept[NoSuchNamespaceException] {
-      sql("SHOW TABLES FROM a.b")
+  test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+    val exception = intercept[AnalysisException] {
+      runShowTablesSql("SHOW TABLES FROM a.b", Seq(), expectV2Catalog = false)
     }
 
-    assert(exception.getMessage.contains("Namespace 'a.b' not found"))
+    assert(exception.getMessage.contains("The database name is not valid: a.b"))
   }
 
   test("ShowTables: using v2 catalog with empty namespace") {
@@ -710,38 +712,34 @@ class DataSourceV2SQLSuite
     runShowTablesSql("SHOW TABLES", Seq(Row("", "table")))
   }
 
-  test("ShowTables: namespace not specified and default v2 catalog not set") {
-    // For the following, the current catalog (v2 session catalog) is used.
+  test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
     runShowTablesSql(
       "SHOW TABLES",
-      Seq(Row("", "source"), Row("", "source2")))
+      Seq(Row("", "source", true), Row("", "source2", true)),
+      expectV2Catalog = false)
 
     runShowTablesSql(
       "SHOW TABLES LIKE '*2'",
-      Seq(Row("", "source2")))
+      Seq(Row("", "source2", true)),
+      expectV2Catalog = false)
   }
 
-  test("ShowTables: change catalog and namespace with USE statements") {
-    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
+  private def runShowTablesSql(
+      sqlText: String,
+      expected: Seq[Row],
+      expectV2Catalog: Boolean = true): Unit = {
+    val schema = if (expectV2Catalog) {
+      new StructType()
+        .add("namespace", StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
+    } else {
+      new StructType()
+        .add("database", StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
+        .add("isTemporary", BooleanType, nullable = false)
+    }
 
-    // Initially, the current catalog (v2 session catalog) is used.
-    runShowTablesSql("SHOW TABLES", Seq(Row("", "source"), Row("", "source2")))
-
-    // Update the current catalog only, but current namespace doesn't match ns1.ns2.table.
-    sql("USE CATALOG testcat")
-    runShowTablesSql("SHOW TABLES", Seq())
-
-    // Now the current namespace is also changed to match ns1.ns2.table.
-    sql("USE ns1.ns2 IN testcat")
-    runShowTablesSql("SHOW TABLES", Seq(Row("ns1.ns2", "table")))
-  }
-
-  private def runShowTablesSql(sqlText: String, expected: Seq[Row]): Unit = {
-    val schema = new StructType()
-      .add("namespace", StringType, nullable = false)
-      .add("tableName", StringType, nullable = false)
-
-    val df = sql(sqlText)
+    val df = spark.sql(sqlText)
     assert(df.schema === schema)
     assert(expected === df.collect())
   }
@@ -782,8 +780,11 @@ class DataSourceV2SQLSuite
   test("ShowNamespaces: default v2 catalog is not set") {
     spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
 
-    // The current catalog is resolved to a v2 session catalog.
-    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
+    val exception = intercept[AnalysisException] {
+      sql("SHOW NAMESPACES")
+    }
+
+    assert(exception.getMessage.contains("No default v2 catalog is set"))
   }
 
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
@@ -811,28 +812,12 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("does not support namespaces"))
   }
 
-  test("ShowNamespaces: session catalog is used and namespace doesn't exist") {
+  test("ShowNamespaces: no v2 catalog is available") {
     val exception = intercept[AnalysisException] {
       sql("SHOW NAMESPACES in dummy")
     }
 
-    assert(exception.getMessage.contains("Namespace 'dummy' not found"))
-  }
-
-  test("ShowNamespaces: change catalog and namespace with USE statements") {
-    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
-
-    // Initially, the current catalog is a v2 session catalog.
-    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
-
-    // Update the current catalog to 'testcat'.
-    sql("USE CATALOG testcat")
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
-
-    // Update the current namespace to 'ns1'.
-    sql("USE ns1")
-    // 'SHOW NAMESPACES' is not affected by the current namespace and lists root namespaces.
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
+    assert(exception.getMessage.contains("No v2 catalog is available"))
   }
 
   private def testShowNamespaces(

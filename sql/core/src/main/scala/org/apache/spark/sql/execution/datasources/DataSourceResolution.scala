@@ -23,8 +23,8 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, ShowNamespaces, ShowTables, SubqueryAlias, UseCatalogAndNamespace}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement, UseCatalogAndNamespaceStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowNamespaces, ShowTables, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, SetCatalogAndNamespaceStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -170,34 +170,62 @@ case class DataSourceResolution(
       DeleteFromTable(aliased, delete.condition)
 
     case ShowNamespacesStatement(None, pattern) =>
-      ShowNamespaces(currentCatalog.asNamespaceCatalog, None, pattern)
+      defaultCatalog match {
+        case Some(catalog) =>
+          ShowNamespaces(catalog.asNamespaceCatalog, None, pattern)
+        case None =>
+          throw new AnalysisException("No default v2 catalog is set.")
+      }
 
     case ShowNamespacesStatement(Some(namespace), pattern) =>
-      val CurrentCatalogAndNamespace(catalog, ns) = namespace
-      ShowNamespaces(catalog.asNamespaceCatalog, Some(ns), pattern)
+      val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace
+      maybeCatalog match {
+        case Some(catalog) =>
+          ShowNamespaces(catalog.asNamespaceCatalog, Some(ns), pattern)
+        case None =>
+          throw new AnalysisException(
+            s"No v2 catalog is available for ${namespace.quoted}")
+      }
 
     case update: UpdateTableStatement =>
       throw new AnalysisException(s"Update table is not supported temporarily.")
 
     case ShowTablesStatement(None, pattern) =>
-      ShowTables(currentCatalog.asTableCatalog, catalogManager.currentNamespace, pattern)
+      defaultCatalog match {
+        case Some(catalog) =>
+          ShowTables(
+            catalog.asTableCatalog,
+            catalogManager.currentNamespace,
+            pattern)
+        case None =>
+          ShowTablesCommand(None, pattern)
+      }
 
     case ShowTablesStatement(Some(namespace), pattern) =>
-      val CurrentCatalogAndNamespace(catalog, ns) = namespace
-      ShowTables(catalog.asTableCatalog, ns, pattern)
+      val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace
+      maybeCatalog match {
+        case Some(catalog) =>
+          ShowTables(catalog.asTableCatalog, ns, pattern)
+        case None =>
+          if (namespace.length != 1) {
+            throw new AnalysisException(
+              s"The database name is not valid: ${namespace.quoted}")
+          }
+          ShowTablesCommand(Some(namespace.quoted), pattern)
+      }
 
-    case UseCatalogAndNamespaceStatement(catalogName, namespace) =>
+    case SetCatalogAndNamespaceStatement(catalogName, namespace) =>
       catalogName match {
         case Some(c) =>
           validateCatalog(c)
-          UseCatalogAndNamespace(catalogManager, Some(c), namespace)
+          SetCatalogAndNamespace(catalogManager, Some(c), namespace)
         case None =>
           assert(namespace.nonEmpty)
           val CurrentCatalogAndNamespace(catalog, ns) = namespace.get
           if (!catalog.asNamespaceCatalog.namespaceExists(ns.toArray)) {
             throw new AnalysisException(s"Namespace '${ns.quoted}' not found")
           }
-          UseCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
+          SetCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
       }
   }
 

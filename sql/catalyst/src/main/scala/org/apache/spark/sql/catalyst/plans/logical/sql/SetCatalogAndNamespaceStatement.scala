@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.sql
 /**
  * A USE/USE CATALOG statement, as parsed from SQL.
  */
-case class UseCatalogAndNamespaceStatement(
+case class SetCatalogAndNamespaceStatement(
     catalogName: Option[String],
     namespace: Option[Seq[String]])
     extends ParsedStatement {

@@ -40,7 +40,7 @@ private[sql]
 class CatalogManager(
     conf: SQLConf,
     defaultSessionCatalog: CatalogPlugin,
-    v1SessionCatalog: SessionCatalog) extends Logging {
+    val v1SessionCatalog: SessionCatalog) extends Logging {
   import CatalogManager.SESSION_CATALOG_NAME
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]

@@ -51,14 +51,18 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
-object SimpleAnalyzer extends Analyzer(
-  new SessionCatalog(
-    new InMemoryCatalog,
-    EmptyFunctionRegistry,
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
-    override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
-  },
-  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+object SimpleAnalyzer
+    extends Analyzer(
+      new CatalogManager(
+        new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true),
+        FakeV2SessionCatalog,
+        new SessionCatalog(
+          new InMemoryCatalog,
+          EmptyFunctionRegistry,
+          new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
+          override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
+        }),
+      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
 object FakeV2SessionCatalog extends CatalogPlugin {
   private def fail() = throw new UnsupportedOperationException
@@ -106,22 +110,24 @@ object AnalysisContext {
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
 class Analyzer(
-    catalog: SessionCatalog,
-    v2SessionCatalog: CatalogPlugin,
+    override val catalogManager: CatalogManager,
     conf: SQLConf,
     maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
+  private val catalog: SessionCatalog = catalogManager.v1SessionCatalog
+
   // Only for tests.
   def this(catalog: SessionCatalog, conf: SQLConf) = {
-    this(catalog, FakeV2SessionCatalog, conf, conf.optimizerMaxIterations)
+    this(
+      new CatalogManager(conf, FakeV2SessionCatalog, catalog),
+      conf,
+      conf.optimizerMaxIterations)
   }
 
-  def this(catalog: SessionCatalog, v2SessionCatalog: CatalogPlugin, conf: SQLConf) = {
-    this(catalog, v2SessionCatalog, conf, conf.optimizerMaxIterations)
+  def this(catalogManager: CatalogManager, conf: SQLConf) = {
+    this(catalogManager, conf, conf.optimizerMaxIterations)
   }
-
-  override val catalogManager: CatalogManager = new CatalogManager(conf, v2SessionCatalog, catalog)
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {

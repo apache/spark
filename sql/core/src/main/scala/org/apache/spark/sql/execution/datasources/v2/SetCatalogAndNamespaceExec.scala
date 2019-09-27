@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.LeafExecNode
 /**
  * Physical plan node for setting the current catalog and/or namespace.
  */
-case class UseCatalogAndNamespaceExec(
+case class SetCatalogAndNamespaceExec(
     catalogManager: CatalogManager,
     catalogName: Option[String],
     namespace: Option[Seq[String]])

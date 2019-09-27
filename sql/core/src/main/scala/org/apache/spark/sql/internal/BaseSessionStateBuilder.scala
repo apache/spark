@@ -154,6 +154,8 @@ abstract class BaseSessionStateBuilder(
 
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog, conf)
 
+  protected lazy val catalogManager = new CatalogManager(conf, v2SessionCatalog, catalog)
+
   /**
    * Interface exposed to the user for registering user-defined functions.
    *
@@ -167,13 +169,14 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalog, v2SessionCatalog, conf) {
-    override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      new FindDataSourceTable(session) +:
-        new ResolveSQLOnFile(session) +:
-        new FallBackFileSourceV2(session) +:
-        DataSourceResolution(conf, this.catalogManager) +:
-        customResolutionRules
+  protected def analyzer: Analyzer =
+    new Analyzer(catalogManager, conf) {
+      override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
+        new FindDataSourceTable(session) +:
+          new ResolveSQLOnFile(session) +:
+          new FallBackFileSourceV2(session) +:
+          DataSourceResolution(conf, this.catalogManager) +:
+          customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       new DetectAmbiguousSelfJoin(conf) +:
@@ -225,7 +228,7 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on `catalog` and `experimentalMethods` fields.
    */
-  protected def optimizer(catalogManager: CatalogManager): Optimizer = {
+  protected def optimizer: Optimizer = {
     new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
@@ -312,7 +315,7 @@ abstract class BaseSessionStateBuilder(
       () => catalog,
       sqlParser,
       () => analyzer,
-      optimizer _,
+      () => optimizer,
       planner,
       streamingQueryManager,
       listenerManager,

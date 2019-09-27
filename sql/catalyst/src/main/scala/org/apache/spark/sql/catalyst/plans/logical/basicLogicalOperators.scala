@@ -662,7 +662,7 @@ case class ShowTables(
 /**
  * The logical plan of the USE/USE CATALOG command that works for v2 catalogs.
  */
-case class UseCatalogAndNamespace(
+case class SetCatalogAndNamespace(
     catalogManager: CatalogManager,
     catalogName: Option[String],
     namespace: Option[Seq[String]]) extends Command

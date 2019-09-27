@@ -65,7 +65,7 @@ private[sql] class SessionState(
     catalogBuilder: () => SessionCatalog,
     val sqlParser: ParserInterface,
     analyzerBuilder: () => Analyzer,
-    optimizerBuilder: CatalogManager => Optimizer,
+    optimizerBuilder: () => Optimizer,
     val planner: SparkPlanner,
     val streamingQueryManager: StreamingQueryManager,
     val listenerManager: ExecutionListenerManager,
@@ -79,7 +79,7 @@ private[sql] class SessionState(
 
   lazy val analyzer: Analyzer = analyzerBuilder()
 
-  lazy val optimizer: Optimizer = optimizerBuilder(analyzer.catalogManager)
+  lazy val optimizer: Optimizer = optimizerBuilder()
 
   lazy val resourceLoader: SessionResourceLoader = resourceLoaderBuilder()
 
