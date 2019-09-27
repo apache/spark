@@ -463,7 +463,7 @@ case class ArrayExists(
       > SELECT _FUNC_(array(1, null, 3), x -> x % 2 == 0);
        false
       > SELECT _FUNC_(array(2, null, 8), x -> x % 2 == 0);
-       null
+       NULL
   """,
   since = "3.0.0")
 case class ArrayForAll(
