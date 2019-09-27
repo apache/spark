@@ -466,6 +466,14 @@ case class SortMergeJoinExec(
     // Inline mutable state since not many join operations in a task
     val matches = ctx.addMutableState(clsName, "matches",
       v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold);", forceInline = true)
+    // Maintain a boolean flag to track if right iterator has already been fully consumed.
+    // The following findNextInnerJoinRows could potentially invoke hasNext twice on the
+    // right iterator after it has already been fully consumed. The 1st time this happens,
+    // it would trigger releasing the resources of both left and right iterator. When it
+    // gets invoked a 2nd time, it could potentially lead to NPE. This boolean flag makes
+    // sure that does not happen.
+    val rightIterExhausted = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "rightIterExhausted",
+      v => s"$v = false;", forceInline = true)
     // Copy the left keys as class members so they could be used in next function call.
     val matchedKeyVars = copyKeys(ctx, leftKeyVars)
 
@@ -494,7 +502,8 @@ case class SortMergeJoinExec(
          |
          |    do {
          |      if ($rightRow == null) {
-         |        if (!rightIter.hasNext()) {
+         |        if ($rightIterExhausted || !rightIter.hasNext()) {
+         |          $rightIterExhausted = true;
          |          ${matchedKeyVars.map(_.code).mkString("\n")}
          |          return !$matches.isEmpty();
          |        }
