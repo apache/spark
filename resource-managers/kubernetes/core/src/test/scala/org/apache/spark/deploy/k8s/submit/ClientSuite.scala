@@ -26,6 +26,7 @@ import org.scalatest.mockito.MockitoSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config.WAIT_FOR_APP_COMPLETION
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
@@ -146,7 +147,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kconf,
       driverBuilder,
       kubernetesClient,
-      false,
       loggingPodStatusWatcher)
     submissionClient.run()
     verify(podOperations).create(FULL_EXPECTED_POD)
@@ -157,7 +157,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kconf,
       driverBuilder,
       kubernetesClient,
-      false,
       loggingPodStatusWatcher)
     submissionClient.run()
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
@@ -177,13 +176,13 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Waiting for app completion should stall on the watcher") {
+    kconf.sparkConf.set(WAIT_FOR_APP_COMPLETION, true)
     val submissionClient = new Client(
       kconf,
       driverBuilder,
       kubernetesClient,
-      true,
       loggingPodStatusWatcher)
     submissionClient.run()
-    verify(loggingPodStatusWatcher).awaitCompletion()
+    verify(loggingPodStatusWatcher).watchOrStop(kconf.namespace + ":driver")
   }
 }
