@@ -28,7 +28,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
-import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager, TestMemoryConsumer, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.test.SharedSparkSession
@@ -381,5 +381,49 @@ class UnsafeFixedWidthAggregationMapSuite
         sorter.cleanupResources()
       }
     }
+  }
+
+  testWithMemoryLeakDetection("SPARK-29244: freed page should not be freed again") {
+    memoryManager.limit(8000)
+
+    val pageSize = 4096
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
+      TaskContext.get(), // We want to run completion listener.
+      256, // initial capacity
+      pageSize
+    )
+
+    val rand = new Random(42)
+    val str = rand.nextString(1024)
+    val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
+    buf.setInt(0, str.length)
+
+    var stopThread = false
+    val thread = new Thread {
+      override def run {
+        val testConsumer = new TestMemoryConsumer(taskMemoryManager)
+        while (!stopThread) {
+          try {
+            testConsumer.allocateArray(4000)
+          } catch {
+            case _: SparkOutOfMemoryError =>
+          }
+        }
+      }
+    }
+    thread.start()
+
+    try {
+      map.destructAndCreateExternalSorter()
+    } catch {
+      // In some chance, the `BytesToBytesMap` inside `UnsafeFixedWidthAggregationMap` cannot
+      // allocate enough memory when calling `reset`. It will throw OOM exception.
+      case s: SparkOutOfMemoryError =>
+        TaskContext.get().markTaskCompleted(Some(s))
+    }
+    stopThread = true
   }
 }
