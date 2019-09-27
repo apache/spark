@@ -1440,8 +1440,7 @@ class MaxAbsScalerModel(JavaModel, _MaxAbsScalerParams, JavaMLReadable, JavaMLWr
 
 
 @inherit_doc
-class MinHashLSH(JavaEstimator, _LSHParams, HasInputCol, HasOutputCol, HasSeed,
-                 JavaMLReadable, JavaMLWritable):
+class MinHashLSH(LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaMLWritable):
 
     """
     LSH class for Jaccard distance.
