@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS, CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_COMPRESS}
+import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_COMPRESS}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -87,7 +87,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   // Cache of preferred locations of checkpointed files.
   @transient private[spark] lazy val cachedPreferredLocations = CacheBuilder.newBuilder()
     .expireAfterWrite(
-      SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME),
+      SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME).get,
       TimeUnit.MINUTES)
     .build(
       new CacheLoader[Partition, Seq[String]]() {
@@ -108,7 +108,8 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
    * Return the locations of the checkpoint file associated with the given partition.
    */
   protected override def getPreferredLocations(split: Partition): Seq[String] = {
-    if (SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS)) {
+    val cachedExpireTime = SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME)
+    if (cachedExpireTime.isDefined && cachedExpireTime.get > 0) {
       cachedPreferredLocations.get(split)
     } else {
       getPartitionBlockLocations(split)
