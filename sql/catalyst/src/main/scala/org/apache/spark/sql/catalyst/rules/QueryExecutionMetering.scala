@@ -86,7 +86,7 @@ case class QueryExecutionMetering() {
       s"$ruleName $runtimeValue $numRunValue"
     }.mkString("\n", "\n", "")
 
-    val totalTimeInMS = (totalTime / NANOS_PER_MILLIS) match {
+    val totalTimeInMS = totalTime / NANOS_PER_MILLIS match {
       case 0 => 1
       case n => n
     }
