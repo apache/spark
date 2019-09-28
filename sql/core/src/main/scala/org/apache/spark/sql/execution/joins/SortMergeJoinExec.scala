@@ -654,8 +654,10 @@ case class SortMergeJoinExec(
       (evaluateVariables(leftVars), "")
     }
 
-    // The last two line of code generate in processNext here will handle properly
-    // releasing the resources if the input iterators are not fully consumed
+    // The last two lines of code generated in processNext here will attempt to handle
+    // releasing the resources if the input iterators are not fully consumed. It only
+    // attempts to release the resources of an iterator if the associated child operator
+    // is codegened
     s"""
        |while (findNextInnerJoinRows($leftInput, $rightInput)) {
        |  ${leftVarDecl.mkString("\n")}
@@ -669,10 +671,16 @@ case class SortMergeJoinExec(
        |  }
        |  if (shouldStop()) return;
        |}
-       |((org.apache.spark.sql.execution.ScalaIteratorWithBufferedIterator)$leftInput)
-       |  .getBufferedRowIterator().close();
-       |((org.apache.spark.sql.execution.ScalaIteratorWithBufferedIterator)$rightInput)
-       |  .getBufferedRowIterator().close();
+       |if ($leftInput instanceof
+       |    org.apache.spark.sql.execution.ScalaIteratorWithBufferedIterator) {
+       |  ((org.apache.spark.sql.execution.ScalaIteratorWithBufferedIterator)$leftInput)
+       |    .getBufferedRowIterator().close();
+       |}
+       |if ($rightInput instanceof
+       |    org.apache.spark.sql.execution.ScalaIteratorWithBufferedIterator) {
+       |  ((org.apache.spark.sql.execution.ScalaIteratorWithBufferedIterator)$rightInput)
+       |    .getBufferedRowIterator().close();
+       |}
      """.stripMargin
   }
 }
