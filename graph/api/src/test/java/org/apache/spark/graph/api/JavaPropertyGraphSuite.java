@@ -39,7 +39,6 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.apache.spark.sql.types.DataTypes.*;
-import static org.apache.spark.sql.types.DataTypes.LongType;
 
 public abstract class JavaPropertyGraphSuite implements Serializable {
   private transient TestSparkSession spark;
