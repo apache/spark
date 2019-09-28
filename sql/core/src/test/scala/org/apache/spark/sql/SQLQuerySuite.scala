@@ -130,6 +130,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       // Examples demonstrate alternative names, see SPARK-20749
       "org.apache.spark.sql.catalyst.expressions.Length",
       // Uses settings without _FUNC_ in `SET spark.sql.parser.escapedStringLiterals=true`
+      "org.apache.spark.sql.catalyst.expressions.Like",
       "org.apache.spark.sql.catalyst.expressions.RLike")
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
