@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -3310,6 +3311,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
           |) t3
           |ON t1.x=t3.x
         """.stripMargin).collect()
+    }
+  }
+
+  test("SPARK-29186: SubqueryAlias name value should not be null in json") {
+    withTempView("t1", "t2") {
+      Seq("1", "2", "3").toDF("x").createOrReplaceTempView("t1")
+      Seq("4", "5", "6").toDF("y").createOrReplaceTempView("t2")
+
+      val df = sql("SELECT * FROM t1, t2 WHERE t1.x = t2.y")
+      val subqueryAliases = df.queryExecution.analyzed.collect {
+        case s: SubqueryAlias => s
+      }
+      assert(subqueryAliases.size > 0)
+      subqueryAliases.foreach { alias =>
+        assert(!alias.prettyJson.contains("\"name\" : null"))
+      }
     }
   }
 }
