@@ -69,7 +69,7 @@ object UnsupportedOperationChecker extends Logging {
         if (isStatefulOperation(subPlan)) {
           subPlan.find { p =>
             (p ne subPlan) && isStatefulOperationPossiblyEmitLateRows(p)
-          }.foreach {
+          }.foreach { _ =>
             val errorMsg = "Detected pattern of possible 'correctness' issue " +
               "due to global watermark. " +
               "The query contains stateful operation which can emit rows older than " +
