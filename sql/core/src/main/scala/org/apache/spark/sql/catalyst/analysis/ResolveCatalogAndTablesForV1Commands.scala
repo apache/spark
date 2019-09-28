@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, QualifiedColType}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, Table, TableCatalog, V1Table}
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand}
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField}
 
@@ -38,33 +38,33 @@ class ResolveCatalogAndTablesForV1Commands(
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case AlterTableAddColumnsStatement(
-         CatalogAndTable(catalog, tblName, _: V1Table), cols) =>
+         CatalogAndTableForV1Command(catalog, tblName, _), cols) =>
       cols.foreach(c => assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand"))
       AlterTableAddColumnsCommand(tblName.asTableIdentifier, cols.map(convertToStructField))
 
     // TODO: we should fallback to the v1 `AlterTableChangeColumnCommand`.
     case AlterTableAlterColumnStatement(
-         CatalogAndTable(catalog, tblName, _: V1Table), colName, dataType, comment) =>
+         CatalogAndTableForV1Command(catalog, tblName, _), colName, dataType, comment) =>
       throw new AnalysisException("ALTER COLUMN is only supported with v2 tables.")
 
     case AlterTableRenameColumnStatement(
-         CatalogAndTable(catalog, tblName, _: V1Table), col, newName) =>
+         CatalogAndTableForV1Command(catalog, tblName, _), col, newName) =>
       throw new AnalysisException("RENAME COLUMN is only supported with v2 tables.")
 
     case AlterTableDropColumnsStatement(
-         CatalogAndTable(catalog, tblName, _: V1Table), cols) =>
+         CatalogAndTableForV1Command(catalog, tblName, _), cols) =>
       throw new AnalysisException("DROP COLUMN is only supported with v2 tables.")
 
     case AlterTableSetPropertiesStatement(
-         CatalogAndTable(catalog, tblName, _: V1Table), props) =>
+         CatalogAndTableForV1Command(catalog, tblName, _), props) =>
       AlterTableSetPropertiesCommand(tblName.asTableIdentifier, props, isView = false)
 
     case AlterTableUnsetPropertiesStatement(
-         CatalogAndTable(catalog, tblName, _: V1Table), keys, ifExists) =>
+         CatalogAndTableForV1Command(catalog, tblName, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(tblName.asTableIdentifier, keys, ifExists, isView = false)
 
     case AlterTableSetLocationStatement(
-         CatalogAndTable(catalog, tblName, _: V1Table), newLoc) =>
+         CatalogAndTableForV1Command(catalog, tblName, _), newLoc) =>
       AlterTableSetLocationCommand(tblName.asTableIdentifier, None, newLoc)
 
     case AlterViewSetPropertiesStatement(tblName, props) =>
@@ -74,11 +74,11 @@ class ResolveCatalogAndTablesForV1Commands(
       AlterTableUnsetPropertiesCommand(tblName.asTableIdentifier, keys, ifExists, isView = true)
 
     case DeleteFromStatement(
-         CatalogAndTable(catalog, tblName, _: V1Table), tableAlias, condition) =>
+         CatalogAndTableForV1Command(catalog, tblName, _), tableAlias, condition) =>
       throw new AnalysisException("DELETE FROM is only supported with v2 tables.")
 
     case DescribeTableStatement(
-         CatalogAndTable(catalog, tblName, _: V1Table), partitionSpec, isExtended) =>
+         CatalogAndTableForV1Command(catalog, tblName, _), partitionSpec, isExtended) =>
       DescribeTableCommand(tblName.asTableIdentifier, partitionSpec, isExtended)
 
     // The v1 `DescribeTableCommand` can describe temp view as well.
@@ -86,7 +86,7 @@ class ResolveCatalogAndTablesForV1Commands(
       DescribeTableCommand(tblName.asTableIdentifier, partitionSpec, isExtended)
 
     case DescribeColumnStatement(
-         CatalogAndTable(catalog, tblName, _: V1Table), colNameParts, isExtended) =>
+         CatalogAndTableForV1Command(catalog, tblName, _), colNameParts, isExtended) =>
       DescribeColumnCommand(tblName.asTableIdentifier, colNameParts, isExtended)
 
     // The v1 `DescribeColumnCommand` can describe temp view as well.
@@ -114,5 +114,19 @@ class ResolveCatalogAndTablesForV1Commands(
       cleanedDataType,
       nullable = true,
       builder.build())
+  }
+
+  object CatalogAndTableForV1Command {
+    def unapply(tableName: Seq[String]): Option[(TableCatalog, Seq[String], Table)] = {
+      tableName match {
+        case CatalogAndTable(catalog, tblName, table) if useV1Command(catalog, table) =>
+          Some((catalog, tblName, table))
+        case _ => None
+      }
+    }
+
+    private def useV1Command(catalog: TableCatalog, table: Table): Boolean = {
+      catalog.name() == CatalogManager.SESSION_CATALOG_NAME && table.isInstanceOf[V1Table]
+    }
   }
 }

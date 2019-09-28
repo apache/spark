@@ -34,14 +34,14 @@ class ResolveCatalogAndTables(val catalogManager: CatalogManager)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case AlterTableAddColumnsStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), cols) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), cols) =>
       val changes = cols.map { col =>
         TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
       }
       createAlterTable(catalog, tblName, table, changes)
 
     case AlterTableAlterColumnStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), colName, dataType, comment) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), colName, dataType, comment) =>
       val typeChange = dataType.map { newDataType =>
         TableChange.updateColumnType(colName.toArray, newDataType, true)
       }
@@ -51,17 +51,17 @@ class ResolveCatalogAndTables(val catalogManager: CatalogManager)
       createAlterTable(catalog, tblName, table, typeChange.toSeq ++ commentChange)
 
     case AlterTableRenameColumnStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), col, newName) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), col, newName) =>
       val changes = Seq(TableChange.renameColumn(col.toArray, newName))
       createAlterTable(catalog, tblName, table, changes)
 
     case AlterTableDropColumnsStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), cols) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), cols) =>
       val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
       createAlterTable(catalog, tblName, table, changes)
 
     case AlterTableSetPropertiesStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), props) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), props) =>
       val changes = props.map { case (key, value) =>
         TableChange.setProperty(key, value)
       }
@@ -69,29 +69,29 @@ class ResolveCatalogAndTables(val catalogManager: CatalogManager)
 
     // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
     case AlterTableUnsetPropertiesStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), keys, _) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), keys, _) =>
       val changes = keys.map(key => TableChange.removeProperty(key))
       createAlterTable(catalog, tblName, table, changes)
 
     case AlterTableSetLocationStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), newLoc) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), newLoc) =>
       val changes = Seq(TableChange.setProperty("location", newLoc))
       createAlterTable(catalog, tblName, table, changes)
 
     case AlterViewSetPropertiesStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), props) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), props) =>
       throw new AnalysisException(
         s"Can not specify catalog `${catalog.name}` for view ${tblName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
     case AlterViewUnsetPropertiesStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), keys, ifExists) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), keys, ifExists) =>
       throw new AnalysisException(
         s"Can not specify catalog `${catalog.name}` for view ${tblName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
     case DeleteFromStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), tableAlias, condition) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), tableAlias, condition) =>
       val relation = DataSourceV2Relation.create(table)
       val aliased = tableAlias.map(SubqueryAlias(_, relation)).getOrElse(relation)
       DeleteFromTable(aliased, condition)
@@ -100,14 +100,14 @@ class ResolveCatalogAndTables(val catalogManager: CatalogManager)
       throw new AnalysisException(s"Update table is not supported temporarily.")
 
     case DescribeTableStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), partitionSpec, isExtended) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
         throw new AnalysisException("DESC TABLE does not support partition for v2 tables.")
       }
       DescribeTable(DataSourceV2Relation.create(table), isExtended)
 
     case DescribeColumnStatement(
-         CatalogAndTable(catalog, tblName, V2Table(table)), colNameParts, isExtended) =>
+         CatalogAndTableForV2Command(catalog, tblName, table), colNameParts, isExtended) =>
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
   }
 
@@ -118,10 +118,18 @@ class ResolveCatalogAndTables(val catalogManager: CatalogManager)
       changes: Seq[TableChange]): AlterTable = {
     AlterTable(catalog, tableName.asIdentifier, DataSourceV2Relation.create(table), changes)
   }
-}
 
-private object V2Table {
-  def unapply(table: Table): Option[Table] = {
-    if (table.isInstanceOf[V1Table]) None else Some(table)
+  object CatalogAndTableForV2Command {
+    def unapply(tableName: Seq[String]): Option[(TableCatalog, Seq[String], Table)] = {
+      tableName match {
+        case CatalogAndTable(catalog, tblName, table) if useV2Command(catalog, table) =>
+          Some((catalog, tblName, table))
+        case _ => None
+      }
+    }
+
+    private def useV2Command(catalog: TableCatalog, table: Table): Boolean = {
+      catalog.name() != CatalogManager.SESSION_CATALOG_NAME || !table.isInstanceOf[V1Table]
+    }
   }
 }
