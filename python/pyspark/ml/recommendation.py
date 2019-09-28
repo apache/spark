@@ -408,21 +408,21 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
     .. versionadded:: 1.4.0
     """
 
-    @since("1.4.0")
+    @since("3.0.0")
     def setUserCol(self, value):
         """
         Sets the value of :py:attr:`userCol`.
         """
         return self._set(userCol=value)
 
-    @since("1.4.0")
+    @since("3.0.0")
     def setItemCol(self, value):
         """
         Sets the value of :py:attr:`itemCol`.
         """
         return self._set(itemCol=value)
 
-    @since("2.2.0")
+    @since("3.0.0")
     def setColdStartStrategy(self, value):
         """
         Sets the value of :py:attr:`coldStartStrategy`.
