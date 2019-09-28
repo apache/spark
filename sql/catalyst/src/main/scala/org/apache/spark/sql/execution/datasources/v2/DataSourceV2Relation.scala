@@ -54,8 +54,34 @@ case class DataSourceV2Relation(
     table.asReadable.newScanBuilder(options)
   }
 
+  override def newInstance(): DataSourceV2Relation = {
+    copy(output = output.map(_.newInstance()))
+  }
+}
+
+/**
+ * A logical plan for a DSv2 table with a scan already created.
+ *
+ * This is used in the optimizer to push filters and projection down before conversion to physical
+ * plan. This ensures that the stats that are used by the optimizer account for the filters and
+ * projection that will be pushed down.
+ *
+ * @param table a DSv2 [[Table]]
+ * @param scan a DSv2 [[Scan]]
+ * @param output the output attributes of this relation
+ */
+case class DataSourceV2ScanRelation(
+    table: Table,
+    scan: Scan,
+    output: Seq[AttributeReference]) extends LeafNode with NamedRelation {
+
+  override def name: String = table.name()
+
+  override def simpleString(maxFields: Int): String = {
+    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+  }
+
   override def computeStats(): Statistics = {
-    val scan = newScanBuilder().build()
     scan match {
       case r: SupportsReportStatistics =>
         val statistics = r.estimateStatistics()
@@ -63,10 +89,6 @@ case class DataSourceV2Relation(
       case _ =>
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
-  }
-
-  override def newInstance(): DataSourceV2Relation = {
-    copy(output = output.map(_.newInstance()))
   }
 }
 
