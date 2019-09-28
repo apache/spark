@@ -93,7 +93,7 @@ private[sql] object CatalogV2Implicits {
     }
   }
 
-  implicit class MultiPartIdentifierHelper(parts: Seq[String]) {
+  implicit class MultipartIdentifierHelper(parts: Seq[String]) {
     if (parts.isEmpty) {
       throw new AnalysisException("multi-part identifier cannot be empty.")
     }

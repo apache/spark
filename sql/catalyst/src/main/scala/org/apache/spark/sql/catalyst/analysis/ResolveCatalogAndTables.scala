@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, DeleteFromTable, DescribeTable, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, UpdateTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, Table, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
 /**
@@ -38,7 +38,7 @@ class ResolveCatalogAndTables(val catalogManager: CatalogManager)
       val changes = cols.map { col =>
         TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
       }
-      AlterTable(catalog, tblName.asIdentifier, table, changes)
+      createAlterTable(catalog, tblName, table, changes)
 
     case AlterTableAlterColumnStatement(
          CatalogAndTable(catalog, tblName, V2Table(table)), colName, dataType, comment) =>
@@ -48,35 +48,35 @@ class ResolveCatalogAndTables(val catalogManager: CatalogManager)
       val commentChange = comment.map { newComment =>
         TableChange.updateColumnComment(colName.toArray, newComment)
       }
-      AlterTable(catalog, tblName.asIdentifier, table, typeChange.toSeq ++ commentChange)
+      createAlterTable(catalog, tblName, table, typeChange.toSeq ++ commentChange)
 
     case AlterTableRenameColumnStatement(
          CatalogAndTable(catalog, tblName, V2Table(table)), col, newName) =>
       val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-      AlterTable(catalog, tblName.asIdentifier, table, changes)
+      createAlterTable(catalog, tblName, table, changes)
 
     case AlterTableDropColumnsStatement(
          CatalogAndTable(catalog, tblName, V2Table(table)), cols) =>
       val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-      AlterTable(catalog, tblName.asIdentifier, table, changes)
+      createAlterTable(catalog, tblName, table, changes)
 
     case AlterTableSetPropertiesStatement(
          CatalogAndTable(catalog, tblName, V2Table(table)), props) =>
       val changes = props.map { case (key, value) =>
         TableChange.setProperty(key, value)
       }
-      AlterTable(catalog.asTableCatalog, tblName.asIdentifier, table, changes.toSeq)
+      createAlterTable(catalog, tblName, table, changes.toSeq)
 
     // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
     case AlterTableUnsetPropertiesStatement(
          CatalogAndTable(catalog, tblName, V2Table(table)), keys, _) =>
       val changes = keys.map(key => TableChange.removeProperty(key))
-      AlterTable(catalog, tblName.asIdentifier, table, changes)
+      createAlterTable(catalog, tblName, table, changes)
 
     case AlterTableSetLocationStatement(
          CatalogAndTable(catalog, tblName, V2Table(table)), newLoc) =>
       val changes = Seq(TableChange.setProperty("location", newLoc))
-      AlterTable(catalog.asTableCatalog, tblName.asIdentifier, table, changes)
+      createAlterTable(catalog, tblName, table, changes)
 
     case AlterViewSetPropertiesStatement(
          CatalogAndTable(catalog, tblName, V2Table(table)), props) =>
@@ -104,11 +104,19 @@ class ResolveCatalogAndTables(val catalogManager: CatalogManager)
       if (partitionSpec.nonEmpty) {
         throw new AnalysisException("DESC TABLE does not support partition for v2 tables.")
       }
-      DescribeTable(table, isExtended)
+      DescribeTable(DataSourceV2Relation.create(table), isExtended)
 
     case DescribeColumnStatement(
          CatalogAndTable(catalog, tblName, V2Table(table)), colNameParts, isExtended) =>
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
+  }
+
+  private def createAlterTable(
+      catalog: TableCatalog,
+      tableName: Seq[String],
+      table: Table,
+      changes: Seq[TableChange]): AlterTable = {
+    AlterTable(catalog, tableName.asIdentifier, DataSourceV2Relation.create(table), changes)
   }
 }
 

@@ -591,7 +591,7 @@ case class ShowNamespaces(
     AttributeReference("namespace", StringType, nullable = false)())
 }
 
-case class DescribeTable(table: Table, isExtended: Boolean) extends Command {
+case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
   override val output = DescribeTableSchema.describeTableAttributes()
 }
 
@@ -616,7 +616,7 @@ case class DropTable(
 case class AlterTable(
     catalog: TableCatalog,
     ident: Identifier,
-    table: Table,
+    table: NamedRelation,
     changes: Seq[TableChange]) extends Command {
 
   override lazy val resolved: Boolean = childrenResolved && {
