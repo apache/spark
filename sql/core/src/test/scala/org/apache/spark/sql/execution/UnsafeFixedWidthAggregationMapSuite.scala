@@ -423,7 +423,9 @@ class UnsafeFixedWidthAggregationMapSuite
       // allocate enough memory when calling `reset`. It will throw OOM exception.
       case s: SparkOutOfMemoryError =>
         TaskContext.get().markTaskCompleted(Some(s))
+    } finally {
+      stopThread = true
+      thread.join()
     }
-    stopThread = true
   }
 }

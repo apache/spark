@@ -742,7 +742,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
         isDefined = true;
 
         if (numKeys >= growthThreshold && longArray.size() < MAX_CAPACITY) {
-          growAndRehash();
+          try {
+            growAndRehash();
+          } catch (SparkOutOfMemoryError oom) {
+            canGrowArray = false;
+          }
         }
       }
       return true;
@@ -783,16 +787,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
     assert (capacity >= 0);
     capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    try {
-      longArray = allocateArray(capacity * 2L);
-      longArray.zeroOut();
-    } catch (SparkOutOfMemoryError e) {
-      // When OOM, allocated page was already freed by `TaskMemoryManager`.
-      // We should not keep it in `longArray`. Otherwise it might be freed again in task
-      // complete listeners and cause unnecessary error.
-      longArray = null;
-      throw e;
-    }
+    longArray = allocateArray(capacity * 2L);
+    longArray.zeroOut();
 
     this.growthThreshold = (int) (capacity * loadFactor);
     this.mask = capacity - 1;
@@ -890,6 +886,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     numKeys = 0;
     numValues = 0;
     freeArray(longArray);
+    longArray = null;
     while (dataPages.size() > 0) {
       MemoryBlock dataPage = dataPages.removeLast();
       freePage(dataPage);
@@ -911,32 +908,25 @@ public final class BytesToBytesMap extends MemoryConsumer {
     final LongArray oldLongArray = longArray;
     final int oldCapacity = (int) oldLongArray.size() / 2;
 
-    try {
-      // Allocate the new data structures
-      allocate(Math.min(growthStrategy.nextCapacity(oldCapacity), MAX_CAPACITY));
-    } catch (SparkOutOfMemoryError oom) {
-      canGrowArray = false;
-      longArray = oldLongArray;
-    }
+    // Allocate the new data structures
+    allocate(Math.min(growthStrategy.nextCapacity(oldCapacity), MAX_CAPACITY));
 
-    if (canGrowArray) {
-      // Re-mask (we don't recompute the hashcode because we stored all 32 bits of it)
-      for (int i = 0; i < oldLongArray.size(); i += 2) {
-        final long keyPointer = oldLongArray.get(i);
-        if (keyPointer == 0) {
-          continue;
-        }
-        final int hashcode = (int) oldLongArray.get(i + 1);
-        int newPos = hashcode & mask;
-        int step = 1;
-        while (longArray.get(newPos * 2) != 0) {
-          newPos = (newPos + step) & mask;
-          step++;
-        }
-        longArray.set(newPos * 2, keyPointer);
-        longArray.set(newPos * 2 + 1, hashcode);
+    // Re-mask (we don't recompute the hashcode because we stored all 32 bits of it)
+    for (int i = 0; i < oldLongArray.size(); i += 2) {
+      final long keyPointer = oldLongArray.get(i);
+      if (keyPointer == 0) {
+        continue;
       }
-      freeArray(oldLongArray);
+      final int hashcode = (int) oldLongArray.get(i + 1);
+      int newPos = hashcode & mask;
+      int step = 1;
+      while (longArray.get(newPos * 2) != 0) {
+        newPos = (newPos + step) & mask;
+        step++;
+      }
+      longArray.set(newPos * 2, keyPointer);
+      longArray.set(newPos * 2 + 1, hashcode);
     }
+    freeArray(oldLongArray);
   }
 }
