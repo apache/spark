@@ -1615,7 +1615,7 @@ this configuration judiciously.
 ### Arbitrary Stateful Operations
 Many usecases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)).
 
-Though Spark cannot check and force it, state function should be implemented with respect to the semantics of output mode. For example, in Update mode Spark doesn't expect that the state function will emit rows which are older than current watermark plus allowed late record delay, whereas in Append mode the state function can emit these rows.
+Though Spark cannot check and force it, the state function should be implemented with respect to the semantics of the output mode. For example, in Update mode Spark doesn't expect that the state function will emit rows which are older than current watermark plus allowed late record delay, whereas in Append mode the state function can emit these rows.
 
 ### Unsupported Operations
 There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
@@ -1650,20 +1650,20 @@ efficiently.
 
 ### Limitation of global watermark
 
-In Append mode, some stateful operations could emit rows older than current watermark plus allowed late record delay,
-which are "late rows" in downstream stateful operations (as Spark uses global watermark) and these rows can be discarded.
-This is a limitation of global watermark, and it could bring correctness issue.
+In Append mode, if a stateful operation emits rows older than current watermark plus allowed late record delay,
+they will be "late rows" in downstream stateful operations (as Spark uses global watermark). Note that these rows may be discarded.
+This is a limitation of a global watermark, and it could potentially cause a correctness issue.
 
-Spark will check the logical plan of query and log warning when Spark detects such pattern.
+Spark will check the logical plan of query and log a warning when Spark detects such a pattern.
 
-Any of the following stateful operation(s) after any of below stateful operations can have this issue:
+Any of the stateful operation(s) after any of below stateful operations can have this issue:
 
 * streaming aggregation in Append mode
 * stream-stream outer join
-* `mapGroupsWithState` and `flatMapGroupsWithState` in Append mode (depending on the implementation of state function)
+* `mapGroupsWithState` and `flatMapGroupsWithState` in Append mode (depending on the implementation of the state function)
 
 As Spark cannot check the state function of `mapGroupsWithState`/`flatMapGroupsWithState`, Spark assumes that the state function
-could emit late rows if the operator uses Append mode.
+emits late rows if the operator uses Append mode.
 
 There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
 end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
