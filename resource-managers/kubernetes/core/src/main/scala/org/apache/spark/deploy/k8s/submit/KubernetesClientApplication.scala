@@ -86,6 +86,7 @@ private[spark] object ClientArguments {
  * @param builder Responsible for building the base driver pod based on a composition of
  *                implemented features.
  * @param kubernetesClient the client to talk to the Kubernetes API server
+ * @param watcher a watcher that monitors and logs the application status
  */
 private[spark] class Client(
     conf: KubernetesDriverConf,

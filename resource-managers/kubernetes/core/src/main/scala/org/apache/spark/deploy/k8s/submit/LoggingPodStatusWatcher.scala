@@ -96,9 +96,9 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
       val logShortStatus: Runnable = () => logInfo(s"Application status for $appId (phase: $phase)")
       service.scheduleAtFixedRate(logShortStatus, 0, interval, TimeUnit.MILLISECONDS)
       podCompletedFuture.await()
-      logInfo(pod.map { p =>
-        s"Container final statuses:\n\n${containersDescription(p)}"
-      }.getOrElse("No containers were found in the driver pod."))
+      logInfo(
+        pod.map { p => s"Container final statuses:\n\n${containersDescription(p)}" }
+          .getOrElse("No containers were found in the driver pod."))
       logInfo(s"Application ${conf.appName} with submission ID $sId finished")
     case _ =>
       logInfo(s"Deployed Spark application ${conf.appName} with submission ID $sId into Kubernetes")

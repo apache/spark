@@ -35,7 +35,7 @@ object KubernetesTestConf {
   val RESOURCE_PREFIX = "prefix"
   val EXECUTOR_ID = "1"
 
-  private val DEFAULT_CONF = new SparkConf(false).set(WAIT_FOR_APP_COMPLETION, false)
+  private val DEFAULT_CONF = new SparkConf(false)
 
   // scalastyle:off argcount
   def createDriverConf(
