@@ -839,10 +839,10 @@ class DataSourceV2SQLSuite
   }
 
   test("UseCatalog: v2 catalog does not exist") {
-    val exception = intercept[AnalysisException] {
+    val exception = intercept[CatalogNotFoundException] {
       sql("USE CATALOG unknown")
     }
-    assert(exception.getMessage.contains("v2 catalog 'unknown' cannot be loaded"))
+    assert(exception.getMessage.contains("Catalog 'unknown' plugin class not found"))
   }
 
   test("Use: basic tests with USE statements") {
@@ -874,10 +874,10 @@ class DataSourceV2SQLSuite
   }
 
   test("Use: catalog is explicitly specified, but does not exist") {
-    val exception = intercept[AnalysisException] {
+    val exception = intercept[CatalogNotFoundException] {
       sql("USE ns1.ns1_1 IN unknown")
     }
-    assert(exception.getMessage.contains("v2 catalog 'unknown' cannot be loaded"))
+    assert(exception.getMessage.contains("Catalog 'unknown' plugin class not found"))
   }
 
   test("Use: v2 session catalog is used and namespace does not exist") {

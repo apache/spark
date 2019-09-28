@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, NoSuchNamespaceException, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowNamespaces, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, SetCatalogAndNamespaceStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement}
@@ -217,14 +217,12 @@ case class DataSourceResolution(
     case SetCatalogAndNamespaceStatement(catalogName, namespace) =>
       catalogName match {
         case Some(c) =>
-          validateCatalog(c)
+          requireNamespaceExists(catalogManager.catalog(c), namespace)
           SetCatalogAndNamespace(catalogManager, Some(c), namespace)
         case None =>
           assert(namespace.nonEmpty)
           val CurrentCatalogAndNamespace(catalog, ns) = namespace.get
-          if (!catalog.asNamespaceCatalog.namespaceExists(ns.toArray)) {
-            throw new AnalysisException(s"Namespace '${ns.quoted}' not found")
-          }
+          requireNamespaceExists(catalog, Some(ns))
           SetCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
       }
   }
@@ -408,12 +406,14 @@ case class DataSourceResolution(
       builder.build())
   }
 
-  private def validateCatalog(catalogName: String): CatalogPlugin = {
-    try {
-      catalogManager.catalog(catalogName)
-    } catch {
-      case _: CatalogNotFoundException =>
-        throw new AnalysisException(s"v2 catalog '$catalogName' cannot be loaded")
+  private def requireNamespaceExists(
+      catalog: CatalogPlugin,
+      namespace: Option[Seq[String]]): Unit = {
+    namespace.map { ns =>
+      val nsArray = ns.toArray
+      if (!catalog.asNamespaceCatalog.namespaceExists(nsArray)) {
+        throw new NoSuchNamespaceException(nsArray)
+      }
     }
   }
 }
