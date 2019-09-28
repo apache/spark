@@ -119,6 +119,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
 
   test("using _FUNC_ instead of function names in examples") {
     val exampleRe = "(>.*;)".r
+    val setStmtRe = "(?i)^(>\\s+set\\s+).+".r
     val ignoreSet = Set(
       // Examples for CaseWhen show simpler syntax:
       // `CASE WHEN ... THEN ... WHEN ... THEN ... END`
@@ -128,17 +129,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       // _FUNC_ is replaced by `%` which causes a parsing error on `SELECT %(2, 1.8)`
       "org.apache.spark.sql.catalyst.expressions.Remainder",
       // Examples demonstrate alternative names, see SPARK-20749
-      "org.apache.spark.sql.catalyst.expressions.Length",
-      // Uses settings without _FUNC_ in `SET spark.sql.parser.escapedStringLiterals=true`
-      "org.apache.spark.sql.catalyst.expressions.Like",
-      "org.apache.spark.sql.catalyst.expressions.RLike")
+      "org.apache.spark.sql.catalyst.expressions.Length")
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName
       withClue(s"Expression class '$className'") {
         val exprExamples = info.getOriginalExamples
         if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
-          assert(exampleRe.findAllIn(exprExamples).toSet.forall(_.contains("_FUNC_")))
+          assert(exampleRe.findAllIn(exprExamples).toIterable
+            .filter(setStmtRe.findFirstIn(_).isEmpty) // Ignore SET commands
+            .forall(_.contains("_FUNC_")))
         }
       }
     }
