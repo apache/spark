@@ -94,7 +94,7 @@ case class QueryExecutionMetering() {
     s"""
        |=== Metrics of Analyzer/Optimizer Rules ===
        |Total number of runs: $totalNumRuns
-       |Total time: ${UIUtils.formatDuration(totalTimeInMS)}
+       |Total time: ${UIUtils.formatDurationVerbose(totalTimeInMS)}
        |
        |$colRuleName $colRunTime $colNumRuns
        |$ruleMetrics
