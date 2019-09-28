@@ -51,18 +51,17 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
-object SimpleAnalyzer
-    extends Analyzer(
-      new CatalogManager(
-        new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true),
-        FakeV2SessionCatalog,
-        new SessionCatalog(
-          new InMemoryCatalog,
-          EmptyFunctionRegistry,
-          new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
-          override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
-        }),
-      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+object SimpleAnalyzer extends Analyzer(
+  new CatalogManager(
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true),
+    FakeV2SessionCatalog,
+    new SessionCatalog(
+      new InMemoryCatalog,
+      EmptyFunctionRegistry,
+      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
+      override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
+    }),
+  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
 object FakeV2SessionCatalog extends TableCatalog {
   private def fail() = throw new UnsupportedOperationException
