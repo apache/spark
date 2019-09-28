@@ -65,7 +65,7 @@ abstract class StringRegexExpression extends BinaryExpression
   override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
-
+// scalastyle:off line.contains.tab
 /**
  * Simple RegEx pattern matching function
  */
@@ -109,6 +109,7 @@ abstract class StringRegexExpression extends BinaryExpression
     Use RLIKE to match with standard regular expressions.
   """,
   since = "1.0.0")
+// scalastyle:on line.contains.tab
 case class Like(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
