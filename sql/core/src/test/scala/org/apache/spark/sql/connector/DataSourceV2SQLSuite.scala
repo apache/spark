@@ -830,21 +830,6 @@ class DataSourceV2SQLSuite
     assert(df.collect().map(_.getAs[String](0)).sorted === expected.sorted)
   }
 
-  test("UseCatalog: use catalog with v2 catalog") {
-    val catalogManager = spark.sessionState.catalogManager
-    assert(catalogManager.currentCatalog.name() == "session")
-
-    sql("USE CATALOG testcat")
-    assert(catalogManager.currentCatalog.name() == "testcat")
-  }
-
-  test("UseCatalog: v2 catalog does not exist") {
-    val exception = intercept[CatalogNotFoundException] {
-      sql("USE CATALOG unknown")
-    }
-    assert(exception.getMessage.contains("Catalog 'unknown' plugin class not found"))
-  }
-
   test("Use: basic tests with USE statements") {
     val catalogManager = spark.sessionState.catalogManager
 
@@ -856,9 +841,10 @@ class DataSourceV2SQLSuite
     sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
     sql("CREATE TABLE testcat2.ns2.ns2_2.table (id bigint) USING foo")
     sql("CREATE TABLE testcat2.ns3.ns3_3.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat2.testcat.table (id bigint) USING foo")
 
-    // Catalog is explicitly specified as 'testcat'.
-    sql("USE ns1.ns1_1 IN testcat")
+    // Catalog is resolved to 'testcat'.
+    sql("USE testcat.ns1.ns1_1")
     assert(catalogManager.currentCatalog.name() == "testcat")
     assert(catalogManager.currentNamespace === Array("ns1", "ns1_1"))
 
@@ -871,13 +857,24 @@ class DataSourceV2SQLSuite
     sql("USE ns3.ns3_3")
     assert(catalogManager.currentCatalog.name() == "testcat2")
     assert(catalogManager.currentNamespace === Array("ns3", "ns3_3"))
+
+    // Only the namespace is changed (explicit).
+    sql("USE NAMESPACE testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assert(catalogManager.currentNamespace === Array("testcat"))
+
+    // Catalog is resolved to `testcat`.
+    sql("USE testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+    assert(catalogManager.currentNamespace === Array())
   }
 
-  test("Use: catalog is explicitly specified, but does not exist") {
-    val exception = intercept[CatalogNotFoundException] {
-      sql("USE ns1.ns1_1 IN unknown")
-    }
-    assert(exception.getMessage.contains("Catalog 'unknown' plugin class not found"))
+  test("Use: set v2 catalog as a current catalog") {
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == "session")
+
+    sql("USE testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat")
   }
 
   test("Use: v2 session catalog is used and namespace does not exist") {

@@ -82,9 +82,7 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE CATALOG catalog=errorCapturingIdentifier                     #useCatalog
-    | USE namespace=multipartIdentifier
-        (IN catalog=errorCapturingIdentifier)?                         #use
+    | USE NAMESPACE? multipartIdentifier                               #use
     | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
@@ -935,7 +933,6 @@ ansiNonReserved
     | BY
     | CACHE
     | CASCADE
-    | CATALOG
     | CHANGE
     | CLEAR
     | CLUSTER
@@ -1020,6 +1017,7 @@ ansiNonReserved
     | MINUTES
     | MONTHS
     | MSCK
+    | NAMESPACE
     | NAMESPACES
     | NO
     | NULLS
@@ -1157,7 +1155,6 @@ nonReserved
     | CASCADE
     | CASE
     | CAST
-    | CATALOG
     | CHANGE
     | CHECK
     | CLEAR
@@ -1272,6 +1269,7 @@ nonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAMESPACE
     | NAMESPACES
     | NO
     | NOT
@@ -1414,7 +1412,6 @@ CACHE: 'CACHE';
 CASCADE: 'CASCADE';
 CASE: 'CASE';
 CAST: 'CAST';
-CATALOG: 'CATALOG';
 CHANGE: 'CHANGE';
 CHECK: 'CHECK';
 CLEAR: 'CLEAR';
@@ -1535,6 +1532,7 @@ MINUTES: 'MINUTES';
 MONTH: 'MONTH';
 MONTHS: 'MONTHS';
 MSCK: 'MSCK';
+NAMESPACE: 'NAMESPACE';
 NAMESPACES: 'NAMESPACES';
 NATURAL: 'NATURAL';
 NO: 'NO';
