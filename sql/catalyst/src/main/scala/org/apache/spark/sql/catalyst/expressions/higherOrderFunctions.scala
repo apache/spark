@@ -323,7 +323,7 @@ case class ArraySort(
 
   override protected def nullOrder: NullOrder = NullOrder.Greatest
 
-  override def dataType: ArrayType = ArrayType(argumentsType, argument.nullable)
+  override def dataType: ArrayType = argument.dataType.asInstanceOf[ArrayType]
 
   override def checkInputDataTypes(): TypeCheckResult = {
 
