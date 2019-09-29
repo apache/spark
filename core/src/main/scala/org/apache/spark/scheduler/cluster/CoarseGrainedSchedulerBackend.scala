@@ -186,6 +186,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         // automatically, so try to tell the executor to stop itself. See SPARK-13519.
         executorDataMap.get(executorId).foreach(_.executorEndpoint.send(StopExecutor))
         removeExecutor(executorId, reason)
+
+      case ExecutorConstructed(executorId) =>
+        executorDataMap.get(executorId).foreach(_.isReady = true)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -266,8 +269,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def makeOffers(): Unit = {
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
-        // Filter out executors under killing
-        val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
+        // Filter out executors under killing and not yet constructed
+        val activeExecutors = executorDataMap.filter { case (id, data) => executorIsAlive(id) && data.isReady }
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
             new WorkerOffer(id, executorData.executorHost, executorData.freeCores,

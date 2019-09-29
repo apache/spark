@@ -29,6 +29,7 @@ import org.apache.spark.scheduler.ExecutorResourceInfo
  * @param freeCores  The current number of cores available for work on the executor
  * @param totalCores The total number of cores available to the executor
  * @param resourcesInfo The information of the currently available resources on the executor
+ * @param isReady Whether the executor is fully constructed and ready for receive offers
  */
 private[cluster] class ExecutorData(
     val executorEndpoint: RpcEndpointRef,
@@ -38,5 +39,6 @@ private[cluster] class ExecutorData(
     override val totalCores: Int,
     override val logUrlMap: Map[String, String],
     override val attributes: Map[String, String],
-    override val resourcesInfo: Map[String, ExecutorResourceInfo]
+    override val resourcesInfo: Map[String, ExecutorResourceInfo],
+    var isReady: Boolean = false
 ) extends ExecutorInfo(executorHost, totalCores, logUrlMap, attributes, resourcesInfo)
