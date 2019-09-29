@@ -145,6 +145,13 @@ private[hive] class HiveClientImpl(
         warehouseDir.foreach { dir =>
           ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, dir)
         }
+        // ret != null means we have a CliSessionState instance in current thread which initialized
+        // by SparkSQLCLIDriver. The class loader of CliSessionState's conf is current main thread's
+        // class loader used to load jars passed by --jars. One class loader used by AddJarCommand
+        // is clientLoader.classLoader which contain jar path passed by --jars in main thread.
+        // We set CliSessionState's conf class loader to clientLoader.classLoader. Thus we can load
+        // all jars passed by --jars and AddJarCommand.
+        ret.getConf.setClassLoader(clientLoader.classLoader)
         ret
       } else {
         newState()
