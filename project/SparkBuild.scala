@@ -980,7 +980,8 @@ object TestSettings {
     javaOptions in Test ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
-    javaOptions in Test ++= "-Xmx4g -Xss4m"
+    // SPARK-29282 This is for consistency between JDK8 and JDK11.
+    javaOptions in Test ++= "-Xmx4g -Xss4m -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Exclude tags defined in a system property
