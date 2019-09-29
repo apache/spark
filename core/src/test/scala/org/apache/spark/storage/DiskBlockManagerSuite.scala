@@ -51,7 +51,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
   override def beforeEach() {
     super.beforeEach()
     val conf = testConf.clone
-    conf.set("spark.local.dir", rootDirs)
+    conf.set("spark.local.dir", rootDirs).set("spark.diskStore.subDirectories", "1")
     diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
   }
 
@@ -93,18 +93,25 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
 
   test("temporary shuffle file should be able to handle disk failures") {
     try {
+      // the following two lines pre-create subdirectories under each root dir of block manager
+      diskBlockManager.getFile("1")
+      diskBlockManager.getFile("2")
+
       val tempShuffleFile1 = diskBlockManager.createTempShuffleBlock()._2
-      assert(tempShuffleFile1.exists())
-      rootDir0.setWritable(false)
+      assert(tempShuffleFile1.exists(), "There are no bad disks")
+      rootDir0.setExecutable(false)
       val tempShuffleFile2 = diskBlockManager.createTempShuffleBlock()._2
-      assert(tempShuffleFile2.exists())
-      assert(tempShuffleFile2.getParent === rootDir1.getAbsolutePath)
-      rootDir1.setWritable(false)
+      assert(tempShuffleFile2.exists(),
+        "There is only one bad disk, so temp shuffle file should be created")
+      assert(tempShuffleFile2.getParentFile.getParentFile.getParent === rootDir1.getAbsolutePath,
+        "The temp shuffle file should be under the healthy disk")
+      rootDir1.setExecutable(false)
       val tempShuffleFile3 = diskBlockManager.createTempShuffleBlock()._2
-      assert(!tempShuffleFile3.exists())
+      assert(!tempShuffleFile3.exists(),
+        "All disks are broken, so there should be no temp shuffle file created")
     } finally {
-      rootDir0.setWritable(true)
-      rootDir1.setWritable(true)
+      rootDir0.setExecutable(true)
+      rootDir1.setExecutable(true)
     }
 
   }
