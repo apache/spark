@@ -843,7 +843,7 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.0.5</version>
+        <version>3.0.8</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -861,7 +861,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.13.5</version>
+        <version>1.14.2</version>
         <scope>test</scope>
       </dependency>
       <dependency>
