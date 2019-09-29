@@ -181,7 +181,7 @@ private[hive] class HiveClientImpl(
       sparkConf.getAll.toMap ++ extraConfig).toMap
     confMap.foreach { case (k, v) => hiveConf.set(k, v) }
     SQLConf.get.redactOptions(confMap).foreach { case (k, v) =>
-      logInfo(
+      logDebug(
         s"""
            |Applying Hadoop/Hive/Spark and extra properties to Hive Conf:
            |$k=$v
