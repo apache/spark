@@ -64,8 +64,8 @@ class CoGroupedData(object):
         ...    [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
         ...    ("time", "id", "v1"))
         >>> df2 = spark.createDataFrame(
-        ... [(20000101, 1, "x"), (20000101, 2, "y")],
-        ... ("time", "id", "v2"))
+        ...    [(20000101, 1, "x"), (20000101, 2, "y")],
+        ...    ("time", "id", "v2"))
         >>> @pandas_udf("time int, id int, v1 double, v2 string", PandasUDFType.COGROUPED_MAP)
         ... def asof_join(l, r):
         ...     return pd.merge_asof(l, r, on="time", by="id")
