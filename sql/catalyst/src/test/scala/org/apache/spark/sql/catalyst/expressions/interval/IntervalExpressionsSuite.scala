@@ -25,6 +25,7 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
   implicit def interval(s: String): Literal = {
     Literal(CalendarInterval.fromString("interval " + s))
   }
+
   test("millennium") {
     checkEvaluation(Millennium("0 years"), 0)
     checkEvaluation(Millennium("9999 years"), 9)
@@ -38,5 +39,20 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
     // Millennium must be taken from years and months
     checkEvaluation(Millennium("999 years 12 months"), 1)
     checkEvaluation(Millennium("1000 years -1 months"), 0)
+  }
+
+  test("century") {
+    checkEvaluation(Century("0 years"), 0)
+    checkEvaluation(Century("9999 years"), 99)
+
+    checkEvaluation(Century("1000 years"), 10)
+    checkEvaluation(Century("-2000 years"), -20)
+
+    // Microseconds part must not be taken into account
+    checkEvaluation(Century("99 years 400 days"), 0)
+
+    // Century must be taken from years and months
+    checkEvaluation(Century("99 years 12 months"), 1)
+    checkEvaluation(Century("100 years -1 months"), 0)
   }
 }

@@ -41,6 +41,22 @@ case class Millennium(child: Expression) extends UnaryExpression with ImplicitCa
   }
 }
 
+case class Century(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(date: Any): Any = {
+    IntervalUtils.getCentury(date.asInstanceOf[CalendarInterval])
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$iu.getCentury($c)")
+  }
+}
+
 object IntervalPart {
 
   def parseExtractField(
@@ -48,7 +64,7 @@ object IntervalPart {
       source: Expression,
       errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
     case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millennium(source)
-//    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
+    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
 //    case "DECADE" | "DECADES" | "DEC" | "DECS" => Decade(source)
 //    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
 //    case "ISOYEAR" => IsoYear(source)
