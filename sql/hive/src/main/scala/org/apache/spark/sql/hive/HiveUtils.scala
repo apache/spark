@@ -45,7 +45,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{ChildFirstURLClassLoader, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
 
 private[spark] object HiveUtils extends Logging {
@@ -387,6 +387,16 @@ private[spark] object HiveUtils extends Logging {
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else {
+      // jars passed through --jars. They need to be added back before creating IsolatedClientLoader
+      val jarsInClasspath = Utils.getContextOrSparkClassLoader match {
+        case m: MutableURLClassLoader =>
+          val jars = m.getURLs.toSeq
+          logInfo(s"Added jars in classpath to IsolatedClientLoader: $jars")
+          jars
+        case _ =>
+          Seq.empty
+      }
+
       // Convert to files and expand any directories.
       val jars =
         hiveMetastoreJars
@@ -402,8 +412,8 @@ private[spark] object HiveUtils extends Logging {
             }
           case path =>
             new File(path) :: Nil
-        }
-          .map(_.toURI.toURL)
+        }.map(_.toURI.toURL) ++ jarsInClasspath
+
 
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +

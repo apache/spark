@@ -336,19 +336,12 @@ class HiveSparkSubmitSuite
   }
 
   test("SPARK-29254: include jars passed in through --jars when isolatedLoader is enabled") {
-    def getJarFromUrl(urlString: String): File = {
-      val fileName = urlString.split("/").last
-      Utils.doFetchFile(urlString, Utils.createTempDir(), fileName, new SparkConf, null, null)
-    }
-    val repository = "https://repository.apache.org/content/repositories/releases/"
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
     // download Hive 2.1.1, a non builtinHiveVersion(1.2.1) version for testing
-    val jar3 = getJarFromUrl(s"${repository}org/apache/hive/hive-contrib/" +
-      s"2.1.1/hive-contrib-2.1.1.jar").getCanonicalPath
-    val jar4 = getJarFromUrl(s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
-      s"2.1.1/hive-hcatalog-core-2.1.1.jar").getCanonicalPath
+    val jar3 = HiveTestJars.getHiveContribJar("2.1.1")
+    val jar4 = HiveTestJars.getHiveHcatalogCoreJar("2.1.1")
     val jarsString = Seq(jar1, jar2, jar3, jar4).map(j => j.toString).mkString(",")
     val args = Seq(
       "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),
