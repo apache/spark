@@ -1,7 +1,7 @@
 -- Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
 --
 -- Window Functions Testing
--- https://github.com/postgres/postgres/blob/REL_12_BETA3/src/test/regress/sql/window.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA3/src/test/regress/sql/window.sql#L1-L319
 
 CREATE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1;
 
@@ -135,7 +135,8 @@ SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s
 SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
 
 -- strict aggs
--- Temporarily turns off the ANSI mode because of compatibility issues between keywords
+-- Temporarily turns off the ANSI mode because of compatibility issues between
+-- keywords related to date (in this case, year)
 SET spark.sql.parser.ansi.enabled=false;
 SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
 SELECT *,
@@ -271,9 +272,9 @@ unique1, four
 FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
-SELECT sum(unique1) over (w range between current row and unbounded following),
-	unique1, four
-FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
+-- SELECT sum(unique1) over (w range between current row and unbounded following),
+-- 	unique1, four
+-- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
@@ -341,3 +342,5 @@ SELECT * FROM v_window;
 
 DROP VIEW v_window;
 DROP TABLE empsalary;
+DROP VIEW tenk2;
+DROP VIEW int4_tbl;
