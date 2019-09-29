@@ -18,7 +18,6 @@
 package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
-import java.util.UUID
 
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
@@ -90,5 +89,23 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     val writer = new FileWriter(file, true)
     for (i <- 0 until numBytes) writer.write(i)
     writer.close()
+  }
+
+  test("temporary shuffle file should be able to handle disk failures") {
+    try {
+      val tempShuffleFile1 = diskBlockManager.createTempShuffleBlock()._2
+      assert(tempShuffleFile1.exists())
+      rootDir0.setWritable(false)
+      val tempShuffleFile2 = diskBlockManager.createTempShuffleBlock()._2
+      assert(tempShuffleFile2.exists())
+      assert(tempShuffleFile2.getParent === rootDir1.getAbsolutePath)
+      rootDir1.setWritable(false)
+      val tempShuffleFile3 = diskBlockManager.createTempShuffleBlock()._2
+      assert(!tempShuffleFile3.exists())
+    } finally {
+      rootDir0.setWritable(true)
+      rootDir1.setWritable(true)
+    }
+
   }
 }

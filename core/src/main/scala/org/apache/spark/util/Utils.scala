@@ -95,7 +95,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
