@@ -1,0 +1,73 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.expressions.interval
+
+import java.util.Locale
+
+import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.types.{AbstractDataType, CalendarIntervalType, DataType, IntegerType}
+import org.apache.spark.unsafe.types.CalendarInterval
+
+case class Millennium(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(date: Any): Any = {
+    IntervalUtils.getMillennium(date.asInstanceOf[CalendarInterval])
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$iu.getMillennium($c)")
+  }
+}
+
+object IntervalPart {
+
+  def parseExtractField(
+      extractField: String,
+      source: Expression,
+      errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
+    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millennium(source)
+//    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
+//    case "DECADE" | "DECADES" | "DEC" | "DECS" => Decade(source)
+//    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
+//    case "ISOYEAR" => IsoYear(source)
+//    case "QUARTER" | "QTR" => Quarter(source)
+//    case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
+//    case "WEEK" | "W" | "WEEKS" => WeekOfYear(source)
+//    case "DAY" | "D" | "DAYS" => DayOfMonth(source)
+//    case "DAYOFWEEK" => DayOfWeek(source)
+//    case "DOW" => Subtract(DayOfWeek(source), Literal(1))
+//    case "ISODOW" => Add(WeekDay(source), Literal(1))
+//    case "DOY" => DayOfYear(source)
+//    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
+//    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
+//    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Second(source)
+//    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
+//      Milliseconds(source)
+//    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
+//      Microseconds(source)
+//    case "EPOCH" => Epoch(source)
+//    case _ => errorHandleFunc
+  }
+}
