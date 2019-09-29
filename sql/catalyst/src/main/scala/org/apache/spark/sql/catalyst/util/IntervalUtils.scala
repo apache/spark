@@ -24,6 +24,7 @@ object IntervalUtils {
   val YEARS_PER_MILLENNIUM: Int = 1000
   val YEARS_PER_CENTURY: Int = 100
   val YEARS_PER_DECADE: Int = 10
+  val MONTHS_PER_QUARTER: Int = 3
 
   def getYear(interval: CalendarInterval): Int = {
     interval.months / MONTHS_PER_YEAR
@@ -39,5 +40,9 @@ object IntervalUtils {
 
   def getDecade(interval: CalendarInterval): Int = {
     getYear(interval) / YEARS_PER_DECADE
+  }
+
+  def getQuarter(interval: CalendarInterval): Int = {
+    (interval.months % MONTHS_PER_YEAR) / MONTHS_PER_QUARTER + 1
   }
 }
