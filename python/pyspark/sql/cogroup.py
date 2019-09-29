@@ -83,7 +83,7 @@ class CoGroupedData(object):
 
         Alternatively, the user can define a function that takes three arguments.  In this case,
         the grouping key(s) will be passed as the first argument and the data will be passed as the
-        second and third arguments.  The grouping key(s) will be  passed as a tuple of numpy data
+        second and third arguments.  The grouping key(s) will be passed as a tuple of numpy data
         types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in as two
         `pandas.DataFrame` containing all columns from the original Spark DataFrames.
 
@@ -130,8 +130,6 @@ def _test():
         .master("local[4]")\
         .appName("sql.cogroup tests")\
         .getOrCreate()
-    sc = spark.sparkContext
-    globs['sc'] = sc
     globs['spark'] = spark
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.cogroup, globs=globs,
