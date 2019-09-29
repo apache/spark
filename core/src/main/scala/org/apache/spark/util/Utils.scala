@@ -2957,6 +2957,11 @@ private[spark] object Utils extends Logging {
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
   }
+
+  @tailrec
+  def findFirstCause(t: Throwable): Throwable = {
+    if (t.getCause == null) t else findFirstCause(t.getCause)
+  }
 }
 
 private[util] object CallerContext extends Logging {

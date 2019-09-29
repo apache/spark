@@ -286,7 +286,8 @@ private[hive] class SparkExecuteStatementOperation(
           if (e.isInstanceOf[HiveSQLException]) {
             throw e.asInstanceOf[HiveSQLException]
           } else {
-            throw new HiveSQLException("Error running query: " + e.toString, e)
+            throw new HiveSQLException("Error running query: " +
+              SparkUtils.findFirstCause(e).toString, e)
           }
         }
     } finally {
