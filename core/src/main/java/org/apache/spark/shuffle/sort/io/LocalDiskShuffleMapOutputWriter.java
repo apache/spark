@@ -48,7 +48,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     LoggerFactory.getLogger(LocalDiskShuffleMapOutputWriter.class);
 
   private final int shuffleId;
-  private final int mapId;
+  private final long mapId;
   private final IndexShuffleBlockResolver blockResolver;
   private final long[] partitionLengths;
   private final int bufferSize;
@@ -64,7 +64,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
 
   public LocalDiskShuffleMapOutputWriter(
       int shuffleId,
-      int mapId,
+      long mapId,
       int numPartitions,
       IndexShuffleBlockResolver blockResolver,
       SparkConf sparkConf) {

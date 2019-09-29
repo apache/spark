@@ -23,7 +23,7 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.{ByteStreams, Closeables}
+import com.google.common.io.ByteStreams
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -727,7 +727,7 @@ private[spark] class ExternalSorter[K, V, C](
    */
   def writePartitionedMapOutput(
       shuffleId: Int,
-      mapId: Int,
+      mapId: Long,
       mapOutputWriter: ShuffleMapOutputWriter): Unit = {
     var nextPartitionId = 0
     if (spills.isEmpty) {

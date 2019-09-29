@@ -992,7 +992,17 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("DeleteFrom: basic") {
+  test("DeleteFrom: basic - delete all") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t")
+      checkAnswer(spark.table(t), Seq())
+    }
+  }
+
+  test("DeleteFrom: basic - delete with where clause") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
@@ -1003,12 +1013,23 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("DeleteFrom: alias") {
+  test("DeleteFrom: delete from aliased target table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t tbl WHERE tbl.id = 2")
+      sql(s"DELETE FROM $t AS tbl WHERE tbl.id = 2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c", 3)))
+    }
+  }
+
+  test("DeleteFrom: normalize attribute names") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t AS tbl WHERE tbl.ID = 2")
       checkAnswer(spark.table(t), Seq(
         Row(3, "c", 3)))
     }
@@ -1026,6 +1047,31 @@ class DataSourceV2SQLSuite
       assert(spark.table(t).count === 3)
       assert(exc.getMessage.contains("Delete by condition with subquery is not supported"))
     }
+  }
+
+  test("Update: basic - update all") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, name string, age int, p int)
+           |USING foo
+           |PARTITIONED BY (id, p)
+         """.stripMargin)
+      sql(
+        s"""
+           |INSERT INTO $t
+           |VALUES (1L, 'Herry', 26, 1),
+           |(2L, 'Jack', 31, 2),
+           |(3L, 'Lisa', 28, 3),
+           |(4L, 'Frank', 33, 3)
+         """.stripMargin)
+    }
+    val errMsg = "Update table is not supported temporarily"
+    testCreateAnalysisError(
+      s"UPDATE $t SET name='Robert', age=32",
+      errMsg
+    )
   }
 
   private def testCreateAnalysisError(sqlStatement: String, expectedError: String): Unit = {

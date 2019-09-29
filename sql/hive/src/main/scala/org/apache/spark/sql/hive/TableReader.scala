@@ -83,7 +83,7 @@ class HadoopTableReader(
       sparkSession.sparkContext.defaultMinPartitions)
   }
 
-  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(
+  SparkHadoopUtil.get.appendS3AndSparkHadoopHiveConfigurations(
     sparkSession.sparkContext.conf, hadoopConf)
 
   private val _broadcastedHadoopConf =

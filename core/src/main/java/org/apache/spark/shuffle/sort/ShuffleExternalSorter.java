@@ -423,7 +423,6 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    *
    * @return metadata for the spill files written by this sorter. If no records were ever inserted
    *         into this sorter, then this will return an empty array.
-   * @throws IOException
    */
   public SpillInfo[] closeAndGetSpills() throws IOException {
     if (inMemSorter != null) {

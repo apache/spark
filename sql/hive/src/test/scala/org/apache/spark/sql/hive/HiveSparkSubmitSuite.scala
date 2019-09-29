@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveContext}
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveContext}
 import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types.{DecimalType, StructType}
@@ -111,8 +111,8 @@ class HiveSparkSubmitSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
-    val jar3 = HiveTestUtils.getHiveContribJar.getCanonicalPath
-    val jar4 = HiveTestUtils.getHiveHcatalogCoreJar.getCanonicalPath
+    val jar3 = HiveTestJars.getHiveContribJar().getCanonicalPath
+    val jar4 = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
     val jarsString = Seq(jar1, jar2, jar3, jar4).map(j => j.toString).mkString(",")
     val args = Seq(
       "--class", SparkSubmitClassLoaderTest.getClass.getName.stripSuffix("$"),
@@ -321,7 +321,7 @@ class HiveSparkSubmitSuite
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
-      "--jars", HiveTestUtils.getHiveContribJar.getCanonicalPath,
+      "--jars", HiveTestJars.getHiveContribJar().getCanonicalPath,
       unusedJar.toString)
     runSparkSubmit(argsForCreateTable)
 
@@ -463,7 +463,7 @@ object TemporaryHiveUDFTest extends Logging {
 
     // Load a Hive UDF from the jar.
     logInfo("Registering a temporary Hive UDF provided in a jar.")
-    val jar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    val jar = HiveTestJars.getHiveContribJar().getCanonicalPath
     hiveContext.sql(
       s"""
          |CREATE TEMPORARY FUNCTION example_max
@@ -501,7 +501,7 @@ object PermanentHiveUDFTest1 extends Logging {
 
     // Load a Hive UDF from the jar.
     logInfo("Registering a permanent Hive UDF provided in a jar.")
-    val jar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    val jar = HiveTestJars.getHiveContribJar().getCanonicalPath
     hiveContext.sql(
       s"""
          |CREATE FUNCTION example_max
@@ -538,7 +538,7 @@ object PermanentHiveUDFTest2 extends Logging {
     val hiveContext = new TestHiveContext(sc)
     // Load a Hive UDF from the jar.
     logInfo("Write the metadata of a permanent Hive UDF into metastore.")
-    val jar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    val jar = HiveTestJars.getHiveContribJar().getCanonicalPath
     val function = CatalogFunction(
       FunctionIdentifier("example_max"),
       "org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax",

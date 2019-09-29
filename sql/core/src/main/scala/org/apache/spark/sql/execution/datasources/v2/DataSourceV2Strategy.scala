@@ -226,15 +226,15 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
             orCreate = orCreate) :: Nil
       }
 
-    case AppendData(r: DataSourceV2Relation, query, _) =>
+    case AppendData(r: DataSourceV2Relation, query, writeOptions, _) =>
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          AppendDataExecV1(v1, r.options, query) :: Nil
+          AppendDataExecV1(v1, writeOptions.asOptions, query) :: Nil
         case v2 =>
-          AppendDataExec(v2, r.options, planLater(query)) :: Nil
+          AppendDataExec(v2, writeOptions.asOptions, planLater(query)) :: Nil
       }
 
-    case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, _) =>
+    case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, writeOptions, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val filters = splitConjunctivePredicates(deleteExpr).map {
         filter => DataSourceStrategy.translateFilter(deleteExpr).getOrElse(
@@ -242,25 +242,27 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       }.toArray
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          OverwriteByExpressionExecV1(v1, filters, r.options, query) :: Nil
+          OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions, query) :: Nil
         case v2 =>
-          OverwriteByExpressionExec(v2, filters, r.options, planLater(query)) :: Nil
+          OverwriteByExpressionExec(v2, filters, writeOptions.asOptions, planLater(query)) :: Nil
       }
 
-    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _) =>
-      OverwritePartitionsDynamicExec(r.table.asWritable, r.options, planLater(query)) :: Nil
+    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, writeOptions, _) =>
+      OverwritePartitionsDynamicExec(
+        r.table.asWritable, writeOptions.asOptions, planLater(query)) :: Nil
 
     case DeleteFromTable(r: DataSourceV2Relation, condition) =>
-      if (SubqueryExpression.hasSubquery(condition)) {
+      if (condition.exists(SubqueryExpression.hasSubquery)) {
         throw new AnalysisException(
           s"Delete by condition with subquery is not supported: $condition")
       }
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
-      val filters = splitConjunctivePredicates(condition).map {
-        f => DataSourceStrategy.translateFilter(f).getOrElse(
-          throw new AnalysisException(s"Exec delete failed:" +
-              s" cannot translate expression to source filter: $f"))
-      }.toArray
+      val filters = DataSourceStrategy.normalizeFilters(condition.toSeq, r.output)
+          .flatMap(splitConjunctivePredicates(_).map {
+            f => DataSourceStrategy.translateFilter(f).getOrElse(
+              throw new AnalysisException(s"Exec update failed:" +
+                  s" cannot translate expression to source filter: $f"))
+          }).toArray
       DeleteFromTableExec(r.table.asDeletable, filters) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>

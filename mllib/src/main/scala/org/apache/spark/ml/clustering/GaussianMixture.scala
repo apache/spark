@@ -33,8 +33,8 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
   Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
 
@@ -111,28 +111,32 @@ class GaussianMixtureModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    var predictionColNames = Seq.empty[String]
-    var predictionColumns = Seq.empty[Column]
-
-    if ($(predictionCol).nonEmpty) {
-      val predUDF = udf((vector: Vector) => predict(vector))
-      predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol))
-    }
+    val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
+    var outputData = dataset
+    var numColsOutput = 0
 
     if ($(probabilityCol).nonEmpty) {
       val probUDF = udf((vector: Vector) => predictProbability(vector))
-      predictionColNames :+= $(probabilityCol)
-      predictionColumns :+= probUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol))
+      outputData = outputData.withColumn($(probabilityCol), probUDF(vectorCol))
+      numColsOutput += 1
     }
 
-    if (predictionColNames.nonEmpty) {
-      dataset.withColumns(predictionColNames, predictionColumns)
-    } else {
+    if ($(predictionCol).nonEmpty) {
+      if ($(probabilityCol).nonEmpty) {
+        val predUDF = udf((vector: Vector) => vector.argmax)
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(probabilityCol))))
+      } else {
+        val predUDF = udf((vector: Vector) => predict(vector))
+        outputData = outputData.withColumn($(predictionCol), predUDF(vectorCol))
+      }
+      numColsOutput += 1
+    }
+
+    if (numColsOutput == 0) {
       this.logWarning(s"$uid: GaussianMixtureModel.transform() does nothing" +
         " because no output columns were set.")
-      dataset.toDF()
     }
+    outputData.toDF
   }
 
   @Since("2.0.0")

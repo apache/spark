@@ -690,6 +690,12 @@ class DataFrameTests(ReusedSQLTestCase):
         expected = df.collect()
         self.assertEqual(expected, list(it))
 
+    def test_to_local_iterator_prefetch(self):
+        df = self.spark.range(8, numPartitions=4)
+        expected = df.collect()
+        it = df.toLocalIterator(prefetchPartitions=True)
+        self.assertEqual(expected, list(it))
+
     def test_to_local_iterator_not_fully_consumed(self):
         # SPARK-23961: toLocalIterator throws exception when not fully consumed
         # Create a DataFrame large enough so that write to socket will eventually block

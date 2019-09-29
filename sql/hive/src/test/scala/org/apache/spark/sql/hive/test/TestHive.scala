@@ -647,3 +647,24 @@ private[sql] class TestHiveSessionStateBuilder(
 
   override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
 }
+
+private[hive] object HiveTestJars {
+  private val repository = SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.defaultValueString
+  private val hiveTestJarsDir = Utils.createTempDir()
+
+  def getHiveContribJar(version: String = HiveUtils.builtinHiveVersion): File =
+    getJarFromUrl(s"${repository}org/apache/hive/hive-contrib/" +
+      s"$version/hive-contrib-$version.jar")
+  def getHiveHcatalogCoreJar(version: String = HiveUtils.builtinHiveVersion): File =
+    getJarFromUrl(s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
+      s"$version/hive-hcatalog-core-$version.jar")
+
+  private def getJarFromUrl(urlString: String): File = {
+    val fileName = urlString.split("/").last
+    val targetFile = new File(hiveTestJarsDir, fileName)
+    if (!targetFile.exists()) {
+      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, new SparkConf, null, null)
+    }
+    targetFile
+  }
+}
