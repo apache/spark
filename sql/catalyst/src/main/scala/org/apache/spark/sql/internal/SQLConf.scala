@@ -2593,17 +2593,6 @@ class SQLConf extends Serializable with Logging {
   }
 
   /**
-   * Redacts the given option entry according to the description of SQL_OPTIONS_REDACTION_PATTERN.
-   */
-  def redactOptions[K, V](options: (K, V)): (K, V) = {
-    val regexes = Seq(
-      getConf(SQL_OPTIONS_REDACTION_PATTERN),
-      SECRET_REDACTION_PATTERN.readFrom(reader))
-
-    regexes.foldLeft(options) { case (kvs, r) => Utils.redact(Some(r), kvs) }
-  }
-
-  /**
    * Return whether a given key is set in this [[SQLConf]].
    */
   def contains(key: String): Boolean = {
