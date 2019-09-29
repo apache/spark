@@ -400,7 +400,8 @@ private[spark] object JsonProtocol {
     ("Shuffle Write Metrics" -> shuffleWriteMetrics) ~
     ("Input Metrics" -> inputMetrics) ~
     ("Output Metrics" -> outputMetrics) ~
-    ("Updated Blocks" -> updatedBlocks)
+    ("Updated Blocks" -> updatedBlocks) ~
+    ("Peak Execution Memory" -> taskMetrics.peakExecutionMemory)
   }
 
   /** Convert executor metrics to JSON. */
@@ -647,13 +648,6 @@ private[spark] object JsonProtocol {
     val taskInfo = taskInfoFromJson(json \ "Task Info")
     val executorMetrics = executorMetricsFromJson(json \ "Task Executor Metrics")
     val taskMetrics = taskMetricsFromJson(json \ "Task Metrics")
-    val peakExecutionMemory = taskInfo.accumulables.find(accInfo => {
-      accInfo.name.get.equals("internal.metrics.peakExecutionMemory")
-    }) match {
-      case Some(accInfo) => accInfo.value.getOrElse(0L).toString.toLong
-      case None => 0L
-    }
-    taskMetrics.setPeakExecutionMemory(peakExecutionMemory)
     SparkListenerTaskEnd(stageId, stageAttemptId, taskType, taskEndReason, taskInfo,
       executorMetrics, taskMetrics)
   }
@@ -898,6 +892,10 @@ private[spark] object JsonProtocol {
     })
     metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
     metrics.setExecutorCpuTime((json \ "Executor CPU Time") match {
+      case JNothing => 0
+      case x => x.extract[Long]
+    })
+    metrics.setPeakExecutionMemory((json \ "Peak Execution Memory") match {
       case JNothing => 0
       case x => x.extract[Long]
     })
