@@ -1,7 +1,7 @@
 -- Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
 --
 -- Window Functions Testing
--- https://github.com/postgres/postgres/blob/REL_12_BETA3/src/test/regress/sql/window.sql#L1-L319
+-- https://github.com/postgres/postgres/blob/REL_12_BETA4/src/test/regress/sql/window.sql#L1-L319
 
 CREATE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1;
 
