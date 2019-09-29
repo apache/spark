@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
@@ -838,6 +839,62 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, IntegerType), Literal.create(null, StringType)), null)
     checkEvaluation(FormatNumber(
       Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+  }
+
+  test("ToNumber") {
+    // Test '0' and '9'
+    checkEvaluation(ToNumber(Literal("454"), Literal("")), "")
+    checkEvaluation(ToNumber(Literal("454"), Literal("9")), "4")
+    checkEvaluation(ToNumber(Literal("454"), Literal("99")), "45")
+    checkEvaluation(ToNumber(Literal("454"), Literal("999")), "454")
+    checkEvaluation(ToNumber(Literal("054"), Literal("999")), "54")
+    checkEvaluation(ToNumber(Literal("404"), Literal("999")), "404")
+    checkEvaluation(ToNumber(Literal("450"), Literal("999")), "450")
+    checkEvaluation(ToNumber(Literal("0454"), Literal("999")), "45")
+    checkEvaluation(ToNumber(Literal("4540"), Literal("999")), "454")
+    checkEvaluation(ToNumber(Literal("454"), Literal("0")), "4")
+    checkEvaluation(ToNumber(Literal("454"), Literal("00")), "45")
+    checkEvaluation(ToNumber(Literal("454"), Literal("000")), "454")
+    checkEvaluation(ToNumber(Literal("054"), Literal("000")), "54")
+    checkEvaluation(ToNumber(Literal("404"), Literal("000")), "404")
+    checkEvaluation(ToNumber(Literal("450"), Literal("000")), "450")
+    checkEvaluation(ToNumber(Literal("0454"), Literal("000")), "45")
+    checkEvaluation(ToNumber(Literal("4540"), Literal("000")), "454")
+    // Test '.' and 'D'
+    checkEvaluation(ToNumber(Literal("454.0"), Literal("999.9")), "454")
+    checkEvaluation(ToNumber(Literal("454.0"), Literal("000.0")), "454")
+    checkEvaluation(ToNumber(Literal("454.0"), Literal("999D9")), "454")
+    checkEvaluation(ToNumber(Literal("454.0"), Literal("000D0")), "454")
+    checkEvaluation(ToNumber(Literal("454.00"), Literal("000D00")), "454")
+    checkEvaluation(ToNumber(Literal("454.3"), Literal("999.9")), "454.3")
+    checkEvaluation(ToNumber(Literal("454.3"), Literal("000.0")), "454.3")
+    checkEvaluation(ToNumber(Literal("454.3"), Literal("999D9")), "454.3")
+    checkEvaluation(ToNumber(Literal("454.3"), Literal("000D0")), "454.3")
+    // Test ',' and 'G'
+    checkEvaluation(ToNumber(Literal("12,454"), Literal("99,999")), "12454")
+    checkEvaluation(ToNumber(Literal("12,454"), Literal("00,000")), "12454")
+    checkEvaluation(ToNumber(Literal("12,454"), Literal("99G999")), "12454")
+    checkEvaluation(ToNumber(Literal("12,454"), Literal("00G000")), "12454")
+    checkEvaluation(ToNumber(Literal("12,454,367"), Literal("99,999,999")), "12454367")
+    checkEvaluation(ToNumber(Literal("12,454,367"), Literal("00,000,000")), "12454367")
+    checkEvaluation(ToNumber(Literal("12,454,367"), Literal("99G999G999")), "12454367")
+    checkEvaluation(ToNumber(Literal("12,454,367"), Literal("00G000G000")), "12454367")
+    // Test 'S'
+    checkEvaluation(ToNumber(Literal("454-"), Literal("999S")), "-454")
+    checkEvaluation(ToNumber(Literal("454-"), Literal("000S")), "-454")
+    checkEvaluation(ToNumber(Literal("12,454.8-"), Literal("99G999D9S")), "-12454.8")
+    checkEvaluation(ToNumber(Literal("1-2,454.8"), Literal("9S9,999D9")), "-12454.8")
+    checkEvaluation(ToNumber(Literal("00,454.8-"), Literal("99G999.9S")), "-454.8")
+    // Test 'L'
+    checkEvaluation(ToNumber(Literal("CNY234234.4350"), Literal("L999999.0000")), "234234.435")
+    checkEvaluation(ToNumber(Literal("RMB34234.4350"), Literal("L99999.0000")), "34234.435")
+    checkEvaluation(ToNumber(Literal("RY34234.4350"), Literal("L99999.0000")), "34234.435")
+    checkEvaluation(ToNumber(Literal("R34234.4350"), Literal("L99999.0000")), "34234.435")
+
+    ToNumber(Literal("454.3.2"), Literal("999D9D9")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Multiple decimal points in"))
+    }
   }
 
   test("find in set") {
