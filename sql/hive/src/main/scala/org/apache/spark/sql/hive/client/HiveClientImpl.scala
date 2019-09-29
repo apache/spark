@@ -370,6 +370,13 @@ private[hive] class HiveClientImpl(
   }
 
   override def alterDatabase(database: CatalogDatabase): Unit = withHiveState {
+    if (!getDatabase(database.name).locationUri.equals(database.locationUri)) {
+      // SPARK-29260: Enable supported versions once it support altering database location.
+      if (!(version.equals(hive.v3_0) || version.equals(hive.v3_1))) {
+        throw new AnalysisException(
+          s"Hive ${version.fullVersion} does not support altering database location")
+      }
+    }
     client.alterDatabase(
       database.name,
       new HiveDatabase(
