@@ -58,7 +58,7 @@ class ExecutorClassLoaderSuite
   var url1: String = _
   var urls2: Array[URL] = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     tempDir1 = Utils.createTempDir()
     tempDir2 = Utils.createTempDir()
@@ -71,7 +71,7 @@ class ExecutorClassLoaderSuite
     parentClassNames.foreach(TestUtils.createCompiledClass(_, tempDir2, "2"))
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       Utils.deleteRecursively(tempDir1)
       Utils.deleteRecursively(tempDir2)

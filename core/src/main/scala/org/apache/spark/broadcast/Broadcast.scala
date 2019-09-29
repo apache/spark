@@ -74,7 +74,7 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
    * Asynchronously delete cached copies of this broadcast on the executors.
    * If the broadcast is used after this is called, it will need to be re-sent to each executor.
    */
-  def unpersist() {
+  def unpersist(): Unit = {
     unpersist(blocking = false)
   }
 
@@ -83,7 +83,7 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
    * this is called, it will need to be re-sent to each executor.
    * @param blocking Whether to block until unpersisting has completed
    */
-  def unpersist(blocking: Boolean) {
+  def unpersist(blocking: Boolean): Unit = {
     assertValid()
     doUnpersist(blocking)
   }
@@ -93,7 +93,7 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
    * Destroy all data and metadata related to this broadcast variable. Use this with caution;
    * once a broadcast variable has been destroyed, it cannot be used again.
    */
-  def destroy() {
+  def destroy(): Unit = {
     destroy(blocking = false)
   }
 
@@ -102,7 +102,7 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
    * once a broadcast variable has been destroyed, it cannot be used again.
    * @param blocking Whether to block until destroy has completed
    */
-  private[spark] def destroy(blocking: Boolean) {
+  private[spark] def destroy(blocking: Boolean): Unit = {
     assertValid()
     _isValid = false
     _destroySite = Utils.getCallSite().shortForm
@@ -128,17 +128,17 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
    * Actually unpersist the broadcasted value on the executors. Concrete implementations of
    * Broadcast class must define their own logic to unpersist their own data.
    */
-  protected def doUnpersist(blocking: Boolean)
+  protected def doUnpersist(blocking: Boolean): Unit
 
   /**
    * Actually destroy all data and metadata related to this broadcast variable.
    * Implementation of Broadcast class must define their own logic to destroy their own
    * state.
    */
-  protected def doDestroy(blocking: Boolean)
+  protected def doDestroy(blocking: Boolean): Unit
 
   /** Check if this broadcast is valid. If not valid, exception is thrown. */
-  protected def assertValid() {
+  protected def assertValid(): Unit = {
     if (!_isValid) {
       throw new SparkException(
         "Attempted to use %s after it was destroyed (%s) ".format(toString, _destroySite))

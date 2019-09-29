@@ -27,7 +27,7 @@ trait KinesisFunSuite extends SparkFunSuite  {
   import KinesisTestUtils._
 
   /** Run the test if environment variable is set or ignore the test */
-  def testIfEnabled(testName: String)(testBody: => Unit) {
+  def testIfEnabled(testName: String)(testBody: => Unit): Unit = {
     if (shouldRunTests) {
       test(testName)(testBody)
     } else {

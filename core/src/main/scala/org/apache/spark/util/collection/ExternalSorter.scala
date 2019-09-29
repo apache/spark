@@ -534,7 +534,7 @@ private[spark] class ExternalSorter[K, V, C](
      * Update partitionId if we have reached the end of our current partition, possibly skipping
      * empty partitions on the way.
      */
-    private def skipToNextPartition() {
+    private def skipToNextPartition(): Unit = {
       while (partitionId < numPartitions &&
           indexInPartition == spill.elementsPerPartition(partitionId)) {
         partitionId += 1
@@ -605,7 +605,7 @@ private[spark] class ExternalSorter[K, V, C](
     }
 
     // Clean up our open streams and put us in a state where we can't read any more data
-    def cleanup() {
+    def cleanup(): Unit = {
       batchId = batchOffsets.length  // Prevent reading any other batch
       val ds = deserializeStream
       deserializeStream = null

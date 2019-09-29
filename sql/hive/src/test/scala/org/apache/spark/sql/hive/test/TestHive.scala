@@ -489,7 +489,7 @@ private[hive] class TestHiveSparkSession(
 
   def getLoadedTables: collection.mutable.HashSet[String] = sharedState.loadedTables
 
-  def loadTestTable(name: String) {
+  def loadTestTable(name: String): Unit = {
     if (!sharedState.loadedTables.contains(name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
       sharedState.loadedTables += name
@@ -523,7 +523,7 @@ private[hive] class TestHiveSparkSession(
   /**
    * Resets the test instance by deleting any table, view, temp view, and UDF that have been created
    */
-  def reset() {
+  def reset(): Unit = {
     try {
       // HACK: Hive is too noisy by default.
       org.apache.log4j.LogManager.getCurrentLoggers.asScala.foreach { log =>

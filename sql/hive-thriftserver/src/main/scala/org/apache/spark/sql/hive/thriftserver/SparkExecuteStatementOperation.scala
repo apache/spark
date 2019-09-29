@@ -78,7 +78,7 @@ private[hive] class SparkExecuteStatementOperation(
     HiveThriftServer2.listener.onOperationClosed(statementId)
   }
 
-  def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int) {
+  def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int): Unit = {
     dataTypes(ordinal) match {
       case StringType =>
         to += from.getString(ordinal)
@@ -310,7 +310,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private def cleanup(state: OperationState) {
+  private def cleanup(state: OperationState): Unit = {
     setState(state)
     if (runInBackground) {
       val backgroundHandle = getBackgroundHandle()

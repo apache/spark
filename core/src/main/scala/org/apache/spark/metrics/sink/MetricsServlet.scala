@@ -59,9 +59,9 @@ private[spark] class MetricsServlet(
     mapper.writeValueAsString(registry)
   }
 
-  override def start() { }
+  override def start(): Unit = { }
 
-  override def stop() { }
+  override def stop(): Unit = { }
 
-  override def report() { }
+  override def report(): Unit = { }
 }

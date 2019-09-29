@@ -523,7 +523,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val mapAppConf = mapYARNAppConf ++ mapMRAppConf
   }
 
-  def withAppConf(m: Map[String, String] = Map())(testCode: (Configuration) => Any) {
+  def withAppConf(m: Map[String, String] = Map())(testCode: (Configuration) => Any): Unit = {
     val conf = new Configuration
     m.foreach { case (k, v) => conf.set(k, v, "ClientSpec") }
     testCode(conf)
