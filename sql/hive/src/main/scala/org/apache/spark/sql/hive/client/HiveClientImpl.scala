@@ -52,6 +52,7 @@ import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
 import org.apache.spark.sql.hive.client.HiveClientImpl._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -167,14 +168,15 @@ private[hive] class HiveClientImpl(
     // has hive-site.xml. So, HiveConf will use that to override its default values.
     // 2: we set all spark confs to this hiveConf.
     // 3: we set all entries in config to this hiveConf.
-    (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
-      ++ sparkConf.getAll.toMap ++ extraConfig).foreach { case (k, v) =>
+    val confMap = (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue) ++
+      sparkConf.getAll.toMap ++ extraConfig).toMap
+    confMap.foreach { case (k, v) => hiveConf.set(k, v) }
+    SQLConf.get.redactOptions(confMap).foreach { case (k, v) =>
       logDebug(
         s"""
            |Applying Hadoop/Hive/Spark and extra properties to Hive Conf:
-           |$k=${if (k.toLowerCase(Locale.ROOT).contains("password")) "xxx" else v}
+           |$k=$v
          """.stripMargin)
-      hiveConf.set(k, v)
     }
     val state = new SessionState(hiveConf)
     if (clientLoader.cachedHive != null) {
