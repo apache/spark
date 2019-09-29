@@ -1339,8 +1339,8 @@
           </exclusion>
           <exclusion>
             <groupId>com.github.spotbugs</groupId>
-	    <artifactId>spotbugs-annotations</artifactId>
-	  </exclusion>
+            <artifactId>spotbugs-annotations</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
