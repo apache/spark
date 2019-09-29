@@ -19,12 +19,13 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 import java.sql.Timestamp
+import java.util.concurrent.Semaphore
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
-import org.apache.spark.{SparkEnv, TestUtils}
+import org.apache.spark.{SparkContext, TestUtils}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileSourceWriteDesc
 import org.apache.spark.sql.{QueryTest, Row}
@@ -34,7 +35,7 @@ import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtoc
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.util.Utils
 
 private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String)
@@ -50,10 +51,9 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
 private class DetectCorrectOutputPathFileCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean,
     fileSourceWriteDesc: Option[FileSourceWriteDesc])
-  extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite,
-    fileSourceWriteDesc) with Serializable with Logging {
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, fileSourceWriteDesc) with Serializable
+    with Logging {
 
   override def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val committer = super.setupCommitter(context)
@@ -70,6 +70,13 @@ private class DetectCorrectOutputPathFileCommitProtocol(
 
 class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  // create sparkSession with 4 cores to support concurrent write.
+  override protected def createSparkSession = new TestSparkSession(
+    new SparkContext(
+      "local[4]",
+      "test-partitioned-write-context",
+      sparkConf.set("spark.sql.testkey", "true")))
 
   test("write many partitions") {
     val path = Utils.createTempDir()
@@ -196,5 +203,53 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("Concurrent write to the same table with different partitions should be possible") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTable("ta", "tb") {
+        val sem = new Semaphore(0)
+        Seq((1, 2)).toDF("a", "b")
+          .write
+          .partitionBy("b")
+          .mode("overwrite")
+          .saveAsTable("ta")
+
+        spark.range(0, 10).toDF("a").write.mode("overwrite").saveAsTable("tb")
+        val stat1 = "insert overwrite table ta partition(b=1) select a from tb"
+        val stat2 = "insert overwrite table ta partition(b=2) select a from tb"
+        val stats = Seq(stat1, stat2)
+
+        var throwable: Option[Throwable] = None
+        for (i <- 0 until 2) {
+          new Thread {
+            override def run(): Unit = {
+              try {
+                val stat = stats(i)
+                sql(stat)
+              } catch {
+                case t: Throwable =>
+                  throwable = Some(t)
+              } finally {
+                sem.release()
+              }
+            }
+          }.start()
+        }
+        // make sure writing table in two threads are executed.
+        sem.acquire(2)
+        throwable.foreach { t => throw improveStackTrace(t) }
+
+        val df1 = spark.range(0, 10).map(x => (x, 1)).toDF("a", "b")
+        val df2 = spark.range(0, 10).map(x => (x, 2)).toDF("a", "b")
+        checkAnswer(spark.sql("select a, b from ta where b = 1"), df1)
+        checkAnswer(spark.sql("select a, b from ta where b = 2"), df2)
+      }
+    }
+  }
+
+  private def improveStackTrace(t: Throwable): Throwable = {
+    t.setStackTrace(t.getStackTrace ++ Thread.currentThread.getStackTrace)
+    t
   }
 }

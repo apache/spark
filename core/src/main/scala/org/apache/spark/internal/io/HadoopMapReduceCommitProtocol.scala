@@ -41,26 +41,31 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  *
  * @param jobId the job's or stage's id
  * @param path the job's output path, or null if committer acts as a noop
- * @param dynamicPartitionOverwrite If true, Spark will overwrite partition directories at runtime
- *                                  dynamically, i.e., we first write files under a staging
- *                                  directory with partition path, e.g.
- *                                  /path/to/staging/a=1/b=1/xxx.parquet. When committing the job,
- *                                  we first clean up the corresponding partition directories at
- *                                  destination path, e.g. /path/to/destination/a=1/b=1, and move
- *                                  files from staging directory to the corresponding partition
- *                                  directories under destination path.
+ * @param fileSourceWriteDesc a description for file source write operation
  */
 class HadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean = false,
-    fileSourceWriteDesc: Option[FileSourceWriteDesc] = None)
+    fileSourceWriteDesc: Option[FileSourceWriteDesc])
   extends FileCommitProtocol with Serializable with Logging {
 
   import FileCommitProtocol._
   import HadoopMapReduceCommitProtocol._
 
-  def this(jobId: String, path: String, dpOverwrite: Boolean) = this(jobId, path, dpOverwrite, None)
+  def this(jobId: String, path: String, dynamicPartitionOverwrite: Boolean = false) =
+    this(jobId, path, Some(new FileSourceWriteDesc(dynamicPartitionOverwrite =
+      dynamicPartitionOverwrite)))
+
+  /**
+   * If true, Spark will overwrite partition directories at runtime dynamically, i.e., we first
+   * write files under a staging directory with partition path, e.g.
+   * /path/to/staging/a=1/b=1/xxx.parquet.
+   * When committing the job, we first clean up the corresponding partition directories at
+   * destination path, e.g. /path/to/destination/a=1/b=1, and move files from staging directory to
+   * the corresponding partition directories under destination path.
+   */
+  def dynamicPartitionOverwrite: Boolean =
+    fileSourceWriteDesc.map(_.dynamicPartitionOverwrite).getOrElse(false)
 
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
   @transient private var committer: OutputCommitter = _
@@ -147,7 +152,7 @@ class HadoopMapReduceCommitProtocol(
     if (supportConcurrent) {
       stagingOutputPath = getOutputPath(context)
       context.getConfiguration.set(FileOutputFormat.OUTDIR, stagingOutputPath.toString)
-      logWarning("Set file output committer algorithm version to 2 implicitly," +
+      logDebug("Set file output committer algorithm version to 2 implicitly," +
         " for that the task output would be committed to staging output path firstly," +
         " which is equivalent to algorithm 1.")
       context.getConfiguration.setInt(FileOutputCommitter.FILEOUTPUTCOMMITTER_ALGORITHM_VERSION, 2)

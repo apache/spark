@@ -53,14 +53,13 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
       "Wrong constructor argument count")
   }
 
-  test("Four-arg constructor has priority") {
-    assert(4 == instantiateWithFileSourceWriteDesc(false, None).argCount,
-      "Wrong constructor argument count")
-  }
 
-  test("Four-arg constructor has priority with file source write description specified") {
-    assert(4 == instantiateWithFileSourceWriteDesc(false,
-      Some(FileSourceWriteDesc(true, Seq.empty))).argCount, "Wrong constructor argument count")
+  test("With file source write desc arg constructor has priority when file source" +
+    " write description specified") {
+    val instance = instantiateWithFileSourceWriteDesc(
+      Some(new FileSourceWriteDesc(true, false, Seq.empty)))
+    assert(3 == instance.argCount, "Wrong constructor argument count")
+    assert("with file source write desc" == instance.msg, "Wrong constructor invoked")
   }
 
   test("The protocol must be of the correct class") {
@@ -112,17 +111,15 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
 
   /**
    * Create a four-arg protocol instance.
-   * @param dynamic dynamic partitioning mode
    * @param desc file source write description
    * @return the instance
    */
   private def instantiateWithFileSourceWriteDesc(
-      dynamic: Boolean, desc: Option[FileSourceWriteDesc]): FullConstructorCommitProtocol = {
+      desc: Option[FileSourceWriteDesc]): FullConstructorCommitProtocol = {
     FileCommitProtocol.instantiate(
       classOf[FullConstructorCommitProtocol].getCanonicalName,
       "job",
       "path",
-      dynamic,
       None).asInstanceOf[FullConstructorCommitProtocol]
   }
 }
@@ -139,26 +136,26 @@ private class ClassicConstructorCommitProtocol(arg1: String, arg2: String)
  * This protocol implementation does have the new three-arg constructor
  * alongside the original, and a 4 arg one for completeness.
  * The final value of the real constructor is the number of arguments
- * used in the 2-, 3- and 4- constructor, for test assertions.
+ * used in the 2- and 3- constructor, for test assertions.
  */
 private class FullConstructorCommitProtocol(
   arg1: String,
   arg2: String,
-  b: Boolean,
   desc: Option[FileSourceWriteDesc],
-  val argCount: Int)
-  extends HadoopMapReduceCommitProtocol(arg1, arg2, b) {
+  val argCount: Int,
+  val msg: String = "")
+  extends HadoopMapReduceCommitProtocol(arg1, arg2, desc) {
 
   def this(arg1: String, arg2: String) = {
-    this(arg1, arg2, false, None, 2)
+    this(arg1, arg2, None, 2)
   }
 
   def this(arg1: String, arg2: String, b: Boolean) = {
-    this(arg1, arg2, false, None, 3)
+    this(arg1, arg2, Some(new FileSourceWriteDesc(dynamicPartitionOverwrite = b)), 3)
   }
 
-  def this(arg1: String, arg2: String, b: Boolean, desc: Option[FileSourceWriteDesc]) {
-    this(arg1, arg2, false, None, 4)
+  def this(arg1: String, arg2: String, desc: Option[FileSourceWriteDesc]) {
+    this(arg1, arg2, desc, 3, "with file source write desc")
   }
 }
 

@@ -33,7 +33,8 @@ import org.apache.spark.util.Utils
  *    will be used for tasks on executors.
  * 2. Implementations should have a constructor with 2 or 3 arguments:
  *      (jobId: String, path: String) or
- *      (jobId: String, path: String, dynamicPartitionOverwrite: Boolean)
+ *      (jobId: String, path: String, dynamicPartitionOverwrite: Boolean) or
+ *      (jobId: String, path: String, fileSourceWriteDesc: Option[FileSourceWriteDesc])
  * 3. A committer should not be reused across multiple Spark jobs.
  *
  * The proper call sequence is:
@@ -179,27 +180,26 @@ object FileCommitProtocol extends Logging {
       className: String,
       jobId: String,
       outputPath: String,
-      dynamicPartitionOverwrite: Boolean,
       fileSourceWriteDesc: Option[FileSourceWriteDesc]): FileCommitProtocol = {
 
     logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
-      s" dynamic=$dynamicPartitionOverwrite; fileSourceWriteDesc= $fileSourceWriteDesc")
+      s" fileSourceWriteDesc= $fileSourceWriteDesc")
     val clazz = Utils.classForName[FileCommitProtocol](className)
     // First try the constructor with arguments (jobId: String, outputPath: String,
-    // dynamicPartitionOverwrite: Boolean, fileSourceWriteDesc: Option[FileSourceWriteDesc]).
+    // fileSourceWriteDesc: Option[FileSourceWriteDesc]).
     // If that doesn't exist, try to invoke `FileCommitProtocol.instance(className,
     // JobId, outputPath, dynamicPartitionOverwrite)`.
     try {
-      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean],
+      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String],
         classOf[Option[FileSourceWriteDesc]])
-      logDebug("Using (String, String, Boolean, Option[FileSourceWriteDesc]) constructor")
-      ctor.newInstance(jobId, outputPath, dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean],
-        fileSourceWriteDesc)
+      logDebug("Using (String, String, Option[FileSourceWriteDesc]) constructor")
+      ctor.newInstance(jobId, outputPath, fileSourceWriteDesc)
     } catch {
       case _: NoSuchMethodException =>
         logDebug("Falling back to invoke instance(className, JobId, outputPath," +
           " dynamicPartitionOverwrite)")
-        instantiate(className, jobId, outputPath, dynamicPartitionOverwrite)
+        instantiate(className, jobId, outputPath,
+          fileSourceWriteDesc.map(_.dynamicPartitionOverwrite).getOrElse(false))
     }
   }
 

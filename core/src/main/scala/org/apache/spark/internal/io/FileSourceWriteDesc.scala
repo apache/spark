@@ -21,8 +21,12 @@ package org.apache.spark.internal.io
  * A class to describe the properties for file source write operation.
  *
  * @param isInsertIntoHadoopFsRelation whether is a InsertIntoHadoopFsRelation operation
+ * @param dynamicPartitionOverwrite dynamic overwrite is enabled, the save mode is overwrite and
+ *                                  not all partition keys are specified
  * @param escapedStaticPartitionKVs static partition key and value pairs, which have been escaped
  */
-case class FileSourceWriteDesc(
-    isInsertIntoHadoopFsRelation: Boolean,
-    escapedStaticPartitionKVs: Seq[(String, String)])
+class FileSourceWriteDesc(
+    val isInsertIntoHadoopFsRelation: Boolean = false,
+    val dynamicPartitionOverwrite: Boolean = false,
+    val escapedStaticPartitionKVs: Seq[(String, String)] = Seq.empty[(String, String)])
+  extends Serializable
