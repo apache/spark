@@ -270,7 +270,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
         // Filter out executors under killing and not yet constructed
-        val activeExecutors = executorDataMap.filter { case (id, data) => executorIsAlive(id) && data.isReady }
+        val activeExecutors =
+          executorDataMap.filter { case (id, data) => executorIsAlive(id) && data.isReady }
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
             new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
