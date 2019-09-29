@@ -25,15 +25,19 @@ object IntervalUtils {
   val YEARS_PER_CENTURY: Int = 100
   val YEARS_PER_DECADE: Int = 10
 
+  def getYear(interval: CalendarInterval): Int = {
+    interval.months / MONTHS_PER_YEAR
+  }
+
   def getMillennium(interval: CalendarInterval): Int = {
-    (interval.months / MONTHS_PER_YEAR) / YEARS_PER_MILLENNIUM
+    getYear(interval) / YEARS_PER_MILLENNIUM
   }
 
   def getCentury(interval: CalendarInterval): Int = {
-    (interval.months / MONTHS_PER_YEAR) / YEARS_PER_CENTURY
+    getYear(interval) / YEARS_PER_CENTURY
   }
 
   def getDecade(interval: CalendarInterval): Int = {
-    (interval.months / MONTHS_PER_YEAR) / YEARS_PER_DECADE
+    getYear(interval) / YEARS_PER_DECADE
   }
 }

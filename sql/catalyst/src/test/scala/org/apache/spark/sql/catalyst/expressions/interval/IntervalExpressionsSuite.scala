@@ -70,4 +70,19 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Decade("9 years 12 months"), 1)
     checkEvaluation(Decade("10 years -1 months"), 0)
   }
+
+  test("year") {
+    checkEvaluation(Year("0 years"), 0)
+    checkEvaluation(Year("9999 years"), 9999)
+
+    checkEvaluation(Year("1000 years"), 1000)
+    checkEvaluation(Year("-2000 years"), -2000)
+
+    // Microseconds part must not be taken into account
+    checkEvaluation(Year("9 years 400 days"), 9)
+
+    // Year must be taken from years and months
+    checkEvaluation(Year("9 years 12 months"), 10)
+    checkEvaluation(Year("10 years -1 months"), 9)
+  }
 }
