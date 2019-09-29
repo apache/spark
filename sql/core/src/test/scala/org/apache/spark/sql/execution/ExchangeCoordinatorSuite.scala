@@ -493,4 +493,15 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
     withSparkSession(test, 4, None)
   }
+
+  test("SPARK-29284 adaptive query execution works correctly " +
+    "when first stage partitions size is 0") {
+    val test = { spark: SparkSession =>
+      spark.sql("SET spark.sql.adaptive.enabled=true")
+      spark.sql("SET spark.sql.shuffle.partitions=1")
+      val resultDf = spark.range(0).distinct().groupBy().count()
+      checkAnswer(resultDf, Row(0) :: Nil)
+    }
+    withSparkSession(test, 4, None)
+  }
 }

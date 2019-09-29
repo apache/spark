@@ -237,7 +237,7 @@ class ExchangeCoordinator(
       // number of post-shuffle partitions.
       val partitionStartIndices =
         if (mapOutputStatistics.length == 0) {
-          Array.empty[Int]
+          Array(0)
         } else {
           estimatePartitionStartIndices(mapOutputStatistics)
         }
