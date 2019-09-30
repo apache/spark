@@ -114,7 +114,7 @@ private[kafka010] class InternalKafkaConsumer(
     clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
       kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
     kafkaParamsWithSecurity = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
-      .setAuthenticationConfigIfNeeded()
+      .setAuthenticationConfigIfNeeded(clusterConfig)
       .build()
     val c = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParamsWithSecurity)
     val tps = new ju.ArrayList[TopicPartition]()
