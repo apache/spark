@@ -42,7 +42,11 @@ object IntervalUtils {
     getYear(interval) / YEARS_PER_DECADE
   }
 
+  def getMonth(interval: CalendarInterval): Int = {
+    interval.months % MONTHS_PER_YEAR
+  }
+
   def getQuarter(interval: CalendarInterval): Int = {
-    (interval.months % MONTHS_PER_YEAR) / MONTHS_PER_QUARTER + 1
+    getMonth(interval) / MONTHS_PER_QUARTER + 1
   }
 }

@@ -88,4 +88,14 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Quarter("-2 years -3 months"), 0)
     checkEvaluation(Quarter("9999 years"), 1)
   }
+
+  test("month") {
+    checkEvaluation(Month("0 year"), 0)
+    for (m <- -24 to 24) {
+      checkEvaluation(Month(s"$m months"), m % 12)
+    }
+    checkEvaluation(Month("1 year 10 months"), 10)
+    checkEvaluation(Month("-2 year -10 months"), -10)
+    checkEvaluation(Month("9999 years"), 0)
+  }
 }

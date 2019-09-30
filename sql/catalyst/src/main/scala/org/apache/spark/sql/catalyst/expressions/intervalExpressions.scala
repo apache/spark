@@ -85,6 +85,18 @@ case class Quarter(child: Expression) extends UnaryExpression with ExpectsInputT
   }
 }
 
+case class Month(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
+  override def dataType: DataType = IntegerType
+  override protected def nullSafeEval(date: Any): Any = {
+    IntervalUtils.getMonth(date.asInstanceOf[CalendarInterval])
+  }
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$iu.getMonth($c)")
+  }
+}
+
 object IntervalPart {
 
   def parseExtractField(
@@ -97,7 +109,7 @@ object IntervalPart {
     case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
     case "ISOYEAR" => errorHandleFunc
     case "QUARTER" | "QTR" => Quarter(source)
-//    case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
+    case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
 //    case "WEEK" | "W" | "WEEKS" => WeekOfYear(source)
 //    case "DAY" | "D" | "DAYS" => DayOfMonth(source)
 //    case "DAYOFWEEK" => DayOfWeek(source)
