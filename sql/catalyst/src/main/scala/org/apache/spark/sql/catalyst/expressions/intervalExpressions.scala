@@ -110,7 +110,7 @@ object IntervalPart {
     case "ISOYEAR" => errorHandleFunc
     case "QUARTER" | "QTR" => Quarter(source)
     case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
-//    case "WEEK" | "W" | "WEEKS" => WeekOfYear(source)
+    case "WEEK" | "W" | "WEEKS" => errorHandleFunc
 //    case "DAY" | "D" | "DAYS" => DayOfMonth(source)
 //    case "DAYOFWEEK" => DayOfWeek(source)
 //    case "DOW" => Subtract(DayOfWeek(source), Literal(1))
