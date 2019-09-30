@@ -842,7 +842,7 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
   }
 
-  def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*) {
+  def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*): Unit = {
     val user = System.getProperty("user.name")
     val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
     val statements = connections.map(_.createStatement())
@@ -863,7 +863,7 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     }
   }
 
-  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*) {
+  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*): Unit = {
     val user = System.getProperty("user.name")
     val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
     val statements = connections.map(_.createStatement())
@@ -879,7 +879,7 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     }
   }
 
-  def withJdbcStatement(tableNames: String*)(f: Statement => Unit) {
+  def withJdbcStatement(tableNames: String*)(f: Statement => Unit): Unit = {
     withMultipleConnectionJdbcStatement(tableNames: _*)(f)
   }
 }

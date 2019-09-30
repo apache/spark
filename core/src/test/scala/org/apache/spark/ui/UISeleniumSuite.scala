@@ -233,7 +233,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
   test("spark.ui.killEnabled should properly control kill button display") {
     def hasKillLink: Boolean = find(className("kill-link")).isDefined
-    def runSlowJob(sc: SparkContext) {
+    def runSlowJob(sc: SparkContext): Unit = {
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
     }
 

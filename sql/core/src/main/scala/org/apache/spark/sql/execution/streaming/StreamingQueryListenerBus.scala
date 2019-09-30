@@ -63,7 +63,7 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
    * are dispatched to Spark listener bus. This method is guaranteed to be called by queries in
    * the same SparkSession as this listener.
    */
-  def post(event: StreamingQueryListener.Event) {
+  def post(event: StreamingQueryListener.Event): Unit = {
     event match {
       case s: QueryStartedEvent =>
         activeQueryRunIds.synchronized { activeQueryRunIds += s.runId }

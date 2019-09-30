@@ -56,7 +56,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     sc.setCheckpointDir(checkpointDir)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       Utils.deleteRecursively(new File(checkpointDir))
     } finally {
@@ -127,7 +127,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     dataframe: DataFrame,
     transformer: Transformer,
     expectedMessagePart : String,
-    firstResultCol: String) {
+    firstResultCol: String): Unit = {
 
     withClue(s"""Expected message part "${expectedMessagePart}" is not found in DF test.""") {
       val exceptionOnDf = intercept[Throwable] {

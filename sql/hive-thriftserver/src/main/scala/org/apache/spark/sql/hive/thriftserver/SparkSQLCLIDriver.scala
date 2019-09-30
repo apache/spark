@@ -63,7 +63,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
    * a signal handler will invoke this registered callback if a Ctrl+C signal is detected while
    * a command is being processed by the current thread.
    */
-  def installSignalHandler() {
+  def installSignalHandler(): Unit = {
     HiveInterruptUtils.add(() => {
       // Handle remote execution mode
       if (SparkSQLEnv.sparkContext != null) {
@@ -77,7 +77,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     })
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val oproc = new OptionsProcessor()
     if (!oproc.process_stage1(args)) {
       System.exit(1)

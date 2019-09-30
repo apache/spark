@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
 private[columnar] trait ColumnAccessor {
   initialize()
 
-  protected def initialize()
+  protected def initialize(): Unit
 
   def hasNext: Boolean
 
@@ -50,7 +50,7 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
     protected val columnType: ColumnType[JvmType])
   extends ColumnAccessor {
 
-  protected def initialize() {}
+  protected def initialize(): Unit = {}
 
   override def hasNext: Boolean = buffer.hasRemaining
 

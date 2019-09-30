@@ -487,7 +487,7 @@ object ShuffleSuite {
     @volatile var bytesWritten: Long = 0
     @volatile var bytesRead: Long = 0
     val listener = new SparkListener {
-      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         recordsWritten += taskEnd.taskMetrics.shuffleWriteMetrics.recordsWritten
         bytesWritten += taskEnd.taskMetrics.shuffleWriteMetrics.bytesWritten
         recordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
