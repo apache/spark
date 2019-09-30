@@ -47,9 +47,12 @@ private[kafka010] class InternalKafkaConsumer(
 
   val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
-  // These fields must be updated whenever a new consumer is created.
-  private[kafka010] var clusterConfig: Option[KafkaTokenClusterConf] = _
+  private[kafka010] val clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(
+    SparkEnv.get.conf, kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
+      .asInstanceOf[String])
+
   // Kafka consumer is not able to give back the params instantiated with so we need to store it.
+  // It must be updated all the time when new consumer created.
   private[kafka010] var kafkaParamsWithSecurity: ju.Map[String, Object] = _
   private val consumer = createConsumer()
 
@@ -111,8 +114,6 @@ private[kafka010] class InternalKafkaConsumer(
 
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
   private def createConsumer(): KafkaConsumer[Array[Byte], Array[Byte]] = {
-    clusterConfig = KafkaTokenUtil.findMatchingTokenClusterConfig(SparkEnv.get.conf,
-      kafkaParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
     kafkaParamsWithSecurity = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
       .setAuthenticationConfigIfNeeded(clusterConfig)
       .build()

@@ -272,6 +272,7 @@ private[spark] object KafkaTokenUtil extends Logging {
   def getTokenJaasParams(clusterConf: KafkaTokenClusterConf): String = {
     val token = UserGroupInformation.getCurrentUser().getCredentials.getToken(
       getTokenService(clusterConf.identifier))
+    require(token != null, s"Token for identifier ${clusterConf.identifier} must exist")
     val username = new String(token.getIdentifier)
     val password = new String(token.getPassword)
 
