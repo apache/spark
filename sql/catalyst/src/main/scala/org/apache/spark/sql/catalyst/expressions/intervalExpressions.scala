@@ -25,101 +25,68 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types.{AbstractDataType, ByteType, CalendarIntervalType, DataType, IntegerType, LongType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
-case class Millennium(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+abstract class IntervalPart(
+    child: Expression,
+    val dataType: DataType,
+    func: CalendarInterval => Any,
+    funcName: String) extends UnaryExpression with ExpectsInputTypes with Serializable {
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-  override def dataType: DataType = IntegerType
-  override protected def nullSafeEval(date: Any): Any = {
-    IntervalUtils.getMillennium(date.asInstanceOf[CalendarInterval])
+  override protected def nullSafeEval(interval: Any): Any = {
+    func(interval.asInstanceOf[CalendarInterval])
   }
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$iu.getMillennium($c)")
+    defineCodeGen(ctx, ev, c => s"$iu.$funcName($c)")
   }
 }
 
-case class Century(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-  override def dataType: DataType = IntegerType
-  override protected def nullSafeEval(date: Any): Any = {
-    IntervalUtils.getCentury(date.asInstanceOf[CalendarInterval])
-  }
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$iu.getCentury($c)")
-  }
-}
+case class Millennium(child: Expression) extends IntervalPart(
+    child,
+    IntegerType,
+    IntervalUtils.getMillennium,
+    "getMillennium")
 
-case class Decade(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-  override def dataType: DataType = IntegerType
-  override protected def nullSafeEval(date: Any): Any = {
-    IntervalUtils.getDecade(date.asInstanceOf[CalendarInterval])
-  }
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$iu.getDecade($c)")
-  }
-}
+case class Century(child: Expression) extends IntervalPart(
+    child,
+    IntegerType,
+    IntervalUtils.getCentury,
+    "getCentury")
 
-case class Year(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-  override def dataType: DataType = IntegerType
-  override protected def nullSafeEval(date: Any): Any = {
-    IntervalUtils.getYear(date.asInstanceOf[CalendarInterval])
-  }
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$iu.getYear($c)")
-  }
-}
+case class Decade(child: Expression) extends IntervalPart(
+    child,
+    IntegerType,
+    IntervalUtils.getDecade,
+    "getDecade")
 
-case class Quarter(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-  override def dataType: DataType = ByteType
-  override protected def nullSafeEval(date: Any): Any = {
-    IntervalUtils.getQuarter(date.asInstanceOf[CalendarInterval])
-  }
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$iu.getQuarter($c)")
-  }
-}
+case class Year(child: Expression) extends IntervalPart(
+    child,
+    IntegerType,
+    IntervalUtils.getYear,
+    "getYear")
 
-case class Month(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-  override def dataType: DataType = ByteType
-  override protected def nullSafeEval(date: Any): Any = {
-    IntervalUtils.getMonth(date.asInstanceOf[CalendarInterval])
-  }
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$iu.getMonth($c)")
-  }
-}
+case class Quarter(child: Expression) extends IntervalPart(
+    child,
+    ByteType,
+    IntervalUtils.getQuarter,
+    "getQuarter")
 
-case class Day(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-  override def dataType: DataType = LongType
-  override protected def nullSafeEval(date: Any): Any = {
-    IntervalUtils.getDay(date.asInstanceOf[CalendarInterval])
-  }
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$iu.getDay($c)")
-  }
-}
+case class Month(child: Expression) extends IntervalPart(
+    child,
+    ByteType,
+    IntervalUtils.getMonth,
+    "getMonth")
 
-case class Hour(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-  override def dataType: DataType = ByteType
-  override protected def nullSafeEval(date: Any): Any = {
-    IntervalUtils.getHour(date.asInstanceOf[CalendarInterval])
-  }
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$iu.getHour($c)")
-  }
-}
+case class Day(child: Expression) extends IntervalPart(
+    child,
+    LongType,
+    IntervalUtils.getDay,
+    "getDay")
+
+case class Hour(child: Expression) extends IntervalPart(
+    child,
+    ByteType,
+    IntervalUtils.getHour,
+    "getHour")
 
 object IntervalPart {
 
