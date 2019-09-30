@@ -26,6 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
@@ -286,8 +287,9 @@ private[hive] class SparkExecuteStatementOperation(
           if (e.isInstanceOf[HiveSQLException]) {
             throw e.asInstanceOf[HiveSQLException]
           } else {
+            val root = ExceptionUtils.getRootCause(e)
             throw new HiveSQLException("Error running query: " +
-              SparkUtils.findFirstCause(e).toString, e)
+              (if (root == null) e.toString else root.toString), e)
           }
         }
     } finally {
