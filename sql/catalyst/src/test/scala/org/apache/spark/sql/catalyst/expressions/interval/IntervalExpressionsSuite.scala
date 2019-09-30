@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.interval
 
+import scala.language.implicitConversions
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
 import org.apache.spark.unsafe.types.CalendarInterval
