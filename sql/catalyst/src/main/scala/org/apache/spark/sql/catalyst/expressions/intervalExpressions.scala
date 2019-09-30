@@ -64,6 +64,8 @@ case class Day(child: Expression) extends IntervalPart(child, LongType, getDay, 
 
 case class Hour(child: Expression) extends IntervalPart(child, ByteType, getHour, "getHour")
 
+case class Minute(child: Expression) extends IntervalPart(child, ByteType, getMinute, "getMinute")
+
 object IntervalPart {
 
   def parseExtractField(
@@ -78,7 +80,7 @@ object IntervalPart {
     case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
     case "DAY" | "D" | "DAYS" => Day(source)
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
-//    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
+    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
 //    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Second(source)
 //    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
 //      Milliseconds(source)
