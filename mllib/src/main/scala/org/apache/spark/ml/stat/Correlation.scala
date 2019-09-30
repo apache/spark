@@ -49,7 +49,7 @@ object Correlation {
    *               Supported: `pearson` (default), `spearman`
    * @return A dataframe that contains the correlation matrix of the column of vectors. This
    *         dataframe contains a single row and a single column of name
-   *         '$METHODNAME($COLUMN)'.
+   *         `$METHODNAME($COLUMN)`.
    * @throws IllegalArgumentException if the column is not a valid column in the dataset, or if
    *                                  the content of this column is not of type Vector.
    *

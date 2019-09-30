@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
@@ -53,6 +53,16 @@ class UnsafeArraySuite extends SparkFunSuite {
   val intMultiDimArray = Array(Array(1), Array(2, 20), Array(3, 30, 300))
   val doubleMultiDimArray = Array(
     Array(1.1, 11.1), Array(2.2, 22.2, 222.2), Array(3.3, 33.3, 333.3, 3333.3))
+
+  val serialArray = {
+    val offset = 32
+    val data = new Array[Byte](1024)
+    Platform.putLong(data, offset, 1)
+    val arrayData = new UnsafeArrayData()
+    arrayData.pointTo(data, offset, data.length)
+    arrayData.setLong(0, 19285)
+    arrayData
+  }
 
   test("read array") {
     val unsafeBoolean = ExpressionEncoder[Array[Boolean]].resolveAndBind().
@@ -208,14 +218,15 @@ class UnsafeArraySuite extends SparkFunSuite {
   }
 
   test("unsafe java serialization") {
-    val offset = 32
-    val data = new Array[Byte](1024)
-    Platform.putLong(data, offset, 1)
-    val arrayData = new UnsafeArrayData()
-    arrayData.pointTo(data, offset, data.length)
-    arrayData.setLong(0, 19285)
     val ser = new JavaSerializer(new SparkConf).newInstance()
-    val arrayDataSer = ser.deserialize[UnsafeArrayData](ser.serialize(arrayData))
+    val arrayDataSer = ser.deserialize[UnsafeArrayData](ser.serialize(serialArray))
+    assert(arrayDataSer.getLong(0) == 19285)
+    assert(arrayDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
+  }
+
+  test("unsafe Kryo serialization") {
+    val ser = new KryoSerializer(new SparkConf).newInstance()
+    val arrayDataSer = ser.deserialize[UnsafeArrayData](ser.serialize(serialArray))
     assert(arrayDataSer.getLong(0) == 19285)
     assert(arrayDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
   }

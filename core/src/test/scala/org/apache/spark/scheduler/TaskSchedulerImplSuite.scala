@@ -77,7 +77,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
-    val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
+    setupSchedulerWithMaster("local", confs: _*)
+  }
+
+  def setupSchedulerWithMaster(master: String, confs: (String, String)*): TaskSchedulerImpl = {
+    val conf = new SparkConf().setMaster(master).setAppName("TaskSchedulerImplSuite")
     confs.foreach { case (k, v) => conf.set(k, v) }
     sc = new SparkContext(conf)
     taskScheduler = new TaskSchedulerImpl(sc)
@@ -214,19 +218,19 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       taskScheduler.taskSetManagerForAttempt(taskset.stageId, taskset.stageAttemptId).get.isZombie
     }
 
-    val attempt1 = FakeTask.createTaskSet(1, 0)
+    val attempt1 = FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0)
     taskScheduler.submitTasks(attempt1)
     // The first submitted taskset is active
     assert(!isTasksetZombie(attempt1))
 
-    val attempt2 = FakeTask.createTaskSet(1, 1)
+    val attempt2 = FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 1)
     taskScheduler.submitTasks(attempt2)
     // The first submitted taskset is zombie now
     assert(isTasksetZombie(attempt1))
     // The newly submitted taskset is active
     assert(!isTasksetZombie(attempt2))
 
-    val attempt3 = FakeTask.createTaskSet(1, 2)
+    val attempt3 = FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 2)
     taskScheduler.submitTasks(attempt3)
     // The first submitted taskset remains zombie
     assert(isTasksetZombie(attempt1))
@@ -241,7 +245,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val numFreeCores = 1
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores))
-    val attempt1 = FakeTask.createTaskSet(10)
+    val attempt1 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 0)
 
     // submit attempt 1, offer some resources, some tasks get scheduled
     taskScheduler.submitTasks(attempt1)
@@ -257,7 +261,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(0 === taskDescriptions2.length)
 
     // if we schedule another attempt for the same stage, it should get scheduled
-    val attempt2 = FakeTask.createTaskSet(10, 1)
+    val attempt2 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 1)
 
     // submit attempt 2, offer some resources, some tasks get scheduled
     taskScheduler.submitTasks(attempt2)
@@ -273,7 +277,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val numFreeCores = 10
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores))
-    val attempt1 = FakeTask.createTaskSet(10)
+    val attempt1 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 0)
 
     // submit attempt 1, offer some resources, some tasks get scheduled
     taskScheduler.submitTasks(attempt1)
@@ -289,7 +293,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(0 === taskDescriptions2.length)
 
     // submit attempt 2
-    val attempt2 = FakeTask.createTaskSet(10, 1)
+    val attempt2 = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 1)
     taskScheduler.submitTasks(attempt2)
 
     // attempt 1 finished (this can happen even if it was marked zombie earlier -- all tasks were
@@ -483,7 +487,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("abort stage when all executors are blacklisted and we cannot acquire new executor") {
     taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
-    val taskSet = FakeTask.createTaskSet(numTasks = 10, stageAttemptId = 0)
+    val taskSet = FakeTask.createTaskSet(numTasks = 10)
     taskScheduler.submitTasks(taskSet)
     val tsm = stageToMockTaskSetManager(0)
 
@@ -525,7 +529,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0")
 
     // We have only 1 task remaining with 1 executor
-    val taskSet = FakeTask.createTaskSet(numTasks = 1, stageAttemptId = 0)
+    val taskSet = FakeTask.createTaskSet(numTasks = 1)
     taskScheduler.submitTasks(taskSet)
     val tsm = stageToMockTaskSetManager(0)
 
@@ -561,7 +565,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "10")
 
     // We have only 1 task remaining with 1 executor
-    val taskSet = FakeTask.createTaskSet(numTasks = 1, stageAttemptId = 0)
+    val taskSet = FakeTask.createTaskSet(numTasks = 1)
     taskScheduler.submitTasks(taskSet)
     val tsm = stageToMockTaskSetManager(0)
 
@@ -907,7 +911,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("SPARK-16106 locality levels updated if executor added to existing host") {
     val taskScheduler = setupScheduler()
 
-    taskScheduler.submitTasks(FakeTask.createTaskSet(2, 0,
+    taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0,
       (0 until 2).map { _ => Seq(TaskLocation("host0", "executor2")) }: _*
     ))
 
@@ -945,7 +949,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("scheduler checks for executors that can be expired from blacklist") {
     taskScheduler = setupScheduler()
 
-    taskScheduler.submitTasks(FakeTask.createTaskSet(1, 0))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0))
     taskScheduler.resourceOffers(IndexedSeq(
       new WorkerOffer("executor0", "host0", 1)
     )).flatten
@@ -1129,7 +1133,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // you'd need the previous stage to also get restarted, and then succeed, in between each
     // attempt, but that happens outside what we're mocking here.)
     val zombieAttempts = (0 until 2).map { stageAttempt =>
-      val attempt = FakeTask.createTaskSet(10, stageAttemptId = stageAttempt)
+      val attempt = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = stageAttempt)
       taskScheduler.submitTasks(attempt)
       val tsm = taskScheduler.taskSetManagerForAttempt(0, stageAttempt).get
       val offers = (0 until 10).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
@@ -1148,7 +1152,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // we've now got 2 zombie attempts, each with 9 tasks still active.  Submit the 3rd attempt for
     // the stage, but this time with insufficient resources so not all tasks are active.
 
-    val finalAttempt = FakeTask.createTaskSet(10, stageAttemptId = 2)
+    val finalAttempt = FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 2)
     taskScheduler.submitTasks(finalAttempt)
     val finalTsm = taskScheduler.taskSetManagerForAttempt(0, 2).get
     val offers = (0 until 5).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
@@ -1251,6 +1255,29 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(3 === taskDescriptions.length)
   }
 
+  test("SPARK-29263: barrier TaskSet can't schedule when higher prio taskset takes the slots") {
+    val taskCpus = 2
+    val taskScheduler = setupSchedulerWithMaster(
+      s"local[$taskCpus]",
+      config.CPUS_PER_TASK.key -> taskCpus.toString)
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")),
+      new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629")))
+    val barrier = FakeTask.createBarrierTaskSet(3, stageId = 0, stageAttemptId = 0, priority = 1)
+    val highPrio = FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0, priority = 0)
+
+    // submit highPrio and barrier taskSet
+    taskScheduler.submitTasks(highPrio)
+    taskScheduler.submitTasks(barrier)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    // it schedules the highPrio task first, and then will not have enough slots to schedule
+    // the barrier taskset
+    assert(1 === taskDescriptions.length)
+  }
+
   test("cancelTasks shall kill all the running tasks and fail the stage") {
     val taskScheduler = setupScheduler()
 
@@ -1266,7 +1293,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       }
     })
 
-    val attempt1 = FakeTask.createTaskSet(10, 0)
+    val attempt1 = FakeTask.createTaskSet(10)
     taskScheduler.submitTasks(attempt1)
 
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
@@ -1297,7 +1324,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       }
     })
 
-    val attempt1 = FakeTask.createTaskSet(10, 0)
+    val attempt1 = FakeTask.createTaskSet(10)
     taskScheduler.submitTasks(attempt1)
 
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),

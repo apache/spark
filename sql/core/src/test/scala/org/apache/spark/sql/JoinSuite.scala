@@ -894,6 +894,26 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-27485: EnsureRequirements should not fail join with duplicate keys") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val tbl_a = spark.range(40)
+        .select($"id" as "x", $"id" % 10 as "y")
+        .repartition(2, $"x", $"y", $"x")
+        .as("tbl_a")
+
+      val tbl_b = spark.range(20)
+        .select($"id" as "x", $"id" % 2 as "y1", $"id" % 20 as "y2")
+        .as("tbl_b")
+
+      val res = tbl_a
+        .join(tbl_b,
+          $"tbl_a.x" === $"tbl_b.x" && $"tbl_a.y" === $"tbl_b.y1" && $"tbl_a.y" === $"tbl_b.y2")
+        .select($"tbl_a.x")
+      checkAnswer(res, Row(0L) :: Row(1L) :: Nil)
+    }
+  }
+
   test("SPARK-26352: join reordering should not change the order of columns") {
     withTable("tab1", "tab2", "tab3") {
       spark.sql("select 1 as x, 100 as y").write.saveAsTable("tab1")

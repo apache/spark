@@ -36,10 +36,11 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ManualClock, Utils}
 
 
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits with Logging {
@@ -354,7 +355,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     logInfo("==================================\n\n\n")
     ssc = new StreamingContext(sc, Milliseconds(100))
     var runningCount = 0
-    SlowTestReceiver.receivedAllRecords = false
     // Create test receiver that sleeps in onStop()
     val totalNumRecords = 15
     val recordsPerSecond = 1
@@ -366,6 +366,9 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     }
     ssc.start()
     ssc.awaitTerminationOrTimeout(500)
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(SlowTestReceiver.initialized)
+    }
     ssc.stop(stopSparkContext = false, stopGracefully = true)
     logInfo("Running count = " + runningCount)
     assert(runningCount > 0)
@@ -390,6 +393,29 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     val streamingSourceAfterStop = StreamingContextSuite.getStreamingSource(ssc)
     assert(ssc.getState() === StreamingContextState.STOPPED)
     assert(!sourcesAfterStop.contains(streamingSourceAfterStop))
+  }
+
+  test("SPARK-28709 registering and de-registering of progressListener") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    conf.set("spark.ui.enabled", "true")
+
+    ssc = new StreamingContext(conf, batchDuration)
+
+    assert(ssc.sc.ui.isDefined, "Spark UI is not started!")
+    val sparkUI = ssc.sc.ui.get
+
+    addInputStream(ssc).register()
+    ssc.start()
+
+    assert(ssc.scheduler.listenerBus.listeners.contains(ssc.progressListener))
+    assert(ssc.sc.listenerBus.listeners.contains(ssc.progressListener))
+    assert(sparkUI.getStreamingJobProgressListener.get == ssc.progressListener)
+
+    ssc.stop()
+
+    assert(!ssc.scheduler.listenerBus.listeners.contains(ssc.progressListener))
+    assert(!ssc.sc.listenerBus.listeners.contains(ssc.progressListener))
+    assert(sparkUI.getStreamingJobProgressListener.isEmpty)
   }
 
   test("awaitTermination") {
@@ -841,6 +867,31 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     assert(latch.await(60, TimeUnit.SECONDS))
   }
 
+  test("SPARK-22955 graceful shutdown shouldn't lead to job generation error") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    conf.set("spark.streaming.clock", classOf[ManualClock].getName)
+    conf.set("spark.streaming.gracefulStopTimeout", "60s")
+
+    ssc = new StreamingContext(conf, Milliseconds(100))
+
+    new InputDStream[Int](ssc) {
+      @volatile private var stopped = false
+      override def start(): Unit = {}
+      override def stop(): Unit = stopped = true
+      override def compute(validTime: Time): Option[RDD[Int]] = {
+        if (stopped) throw new IllegalStateException("Already stopped")
+        Some(ssc.sc.emptyRDD[Int])
+      }
+    }.register()
+
+    ssc.start()
+    // start generating of batches constantly without any delay
+    ssc.scheduler.clock.asInstanceOf[ManualClock].setTime(Long.MaxValue)
+    ssc.stop(stopSparkContext = true, stopGracefully = true)
+    // exception shouldn't be thrown
+    ssc.awaitTermination()
+  }
+
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => 1 to i)
     val inputStream = new TestInputStream(s, input, 1)
@@ -909,6 +960,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
 
   var receivingThreadOption: Option[Thread] = None
+  @volatile var receivedAllRecords = false
 
   def onStart() {
     val thread = new Thread() {
@@ -918,17 +970,18 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
           Thread.sleep(1000 / recordsPerSecond)
           store(i)
         }
-        SlowTestReceiver.receivedAllRecords = true
+        receivedAllRecords = true
         logInfo(s"Received all $totalRecords records")
       }
     }
     receivingThreadOption = Some(thread)
     thread.start()
+    SlowTestReceiver.initialized = true
   }
 
   def onStop() {
     // Simulate slow receiver by waiting for all records to be produced
-    while (!SlowTestReceiver.receivedAllRecords) {
+    while (!receivedAllRecords) {
       Thread.sleep(100)
     }
     // no clean to be done, the receiving thread should stop on it own
@@ -936,7 +989,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
 }
 
 object SlowTestReceiver {
-  var receivedAllRecords = false
+  var initialized = false
 }
 
 /** Streaming application for testing DStream and RDD creation sites */

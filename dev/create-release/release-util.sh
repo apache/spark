@@ -150,6 +150,9 @@ function get_release_info {
   GIT_REF="$RELEASE_TAG"
   if is_dry_run; then
     echo "This is a dry run. Please confirm the ref that will be built for testing."
+    if [[ $SKIP_TAG = 0 ]]; then
+      GIT_REF="$GIT_BRANCH"
+    fi
     GIT_REF=$(read_config "Ref" "$GIT_REF")
   fi
   export GIT_REF

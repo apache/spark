@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, never, verify, when}
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config
@@ -37,20 +37,24 @@ import org.apache.spark.util.ManualClock
  */
 class ExecutorAllocationManagerSuite
   extends SparkFunSuite
-  with LocalSparkContext
-  with BeforeAndAfter {
+  with LocalSparkContext {
 
   import ExecutorAllocationManager._
   import ExecutorAllocationManagerSuite._
 
   private val contexts = new mutable.ListBuffer[SparkContext]()
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     contexts.clear()
   }
 
-  after {
-    contexts.foreach(_.stop())
+  override def afterEach(): Unit = {
+    try {
+      contexts.foreach(_.stop())
+    } finally {
+      super.afterEach()
+    }
   }
 
   private def post(bus: LiveListenerBus, event: SparkListenerEvent): Unit = {
@@ -281,7 +285,7 @@ class ExecutorAllocationManagerSuite
     assert(totalRunningTasks(manager) === 0)
   }
 
-  test("cancel pending executors when no longer needed") {
+  testRetry("cancel pending executors when no longer needed") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get
     post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(2, 5)))

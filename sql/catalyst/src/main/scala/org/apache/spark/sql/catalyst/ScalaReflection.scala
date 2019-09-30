@@ -74,7 +74,7 @@ object ScalaReflection extends ScalaReflection {
   /**
    * Synchronize to prevent concurrent usage of `<:<` operator.
    * This operator is not thread safe in any current version of scala; i.e.
-   * (2.11.12, 2.12.8, 2.13.0-M5).
+   * (2.11.12, 2.12.10, 2.13.0-M5).
    *
    * See https://github.com/scala/bug/issues/10766
    */

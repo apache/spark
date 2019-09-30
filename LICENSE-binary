@@ -467,6 +467,7 @@ Common Development and Distribution License (CDDL) 1.1
 ------------------------------------------------------
 
 javax.annotation:javax.annotation-api    https://jcp.org/en/jsr/detail?id=250
+javax.el:javax.el-api	https://javaee.github.io/uel-ri/
 javax.servlet:javax.servlet-api   https://javaee.github.io/servlet-spec/
 javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
 javax.ws.rs:javax.ws.rs-api https://github.com/jax-rs

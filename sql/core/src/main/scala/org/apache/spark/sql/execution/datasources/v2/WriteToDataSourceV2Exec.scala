@@ -122,11 +122,11 @@ object DataWritingSparkTask extends Logging {
         val coordinator = SparkEnv.get.outputCommitCoordinator
         val commitAuthorized = coordinator.canCommit(stageId, stageAttempt, partId, attemptId)
         if (commitAuthorized) {
-          logInfo(s"Commit authorized for partition $partId (task $taskId, attempt $attemptId" +
+          logInfo(s"Commit authorized for partition $partId (task $taskId, attempt $attemptId, " +
             s"stage $stageId.$stageAttempt)")
           dataWriter.commit()
         } else {
-          val message = s"Commit denied for partition $partId (task $taskId, attempt $attemptId" +
+          val message = s"Commit denied for partition $partId (task $taskId, attempt $attemptId, " +
             s"stage $stageId.$stageAttempt)"
           logInfo(message)
           // throwing CommitDeniedException will trigger the catch block for abort
@@ -138,17 +138,17 @@ object DataWritingSparkTask extends Logging {
         dataWriter.commit()
       }
 
-      logInfo(s"Committed partition $partId (task $taskId, attempt $attemptId" +
+      logInfo(s"Committed partition $partId (task $taskId, attempt $attemptId, " +
         s"stage $stageId.$stageAttempt)")
 
       msg
 
     })(catchBlock = {
       // If there is an error, abort this writer
-      logError(s"Aborting commit for partition $partId (task $taskId, attempt $attemptId" +
+      logError(s"Aborting commit for partition $partId (task $taskId, attempt $attemptId, " +
             s"stage $stageId.$stageAttempt)")
       dataWriter.abort()
-      logError(s"Aborted commit for partition $partId (task $taskId, attempt $attemptId" +
+      logError(s"Aborted commit for partition $partId (task $taskId, attempt $attemptId, " +
             s"stage $stageId.$stageAttempt)")
     })
   }

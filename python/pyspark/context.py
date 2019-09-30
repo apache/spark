@@ -937,7 +937,7 @@ class SparkContext(object):
     def setCheckpointDir(self, dirName):
         """
         Set the directory under which RDDs are going to be checkpointed. The
-        directory must be a HDFS path if running on a cluster.
+        directory must be an HDFS path if running on a cluster.
         """
         self._jsc.sc().setCheckpointDir(dirName)
 

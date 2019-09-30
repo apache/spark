@@ -313,7 +313,8 @@ class LinearSVCModel private[classification] (
   setDefault(threshold, 0.0)
 
   @Since("2.2.0")
-  def setWeightCol(value: Double): this.type = set(threshold, value)
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.4.4")
+  def setWeightCol(value: Double): this.type = this
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, coefficients) + intercept
