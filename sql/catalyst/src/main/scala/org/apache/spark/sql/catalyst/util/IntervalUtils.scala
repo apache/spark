@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
 
 object IntervalUtils {
@@ -62,5 +63,9 @@ object IntervalUtils {
 
   def getMinute(interval: CalendarInterval): Byte = {
     ((interval.microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
+  }
+
+  def getSecond(interval: CalendarInterval): Decimal = {
+    Decimal(interval.microseconds % MICROS_PER_MINUTE, 8, 6)
   }
 }

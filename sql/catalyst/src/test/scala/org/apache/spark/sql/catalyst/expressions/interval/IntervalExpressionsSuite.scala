@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.interval
 
 import scala.language.implicitConversions
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper {
@@ -99,6 +99,9 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Month("9999 years"), 0.toByte)
   }
 
+  private val largeInterval: String =
+    "9999 years 11 months 31 days 11 hours 59 minutes 59 seconds"
+
   test("day") {
     checkEvaluation(Day("0 days"), 0L)
     checkEvaluation(Day("1 days 100 seconds"), 1L)
@@ -107,8 +110,7 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Day("365 days"), 365L)
     // Years and months must not be taken into account
     checkEvaluation(Day("100 year 10 months 5 days"), 5L)
-    checkEvaluation(Day(
-      "9999 years 11 months 31 days 11 hours 59 minutes 59 seconds"), 31L)
+    checkEvaluation(Day(largeInterval), 31L)
   }
 
   test("hour") {
@@ -119,8 +121,7 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Hour("-23 hours"), -23.toByte)
     // Years and months must not be taken into account
     checkEvaluation(Hour("100 year 10 months 10 hours"), 10.toByte)
-    checkEvaluation(Hour(
-      "9999 years 11 months 31 days 11 hours 59 minutes 59 seconds"), 11.toByte)
+    checkEvaluation(Hour(largeInterval), 11.toByte)
   }
 
   test("minute") {
@@ -131,7 +132,18 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Minute("-59 minute"), -59.toByte)
     // Years and months must not be taken into account
     checkEvaluation(Minute("100 year 10 months 10 minutes"), 10.toByte)
-    checkEvaluation(Minute(
-      "9999 years 11 months 31 days 11 hours 59 minutes 59 seconds"), 59.toByte)
+    checkEvaluation(Minute(largeInterval), 59.toByte)
+  }
+
+  test("second") {
+    checkEvaluation(Second("0 second"), Decimal(0, 8, 6))
+    checkEvaluation(Second("1 second"), Decimal(1.0, 8, 6))
+    checkEvaluation(Second("-1 second"), Decimal(-1.0, 8, 6))
+    checkEvaluation(Second("1 minute 59 second"), Decimal(59.0, 8, 6))
+    checkEvaluation(Second("-59 minutes -59 seconds"), Decimal(-59.0, 8, 6))
+    // Years and months must not be taken into account
+    checkEvaluation(Second("100 year 10 months 10 seconds"), Decimal(10.0, 8, 6))
+    checkEvaluation(Second(largeInterval), Decimal(59.0, 8, 6))
+    checkEvaluation(Second("10 seconds 1 milliseconds 1 microseconds"), Decimal(10001001, 8, 6))
   }
 }
