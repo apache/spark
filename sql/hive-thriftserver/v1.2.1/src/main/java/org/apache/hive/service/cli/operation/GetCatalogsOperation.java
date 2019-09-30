@@ -36,7 +36,7 @@ public class GetCatalogsOperation extends MetadataOperation {
   private static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
   .addStringColumn("TABLE_CAT", "Catalog name. NULL if not applicable.");
 
-  private final RowSet rowSet;
+  protected final RowSet rowSet;
 
   protected GetCatalogsOperation(HiveSession parentSession) {
     super(parentSession, OperationType.GET_CATALOGS);

@@ -35,7 +35,7 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -372,9 +372,10 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
 
       val orcFilePath = new Path(partFiles.head.getAbsolutePath)
       val readerOptions = OrcFile.readerOptions(new Configuration())
-      val reader = OrcFile.createReader(orcFilePath, readerOptions)
-      val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
-      assert(version === SPARK_VERSION_SHORT)
+      Utils.tryWithResource(OrcFile.createReader(orcFilePath, readerOptions)) { reader =>
+        val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
+        assert(version === SPARK_VERSION_SHORT)
+      }
     }
   }
 
@@ -480,7 +481,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
   }
 }
 
-class OrcSourceSuite extends OrcSuite with SharedSQLContext {
+class OrcSourceSuite extends OrcSuite with SharedSparkSession {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()

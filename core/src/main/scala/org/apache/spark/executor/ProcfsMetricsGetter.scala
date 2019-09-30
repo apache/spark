@@ -18,7 +18,7 @@
 package org.apache.spark.executor
 
 import java.io._
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
 import java.util.Locale
 
@@ -171,7 +171,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       val pidDir = new File(procfsDir, pid.toString)
       def openReader(): BufferedReader = {
         val f = new File(new File(procfsDir, pid.toString), procfsStatFile)
-        new BufferedReader(new InputStreamReader(new FileInputStream(f), Charset.forName("UTF-8")))
+        new BufferedReader(new InputStreamReader(new FileInputStream(f), UTF_8))
       }
       Utils.tryWithResource(openReader) { in =>
         val procInfo = in.readLine

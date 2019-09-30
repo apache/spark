@@ -39,10 +39,10 @@ import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
+class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"
@@ -66,6 +66,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
+  private val malformedRowFile = "test-data/malformedRow.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -2063,7 +2064,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
   test("SPARK-27873: disabling enforceSchema should not fail columnNameOfCorruptRecord") {
     Seq("csv", "").foreach { reader =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> reader) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> reader) {
         withTempPath { path =>
           val df = Seq(("0", "2013-111-11")).toDF("a", "b")
           df.write
@@ -2107,6 +2108,19 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
       assert(errMsg.contains("..."),
         "expect the TextParsingException truncate the error content to be 1000 length.")
+    }
+  }
+
+  test("SPARK-29101 test count with DROPMALFORMED mode") {
+    Seq((true, 4), (false, 3)).foreach { case (csvColumnPruning, expectedCount) =>
+      withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> csvColumnPruning.toString) {
+        val count = spark.read
+          .option("header", "true")
+          .option("mode", "DROPMALFORMED")
+          .csv(testFile(malformedRowFile))
+          .count()
+        assert(expectedCount == count)
+      }
     }
   }
 }

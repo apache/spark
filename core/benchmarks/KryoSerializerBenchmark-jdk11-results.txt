@@ -1,0 +1,12 @@
+================================================================================================
+Benchmark KryoPool vs old"pool of 1" implementation
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Benchmark KryoPool vs old"pool of 1" implementation:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+KryoPool:true                                      6208           8374         NaN          0.0    12416876.6       1.0X
+KryoPool:false                                     9084          11577         724          0.0    18168947.4       0.7X
+
+

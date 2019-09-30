@@ -17,19 +17,12 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import org.scalatest.BeforeAndAfterEach
-
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 
 
-class PartitionBatchPruningSuite
-  extends SparkFunSuite
-  with BeforeAndAfterEach
-  with SharedSQLContext {
+class PartitionBatchPruningSuite extends SharedSparkSession {
 
   import testImplicits._
 

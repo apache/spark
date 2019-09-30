@@ -30,7 +30,6 @@ import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.Partitioner
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils, Optional}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
@@ -431,7 +430,6 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * :: Experimental ::
    * Return a [[JavaMapWithStateDStream]] by applying a function to every key-value element of
    * `this` stream, while maintaining some state data for each unique key. The mapping function
    * and other specification (e.g. partitioners, timeouts, initial state data, etc.) of this
@@ -458,7 +456,6 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * @tparam StateType    Class type of the state data
    * @tparam MappedType   Class type of the mapped data
    */
-  @Experimental
   def mapWithState[StateType, MappedType](spec: StateSpec[K, V, StateType, MappedType]):
     JavaMapWithStateDStream[K, V, StateType, MappedType] = {
     new JavaMapWithStateDStream(dstream.mapWithState(spec)(

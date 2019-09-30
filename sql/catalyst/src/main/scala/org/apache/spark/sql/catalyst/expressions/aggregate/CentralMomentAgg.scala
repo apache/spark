@@ -223,7 +223,7 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (-10), (-20), (100), (1000) AS tab(col);
-       1.1135657469022013
+       1.1135657469022011
       > SELECT _FUNC_(col) FROM VALUES (-1000), (-100), (10), (20) AS tab(col);
        -1.1135657469022011
   """,
@@ -245,9 +245,9 @@ case class Skewness(child: Expression) extends CentralMomentAgg(child) {
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (-10), (-20), (100), (1000) AS tab(col);
-       -0.7014368047529618
+       -0.7014368047529627
       > SELECT _FUNC_(col) FROM VALUES (1), (10), (100), (10), (1) as tab(col);
-       0.19432323191698986
+       0.19432323191699075
   """,
   since = "1.6.0")
 case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {

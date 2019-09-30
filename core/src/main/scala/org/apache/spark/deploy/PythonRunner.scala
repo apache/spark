@@ -91,6 +91,15 @@ object PythonRunner {
     // python process is through environment variable.
     sparkConf.get(PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
     sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
+    // if OMP_NUM_THREADS is not explicitly set, override it with the number of cores
+    if (sparkConf.getOption("spark.yarn.appMasterEnv.OMP_NUM_THREADS").isEmpty &&
+        sparkConf.getOption("spark.mesos.driverEnv.OMP_NUM_THREADS").isEmpty &&
+        sparkConf.getOption("spark.kubernetes.driverEnv.OMP_NUM_THREADS").isEmpty) {
+      // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to the driver
+      // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
+      // see https://github.com/numpy/numpy/issues/10455
+      sparkConf.getOption("spark.driver.cores").foreach(env.put("OMP_NUM_THREADS", _))
+    }
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     try {
       val process = builder.start()

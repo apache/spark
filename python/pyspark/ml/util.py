@@ -119,7 +119,7 @@ class MLWriter(BaseReadWrite):
 
         _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
         wrapper = JavaWrapper(_java_obj)
-        wrapper._call_java("handleOverwrite", path, True, self.sc._jsc.sc())
+        wrapper._call_java("handleOverwrite", path, True, self.sparkSession._jsparkSession)
 
     def save(self, path):
         """Save the ML instance to the input path."""
@@ -340,22 +340,6 @@ class JavaMLReadable(MLReadable):
     def read(cls):
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
-
-
-@inherit_doc
-class JavaPredictionModel():
-    """
-    (Private) Java Model for prediction tasks (regression and classification).
-    To be mixed in with class:`pyspark.ml.JavaModel`
-    """
-
-    @property
-    @since("2.1.0")
-    def numFeatures(self):
-        """
-        Returns the number of features the model was trained on. If unknown, returns -1
-        """
-        return self._call_java("numFeatures")
 
 
 @inherit_doc

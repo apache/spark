@@ -28,7 +28,7 @@ import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
@@ -431,6 +431,28 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         "product-class" -> JString(classOf[FunctionIdentifier].getName),
           "funcName" -> "function"))
 
+    // Converts AliasIdentifier to JSON
+    assertJSON(
+      AliasIdentifier("alias"),
+      JObject(
+        "product-class" -> JString(classOf[AliasIdentifier].getName),
+          "identifier" -> "alias"))
+
+    // Converts SubqueryAlias to JSON
+    assertJSON(
+      SubqueryAlias("t1", JsonTestTreeNode("0")),
+      List(
+        JObject(
+          "class" -> classOf[SubqueryAlias].getName,
+          "num-children" -> 1,
+          "name" -> JObject("product-class" -> JString(classOf[AliasIdentifier].getName),
+            "identifier" -> "t1"),
+          "child" -> 0),
+        JObject(
+          "class" -> classOf[JsonTestTreeNode].getName,
+          "num-children" -> 0,
+          "arg" -> "0")))
+
     // Converts BucketSpec to JSON
     assertJSON(
       BucketSpec(1, Seq("bucket"), Seq("sort")),
@@ -680,12 +702,12 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("clone") {
-    def assertDifferentInstance(before: AnyRef, after: AnyRef): Unit = {
+    def assertDifferentInstance[T <: TreeNode[T]](before: TreeNode[T], after: TreeNode[T]): Unit = {
       assert(before.ne(after) && before == after)
-      before.asInstanceOf[TreeNode[_]].children.zip(
-          after.asInstanceOf[TreeNode[_]].children).foreach {
-        case (beforeChild: AnyRef, afterChild: AnyRef) =>
-          assertDifferentInstance(beforeChild, afterChild)
+      before.children.zip(after.children).foreach { case (beforeChild, afterChild) =>
+        assertDifferentInstance(
+          beforeChild.asInstanceOf[TreeNode[T]],
+          afterChild.asInstanceOf[TreeNode[T]])
       }
     }
 

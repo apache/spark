@@ -90,11 +90,13 @@ private[spark] class CoarseGrainedExecutorBackend(
   // visible for testing
   def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
     // only parse the resources if a task requires them
-    val resourceInfo = if (parseTaskResourceRequirements(env.conf).nonEmpty) {
+    val resourceInfo = if (parseResourceRequirements(env.conf, SPARK_TASK_PREFIX).nonEmpty) {
       val resources = getOrDiscoverAllResources(env.conf, SPARK_EXECUTOR_PREFIX, resourcesFileOpt)
       if (resources.isEmpty) {
         throw new SparkException("User specified resources per task via: " +
           s"$SPARK_TASK_PREFIX, but can't find any resources available on the executor.")
+      } else {
+        logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
       }
       resources
     } else {
@@ -353,8 +355,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
     }
 
-    if (driverUrl == null || executorId == null || hostname == null || cores <= 0 ||
-      appId == null) {
+    if (hostname == null) {
+      hostname = Utils.localHostName()
+      log.info(s"Executor hostname is not provided, will use '$hostname' to advertise itself")
+    }
+
+    if (driverUrl == null || executorId == null || cores <= 0 || appId == null) {
       printUsageAndExit(classNameForEntry)
     }
 

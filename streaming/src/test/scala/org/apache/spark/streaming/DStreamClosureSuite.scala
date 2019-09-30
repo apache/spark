@@ -29,22 +29,12 @@ import org.apache.spark.util.ReturnStatementInClosureException
 /**
  * Test that closures passed to DStream operations are actually cleaned.
  */
-class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
-  private var ssc: StreamingContext = null
+class DStreamClosureSuite extends SparkFunSuite with LocalStreamingContext with BeforeAndAfterAll {
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
     val sc = new SparkContext("local", "test")
     ssc = new StreamingContext(sc, Seconds(1))
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      ssc.stop(stopSparkContext = true)
-      ssc = null
-    } finally {
-      super.afterAll()
-    }
   }
 
   test("user provided closures are actually cleaned") {

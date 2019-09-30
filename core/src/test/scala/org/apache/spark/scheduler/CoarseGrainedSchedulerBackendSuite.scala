@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.immutable
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps

@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Properties
@@ -136,7 +135,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     // not enough gpu's on the executor
     withTempDir { tmpDir =>
       val gpuArgs = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0"))
-            val ja = Extraction.decompose(Seq(gpuArgs))
+      val ja = Extraction.decompose(Seq(gpuArgs))
       val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
       var error = intercept[IllegalArgumentException] {
@@ -157,7 +156,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
-      assert(error.contains("User is expecting to use resource: gpu but didn't specify a " +
+      assert(error.contains("User is expecting to use resource: gpu, but didn't specify a " +
         "discovery script!"))
     }
   }

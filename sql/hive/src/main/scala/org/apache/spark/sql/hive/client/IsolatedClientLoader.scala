@@ -36,6 +36,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
@@ -60,9 +61,10 @@ private[hive] object IsolatedClientLoader extends Logging {
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
     } else {
+      val remoteRepos = sparkConf.get(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES)
       val (downloadedFiles, actualHadoopVersion) =
         try {
-          (downloadVersion(resolvedVersion, hadoopVersion, ivyPath), hadoopVersion)
+          (downloadVersion(resolvedVersion, hadoopVersion, ivyPath, remoteRepos), hadoopVersion)
         } catch {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
@@ -74,7 +76,8 @@ private[hive] object IsolatedClientLoader extends Logging {
               "It is recommended to set jars used by Hive metastore client through " +
               "spark.sql.hive.metastore.jars in the production environment.")
             _sharesHadoopClasses = false
-            (downloadVersion(resolvedVersion, fallbackVersion, ivyPath), fallbackVersion)
+            (downloadVersion(
+              resolvedVersion, fallbackVersion, ivyPath, remoteRepos), fallbackVersion)
         }
       resolvedVersions.put((resolvedVersion, actualHadoopVersion), downloadedFiles)
       resolvedVersions((resolvedVersion, actualHadoopVersion))
@@ -101,9 +104,9 @@ private[hive] object IsolatedClientLoader extends Logging {
     case "2.0" | "2.0.0" | "2.0.1" => hive.v2_0
     case "2.1" | "2.1.0" | "2.1.1" => hive.v2_1
     case "2.2" | "2.2.0" => hive.v2_2
-    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" | "2.3.3" | "2.3.4" | "2.3.5" => hive.v2_3
+    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" | "2.3.3" | "2.3.4" | "2.3.5" | "2.3.6" => hive.v2_3
     case "3.0" | "3.0.0" => hive.v3_0
-    case "3.1" | "3.1.0" | "3.1.1" => hive.v3_1
+    case "3.1" | "3.1.0" | "3.1.1" | "3.1.2" => hive.v3_1
     case version =>
       throw new UnsupportedOperationException(s"Unsupported Hive Metastore version ($version). " +
         s"Please set ${HiveUtils.HIVE_METASTORE_VERSION.key} with a valid version.")
@@ -112,7 +115,8 @@ private[hive] object IsolatedClientLoader extends Logging {
   private def downloadVersion(
       version: HiveVersion,
       hadoopVersion: String,
-      ivyPath: Option[String]): Seq[URL] = {
+      ivyPath: Option[String],
+      remoteRepos: String): Seq[URL] = {
     val hiveArtifacts = version.extraDeps ++
       Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
@@ -123,7 +127,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
         SparkSubmitUtils.buildIvySettings(
-          Some("http://www.datanucleus.org/downloads/maven2"),
+          Some(remoteRepos),
           ivyPath),
         exclusions = version.exclusions)
     }

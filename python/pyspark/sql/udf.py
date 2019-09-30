@@ -42,6 +42,7 @@ def _create_udf(f, returnType, evalType):
     if evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                    PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                     PythonEvalType.SQL_MAP_PANDAS_ITER_UDF):
 
@@ -64,6 +65,13 @@ def _create_udf(f, returnType, evalType):
             raise ValueError(
                 "Invalid function: pandas_udfs with function type GROUPED_MAP "
                 "must take either one argument (data) or two arguments (key, data).")
+
+        if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF \
+                and len(argspec.args) not in (2, 3):
+            raise ValueError(
+                "Invalid function: pandas_udfs with function type COGROUPED_MAP "
+                "must take either two arguments (left, right) "
+                "or three arguments (key, left, right).")
 
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
@@ -146,6 +154,17 @@ class UserDefinedFunction(object):
                         "%s is not supported" % str(self._returnType_placeholder))
             else:
                 raise TypeError("Invalid returnType for map iterator Pandas "
+                                "UDFs: returnType must be a StructType.")
+        elif self.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+            if isinstance(self._returnType_placeholder, StructType):
+                try:
+                    to_arrow_type(self._returnType_placeholder)
+                except TypeError:
+                    raise NotImplementedError(
+                        "Invalid returnType with cogrouped map Pandas UDFs: "
+                        "%s is not supported" % str(self._returnType_placeholder))
+            else:
+                raise TypeError("Invalid returnType for cogrouped map Pandas "
                                 "UDFs: returnType must be a StructType.")
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:

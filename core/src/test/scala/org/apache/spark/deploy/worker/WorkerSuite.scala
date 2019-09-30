@@ -23,6 +23,7 @@ import java.util.function.Supplier
 
 import scala.concurrent.duration._
 
+import org.json4s.{DefaultFormats, Extraction}
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
@@ -32,11 +33,16 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.TestUtils.{createTempJsonFile, createTempScriptWithExpectedOutput}
 import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
 import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged, WorkDirCleanup}
+import org.apache.spark.deploy.StandaloneResourceUtils.{ALLOCATED_RESOURCES_FILE, SPARK_RESOURCES_COORDINATE_DIR}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Worker._
+import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs.{WORKER_FPGA_ID, WORKER_GPU_ID}
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.util.Utils
 
@@ -51,17 +57,36 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
   }
   def conf(opts: (String, String)*): SparkConf = new SparkConf(loadDefaults = false).setAll(opts)
 
+  implicit val formats = DefaultFormats
+
   private var _worker: Worker = _
 
   private def makeWorker(
-      conf: SparkConf,
-      shuffleServiceSupplier: Supplier[ExternalShuffleService] = null): Worker = {
+      conf: SparkConf = new SparkConf(),
+      shuffleServiceSupplier: Supplier[ExternalShuffleService] = null,
+      pid: Int = Utils.getProcessId,
+      local: Boolean = false): Worker = {
     assert(_worker === null, "Some Worker's RpcEnv is leaked in tests")
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, securityMgr)
-    _worker = new Worker(rpcEnv, 50000, 20, 1234 * 5, Array.fill(1)(RpcAddress("1.2.3.4", 1234)),
-      "Worker", "/tmp", conf, securityMgr, None, shuffleServiceSupplier)
-    _worker
+    val resourcesFile = conf.get(SPARK_WORKER_RESOURCE_FILE)
+    val localWorker = new Worker(rpcEnv, 50000, 20, 1234 * 5,
+      Array.fill(1)(RpcAddress("1.2.3.4", 1234)), "Worker", "/tmp",
+      conf, securityMgr, resourcesFile, shuffleServiceSupplier, pid)
+    if (local) {
+      localWorker
+    } else {
+      _worker = localWorker
+      _worker
+    }
+  }
+
+  private def assertResourcesFileDeleted(): Unit = {
+    assert(sys.props.contains("spark.test.home"))
+    val sparkHome = sys.props.get("spark.test.home")
+    val resourceFile = new File(sparkHome + "/" + SPARK_RESOURCES_COORDINATE_DIR,
+      ALLOCATED_RESOURCES_FILE)
+    assert(!resourceFile.exists())
   }
 
   before {
@@ -215,6 +240,141 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
       }
       assert(worker.drivers.size === 49 - i)
       assert(worker.finishedDrivers.size === expectedValue)
+    }
+  }
+
+  test("worker could be launched without any resources") {
+    val worker = makeWorker()
+    worker.rpcEnv.setupEndpoint("worker", worker)
+    eventually(timeout(10.seconds)) {
+      assert(worker.resources === Map.empty)
+      worker.rpcEnv.shutdown()
+      worker.rpcEnv.awaitTermination()
+    }
+    assertResourcesFileDeleted()
+  }
+
+  test("worker could load resources from resources file while launching") {
+    val conf = new SparkConf()
+    withTempDir { dir =>
+      val gpuArgs = ResourceAllocation(WORKER_GPU_ID, Seq("0", "1"))
+      val fpgaArgs =
+        ResourceAllocation(WORKER_FPGA_ID, Seq("f1", "f2", "f3"))
+      val ja = Extraction.decompose(Seq(gpuArgs, fpgaArgs))
+      val f1 = createTempJsonFile(dir, "resources", ja)
+      conf.set(SPARK_WORKER_RESOURCE_FILE.key, f1)
+      conf.set(WORKER_GPU_ID.amountConf, "2")
+      conf.set(WORKER_FPGA_ID.amountConf, "3")
+      val worker = makeWorker(conf)
+      worker.rpcEnv.setupEndpoint("worker", worker)
+      eventually(timeout(10.seconds)) {
+        assert(worker.resources === Map(GPU -> gpuArgs.toResourceInformation,
+          FPGA -> fpgaArgs.toResourceInformation))
+        worker.rpcEnv.shutdown()
+        worker.rpcEnv.awaitTermination()
+      }
+      assertResourcesFileDeleted()
+    }
+  }
+
+  test("worker could load resources from discovery script while launching") {
+    val conf = new SparkConf()
+    withTempDir { dir =>
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
+        """{"name": "fpga","addresses":["f1", "f2", "f3"]}""")
+      conf.set(WORKER_FPGA_ID.discoveryScriptConf, scriptPath)
+      conf.set(WORKER_FPGA_ID.amountConf, "3")
+      val worker = makeWorker(conf)
+      worker.rpcEnv.setupEndpoint("worker", worker)
+      eventually(timeout(10.seconds)) {
+        assert(worker.resources === Map(FPGA ->
+          new ResourceInformation(FPGA, Array("f1", "f2", "f3"))))
+        worker.rpcEnv.shutdown()
+        worker.rpcEnv.awaitTermination()
+      }
+      assertResourcesFileDeleted()
+    }
+  }
+
+  test("worker could load resources from resources file and discovery script while launching") {
+    val conf = new SparkConf()
+    withTempDir { dir =>
+      val gpuArgs = ResourceAllocation(WORKER_GPU_ID, Seq("0", "1"))
+      val ja = Extraction.decompose(Seq(gpuArgs))
+      val resourcesPath = createTempJsonFile(dir, "resources", ja)
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
+        """{"name": "fpga","addresses":["f1", "f2", "f3"]}""")
+      conf.set(SPARK_WORKER_RESOURCE_FILE.key, resourcesPath)
+      conf.set(WORKER_FPGA_ID.discoveryScriptConf, scriptPath)
+      conf.set(WORKER_FPGA_ID.amountConf, "3")
+      conf.set(WORKER_GPU_ID.amountConf, "2")
+      val worker = makeWorker(conf)
+      worker.rpcEnv.setupEndpoint("worker", worker)
+      eventually(timeout(10.seconds)) {
+        assert(worker.resources === Map(GPU -> gpuArgs.toResourceInformation,
+          FPGA -> new ResourceInformation(FPGA, Array("f1", "f2", "f3"))))
+        worker.rpcEnv.shutdown()
+        worker.rpcEnv.awaitTermination()
+      }
+      assertResourcesFileDeleted()
+    }
+  }
+
+  test("Workers run on the same host should avoid resources conflict when coordinate is on") {
+    val conf = new SparkConf()
+    withTempDir { dir =>
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
+        """{"name": "fpga","addresses":["f1", "f2", "f3", "f4", "f5"]}""")
+      conf.set(WORKER_FPGA_ID.discoveryScriptConf, scriptPath)
+      conf.set(WORKER_FPGA_ID.amountConf, "2")
+      val workers = (0 until 3).map(id => makeWorker(conf, pid = id, local = true))
+      workers.zipWithIndex.foreach{case (w, i) => w.rpcEnv.setupEndpoint(s"worker$i", w)}
+      eventually(timeout(20.seconds)) {
+        val (empty, nonEmpty) = workers.partition(_.resources.isEmpty)
+        assert(empty.length === 1)
+        assert(nonEmpty.length === 2)
+        val totalResources = nonEmpty.flatMap(_.resources(FPGA).addresses).toSet.toSeq.sorted
+        assert(totalResources === Seq("f1", "f2", "f3", "f4"))
+        workers.foreach(_.rpcEnv.shutdown())
+        workers.foreach(_.rpcEnv.awaitTermination())
+      }
+      assertResourcesFileDeleted()
+    }
+  }
+
+  test("Workers run on the same host should load resources naively when coordinate is off") {
+    val conf = new SparkConf()
+    // disable coordination
+    conf.set(config.SPARK_RESOURCES_COORDINATE, false)
+    withTempDir { dir =>
+      val gpuArgs = ResourceAllocation(WORKER_GPU_ID, Seq("g0", "g1"))
+      val ja = Extraction.decompose(Seq(gpuArgs))
+      val resourcesPath = createTempJsonFile(dir, "resources", ja)
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
+        """{"name": "fpga","addresses":["f1", "f2", "f3", "f4", "f5"]}""")
+      conf.set(SPARK_WORKER_RESOURCE_FILE.key, resourcesPath)
+      conf.set(WORKER_GPU_ID.amountConf, "2")
+      conf.set(WORKER_FPGA_ID.discoveryScriptConf, scriptPath)
+      conf.set(WORKER_FPGA_ID.amountConf, "2")
+      val workers = (0 until 3).map(id => makeWorker(conf, pid = id, local = true))
+      workers.zipWithIndex.foreach{case (w, i) => w.rpcEnv.setupEndpoint(s"worker$i", w)}
+      eventually(timeout(20.seconds)) {
+        val (empty, nonEmpty) = workers.partition(_.resources.isEmpty)
+        assert(empty.length === 0)
+        assert(nonEmpty.length === 3)
+        // Each Worker should get the same resources from resources file and discovery script
+        // without coordination. Note that, normally, we must config different resources
+        // for workers run on the same host when coordinate config is off. Test here is used
+        // to validate the different behaviour comparing to the above test when coordinate config
+        // is on, so we admit the resources collision here.
+        nonEmpty.foreach { worker =>
+          assert(worker.resources === Map(GPU -> gpuArgs.toResourceInformation,
+            FPGA -> new ResourceInformation(FPGA, Array("f1", "f2", "f3", "f4", "f5"))))
+        }
+        workers.foreach(_.rpcEnv.shutdown())
+        workers.foreach(_.rpcEnv.awaitTermination())
+      }
+      assertResourcesFileDeleted()
     }
   }
 

@@ -94,7 +94,7 @@ private[spark] class TaskSchedulerImpl(
   val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
 
   // Resources to request per task
-  val resourcesReqsPerTask = ResourceUtils.parseTaskResourceRequirements(sc.conf)
+  val resourcesReqsPerTask = ResourceUtils.parseResourceRequirements(sc.conf, SPARK_TASK_PREFIX)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.  Protected by `this`
@@ -383,9 +383,8 @@ private[spark] class TaskSchedulerImpl(
    * Check whether the resources from the WorkerOffer are enough to run at least one task.
    */
   private def resourcesMeetTaskRequirements(resources: Map[String, Buffer[String]]): Boolean = {
-    resourcesReqsPerTask.forall { req =>
-      resources.contains(req.resourceName) && resources(req.resourceName).size >= req.amount
-    }
+    val resourcesFree = resources.map(r => r._1 -> r._2.length)
+    ResourceUtils.resourcesMeetRequirements(resourcesFree, resourcesReqsPerTask)
   }
 
   /**
@@ -431,7 +430,6 @@ private[spark] class TaskSchedulerImpl(
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
     val availableResources = shuffledOffers.map(_.resources).toArray
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
-    val availableSlots = shuffledOffers.map(o => o.cores / CPUS_PER_TASK).sum
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -445,6 +443,7 @@ private[spark] class TaskSchedulerImpl(
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     for (taskSet <- sortedTaskSets) {
+      val availableSlots = availableCpus.map(c => c / CPUS_PER_TASK).sum
       // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
       if (taskSet.isBarrier && availableSlots < taskSet.numTasks) {
         // Skip the launch process.

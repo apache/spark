@@ -677,8 +677,9 @@ object TypeCoercion {
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
       case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
+        val preferIntegralDivision = conf.usePostgreSQLDialect
         (left.dataType, right.dataType) match {
-          case (_: IntegralType, _: IntegralType) if conf.preferIntegralDivision =>
+          case (_: IntegralType, _: IntegralType) if preferIntegralDivision =>
             IntegralDivide(left, right)
           case _ =>
             Divide(Cast(left, DoubleType), Cast(right, DoubleType))
@@ -861,7 +862,9 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
+      // If DecimalType operands are involved, DecimalPrecision will handle it
+      case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
+          !right.dataType.isInstanceOf[DecimalType] && left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.

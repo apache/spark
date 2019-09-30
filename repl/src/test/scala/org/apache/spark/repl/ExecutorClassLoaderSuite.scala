@@ -164,7 +164,7 @@ class ExecutorClassLoaderSuite
     val is = classLoader.getResourceAsStream(resourceName)
     assert(is != null, s"Resource $resourceName not found")
 
-    val bufferedSource = Source.fromInputStream(is, "UTF-8")
+    val bufferedSource = Source.fromInputStream(is, StandardCharsets.UTF_8.name())
     Utils.tryWithSafeFinally {
       val content = bufferedSource.getLines().next()
       assert(content.contains("resource"), "File doesn't contain 'resource'")
@@ -272,7 +272,8 @@ class ExecutorClassLoaderSuite
         assert(e.getMessage.contains("ThisIsAClassName"))
         // RemoteClassLoaderError must not be LinkageError nor ClassNotFoundException. Otherwise,
         // JVM will cache it and doesn't retry to load a class.
-        assert(!e.isInstanceOf[LinkageError] && !e.isInstanceOf[ClassNotFoundException])
+        assert(!(classOf[LinkageError].isAssignableFrom(e.getClass)))
+        assert(!(classOf[ClassNotFoundException].isAssignableFrom(e.getClass)))
       } finally {
         rpcEnv.shutdown()
         rpcEnv.awaitTermination()

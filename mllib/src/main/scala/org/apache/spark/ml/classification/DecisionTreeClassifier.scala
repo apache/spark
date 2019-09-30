@@ -22,7 +22,7 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -34,9 +34,8 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions.{col, udf}
 
 /**
  * Decision tree learning algorithm (http://en.wikipedia.org/wiki/Decision_tree_learning)
@@ -116,9 +115,8 @@ class DecisionTreeClassifier @Since("1.4.0") (
       dataset: Dataset[_]): DecisionTreeClassificationModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    val categoricalFeatures: Map[Int, Int] =
-      MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses: Int = getNumClasses(dataset)
+    val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    val numClasses = getNumClasses(dataset)
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
@@ -126,18 +124,12 @@ class DecisionTreeClassifier @Since("1.4.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
     validateNumClasses(numClasses)
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances =
-      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          validateLabel(label, numClasses)
-          Instance(label, weight, features)
-      }
+    val instances = extractInstances(dataset, numClasses)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
-      probabilityCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,
-      cacheNodeIds, checkpointInterval, impurity, seed)
+      probabilityCol, leafCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain,
+      maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed)
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
@@ -208,6 +200,18 @@ class DecisionTreeClassificationModel private[ml] (
 
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+
+    val outputData = super.transform(dataset)
+    if ($(leafCol).nonEmpty) {
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))))
+    } else {
+      outputData
+    }
   }
 
   override protected def predictRaw(features: Vector): Vector = {
