@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.sort
 import java.lang.{Long => JLong}
 
 import org.mockito.Mockito.when
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
