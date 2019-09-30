@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.client
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
@@ -29,7 +28,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StructType}
 import org.apache.spark.util.Utils
 
 class HivePartitionFilteringSuite(version: String)
@@ -275,12 +274,6 @@ class HivePartitionFilteringSuite(version: String)
 
   test("create client with sharesHadoopClasses = false") {
     buildClient(new Configuration(), sharesHadoopClasses = false)
-  }
-
-  test("fromHiveColumn: void type") {
-    val fieldSchema = new FieldSchema("c1", "void", "")
-    val structField = HiveClientImpl.fromHiveColumn(fieldSchema)
-    assert(structField.dataType == NullType)
   }
 
   private def testMetastorePartitionFiltering(
