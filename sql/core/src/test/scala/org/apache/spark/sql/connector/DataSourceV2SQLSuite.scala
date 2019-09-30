@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
@@ -878,17 +878,17 @@ class DataSourceV2SQLSuite
   }
 
   test("Use: v2 session catalog is used and namespace does not exist") {
-    val exception = intercept[AnalysisException] {
+    val exception = intercept[NoSuchDatabaseException] {
       sql("USE ns1")
     }
-    assert(exception.getMessage.contains("Namespace 'ns1' not found"))
+    assert(exception.getMessage.contains("Database 'ns1' not found"))
   }
 
   test("Use: v2 catalog is used and namespace does not exist") {
-    val exception = intercept[AnalysisException] {
-      sql("USE testcat.ns1.ns2")
-    }
-    assert(exception.getMessage.contains("Namespace 'ns1.ns2' not found"))
+    // Namespaces are not required to exist for v2 catalogs.
+    sql("USE testcat.ns1.ns2")
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentNamespace === Array("ns1", "ns2"))
   }
 
   test("tableCreation: partition column case insensitive resolution") {

@@ -660,7 +660,7 @@ case class ShowTables(
 }
 
 /**
- * The logical plan of the USE/USE CATALOG command that works for v2 catalogs.
+ * The logical plan of the USE/USE NAMESPACE command that works for v2 catalogs.
  */
 case class SetCatalogAndNamespace(
     catalogManager: CatalogManager,
