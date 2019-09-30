@@ -2259,26 +2259,6 @@ object functions {
   }
 
   /**
-   * Convert a string to a number based on the pattern.
-   *
-   * The pattern can consist of the following characters:
-   *   '9': digit position (can be dropped if insignificant)
-   *   '0': digit position (will not be dropped, even if insignificant)
-   *   '.': decimal point (only allowed once)
-   *   ',': group (thousands) separator
-   *   'S': sign anchored to number (uses locale)
-   *   'L': currency symbol (uses locale)
-   *   'D': decimal point (uses locale)
-   *   'G': group separator (uses locale)
-   *
-   * @group string_funcs
-   * @since 3.0.0
-   */
-  def to_number(x: Column, format: String): Column = withExpr {
-    ToNumber(x.expr, lit(format).expr)
-  }
-
-  /**
    * Formats the arguments in printf-style and returns the result as a string column.
    *
    * @group string_funcs

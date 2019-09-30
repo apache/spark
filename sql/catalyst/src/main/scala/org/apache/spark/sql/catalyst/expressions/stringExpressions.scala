@@ -2301,7 +2301,9 @@ case class FormatNumber(x: Expression, d: Expression)
 case class ToNumber(strExpr: Expression, patternExpr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  private lazy val pattern = patternExpr.eval().asInstanceOf[UTF8String].toString
+  // scalastyle:off caselocale
+  private lazy val patternStr = patternExpr.eval().asInstanceOf[UTF8String].toUpperCase.toString
+  // scalastyle:on caselocale
 
   override def left: Expression = strExpr
   override def right: Expression = patternExpr
@@ -2315,7 +2317,7 @@ case class ToNumber(strExpr: Expression, patternExpr: Expression)
 
     val inputTypeCheck = super.checkInputDataTypes()
     if(inputTypeCheck.isSuccess) {
-      if (pattern.count(checkDecimalPointNum(_)) > 1) {
+      if (patternStr.count(checkDecimalPointNum(_)) > 1) {
         TypeCheckResult.TypeCheckFailure(s"Multiple decimal points in $patternExpr")
       } else {
         inputTypeCheck
@@ -2328,7 +2330,7 @@ case class ToNumber(strExpr: Expression, patternExpr: Expression)
   override def nullSafeEval(string: Any, pattern: Any): Any = {
     val str = string.asInstanceOf[UTF8String]
     val chars = str.toString().toCharArray()
-    val patternChars = pattern.asInstanceOf[UTF8String].toUpperCase.toString.toIterator
+    val patternChars = patternStr.toIterator
     val builder = new UTF8StringBuilder
     var indexOfString = 0
     var hasSign = false
@@ -2363,7 +2365,7 @@ case class ToNumber(strExpr: Expression, patternExpr: Expression)
           case 'S' if currentChar.equals('-') =>
             hasSign = true
           case 'L' =>
-            while(Character.isLetter(chars(indexOfString))) {
+            while (Character.isLetter(chars(indexOfString))) {
               indexOfString += 1
             }
             indexOfString -= 1
@@ -2376,7 +2378,7 @@ case class ToNumber(strExpr: Expression, patternExpr: Expression)
 
     var result = if (integerLen == -1 && wholeLen == -1) {
       builder.build
-    } else if (wholeLen == -1 || wholeLen == integerLen + 1){
+    } else if (wholeLen == -1 || wholeLen == integerLen + 1) {
       builder.build.substringSQL(1, integerLen)
     } else {
       builder.build.substringSQL(1, wholeLen)
@@ -2441,11 +2443,11 @@ case class ToNumber(strExpr: Expression, patternExpr: Expression)
                    $hasPoint = true;
                    $integerLen = $sb.length();
                    $sb.append($chars[$indexOfString]);
-		 } 
+                 }
                  break;
                case ',':
                case 'G':
-		 break;
+                 break;
                case 'S':
                  if ('-' == $chars[$indexOfString]) {
                    $hasSign = true;
@@ -2454,7 +2456,7 @@ case class ToNumber(strExpr: Expression, patternExpr: Expression)
                case 'L':
                  while(Character.isLetter($chars[$indexOfString])) {
                    $indexOfString++;
-		 }
+                 }
                  $indexOfString--;
                  break;
                default :
