@@ -418,12 +418,13 @@ private[spark] class TaskSchedulerImpl(
     // updating the blacklist is only relevant when task offers are being made.
     blacklistTrackerOpt.foreach(_.applyBlacklistTimeout())
 
+    // also filter offers to those executor under constructing
     val filteredOffers = blacklistTrackerOpt.map { blacklistTracker =>
       offers.filter { offer =>
         !blacklistTracker.isNodeBlacklisted(offer.host) &&
           !blacklistTracker.isExecutorBlacklisted(offer.executorId)
       }
-    }.getOrElse(offers)
+    }.getOrElse(offers).filter(_.isExecutorConstructed)
 
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.

@@ -30,4 +30,5 @@ case class WorkerOffer(
     // `address` is an optional hostPort string, it provide more useful information than `host`
     // when multiple executors are launched on the same host.
     address: Option[String] = None,
-    resources: Map[String, Buffer[String]] = Map.empty)
+    resources: Map[String, Buffer[String]] = Map.empty,
+    isExecutorConstructed: Boolean = true)
