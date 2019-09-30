@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.interval
 import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{DatePart, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -179,9 +179,5 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Epoch("1 year"), Decimal(31557600.0, 18, 6))
     checkEvaluation(Epoch("-1 year"), Decimal(-31557600.0, 18, 6))
     checkEvaluation(Epoch("1 second 1 millisecond 1 microsecond"), Decimal(1.001001, 18, 6))
-  }
-
-  test("date_part from interval") {
-    checkEvaluation(new DatePart(Literal("months"), Literal(new CalendarInterval(10, 0))), 10)
   }
 }
