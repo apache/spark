@@ -451,18 +451,18 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     for (i <- 1 to 100) {
       master.removeExecutor(store.blockManagerId.executorId)
       val t1 = new Thread {
-        override def run() {
+        override def run(): Unit = {
           store.putIterator(
             "a2", a2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
         }
       }
       val t2 = new Thread {
-        override def run() {
+        override def run(): Unit = {
           store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
         }
       }
       val t3 = new Thread {
-        override def run() {
+        override def run(): Unit = {
           store.reregister()
         }
       }

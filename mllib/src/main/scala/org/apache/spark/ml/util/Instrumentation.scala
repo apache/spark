@@ -205,21 +205,21 @@ private[spark] class OptionalInstrumentation private(
 
   protected override def logName: String = className
 
-  override def logInfo(msg: => String) {
+  override def logInfo(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logInfo(msg)
       case None => super.logInfo(msg)
     }
   }
 
-  override def logWarning(msg: => String) {
+  override def logWarning(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logWarning(msg)
       case None => super.logWarning(msg)
     }
   }
 
-  override def logError(msg: => String) {
+  override def logError(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logError(msg)
       case None => super.logError(msg)

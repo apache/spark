@@ -277,7 +277,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     expectedOutput: Seq[Seq[Int]],
     windowDuration: Duration = Seconds(2),
     slideDuration: Duration = Seconds(1)
-    ) {
+    ): Unit = {
     test("window - " + name) {
       val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt
       val operation = (s: DStream[Int]) => s.window(windowDuration, slideDuration)
@@ -291,7 +291,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     expectedOutput: Seq[Seq[(String, Int)]],
     windowDuration: Duration = Seconds(2),
     slideDuration: Duration = Seconds(1)
-    ) {
+    ): Unit = {
     test("reduceByKeyAndWindow - " + name) {
       logInfo("reduceByKeyAndWindow - " + name)
       val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt
@@ -308,7 +308,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     expectedOutput: Seq[Seq[(String, Int)]],
     windowDuration: Duration = Seconds(2),
     slideDuration: Duration = Seconds(1)
-  ) {
+  ): Unit = {
     test("reduceByKeyAndWindow with inverse function - " + name) {
       logInfo("reduceByKeyAndWindow with inverse function - " + name)
       val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt
@@ -326,7 +326,7 @@ class WindowOperationsSuite extends TestSuiteBase {
       expectedOutput: Seq[Seq[(String, Int)]],
       windowDuration: Duration = Seconds(2),
       slideDuration: Duration = Seconds(1)
-    ) {
+    ): Unit = {
     test("reduceByKeyAndWindow with inverse and filter functions - " + name) {
       logInfo("reduceByKeyAndWindow with inverse and filter functions - " + name)
       val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt

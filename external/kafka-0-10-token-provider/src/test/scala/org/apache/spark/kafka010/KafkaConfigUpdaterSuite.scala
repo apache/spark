@@ -98,7 +98,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
   }
 
   def testWithTokenSetValues(params: Map[String, String])
-      (validate: (ju.Map[String, Object]) => Unit) {
+      (validate: (ju.Map[String, Object]) => Unit): Unit = {
     setSparkEnv(
       Map(
         s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers

@@ -91,7 +91,7 @@ private[spark] class WorkerInfo(
     init()
   }
 
-  private def init() {
+  private def init(): Unit = {
     executors = new mutable.HashMap
     drivers = new mutable.HashMap
     state = WorkerState.ALIVE
@@ -105,13 +105,13 @@ private[spark] class WorkerInfo(
     host + ":" + port
   }
 
-  def addExecutor(exec: ExecutorDesc) {
+  def addExecutor(exec: ExecutorDesc): Unit = {
     executors(exec.fullId) = exec
     coresUsed += exec.cores
     memoryUsed += exec.memory
   }
 
-  def removeExecutor(exec: ExecutorDesc) {
+  def removeExecutor(exec: ExecutorDesc): Unit = {
     if (executors.contains(exec.fullId)) {
       executors -= exec.fullId
       coresUsed -= exec.cores
@@ -124,13 +124,13 @@ private[spark] class WorkerInfo(
     executors.values.exists(_.application == app)
   }
 
-  def addDriver(driver: DriverInfo) {
+  def addDriver(driver: DriverInfo): Unit = {
     drivers(driver.id) = driver
     memoryUsed += driver.desc.mem
     coresUsed += driver.desc.cores
   }
 
-  def removeDriver(driver: DriverInfo) {
+  def removeDriver(driver: DriverInfo): Unit = {
     drivers -= driver.id
     memoryUsed -= driver.desc.mem
     coresUsed -= driver.desc.cores

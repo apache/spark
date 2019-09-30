@@ -56,7 +56,7 @@ import org.apache.spark.util.{LongAccumulator, UninterruptibleThread}
 class ExecutorSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     // Unset any latches after each test; each test that needs them initializes new ones.
     ExecutorSuiteHelper.latches = null
     super.afterEach()

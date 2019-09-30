@@ -1157,7 +1157,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  protected def testRecoverPartitions() {
+  protected def testRecoverPartitions(): Unit = {
     val catalog = spark.sessionState.catalog
     // table to alter does not exist
     intercept[AnalysisException] {

@@ -155,7 +155,7 @@ sealed trait Matrix extends Serializable {
    *          and column indices respectively with the type `Int`, and the final parameter is the
    *          corresponding value in the matrix with type `Double`.
    */
-  private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
+  private[spark] def foreachActive(f: (Int, Int, Double) => Unit): Unit
 
   /**
    * Find the number of non-zero active values.

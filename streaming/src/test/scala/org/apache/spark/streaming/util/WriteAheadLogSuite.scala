@@ -256,12 +256,12 @@ class FileBasedWriteAheadLogSuite
           counter.increment()
           // block so that other threads also launch
           latch.await(10, TimeUnit.SECONDS)
-          override def completion() { counter.decrement() }
+          override def completion(): Unit = { counter.decrement() }
         }
       }
       @volatile var collected: Seq[Int] = Nil
       val t = new Thread() {
-        override def run() {
+        override def run(): Unit = {
           // run the calculation on a separate thread so that we can release the latch
           val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](executionContext,
             testSeq, handle)

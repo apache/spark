@@ -408,7 +408,7 @@ class DDLParserSuite extends AnalysisTest {
   private def testCreateOrReplaceDdl(
       sqlStatement: String,
       tableSpec: TableSpec,
-      expectedIfNotExists: Boolean) {
+      expectedIfNotExists: Boolean): Unit = {
     val parsedPlan = parsePlan(sqlStatement)
     val newTableToken = sqlStatement.split(" ")(0).trim.toUpperCase(Locale.ROOT)
     parsedPlan match {

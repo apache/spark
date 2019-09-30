@@ -39,7 +39,7 @@ class MatricesSuite extends SparkFunSuite {
 
     val ser = new KryoSerializer(conf).newInstance()
 
-    def check[T: ClassTag](t: T) {
+    def check[T: ClassTag](t: T): Unit = {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
 

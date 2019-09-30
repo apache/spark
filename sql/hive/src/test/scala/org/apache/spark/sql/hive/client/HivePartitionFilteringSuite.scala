@@ -94,7 +94,7 @@ class HivePartitionFilteringSuite(version: String)
     }
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     client = init(true)
   }

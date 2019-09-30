@@ -45,7 +45,7 @@ class MesosRestServerSuite extends SparkFunSuite
     testOverheadMemory(conf, "2000M", 3000)
   }
 
-  def testOverheadMemory(conf: SparkConf, driverMemory: String, expectedResult: Int) {
+  def testOverheadMemory(conf: SparkConf, driverMemory: String, expectedResult: Int): Unit = {
     conf.set("spark.master", "testmaster")
     conf.set("spark.app.name", "testapp")
     conf.set(config.DRIVER_MEMORY.key, driverMemory)

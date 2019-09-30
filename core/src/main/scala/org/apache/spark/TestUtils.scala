@@ -234,8 +234,10 @@ private[spark] object TestUtils {
       val sslCtx = SSLContext.getInstance("SSL")
       val trustManager = new X509TrustManager {
         override def getAcceptedIssuers(): Array[X509Certificate] = null
-        override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String) {}
-        override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String) {}
+        override def checkClientTrusted(x509Certificates: Array[X509Certificate],
+            s: String): Unit = {}
+        override def checkServerTrusted(x509Certificates: Array[X509Certificate],
+            s: String): Unit = {}
       }
       val verifier = new HostnameVerifier() {
         override def verify(hostname: String, session: SSLSession): Boolean = true

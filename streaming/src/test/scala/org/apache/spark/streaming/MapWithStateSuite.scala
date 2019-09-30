@@ -561,7 +561,7 @@ class MapWithStateSuite extends SparkFunSuite with LocalStreamingContext
     (collectedOutputs.asScala.toSeq, collectedStateSnapshots.asScala.toSeq)
   }
 
-  private def assert[U](expected: Seq[Seq[U]], collected: Seq[Seq[U]], typ: String) {
+  private def assert[U](expected: Seq[Seq[U]], collected: Seq[Seq[U]], typ: String): Unit = {
     val debugString = "\nExpected:\n" + expected.mkString("\n") +
       "\nCollected:\n" + collected.mkString("\n")
     assert(expected.size === collected.size,

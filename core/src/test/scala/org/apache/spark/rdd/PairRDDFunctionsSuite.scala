@@ -200,7 +200,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(sums.partitioner === Some(p))
     // count the dependencies to make sure there is only 1 ShuffledRDD
     val deps = new HashSet[RDD[_]]()
-    def visit(r: RDD[_]) {
+    def visit(r: RDD[_]): Unit = {
       for (dep <- r.dependencies) {
         deps += dep.rdd
         visit(dep.rdd)

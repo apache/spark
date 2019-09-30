@@ -38,7 +38,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   private[metrics] val properties = new Properties()
   private[metrics] var perInstanceSubProperties: mutable.HashMap[String, Properties] = null
 
-  private def setDefaultProperties(prop: Properties) {
+  private def setDefaultProperties(prop: Properties): Unit = {
     prop.setProperty("*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet")
     prop.setProperty("*.sink.servlet.path", "/metrics/json")
     prop.setProperty("master.sink.servlet.path", "/metrics/master/json")
@@ -49,7 +49,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
    * Load properties from various places, based on precedence
    * If the same property is set again latter on in the method, it overwrites the previous value
    */
-  def initialize() {
+  def initialize(): Unit = {
     // Add default properties in case there's no properties file
     setDefaultProperties(properties)
 

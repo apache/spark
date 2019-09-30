@@ -166,21 +166,21 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /**
    * Callback called when a batch has been completely processed.
    */
-  def onBatchCompletion(time: Time) {
+  def onBatchCompletion(time: Time): Unit = {
     eventLoop.post(ClearMetadata(time))
   }
 
   /**
    * Callback called when the checkpoint of a batch has been written.
    */
-  def onCheckpointCompletion(time: Time, clearCheckpointDataLater: Boolean) {
+  def onCheckpointCompletion(time: Time, clearCheckpointDataLater: Boolean): Unit = {
     if (clearCheckpointDataLater) {
       eventLoop.post(ClearCheckpointData(time))
     }
   }
 
   /** Processes all events */
-  private def processEvent(event: JobGeneratorEvent) {
+  private def processEvent(event: JobGeneratorEvent): Unit = {
     logDebug("Got event " + event)
     event match {
       case GenerateJobs(time) => generateJobs(time)
@@ -192,7 +192,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /** Starts the generator for the first time */
-  private def startFirstTime() {
+  private def startFirstTime(): Unit = {
     val startTime = new Time(timer.getStartTime())
     graph.start(startTime - graph.batchDuration)
     timer.start(startTime.milliseconds)
@@ -200,7 +200,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /** Restarts the generator based on the information in checkpoint */
-  private def restart() {
+  private def restart(): Unit = {
     // If manual clock is being used for testing, then
     // either set the manual clock to the last checkpointed time,
     // or if the property is defined set it to that time
@@ -243,7 +243,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /** Generate jobs and perform checkpointing for the given `time`.  */
-  private def generateJobs(time: Time) {
+  private def generateJobs(time: Time): Unit = {
     // Checkpoint all RDDs marked for checkpointing to ensure their lineages are
     // truncated periodically. Otherwise, we may run into stack overflows (SPARK-6847).
     ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
@@ -262,7 +262,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /** Clear DStream metadata for the given `time`. */
-  private def clearMetadata(time: Time) {
+  private def clearMetadata(time: Time): Unit = {
     ssc.graph.clearMetadata(time)
 
     // If checkpointing is enabled, then checkpoint,
@@ -281,7 +281,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /** Clear DStream checkpoint data for the given `time`. */
-  private def clearCheckpointData(time: Time) {
+  private def clearCheckpointData(time: Time): Unit = {
     ssc.graph.clearCheckpointData(time)
 
     // All the checkpoint information about which batches have been processed, etc have
@@ -293,7 +293,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /** Perform checkpoint for the given `time`. */
-  private def doCheckpoint(time: Time, clearCheckpointDataLater: Boolean) {
+  private def doCheckpoint(time: Time, clearCheckpointDataLater: Boolean): Unit = {
     if (shouldCheckpoint && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
       logInfo("Checkpointing graph for time " + time)
       ssc.graph.updateCheckpointData(time)
@@ -303,7 +303,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     }
   }
 
-  private def markBatchFullyProcessed(time: Time) {
+  private def markBatchFullyProcessed(time: Time): Unit = {
     lastProcessedBatch = time
   }
 }

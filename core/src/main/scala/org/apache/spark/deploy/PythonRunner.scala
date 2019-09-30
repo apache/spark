@@ -35,7 +35,7 @@ import org.apache.spark.util.{RedirectThread, Utils}
  * subprocess and then has it connect back to the JVM to access system properties, etc.
  */
 object PythonRunner {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)

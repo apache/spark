@@ -446,7 +446,7 @@ private[spark] class BlockManager(
     }
   }
 
-  private def registerWithExternalShuffleServer() {
+  private def registerWithExternalShuffleServer(): Unit = {
     logInfo("Registering executor with local external shuffle service.")
     val shuffleConfig = new ExecutorShuffleInfo(
       diskBlockManager.localDirsString,
@@ -1830,7 +1830,7 @@ private[spark] object BlockManager {
     private val POLL_TIMEOUT = 1000
     @volatile private var stopped = false
 
-    private val cleaningThread = new Thread() { override def run() { keepCleaning() } }
+    private val cleaningThread = new Thread() { override def run(): Unit = { keepCleaning() } }
     cleaningThread.setDaemon(true)
     cleaningThread.setName("RemoteBlock-temp-file-clean-thread")
     cleaningThread.start()

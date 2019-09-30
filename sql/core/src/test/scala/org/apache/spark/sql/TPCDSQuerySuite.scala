@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSSchema {
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     for (tableName <- tableNames) {
       createTable(spark, tableName)

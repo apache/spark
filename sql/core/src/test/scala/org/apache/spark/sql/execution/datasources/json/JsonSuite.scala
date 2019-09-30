@@ -49,7 +49,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
   import testImplicits._
 
   test("Type promotion") {
-    def checkTypePromotion(expected: Any, actual: Any) {
+    def checkTypePromotion(expected: Any, actual: Any): Unit = {
       assert(expected.getClass == actual.getClass,
         s"Failed to promote ${actual.getClass} to ${expected.getClass}.")
       assert(expected == actual,
@@ -128,7 +128,7 @@ class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
   }
 
   test("Get compatible type") {
-    def checkDataType(t1: DataType, t2: DataType, expected: DataType) {
+    def checkDataType(t1: DataType, t2: DataType, expected: DataType): Unit = {
       var actual = JsonInferSchema.compatibleType(t1, t2)
       assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")

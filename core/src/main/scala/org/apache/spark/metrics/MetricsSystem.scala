@@ -96,7 +96,7 @@ private[spark] class MetricsSystem private (
 
   metricsConfig.initialize()
 
-  def start(registerStaticSources: Boolean = true) {
+  def start(registerStaticSources: Boolean = true): Unit = {
     require(!running, "Attempting to start a MetricsSystem that is already running")
     running = true
     if (registerStaticSources) {
@@ -107,7 +107,7 @@ private[spark] class MetricsSystem private (
     sinks.foreach(_.start)
   }
 
-  def stop() {
+  def stop(): Unit = {
     if (running) {
       sinks.foreach(_.stop)
     } else {
@@ -116,7 +116,7 @@ private[spark] class MetricsSystem private (
     running = false
   }
 
-  def report() {
+  def report(): Unit = {
     sinks.foreach(_.report())
   }
 
@@ -157,7 +157,7 @@ private[spark] class MetricsSystem private (
   def getSourcesByName(sourceName: String): Seq[Source] =
     sources.filter(_.sourceName == sourceName)
 
-  def registerSource(source: Source) {
+  def registerSource(source: Source): Unit = {
     sources += source
     try {
       val regName = buildRegistryName(source)
@@ -167,13 +167,13 @@ private[spark] class MetricsSystem private (
     }
   }
 
-  def removeSource(source: Source) {
+  def removeSource(source: Source): Unit = {
     sources -= source
     val regName = buildRegistryName(source)
     registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
   }
 
-  private def registerSources() {
+  private def registerSources(): Unit = {
     val instConfig = metricsConfig.getInstance(instance)
     val sourceConfigs = metricsConfig.subProperties(instConfig, MetricsSystem.SOURCE_REGEX)
 
@@ -189,7 +189,7 @@ private[spark] class MetricsSystem private (
     }
   }
 
-  private def registerSinks() {
+  private def registerSinks(): Unit = {
     val instConfig = metricsConfig.getInstance(instance)
     val sinkConfigs = metricsConfig.subProperties(instConfig, MetricsSystem.SINK_REGEX)
 
@@ -233,7 +233,7 @@ private[spark] object MetricsSystem {
   private[this] val MINIMAL_POLL_UNIT = TimeUnit.SECONDS
   private[this] val MINIMAL_POLL_PERIOD = 1
 
-  def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int) {
+  def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int): Unit = {
     val period = MINIMAL_POLL_UNIT.convert(pollPeriod, pollUnit)
     if (period < MINIMAL_POLL_PERIOD) {
       throw new IllegalArgumentException("Polling period " + pollPeriod + " " + pollUnit +
