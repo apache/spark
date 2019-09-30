@@ -1,10 +1,10 @@
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
-Avro writer benchmark:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------
-Output Single Int Column                      3213 / 3373          4.9         204.3       1.0X
-Output Single Double Column                   3313 / 3345          4.7         210.7       1.0X
-Output Int and String Column                  7303 / 7316          2.2         464.3       0.4X
-Output Partitions                             5309 / 5691          3.0         337.5       0.6X
-Output Buckets                                7031 / 7557          2.2         447.0       0.5X
+Avro writer benchmark:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Output Single Int Column                           3199           3235          51          4.9         203.4       1.0X
+Output Single Double Column                        3583           3631          68          4.4         227.8       0.9X
+Output Int and String Column                       7210           7228          26          2.2         458.4       0.4X
+Output Partitions                                  5579           5583           6          2.8         354.7       0.6X
+Output Buckets                                     7198           7271         104          2.2         457.6       0.4X
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.launcher.SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
@@ -34,6 +35,7 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
     SparkSession.builder()
       .master("local[1]")
       .appName(this.getClass.getCanonicalName)
+      .config(EXECUTOR_EXTRA_JAVA_OPTIONS, "-XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads")
       .config(SQLConf.SHUFFLE_PARTITIONS.key, 1)
       .config(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, 1)
       .getOrCreate()
