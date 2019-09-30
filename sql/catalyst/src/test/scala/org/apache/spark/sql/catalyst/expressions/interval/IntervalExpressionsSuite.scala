@@ -146,5 +146,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Seconds("100 year 10 months 10 seconds"), Decimal(10.0, 8, 6))
     checkEvaluation(Seconds(largeInterval), Decimal(59.0, 8, 6))
     checkEvaluation(Seconds("10 seconds 1 milliseconds 1 microseconds"), Decimal(10001001, 8, 6))
+    checkEvaluation(Seconds("61 seconds 1 microseconds"), Decimal(1000001, 8, 6))
   }
 }
