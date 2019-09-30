@@ -98,4 +98,16 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Month("-2 year -10 months"), -10)
     checkEvaluation(Month("9999 years"), 0)
   }
+
+  test("day") {
+    checkEvaluation(Day("0 days"), 0L)
+    checkEvaluation(Day("1 days 100 seconds"), 1L)
+    checkEvaluation(Day("-1 days -100 seconds"), -1L)
+    checkEvaluation(Day("-365 days"), -365L)
+    checkEvaluation(Day("365 days"), 365L)
+    // Years and months must not be taken into account
+    checkEvaluation(Day("100 year 10 months 5 days"), 5L)
+    checkEvaluation(Day(
+      "9999 years 11 months 31 days 11 hours 59 minutes 59 seconds"), 31L)
+  }
 }

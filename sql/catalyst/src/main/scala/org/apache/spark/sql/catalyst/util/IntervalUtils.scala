@@ -49,4 +49,8 @@ object IntervalUtils {
   def getQuarter(interval: CalendarInterval): Int = {
     getMonth(interval) / MONTHS_PER_QUARTER + 1
   }
+
+  def getDay(interval: CalendarInterval): Long = {
+    interval.microseconds / DateTimeUtils.MICROS_PER_DAY
+  }
 }
