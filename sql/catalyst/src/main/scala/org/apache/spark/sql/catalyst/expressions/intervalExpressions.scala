@@ -19,86 +19,66 @@ package org.apache.spark.sql.catalyst.expressions.interval
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types.{AbstractDataType, CalendarIntervalType, DataType, IntegerType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
-case class Millennium(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
+case class Millennium(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-
   override def dataType: DataType = IntegerType
-
   override protected def nullSafeEval(date: Any): Any = {
     IntervalUtils.getMillennium(date.asInstanceOf[CalendarInterval])
   }
-
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$iu.getMillennium($c)")
   }
 }
 
-case class Century(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
+case class Century(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-
   override def dataType: DataType = IntegerType
-
   override protected def nullSafeEval(date: Any): Any = {
     IntervalUtils.getCentury(date.asInstanceOf[CalendarInterval])
   }
-
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$iu.getCentury($c)")
   }
 }
 
-case class Decade(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
+case class Decade(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-
   override def dataType: DataType = IntegerType
-
   override protected def nullSafeEval(date: Any): Any = {
     IntervalUtils.getDecade(date.asInstanceOf[CalendarInterval])
   }
-
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$iu.getDecade($c)")
   }
 }
 
-case class Year(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
+case class Year(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-
   override def dataType: DataType = IntegerType
-
   override protected def nullSafeEval(date: Any): Any = {
     IntervalUtils.getYear(date.asInstanceOf[CalendarInterval])
   }
-
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$iu.getYear($c)")
   }
 }
 
-case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
+case class Quarter(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-
   override def dataType: DataType = IntegerType
-
   override protected def nullSafeEval(date: Any): Any = {
     IntervalUtils.getQuarter(date.asInstanceOf[CalendarInterval])
   }
-
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$iu.getQuarter($c)")
