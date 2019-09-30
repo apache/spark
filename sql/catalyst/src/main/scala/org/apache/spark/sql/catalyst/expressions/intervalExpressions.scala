@@ -75,7 +75,7 @@ case class Year(child: Expression) extends UnaryExpression with ExpectsInputType
 
 case class Quarter(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-  override def dataType: DataType = IntegerType
+  override def dataType: DataType = ByteType
   override protected def nullSafeEval(date: Any): Any = {
     IntervalUtils.getQuarter(date.asInstanceOf[CalendarInterval])
   }

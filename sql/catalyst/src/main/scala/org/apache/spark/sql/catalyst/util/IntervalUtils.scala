@@ -21,7 +21,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 object IntervalUtils {
   val MONTHS_PER_YEAR: Int = 12
-  val MONTHS_PER_QUARTER: Int = 3
+  val MONTHS_PER_QUARTER: Byte = 3
   val YEARS_PER_MILLENNIUM: Int = 1000
   val YEARS_PER_CENTURY: Int = 100
   val YEARS_PER_DECADE: Int = 10
@@ -47,8 +47,8 @@ object IntervalUtils {
     (interval.months % MONTHS_PER_YEAR).toByte
   }
 
-  def getQuarter(interval: CalendarInterval): Int = {
-    getMonth(interval) / MONTHS_PER_QUARTER + 1
+  def getQuarter(interval: CalendarInterval): Byte = {
+    (getMonth(interval) / MONTHS_PER_QUARTER + 1).toByte
   }
 
   def getDay(interval: CalendarInterval): Long = {

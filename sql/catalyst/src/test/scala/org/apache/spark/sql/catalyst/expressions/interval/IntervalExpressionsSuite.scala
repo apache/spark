@@ -77,16 +77,16 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("quarter") {
-    checkEvaluation(Quarter("0 months"), 1)
-    checkEvaluation(Quarter("1 months"), 1)
-    checkEvaluation(Quarter("-1 months"), 1)
-    checkEvaluation(Quarter("2 months"), 1)
-    checkEvaluation(Quarter("-2 months"), 1)
-    checkEvaluation(Quarter("1 years -1 months"), 4)
-    checkEvaluation(Quarter("-1 years 1 months"), -2)
-    checkEvaluation(Quarter("2 years 3 months"), 2)
-    checkEvaluation(Quarter("-2 years -3 months"), 0)
-    checkEvaluation(Quarter("9999 years"), 1)
+    checkEvaluation(Quarter("0 months"), 1.toByte)
+    checkEvaluation(Quarter("1 months"), 1.toByte)
+    checkEvaluation(Quarter("-1 months"), 1.toByte)
+    checkEvaluation(Quarter("2 months"), 1.toByte)
+    checkEvaluation(Quarter("-2 months"), 1.toByte)
+    checkEvaluation(Quarter("1 years -1 months"), 4.toByte)
+    checkEvaluation(Quarter("-1 years 1 months"), -2.toByte)
+    checkEvaluation(Quarter("2 years 3 months"), 2.toByte)
+    checkEvaluation(Quarter("-2 years -3 months"), 0.toByte)
+    checkEvaluation(Quarter("9999 years"), 1.toByte)
   }
 
   test("month") {
