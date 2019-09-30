@@ -2190,6 +2190,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     testNonPrimitiveType()
   }
 
+  test("filter function - index argument") {
+    val df = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    def testIndexArgument(): Unit = {
+      checkAnswer(df.selectExpr("filter(s, (x, i) -> i % 2 == 0)"),
+        Seq(
+          Row(Seq("c", "b")),
+          Row(Seq("b", "c")),
+          Row(Seq.empty),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testIndexArgument()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testIndexArgument()
+  }
+
   test("filter function - invalid") {
     val df = Seq(
       (Seq("c", "a", "b"), 1),

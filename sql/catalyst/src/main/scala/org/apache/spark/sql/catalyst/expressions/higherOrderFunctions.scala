@@ -345,9 +345,12 @@ case class MapFilter(
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 1);
        [1,3]
       > SELECT _FUNC_(array(0, 2, 3), (x, i) -> x > i);
-       [2, 3]
+       [2,3]
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  note = """
+    The inner function may use the index argument since 3.0.0.
+  """)
 case class ArrayFilter(
     argument: Expression,
     function: Expression)
@@ -369,11 +372,7 @@ case class ArrayFilter(
 
   @transient lazy val (elementVar, indexVar) = {
     val LambdaFunction(_, (elementVar: NamedLambdaVariable) +: tail, _) = function
-    val indexVar = if (tail.nonEmpty) {
-      Some(tail.head.asInstanceOf[NamedLambdaVariable])
-    } else {
-      None
-    }
+    val indexVar = tail.headOption.map(_.asInstanceOf[NamedLambdaVariable])
     (elementVar, indexVar)
   }
 
