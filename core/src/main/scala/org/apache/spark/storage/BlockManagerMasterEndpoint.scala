@@ -144,9 +144,6 @@ class BlockManagerMasterEndpoint(
     case StopBlockManagerMaster =>
       context.reply(true)
       stop()
-
-    case BlockManagerHeartbeat(blockManagerId) =>
-      context.reply(heartbeatReceived(blockManagerId))
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
@@ -288,19 +285,6 @@ class BlockManagerMasterEndpoint(
   private def removeExecutor(execId: String) {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
-  }
-
-  /**
-   * Return true if the driver knows about the given block manager. Otherwise, return false,
-   * indicating that the block manager should re-register.
-   */
-  private def heartbeatReceived(blockManagerId: BlockManagerId): Boolean = {
-    if (!blockManagerInfo.contains(blockManagerId)) {
-      blockManagerId.isDriver && !isLocal
-    } else {
-      blockManagerInfo(blockManagerId).updateLastSeenMs()
-      true
-    }
   }
 
   // Remove a block from the slaves that have it. This can only be used to remove
@@ -460,7 +444,6 @@ class BlockManagerMasterEndpoint(
     }
 
     if (blockId == null) {
-      blockManagerInfo(blockManagerId).updateLastSeenMs()
       return true
     }
 
@@ -585,7 +568,6 @@ private[spark] class BlockManagerInfo(
 
   val externalShuffleServiceEnabled = externalShuffleServiceBlockStatus.isDefined
 
-  private var _lastSeenMs: Long = timeMs
   private var _remainingMem: Long = maxMem
 
   // Mapping from block id to its status.
@@ -593,17 +575,11 @@ private[spark] class BlockManagerInfo(
 
   def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
 
-  def updateLastSeenMs() {
-    _lastSeenMs = System.currentTimeMillis()
-  }
-
   def updateBlockInfo(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long) {
-
-    updateLastSeenMs()
 
     val blockExists = _blocks.containsKey(blockId)
     var originalMemSize: Long = 0
@@ -692,8 +668,6 @@ private[spark] class BlockManagerInfo(
   }
 
   def remainingMem: Long = _remainingMem
-
-  def lastSeenMs: Long = _lastSeenMs
 
   def blocks: JHashMap[BlockId, BlockStatus] = _blocks
 

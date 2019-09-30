@@ -30,6 +30,7 @@ import org.apache.spark.util.{RpcUtils, ThreadUtils}
 private[spark]
 class BlockManagerMaster(
     var driverEndpoint: RpcEndpointRef,
+    var driverHeartbeatEndPoint: RpcEndpointRef,
     conf: SparkConf,
     isDriver: Boolean)
   extends Logging {
@@ -38,6 +39,7 @@ class BlockManagerMaster(
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String) {
+    driverHeartbeatEndPoint.askSync[Boolean](RemoveExecutor(execId))
     tell(RemoveExecutor(execId))
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
@@ -46,6 +48,7 @@ class BlockManagerMaster(
    *  This is only called on the driver side. Non-blocking
    */
   def removeExecutorAsync(execId: String) {
+    driverHeartbeatEndPoint.ask[Boolean](RemoveExecutor(execId))
     driverEndpoint.ask[Boolean](RemoveExecutor(execId))
     logInfo("Removal of executor " + execId + " requested")
   }
@@ -62,8 +65,10 @@ class BlockManagerMaster(
       maxOffHeapMemSize: Long,
       slaveEndpoint: RpcEndpointRef): BlockManagerId = {
     logInfo(s"Registering BlockManager $id")
-    val updatedId = driverEndpoint.askSync[BlockManagerId](
-      RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
+    val register =
+      RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint)
+    driverHeartbeatEndPoint.ask[Boolean](register)
+    val updatedId = driverEndpoint.askSync[BlockManagerId](register)
     logInfo(s"Registered BlockManager $updatedId")
     updatedId
   }
@@ -74,8 +79,9 @@ class BlockManagerMaster(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
-    val res = driverEndpoint.askSync[Boolean](
-      UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize))
+    val update = UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize)
+    driverHeartbeatEndPoint.ask[Boolean](update)
+    val res = driverEndpoint.askSync[Boolean](update)
     logDebug(s"Updated info of block $blockId")
     res
   }
@@ -230,6 +236,7 @@ class BlockManagerMaster(
     if (driverEndpoint != null && isDriver) {
       tell(StopBlockManagerMaster)
       driverEndpoint = null
+      driverHeartbeatEndPoint = null
       logInfo("BlockManagerMaster stopped")
     }
   }
@@ -245,4 +252,5 @@ class BlockManagerMaster(
 
 private[spark] object BlockManagerMaster {
   val DRIVER_ENDPOINT_NAME = "BlockManagerMaster"
+  val DRIVER_HEARTBEAT_ENDPOINT_NAME = "BlockManagerMasterHeartbeat"
 }

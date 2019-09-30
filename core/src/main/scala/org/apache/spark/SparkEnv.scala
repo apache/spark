@@ -337,19 +337,24 @@ object SparkEnv extends Logging {
       None
     }
 
-    val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
-      BlockManagerMaster.DRIVER_ENDPOINT_NAME,
-      new BlockManagerMasterEndpoint(
-        rpcEnv,
-        isLocal,
-        conf,
-        listenerBus,
-        if (conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)) {
-          externalShuffleClient
-        } else {
-          None
-        })),
-      conf, isDriver)
+    val blockManagerMaster = new BlockManagerMaster(
+      registerOrLookupEndpoint(
+        BlockManagerMaster.DRIVER_ENDPOINT_NAME,
+        new BlockManagerMasterEndpoint(
+          rpcEnv,
+          isLocal,
+          conf,
+          listenerBus,
+          if (conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)) {
+            externalShuffleClient
+          } else {
+            None
+          })),
+      registerOrLookupEndpoint(
+        BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
+        new BlockManagerMasterHeartbeatEndpoint(rpcEnv, isLocal)),
+      conf,
+      isDriver)
 
     val blockTransferService =
       new NettyBlockTransferService(conf, securityManager, bindAddress, advertiseAddress,
