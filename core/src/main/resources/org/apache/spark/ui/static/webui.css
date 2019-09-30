@@ -245,9 +245,9 @@ a.expandbutton {
   max-width: 600px;
 }
 
-.paginate_button.active > a {
-    color: #999999;
-    text-decoration: underline;
+.paginate_button.active {
+  border: 1px solid #979797 !important;
+  background: white linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
 }
 
 .title-table {
