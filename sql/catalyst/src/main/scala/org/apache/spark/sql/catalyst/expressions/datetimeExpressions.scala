@@ -2009,10 +2009,11 @@ object DatePart {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(field, source) - Extracts a part of the date/timestamp.",
+  usage = "_FUNC_(field, source) - Extracts a part of the date/timestamp or interval source.",
   arguments = """
     Arguments:
-      * field - selects which part of the source should be extracted. Supported string values are:
+      * field - selects which part of the source should be extracted.
+               Supported string values of `field` for dates and timestamps are:
                 ["MILLENNIUM", ("MILLENNIA", "MIL", "MILS"),
                  "CENTURY", ("CENTURIES", "C", "CENT"),
                  "DECADE", ("DECADES", "DEC", "DECS"),
@@ -2032,7 +2033,21 @@ object DatePart {
                  "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS"),
                  "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US"),
                  "EPOCH"]
-      * source - a date (or timestamp) column from where `field` should be extracted
+                Supported string values of `field` for intervals are:
+                 ["MILLENNIUM", ("MILLENNIA", "MIL", "MILS"),
+                   "CENTURY", ("CENTURIES", "C", "CENT"),
+                   "DECADE", ("DECADES", "DEC", "DECS"),
+                   "YEAR", ("Y", "YEARS", "YR", "YRS"),
+                   "QUARTER", ("QTR"),
+                   "MONTH", ("MON", "MONS", "MONTHS"),
+                   "DAY", ("D", "DAYS"),
+                   "HOUR", ("H", "HOURS", "HR", "HRS"),
+                   "MINUTE", ("M", "MIN", "MINS", "MINUTES"),
+                   "SECOND", ("S", "SEC", "SECONDS", "SECS"),
+                   "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS"),
+                   "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US"),
+                   "EPOCH"]
+      * source - a date/timestamp or interval column from where `field` should be extracted
   """,
   examples = """
     Examples:
@@ -2042,6 +2057,10 @@ object DatePart {
        33
       > SELECT _FUNC_('doy', DATE'2019-08-12');
        224
+      > SELECT _FUNC_('days', interval 1 year 10 months 5 days);
+       5
+      > SELECT _FUNC_('seconds', interval 30 seconds 1 milliseconds 1 microseconds);
+       30.001001
   """,
   since = "3.0.0")
 case class DatePart(field: Expression, source: Expression, child: Expression)
