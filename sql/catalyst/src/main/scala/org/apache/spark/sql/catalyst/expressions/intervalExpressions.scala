@@ -22,14 +22,18 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
-import org.apache.spark.sql.types.{AbstractDataType, ByteType, CalendarIntervalType, DataType, IntegerType, LongType}
+import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 abstract class IntervalPart(
     child: Expression,
     val dataType: DataType,
     func: CalendarInterval => Any,
-    funcName: String) extends UnaryExpression with ExpectsInputTypes with Serializable {
+    funcName: String)
+    extends UnaryExpression
+    with ExpectsInputTypes
+    with Serializable {
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
   override protected def nullSafeEval(interval: Any): Any = {
     func(interval.asInstanceOf[CalendarInterval])
@@ -40,53 +44,25 @@ abstract class IntervalPart(
   }
 }
 
-case class Millennium(child: Expression) extends IntervalPart(
-    child,
-    IntegerType,
-    IntervalUtils.getMillennium,
-    "getMillennium")
+case class Millennium(child: Expression)
+    extends IntervalPart(child, IntegerType, getMillennium, "getMillennium")
 
-case class Century(child: Expression) extends IntervalPart(
-    child,
-    IntegerType,
-    IntervalUtils.getCentury,
-    "getCentury")
+case class Century(child: Expression)
+    extends IntervalPart(child, IntegerType, getCentury, "getCentury")
 
-case class Decade(child: Expression) extends IntervalPart(
-    child,
-    IntegerType,
-    IntervalUtils.getDecade,
-    "getDecade")
+case class Decade(child: Expression)
+    extends IntervalPart(child, IntegerType, getDecade, "getDecade")
 
-case class Year(child: Expression) extends IntervalPart(
-    child,
-    IntegerType,
-    IntervalUtils.getYear,
-    "getYear")
+case class Year(child: Expression) extends IntervalPart(child, IntegerType, getYear, "getYear")
 
-case class Quarter(child: Expression) extends IntervalPart(
-    child,
-    ByteType,
-    IntervalUtils.getQuarter,
-    "getQuarter")
+case class Quarter(child: Expression)
+    extends IntervalPart(child, ByteType, getQuarter, "getQuarter")
 
-case class Month(child: Expression) extends IntervalPart(
-    child,
-    ByteType,
-    IntervalUtils.getMonth,
-    "getMonth")
+case class Month(child: Expression) extends IntervalPart(child, ByteType, getMonth, "getMonth")
 
-case class Day(child: Expression) extends IntervalPart(
-    child,
-    LongType,
-    IntervalUtils.getDay,
-    "getDay")
+case class Day(child: Expression) extends IntervalPart(child, LongType, getDay, "getDay")
 
-case class Hour(child: Expression) extends IntervalPart(
-    child,
-    ByteType,
-    IntervalUtils.getHour,
-    "getHour")
+case class Hour(child: Expression) extends IntervalPart(child, ByteType, getHour, "getHour")
 
 object IntervalPart {
 
