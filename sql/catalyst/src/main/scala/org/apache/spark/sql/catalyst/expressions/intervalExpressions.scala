@@ -109,7 +109,6 @@ object IntervalPart {
     case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
     case "QUARTER" | "QTR" => Quarter(source)
     case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
-    case "WEEK" | "W" | "WEEKS" => errorHandleFunc
 //    case "DAY" | "D" | "DAYS" => DayOfMonth(source)
 //    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
 //    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
