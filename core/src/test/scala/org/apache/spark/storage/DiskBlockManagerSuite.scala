@@ -91,24 +91,38 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     writer.close()
   }
 
-  test("temporary shuffle file should be able to handle disk failures") {
+  test("temporary shuffle/local file should be able to handle disk failures") {
     try {
       // the following two lines pre-create subdirectories under each root dir of block manager
       diskBlockManager.getFile("1")
       diskBlockManager.getFile("2")
 
       val tempShuffleFile1 = diskBlockManager.createTempShuffleBlock()._2
-      assert(tempShuffleFile1.exists(), "There are no bad disks")
+      val tempLocalFile1 = diskBlockManager.createTempLocalBlock()._2
+      assert(tempShuffleFile1.exists(), "There are no bad disks, so temp shuffle file exists")
+      assert(tempLocalFile1.exists(), "There are no bad disks, so temp local file exists")
+
+      // partial disks damaged
       rootDir0.setExecutable(false)
       val tempShuffleFile2 = diskBlockManager.createTempShuffleBlock()._2
+      val tempLocalFile2 = diskBlockManager.createTempLocalBlock()._2
       assert(tempShuffleFile2.exists(),
         "There is only one bad disk, so temp shuffle file should be created")
       assert(tempShuffleFile2.getParentFile.getParentFile.getParent === rootDir1.getAbsolutePath,
         "The temp shuffle file should be under the healthy disk")
+      assert(tempLocalFile2.exists(),
+        "There is only one bad disk, so temp local file should be created")
+      assert(tempLocalFile2.getParentFile.getParentFile.getParent === rootDir1.getAbsolutePath,
+        "The temp local file should be under the healthy disk")
+
+      // all disks damaged
       rootDir1.setExecutable(false)
       val tempShuffleFile3 = diskBlockManager.createTempShuffleBlock()._2
+      val tempLocalFile3 = diskBlockManager.createTempLocalBlock()._2
       assert(!tempShuffleFile3.exists(),
         "All disks are broken, so there should be no temp shuffle file created")
+      assert(!tempLocalFile3.exists(),
+        "All disks are broken, so there should be no temp local file created")
     } finally {
       rootDir0.setExecutable(true)
       rootDir1.setExecutable(true)
