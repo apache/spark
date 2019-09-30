@@ -2983,7 +2983,6 @@
       <properties>
         <hadoop.version>3.2.0</hadoop.version>
         <curator.version>2.13.0</curator.version>
-        <zookeeper.version>3.4.14</zookeeper.version>
         <hive.group>org.apache.hive</hive.group>
         <hive.classifier>core</hive.classifier>
         <hive.version>${hive23.version}</hive.version>
