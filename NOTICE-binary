@@ -1372,6 +1372,11 @@ Copyright 2015-2017 The Apache Software Foundation
 This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
 
+Ehcache V3
+Copyright 2014-2016 Terracotta, Inc.
+
+The product includes software from the Apache Commons Lang project,
+under the Apache License 2.0 (see: org.ehcache.impl.internal.classes.commonslang)
 
 Apache Geronimo JCache Spec 1.0
 Copyright 2003-2014 The Apache Software Foundation
@@ -1483,4 +1488,3 @@ Copyright 2014-2017 The Apache Software Foundation
 
 This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
-
