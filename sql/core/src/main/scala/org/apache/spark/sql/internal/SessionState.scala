@@ -177,20 +177,26 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
   }
 
   def resolveAndDownLoad(path: String): String = {
-    val uri = new URI(path)
-    if (uri.getScheme == null) {
-      path
-    } else {
-      uri.getScheme.toLowerCase(Locale.ROOT) match {
-        case "ftp" | "http" | "https" =>
-          Utils.doFetchFile(path,
-            new File(SparkFiles.getRootDirectory()),
-            Utils.decodeFileNameInURI(uri),
-            session.sparkContext.getConf,
-            session.sparkContext.env.securityManager,
-            session.sparkContext.hadoopConfiguration).getPath
-        case _ => path
+    try {
+      val uri = new URI(path)
+      if (uri.getScheme == null) {
+        path
+      } else {
+        uri.getScheme.toLowerCase(Locale.ROOT) match {
+          case "ftp" | "http" | "https" =>
+            Utils.doFetchFile(path,
+              new File(SparkFiles.getRootDirectory()),
+              Utils.decodeFileNameInURI(uri),
+              session.sparkContext.getConf,
+              session.sparkContext.env.securityManager,
+              session.sparkContext.hadoopConfiguration).getPath
+          case _ => path
+        }
       }
+    } catch {
+      case e: Exception =>
+        e.printStackTrace()
+        path
     }
   }
 }
