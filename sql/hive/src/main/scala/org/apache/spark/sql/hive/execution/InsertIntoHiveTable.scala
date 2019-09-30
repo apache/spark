@@ -26,11 +26,11 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalog}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.execution.command.{AlterTableAddPartitionCommand, CommandUtils}
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl
 
@@ -230,12 +230,28 @@ case class InsertIntoHiveTable(
         var doHiveOverwrite = overwrite
 
         if (oldPart.isEmpty || !ifPartitionNotExists) {
+          // SPARK-29295: When insert overwrite to a Hive external table partition, if the
+          // partition does not exist, Hive will not check if the external partition directory
+          // exists or not before copying files. So if users drop the partition, and then do
+          // insert overwrite to the same partition, the partition will have both old and new
+          // data.
+          val updatedPart = if (overwrite && table.tableType == CatalogTableType.EXTERNAL) {
+            AlterTableAddPartitionCommand(
+              table.identifier, Seq((partitionSpec, None)), ifNotExists = true).run(sparkSession)
+            externalCatalog.getPartitionOption(
+              table.database,
+              table.identifier.table,
+              partitionSpec)
+          } else {
+            oldPart
+          }
+
           // SPARK-18107: Insert overwrite runs much slower than hive-client.
           // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
           // version and we may not want to catch up new Hive version every time. We delete the
           // Hive partition first and then load data file into the Hive partition.
-          if (oldPart.nonEmpty && overwrite) {
-            oldPart.get.storage.locationUri.foreach { uri =>
+          if (updatedPart.nonEmpty && overwrite) {
+            updatedPart.get.storage.locationUri.foreach { uri =>
               val partitionPath = new Path(uri)
               val fs = partitionPath.getFileSystem(hadoopConf)
               if (fs.exists(partitionPath)) {

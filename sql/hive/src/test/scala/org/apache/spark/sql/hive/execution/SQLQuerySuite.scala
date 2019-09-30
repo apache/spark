@@ -2412,4 +2412,29 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-29295: insert overwrite external partition should not have old data") {
+    withTable("test") {
+      withTempDir { f =>
+        sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (name string) STORED AS " +
+          s"PARQUET LOCATION '${f.getAbsolutePath}'")
+
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+          sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 1")
+          sql("ALTER TABLE test DROP PARTITION(name='n1')")
+          sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 2")
+          checkAnswer( sql("SELECT id FROM test WHERE name = 'n1' ORDER BY id"),
+            Array(Row(2)))
+        }
+
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
+          sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 1")
+          sql("ALTER TABLE test DROP PARTITION(name='n1')")
+          sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 2")
+          checkAnswer( sql("SELECT id FROM test WHERE name = 'n1' ORDER BY id"),
+            Array(Row(2)))
+        }
+      }
+    }
+  }
 }
