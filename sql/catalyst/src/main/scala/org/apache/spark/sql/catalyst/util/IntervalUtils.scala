@@ -25,6 +25,7 @@ object IntervalUtils {
   val YEARS_PER_MILLENNIUM: Int = 1000
   val YEARS_PER_CENTURY: Int = 100
   val YEARS_PER_DECADE: Int = 10
+  val MICROS_PER_HOUR: Long = DateTimeUtils.MILLIS_PER_HOUR * DateTimeUtils.MICROS_PER_MILLIS
 
   def getYear(interval: CalendarInterval): Int = {
     interval.months / MONTHS_PER_YEAR
@@ -52,5 +53,9 @@ object IntervalUtils {
 
   def getDay(interval: CalendarInterval): Long = {
     interval.microseconds / DateTimeUtils.MICROS_PER_DAY
+  }
+
+  def getHour(interval: CalendarInterval): Byte = {
+    ((interval.microseconds % DateTimeUtils.MICROS_PER_DAY) / MICROS_PER_HOUR).toByte
   }
 }

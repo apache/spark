@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
-import org.apache.spark.sql.types.{AbstractDataType, CalendarIntervalType, DataType, IntegerType, LongType}
+import org.apache.spark.sql.types.{AbstractDataType, ByteType, CalendarIntervalType, DataType, IntegerType, LongType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Millennium(child: Expression) extends UnaryExpression with ExpectsInputTypes {
@@ -109,6 +109,18 @@ case class Day(child: Expression) extends UnaryExpression with ExpectsInputTypes
   }
 }
 
+case class Hour(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
+  override def dataType: DataType = ByteType
+  override protected def nullSafeEval(date: Any): Any = {
+    IntervalUtils.getHour(date.asInstanceOf[CalendarInterval])
+  }
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$iu.getHour($c)")
+  }
+}
+
 object IntervalPart {
 
   def parseExtractField(
@@ -122,7 +134,7 @@ object IntervalPart {
     case "QUARTER" | "QTR" => Quarter(source)
     case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
     case "DAY" | "D" | "DAYS" => Day(source)
-//    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
+    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
 //    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
 //    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Second(source)
 //    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>

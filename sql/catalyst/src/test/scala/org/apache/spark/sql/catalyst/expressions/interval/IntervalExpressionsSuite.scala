@@ -110,4 +110,16 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Day(
       "9999 years 11 months 31 days 11 hours 59 minutes 59 seconds"), 31L)
   }
+
+  test("hour") {
+    checkEvaluation(Hour("0 hours"), 0.toByte)
+    checkEvaluation(Hour("1 hour"), 1.toByte)
+    checkEvaluation(Hour("-1 hour"), -1.toByte)
+    checkEvaluation(Hour("23 hours"), 23.toByte)
+    checkEvaluation(Hour("-23 hours"), -23.toByte)
+    // Years and months must not be taken into account
+    checkEvaluation(Hour("100 year 10 months 10 hours"), 10.toByte)
+    checkEvaluation(Hour(
+      "9999 years 11 months 31 days 11 hours 59 minutes 59 seconds"), 11.toByte)
+  }
 }
