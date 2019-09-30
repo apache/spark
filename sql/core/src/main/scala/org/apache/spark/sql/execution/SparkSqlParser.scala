@@ -175,6 +175,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     ShowColumnsCommand(Option(ctx.db).map(_.getText), visitTableIdentifier(ctx.tableIdentifier))
   }
 
+  override def visitAddColumns(ctx: AddColumnsContext): LogicalPlan = withOrigin(ctx) {
+    val tableName = visitTableIdentifier(ctx.tableIdentifier())
+    val dataCols = Option(ctx.columns).map(visitColTypeList).getOrElse(Nil)
+
+    AlterTableAddColumnsCommand(tableName, dataCols)
+  }
+
   /**
    * A command for users to list the partition names of a table. If partition spec is specified,
    * partitions that match the spec are returned. Otherwise an empty result set is returned.

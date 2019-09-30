@@ -596,7 +596,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val newTableProps = oldDataSourceProps ++ withStatsProps.properties + partitionProviderProp
       val newDef = withStatsProps.copy(
         storage = newStorage,
-        schema = oldTableDef.schema,
+        //schema = oldTableDef.schema,
+        //allow `alter table xx add columns(xx)`
+        schema = tableDefinition.schema,
         partitionColumnNames = oldTableDef.partitionColumnNames,
         bucketSpec = oldTableDef.bucketSpec,
         properties = newTableProps)

@@ -118,6 +118,23 @@ case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends
   }
 }
 
+case class AlterTableAddColumnsCommand(
+                                        tableName: TableIdentifier,
+                                        newColumns: Seq[StructField]) extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+
+    val newSchema = StructType(table.schema.fields ++ newColumns)
+    val newTable = table.copy(schema = newSchema)
+    catalog.alterTable(newTable)
+    Seq.empty[Row]
+  }
+}
+
 
 /**
  * A command that renames a table/view.
