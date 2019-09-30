@@ -172,4 +172,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Microseconds("11 year 1 microseconds"), 1L)
     checkEvaluation(Microseconds(largeInterval), 59999999L)
   }
+
+  test("epoch") {
+    checkEvaluation(Epoch("0 months"), Decimal(0.0, 18, 6))
+    checkEvaluation(Epoch("10000 years"), Decimal(315576000000.0, 18, 6))
+    checkEvaluation(Epoch("1 year"), Decimal(31557600.0, 18, 6))
+    checkEvaluation(Epoch("-1 year"), Decimal(-31557600.0, 18, 6))
+    checkEvaluation(Epoch("1 second 1 millisecond 1 microsecond"), Decimal(1.001001, 18, 6))
+  }
 }

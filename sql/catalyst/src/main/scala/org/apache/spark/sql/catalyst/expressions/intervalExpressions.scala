@@ -76,6 +76,11 @@ case class Milliseconds(child: Expression)
 case class Microseconds(child: Expression)
   extends IntervalPart(child, LongType, getMicroseconds, "getMicroseconds")
 
+// Number of seconds in 10000 years is 315576000001 (30 days per one month)
+// which is 12 digits + 6 digits for the fractional part of seconds.
+case class Epoch(child: Expression)
+  extends IntervalPart(child, DecimalType(18, 6), getEpoch, "getEpoch")
+
 object IntervalPart {
 
   def parseExtractField(
@@ -96,7 +101,7 @@ object IntervalPart {
       Milliseconds(source)
     case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
       Microseconds(source)
-//    case "EPOCH" => Epoch(source)
+    case "EPOCH" => Epoch(source)
     case _ => errorHandleFunc
   }
 }

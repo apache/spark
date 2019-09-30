@@ -28,6 +28,10 @@ object IntervalUtils {
   val YEARS_PER_DECADE: Int = 10
   val MICROS_PER_HOUR: Long = DateTimeUtils.MILLIS_PER_HOUR * DateTimeUtils.MICROS_PER_MILLIS
   val MICROS_PER_MINUTE: Long = DateTimeUtils.MILLIS_PER_MINUTE * DateTimeUtils.MICROS_PER_MILLIS
+  val DAYS_PER_MONTH: Byte = 30
+  val MICROS_PER_MONTH: Long = DAYS_PER_MONTH * DateTimeUtils.SECONDS_PER_DAY
+  /* 365.25 days per year assumes leap year every four years */
+  val MICROS_PER_YEAR: Long = (36525L * DateTimeUtils.MICROS_PER_DAY) / 100
 
   def getYears(interval: CalendarInterval): Int = {
     interval.months / MONTHS_PER_YEAR
@@ -75,5 +79,13 @@ object IntervalUtils {
 
   def getMilliseconds(interval: CalendarInterval): Decimal = {
     Decimal(getMicroseconds(interval), 8, 3)
+  }
+
+  // Returns total number of seconds with microseconds fractional part in the given interval.
+  def getEpoch(interval: CalendarInterval): Decimal = {
+    var result = interval.microseconds
+    result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
+    result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
+    Decimal(result, 18, 6)
   }
 }
