@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.{DateTimeException, Instant, LocalDate, LocalDateTime, ZoneId}
+import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
@@ -30,6 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.interval.IntervalPart
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -2056,9 +2057,13 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
         Literal(null, DoubleType)
       } else {
         val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
-        DatePart.parseExtractField(fieldStr, source, {
-          throw new AnalysisException(s"Literals of type '$fieldStr' are currently not supported.")
-        })
+        val errMsg = s"Literals of type '$fieldStr' are currently not supported " +
+          s"for the ${source.dataType.catalogString} type."
+        if (source.dataType == CalendarIntervalType) {
+          IntervalPart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
+        } else {
+          DatePart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
+        }
       }
     })
   }
