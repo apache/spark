@@ -24,6 +24,7 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
@@ -38,8 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, L
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveVersion
-import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, NullType, StructType}
 import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
@@ -1046,5 +1046,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
     // TODO: add more tests.
+  }
+
+  test("fromHiveColumn: void type") {
+    val fieldSchema = new FieldSchema("c1", "void", "")
+    val structField = HiveClientImpl.fromHiveColumn(fieldSchema)
+    assert(structField.dataType == NullType)
   }
 }
