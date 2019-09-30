@@ -43,8 +43,8 @@ object IntervalUtils {
     getYear(interval) / YEARS_PER_DECADE
   }
 
-  def getMonth(interval: CalendarInterval): Int = {
-    interval.months % MONTHS_PER_YEAR
+  def getMonth(interval: CalendarInterval): Byte = {
+    (interval.months % MONTHS_PER_YEAR).toByte
   }
 
   def getQuarter(interval: CalendarInterval): Int = {

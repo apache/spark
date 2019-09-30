@@ -90,13 +90,13 @@ class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("month") {
-    checkEvaluation(Month("0 year"), 0)
+    checkEvaluation(Month("0 year"), 0.toByte)
     for (m <- -24 to 24) {
-      checkEvaluation(Month(s"$m months"), m % 12)
+      checkEvaluation(Month(s"$m months"), (m % 12).toByte)
     }
-    checkEvaluation(Month("1 year 10 months"), 10)
-    checkEvaluation(Month("-2 year -10 months"), -10)
-    checkEvaluation(Month("9999 years"), 0)
+    checkEvaluation(Month("1 year 10 months"), 10.toByte)
+    checkEvaluation(Month("-2 year -10 months"), -10.toByte)
+    checkEvaluation(Month("9999 years"), 0.toByte)
   }
 
   test("day") {
