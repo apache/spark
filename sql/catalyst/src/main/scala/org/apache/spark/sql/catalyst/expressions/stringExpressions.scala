@@ -2373,7 +2373,6 @@ case class ToNumber(strExpr: Expression, patternExpr: Expression)
         }
         indexOfString += 1
       }
-      
     }
 
     var result = if (integerLen == -1 && wholeLen == -1) {
