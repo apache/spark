@@ -600,7 +600,7 @@ class SparkSubmitSuite
   }
 
   // TODO(SPARK-9603): Building a package is flaky on Jenkins Maven builds.
-  // See https://gist.github.com/shivaram/3a2fecce60768a603dac for a error log
+  // See https://gist.github.com/shivaram/3a2fecce60768a603dac for an error log
   ignore("correctly builds R packages included in a jar with --packages") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")

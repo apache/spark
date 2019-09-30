@@ -548,23 +548,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains("spark.master") && get("spark.master").startsWith("yarn-")) {
-      val warning = s"spark.master ${get("spark.master")} is deprecated in Spark 2.0+, please " +
-        "instead use \"yarn\" with specified deploy mode."
-
-      get("spark.master") match {
-        case "yarn-cluster" =>
-          logWarning(warning)
-          set("spark.master", "yarn")
-          set(SUBMIT_DEPLOY_MODE, "cluster")
-        case "yarn-client" =>
-          logWarning(warning)
-          set("spark.master", "yarn")
-          set(SUBMIT_DEPLOY_MODE, "client")
-        case _ => // Any other unexpected master will be checked when creating scheduler backend.
-      }
-    }
-
     if (contains(SUBMIT_DEPLOY_MODE)) {
       get(SUBMIT_DEPLOY_MODE) match {
         case "cluster" | "client" =>

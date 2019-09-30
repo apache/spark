@@ -37,6 +37,7 @@ from pyspark.java_gateway import launch_gateway, local_connect_and_auth
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
     PairDeserializer, AutoBatchedSerializer, NoOpSerializer, ChunkedStream
 from pyspark.storagelevel import StorageLevel
+from pyspark.resourceinformation import ResourceInformation
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
@@ -662,8 +663,6 @@ class SparkContext(object):
 
     def binaryFiles(self, path, minPartitions=None):
         """
-        .. note:: Experimental
-
         Read a directory of binary files from HDFS, a local file system
         (available on all nodes), or any Hadoop-supported file system URI
         as a byte array. Each file is read as a single record and returned
@@ -679,8 +678,6 @@ class SparkContext(object):
 
     def binaryRecords(self, path, recordLength):
         """
-        .. note:: Experimental
-
         Load data from a flat binary file, assuming each record is a set of numbers
         with the specified numerical format (see ByteBuffer), and the number of
         bytes per record is constant.
@@ -953,7 +950,7 @@ class SparkContext(object):
     def setCheckpointDir(self, dirName):
         """
         Set the directory under which RDDs are going to be checkpointed. The
-        directory must be a HDFS path if running on a cluster.
+        directory must be an HDFS path if running on a cluster.
         """
         self._jsc.sc().setCheckpointDir(dirName)
 
@@ -1106,6 +1103,17 @@ class SparkContext(object):
         conf = SparkConf()
         conf.setAll(self._conf.getAll())
         return conf
+
+    @property
+    def resources(self):
+        resources = {}
+        jresources = self._jsc.resources()
+        for x in jresources:
+            name = jresources[x].name()
+            jaddresses = jresources[x].addresses()
+            addrs = [addr for addr in jaddresses]
+            resources[name] = ResourceInformation(name, addrs)
+        return resources
 
 
 def _test():

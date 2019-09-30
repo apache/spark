@@ -21,9 +21,9 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class SparkPlanSuite extends QueryTest with SharedSQLContext {
+class SparkPlanSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-21619 execution of a canonicalized plan should fail") {
     val plan = spark.range(10).queryExecution.executedPlan.canonicalized
@@ -37,7 +37,7 @@ class SparkPlanSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-23731 plans should be canonicalizable after being (de)serialized") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempPath { path =>
         spark.range(1).write.parquet(path.getAbsolutePath)
         val df = spark.read.parquet(path.getAbsolutePath)
@@ -56,7 +56,7 @@ class SparkPlanSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-27418 BatchScanExec should be canonicalizable after being (de)serialized") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
         spark.range(1).write.parquet(path.getAbsolutePath)
         val df = spark.read.parquet(path.getAbsolutePath)
@@ -75,7 +75,7 @@ class SparkPlanSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25357 SparkPlanInfo of FileScan contains nonEmpty metadata") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempPath { path =>
         spark.range(5).write.parquet(path.getAbsolutePath)
         val f = spark.read.parquet(path.getAbsolutePath)

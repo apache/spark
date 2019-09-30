@@ -36,6 +36,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_udf
+from pyspark.sql.utils import to_str
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
 # Namely, if columns are referred as arguments, they can be always both Column or string,
@@ -113,6 +114,10 @@ def _create_window_function(name, doc=''):
     _.__name__ = name
     _.__doc__ = 'Window function: ' + doc
     return _
+
+
+def _options_to_str(options):
+    return {key: to_str(value) for (key, value) in options.items()}
 
 _lit_doc = """
     Creates a :class:`Column` of literal value.
@@ -1242,7 +1247,7 @@ def last_day(date):
 
 @ignore_unicode_prefix
 @since(1.5)
-def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
+def from_unixtime(timestamp, format="uuuu-MM-dd HH:mm:ss"):
     """
     Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
     representing the timestamp of that moment in the current system time zone in the given
@@ -1259,9 +1264,9 @@ def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
 
 
 @since(1.5)
-def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
+def unix_timestamp(timestamp=None, format='uuuu-MM-dd HH:mm:ss'):
     """
-    Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
+    Convert time string with given pattern ('uuuu-MM-dd HH:mm:ss', by default)
     to Unix time stamp (in seconds), using the default timezone and the default
     locale, return null if fail.
 
@@ -1564,8 +1569,9 @@ def format_string(format, *cols):
     """
     Formats the arguments in printf-style and returns the result as a string column.
 
-    :param col: the column name of the numeric value to be formatted
-    :param d: the N decimal places
+    :param format: string that can contain embedded format tags and used as result column's value
+    :param cols: list of column names (string) or list of :class:`Column` expressions to
+        be used in formatting
 
     >>> df = spark.createDataFrame([(5, "hello")], ['a', 'b'])
     >>> df.select(format_string('%d %s', df.a, df.b).alias('v')).collect()
@@ -1963,7 +1969,7 @@ def arrays_overlap(a1, a2):
 def slice(x, start, length):
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
-    (or starting from the end if `start` is negative) with the specified `length`.
+    (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
     >>> df = spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
     >>> df.select(slice(df.x, 2, 2).alias("sliced")).collect()
     [Row(sliced=[2, 3]), Row(sliced=[5])]
@@ -2046,11 +2052,12 @@ def element_at(col, extraction):
     [Row(element_at(data, 1)=u'a'), Row(element_at(data, 1)=None)]
 
     >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},), ({},)], ['data'])
-    >>> df.select(element_at(df.data, "a")).collect()
+    >>> df.select(element_at(df.data, lit("a"))).collect()
     [Row(element_at(data, a)=1.0), Row(element_at(data, a)=None)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.element_at(_to_java_column(col), extraction))
+    return Column(sc._jvm.functions.element_at(
+        _to_java_column(col), lit(extraction)._jc))  # noqa: F821 'lit' is dynamically defined.
 
 
 @since(2.4)
@@ -2343,7 +2350,7 @@ def from_json(col, schema, options={}):
         schema = schema.json()
     elif isinstance(schema, Column):
         schema = _to_java_column(schema)
-    jc = sc._jvm.functions.from_json(_to_java_column(col), schema, options)
+    jc = sc._jvm.functions.from_json(_to_java_column(col), schema, _options_to_str(options))
     return Column(jc)
 
 
@@ -2384,7 +2391,7 @@ def to_json(col, options={}):
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.to_json(_to_java_column(col), options)
+    jc = sc._jvm.functions.to_json(_to_java_column(col), _options_to_str(options))
     return Column(jc)
 
 
@@ -2415,7 +2422,7 @@ def schema_of_json(json, options={}):
         raise TypeError("schema argument should be a column or string")
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.schema_of_json(col, options)
+    jc = sc._jvm.functions.schema_of_json(col, _options_to_str(options))
     return Column(jc)
 
 
@@ -2442,7 +2449,7 @@ def schema_of_csv(csv, options={}):
         raise TypeError("schema argument should be a column or string")
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.schema_of_csv(col, options)
+    jc = sc._jvm.functions.schema_of_csv(col, _options_to_str(options))
     return Column(jc)
 
 
@@ -2464,7 +2471,7 @@ def to_csv(col, options={}):
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.to_csv(_to_java_column(col), options)
+    jc = sc._jvm.functions.to_csv(_to_java_column(col), _options_to_str(options))
     return Column(jc)
 
 
@@ -2693,7 +2700,10 @@ def array_repeat(col, count):
     [Row(r=[u'ab', u'ab', u'ab'])]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.array_repeat(_to_java_column(col), count))
+    return Column(sc._jvm.functions.array_repeat(
+        _to_java_column(col),
+        _to_java_column(count) if isinstance(count, Column) else count
+    ))
 
 
 @since(2.4)
@@ -2775,6 +2785,11 @@ def from_csv(col, schema, options={}):
     >>> value = data[0][0]
     >>> df.select(from_csv(df.value, schema_of_csv(value)).alias("csv")).collect()
     [Row(csv=Row(_c0=1, _c1=2, _c2=3))]
+    >>> data = [("   abc",)]
+    >>> df = spark.createDataFrame(data, ("value",))
+    >>> options = {'ignoreLeadingWhiteSpace': True}
+    >>> df.select(from_csv(df.value, "s string", options).alias("csv")).collect()
+    [Row(csv=Row(s=u'abc'))]
     """
 
     sc = SparkContext._active_spark_context
@@ -2785,7 +2800,7 @@ def from_csv(col, schema, options={}):
     else:
         raise TypeError("schema argument should be a column or string")
 
-    jc = sc._jvm.functions.from_csv(_to_java_column(col), schema, options)
+    jc = sc._jvm.functions.from_csv(_to_java_column(col), schema, _options_to_str(options))
     return Column(jc)
 
 
@@ -2799,6 +2814,8 @@ class PandasUDFType(object):
     SCALAR_ITER = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
 
     GROUPED_MAP = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+
+    COGROUPED_MAP = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
 
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
@@ -2902,8 +2919,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
-
-    .. note:: Experimental
 
     The function type of the UDF can be one of the following:
 
@@ -3308,7 +3323,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
                          PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                          PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                          PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-                         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF]:
+                         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+                         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF]:
         raise ValueError("Invalid functionType: "
                          "functionType must be one the values from PandasUDFType")
 

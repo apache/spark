@@ -71,7 +71,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
         taskAccum.value.get.asInstanceOf[Long]
       }
       // Each task should keep track of the partial value on the way, i.e. 1, 2, ... numPartitions
-      assert(taskAccumValues.sorted === (1L to numPartitions).toSeq)
+      assert(taskAccumValues.sorted === (1L to numPartitions))
     }
     rdd.count()
     listener.awaitNextJobCompletion()
@@ -140,6 +140,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
         throw new FetchFailedException(
           SparkEnv.get.blockManager.blockManagerId,
           sid,
+          taskContext.partitionId(),
           taskContext.partitionId(),
           taskContext.partitionId(),
           "simulated fetch failure")

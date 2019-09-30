@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.UUID
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
@@ -70,7 +71,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
     cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
+  override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
 
   override def output: Seq[Attribute] = cmd.output
 
@@ -143,7 +144,8 @@ case class ExplainCommand(
     logicalPlan: LogicalPlan,
     extended: Boolean = false,
     codegen: Boolean = false,
-    cost: Boolean = false)
+    cost: Boolean = false,
+    formatted: Boolean = false)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] =
@@ -155,11 +157,17 @@ case class ExplainCommand(
       sparkSession.sessionState.executePlan(logicalPlan))
     val outputString =
       if (codegen) {
-        codegenString(queryExecution.executedPlan)
+        try {
+          codegenString(queryExecution.executedPlan)
+        } catch {
+          case e: AnalysisException => e.toString
+        }
       } else if (extended) {
         queryExecution.toString
       } else if (cost) {
         queryExecution.stringWithStats
+      } else if (formatted) {
+        queryExecution.simpleString(formatted = true)
       } else {
         queryExecution.simpleString
       }

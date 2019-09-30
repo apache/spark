@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
-import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveSingleton}
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
@@ -1106,7 +1106,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
         sql(
-          s"ADD JAR ${HiveTestUtils.getHiveContribJar.getCanonicalPath}")
+          s"ADD JAR ${HiveTestJars.getHiveContribJar().getCanonicalPath}")
         try {
           sql(
             """
@@ -1183,12 +1183,31 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       Row(CalendarInterval.fromString("interval 100 milliseconds")))
     checkAnswer(sql("select interval '10-9' year to month"),
       Row(CalendarInterval.fromString("interval 10 years 9 months")))
+    checkAnswer(sql("select interval '20 15:40:32.99899999' day to hour"),
+      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours")))
+    checkAnswer(sql("select interval '20 15:40:32.99899999' day to minute"),
+      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes")))
     checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
       Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
         "32 seconds 998 milliseconds 999 microseconds")))
+    checkAnswer(sql("select interval '15:40:32.99899999' hour to minute"),
+      Row(CalendarInterval.fromString("interval 15 hours 40 minutes")))
+    checkAnswer(sql("select interval '15:40.99899999' hour to second"),
+      Row(CalendarInterval.fromString("interval 15 minutes 40 seconds 998 milliseconds " +
+        "999 microseconds")))
+    checkAnswer(sql("select interval '15:40' hour to second"),
+      Row(CalendarInterval.fromString("interval 15 hours 40 minutes")))
     checkAnswer(sql("select interval '15:40:32.99899999' hour to second"),
       Row(CalendarInterval.fromString("interval 15 hours 40 minutes 32 seconds 998 milliseconds " +
         "999 microseconds")))
+    checkAnswer(sql("select interval '20 40:32.99899999' minute to second"),
+      Row(CalendarInterval.fromString("interval 2 weeks 6 days 40 minutes 32 seconds " +
+        "998 milliseconds 999 microseconds")))
+    checkAnswer(sql("select interval '40:32.99899999' minute to second"),
+      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds 998 milliseconds " +
+        "999 microseconds")))
+    checkAnswer(sql("select interval '40:32' minute to second"),
+      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds")))
     checkAnswer(sql("select interval '30' year"),
       Row(CalendarInterval.fromString("interval 30 years")))
     checkAnswer(sql("select interval '25' month"),
@@ -2346,7 +2365,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       // This test case is only for file source V1. As the rule OptimizeMetadataOnlyQuery is
       // disabled by default, we can skip testing file source v2 in current stage.
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString,
-        SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
         withTable("t") {
           sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
           sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")

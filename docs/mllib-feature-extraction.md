@@ -348,17 +348,3 @@ Refer to the [`ElementwiseProduct` Python docs](api/python/pyspark.mllib.html#py
 
 A feature transformer that projects vectors to a low-dimensional space using PCA.
 Details you can read at [dimensionality reduction](mllib-dimensionality-reduction.html).
-
-### Example
-
-The following code demonstrates how to compute principal components on a `Vector`
-and use them to project the vectors into a low-dimensional space while keeping associated labels
-for calculation a [Linear Regression](mllib-linear-methods.html)
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-Refer to the [`PCA` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.PCA) for details on the API.
-
-{% include_example scala/org/apache/spark/examples/mllib/PCAExample.scala %}
-</div>
-</div>

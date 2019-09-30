@@ -461,17 +461,10 @@ abstract class LDAModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    if ($(topicDistributionCol).nonEmpty) {
-      val func = getTopicDistributionMethod
-      val transformer = udf(func)
-
-      dataset.withColumn($(topicDistributionCol),
-        transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
-    } else {
-      logWarning("LDAModel.transform was called without any output columns. Set an output column" +
-        " such as topicDistributionCol to produce results.")
-      dataset.toDF()
-    }
+    val func = getTopicDistributionMethod
+    val transformer = udf(func)
+    dataset.withColumn($(topicDistributionCol),
+      transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
   }
 
   /**
@@ -490,7 +483,7 @@ abstract class LDAModel private[ml] (
         Vectors.zeros(k)
       } else {
         val (ids: List[Int], cts: Array[Double]) = vector match {
-          case v: DenseVector => ((0 until v.size).toList, v.values)
+          case v: DenseVector => (List.range(0, v.size), v.values)
           case v: SparseVector => (v.indices.toList, v.values)
           case other =>
             throw new UnsupportedOperationException(

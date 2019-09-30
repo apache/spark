@@ -63,8 +63,7 @@ private[kafka010] class KafkaSourceRDD(
     executorKafkaParams: ju.Map[String, Object],
     offsetRanges: Seq[KafkaSourceRDDOffsetRange],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean)
+    failOnDataLoss: Boolean)
   extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
   override def persist(newLevel: StorageLevel): this.type = {
@@ -87,7 +86,7 @@ private[kafka010] class KafkaSourceRDD(
       context: TaskContext): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {
     val sourcePartition = thePart.asInstanceOf[KafkaSourceRDDPartition]
     val consumer = KafkaDataConsumer.acquire(
-      sourcePartition.offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
+      sourcePartition.offsetRange.topicPartition, executorKafkaParams)
 
     val range = resolveRange(consumer, sourcePartition.offsetRange)
     assert(

@@ -77,7 +77,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private var eventLoop: EventLoop[JobGeneratorEvent] = null
 
   // last batch whose completion,checkpointing and metadata cleanup has been completed
-  private var lastProcessedBatch: Time = null
+  @volatile private[streaming] var lastProcessedBatch: Time = null
 
   /** Start generation of jobs */
   def start(): Unit = synchronized {
@@ -138,7 +138,6 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
       // Stop generating jobs
       val stopTime = timer.stop(interruptTimer = false)
-      graph.stop()
       logInfo("Stopped generation timer")
 
       // Wait for the jobs to complete and checkpoints to be written
@@ -150,6 +149,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         Thread.sleep(pollTime)
       }
       logInfo("Waited for jobs to be processed and checkpoints to be written")
+      graph.stop()
     } else {
       logInfo("Stopping JobGenerator immediately")
       // Stop timer and graph immediately, ignore unprocessed data and pending jobs

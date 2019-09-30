@@ -31,12 +31,12 @@ import org.apache.spark.scheduler.ExecutorResourceInfo
  * @param resourcesInfo The information of the currently available resources on the executor
  */
 private[cluster] class ExecutorData(
-   val executorEndpoint: RpcEndpointRef,
-   val executorAddress: RpcAddress,
-   override val executorHost: String,
-   var freeCores: Int,
-   override val totalCores: Int,
-   override val logUrlMap: Map[String, String],
-   override val attributes: Map[String, String],
-   val resourcesInfo: Map[String, ExecutorResourceInfo]
-) extends ExecutorInfo(executorHost, totalCores, logUrlMap, attributes)
+    val executorEndpoint: RpcEndpointRef,
+    val executorAddress: RpcAddress,
+    override val executorHost: String,
+    var freeCores: Int,
+    override val totalCores: Int,
+    override val logUrlMap: Map[String, String],
+    override val attributes: Map[String, String],
+    override val resourcesInfo: Map[String, ExecutorResourceInfo]
+) extends ExecutorInfo(executorHost, totalCores, logUrlMap, attributes, resourcesInfo)

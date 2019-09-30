@@ -185,6 +185,14 @@ public class CalendarIntervalSuite {
     } catch (IllegalArgumentException e) {
       assertTrue(e.getMessage().contains("not match day-time format"));
     }
+
+    try {
+      input = "5 1:12:20";
+      fromDayTimeString(input, "hour", "microsecond");
+      fail("Expected to throw an exception for the invalid convention type");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("Cannot support (interval"));
+    }
   }
 
   @Test

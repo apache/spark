@@ -29,6 +29,11 @@ import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
 class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
+  test("redactParams shouldn't throw exception when no SparkEnv available") {
+    // This is effecting only tests and should never happen in production
+    assert(KafkaRedactionUtil.redactParams(Seq()) === Seq())
+  }
+
   test("redactParams should give back empty parameters") {
     setSparkEnv(Map.empty)
     assert(KafkaRedactionUtil.redactParams(Seq()) === Seq())

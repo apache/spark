@@ -25,7 +25,7 @@ import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
 import org.apache.spark.ml.feature.Instance
@@ -43,7 +43,6 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.regression.{LinearRegressionModel => OldLinearRegressionModel}
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
@@ -320,13 +319,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = instrumented { instr =>
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
-    val instances: RDD[Instance] = dataset.select(
-      col($(labelCol)), w, col($(featuresCol))).rdd.map {
-      case Row(label: Double, weight: Double, features: Vector) =>
-        Instance(label, weight, features)
-    }
+    val instances = extractInstances(dataset)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
@@ -797,7 +791,6 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 }
 
 /**
- * :: Experimental ::
  * Linear regression training results. Currently, the training summary ignores the
  * training weights except for the objective trace.
  *
@@ -805,7 +798,6 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Since("1.5.0")
-@Experimental
 class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
@@ -835,7 +827,6 @@ class LinearRegressionTrainingSummary private[regression] (
 }
 
 /**
- * :: Experimental ::
  * Linear regression results evaluated on a dataset.
  *
  * @param predictions predictions output by the model's `transform` method.
@@ -845,7 +836,6 @@ class LinearRegressionTrainingSummary private[regression] (
  * @param featuresCol Field in "predictions" which gives the features of each instance as a vector.
  */
 @Since("1.5.0")
-@Experimental
 class LinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,
     val predictionCol: String,

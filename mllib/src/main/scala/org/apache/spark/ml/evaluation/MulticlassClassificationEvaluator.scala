@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol, HasWeightCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
@@ -27,11 +27,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * :: Experimental ::
  * Evaluator for multiclass classification, which expects two input columns: prediction and label.
  */
 @Since("1.5.0")
-@Experimental
 class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Evaluator with HasPredictionCol with HasLabelCol
     with HasWeightCol with DefaultParamsWritable {

@@ -200,7 +200,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  val initThread = initialize()
+  var initThread: Thread = null
 
   private[history] def initialize(): Thread = {
     if (!isFsInSafeMode()) {
@@ -382,6 +382,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       Map()
     }
     Map("Event log directory" -> logDir.toString) ++ safeMode
+  }
+
+  override def start(): Unit = {
+    initThread = initialize()
   }
 
   override def stop(): Unit = {
@@ -805,6 +809,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private[history] def cleanLogs(): Unit = Utils.tryLog {
     val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
+    val maxNum = conf.get(MAX_LOG_NUM)
 
     val expired = listing.view(classOf[ApplicationInfoWrapper])
       .index("oldestAttempt")
@@ -817,23 +822,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val (remaining, toDelete) = app.attempts.partition { attempt =>
         attempt.info.lastUpdated.getTime() >= maxTime
       }
-
-      if (remaining.nonEmpty) {
-        val newApp = new ApplicationInfoWrapper(app.info, remaining)
-        listing.write(newApp)
-      }
-
-      toDelete.foreach { attempt =>
-        logInfo(s"Deleting expired event log for ${attempt.logPath}")
-        val logPath = new Path(logDir, attempt.logPath)
-        listing.delete(classOf[LogInfo], logPath.toString())
-        cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
-        deleteLog(fs, logPath)
-      }
-
-      if (remaining.isEmpty) {
-        listing.delete(app.getClass(), app.id)
-      }
+      deleteAttemptLogs(app, remaining, toDelete)
     }
 
     // Delete log files that don't have a valid application and exceed the configured max age.
@@ -851,8 +840,57 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         listing.delete(classOf[LogInfo], log.logPath)
       }
     }
+
+    // If the number of files is bigger than MAX_LOG_NUM,
+    // clean up all completed attempts per application one by one.
+    val num = listing.view(classOf[LogInfo]).index("lastProcessed").asScala.size
+    var count = num - maxNum
+    if (count > 0) {
+      logInfo(s"Try to delete $count old event logs to keep $maxNum logs in total.")
+      val oldAttempts = listing.view(classOf[ApplicationInfoWrapper])
+        .index("oldestAttempt")
+        .asScala
+      oldAttempts.foreach { app =>
+        if (count > 0) {
+          // Applications may have multiple attempts, some of which may not be completed yet.
+          val (toDelete, remaining) = app.attempts.partition(_.info.completed)
+          count -= deleteAttemptLogs(app, remaining, toDelete)
+        }
+      }
+      if (count > 0) {
+        logWarning(s"Fail to clean up according to MAX_LOG_NUM policy ($maxNum).")
+      }
+    }
+
     // Clean the blacklist from the expired entries.
     clearBlacklist(CLEAN_INTERVAL_S)
+  }
+
+  private def deleteAttemptLogs(
+      app: ApplicationInfoWrapper,
+      remaining: List[AttemptInfoWrapper],
+      toDelete: List[AttemptInfoWrapper]): Int = {
+    if (remaining.nonEmpty) {
+      val newApp = new ApplicationInfoWrapper(app.info, remaining)
+      listing.write(newApp)
+    }
+
+    var countDeleted = 0
+    toDelete.foreach { attempt =>
+      logInfo(s"Deleting expired event log for ${attempt.logPath}")
+      val logPath = new Path(logDir, attempt.logPath)
+      listing.delete(classOf[LogInfo], logPath.toString())
+      cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
+      if (deleteLog(fs, logPath)) {
+        countDeleted += 1
+      }
+    }
+
+    if (remaining.isEmpty) {
+      listing.delete(app.getClass(), app.id)
+    }
+
+    countDeleted
   }
 
   /**
@@ -1066,12 +1104,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       throw new NoSuchElementException(s"Cannot find attempt $attemptId of $appId."))
   }
 
-  private def deleteLog(fs: FileSystem, log: Path): Unit = {
+  private def deleteLog(fs: FileSystem, log: Path): Boolean = {
+    var deleted = false
     if (isBlacklisted(log)) {
       logDebug(s"Skipping deleting $log as we don't have permissions on it.")
     } else {
       try {
-        fs.delete(log, true)
+        deleted = fs.delete(log, true)
       } catch {
         case _: AccessControlException =>
           logInfo(s"No permission to delete $log, ignoring.")
@@ -1079,6 +1118,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           logError(s"IOException in cleaning $log", ioe)
       }
     }
+    deleted
   }
 
   private def isCompleted(name: String): Boolean = {

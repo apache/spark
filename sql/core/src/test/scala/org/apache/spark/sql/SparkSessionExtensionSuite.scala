@@ -16,16 +16,19 @@
  */
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, UnresolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
@@ -121,6 +124,25 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
+  case class MyHintRule(spark: SparkSession) extends Rule[LogicalPlan] {
+    val MY_HINT_NAME = Set("CONVERT_TO_EMPTY")
+
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveOperators {
+      case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+        LocalRelation(h.output, data = Seq.empty, isStreaming = h.isStreaming)
+    }
+  }
+
+  test("inject custom hint rule") {
+    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
+      assert(
+        session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
+        "plan is expected to be a local relation"
+      )
+    }
+  }
+
   test("inject columnar") {
     val extensions = create { extensions =>
       extensions.injectColumnar(session =>
@@ -152,7 +174,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
   test("use custom class for extensions") {
     val session = SparkSession.builder()
       .master("local[1]")
-      .config("spark.sql.extensions", classOf[MyExtensions].getCanonicalName)
+      .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions].getCanonicalName)
       .getOrCreate()
     try {
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
@@ -173,7 +195,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
   test("use multiple custom class for extensions in the specified order") {
     val session = SparkSession.builder()
       .master("local[1]")
-      .config("spark.sql.extensions", Seq(
+      .config(SPARK_SESSION_EXTENSIONS.key, Seq(
         classOf[MyExtensions2].getCanonicalName,
         classOf[MyExtensions].getCanonicalName).mkString(","))
       .getOrCreate()
@@ -201,7 +223,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
   test("allow an extension to be duplicated") {
     val session = SparkSession.builder()
       .master("local[1]")
-      .config("spark.sql.extensions", Seq(
+      .config(SPARK_SESSION_EXTENSIONS.key, Seq(
         classOf[MyExtensions].getCanonicalName,
         classOf[MyExtensions].getCanonicalName).mkString(","))
       .getOrCreate()
@@ -228,7 +250,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
   test("use the last registered function name when there are duplicates") {
     val session = SparkSession.builder()
       .master("local[1]")
-      .config("spark.sql.extensions", Seq(
+      .config(SPARK_SESSION_EXTENSIONS.key, Seq(
         classOf[MyExtensions2].getCanonicalName,
         classOf[MyExtensions2Duplicate].getCanonicalName).mkString(","))
       .getOrCreate()

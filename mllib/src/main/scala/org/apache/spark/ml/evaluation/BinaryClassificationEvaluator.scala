@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -28,13 +28,11 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * :: Experimental ::
  * Evaluator for binary classification, which expects two input columns: rawPrediction and label.
  * The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label 1)
  * or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
  */
 @Since("1.2.0")
-@Experimental
 class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Evaluator with HasRawPredictionCol with HasLabelCol
     with HasWeightCol with DefaultParamsWritable {
@@ -60,6 +58,28 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   /** @group setParam */
   @Since("1.2.0")
   def setMetricName(value: String): this.type = set(metricName, value)
+
+  /**
+   * param for number of bins to down-sample the curves (ROC curve, PR curve) in area
+   * computation. If 0, no down-sampling will occur.
+   * Default: 1000.
+   * @group expertParam
+   */
+  @Since("3.0.0")
+  val numBins: IntParam = new IntParam(this, "numBins", "Number of bins to down-sample " +
+    "the curves (ROC curve, PR curve) in area computation. If 0, no down-sampling will occur. " +
+    "Must be >= 0.",
+    ParamValidators.gtEq(0))
+
+  /** @group expertGetParam */
+  @Since("3.0.0")
+  def getNumBins: Int = $(numBins)
+
+  /** @group expertSetParam */
+  @Since("3.0.0")
+  def setNumBins(value: Int): this.type = set(numBins, value)
+
+  setDefault(numBins -> 1000)
 
   /** @group setParam */
   @Since("1.5.0")
@@ -96,7 +116,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
         case Row(rawPrediction: Double, label: Double, weight: Double) =>
           (rawPrediction, label, weight)
       }
-    val metrics = new BinaryClassificationMetrics(scoreAndLabelsWithWeights)
+    val metrics = new BinaryClassificationMetrics(scoreAndLabelsWithWeights, $(numBins))
     val metric = $(metricName) match {
       case "areaUnderROC" => metrics.areaUnderROC()
       case "areaUnderPR" => metrics.areaUnderPR()
@@ -106,10 +126,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   }
 
   @Since("1.5.0")
-  override def isLargerBetter: Boolean = $(metricName) match {
-    case "areaUnderROC" => true
-    case "areaUnderPR" => true
-  }
+  override def isLargerBetter: Boolean = true
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopy(extra)

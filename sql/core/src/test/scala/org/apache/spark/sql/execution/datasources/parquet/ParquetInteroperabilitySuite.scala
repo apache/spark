@@ -28,9 +28,9 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
+class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedSparkSession {
   test("parquet files with different physical schemas but share the same logical schema") {
     import ParquetCompatibilityTest._
 

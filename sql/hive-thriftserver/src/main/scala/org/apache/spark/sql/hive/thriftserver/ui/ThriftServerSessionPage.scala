@@ -22,10 +22,11 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState}
+import org.apache.spark.sql.hive.thriftserver.ui.ToolTips._
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
 
@@ -79,8 +80,12 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
       .filter(_.sessionId == sessionID)
     val numStatement = executionList.size
     val table = if (numStatement > 0) {
-      val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
-        "Statement", "State", "Detail")
+      val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Close Time",
+        "Execution Time", "Duration", "Statement", "State", "Detail")
+      val tooltips = Seq(None, None, None, None, Some(THRIFT_SERVER_FINISH_TIME),
+        Some(THRIFT_SERVER_CLOSE_TIME), Some(THRIFT_SERVER_EXECUTION),
+        Some(THRIFT_SERVER_DURATION), None, None, None)
+      assert(headerRow.length == tooltips.length)
       val dataRows = executionList.sortBy(_.startTimestamp).reverse
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
@@ -90,7 +95,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
             [{id}]
           </a>
         }
-        val detail = if (info.state == ExecutionState.FAILED) info.detail else info.executePlan
+        val detail = Option(info.detail).filter(!_.isEmpty).getOrElse(info.executePlan)
         <tr>
           <td>{info.userName}</td>
           <td>
@@ -98,8 +103,14 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
           </td>
           <td>{info.groupId}</td>
           <td>{formatDate(info.startTimestamp)}</td>
-          <td>{formatDate(info.finishTimestamp)}</td>
-          <td>{formatDurationOption(Some(info.totalTime))}</td>
+          <td>{if (info.finishTimestamp > 0) formatDate(info.finishTimestamp)}</td>
+          <td>{if (info.closeTimestamp > 0) formatDate(info.closeTimestamp)}</td>
+          <td sorttable_customkey={info.totalTime(info.finishTimestamp).toString}>
+            {formatDurationOption(Some(info.totalTime(info.finishTimestamp)))}
+          </td>
+          <td sorttable_customkey={info.totalTime(info.closeTimestamp).toString}>
+            {formatDurationOption(Some(info.totalTime(info.closeTimestamp)))}
+          </td>
           <td>{info.statement}</td>
           <td>{info.state}</td>
           {errorMessageCell(detail)}
@@ -107,7 +118,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
       }
 
       Some(UIUtils.listingTable(headerRow, generateDataRow,
-        dataRows, false, None, Seq(null), false))
+        dataRows, false, None, Seq(null), false, tooltipHeaders = tooltips))
     } else {
       None
     }

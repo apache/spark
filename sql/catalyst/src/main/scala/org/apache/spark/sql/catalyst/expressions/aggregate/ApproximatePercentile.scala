@@ -63,7 +63,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(10.0, array(0.5, 0.4, 0.1), 100);
        [10.0,10.0,10.0]
       > SELECT _FUNC_(10.0, 0.5, 100);
-       10.0
+       10
   """,
   since = "2.1.0")
 case class ApproximatePercentile(

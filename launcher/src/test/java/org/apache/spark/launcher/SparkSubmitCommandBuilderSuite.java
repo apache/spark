@@ -250,7 +250,29 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     new SparkSubmitCommandBuilder().buildSparkSubmitArgs();
   }
 
+  @Test
+  public void testIsClientMode() {
+    // Default master is "local[*]"
+    SparkSubmitCommandBuilder builder = newCommandBuilder(Collections.emptyList());
+    assertTrue("By default application run in local mode",
+      builder.isClientMode(Collections.emptyMap()));
+    // --master yarn or it can be any RM
+    List<String> sparkSubmitArgs = Arrays.asList(parser.MASTER, "yarn");
+    builder = newCommandBuilder(sparkSubmitArgs);
+    assertTrue("By default deploy mode is client", builder.isClientMode(Collections.emptyMap()));
+    // --master yarn and set spark.submit.deployMode to client
+    Map<String, String> userProps = new HashMap<>();
+    userProps.put("spark.submit.deployMode", "client");
+    assertTrue(builder.isClientMode(userProps));
+    // --master mesos --deploy-mode cluster
+    sparkSubmitArgs = Arrays.asList(parser.MASTER, "mesos", parser.DEPLOY_MODE, "cluster");
+    builder = newCommandBuilder(sparkSubmitArgs);
+    assertFalse(builder.isClientMode(Collections.emptyMap()));
+  }
+
   private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {
+    final String DRIVER_DEFAULT_PARAM = "-Ddriver-default";
+    final String DRIVER_EXTRA_PARAM = "-Ddriver-extra";
     String deployMode = isDriver ? "client" : "cluster";
 
     SparkSubmitCommandBuilder launcher =
@@ -270,7 +292,8 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       launcher.setPropertiesFile(dummyPropsFile.getAbsolutePath());
       launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
-      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver");
+      launcher.conf.put(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS, DRIVER_DEFAULT_PARAM);
+      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, DRIVER_EXTRA_PARAM);
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
     } else {
       launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
@@ -284,6 +307,9 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     if (isDriver) {
       assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx1g"));
+      assertTrue("Driver default options should be configured.",
+        cmd.contains(DRIVER_DEFAULT_PARAM));
+      assertTrue("Driver extra options should be configured.", cmd.contains(DRIVER_EXTRA_PARAM));
     } else {
       boolean found = false;
       for (String arg : cmd) {
@@ -293,6 +319,10 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
         }
       }
       assertFalse("Memory arguments should not be set.", found);
+      assertFalse("Driver default options should not be configured.",
+        cmd.contains(DRIVER_DEFAULT_PARAM));
+      assertFalse("Driver extra options should not be configured.",
+        cmd.contains(DRIVER_EXTRA_PARAM));
     }
 
     String[] cp = findArgValue(cmd, "-cp").split(Pattern.quote(File.pathSeparator));

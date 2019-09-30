@@ -381,6 +381,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "fields",
     "fileformat",
     "first",
+    "first_value",
     "following",
     "for",
     "foreign",
@@ -415,6 +416,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "join",
     "keys",
     "last",
+    "last_value",
     "lateral",
     "lazy",
     "leading",
@@ -441,6 +443,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "month",
     "months",
     "msck",
+    "namespaces",
     "natural",
     "no",
     "not",
@@ -483,6 +486,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "repair",
     "replace",
     "reset",
+    "respect",
     "restrict",
     "revoke",
     "right",
@@ -536,6 +540,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "uncache",
     "union",
     "unique",
+    "unknown",
     "unlock",
     "unset",
     "use",
@@ -579,6 +584,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "except",
     "false",
     "fetch",
+    "first_value",
     "for",
     "foreign",
     "from",
@@ -593,6 +599,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "into",
     "join",
     "is",
+    "last_value",
     "leading",
     "left",
     "minute",
@@ -621,6 +628,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
     "trailing",
     "union",
     "unique",
+    "unknown",
     "user",
     "using",
     "when",
@@ -650,7 +658,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("table identifier - reserved/non-reserved keywords if ANSI mode enabled") {
-    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       reservedKeywordsInAnsiMode.foreach { keyword =>
         val errMsg = intercept[ParseException] {
           parseTableIdentifier(keyword)

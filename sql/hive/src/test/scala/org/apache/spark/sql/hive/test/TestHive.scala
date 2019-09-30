@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
-import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -57,9 +57,9 @@ object TestHive
       new SparkConf()
         .set("spark.sql.test", "")
         .set(SQLConf.CODEGEN_FALLBACK.key, "false")
-        .set("spark.sql.hive.metastore.barrierPrefixes",
+        .set(HiveUtils.HIVE_METASTORE_BARRIER_PREFIXES.key,
           "org.apache.spark.sql.hive.execution.PairSerDe")
-        .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
+        .set(WAREHOUSE_PATH.key, TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
         .set(UI_ENABLED, false)
         .set(config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
@@ -534,7 +534,7 @@ private[hive] class TestHiveSparkSession(
       }
 
       // Clean out the Hive warehouse between each suite
-      val warehouseDir = new File(new URI(sparkContext.conf.get("spark.sql.warehouse.dir")).getPath)
+      val warehouseDir = new File(new URI(sparkContext.conf.get(WAREHOUSE_PATH.key)).getPath)
       Utils.deleteRecursively(warehouseDir)
       warehouseDir.mkdir()
 
@@ -646,4 +646,25 @@ private[sql] class TestHiveSessionStateBuilder(
   }
 
   override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
+}
+
+private[hive] object HiveTestJars {
+  private val repository = SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.defaultValueString
+  private val hiveTestJarsDir = Utils.createTempDir()
+
+  def getHiveContribJar(version: String = HiveUtils.builtinHiveVersion): File =
+    getJarFromUrl(s"${repository}org/apache/hive/hive-contrib/" +
+      s"$version/hive-contrib-$version.jar")
+  def getHiveHcatalogCoreJar(version: String = HiveUtils.builtinHiveVersion): File =
+    getJarFromUrl(s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
+      s"$version/hive-hcatalog-core-$version.jar")
+
+  private def getJarFromUrl(urlString: String): File = {
+    val fileName = urlString.split("/").last
+    val targetFile = new File(hiveTestJarsDir, fileName)
+    if (!targetFile.exists()) {
+      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, new SparkConf, null, null)
+    }
+    targetFile
+  }
 }

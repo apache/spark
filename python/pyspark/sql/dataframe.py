@@ -22,8 +22,10 @@ if sys.version >= '3':
     basestring = unicode = str
     long = int
     from functools import reduce
+    from html import escape as html_escape
 else:
     from itertools import imap as map
+    from cgi import escape as html_escape
 
 import warnings
 
@@ -375,7 +377,6 @@ class DataFrame(object):
         by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
         using support eager evaluation with HTML.
         """
-        import cgi
         if not self._support_repr_html:
             self._support_repr_html = True
         if self.sql_ctx._conf.isReplEagerEvalEnabled():
@@ -390,11 +391,11 @@ class DataFrame(object):
 
             html = "<table border='1'>\n"
             # generate table head
-            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: cgi.escape(x), head))
+            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: html_escape(x), head))
             # generate table rows
             for row in row_data:
                 html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
-                    map(lambda x: cgi.escape(x), row))
+                    map(lambda x: html_escape(x), row))
             html += "</table>\n"
             if has_more_data:
                 html += "only showing top %d %s\n" % (
@@ -519,16 +520,20 @@ class DataFrame(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def toLocalIterator(self):
+    def toLocalIterator(self, prefetchPartitions=False):
         """
         Returns an iterator that contains all of the rows in this :class:`DataFrame`.
         The iterator will consume as much memory as the largest partition in this DataFrame.
+        With prefetch it may consume up to the memory of the 2 largest partitions.
+
+        :param prefetchPartitions: If Spark should pre-fetch the next partition
+                                   before it is needed.
 
         >>> list(df.toLocalIterator())
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            sock_info = self._jdf.toPythonIterator()
+            sock_info = self._jdf.toPythonIterator(prefetchPartitions)
         return _local_iterator_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
