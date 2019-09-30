@@ -65,7 +65,15 @@ object IntervalUtils {
     ((interval.microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
   }
 
+  private def getMicrosInMinute(interval: CalendarInterval): Long = {
+    interval.microseconds % MICROS_PER_MINUTE
+  }
+
   def getSeconds(interval: CalendarInterval): Decimal = {
-    Decimal(interval.microseconds % MICROS_PER_MINUTE, 8, 6)
+    Decimal(getMicrosInMinute(interval), 8, 6)
+  }
+
+  def getMilliseconds(interval: CalendarInterval): Decimal = {
+    Decimal(getMicrosInMinute(interval), 8, 3)
   }
 }

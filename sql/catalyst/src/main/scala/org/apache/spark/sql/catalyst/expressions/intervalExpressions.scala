@@ -70,6 +70,9 @@ case class Minutes(child: Expression)
 case class Seconds(child: Expression)
     extends IntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
 
+case class Milliseconds(child: Expression)
+  extends IntervalPart(child, DecimalType(8, 3), getMilliseconds, "getMilliseconds")
+
 object IntervalPart {
 
   def parseExtractField(
@@ -86,8 +89,8 @@ object IntervalPart {
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hours(source)
     case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minutes(source)
     case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Seconds(source)
-//    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
-//      Milliseconds(source)
+    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
+      Milliseconds(source)
 //    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
 //      Microseconds(source)
 //    case "EPOCH" => Epoch(source)

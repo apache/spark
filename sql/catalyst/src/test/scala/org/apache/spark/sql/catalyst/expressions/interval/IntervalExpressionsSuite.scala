@@ -101,7 +101,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   private val largeInterval: String =
-    "9999 years 11 months 31 days 11 hours 59 minutes 59 seconds"
+    "9999 years 11 months 31 days 11 hours 59 minutes 59 seconds 999 millisecond"
 
   test("days") {
     checkEvaluation(Days("0 days"), 0L)
@@ -144,8 +144,20 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Seconds("-59 minutes -59 seconds"), Decimal(-59.0, 8, 6))
     // Years and months must not be taken into account
     checkEvaluation(Seconds("100 year 10 months 10 seconds"), Decimal(10.0, 8, 6))
-    checkEvaluation(Seconds(largeInterval), Decimal(59.0, 8, 6))
+    checkEvaluation(Seconds(largeInterval), Decimal(59.999, 8, 6))
     checkEvaluation(Seconds("10 seconds 1 milliseconds 1 microseconds"), Decimal(10001001, 8, 6))
     checkEvaluation(Seconds("61 seconds 1 microseconds"), Decimal(1000001, 8, 6))
+  }
+
+  test("milliseconds") {
+    checkEvaluation(Milliseconds("0 milliseconds"), Decimal(0, 8, 3))
+    checkEvaluation(Milliseconds("1 milliseconds"), Decimal(1.0, 8, 3))
+    checkEvaluation(Milliseconds("-1 milliseconds"), Decimal(-1.0, 8, 3))
+    checkEvaluation(Milliseconds("1 second 999 milliseconds"), Decimal(1999.0, 8, 3))
+    checkEvaluation(Milliseconds("999 milliseconds 1 microsecond"), Decimal(999.001, 8, 3))
+    checkEvaluation(Milliseconds("-1 second -999 milliseconds"), Decimal(-1999.0, 8, 3))
+    // Years and months must not be taken into account
+    checkEvaluation(Milliseconds("100 year 1 millisecond"), Decimal(1.0, 8, 3))
+    checkEvaluation(Milliseconds(largeInterval), Decimal(59999.0, 8, 3))
   }
 }
