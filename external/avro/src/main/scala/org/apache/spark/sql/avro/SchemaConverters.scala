@@ -148,13 +148,13 @@ object SchemaConverters {
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
       nameSpace: String = "",
-      logicalTypeMappings: PartialFunction[(AbstractDataType, String, String), Schema] = Map.empty)
+      logicalTypeMappings: PartialFunction[RecordInfo, Schema] = Map.empty)
     : Schema = {
     val builder = SchemaBuilder.builder()
 
     val schema = catalystType match {
-      case t if logicalTypeMappings.isDefinedAt((t, recordName, nameSpace)) =>
-        logicalTypeMappings((t, recordName, nameSpace))
+      case cType if logicalTypeMappings.isDefinedAt(RecordInfo(cType, recordName, nameSpace)) =>
+        logicalTypeMappings(RecordInfo(cType, recordName, nameSpace))
       case BooleanType => builder.booleanType()
       case ByteType | ShortType | IntegerType => builder.intType()
       case LongType => builder.longType()

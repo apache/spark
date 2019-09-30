@@ -21,8 +21,6 @@ package org.apache.spark.sql.avro
 import org.apache.avro.{LogicalType, Schema}
 
 import org.apache.spark.sql.avro.SchemaConverters.SchemaType
-import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.types.AbstractDataType
 
 /**
  * Mapping interface between Catalyst struct type and Avro schemas
@@ -36,31 +34,33 @@ trait AvroLogicalTypeCatalystMapper extends Serializable {
   def toSqlType: PartialFunction[LogicalType, SchemaType]
 
   /**
-   * Given Catalyst type returns mapped Avro schema type
-   * @return catalyst mappings
+   * Given a [[org.apache.spark.sql.avro.RecordInfo]] returns mapped Avro schema type
+   * @return partial function with mappings
    */
-  def toAvroSchema: PartialFunction[(AbstractDataType, String, String), Schema]
+  def toAvroSchema: PartialFunction[RecordInfo, Schema]
 
   /**
-   * Given Avro logical type and the Avro data value update the value to Catalyst data.
+   * Given Avro logical type and a [[org.apache.spark.sql.avro.DataDeserializer]] deserialize
+   * de given Avro data to Catalyst data using the catalyst updater.
    * @return Avro deserialization mappings
    */
-  def deserialize: PartialFunction[LogicalType, (CatalystDataUpdater, Int, Any) => Unit]
+  def deserialize: PartialFunction[LogicalType, DataDeserializer => Unit]
 
   /**
-   * Given Avro logical type and the Catalyst data value update the value to Avro data.
+   * Given Avro logical type and a [[org.apache.spark.sql.avro.DataSerializer]] serialize
+   * de given Catalyst data to Avro data.
    * @return Avro serialization mappings
    */
-  def serialize: PartialFunction[LogicalType, (SpecializedGetters, Int) => Any]
+  def serialize: PartialFunction[LogicalType, DataSerializer => Any]
 }
 
 class DefaultAvroLogicalTypeCatalystMapper extends AvroLogicalTypeCatalystMapper {
   override def toSqlType: PartialFunction[LogicalType, SchemaType] =
     Map.empty
-  override def toAvroSchema: PartialFunction[(AbstractDataType, String, String), Schema] =
+  override def toAvroSchema: PartialFunction[RecordInfo, Schema] =
     Map.empty
-  override def deserialize: PartialFunction[LogicalType, (CatalystDataUpdater, Int, Any) => Unit] =
+  override def deserialize: PartialFunction[LogicalType, DataDeserializer => Unit] =
     Map.empty
-  override def serialize: PartialFunction[LogicalType, (SpecializedGetters, Int) => Any] =
+  override def serialize: PartialFunction[LogicalType, DataSerializer => Any] =
     Map.empty
 }

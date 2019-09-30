@@ -66,7 +66,7 @@ class AvroDeserializer(
       val fieldUpdater = new RowUpdater(tmpRow)
       val writer = newWriter(rootAvroType, rootCatalystType, Nil)
       (data: Any) => {
-        writer(fieldUpdater, 0, data)
+        writer(DataDeserializer(fieldUpdater, 0, data))
         tmpRow.get(0, rootCatalystType)
       }
   }
@@ -80,69 +80,95 @@ class AvroDeserializer(
   private def newWriter(
       avroType: Schema,
       catalystType: DataType,
-      path: List[String]): (CatalystDataUpdater, Int, Any) => Unit =
+      path: List[String]): DataDeserializer => Unit =
     (avroType.getType, catalystType) match {
       case _ if logicalTypeUpdater.deserialize.isDefinedAt(avroType.getLogicalType) =>
         logicalTypeUpdater.deserialize(avroType.getLogicalType)
 
-      case (NULL, NullType) => (updater, ordinal, _) =>
-        updater.setNullAt(ordinal)
+      case (NULL, NullType) => dataUpdater =>
+        dataUpdater.updater.setNullAt(dataUpdater.ordinal)
 
       // TODO: we can avoid boxing if future version of avro provide primitive accessors.
-      case (BOOLEAN, BooleanType) => (updater, ordinal, value) =>
-        updater.setBoolean(ordinal, value.asInstanceOf[Boolean])
+      case (BOOLEAN, BooleanType) => dataUpdater =>
+        dataUpdater.updater.setBoolean(
+          dataUpdater.ordinal,
+          dataUpdater.value.asInstanceOf[Boolean])
 
-      case (INT, IntegerType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, value.asInstanceOf[Int])
+      case (INT, IntegerType) => dataUpdater =>
+        dataUpdater.updater.setInt(
+          dataUpdater.ordinal,
+          dataUpdater.value.asInstanceOf[Int])
 
-      case (INT, DateType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, value.asInstanceOf[Int])
+      case (INT, DateType) => dataUpdater =>
+        dataUpdater.updater.setInt(
+          dataUpdater.ordinal,
+          dataUpdater.value.asInstanceOf[Int]
+        )
 
-      case (LONG, LongType) => (updater, ordinal, value) =>
-        updater.setLong(ordinal, value.asInstanceOf[Long])
+      case (LONG, LongType) => dataUpdater =>
+        dataUpdater.updater.setLong(
+          dataUpdater.ordinal,
+          dataUpdater.value.asInstanceOf[Long])
 
       case (LONG, TimestampType) => avroType.getLogicalType match {
-        case _: TimestampMillis => (updater, ordinal, value) =>
-          updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
-        case _: TimestampMicros => (updater, ordinal, value) =>
-          updater.setLong(ordinal, value.asInstanceOf[Long])
-        case null => (updater, ordinal, value) =>
+        case _: TimestampMillis => dataUpdater =>
+          dataUpdater.updater.setLong(
+            dataUpdater.ordinal,
+            dataUpdater.value.asInstanceOf[Long] * 1000)
+        case _: TimestampMicros => dataUpdater =>
+          dataUpdater.updater.setLong(
+            dataUpdater.ordinal,
+            dataUpdater.value.asInstanceOf[Long])
+        case null => dataUpdater =>
           // For backward compatibility, if the Avro type is Long and it is not logical type,
           // the value is processed as timestamp type with millisecond precision.
-          updater.setLong(ordinal, value.asInstanceOf[Long] * 1000)
+          dataUpdater.updater.setLong(
+            dataUpdater.ordinal,
+            dataUpdater.value.asInstanceOf[Long] * 1000)
         case other => throw new IncompatibleSchemaException(
           s"Cannot convert Avro logical type ${other} to Catalyst Timestamp type.")
       }
 
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
       // For backward compatibility, we still keep this conversion.
-      case (LONG, DateType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, (value.asInstanceOf[Long] / MILLIS_PER_DAY).toInt)
+      case (LONG, DateType) => dataUpdater =>
+        dataUpdater.updater.setInt(
+          dataUpdater.ordinal,
+          (dataUpdater.value.asInstanceOf[Long] / MILLIS_PER_DAY).toInt
+        )
 
-      case (FLOAT, FloatType) => (updater, ordinal, value) =>
-        updater.setFloat(ordinal, value.asInstanceOf[Float])
+      case (FLOAT, FloatType) => dataUpdater =>
+          dataUpdater.updater.setFloat(
+            dataUpdater.ordinal,
+            dataUpdater.value.asInstanceOf[Float])
 
-      case (DOUBLE, DoubleType) => (updater, ordinal, value) =>
-        updater.setDouble(ordinal, value.asInstanceOf[Double])
+      case (DOUBLE, DoubleType) => dataUpdater =>
+        dataUpdater.updater.setDouble(
+          dataUpdater.ordinal,
+          dataUpdater.value.asInstanceOf[Double])
 
-      case (STRING, StringType) => (updater, ordinal, value) =>
-        val str = value match {
+      case (STRING, StringType) => dataUpdater =>
+        val str = dataUpdater.value match {
           case s: String => UTF8String.fromString(s)
           case s: Utf8 =>
             val bytes = new Array[Byte](s.getByteLength)
             System.arraycopy(s.getBytes, 0, bytes, 0, s.getByteLength)
             UTF8String.fromBytes(bytes)
         }
-        updater.set(ordinal, str)
+        dataUpdater.updater.set(dataUpdater.ordinal, str)
 
-      case (ENUM, StringType) => (updater, ordinal, value) =>
-        updater.set(ordinal, UTF8String.fromString(value.toString))
+      case (ENUM, StringType) => dataUpdater =>
+        dataUpdater.updater.set(
+          dataUpdater.ordinal,
+          UTF8String.fromString(dataUpdater.value.toString))
 
-      case (FIXED, BinaryType) => (updater, ordinal, value) =>
-        updater.set(ordinal, value.asInstanceOf[GenericFixed].bytes().clone())
+      case (FIXED, BinaryType) => dataUpdater =>
+        dataUpdater.updater.set(
+          dataUpdater.ordinal,
+          dataUpdater.value.asInstanceOf[GenericFixed].bytes().clone())
 
-      case (BYTES, BinaryType) => (updater, ordinal, value) =>
-        val bytes = value match {
+      case (BYTES, BinaryType) => dataUpdater =>
+        val bytes = dataUpdater.value match {
           case b: ByteBuffer =>
             val bytes = new Array[Byte](b.remaining)
             b.get(bytes)
@@ -150,31 +176,36 @@ class AvroDeserializer(
           case b: Array[Byte] => b
           case other => throw new RuntimeException(s"$other is not a valid avro binary.")
         }
-        updater.set(ordinal, bytes)
+        dataUpdater.updater.set(dataUpdater.ordinal, bytes)
 
-      case (FIXED, d: DecimalType) => (updater, ordinal, value) =>
-        val bigDecimal = decimalConversions.fromFixed(value.asInstanceOf[GenericFixed], avroType,
+      case (FIXED, d: DecimalType) => dataUpdater =>
+        val bigDecimal = decimalConversions.fromFixed(
+          dataUpdater.value.asInstanceOf[GenericFixed],
+          avroType,
           LogicalTypes.decimal(d.precision, d.scale))
         val decimal = createDecimal(bigDecimal, d.precision, d.scale)
-        updater.setDecimal(ordinal, decimal)
+        dataUpdater.updater.setDecimal(dataUpdater.ordinal, decimal)
 
-      case (BYTES, d: DecimalType) => (updater, ordinal, value) =>
-        val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType,
+      case (BYTES, d: DecimalType) => dataUpdater =>
+        val bigDecimal = decimalConversions.fromBytes(
+          dataUpdater.value.asInstanceOf[ByteBuffer],
+          avroType,
           LogicalTypes.decimal(d.precision, d.scale))
         val decimal = createDecimal(bigDecimal, d.precision, d.scale)
-        updater.setDecimal(ordinal, decimal)
+        dataUpdater.updater.setDecimal(dataUpdater.ordinal, decimal)
 
       case (RECORD, st: StructType) =>
         val writeRecord = getRecordWriter(avroType, st, path)
-        (updater, ordinal, value) =>
+        dataUpdater =>
           val row = new SpecificInternalRow(st)
-          writeRecord(new RowUpdater(row), value.asInstanceOf[GenericRecord])
-          updater.set(ordinal, row)
+          writeRecord(new RowUpdater(row),
+            dataUpdater.value.asInstanceOf[GenericRecord])
+          dataUpdater.updater.set(dataUpdater.ordinal, row)
 
       case (ARRAY, ArrayType(elementType, containsNull)) =>
         val elementWriter = newWriter(avroType.getElementType, elementType, path)
-        (updater, ordinal, value) =>
-          val array = value.asInstanceOf[GenericData.Array[Any]]
+        dataUpdater =>
+          val array = dataUpdater.value.asInstanceOf[GenericData.Array[Any]]
           val len = array.size()
           val result = createArrayData(elementType, len)
           val elementUpdater = new ArrayDataUpdater(result)
@@ -190,18 +221,18 @@ class AvroDeserializer(
                 elementUpdater.setNullAt(i)
               }
             } else {
-              elementWriter(elementUpdater, i, element)
+              elementWriter(DataDeserializer(elementUpdater, i, element))
             }
             i += 1
           }
 
-          updater.set(ordinal, result)
+          dataUpdater.updater.set(dataUpdater.ordinal, result)
 
       case (MAP, MapType(keyType, valueType, valueContainsNull)) if keyType == StringType =>
         val keyWriter = newWriter(SchemaBuilder.builder().stringType(), StringType, path)
         val valueWriter = newWriter(avroType.getValueType, valueType, path)
-        (updater, ordinal, value) =>
-          val map = value.asInstanceOf[java.util.Map[AnyRef, AnyRef]]
+        dataUpdater =>
+          val map = dataUpdater.value.asInstanceOf[java.util.Map[AnyRef, AnyRef]]
           val keyArray = createArrayData(keyType, map.size())
           val keyUpdater = new ArrayDataUpdater(keyArray)
           val valueArray = createArrayData(valueType, map.size())
@@ -211,7 +242,7 @@ class AvroDeserializer(
           while (iter.hasNext) {
             val entry = iter.next()
             assert(entry.getKey != null)
-            keyWriter(keyUpdater, i, entry.getKey)
+            keyWriter(DataDeserializer(keyUpdater, i, entry.getKey))
             if (entry.getValue == null) {
               if (!valueContainsNull) {
                 throw new RuntimeException(s"Map value at path ${path.mkString(".")} is not " +
@@ -220,14 +251,16 @@ class AvroDeserializer(
                 valueUpdater.setNullAt(i)
               }
             } else {
-              valueWriter(valueUpdater, i, entry.getValue)
+              valueWriter(DataDeserializer(valueUpdater, i, entry.getValue))
             }
             i += 1
           }
 
           // The Avro map will never have null or duplicated map keys, it's safe to create a
           // ArrayBasedMapData directly here.
-          updater.set(ordinal, new ArrayBasedMapData(keyArray, valueArray))
+          dataUpdater.updater.set(
+            dataUpdater.ordinal,
+            new ArrayBasedMapData(keyArray, valueArray))
 
       case (UNION, _) =>
         val allTypes = avroType.getTypes.asScala
@@ -239,17 +272,23 @@ class AvroDeserializer(
           } else {
             nonNullTypes.map(_.getType) match {
               case Seq(a, b) if Set(a, b) == Set(INT, LONG) && catalystType == LongType =>
-                (updater, ordinal, value) => value match {
-                  case null => updater.setNullAt(ordinal)
-                  case l: java.lang.Long => updater.setLong(ordinal, l)
-                  case i: java.lang.Integer => updater.setLong(ordinal, i.longValue())
+                dataUpdater => dataUpdater.value match {
+                  case null =>
+                    dataUpdater.updater.setNullAt(dataUpdater.ordinal)
+                  case l: java.lang.Long =>
+                    dataUpdater.updater.setLong(dataUpdater.ordinal, l)
+                  case i: java.lang.Integer =>
+                    dataUpdater.updater.setLong(dataUpdater.ordinal, i.longValue())
                 }
 
               case Seq(a, b) if Set(a, b) == Set(FLOAT, DOUBLE) && catalystType == DoubleType =>
-                (updater, ordinal, value) => value match {
-                  case null => updater.setNullAt(ordinal)
-                  case d: java.lang.Double => updater.setDouble(ordinal, d)
-                  case f: java.lang.Float => updater.setDouble(ordinal, f.doubleValue())
+                dataUpdater => dataUpdater.value match {
+                  case null =>
+                    dataUpdater.updater.setNullAt(dataUpdater.ordinal)
+                  case d: java.lang.Double =>
+                    dataUpdater.updater.setDouble(dataUpdater.ordinal, d)
+                  case f: java.lang.Float =>
+                    dataUpdater.updater.setDouble(dataUpdater.ordinal, f.doubleValue())
                 }
 
               case _ =>
@@ -258,12 +297,12 @@ class AvroDeserializer(
                     val fieldWriters = nonNullTypes.zip(st.fields).map {
                       case (schema, field) => newWriter(schema, field.dataType, path :+ field.name)
                     }.toArray
-                    (updater, ordinal, value) => {
+                    dataUpdater => {
                       val row = new SpecificInternalRow(st)
                       val fieldUpdater = new RowUpdater(row)
-                      val i = GenericData.get().resolveUnion(nonNullAvroType, value)
-                      fieldWriters(i)(fieldUpdater, i, value)
-                      updater.set(ordinal, row)
+                      val i = GenericData.get().resolveUnion(nonNullAvroType, dataUpdater.value)
+                      fieldWriters(i)(DataDeserializer(fieldUpdater, i, dataUpdater.value))
+                      dataUpdater.updater.set(dataUpdater.ordinal, row)
                     }
 
                   case _ =>
@@ -277,7 +316,7 @@ class AvroDeserializer(
             }
           }
         } else {
-          (updater, ordinal, value) => updater.setNullAt(ordinal)
+          dataUpdater => dataUpdater.updater.setNullAt(dataUpdater.ordinal)
         }
 
       case _ =>
@@ -320,7 +359,7 @@ class AvroDeserializer(
           if (value == null) {
             fieldUpdater.setNullAt(ordinal)
           } else {
-            baseWriter(fieldUpdater, ordinal, value)
+            baseWriter(DataDeserializer(fieldUpdater, ordinal, value))
           }
         }
         fieldWriters += fieldWriter

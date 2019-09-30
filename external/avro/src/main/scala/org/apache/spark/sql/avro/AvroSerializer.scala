@@ -33,7 +33,7 @@ import org.apache.avro.util.Utf8
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.types._
 
 /**
@@ -59,7 +59,7 @@ class AvroSerializer(rootCatalystType: DataType,
         val converter = newConverter(rootCatalystType, actualAvroType)
         (data: Any) =>
           tmpRow.update(0, data)
-          converter.apply(tmpRow, 0)
+          converter.apply(DataSerializer(tmpRow, 0))
     }
     if (nullable) {
       (data: Any) =>
@@ -73,7 +73,7 @@ class AvroSerializer(rootCatalystType: DataType,
     }
   }
 
-  private type Converter = (SpecializedGetters, Int) => Any
+  private type Converter = DataSerializer => Any
 
   private lazy val decimalConversions = new DecimalConversion()
 
@@ -82,39 +82,60 @@ class AvroSerializer(rootCatalystType: DataType,
       case _ if logicalTypeUpdater.serialize.isDefinedAt(avroType.getLogicalType) =>
         logicalTypeUpdater.serialize(avroType.getLogicalType)
       case (NullType, NULL) =>
-        (getter, ordinal) => null
+        _ => null
       case (BooleanType, BOOLEAN) =>
-        (getter, ordinal) => getter.getBoolean(ordinal)
+        dataSerializer => dataSerializer
+          .getter
+          .getBoolean(dataSerializer.ordinal)
       case (ByteType, INT) =>
-        (getter, ordinal) => getter.getByte(ordinal).toInt
+        dataSerializer => dataSerializer
+          .getter
+          .getByte(dataSerializer.ordinal).toInt
       case (ShortType, INT) =>
-        (getter, ordinal) => getter.getShort(ordinal).toInt
+        dataSerializer => dataSerializer
+          .getter
+          .getShort(dataSerializer.ordinal).toInt
       case (IntegerType, INT) =>
-        (getter, ordinal) => getter.getInt(ordinal)
+        dataSerializer => dataSerializer
+          .getter
+          .getInt(dataSerializer.ordinal)
       case (LongType, LONG) =>
-        (getter, ordinal) => getter.getLong(ordinal)
+        dataSerializer => dataSerializer
+          .getter
+          .getLong(dataSerializer.ordinal)
       case (FloatType, FLOAT) =>
-        (getter, ordinal) => getter.getFloat(ordinal)
+        dataSerializer => dataSerializer
+          .getter
+          .getFloat(dataSerializer.ordinal)
       case (DoubleType, DOUBLE) =>
-        (getter, ordinal) => getter.getDouble(ordinal)
+        dataSerializer => dataSerializer
+          .getter
+          .getDouble(dataSerializer.ordinal)
       case (d: DecimalType, FIXED)
         if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
-        (getter, ordinal) =>
-          val decimal = getter.getDecimal(ordinal, d.precision, d.scale)
+        dataSerializer =>
+          val decimal = dataSerializer
+            .getter
+            .getDecimal(dataSerializer.ordinal, d.precision, d.scale)
           decimalConversions.toFixed(decimal.toJavaBigDecimal, avroType,
             LogicalTypes.decimal(d.precision, d.scale))
 
       case (d: DecimalType, BYTES)
         if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
-        (getter, ordinal) =>
-          val decimal = getter.getDecimal(ordinal, d.precision, d.scale)
+        dataSerializer =>
+          val decimal = dataSerializer
+            .getter
+            .getDecimal(dataSerializer.ordinal, d.precision, d.scale)
           decimalConversions.toBytes(decimal.toJavaBigDecimal, avroType,
             LogicalTypes.decimal(d.precision, d.scale))
 
       case (StringType, ENUM) =>
         val enumSymbols: Set[String] = avroType.getEnumSymbols.asScala.toSet
-        (getter, ordinal) =>
-          val data = getter.getUTF8String(ordinal).toString
+        dataSerializer =>
+          val data = dataSerializer
+            .getter
+            .getUTF8String(dataSerializer.ordinal)
+            .toString
           if (!enumSymbols.contains(data)) {
             throw new IncompatibleSchemaException(
               "Cannot write \"" + data + "\" since it's not defined in enum \"" +
@@ -123,12 +144,17 @@ class AvroSerializer(rootCatalystType: DataType,
           new EnumSymbol(avroType, data)
 
       case (StringType, STRING) =>
-        (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
+        dataSerializer => new Utf8(dataSerializer
+          .getter
+          .getUTF8String(dataSerializer.ordinal)
+          .getBytes)
 
       case (BinaryType, FIXED) =>
         val size = avroType.getFixedSize()
-        (getter, ordinal) =>
-          val data: Array[Byte] = getter.getBinary(ordinal)
+        dataSerializer =>
+          val data: Array[Byte] = dataSerializer
+            .getter
+            .getBinary(dataSerializer.ordinal)
           if (data.length != size) {
             throw new IncompatibleSchemaException(
               s"Cannot write ${data.length} ${if (data.length > 1) "bytes" else "byte"} of " +
@@ -138,17 +164,27 @@ class AvroSerializer(rootCatalystType: DataType,
           new Fixed(avroType, data)
 
       case (BinaryType, BYTES) =>
-        (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
+        dataSerializer => ByteBuffer.wrap(dataSerializer
+          .getter
+          .getBinary(dataSerializer.ordinal))
 
       case (DateType, INT) =>
-        (getter, ordinal) => getter.getInt(ordinal)
+        dataSerializer => dataSerializer
+          .getter
+          .getInt(dataSerializer.ordinal)
 
       case (TimestampType, LONG) => avroType.getLogicalType match {
-          case _: TimestampMillis => (getter, ordinal) => getter.getLong(ordinal) / 1000
-          case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
+          case _: TimestampMillis => dataSerializer => dataSerializer
+            .getter
+            .getLong(dataSerializer.ordinal) / 1000
+          case _: TimestampMicros => dataSerializer => dataSerializer
+            .getter
+            .getLong(dataSerializer.ordinal)
           // For backward compatibility, if the Avro type is Long and it is not logical type,
           // output the timestamp value as with millisecond precision.
-          case null => (getter, ordinal) => getter.getLong(ordinal) / 1000
+          case null => dataSerializer => dataSerializer
+            .getter
+            .getLong(dataSerializer.ordinal) / 1000
           case other => throw new IncompatibleSchemaException(
             s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
         }
@@ -156,8 +192,10 @@ class AvroSerializer(rootCatalystType: DataType,
       case (ArrayType(et, containsNull), ARRAY) =>
         val elementConverter = newConverter(
           et, resolveNullableType(avroType.getElementType, containsNull))
-        (getter, ordinal) => {
-          val arrayData = getter.getArray(ordinal)
+        dataSerializer => {
+          val arrayData = dataSerializer
+            .getter
+            .getArray(dataSerializer.ordinal)
           val len = arrayData.numElements()
           val result = new Array[Any](len)
           var i = 0
@@ -165,7 +203,7 @@ class AvroSerializer(rootCatalystType: DataType,
             if (containsNull && arrayData.isNullAt(i)) {
               result(i) = null
             } else {
-              result(i) = elementConverter(arrayData, i)
+              result(i) = elementConverter(DataSerializer(arrayData, i))
             }
             i += 1
           }
@@ -177,13 +215,15 @@ class AvroSerializer(rootCatalystType: DataType,
       case (st: StructType, RECORD) =>
         val structConverter = newStructConverter(st, avroType)
         val numFields = st.length
-        (getter, ordinal) => structConverter(getter.getStruct(ordinal, numFields))
+        dataSerializer => structConverter(dataSerializer
+          .getter
+          .getStruct(dataSerializer.ordinal, numFields))
 
       case (MapType(kt, vt, valueContainsNull), MAP) if kt == StringType =>
         val valueConverter = newConverter(
           vt, resolveNullableType(avroType.getValueType, valueContainsNull))
-        (getter, ordinal) =>
-          val mapData = getter.getMap(ordinal)
+        dataSerializer =>
+          val mapData = dataSerializer.getter.getMap(dataSerializer.ordinal)
           val len = mapData.numElements()
           val result = new java.util.HashMap[String, Any](len)
           val keyArray = mapData.keyArray()
@@ -194,7 +234,7 @@ class AvroSerializer(rootCatalystType: DataType,
             if (valueContainsNull && valueArray.isNullAt(i)) {
               result.put(key, null)
             } else {
-              result.put(key, valueConverter(valueArray, i))
+              result.put(key, valueConverter(DataSerializer(valueArray, i)))
             }
             i += 1
           }
@@ -233,7 +273,7 @@ class AvroSerializer(rootCatalystType: DataType,
         if (row.isNullAt(i)) {
           result.put(avroIndices(i), null)
         } else {
-          result.put(avroIndices(i), fieldConverters(i).apply(row, i))
+          result.put(avroIndices(i), fieldConverters(i).apply(DataSerializer(row, i)))
         }
         i += 1
       }

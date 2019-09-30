@@ -91,7 +91,7 @@ object functions {
    *
    * @param data the data column.
    * @param jsonFormatSchema user-specified output avro schema in JSON string format.
-   * @param options options to control how the Avro record is parsed.
+   * @param options options to control how the Avro record is serialized.
    * @since 3.0.0
    */
   @Experimental

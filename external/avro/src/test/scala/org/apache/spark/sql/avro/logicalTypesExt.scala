@@ -27,7 +27,6 @@ import org.apache.avro.{LogicalType, LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.util.Utf8
 
 import org.apache.spark.sql.avro.SchemaConverters.SchemaType
-import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.types.{AbstractDataType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -44,11 +43,21 @@ object ISODatetimeLogicalType extends LogicalType("datetime") {
 }
 
 class TestSuitAvroLogicalCatalystMapper extends AvroLogicalTypeCatalystMapper {
+
+  override def toSqlType: PartialFunction[LogicalType, SchemaConverters.SchemaType] = {
+    case ISODatetimeLogicalType => SchemaType(TimestampType, nullable = false)
+  }
+
+  override def toAvroSchema: PartialFunction[RecordInfo, Schema] = {
+    case RecordInfo(TimestampType, _, _) =>
+      ISODatetimeLogicalType.addToSchema(SchemaBuilder.builder().stringType())
+  }
+
   override def deserialize
-  : PartialFunction[LogicalType, (CatalystDataUpdater, Int, Any) => Unit] = {
+  : PartialFunction[LogicalType, DataDeserializer => Unit] = {
     case ISODatetimeLogicalType =>
-      (updater, ordinal, value) =>
-        val datetime = value match {
+      dataUpdater =>
+        val datetime = dataUpdater.value match {
           case s: String => UTF8String.fromString(s)
           case s: Utf8 => val bytes = new Array[Byte](s.getByteLength)
             System.arraycopy(s.getBytes, 0, bytes, 0, s.getByteLength)
@@ -59,23 +68,18 @@ class TestSuitAvroLogicalCatalystMapper extends AvroLogicalTypeCatalystMapper {
             .atZoneSameInstant(ZoneOffset.UTC)
             .toInstant
         )
-        updater.setLong(ordinal, timestamp.toInstant.toEpochMilli * 1000L)
+        dataUpdater.updater
+          .setLong(dataUpdater.ordinal, timestamp.toInstant.toEpochMilli * 1000L)
   }
 
-  override def toSqlType: PartialFunction[LogicalType, SchemaConverters.SchemaType] = {
-    case ISODatetimeLogicalType => SchemaType(TimestampType, nullable = false)
-  }
-
-  override def toAvroSchema: PartialFunction[(AbstractDataType, String, String), Schema] = {
-    case (TimestampType, _, _) =>
-      ISODatetimeLogicalType.addToSchema(SchemaBuilder.builder().stringType())
-  }
-
-  override def serialize: PartialFunction[LogicalType, (SpecializedGetters, Int) => Any] = {
+  override def serialize: PartialFunction[LogicalType, DataSerializer => Any] = {
     case ISODatetimeLogicalType =>
-      (getter, ordinal) =>
+      dataSerializer =>
         val datetime = OffsetDateTime.ofInstant(
-          Instant.ofEpochMilli(getter.getLong(ordinal) / 1000), ZoneOffset.UTC
+          Instant.ofEpochMilli(dataSerializer
+            .getter
+            .getLong(dataSerializer.ordinal) / 1000),
+          ZoneOffset.UTC
         ).toString
 
         Try(DateTimeFormatter.ISO_DATE_TIME.parse(datetime))

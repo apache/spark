@@ -18,8 +18,9 @@
 package org.apache.spark.sql.avro
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{AbstractDataType, Decimal}
 
 
 /**
@@ -68,3 +69,7 @@ final class ArrayDataUpdater(array: ArrayData) extends CatalystDataUpdater {
   override def setFloat(ordinal: Int, value: Float): Unit = array.setFloat(ordinal, value)
   override def setDecimal(ordinal: Int, value: Decimal): Unit = array.update(ordinal, value)
 }
+
+case class DataDeserializer(updater: CatalystDataUpdater, ordinal: Int, value: Any)
+case class DataSerializer(getter: SpecializedGetters, ordinal: Int)
+case class RecordInfo(catalystType: AbstractDataType, name: String, namespace: String)
