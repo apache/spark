@@ -18,10 +18,13 @@
 package org.apache.spark.sql.internal
 
 import java.io.File
+import java.net.URI
+import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkFiles
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
@@ -33,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
+import org.apache.spark.util.Utils
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -158,8 +162,9 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * [[SessionState]].
    */
   def addJar(path: String): Unit = {
-    session.sparkContext.addJar(path)
-    val uri = new Path(path).toUri
+    val resolvedPath: String = resolveAndDownLoad(path)
+    session.sparkContext.addJar(resolvedPath)
+    val uri = new Path(resolvedPath).toUri
     val jarURL = if (uri.getScheme == null) {
       // `path` is a local file path without a URL scheme
       new File(path).toURI.toURL
@@ -169,5 +174,23 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
     }
     session.sharedState.jarClassLoader.addURL(jarURL)
     Thread.currentThread().setContextClassLoader(session.sharedState.jarClassLoader)
+  }
+
+  def resolveAndDownLoad(path: String): String = {
+    val uri = new URI(path)
+    if (uri.getScheme == null) {
+      path
+    } else {
+      uri.getScheme.toLowerCase(Locale.ROOT) match {
+        case "ftp" | "http" | "https" =>
+          Utils.doFetchFile(path,
+            new File(SparkFiles.getRootDirectory()),
+            Utils.decodeFileNameInURI(uri),
+            session.sparkContext.getConf,
+            session.sparkContext.env.securityManager,
+            session.sparkContext.hadoopConfiguration).getPath
+        case _ => path
+      }
+    }
   }
 }
