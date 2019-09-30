@@ -44,30 +44,31 @@ abstract class IntervalPart(
   }
 }
 
-case class Millennium(child: Expression)
-    extends IntervalPart(child, IntegerType, getMillennium, "getMillennium")
+case class Millenniums(child: Expression)
+    extends IntervalPart(child, IntegerType, getMillenniums, "getMillenniums")
 
-case class Century(child: Expression)
-    extends IntervalPart(child, IntegerType, getCentury, "getCentury")
+case class Centuries(child: Expression)
+    extends IntervalPart(child, IntegerType, getCenturies, "getCenturies")
 
-case class Decade(child: Expression)
-    extends IntervalPart(child, IntegerType, getDecade, "getDecade")
+case class Decades(child: Expression)
+    extends IntervalPart(child, IntegerType, getDecades, "getDecades")
 
-case class Year(child: Expression) extends IntervalPart(child, IntegerType, getYear, "getYear")
+case class Years(child: Expression) extends IntervalPart(child, IntegerType, getYears, "getYears")
 
-case class Quarter(child: Expression)
-    extends IntervalPart(child, ByteType, getQuarter, "getQuarter")
+case class Quarters(child: Expression)
+    extends IntervalPart(child, ByteType, getQuarters, "getQuarters")
 
-case class Month(child: Expression) extends IntervalPart(child, ByteType, getMonth, "getMonth")
+case class Months(child: Expression) extends IntervalPart(child, ByteType, getMonths, "getMonths")
 
-case class Day(child: Expression) extends IntervalPart(child, LongType, getDay, "getDay")
+case class Days(child: Expression) extends IntervalPart(child, LongType, getDays, "getDays")
 
-case class Hour(child: Expression) extends IntervalPart(child, ByteType, getHour, "getHour")
+case class Hours(child: Expression) extends IntervalPart(child, ByteType, getHours, "getHours")
 
-case class Minute(child: Expression) extends IntervalPart(child, ByteType, getMinute, "getMinute")
+case class Minutes(child: Expression)
+    extends IntervalPart(child, ByteType, getMinutes, "getMinutes")
 
-case class Second(child: Expression)
-    extends IntervalPart(child, DecimalType(8, 6), getSecond, "getSecond")
+case class Seconds(child: Expression)
+    extends IntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
 
 object IntervalPart {
 
@@ -75,16 +76,16 @@ object IntervalPart {
       extractField: String,
       source: Expression,
       errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millennium(source)
-    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
-    case "DECADE" | "DECADES" | "DEC" | "DECS" => Decade(source)
-    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
-    case "QUARTER" | "QTR" => Quarter(source)
-    case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
-    case "DAY" | "D" | "DAYS" => Day(source)
-    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
-    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
-    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Second(source)
+    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millenniums(source)
+    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Centuries(source)
+    case "DECADE" | "DECADES" | "DEC" | "DECS" => Decades(source)
+    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Years(source)
+    case "QUARTER" | "QTR" => Quarters(source)
+    case "MONTH" | "MON" | "MONS" | "MONTHS" => Months(source)
+    case "DAY" | "D" | "DAYS" => Days(source)
+    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hours(source)
+    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minutes(source)
+    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Seconds(source)
 //    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
 //      Milliseconds(source)
 //    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>

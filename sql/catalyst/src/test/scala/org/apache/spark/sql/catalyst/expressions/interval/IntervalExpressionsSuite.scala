@@ -18,132 +18,133 @@
 package org.apache.spark.sql.catalyst.expressions.interval
 
 import scala.language.implicitConversions
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class IntervalExpressionsSuite  extends SparkFunSuite with ExpressionEvalHelper {
+class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   implicit def interval(s: String): Literal = {
     Literal(CalendarInterval.fromString("interval " + s))
   }
 
-  test("millennium") {
-    checkEvaluation(Millennium("0 years"), 0)
-    checkEvaluation(Millennium("9999 years"), 9)
-    checkEvaluation(Millennium("1000 years"), 1)
-    checkEvaluation(Millennium("-2000 years"), -2)
+  test("millenniums") {
+    checkEvaluation(Millenniums("0 years"), 0)
+    checkEvaluation(Millenniums("9999 years"), 9)
+    checkEvaluation(Millenniums("1000 years"), 1)
+    checkEvaluation(Millenniums("-2000 years"), -2)
     // Microseconds part must not be taken into account
-    checkEvaluation(Millennium("999 years 400 days"), 0)
+    checkEvaluation(Millenniums("999 years 400 days"), 0)
     // Millennium must be taken from years and months
-    checkEvaluation(Millennium("999 years 12 months"), 1)
-    checkEvaluation(Millennium("1000 years -1 months"), 0)
+    checkEvaluation(Millenniums("999 years 12 months"), 1)
+    checkEvaluation(Millenniums("1000 years -1 months"), 0)
   }
 
-  test("century") {
-    checkEvaluation(Century("0 years"), 0)
-    checkEvaluation(Century("9999 years"), 99)
-    checkEvaluation(Century("1000 years"), 10)
-    checkEvaluation(Century("-2000 years"), -20)
+  test("centuries") {
+    checkEvaluation(Centuries("0 years"), 0)
+    checkEvaluation(Centuries("9999 years"), 99)
+    checkEvaluation(Centuries("1000 years"), 10)
+    checkEvaluation(Centuries("-2000 years"), -20)
     // Microseconds part must not be taken into account
-    checkEvaluation(Century("99 years 400 days"), 0)
+    checkEvaluation(Centuries("99 years 400 days"), 0)
     // Century must be taken from years and months
-    checkEvaluation(Century("99 years 12 months"), 1)
-    checkEvaluation(Century("100 years -1 months"), 0)
+    checkEvaluation(Centuries("99 years 12 months"), 1)
+    checkEvaluation(Centuries("100 years -1 months"), 0)
   }
 
-  test("decade") {
-    checkEvaluation(Decade("0 years"), 0)
-    checkEvaluation(Decade("9999 years"), 999)
-    checkEvaluation(Decade("1000 years"), 100)
-    checkEvaluation(Decade("-2000 years"), -200)
+  test("decades") {
+    checkEvaluation(Decades("0 years"), 0)
+    checkEvaluation(Decades("9999 years"), 999)
+    checkEvaluation(Decades("1000 years"), 100)
+    checkEvaluation(Decades("-2000 years"), -200)
     // Microseconds part must not be taken into account
-    checkEvaluation(Decade("9 years 400 days"), 0)
+    checkEvaluation(Decades("9 years 400 days"), 0)
     // Decade must be taken from years and months
-    checkEvaluation(Decade("9 years 12 months"), 1)
-    checkEvaluation(Decade("10 years -1 months"), 0)
+    checkEvaluation(Decades("9 years 12 months"), 1)
+    checkEvaluation(Decades("10 years -1 months"), 0)
   }
 
-  test("year") {
-    checkEvaluation(Year("0 years"), 0)
-    checkEvaluation(Year("9999 years"), 9999)
-    checkEvaluation(Year("1000 years"), 1000)
-    checkEvaluation(Year("-2000 years"), -2000)
+  test("years") {
+    checkEvaluation(Years("0 years"), 0)
+    checkEvaluation(Years("9999 years"), 9999)
+    checkEvaluation(Years("1000 years"), 1000)
+    checkEvaluation(Years("-2000 years"), -2000)
     // Microseconds part must not be taken into account
-    checkEvaluation(Year("9 years 400 days"), 9)
+    checkEvaluation(Years("9 years 400 days"), 9)
     // Year must be taken from years and months
-    checkEvaluation(Year("9 years 12 months"), 10)
-    checkEvaluation(Year("10 years -1 months"), 9)
+    checkEvaluation(Years("9 years 12 months"), 10)
+    checkEvaluation(Years("10 years -1 months"), 9)
   }
 
-  test("quarter") {
-    checkEvaluation(Quarter("0 months"), 1.toByte)
-    checkEvaluation(Quarter("1 months"), 1.toByte)
-    checkEvaluation(Quarter("-1 months"), 1.toByte)
-    checkEvaluation(Quarter("2 months"), 1.toByte)
-    checkEvaluation(Quarter("-2 months"), 1.toByte)
-    checkEvaluation(Quarter("1 years -1 months"), 4.toByte)
-    checkEvaluation(Quarter("-1 years 1 months"), -2.toByte)
-    checkEvaluation(Quarter("2 years 3 months"), 2.toByte)
-    checkEvaluation(Quarter("-2 years -3 months"), 0.toByte)
-    checkEvaluation(Quarter("9999 years"), 1.toByte)
+  test("quarters") {
+    checkEvaluation(Quarters("0 months"), 1.toByte)
+    checkEvaluation(Quarters("1 months"), 1.toByte)
+    checkEvaluation(Quarters("-1 months"), 1.toByte)
+    checkEvaluation(Quarters("2 months"), 1.toByte)
+    checkEvaluation(Quarters("-2 months"), 1.toByte)
+    checkEvaluation(Quarters("1 years -1 months"), 4.toByte)
+    checkEvaluation(Quarters("-1 years 1 months"), -2.toByte)
+    checkEvaluation(Quarters("2 years 3 months"), 2.toByte)
+    checkEvaluation(Quarters("-2 years -3 months"), 0.toByte)
+    checkEvaluation(Quarters("9999 years"), 1.toByte)
   }
 
-  test("month") {
-    checkEvaluation(Month("0 year"), 0.toByte)
+  test("months") {
+    checkEvaluation(Months("0 year"), 0.toByte)
     for (m <- -24 to 24) {
-      checkEvaluation(Month(s"$m months"), (m % 12).toByte)
+      checkEvaluation(Months(s"$m months"), (m % 12).toByte)
     }
-    checkEvaluation(Month("1 year 10 months"), 10.toByte)
-    checkEvaluation(Month("-2 year -10 months"), -10.toByte)
-    checkEvaluation(Month("9999 years"), 0.toByte)
+    checkEvaluation(Months("1 year 10 months"), 10.toByte)
+    checkEvaluation(Months("-2 year -10 months"), -10.toByte)
+    checkEvaluation(Months("9999 years"), 0.toByte)
   }
 
   private val largeInterval: String =
     "9999 years 11 months 31 days 11 hours 59 minutes 59 seconds"
 
-  test("day") {
-    checkEvaluation(Day("0 days"), 0L)
-    checkEvaluation(Day("1 days 100 seconds"), 1L)
-    checkEvaluation(Day("-1 days -100 seconds"), -1L)
-    checkEvaluation(Day("-365 days"), -365L)
-    checkEvaluation(Day("365 days"), 365L)
+  test("days") {
+    checkEvaluation(Days("0 days"), 0L)
+    checkEvaluation(Days("1 days 100 seconds"), 1L)
+    checkEvaluation(Days("-1 days -100 seconds"), -1L)
+    checkEvaluation(Days("-365 days"), -365L)
+    checkEvaluation(Days("365 days"), 365L)
     // Years and months must not be taken into account
-    checkEvaluation(Day("100 year 10 months 5 days"), 5L)
-    checkEvaluation(Day(largeInterval), 31L)
+    checkEvaluation(Days("100 year 10 months 5 days"), 5L)
+    checkEvaluation(Days(largeInterval), 31L)
   }
 
-  test("hour") {
-    checkEvaluation(Hour("0 hours"), 0.toByte)
-    checkEvaluation(Hour("1 hour"), 1.toByte)
-    checkEvaluation(Hour("-1 hour"), -1.toByte)
-    checkEvaluation(Hour("23 hours"), 23.toByte)
-    checkEvaluation(Hour("-23 hours"), -23.toByte)
+  test("hours") {
+    checkEvaluation(Hours("0 hours"), 0.toByte)
+    checkEvaluation(Hours("1 hour"), 1.toByte)
+    checkEvaluation(Hours("-1 hour"), -1.toByte)
+    checkEvaluation(Hours("23 hours"), 23.toByte)
+    checkEvaluation(Hours("-23 hours"), -23.toByte)
     // Years and months must not be taken into account
-    checkEvaluation(Hour("100 year 10 months 10 hours"), 10.toByte)
-    checkEvaluation(Hour(largeInterval), 11.toByte)
+    checkEvaluation(Hours("100 year 10 months 10 hours"), 10.toByte)
+    checkEvaluation(Hours(largeInterval), 11.toByte)
   }
 
-  test("minute") {
-    checkEvaluation(Minute("0 minute"), 0.toByte)
-    checkEvaluation(Minute("1 minute"), 1.toByte)
-    checkEvaluation(Minute("-1 minute"), -1.toByte)
-    checkEvaluation(Minute("59 minute"), 59.toByte)
-    checkEvaluation(Minute("-59 minute"), -59.toByte)
+  test("minutes") {
+    checkEvaluation(Minutes("0 minute"), 0.toByte)
+    checkEvaluation(Minutes("1 minute"), 1.toByte)
+    checkEvaluation(Minutes("-1 minute"), -1.toByte)
+    checkEvaluation(Minutes("59 minute"), 59.toByte)
+    checkEvaluation(Minutes("-59 minute"), -59.toByte)
     // Years and months must not be taken into account
-    checkEvaluation(Minute("100 year 10 months 10 minutes"), 10.toByte)
-    checkEvaluation(Minute(largeInterval), 59.toByte)
+    checkEvaluation(Minutes("100 year 10 months 10 minutes"), 10.toByte)
+    checkEvaluation(Minutes(largeInterval), 59.toByte)
   }
 
-  test("second") {
-    checkEvaluation(Second("0 second"), Decimal(0, 8, 6))
-    checkEvaluation(Second("1 second"), Decimal(1.0, 8, 6))
-    checkEvaluation(Second("-1 second"), Decimal(-1.0, 8, 6))
-    checkEvaluation(Second("1 minute 59 second"), Decimal(59.0, 8, 6))
-    checkEvaluation(Second("-59 minutes -59 seconds"), Decimal(-59.0, 8, 6))
+  test("seconds") {
+    checkEvaluation(Seconds("0 second"), Decimal(0, 8, 6))
+    checkEvaluation(Seconds("1 second"), Decimal(1.0, 8, 6))
+    checkEvaluation(Seconds("-1 second"), Decimal(-1.0, 8, 6))
+    checkEvaluation(Seconds("1 minute 59 second"), Decimal(59.0, 8, 6))
+    checkEvaluation(Seconds("-59 minutes -59 seconds"), Decimal(-59.0, 8, 6))
     // Years and months must not be taken into account
-    checkEvaluation(Second("100 year 10 months 10 seconds"), Decimal(10.0, 8, 6))
-    checkEvaluation(Second(largeInterval), Decimal(59.0, 8, 6))
-    checkEvaluation(Second("10 seconds 1 milliseconds 1 microseconds"), Decimal(10001001, 8, 6))
+    checkEvaluation(Seconds("100 year 10 months 10 seconds"), Decimal(10.0, 8, 6))
+    checkEvaluation(Seconds(largeInterval), Decimal(59.0, 8, 6))
+    checkEvaluation(Seconds("10 seconds 1 milliseconds 1 microseconds"), Decimal(10001001, 8, 6))
   }
 }

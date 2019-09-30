@@ -29,43 +29,43 @@ object IntervalUtils {
   val MICROS_PER_HOUR: Long = DateTimeUtils.MILLIS_PER_HOUR * DateTimeUtils.MICROS_PER_MILLIS
   val MICROS_PER_MINUTE: Long = DateTimeUtils.MILLIS_PER_MINUTE * DateTimeUtils.MICROS_PER_MILLIS
 
-  def getYear(interval: CalendarInterval): Int = {
+  def getYears(interval: CalendarInterval): Int = {
     interval.months / MONTHS_PER_YEAR
   }
 
-  def getMillennium(interval: CalendarInterval): Int = {
-    getYear(interval) / YEARS_PER_MILLENNIUM
+  def getMillenniums(interval: CalendarInterval): Int = {
+    getYears(interval) / YEARS_PER_MILLENNIUM
   }
 
-  def getCentury(interval: CalendarInterval): Int = {
-    getYear(interval) / YEARS_PER_CENTURY
+  def getCenturies(interval: CalendarInterval): Int = {
+    getYears(interval) / YEARS_PER_CENTURY
   }
 
-  def getDecade(interval: CalendarInterval): Int = {
-    getYear(interval) / YEARS_PER_DECADE
+  def getDecades(interval: CalendarInterval): Int = {
+    getYears(interval) / YEARS_PER_DECADE
   }
 
-  def getMonth(interval: CalendarInterval): Byte = {
+  def getMonths(interval: CalendarInterval): Byte = {
     (interval.months % MONTHS_PER_YEAR).toByte
   }
 
-  def getQuarter(interval: CalendarInterval): Byte = {
-    (getMonth(interval) / MONTHS_PER_QUARTER + 1).toByte
+  def getQuarters(interval: CalendarInterval): Byte = {
+    (getMonths(interval) / MONTHS_PER_QUARTER + 1).toByte
   }
 
-  def getDay(interval: CalendarInterval): Long = {
+  def getDays(interval: CalendarInterval): Long = {
     interval.microseconds / DateTimeUtils.MICROS_PER_DAY
   }
 
-  def getHour(interval: CalendarInterval): Byte = {
+  def getHours(interval: CalendarInterval): Byte = {
     ((interval.microseconds % DateTimeUtils.MICROS_PER_DAY) / MICROS_PER_HOUR).toByte
   }
 
-  def getMinute(interval: CalendarInterval): Byte = {
+  def getMinutes(interval: CalendarInterval): Byte = {
     ((interval.microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
   }
 
-  def getSecond(interval: CalendarInterval): Decimal = {
+  def getSeconds(interval: CalendarInterval): Decimal = {
     Decimal(interval.microseconds % MICROS_PER_MINUTE, 8, 6)
   }
 }
