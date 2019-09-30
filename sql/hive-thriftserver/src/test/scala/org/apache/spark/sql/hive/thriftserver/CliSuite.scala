@@ -383,5 +383,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "DROP TABLE sourceTableForWithSQL;"
         -> ""
     )
+    }
+  test("SPARK-29268 test spark sql with spark.sql.hive.metastore.jars") {
+    runCliWithin(2.minute, Seq("--conf", "spark.sql.hive.metastore.jars=maven"))(
+      "SET conf1;" -> "conftest")
   }
 }

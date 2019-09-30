@@ -385,7 +385,8 @@ private[spark] object HiveUtils extends Logging {
         hadoopConf = hadoopConf,
         config = configurations,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
-        sharedPrefixes = hiveMetastoreSharedPrefixes)
+        sharedPrefixes = hiveMetastoreSharedPrefixes,
+        isolationOn = !isCliSessionState)
     } else {
       // Convert to files and expand any directories.
       val jars =
@@ -414,7 +415,7 @@ private[spark] object HiveUtils extends Logging {
         hadoopConf = hadoopConf,
         execJars = jars.toSeq,
         config = configurations,
-        isolationOn = true,
+        isolationOn = !isCliSessionState(),
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     }
