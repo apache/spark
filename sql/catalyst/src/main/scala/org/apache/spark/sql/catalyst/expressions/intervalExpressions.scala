@@ -66,8 +66,8 @@ case class Hour(child: Expression) extends IntervalPart(child, ByteType, getHour
 
 case class Minute(child: Expression) extends IntervalPart(child, ByteType, getMinute, "getMinute")
 
-case class Second(child: Expression) extends IntervalPart(
-  child, DecimalType(8, 6), getSecond, "getSecond")
+case class Second(child: Expression)
+    extends IntervalPart(child, DecimalType(8, 6), getSecond, "getSecond")
 
 object IntervalPart {
 
