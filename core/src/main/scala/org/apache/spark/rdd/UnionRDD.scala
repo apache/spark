@@ -21,6 +21,7 @@ import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ForkJoinTaskSupport
+import scala.collection.parallel.immutable.ParVector
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
@@ -75,13 +76,13 @@ class UnionRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     val parRDDs = if (isPartitionListingParallel) {
-      val parArray = rdds.par
+      val parArray = new ParVector(rdds.toVector)
       parArray.tasksupport = UnionRDD.partitionEvalTaskSupport
       parArray
     } else {
       rdds
     }
-    val array = new Array[Partition](parRDDs.map(_.partitions.length).seq.sum)
+    val array = new Array[Partition](parRDDs.map(_.partitions.length).sum)
     var pos = 0
     for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
       array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index)

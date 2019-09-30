@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit._
 
 import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
+import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -684,7 +685,7 @@ case class AlterTableRecoverPartitionsCommand(
     val statusPar: GenSeq[FileStatus] =
       if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
         // parallelize the list of partitions here, then we can have better parallelism later.
-        val parArray = statuses.par
+        val parArray = new ParVector(statuses.toVector)
         parArray.tasksupport = evalTaskSupport
         parArray
       } else {

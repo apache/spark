@@ -22,6 +22,8 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.parallel.immutable.ParVector
+
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
@@ -169,7 +171,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
 
     withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
-      spark.sessionState.functionRegistry.listFunction().par.foreach { funcId =>
+      val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
+      parFuncs.foreach { funcId =>
         // Examples can change settings. We clone the session to prevent tests clashing.
         val clonedSpark = spark.cloneSession()
         val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
