@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
