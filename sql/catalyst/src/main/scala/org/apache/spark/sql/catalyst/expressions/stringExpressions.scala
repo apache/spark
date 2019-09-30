@@ -2286,8 +2286,6 @@ case class FormatNumber(x: Expression, d: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('454', '');
-       ''
       > SELECT _FUNC_('4540', '999');
        '454'
       > SELECT _FUNC_('454.00', '000D00');
