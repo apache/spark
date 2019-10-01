@@ -282,7 +282,7 @@ case class LoadDataCommand(
       PartitioningUtils.normalizePartitionSpec(
         spec,
         targetTable.partitionColumnNames,
-        targetTable.identifier.quotedString,
+        tableIdentwithDB,
         sparkSession.sessionState.conf.resolver)
     }
 

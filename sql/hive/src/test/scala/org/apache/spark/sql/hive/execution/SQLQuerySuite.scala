@@ -2016,7 +2016,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withTempDir { dir =>
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
-      Files.append("1", new File(dirPath, s"part-r-000011"), StandardCharsets.UTF_8)
+      Files.append("1", new File(dirPath, "part-r-000011"), StandardCharsets.UTF_8)
       withTable("part_table") {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
           sql(
@@ -2025,7 +2025,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
               |PARTITIONED BY (d STRING)
             """.stripMargin)
           sql(s"LOAD DATA LOCAL INPATH '$path/part-r-000011' " +
-            s"INTO TABLE part_table PARTITION(D ='1')")
+            "INTO TABLE part_table PARTITION(D ='1')")
           checkAnswer(sql("SELECT * FROM part_table"), Seq(Row("1", "1")))
         }
       }
