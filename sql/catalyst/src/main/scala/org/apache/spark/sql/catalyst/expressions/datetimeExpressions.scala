@@ -2065,6 +2065,8 @@ object DatePart {
        33
       > SELECT _FUNC_('doy', DATE'2019-08-12');
        224
+      > SELECT _FUNC_('SECONDS', timestamp'2019-10-01 00:00:01.000001');
+       1.000001
   """,
   since = "3.0.0")
 case class DatePart(field: Expression, source: Expression, child: Expression)
