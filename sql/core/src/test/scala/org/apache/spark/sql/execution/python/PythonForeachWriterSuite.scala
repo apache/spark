@@ -21,8 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.Mockito.when
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}

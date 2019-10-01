@@ -19,7 +19,7 @@ package org.apache.spark.deploy.rest.mesos
 
 import javax.servlet.http.HttpServletResponse
 
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.TestPrematureExit

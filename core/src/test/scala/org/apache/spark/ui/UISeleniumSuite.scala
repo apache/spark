@@ -31,8 +31,8 @@ import org.openqa.selenium.{By, WebDriver}
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.selenium.WebBrowser
 import org.w3c.css.sac.CSSParseException
 
 import org.apache.spark._
