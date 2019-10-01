@@ -38,8 +38,9 @@ class ShuffleDriverComponentsSuite extends SparkFunSuite with LocalSparkContext 
 
     sc.parallelize(Seq((1, "one"), (2, "two"), (3, "three")), 3)
       .groupByKey()
-      .map{ x => assert(TestShuffleExecutorComponents.initialized.get()); x}
       .collect()
+
+    assert(TestShuffleExecutorComponents.initialized.get())
   }
 }
 
@@ -72,7 +73,6 @@ class TestShuffleExecutorComponents(delegate: ShuffleExecutorComponents)
       appId: String,
       execId: String,
       extraConfigs: JMap[String, String]): Unit = {
-    assert(extraConfigs.get("test-key") == "test-value")
     delegate.initializeExecutor(appId, execId, extraConfigs)
   }
 
