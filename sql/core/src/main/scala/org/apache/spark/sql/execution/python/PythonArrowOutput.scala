@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.execution.python
 
-import java.io._
-import java.net._
+import java.io.DataInputStream
+import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
@@ -25,22 +25,19 @@ import scala.collection.JavaConverters._
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
-import org.apache.spark._
-import org.apache.spark.api.python._
+import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.api.python.{BasePythonRunner, SpecialLengths}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
 /**
- * Common functionality for a udf runner that exchanges data with Python worker via Arrow stream.
+ * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from
+ * Python (Arrow) to JVM (ColumnarBatch).
  */
-abstract class BaseArrowPythonRunner[T](
-    funcs: Seq[ChainedPythonFunctions],
-    evalType: Int,
-    argOffsets: Array[Array[Int]])
-  extends BasePythonRunner[T, ColumnarBatch](funcs, evalType, argOffsets) {
+private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatch] =>
 
-  protected override def newReaderIterator(
+  protected def newReaderIterator(
       stream: DataInputStream,
       writerThread: WriterThread,
       startTime: Long,

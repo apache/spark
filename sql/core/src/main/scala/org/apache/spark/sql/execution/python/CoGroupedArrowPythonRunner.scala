@@ -17,27 +17,27 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io._
-import java.net._
+import java.io.DataOutputStream
+import java.net.Socket
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
-import org.apache.spark._
-import org.apache.spark.api.python._
+import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 
 /**
- * Python UDF Runner for cogrouped udfs.  Although the data is exchanged with the python
- * worker via arrow, we cannot use `ArrowPythonRunner` as we need to send more than one
- * dataframe.
+ * Python UDF Runner for cogrouped udfs. It sends Arrow bathes from two different DataFrames,
+ * groups them in Python, and receive it back in JVM as batches of single DataFrame.
  */
-class CogroupedArrowPythonRunner(
+class CoGroupedArrowPythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,
     argOffsets: Array[Array[Int]],
@@ -45,8 +45,9 @@ class CogroupedArrowPythonRunner(
     rightSchema: StructType,
     timeZoneId: String,
     conf: Map[String, String])
-  extends BaseArrowPythonRunner[(Iterator[InternalRow], Iterator[InternalRow])](
-    funcs, evalType, argOffsets) {
+  extends BasePythonRunner[
+    (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](funcs, evalType, argOffsets)
+  with PythonArrowOutput {
 
   protected def newWriterThread(
       env: SparkEnv,
@@ -81,11 +82,11 @@ class CogroupedArrowPythonRunner(
         dataOut.writeInt(0)
       }
 
-      def writeGroup(
+      private def writeGroup(
           group: Iterator[InternalRow],
           schema: StructType,
           dataOut: DataOutputStream,
-          name: String) = {
+          name: String): Unit = {
         val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
