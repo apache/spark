@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.feature.OneHotEncoderModel
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -205,8 +205,8 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
       dataset: Dataset[_]): MultilayerPerceptronClassificationModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, labelCol, featuresCol, predictionCol, layers, maxIter, tol,
-      blockSize, solver, stepSize, seed)
+    instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol, layers, maxIter,
+      tol, blockSize, solver, stepSize, seed)
 
     val myLayers = $(layers)
     val labels = myLayers.last

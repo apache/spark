@@ -40,7 +40,7 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
   private val maxRateLimit = conf.getLong("spark.streaming.receiver.maxRate", Long.MaxValue)
   private lazy val rateLimiter = GuavaRateLimiter.create(getInitialRateLimit().toDouble)
 
-  def waitToPush() {
+  def waitToPush(): Unit = {
     rateLimiter.acquire()
   }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import scala.xml.{Node, Text}
+import scala.xml.Utility.trim
 
 import org.apache.spark.SparkFunSuite
 
@@ -122,54 +123,60 @@ class UIUtilsSuite extends SparkFunSuite {
   test("decodeURLParameter (SPARK-12708: Sorting task error in Stages Page when yarn mode.)") {
     val encoded1 = "%252F"
     val decoded1 = "/"
-    val encoded2 = "%253Cdriver%253E"
-    val decoded2 = "<driver>"
 
     assert(decoded1 === decodeURLParameter(encoded1))
-    assert(decoded2 === decodeURLParameter(encoded2))
 
     // verify that no affect to decoded URL.
     assert(decoded1 === decodeURLParameter(decoded1))
-    assert(decoded2 === decodeURLParameter(decoded2))
   }
 
-  test("SPARK-20393: Prevent newline characters in parameters.") {
-    val encoding = "Encoding:base64%0d%0a%0d%0aPGh0bWw%2bjcmlwdD48L2h0bWw%2b"
-    val stripEncoding = "Encoding:base64PGh0bWw%2bjcmlwdD48L2h0bWw%2b"
+  test("listingTable with tooltips") {
 
-    assert(stripEncoding === stripXSS(encoding))
+    def generateDataRowValue: String => Seq[Node] = row => <a>{row}</a>
+    val header = Seq("Header1", "Header2")
+    val data = Seq("Data1", "Data2")
+    val tooltip = Seq(None, Some("tooltip"))
+
+    val generated = listingTable(header, generateDataRowValue, data, tooltipHeaders = tooltip)
+
+    val expected: Node =
+      <table class="table table-bordered table-condensed table-striped sortable">
+        <thead>
+          <th width="" class="">{header(0)}</th>
+          <th width="" class="">
+              <span data-toggle="tooltip" title="tooltip">
+                {header(1)}
+              </span>
+          </th>
+        </thead>
+      <tbody>
+        {data.map(generateDataRowValue)}
+      </tbody>
+    </table>
+
+    assert(trim(generated(0)) == trim(expected))
   }
 
-  test("SPARK-20393: Prevent script from parameters running on page.") {
-    val scriptAlert = """>"'><script>alert(401)<%2Fscript>"""
-    val stripScriptAlert = "&gt;&quot;&gt;&lt;script&gt;alert(401)&lt;%2Fscript&gt;"
+  test("listingTable without tooltips") {
 
-    assert(stripScriptAlert === stripXSS(scriptAlert))
-  }
+    def generateDataRowValue: String => Seq[Node] = row => <a>{row}</a>
+    val header = Seq("Header1", "Header2")
+    val data = Seq("Data1", "Data2")
 
-  test("SPARK-20393: Prevent javascript from parameters running on page.") {
-    val javascriptAlert =
-      """app-20161208133404-0002<iframe+src%3Djavascript%3Aalert(1705)>"""
-    val stripJavascriptAlert =
-      "app-20161208133404-0002&lt;iframe+src%3Djavascript%3Aalert(1705)&gt;"
+    val generated = listingTable(header, generateDataRowValue, data)
 
-    assert(stripJavascriptAlert === stripXSS(javascriptAlert))
-  }
+    val expected =
+      <table class="table table-bordered table-condensed table-striped sortable">
+        <thead>
+          <th width="" class="">{header(0)}</th>
+          <th width="" class="">{header(1)}</th>
+        </thead>
+        <tbody>
+          {data.map(generateDataRowValue)}
+        </tbody>
+      </table>
 
-  test("SPARK-20393: Prevent links from parameters on page.") {
-    val link =
-      """stdout'"><iframe+id%3D1131+src%3Dhttp%3A%2F%2Fdemo.test.net%2Fphishing.html>"""
-    val stripLink =
-      "stdout&quot;&gt;&lt;iframe+id%3D1131+src%3Dhttp%3A%2F%2Fdemo.test.net%2Fphishing.html&gt;"
-
-    assert(stripLink === stripXSS(link))
-  }
-
-  test("SPARK-20393: Prevent popups from parameters on page.") {
-    val popup = """stdout'%2Balert(60)%2B'"""
-    val stripPopup = "stdout%2Balert(60)%2B"
-
-    assert(stripPopup === stripXSS(popup))
+    assert(trim(generated(0)) == trim(expected))
   }
 
   private def verify(

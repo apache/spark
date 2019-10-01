@@ -54,7 +54,7 @@ case class Rating @Since("0.8.0") (
  *
  * For implicit preference data, the algorithm used is based on
  * "Collaborative Filtering for Implicit Feedback Datasets", available at
- * <a href="http://dx.doi.org/10.1109/ICDM.2008.22">here</a>, adapted for the blocked approach
+ * <a href="https://doi.org/10.1109/ICDM.2008.22">here</a>, adapted for the blocked approach
  * used here.
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
@@ -62,6 +62,13 @@ case class Rating @Since("0.8.0") (
  * r &gt; 0 and 0 if r &lt;= 0. The ratings then act as 'confidence' values related to strength of
  * indicated user
  * preferences rather than explicit ratings given to items.
+ *
+ * Note: the input rating RDD to the ALS implementation should be deterministic.
+ * Nondeterministic data can cause failure during fitting ALS model.
+ * For example, an order-sensitive operation like sampling after a repartition makes RDD
+ * output nondeterministic, like `rdd.repartition(2).sample(false, 0.5, 1618)`.
+ * Checkpointing sampled RDD or adding a sort before sampling can help make the RDD
+ * deterministic.
  */
 @Since("0.8.0")
 class ALS private (

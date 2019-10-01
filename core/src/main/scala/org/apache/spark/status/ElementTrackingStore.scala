@@ -17,13 +17,18 @@
 
 package org.apache.spark.status
 
+import java.util.Collection
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 import com.google.common.util.concurrent.MoreExecutors
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.Status._
+import org.apache.spark.status.ElementTrackingStore._
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.kvstore._
 
@@ -45,9 +50,27 @@ import org.apache.spark.util.kvstore._
  */
 private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) extends KVStore {
 
-  import config._
+  private class LatchedTriggers(val triggers: Seq[Trigger[_]]) {
+    private val pending = new AtomicBoolean(false)
 
-  private val triggers = new HashMap[Class[_], Seq[Trigger[_]]]()
+    def fireOnce(f: Seq[Trigger[_]] => Unit): WriteQueueResult = {
+      if (pending.compareAndSet(false, true)) {
+        doAsync {
+          pending.set(false)
+          f(triggers)
+        }
+        WriteQueued
+      } else {
+        WriteSkippedQueue
+      }
+    }
+
+    def :+(addlTrigger: Trigger[_]): LatchedTriggers = {
+      new LatchedTriggers(triggers :+ addlTrigger)
+    }
+  }
+
+  private val triggers = new HashMap[Class[_], LatchedTriggers]()
   private val flushTriggers = new ListBuffer[() => Unit]()
   private val executor = if (conf.get(ASYNC_TRACKING_ENABLED)) {
     ThreadUtils.newDaemonSingleThreadExecutor("element-tracking-store-worker")
@@ -67,8 +90,13 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
    *               of elements of the registered type currently known to be in the store.
    */
   def addTrigger(klass: Class[_], threshold: Long)(action: Long => Unit): Unit = {
-    val existing = triggers.getOrElse(klass, Seq())
-    triggers(klass) = existing :+ Trigger(threshold, action)
+    val newTrigger = Trigger(threshold, action)
+    triggers.get(klass) match {
+      case None =>
+        triggers(klass) = new LatchedTriggers(Seq(newTrigger))
+      case Some(latchedTrigger) =>
+        triggers(klass) = latchedTrigger :+ newTrigger
+    }
   }
 
   /**
@@ -97,21 +125,33 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
   override def write(value: Any): Unit = store.write(value)
 
   /** Write an element to the store, optionally checking for whether to fire triggers. */
-  def write(value: Any, checkTriggers: Boolean): Unit = {
+  def write(value: Any, checkTriggers: Boolean): WriteQueueResult = {
     write(value)
 
     if (checkTriggers && !stopped) {
-      triggers.get(value.getClass()).foreach { list =>
-        doAsync {
-          val count = store.count(value.getClass())
+      triggers.get(value.getClass).map { latchedList =>
+        latchedList.fireOnce { list =>
+          val count = store.count(value.getClass)
           list.foreach { t =>
             if (count > t.threshold) {
               t.action(count)
             }
           }
         }
-      }
+      }.getOrElse(WriteSkippedQueue)
+    } else {
+      WriteSkippedQueue
     }
+  }
+
+  def removeAllByIndexValues[T](klass: Class[T], index: String, indexValues: Iterable[_]): Boolean =
+    removeAllByIndexValues(klass, index, indexValues.asJavaCollection)
+
+  override def removeAllByIndexValues[T](
+      klass: Class[T],
+      index: String,
+      indexValues: Collection[_]): Boolean = {
+    store.removeAllByIndexValues(klass, index, indexValues)
   }
 
   override def delete(klass: Class[_], naturalKey: Any): Unit = store.delete(klass, naturalKey)
@@ -157,4 +197,15 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
       threshold: Long,
       action: Long => Unit)
 
+}
+
+private[spark] object ElementTrackingStore {
+  /**
+   * This trait is solely to assist testing the correctness of single-fire execution
+   * The result of write() is otherwise unused.
+   */
+  sealed trait WriteQueueResult
+
+  object WriteQueued extends WriteQueueResult
+  object WriteSkippedQueue extends WriteQueueResult
 }

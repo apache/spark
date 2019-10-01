@@ -26,25 +26,14 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, _}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestBase {
+class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestBase
+    with ExpressionEvalHelper {
 
   private def roundedSize(size: Int) = ByteArrayMethods.roundNumberOfBytesToNearestWord(size)
-
-  private def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
-    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
-    for (fallbackMode <- modes) {
-      test(s"$name with $fallbackMode") {
-        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
-          f
-        }
-      }
-    }
-  }
 
   testBothCodegenAndInterpreted("basic conversion with only primitive types") {
     val factory = UnsafeProjection
@@ -255,22 +244,6 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     assert(setToNullAfterCreation.getDecimal(11, 38, 18) ===
       rowWithNoNullColumns.getDecimal(11, 38, 18))
     // assert(setToNullAfterCreation.get(11) === rowWithNoNullColumns.get(11))
-  }
-
-  testBothCodegenAndInterpreted("NaN canonicalization") {
-    val factory = UnsafeProjection
-    val fieldTypes: Array[DataType] = Array(FloatType, DoubleType)
-
-    val row1 = new SpecificInternalRow(fieldTypes)
-    row1.setFloat(0, java.lang.Float.intBitsToFloat(0x7f800001))
-    row1.setDouble(1, java.lang.Double.longBitsToDouble(0x7ff0000000000001L))
-
-    val row2 = new SpecificInternalRow(fieldTypes)
-    row2.setFloat(0, java.lang.Float.intBitsToFloat(0x7fffffff))
-    row2.setDouble(1, java.lang.Double.longBitsToDouble(0x7fffffffffffffffL))
-
-    val converter = factory.create(fieldTypes)
-    assert(converter.apply(row1).getBytes === converter.apply(row2).getBytes)
   }
 
   testBothCodegenAndInterpreted("basic conversion with struct type") {
@@ -545,5 +518,92 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
 
     assert(unsafeRow.getSizeInBytes ==
       8 + 8 * 2 + roundedSize(field1.getSizeInBytes) + roundedSize(field2.getSizeInBytes))
+  }
+
+  testBothCodegenAndInterpreted("SPARK-25374 converts back into safe representation") {
+    def convertBackToInternalRow(inputRow: InternalRow, fields: Array[DataType]): InternalRow = {
+      val unsafeProj = UnsafeProjection.create(fields)
+      val unsafeRow = unsafeProj(inputRow)
+      val safeProj = SafeProjection.create(fields)
+      safeProj(unsafeRow)
+    }
+
+    // Simple tests
+    val inputRow = InternalRow.fromSeq(Seq(
+      false, 3.toByte, 15.toShort, -83, 129L, 1.0f, 8.0, UTF8String.fromString("test"),
+      Decimal(255), CalendarInterval.fromString("interval 1 day"), Array[Byte](1, 2)
+    ))
+    val fields1 = Array(
+      BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
+      DoubleType, StringType, DecimalType.defaultConcreteType, CalendarIntervalType,
+      BinaryType)
+
+    assert(convertBackToInternalRow(inputRow, fields1) === inputRow)
+
+    // Array tests
+    val arrayRow = InternalRow.fromSeq(Seq(
+      createArray(1, 2, 3),
+      createArray(
+        createArray(Seq("a", "b", "c").map(UTF8String.fromString): _*),
+        createArray(Seq("d").map(UTF8String.fromString): _*))
+    ))
+    val fields2 = Array[DataType](
+      ArrayType(IntegerType),
+      ArrayType(ArrayType(StringType)))
+
+    assert(convertBackToInternalRow(arrayRow, fields2) === arrayRow)
+
+    // Struct tests
+    val structRow = InternalRow.fromSeq(Seq(
+      InternalRow.fromSeq(Seq[Any](1, 4.0)),
+      InternalRow.fromSeq(Seq(
+        UTF8String.fromString("test"),
+        InternalRow.fromSeq(Seq(
+          1,
+          createArray(Seq("2", "3").map(UTF8String.fromString): _*)
+        ))
+      ))
+    ))
+    val fields3 = Array[DataType](
+      StructType(
+        StructField("c0", IntegerType) ::
+        StructField("c1", DoubleType) ::
+        Nil),
+      StructType(
+        StructField("c2", StringType) ::
+        StructField("c3", StructType(
+          StructField("c4", IntegerType) ::
+          StructField("c5", ArrayType(StringType)) ::
+          Nil)) ::
+        Nil))
+
+    assert(convertBackToInternalRow(structRow, fields3) === structRow)
+
+    // Map tests
+    val mapRow = InternalRow.fromSeq(Seq(
+      createMap(Seq("k1", "k2").map(UTF8String.fromString): _*)(1, 2),
+      createMap(
+        createMap(3, 5)(Seq("v1", "v2").map(UTF8String.fromString): _*),
+        createMap(7, 9)(Seq("v3", "v4").map(UTF8String.fromString): _*)
+      )(
+        createMap(Seq("k3", "k4").map(UTF8String.fromString): _*)(3.toShort, 4.toShort),
+        createMap(Seq("k5", "k6").map(UTF8String.fromString): _*)(5.toShort, 6.toShort)
+      )))
+    val fields4 = Array[DataType](
+      MapType(StringType, IntegerType),
+      MapType(MapType(IntegerType, StringType), MapType(StringType, ShortType)))
+
+    val mapResultRow = convertBackToInternalRow(mapRow, fields4)
+    val mapExpectedRow = mapRow
+    checkResult(mapExpectedRow, mapResultRow,
+      exprDataType = StructType(fields4.zipWithIndex.map(f => StructField(s"c${f._2}", f._1))),
+      exprNullable = false)
+
+    // UDT tests
+    val vector = new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))
+    val udt = new TestUDT.MyDenseVectorUDT()
+    val udtRow = InternalRow.fromSeq(Seq(udt.serialize(vector)))
+    val fields5 = Array[DataType](udt)
+    assert(convertBackToInternalRow(udtRow, fields5) === udtRow)
   }
 }

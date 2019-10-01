@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 import java.net.{URL, URLClassLoader}
-import java.nio.charset.StandardCharsets
-import java.sql.Timestamp
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -28,13 +26,13 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
+import org.apache.hive.common.util.HiveVersionInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -57,12 +55,16 @@ private[spark] object HiveUtils extends Logging {
     sc
   }
 
+  private val hiveVersion = HiveVersionInfo.getVersion
+  val isHive23: Boolean = hiveVersion.startsWith("2.3")
+
   /** The version of hive used internally by Spark SQL. */
-  val builtinHiveVersion: String = "1.2.1"
+  val builtinHiveVersion: String = if (isHive23) hiveVersion else "1.2.1"
 
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        s"<code>0.12.0</code> through <code>2.3.3</code>.")
+        "<code>0.12.0</code> through <code>2.3.6</code> and " +
+        "<code>3.0.0</code> through <code>3.1.2</code>.")
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
@@ -107,6 +109,23 @@ private[spark] object HiveUtils extends Logging {
   val CONVERT_METASTORE_ORC = buildConf("spark.sql.hive.convertMetastoreOrc")
     .doc("When set to true, the built-in ORC reader and writer are used to process " +
       "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val CONVERT_INSERTING_PARTITIONED_TABLE =
+    buildConf("spark.sql.hive.convertInsertingPartitionedTable")
+      .doc("When set to true, and `spark.sql.hive.convertMetastoreParquet` or " +
+        "`spark.sql.hive.convertMetastoreOrc` is true, the built-in ORC/Parquet writer is used" +
+        "to process inserting into partitioned ORC/Parquet tables created by using the HiveSQL " +
+        "syntax.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val CONVERT_METASTORE_CTAS = buildConf("spark.sql.hive.convertMetastoreCtas")
+    .doc("When set to true,  Spark will try to use built-in data source writer " +
+      "instead of Hive serde in CTAS. This flag is effective only if " +
+      "`spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is " +
+      "enabled respectively for Parquet and ORC formats")
     .booleanConf
     .createWithDefault(true)
 
@@ -188,7 +207,7 @@ private[spark] object HiveUtils extends Logging {
     //
     // Here we enumerate all time `ConfVar`s and convert their values to numeric strings according
     // to their output time units.
-    Seq(
+    val commonTimeVars = Seq(
       ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY -> TimeUnit.SECONDS,
       ConfVars.METASTORE_CLIENT_SOCKET_TIMEOUT -> TimeUnit.SECONDS,
       ConfVars.METASTORE_CLIENT_SOCKET_LIFETIME -> TimeUnit.SECONDS,
@@ -201,8 +220,6 @@ private[spark] object HiveUtils extends Logging {
       ConfVars.METASTORE_AGGREGATE_STATS_CACHE_MAX_READER_WAIT -> TimeUnit.MILLISECONDS,
       ConfVars.HIVES_AUTO_PROGRESS_TIMEOUT -> TimeUnit.SECONDS,
       ConfVars.HIVE_LOG_INCREMENTAL_PLAN_PROGRESS_INTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_STATS_JDBC_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_STATS_RETRIES_WAIT -> TimeUnit.MILLISECONDS,
       ConfVars.HIVE_LOCK_SLEEP_BETWEEN_RETRIES -> TimeUnit.SECONDS,
       ConfVars.HIVE_ZOOKEEPER_SESSION_TIMEOUT -> TimeUnit.MILLISECONDS,
       ConfVars.HIVE_ZOOKEEPER_CONNECTION_BASESLEEPTIME -> TimeUnit.MILLISECONDS,
@@ -230,7 +247,18 @@ private[spark] object HiveUtils extends Logging {
       ConfVars.SPARK_RPC_CLIENT_HANDSHAKE_TIMEOUT -> TimeUnit.MILLISECONDS
     ).map { case (confVar, unit) =>
       confVar.varname -> HiveConf.getTimeVar(hadoopConf, confVar, unit).toString
-    }.toMap
+    }
+
+    // The following configurations were removed by HIVE-12164(Hive 2.0)
+    val hardcodingTimeVars = Seq(
+      ("hive.stats.jdbc.timeout", "30s") -> TimeUnit.SECONDS,
+      ("hive.stats.retries.wait", "3000ms") -> TimeUnit.MILLISECONDS
+    ).map { case ((key, defaultValue), unit) =>
+      val value = hadoopConf.get(key, defaultValue)
+      key -> HiveConf.toTime(value, unit, unit).toString
+    }
+
+    (commonTimeVars ++ hardcodingTimeVars).toMap
   }
 
   /**
@@ -252,7 +280,7 @@ private[spark] object HiveUtils extends Logging {
   /**
    * Create a [[HiveClient]] used for execution.
    *
-   * Currently this must always be Hive 13 as this is the version of Hive that is packaged
+   * Currently this must always be the Hive built-in version that packaged
    * with Spark SQL. This copy of the client is used for execution related tasks like
    * registering temporary functions or ensuring that the ThreadLocal SessionState is
    * correctly populated.  This copy of Hive is *not* used for storing persistent metadata,
@@ -319,11 +347,20 @@ private[spark] object HiveUtils extends Logging {
       }
 
       val classLoader = Utils.getContextOrSparkClassLoader
-      val jars = allJars(classLoader)
-      if (jars.length == 0) {
-        throw new IllegalArgumentException(
-          "Unable to locate hive jars to connect to metastore. " +
-            s"Please set ${HIVE_METASTORE_JARS.key}.")
+      val jars: Array[URL] = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+        // Do nothing. The system classloader is no longer a URLClassLoader in Java 9,
+        // so it won't match the case in allJars. It no longer exposes URLs of
+        // the system classpath
+        Array.empty[URL]
+      } else {
+        val loadedJars = allJars(classLoader)
+        // Verify at least one jar was found
+        if (loadedJars.length == 0) {
+          throw new IllegalArgumentException(
+            "Unable to locate hive jars to connect to metastore. " +
+              s"Please set ${HIVE_METASTORE_JARS.key}.")
+        }
+        loadedJars
       }
 
       logInfo(
@@ -405,6 +442,13 @@ private[spark] object HiveUtils extends Logging {
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
 
+    // Disable schema verification and allow schema auto-creation in the
+    // Derby database, in case the config for the metastore is set otherwise.
+    // Without these settings, starting the client fails with
+    // MetaException(message:Version information not found in metastore.)
+    propMap.put("hive.metastore.schema.verification", "false")
+    propMap.put("datanucleus.schema.autoCreateAll", "true")
+
     // SPARK-11783: When "hive.metastore.uris" is set, the metastore connection mode will be
     // remote (https://cwiki.apache.org/confluence/display/Hive/AdminManual+MetastoreAdmin
     // mentions that "If hive.metastore.uris is empty local mode is assumed, remote otherwise").
@@ -432,54 +476,9 @@ private[spark] object HiveUtils extends Logging {
     // Configuration. But it happens before SparkContext initialized, we need to take them from
     // system properties in the form of regular hadoop configurations.
     SparkHadoopUtil.get.appendSparkHadoopConfigs(sys.props.toMap, propMap)
+    SparkHadoopUtil.get.appendSparkHiveConfigs(sys.props.toMap, propMap)
 
     propMap.toMap
-  }
-
-  protected val primitiveTypes =
-    Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-      ShortType, DateType, TimestampType, BinaryType)
-
-  protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
-    case (struct: Row, StructType(fields)) =>
-      struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
-      }.mkString("{", ",", "}")
-    case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-    case (map: Map[_, _], MapType(kType, vType, _)) =>
-      map.map {
-        case (key, value) =>
-          toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-      }.toSeq.sorted.mkString("{", ",", "}")
-    case (null, _) => "NULL"
-    case (d: Int, DateType) => new DateWritable(d).toString
-    case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
-    case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
-    case (decimal: java.math.BigDecimal, DecimalType()) =>
-      // Hive strips trailing zeros so use its toString
-      HiveDecimal.create(decimal).toString
-    case (other, _ : UserDefinedType[_]) => other.toString
-    case (other, tpe) if primitiveTypes contains tpe => other.toString
-  }
-
-  /** Hive outputs fields of structs slightly differently than top level attributes. */
-  protected def toHiveStructString(a: (Any, DataType)): String = a match {
-    case (struct: Row, StructType(fields)) =>
-      struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
-      }.mkString("{", ",", "}")
-    case (seq: Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-    case (map: Map[_, _], MapType(kType, vType, _)) =>
-      map.map {
-        case (key, value) =>
-          toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-      }.toSeq.sorted.mkString("{", ",", "}")
-    case (null, _) => "null"
-    case (s: String, StringType) => "\"" + s + "\""
-    case (decimal, DecimalType()) => decimal.toString
-    case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 
   /**

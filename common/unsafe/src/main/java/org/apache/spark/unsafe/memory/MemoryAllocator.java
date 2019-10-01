@@ -38,7 +38,7 @@ public interface MemoryAllocator {
 
   void free(MemoryBlock memory);
 
-  UnsafeMemoryAllocator UNSAFE = new UnsafeMemoryAllocator();
+  MemoryAllocator UNSAFE = new UnsafeMemoryAllocator();
 
-  HeapMemoryAllocator HEAP = new HeapMemoryAllocator();
+  MemoryAllocator HEAP = new HeapMemoryAllocator();
 }

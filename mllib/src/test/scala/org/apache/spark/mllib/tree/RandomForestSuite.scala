@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
  * Test suite for [[RandomForest]].
  */
 class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
-  def binaryClassificationTestWithContinuousFeatures(strategy: Strategy) {
+  def binaryClassificationTestWithContinuousFeatures(strategy: Strategy): Unit = {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
     val rdd = sc.parallelize(arr)
     val numTrees = 1
@@ -68,7 +68,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     binaryClassificationTestWithContinuousFeatures(strategy)
   }
 
-  def regressionTestWithContinuousFeatures(strategy: Strategy) {
+  def regressionTestWithContinuousFeatures(strategy: Strategy): Unit = {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
     val rdd = sc.parallelize(arr)
     val numTrees = 1

@@ -27,11 +27,11 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.TestUtils
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
-class TextSuite extends QueryTest with SharedSQLContext {
+class TextSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("reading text file") {
@@ -232,5 +232,14 @@ class TextSuite extends QueryTest with SharedSQLContext {
     // scalastyle:on nonascii
     assert(data(3) == Row("\"doh\""))
     assert(data.length == 4)
+  }
+
+  test("do not produce empty files for empty partitions") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.emptyDataset[String].write.text(path)
+      val files = new File(path).listFiles()
+      assert(!files.exists(_.getName.endsWith("txt")))
+    }
   }
 }

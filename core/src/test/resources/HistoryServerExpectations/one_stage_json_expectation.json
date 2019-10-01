@@ -8,21 +8,34 @@
   "numFailedTasks" : 0,
   "numKilledTasks" : 0,
   "numCompletedIndices" : 8,
-  "executorRunTime" : 3476,
-  "executorCpuTime" : 0,
   "submissionTime" : "2015-02-03T16:43:05.829GMT",
   "firstTaskLaunchedTime" : "2015-02-03T16:43:05.829GMT",
   "completionTime" : "2015-02-03T16:43:06.286GMT",
+  "executorDeserializeTime" : 13,
+  "executorDeserializeCpuTime" : 0,
+  "executorRunTime" : 3476,
+  "executorCpuTime" : 0,
+  "resultSize" : 15216,
+  "jvmGcTime" : 152,
+  "resultSerializationTime" : 9,
+  "memoryBytesSpilled" : 0,
+  "diskBytesSpilled" : 0,
+  "peakExecutionMemory" : 0,
   "inputBytes" : 28000128,
   "inputRecords" : 0,
   "outputBytes" : 0,
   "outputRecords" : 0,
+  "shuffleRemoteBlocksFetched" : 0,
+  "shuffleLocalBlocksFetched" : 0,
+  "shuffleFetchWaitTime" : 0,
+  "shuffleRemoteBytesRead" : 0,
+  "shuffleRemoteBytesReadToDisk" : 0,
+  "shuffleLocalBytesRead" : 0,
   "shuffleReadBytes" : 0,
   "shuffleReadRecords" : 0,
   "shuffleWriteBytes" : 13180,
+  "shuffleWriteTime" : 692000,
   "shuffleWriteRecords" : 0,
-  "memoryBytesSpilled" : 0,
-  "diskBytesSpilled" : 0,
   "name" : "map at <console>:14",
   "details" : "org.apache.spark.rdd.RDD.map(RDD.scala:271)\n$line10.$read$$iwC$$iwC$$iwC$$iwC.<init>(<console>:14)\n$line10.$read$$iwC$$iwC$$iwC.<init>(<console>:19)\n$line10.$read$$iwC$$iwC.<init>(<console>:21)\n$line10.$read$$iwC.<init>(<console>:23)\n$line10.$read.<init>(<console>:25)\n$line10.$read$.<init>(<console>:29)\n$line10.$read$.<clinit>(<console>)\n$line10.$eval$.<init>(<console>:7)\n$line10.$eval$.<clinit>(<console>)\n$line10.$eval.$print(<console>)\nsun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\nsun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:57)\nsun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)\njava.lang.reflect.Method.invoke(Method.java:606)\norg.apache.spark.repl.SparkIMain$ReadEvalPrint.call(SparkIMain.scala:852)\norg.apache.spark.repl.SparkIMain$Request.loadAndRun(SparkIMain.scala:1125)\norg.apache.spark.repl.SparkIMain.loadAndRunReq$1(SparkIMain.scala:674)\norg.apache.spark.repl.SparkIMain.interpret(SparkIMain.scala:705)\norg.apache.spark.repl.SparkIMain.interpret(SparkIMain.scala:669)",
   "schedulingPool" : "default",
@@ -35,7 +48,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.830GMT",
       "duration" : 456,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -74,7 +87,10 @@
           "writeTime" : 76000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 19,
+      "gettingResultTime" : 0
     },
     "14" : {
       "taskId" : 14,
@@ -82,7 +98,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.832GMT",
       "duration" : 450,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -121,7 +137,10 @@
           "writeTime" : 88000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 13,
+      "gettingResultTime" : 0
     },
     "9" : {
       "taskId" : 9,
@@ -129,7 +148,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.830GMT",
       "duration" : 454,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -168,7 +187,10 @@
           "writeTime" : 98000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 17,
+      "gettingResultTime" : 0
     },
     "13" : {
       "taskId" : 13,
@@ -176,7 +198,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.831GMT",
       "duration" : 452,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -215,7 +237,10 @@
           "writeTime" : 73000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 14,
+      "gettingResultTime" : 0
     },
     "12" : {
       "taskId" : 12,
@@ -223,7 +248,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.831GMT",
       "duration" : 454,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -262,7 +287,10 @@
           "writeTime" : 101000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 17,
+      "gettingResultTime" : 0
     },
     "11" : {
       "taskId" : 11,
@@ -270,7 +298,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.830GMT",
       "duration" : 454,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -309,7 +337,10 @@
           "writeTime" : 83000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 17,
+      "gettingResultTime" : 0
     },
     "8" : {
       "taskId" : 8,
@@ -317,7 +348,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.829GMT",
       "duration" : 454,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -356,7 +387,10 @@
           "writeTime" : 94000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 16,
+      "gettingResultTime" : 0
     },
     "15" : {
       "taskId" : 15,
@@ -364,7 +398,7 @@
       "attempt" : 0,
       "launchTime" : "2015-02-03T16:43:05.833GMT",
       "duration" : 450,
-      "executorId" : "<driver>",
+      "executorId" : "driver",
       "host" : "localhost",
       "status" : "SUCCESS",
       "taskLocality" : "PROCESS_LOCAL",
@@ -403,11 +437,14 @@
           "writeTime" : 79000,
           "recordsWritten" : 0
         }
-      }
+      },
+      "executorLogs" : { },
+      "schedulerDelay" : 13,
+      "gettingResultTime" : 0
     }
   },
   "executorSummary" : {
-    "<driver>" : {
+    "driver" : {
       "taskTime" : 3624,
       "failedTasks" : 0,
       "succeededTasks" : 8,

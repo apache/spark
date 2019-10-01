@@ -20,7 +20,8 @@ package org.apache.spark.sql.avro
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -58,6 +59,7 @@ class AvroOptions(
    * If the option is not set, the Hadoop's config `avro.mapred.ignore.inputs.without.extension`
    * is taken into account. If the former one is not set too, file extensions are ignored.
    */
+  @deprecated("Use the general data source option pathGlobFilter for filtering file names", "3.0")
   val ignoreExtension: Boolean = {
     val ignoreFilesWithoutExtensionByDefault = false
     val ignoreFilesWithoutExtension = conf.getBoolean(
@@ -65,7 +67,7 @@ class AvroOptions(
       ignoreFilesWithoutExtensionByDefault)
 
     parameters
-      .get("ignoreExtension")
+      .get(AvroOptions.ignoreExtensionKey)
       .map(_.toBoolean)
       .getOrElse(!ignoreFilesWithoutExtension)
   }
@@ -79,4 +81,19 @@ class AvroOptions(
   val compression: String = {
     parameters.get("compression").getOrElse(SQLConf.get.avroCompressionCodec)
   }
+
+  val parseMode: ParseMode =
+    parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
+}
+
+object AvroOptions {
+  def apply(parameters: Map[String, String]): AvroOptions = {
+    val hadoopConf = SparkSession
+      .getActiveSession
+      .map(_.sessionState.newHadoopConf())
+      .getOrElse(new Configuration())
+    new AvroOptions(CaseInsensitiveMap(parameters), hadoopConf)
+  }
+
+  val ignoreExtensionKey = "ignoreExtension"
 }

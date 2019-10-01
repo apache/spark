@@ -24,6 +24,7 @@ import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import com.google.common.collect.ImmutableSet;
 import org.apache.commons.io.FileUtils;
 import org.iq80.leveldb.DBIterator;
 import org.junit.After;
@@ -199,6 +200,48 @@ public class LevelDBSuite {
   }
 
   @Test
+  public void testRemoveAll() throws Exception {
+    for (int i = 0; i < 2; i++) {
+      for (int j = 0; j < 2; j++) {
+        ArrayKeyIndexType o = new ArrayKeyIndexType();
+        o.key = new int[] { i, j, 0 };
+        o.id = new String[] { "things" };
+        db.write(o);
+
+        o = new ArrayKeyIndexType();
+        o.key = new int[] { i, j, 1 };
+        o.id = new String[] { "more things" };
+        db.write(o);
+      }
+    }
+
+    ArrayKeyIndexType o = new ArrayKeyIndexType();
+    o.key = new int[] { 2, 2, 2 };
+    o.id = new String[] { "things" };
+    db.write(o);
+
+    assertEquals(9, db.count(ArrayKeyIndexType.class));
+
+    db.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      KVIndex.NATURAL_INDEX_NAME,
+      ImmutableSet.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 }));
+    assertEquals(7, db.count(ArrayKeyIndexType.class));
+
+    db.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      "id",
+      ImmutableSet.of(new String[] { "things" }));
+    assertEquals(4, db.count(ArrayKeyIndexType.class));
+
+    db.removeAllByIndexValues(
+      ArrayKeyIndexType.class,
+      "id",
+      ImmutableSet.of(new String[] { "more things" }));
+    assertEquals(0, db.count(ArrayKeyIndexType.class));
+  }
+
+  @Test
   public void testSkip() throws Exception {
     for (int i = 0; i < 10; i++) {
       db.write(createCustomType1(i));
@@ -217,7 +260,7 @@ public class LevelDBSuite {
   public void testNegativeIndexValues() throws Exception {
     List<Integer> expected = Arrays.asList(-100, -50, 0, 50, 100);
 
-    expected.stream().forEach(i -> {
+    expected.forEach(i -> {
       try {
         db.write(createCustomType1(i));
       } catch (Exception e) {

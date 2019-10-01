@@ -22,21 +22,21 @@ import org.apache.spark.sql.types.StructType.fromDDL
 
 class StructTypeSuite extends SparkFunSuite {
 
-  val s = StructType.fromDDL("a INT, b STRING")
+  private val s = StructType.fromDDL("a INT, b STRING")
 
   test("lookup a single missing field should output existing fields") {
     val e = intercept[IllegalArgumentException](s("c")).getMessage
-    assert(e.contains("Available fields: a, b"))
+    assert(e.contains("Available: a, b"))
   }
 
   test("lookup a set of missing fields should output existing fields") {
     val e = intercept[IllegalArgumentException](s(Set("a", "c"))).getMessage
-    assert(e.contains("Available fields: a, b"))
+    assert(e.contains("Available: a, b"))
   }
 
   test("lookup fieldIndex for missing field should output existing fields") {
     val e = intercept[IllegalArgumentException](s.fieldIndex("c")).getMessage
-    assert(e.contains("Available fields: a, b"))
+    assert(e.contains("Available: a, b"))
   }
 
   test("SPARK-24849: toDDL - simple struct") {
@@ -69,5 +69,22 @@ class StructTypeSuite extends SparkFunSuite {
       StructField("b", BooleanType).withComment("Field's comment")))
 
     assert(struct.toDDL == """`b` BOOLEAN COMMENT 'Field\'s comment'""")
+  }
+
+
+  test("Print up to the given level") {
+    val schema = StructType.fromDDL(
+      "c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
+
+    assert(5 == schema.treeString(2).split("\n").length)
+    assert(3 == schema.treeString(1).split("\n").length)
+    assert(7 == schema.treeString.split("\n").length)
+    assert(7 == schema.treeString(0).split("\n").length)
+    assert(7 == schema.treeString(-1).split("\n").length)
+  }
+
+  test("interval keyword in schema string") {
+    val interval = "`a` INTERVAL"
+    assert(fromDDL(interval).toDDL === interval)
   }
 }

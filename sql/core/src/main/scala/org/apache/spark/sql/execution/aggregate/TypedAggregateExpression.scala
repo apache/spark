@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.language.existentials
-
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
@@ -38,18 +36,14 @@ object TypedAggregateExpression {
     val bufferSerializer = bufferEncoder.namedExpressions
 
     val outputEncoder = encoderFor[OUT]
-    val outputType = if (outputEncoder.flat) {
-      outputEncoder.schema.head.dataType
-    } else {
-      outputEncoder.schema
-    }
+    val outputType = outputEncoder.objSerializer.dataType
 
-    // Checks if the buffer object is simple, i.e. the buffer encoder is flat and the serializer
-    // expression is an alias of `BoundReference`, which means the buffer object doesn't need
-    // serialization.
+    // Checks if the buffer object is simple, i.e. the `BUF` type is not serialized as struct
+    // and the serializer expression is an alias of `BoundReference`, which means the buffer
+    // object doesn't need serialization.
     val isSimpleBuffer = {
       bufferSerializer.head match {
-        case Alias(_: BoundReference, _) if bufferEncoder.flat => true
+        case Alias(_: BoundReference, _) if !bufferEncoder.isSerializedAsStruct => true
         case _ => false
       }
     }
@@ -57,9 +51,8 @@ object TypedAggregateExpression {
     // If the buffer object is simple, use `SimpleTypedAggregateExpression`, which supports whole
     // stage codegen.
     if (isSimpleBuffer) {
-      val bufferDeserializer = UnresolvedDeserializer(
-        bufferEncoder.deserializer,
-        bufferSerializer.map(_.toAttribute))
+      val bufferAttrs = bufferSerializer.map(_.toAttribute)
+      val bufferDeserializer = UnresolvedDeserializer(bufferEncoder.deserializer, bufferAttrs)
 
       SimpleTypedAggregateExpression(
         aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
@@ -67,11 +60,12 @@ object TypedAggregateExpression {
         None,
         None,
         bufferSerializer,
+        bufferAttrs.map(_.asInstanceOf[AttributeReference]),
         bufferDeserializer,
         outputEncoder.serializer,
         outputEncoder.deserializer.dataType,
         outputType,
-        !outputEncoder.flat || outputEncoder.schema.head.nullable)
+        outputEncoder.objSerializer.nullable)
     } else {
       ComplexTypedAggregateExpression(
         aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
@@ -80,9 +74,9 @@ object TypedAggregateExpression {
         None,
         bufferSerializer,
         bufferEncoder.resolveAndBind().deserializer,
-        outputEncoder.serializer,
+        outputEncoder.objSerializer,
         outputType,
-        !outputEncoder.flat || outputEncoder.schema.head.nullable)
+        outputEncoder.objSerializer.nullable)
     }
   }
 }
@@ -122,7 +116,8 @@ case class SimpleTypedAggregateExpression(
     inputDeserializer: Option[Expression],
     inputClass: Option[Class[_]],
     inputSchema: Option[StructType],
-    bufferSerializer: Seq[NamedExpression],
+    bufferSerializer: Seq[Expression],
+    aggBufferAttributes: Seq[AttributeReference],
     bufferDeserializer: Expression,
     outputSerializer: Seq[Expression],
     outputExternalType: DataType,
@@ -132,7 +127,10 @@ case class SimpleTypedAggregateExpression(
 
   override lazy val deterministic: Boolean = true
 
-  override def children: Seq[Expression] = inputDeserializer.toSeq :+ bufferDeserializer
+  override def children: Seq[Expression] = {
+    inputDeserializer.toSeq ++ bufferSerializer ++ aggBufferAttributes ++
+      Seq(bufferDeserializer) ++ outputSerializer
+  }
 
   override lazy val resolved: Boolean = inputDeserializer.isDefined && childrenResolved
 
@@ -142,9 +140,6 @@ case class SimpleTypedAggregateExpression(
     Literal.create(aggregator, ObjectType(classOf[Aggregator[Any, Any, Any]]))
 
   private def bufferExternalType = bufferDeserializer.dataType
-
-  override lazy val aggBufferAttributes: Seq[AttributeReference] =
-    bufferSerializer.map(_.toAttribute.asInstanceOf[AttributeReference])
 
   private def serializeToBuffer(expr: Expression): Seq[Expression] = {
     bufferSerializer.map(_.transform {
@@ -215,9 +210,9 @@ case class ComplexTypedAggregateExpression(
     inputDeserializer: Option[Expression],
     inputClass: Option[Class[_]],
     inputSchema: Option[StructType],
-    bufferSerializer: Seq[NamedExpression],
+    bufferSerializer: Seq[Expression],
     bufferDeserializer: Expression,
-    outputSerializer: Seq[Expression],
+    outputSerializer: Expression,
     dataType: DataType,
     nullable: Boolean,
     mutableAggBufferOffset: Int = 0,
@@ -226,7 +221,9 @@ case class ComplexTypedAggregateExpression(
 
   override lazy val deterministic: Boolean = true
 
-  override def children: Seq[Expression] = inputDeserializer.toSeq
+  override def children: Seq[Expression] = {
+    inputDeserializer.toSeq ++ bufferSerializer :+ bufferDeserializer :+ outputSerializer
+  }
 
   override lazy val resolved: Boolean = inputDeserializer.isDefined && childrenResolved
 
@@ -249,13 +246,7 @@ case class ComplexTypedAggregateExpression(
     aggregator.merge(buffer, input)
   }
 
-  private lazy val resultObjToRow = dataType match {
-    case _: StructType =>
-      UnsafeProjection.create(CreateStruct(outputSerializer))
-    case _ =>
-      assert(outputSerializer.length == 1)
-      UnsafeProjection.create(outputSerializer.head)
-  }
+  private lazy val resultObjToRow = UnsafeProjection.create(outputSerializer)
 
   override def eval(buffer: Any): Any = {
     val resultObj = aggregator.finish(buffer)

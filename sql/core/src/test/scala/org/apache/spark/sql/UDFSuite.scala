@@ -17,22 +17,26 @@
 
 package org.apache.spark.sql
 
+import java.math.BigDecimal
+
 import org.apache.spark.sql.api.java._
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.functions.{lit, udf}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
-import org.apache.spark.sql.types.{DataTypes, DoubleType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.QueryExecutionListener
 
 
 private case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest with SharedSQLContext {
+class UDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("built-in fixed arity expressions") {
@@ -313,9 +317,9 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val udf2Name = "myUdf2"
     val udf1 = spark.udf.register(udf1Name, (n: Int) => n + 1)
     val udf2 = spark.udf.register(udf2Name, (n: Int) => n * 1)
-    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"$udf1Name($udf2Name(1))"))
     assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
-      .contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+      .contains(s"$udf1Name($udf2Name(1))"))
   }
 
   test("SPARK-23666 Do not display exprId in argument names") {
@@ -326,7 +330,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       Console.withOut(outputStream) {
         spark.sql("SELECT f(a._1) FROM x").show
       }
-      assert(outputStream.toString.contains("UDF:f(a._1 AS `_1`)"))
+      assert(outputStream.toString.contains("f(a._1 AS `_1`)"))
     }
   }
 
@@ -335,7 +339,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       withTempPath { path =>
         var numTotalCachedHit = 0
         val listener = new QueryExecutionListener {
-          override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = {}
+          override def onFailure(f: String, qe: QueryExecution, e: Throwable): Unit = {}
 
           override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
             qe.withCachedData match {
@@ -356,10 +360,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
           .withColumn("b", udf1($"a", lit(10)))
         df.cache()
         df.write.saveAsTable("t")
+        sparkContext.listenerBus.waitUntilEmpty()
         assert(numTotalCachedHit == 1, "expected to be cached in saveAsTable")
         df.write.insertInto("t")
+        sparkContext.listenerBus.waitUntilEmpty()
         assert(numTotalCachedHit == 2, "expected to be cached in insertInto")
         df.write.save(path.getCanonicalPath)
+        sparkContext.listenerBus.waitUntilEmpty()
         assert(numTotalCachedHit == 3, "expected to be cached in save for native")
       }
     }
@@ -392,5 +399,147 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       comparePlans(df.logicalPlan, plan)
       checkAnswer(df, Seq(Row("12"), Row("24"), Row("3null"), Row(null)))
     }
+  }
+
+  test("SPARK-25044 Verify null input handling for primitive types - with udf()") {
+    val input = Seq(
+      (null, Integer.valueOf(1), "x"),
+      ("M", null, "y"),
+      ("N", Integer.valueOf(3), null)).toDF("a", "b", "c")
+
+    val udf1 = udf((a: String, b: Int, c: Any) => a + b + c)
+    val df = input.select(udf1('a, 'b, 'c))
+    checkAnswer(df, Seq(Row("null1x"), Row(null), Row("N3null")))
+
+    // test Java UDF. Java UDF can't have primitive inputs, as it's generic typed.
+    val udf2 = udf(new UDF3[String, Integer, Object, String] {
+      override def call(t1: String, t2: Integer, t3: Object): String = {
+        t1 + t2 + t3
+      }
+    }, StringType)
+    val df2 = input.select(udf2('a, 'b, 'c))
+    checkAnswer(df2, Seq(Row("null1x"), Row("Mnully"), Row("N3null")))
+  }
+
+  test("SPARK-25044 Verify null input handling for primitive types - with udf.register") {
+    withTable("t") {
+      Seq((null, Integer.valueOf(1), "x"), ("M", null, "y"), ("N", Integer.valueOf(3), null))
+        .toDF("a", "b", "c").write.format("json").saveAsTable("t")
+      spark.udf.register("f", (a: String, b: Int, c: Any) => a + b + c)
+      val df = spark.sql("SELECT f(a, b, c) FROM t")
+      checkAnswer(df, Seq(Row("null1x"), Row(null), Row("N3null")))
+
+      // test Java UDF. Java UDF can't have primitive inputs, as it's generic typed.
+      spark.udf.register("f2", new UDF3[String, Integer, Object, String] {
+        override def call(t1: String, t2: Integer, t3: Object): String = {
+          t1 + t2 + t3
+        }
+      }, StringType)
+      val df2 = spark.sql("SELECT f2(a, b, c) FROM t")
+      checkAnswer(df2, Seq(Row("null1x"), Row("Mnully"), Row("N3null")))
+    }
+  }
+
+  test("SPARK-25044 Verify null input handling for primitive types - with udf(Any, DataType)") {
+    val f = udf((x: Int) => x, IntegerType)
+    checkAnswer(
+      Seq(new Integer(1), null).toDF("x").select(f($"x")),
+      Row(1) :: Row(0) :: Nil)
+
+    val f2 = udf((x: Double) => x, DoubleType)
+    checkAnswer(
+      Seq(new java.lang.Double(1.1), null).toDF("x").select(f2($"x")),
+      Row(1.1) :: Row(0.0) :: Nil)
+
+  }
+
+  test("SPARK-26308: udf with decimal") {
+    val df1 = spark.createDataFrame(
+      sparkContext.parallelize(Seq(Row(new BigDecimal("2011000000000002456556")))),
+      StructType(Seq(StructField("col1", DecimalType(30, 0)))))
+    val udf1 = org.apache.spark.sql.functions.udf((value: BigDecimal) => {
+      if (value == null) null else value.toBigInteger.toString
+    })
+    checkAnswer(df1.select(udf1(df1.col("col1"))), Seq(Row("2011000000000002456556")))
+  }
+
+  test("SPARK-26308: udf with complex types of decimal") {
+    val df1 = spark.createDataFrame(
+      sparkContext.parallelize(Seq(Row(Array(new BigDecimal("2011000000000002456556"))))),
+      StructType(Seq(StructField("col1", ArrayType(DecimalType(30, 0))))))
+    val udf1 = org.apache.spark.sql.functions.udf((arr: Seq[BigDecimal]) => {
+      arr.map(value => if (value == null) null else value.toBigInteger.toString)
+    })
+    checkAnswer(df1.select(udf1($"col1")), Seq(Row(Array("2011000000000002456556"))))
+
+    val df2 = spark.createDataFrame(
+      sparkContext.parallelize(Seq(Row(Map("a" -> new BigDecimal("2011000000000002456556"))))),
+      StructType(Seq(StructField("col1", MapType(StringType, DecimalType(30, 0))))))
+    val udf2 = org.apache.spark.sql.functions.udf((map: Map[String, BigDecimal]) => {
+      map.mapValues(value => if (value == null) null else value.toBigInteger.toString)
+    })
+    checkAnswer(df2.select(udf2($"col1")), Seq(Row(Map("a" -> "2011000000000002456556"))))
+  }
+
+  test("SPARK-26323 Verify input type check - with udf()") {
+    val f = udf((x: Long, y: Any) => x)
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j").select(f($"i", $"j"))
+    checkAnswer(df, Seq(Row(1L), Row(2L)))
+  }
+
+  test("SPARK-26323 Verify input type check - with udf.register") {
+    withTable("t") {
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.format("json").saveAsTable("t")
+      spark.udf.register("f", (x: Long, y: Any) => x)
+      val df = spark.sql("SELECT f(i, j) FROM t")
+      checkAnswer(df, Seq(Row(1L), Row(2L)))
+    }
+  }
+
+  test("Using java.time.Instant in UDF") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val expected = java.time.Instant.parse("2019-02-27T00:00:00Z")
+      val plusSec = udf((i: java.time.Instant) => i.plusSeconds(1))
+      val df = spark.sql("SELECT TIMESTAMP '2019-02-26 23:59:59Z' as t")
+        .select(plusSec('t))
+      assert(df.collect().toSeq === Seq(Row(expected)))
+    }
+  }
+
+  test("Using java.time.LocalDate in UDF") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val expected = java.time.LocalDate.parse("2019-02-27")
+      val plusDay = udf((i: java.time.LocalDate) => i.plusDays(1))
+      val df = spark.sql("SELECT DATE '2019-02-26' as d")
+        .select(plusDay('d))
+      assert(df.collect().toSeq === Seq(Row(expected)))
+    }
+  }
+
+  test("SPARK-28321 0-args Java UDF should not be called only once") {
+    val nonDeterministicJavaUDF = udf(
+      new UDF0[Int] {
+        override def call(): Int = scala.util.Random.nextInt()
+      }, IntegerType).asNondeterministic()
+
+    assert(spark.range(2).select(nonDeterministicJavaUDF()).distinct().count() == 2)
+  }
+
+  test("Replace _FUNC_ in UDF ExpressionInfo") {
+    val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("upper"))
+    assert(info.getName === "upper")
+    assert(info.getClassName === "org.apache.spark.sql.catalyst.expressions.Upper")
+    assert(info.getUsage === "upper(str) - Returns `str` with all characters changed to uppercase.")
+    assert(info.getExamples.contains("> SELECT upper('SparkSql');"))
+    assert(info.getSince === "1.0.1")
+    assert(info.getNote === "")
+    assert(info.getExtended.contains("> SELECT upper('SparkSql');"))
+  }
+
+  test("SPARK-28521 error message for CAST(parameter types contains DataType)") {
+    val e = intercept[AnalysisException] {
+      spark.sql("SELECT CAST(1)")
+    }
+    assert(e.getMessage.contains("Invalid arguments for function cast"))
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.ml.stat
 
 import java.io._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.Column
@@ -35,7 +35,6 @@ import org.apache.spark.sql.types._
  * Users should not directly create such builders, but instead use one of the methods in
  * [[Summarizer]].
  */
-@Experimental
 @Since("2.3.0")
 sealed abstract class SummaryBuilder {
   /**
@@ -78,7 +77,6 @@ sealed abstract class SummaryBuilder {
  * Note: Currently, the performance of this interface is about 2x~3x slower than using the RDD
  * interface.
  */
-@Experimental
 @Since("2.3.0")
 object Summarizer extends Logging {
 
@@ -96,7 +94,7 @@ object Summarizer extends Logging {
    *  - numNonzeros: a vector with the number of non-zeros for each coefficients
    *  - max: the maximum for each coefficient.
    *  - min: the minimum for each coefficient.
-   *  - normL2: the Euclidian norm for each coefficient.
+   *  - normL2: the Euclidean norm for each coefficient.
    *  - normL1: the L1 norm of each coefficient (sum of the absolute values).
    * @param metrics metrics that can be provided.
    * @return a builder.
@@ -536,7 +534,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
     }
 
     /**
-     * L2 (Euclidian) norm of each dimension.
+     * L2 (Euclidean) norm of each dimension.
      */
     def normL2: Vector = {
       require(requestedMetrics.contains(NormL2))

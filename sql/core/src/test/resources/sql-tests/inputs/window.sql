@@ -109,3 +109,9 @@ last_value(false, false) OVER w AS last_value_contain_null
 FROM testData
 WINDOW w AS ()
 ORDER BY cate, val;
+
+-- parentheses around window reference
+SELECT cate, sum(val) OVER (w)
+FROM testData
+WHERE val is not null
+WINDOW w AS (PARTITION BY cate ORDER BY val);

@@ -17,7 +17,7 @@
 
 package org.apache.spark.metrics.sink
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.MetricRegistry
@@ -52,7 +52,8 @@ private[spark] class StatsdSink(
 
   val pollPeriod = property.getProperty(STATSD_KEY_PERIOD, STATSD_DEFAULT_PERIOD).toInt
   val pollUnit =
-    TimeUnit.valueOf(property.getProperty(STATSD_KEY_UNIT, STATSD_DEFAULT_UNIT).toUpperCase)
+    TimeUnit.valueOf(
+      property.getProperty(STATSD_KEY_UNIT, STATSD_DEFAULT_UNIT).toUpperCase(Locale.ROOT))
 
   val prefix = property.getProperty(STATSD_KEY_PREFIX, STATSD_DEFAULT_PREFIX)
 

@@ -21,6 +21,7 @@ import java.util.{Timer, TimerTask}
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.StageData
 
 /**
@@ -33,17 +34,12 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   // Carriage return
   private val CR = '\r'
   // Update period of progress bar, in milliseconds
-  private val updatePeriodMSec =
-    sc.getConf.getTimeAsMs("spark.ui.consoleProgress.update.interval", "200")
+  private val updatePeriodMSec = sc.getConf.get(UI_CONSOLE_PROGRESS_UPDATE_INTERVAL)
   // Delay to show up a progress bar, in milliseconds
   private val firstDelayMSec = 500L
 
   // The width of terminal
-  private val TerminalWidth = if (!sys.env.getOrElse("COLUMNS", "").isEmpty) {
-    sys.env.get("COLUMNS").get.toInt
-  } else {
-    80
-  }
+  private val TerminalWidth = sys.env.getOrElse("COLUMNS", "80").toInt
 
   private var lastFinishTime = 0L
   private var lastUpdateTime = 0L
@@ -52,7 +48,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   // Schedule a refresh thread to run periodically
   private val timer = new Timer("refresh progress", true)
   timer.schedule(new TimerTask{
-    override def run() {
+    override def run(): Unit = {
       refresh()
     }
   }, firstDelayMSec, updatePeriodMSec)
@@ -77,7 +73,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * after your last output, keeps overwriting itself to hold in one line. The logging will follow
    * the progress bar, then progress bar will be showed in next line without overwrite logs.
    */
-  private def show(now: Long, stages: Seq[StageData]) {
+  private def show(now: Long, stages: Seq[StageData]): Unit = {
     val width = TerminalWidth / stages.size
     val bar = stages.map { s =>
       val total = s.numTasks
@@ -107,7 +103,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   /**
    * Clear the progress bar if showed.
    */
-  private def clear() {
+  private def clear(): Unit = {
     if (!lastProgressBar.isEmpty) {
       System.err.printf(CR + " " * TerminalWidth + CR)
       lastProgressBar = ""

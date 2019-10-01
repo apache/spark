@@ -35,7 +35,8 @@ import org.apache.spark.internal.Logging
  *
  *   val rdd: RDD[(String, Int)] = ...
  *   implicit val caseInsensitiveOrdering = new Ordering[String] {
- *     override def compare(a: String, b: String) = a.toLowerCase.compare(b.toLowerCase)
+ *     override def compare(a: String, b: String) =
+ *       a.toLowerCase(Locale.ROOT).compare(b.toLowerCase(Locale.ROOT))
  *   }
  *
  *   // Sort by key, using the above case insensitive ordering.

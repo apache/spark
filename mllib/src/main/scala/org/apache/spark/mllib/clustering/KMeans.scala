@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.clustering.{KMeans => NewKMeans}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
@@ -118,26 +117,6 @@ class KMeans private (
   def setInitializationMode(initializationMode: String): this.type = {
     KMeans.validateInitMode(initializationMode)
     this.initializationMode = initializationMode
-    this
-  }
-
-  /**
-   * This function has no effect since Spark 2.0.0.
-   */
-  @Since("1.4.0")
-  @deprecated("This has no effect and always returns 1", "2.1.0")
-  def getRuns: Int = {
-    logWarning("Getting number of runs has no effect since Spark 2.0.0.")
-    1
-  }
-
-  /**
-   * This function has no effect since Spark 2.0.0.
-   */
-  @Since("0.8.0")
-  @deprecated("This has no effect", "2.1.0")
-  def setRuns(runs: Int): this.type = {
-    logWarning("Setting number of runs has no effect since Spark 2.0.0.")
     this
   }
 
@@ -327,7 +306,7 @@ class KMeans private (
         distanceMeasureInstance.centroid(sum, count)
       }
 
-      bcCenters.destroy(blocking = false)
+      bcCenters.destroy()
 
       // Update the cluster centers and costs
       converged = true
@@ -405,8 +384,8 @@ class KMeans private (
       }.persist(StorageLevel.MEMORY_AND_DISK)
       val sumCosts = costs.sum()
 
-      bcNewCenters.unpersist(blocking = false)
-      preCosts.unpersist(blocking = false)
+      bcNewCenters.unpersist()
+      preCosts.unpersist()
 
       val chosen = data.zip(costs).mapPartitionsWithIndex { (index, pointCosts) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
@@ -417,8 +396,8 @@ class KMeans private (
       step += 1
     }
 
-    costs.unpersist(blocking = false)
-    bcNewCentersList.foreach(_.destroy(false))
+    costs.unpersist()
+    bcNewCentersList.foreach(_.destroy())
 
     val distinctCenters = centers.map(_.vector).distinct.map(new VectorWithNorm(_))
 
@@ -433,7 +412,7 @@ class KMeans private (
         .map(distanceMeasureInstance.findClosest(bcCenters.value, _)._1)
         .countByValue()
 
-      bcCenters.destroy(blocking = false)
+      bcCenters.destroy()
 
       val myWeights = distinctCenters.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
       LocalKMeans.kMeansPlusPlus(0, distinctCenters.toArray, myWeights, k, 30)
@@ -501,58 +480,6 @@ object KMeans {
   }
 
   /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data Training points as an `RDD` of `Vector` types.
-   * @param k Number of clusters to create.
-   * @param maxIterations Maximum number of iterations allowed.
-   * @param runs This param has no effect since Spark 2.0.0.
-   * @param initializationMode The initialization algorithm. This can either be "random" or
-   *                           "k-means||". (default: "k-means||")
-   * @param seed Random seed for cluster initialization. Default is to generate seed based
-   *             on system time.
-   */
-  @Since("1.3.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String,
-      seed: Long): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setInitializationMode(initializationMode)
-      .setSeed(seed)
-      .run(data)
-  }
-
-  /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data Training points as an `RDD` of `Vector` types.
-   * @param k Number of clusters to create.
-   * @param maxIterations Maximum number of iterations allowed.
-   * @param runs This param has no effect since Spark 2.0.0.
-   * @param initializationMode The initialization algorithm. This can either be "random" or
-   *                           "k-means||". (default: "k-means||")
-   */
-  @Since("0.8.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setInitializationMode(initializationMode)
-      .run(data)
-  }
-
-  /**
    * Trains a k-means model using specified parameters and the default values for unspecified.
    */
   @Since("0.8.0")
@@ -560,21 +487,6 @@ object KMeans {
       data: RDD[Vector],
       k: Int,
       maxIterations: Int): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .run(data)
-  }
-
-  /**
-   * Trains a k-means model using specified parameters and the default values for unspecified.
-   */
-  @Since("0.8.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .run(data)

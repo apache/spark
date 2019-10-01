@@ -109,23 +109,27 @@ _accumulatorRegistry = {}
 
 def _deserialize_accumulator(aid, zero_value, accum_param):
     from pyspark.accumulators import _accumulatorRegistry
-    accum = Accumulator(aid, zero_value, accum_param)
-    accum._deserialized = True
-    _accumulatorRegistry[aid] = accum
-    return accum
+    # If this certain accumulator was deserialized, don't overwrite it.
+    if aid in _accumulatorRegistry:
+        return _accumulatorRegistry[aid]
+    else:
+        accum = Accumulator(aid, zero_value, accum_param)
+        accum._deserialized = True
+        _accumulatorRegistry[aid] = accum
+        return accum
 
 
 class Accumulator(object):
 
     """
     A shared variable that can be accumulated, i.e., has a commutative and associative "add"
-    operation. Worker tasks on a Spark cluster can add values to an Accumulator with the C{+=}
-    operator, but only the driver program is allowed to access its value, using C{value}.
+    operation. Worker tasks on a Spark cluster can add values to an Accumulator with the `+=`
+    operator, but only the driver program is allowed to access its value, using `value`.
     Updates from the workers get propagated automatically to the driver program.
 
-    While C{SparkContext} supports accumulators for primitive data types like C{int} and
-    C{float}, users can also define accumulators for custom types by providing a custom
-    L{AccumulatorParam} object. Refer to the doctest of this module for an example.
+    While :class:`SparkContext` supports accumulators for primitive data types like :class:`int` and
+    :class:`float`, users can also define accumulators for custom types by providing a custom
+    :class:`AccumulatorParam` object. Refer to the doctest of this module for an example.
     """
 
     def __init__(self, aid, value, accum_param):
@@ -181,14 +185,14 @@ class AccumulatorParam(object):
     def zero(self, value):
         """
         Provide a "zero value" for the type, compatible in dimensions with the
-        provided C{value} (e.g., a zero vector)
+        provided `value` (e.g., a zero vector)
         """
         raise NotImplementedError
 
     def addInPlace(self, value1, value2):
         """
         Add two values of the accumulator's data type, returning a new value;
-        for efficiency, can also update C{value1} in place and return it.
+        for efficiency, can also update `value1` in place and return it.
         """
         raise NotImplementedError
 

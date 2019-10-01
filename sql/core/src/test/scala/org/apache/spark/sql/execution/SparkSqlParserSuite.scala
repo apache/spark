@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -59,12 +59,8 @@ class SparkSqlParserSuite extends AnalysisTest {
     comparePlans(normalized1, normalized2)
   }
 
-  private def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](parser.parsePlan(sqlCommand))
-    messages.foreach { message =>
-      assert(e.message.contains(message))
-    }
-  }
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
 
   test("refresh resource") {
     assertEqual("REFRESH prefix_path", RefreshResource("prefix_path"))
@@ -215,68 +211,10 @@ class SparkSqlParserSuite extends AnalysisTest {
       "no viable alternative at input")
   }
 
-  test("create table using - schema") {
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet",
-      createTableUsing(
-        table = "my_tab",
-        schema = (new StructType)
-          .add("a", IntegerType, nullable = true, "test")
-          .add("b", StringType)
-      )
-    )
-    intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
-      "no viable alternative at input")
-  }
-
-  test("create view as insert into table") {
-    // Single insert query
-    intercept("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)",
-      "Operation not allowed: CREATE VIEW ... AS INSERT INTO")
-
-    // Multi insert query
-    intercept("CREATE VIEW testView AS FROM jt INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
-      "INSERT INTO tbl2 SELECT * WHERE jt.id > 4",
-      "Operation not allowed: CREATE VIEW ... AS FROM ... [INSERT INTO ...]+")
-  }
-
-  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
-    assertEqual("describe table t",
-      DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = false))
-    assertEqual("describe table extended t",
-      DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = true))
-    assertEqual("describe table formatted t",
-      DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = true))
-  }
-
-  test("describe table column") {
-    assertEqual("DESCRIBE t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = false))
-    assertEqual("DESCRIBE t `abc.xyz`",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("abc.xyz"), isExtended = false))
-    assertEqual("DESCRIBE t abc.xyz",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("abc", "xyz"), isExtended = false))
-    assertEqual("DESCRIBE t `a.b`.`x.y`",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("a.b", "x.y"), isExtended = false))
-
-    assertEqual("DESCRIBE TABLE t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = false))
-    assertEqual("DESCRIBE TABLE EXTENDED t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = true))
-    assertEqual("DESCRIBE TABLE FORMATTED t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = true))
-
-    intercept("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col",
-      "DESC TABLE COLUMN for a specific partition is not supported")
+  test("describe query") {
+    val query = "SELECT * FROM t"
+    assertEqual("DESCRIBE QUERY " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
+    assertEqual("DESCRIBE " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
   }
 
   test("analyze table statistics") {
@@ -323,12 +261,22 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS", "")
 
     assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
+      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
 
     // Partition specified - should be ignored
     assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
       "COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
+      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
+
+    // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
+      "COMPUTE STATISTICS FOR ALL COLUMNS",
+      AnalyzeColumnCommand(TableIdentifier("t"), None, allColumns = true))
+
+    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL COLUMNS key, value",
+      "mismatched input 'key' expecting <EOF>")
+    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL",
+      "missing 'COLUMNS' at '<EOF>'")
   }
 
   test("query organization") {
@@ -367,14 +315,11 @@ class SparkSqlParserSuite extends AnalysisTest {
       Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))
   }
 
-  test("SPARK-25046 Fix Alter View ... As Insert Into Table") {
-    // Single insert query
-    intercept("ALTER VIEW testView AS INSERT INTO jt VALUES(1, 1)",
-      "Operation not allowed: ALTER VIEW ... AS INSERT INTO")
-
-    // Multi insert query
-    intercept("ALTER VIEW testView AS FROM jt INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
-      "INSERT INTO tbl2 SELECT * WHERE jt.id > 4",
-      "Operation not allowed: ALTER VIEW ... AS FROM ... [INSERT INTO ...]+")
+  test("database and schema tokens are interchangeable") {
+    assertEqual("CREATE DATABASE foo", parser.parsePlan("CREATE SCHEMA foo"))
+    assertEqual("DROP DATABASE foo", parser.parsePlan("DROP SCHEMA foo"))
+    assertEqual("ALTER DATABASE foo SET DBPROPERTIES ('x' = 'y')",
+      parser.parsePlan("ALTER SCHEMA foo SET DBPROPERTIES ('x' = 'y')"))
+    assertEqual("DESC DATABASE foo", parser.parsePlan("DESC SCHEMA foo"))
   }
 }

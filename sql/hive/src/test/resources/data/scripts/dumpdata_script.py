@@ -18,6 +18,9 @@
 #
 import sys
 
+if sys.version_info[0] >= 3:
+    xrange = range
+
 for i in xrange(50):
     for j in xrange(5):
         for k in xrange(20022):

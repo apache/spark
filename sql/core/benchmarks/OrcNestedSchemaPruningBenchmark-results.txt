@@ -1,0 +1,53 @@
+================================================================================================
+Nested Schema Pruning Benchmark For ORC v1
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_212-b04 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Selection:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Top-level column                                    127            163          24          7.9         127.1       1.0X
+Nested column                                       974           1023          39          1.0         974.2       0.1X
+Nested column in array                             4834           4857          23          0.2        4834.1       0.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_212-b04 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Limiting:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Top-level column                                    454            488          45          2.2         454.3       1.0X
+Nested column                                      1539           1602          80          0.6        1539.3       0.3X
+Nested column in array                             5765           5848          69          0.2        5764.7       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_212-b04 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Repartitioning:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Top-level column                                    365            395          58          2.7         364.9       1.0X
+Nested column                                      1456           1477          23          0.7        1456.0       0.3X
+Nested column in array                             5734           5842          91          0.2        5734.4       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_212-b04 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Repartitioning by exprs:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Top-level column                                    373            387          15          2.7         372.8       1.0X
+Nested column                                      4349           4397          59          0.2        4348.8       0.1X
+Nested column in array                             8893           8971          73          0.1        8893.2       0.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_212-b04 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Sample:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Top-level column                                    130            159          24          7.7         129.9       1.0X
+Nested column                                      1160           1216          50          0.9        1159.8       0.1X
+Nested column in array                             5297           5420         176          0.2        5296.8       0.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_212-b04 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Sorting:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Top-level column                                    585            615          60          1.7         585.5       1.0X
+Nested column                                      4972           5213         156          0.2        4972.2       0.1X
+Nested column in array                            10095          10156          32          0.1       10095.4       0.1X
+
+

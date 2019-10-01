@@ -22,14 +22,14 @@ import java.io.File
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
@@ -71,7 +71,8 @@ private[sql] class SessionState(
     val listenerManager: ExecutionListenerManager,
     resourceLoaderBuilder: () => SessionResourceLoader,
     createQueryExecution: LogicalPlan => QueryExecution,
-    createClone: (SparkSession, SessionState) => SessionState) {
+    createClone: (SparkSession, SessionState) => SessionState,
+    val columnarRules: Seq[ColumnarRule]) {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
@@ -81,6 +82,8 @@ private[sql] class SessionState(
   lazy val optimizer: Optimizer = optimizerBuilder()
 
   lazy val resourceLoader: SessionResourceLoader = resourceLoaderBuilder()
+
+  def catalogManager: CatalogManager = analyzer.catalogManager
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
     sharedState.sparkContext.hadoopConfiguration,
@@ -123,8 +126,7 @@ private[sql] object SessionState {
 /**
  * Concrete implementation of a [[BaseSessionStateBuilder]].
  */
-@Experimental
-@InterfaceStability.Unstable
+@Unstable
 class SessionStateBuilder(
     session: SparkSession,
     parentState: Option[SessionState] = None)
@@ -135,7 +137,7 @@ class SessionStateBuilder(
 /**
  * Session shared [[FunctionResourceLoader]].
  */
-@InterfaceStability.Unstable
+@Unstable
 class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoader {
   override def loadResource(resource: FunctionResource): Unit = {
     resource.resourceType match {

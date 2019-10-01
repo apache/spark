@@ -81,7 +81,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
   }
 
   def expectedBernoulliProbabilities(model: NaiveBayesModel, feature: Vector): Vector = {
-    val negThetaMatrix = model.theta.map(v => math.log(1.0 - math.exp(v)))
+    val negThetaMatrix = model.theta.map(v => math.log1p(-math.exp(v)))
     val negFeature = Vectors.dense(feature.toArray.map(v => 1.0 - v))
     val piTheta: BV[Double] = model.pi.asBreeze + model.theta.multiply(feature).asBreeze
     val logClassProbs: BV[Double] = piTheta + negThetaMatrix.multiply(negFeature).asBreeze
@@ -103,7 +103,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
           case Bernoulli =>
             expectedBernoulliProbabilities(model, features)
           case _ =>
-            throw new UnknownError(s"Invalid modelType: $modelType.")
+            throw new IllegalArgumentException(s"Invalid modelType: $modelType.")
         }
         assert(probability ~== expected relTol 1.0e-10)
     }
@@ -378,7 +378,7 @@ object NaiveBayesSuite {
           counts.toArray.sortBy(_._1).map(_._2)
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: $modelType.")
+          throw new IllegalArgumentException(s"Invalid modelType: $modelType.")
       }
 
       LabeledPoint(y, Vectors.dense(xi))

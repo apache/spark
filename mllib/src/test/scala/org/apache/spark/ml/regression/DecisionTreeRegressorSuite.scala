@@ -26,6 +26,7 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
+import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -35,11 +36,17 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
   import testImplicits._
 
   private var categoricalDataPointsRDD: RDD[LabeledPoint] = _
+  private var linearRegressionData: DataFrame = _
 
-  override def beforeAll() {
+  private val seed = 42
+
+  override def beforeAll(): Unit = {
     super.beforeAll()
     categoricalDataPointsRDD =
       sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints().map(_.asML))
+    linearRegressionData = sc.parallelize(LinearDataGenerator.generateLinearInput(
+      intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
+      xVariance = Array(0.7, 1.2), nPoints = 1000, seed, eps = 0.5), 2).map(_.asML).toDF()
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -88,7 +95,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
     val model = dt.fit(df)
 
-    testTransformer[(Vector, Double)](df, model, "features", "variance") {
+    testTransformer[(Vector, Double, Double)](df, model, "features", "variance") {
       case Row(features: Vector, variance: Double) =>
         val expectedVariance = model.rootNode.predictImpl(features).impurityStats.calculate()
         assert(variance === expectedVariance,
@@ -101,7 +108,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setMaxBins(6)
       .setSeed(0)
 
-    testTransformerByGlobalCheckFunc[(Vector, Double)](varianceDF, dt.fit(varianceDF),
+    testTransformerByGlobalCheckFunc[(Vector, Double, Double)](varianceDF, dt.fit(varianceDF),
       "variance") { case rows: Seq[Row] =>
       val calculatedVariances = rows.map(_.getDouble(0))
 
@@ -151,12 +158,50 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     testPredictionModelSinglePrediction(model, df)
   }
 
+  test("model support predict leaf index") {
+    val model = new DecisionTreeRegressionModel("dtr", TreeTests.root0, 3)
+    model.setLeafCol("predictedLeafId")
+      .setPredictionCol("")
+
+    val data = TreeTests.getSingleTreeLeafData
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect()
+      .foreach { case Row(leafId: Double, predictedLeafId: Double) =>
+        assert(leafId === predictedLeafId)
+    }
+  }
+
   test("should support all NumericType labels and not support other types") {
     val dt = new DecisionTreeRegressor().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[DecisionTreeRegressionModel, DecisionTreeRegressor](
       dt, spark, isClassification = false) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
+  }
+
+  test("training with sample weights") {
+    val df = linearRegressionData
+    val numClasses = 0
+    val testParams = Seq(5, 10)
+    for (maxDepth <- testParams) {
+      val estimator = new DecisionTreeRegressor()
+        .setMaxDepth(maxDepth)
+        .setMinWeightFractionPerNode(0.05)
+        .setSeed(123)
+      MLTestingUtils.testArbitrarilyScaledWeights[DecisionTreeRegressionModel,
+        DecisionTreeRegressor](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.1, 0.99))
+      MLTestingUtils.testOutliersWithSmallWeights[DecisionTreeRegressionModel,
+        DecisionTreeRegressor](df.as[LabeledPoint], estimator, numClasses,
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.1, 0.99),
+        outlierRatio = 2)
+      MLTestingUtils.testOversamplingVsWeighting[DecisionTreeRegressionModel,
+        DecisionTreeRegressor](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, _ ~= _ relTol 0.01, 1.0), seed)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -190,20 +235,6 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     testEstimatorAndModelReadWrite(dt, continuousData,
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0),
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
-  }
-
-  test("label/impurity stats") {
-    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
-    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
-    val dtr = new DecisionTreeRegressor()
-      .setImpurity("variance")
-      .setMaxDepth(2)
-      .setMaxBins(8)
-    val model = dtr.fit(df)
-    val statInfo = model.rootNode
-
-    assert(statInfo.getCount == 1000.0 && statInfo.getSum == 600.0
-      && statInfo.getSumOfSquares == 600.0)
   }
 }
 

@@ -18,20 +18,20 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, Locale}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
-import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
-import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
+import org.apache.hadoop.hive.common.HiveInterruptUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -40,10 +40,10 @@ import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.HiveDelegationTokenProvider
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -63,23 +63,21 @@ private[hive] object SparkSQLCLIDriver extends Logging {
    * a signal handler will invoke this registered callback if a Ctrl+C signal is detected while
    * a command is being processed by the current thread.
    */
-  def installSignalHandler() {
-    HiveInterruptUtils.add(new HiveInterruptCallback {
-      override def interrupt() {
-        // Handle remote execution mode
-        if (SparkSQLEnv.sparkContext != null) {
-          SparkSQLEnv.sparkContext.cancelAllJobs()
-        } else {
-          if (transport != null) {
-            // Force closing of TCP connection upon session termination
-            transport.getSocket.close()
-          }
+  def installSignalHandler(): Unit = {
+    HiveInterruptUtils.add(() => {
+      // Handle remote execution mode
+      if (SparkSQLEnv.sparkContext != null) {
+        SparkSQLEnv.sparkContext.cancelAllJobs()
+      } else {
+        if (transport != null) {
+          // Force closing of TCP connection upon session termination
+          transport.getSocket.close()
         }
       }
     })
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val oproc = new OptionsProcessor()
     if (!oproc.process_stage1(args)) {
       System.exit(1)
@@ -100,9 +98,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, "UTF-8")
-      sessionState.info = new PrintStream(System.err, true, "UTF-8")
-      sessionState.err = new PrintStream(System.err, true, "UTF-8")
+      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
+      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
+      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
@@ -113,6 +111,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
+    // Hive 2.0.0 onwards HiveConf.getClassLoader returns the UDFClassLoader (created by Hive).
+    // Because of this spark cannot find the jars as class loader got changed
+    // Hive changed the class loader because of HIVE-11878, so it is required to use old
+    // classLoader as sparks loaded all the jars in this classLoader
+    conf.setClassLoader(Thread.currentThread().getContextClassLoader)
     sessionState.cmdProperties.entrySet().asScala.foreach { item =>
       val key = item.getKey.toString
       val value = item.getValue.toString
@@ -135,20 +138,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
 
-    val remoteMode = isRemoteMode(sessionState)
-    // "-h" option has been passed, so connect to Hive thrift server.
-    if (!remoteMode) {
-      // Hadoop-20 and above - we need to augment classpath using hiveconf
-      // components.
-      // See also: code in ExecDriver.java
-      var loader = conf.getClassLoader
-      val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
-      if (StringUtils.isNotBlank(auxJars)) {
-        loader = Utilities.addToClassPath(loader, StringUtils.split(auxJars, ","))
-      }
-      conf.setClassLoader(loader)
-      Thread.currentThread().setContextClassLoader(loader)
-    } else {
+    if (isRemoteMode(sessionState)) {
       // Hive 1.2 + not supported in CLI
       throw new RuntimeException("Remote operations not supported")
     }
@@ -166,13 +156,29 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val cli = new SparkSQLCLIDriver
     cli.setHiveVariables(oproc.getHiveVariables)
 
+    // In SparkSQL CLI, we may want to use jars augmented by hiveconf
+    // hive.aux.jars.path, here we add jars augmented by hiveconf to
+    // Spark's SessionResourceLoader to obtain these jars.
+    val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
+    if (StringUtils.isNotBlank(auxJars)) {
+      val resourceLoader = SparkSQLEnv.sqlContext.sessionState.resourceLoader
+      StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
+    }
+
+    // The class loader of CliSessionState's conf is current main thread's class loader
+    // used to load jars passed by --jars. One class loader used by AddJarCommand is
+    // sharedState.jarClassLoader which contain jar path passed by --jars in main thread.
+    // We set CliSessionState's conf class loader to sharedState.jarClassLoader.
+    // Thus we can load all jars passed by --jars and AddJarCommand.
+    sessionState.getConf.setClassLoader(SparkSQLEnv.sqlContext.sharedState.jarClassLoader)
+
     // TODO work around for set the log output to console, because the HiveContext
     // will set the output into an invalid buffer.
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, "UTF-8")
-      sessionState.info = new PrintStream(System.err, true, "UTF-8")
-      sessionState.err = new PrintStream(System.err, true, "UTF-8")
+      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
+      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
+      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
@@ -207,7 +213,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     reader.setBellEnabled(false)
     reader.setExpandEvents(false)
     // reader.setDebug(new PrintWriter(new FileWriter("writer.debug", true)))
-    CliDriver.getCommandCompleter.foreach((e) => reader.addCompleter(e))
+    CliDriver.getCommandCompleter.foreach(reader.addCompleter)
 
     val historyDirectory = System.getProperty("user.home")
 
@@ -298,9 +304,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val sessionState = SessionState.get().asInstanceOf[CliSessionState]
 
-  private val LOG = LogFactory.getLog(classOf[SparkSQLCLIDriver])
-
-  private val console = new SessionState.LogHelper(LOG)
+  private val console = ThriftserverShimUtils.getConsole
 
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)
@@ -343,10 +347,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     }
     if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||
       cmd_trimmed.startsWith("!") || isRemoteMode) {
-      val start = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       super.processCmd(cmd)
-      val end = System.currentTimeMillis()
-      val timeTaken: Double = (end - start) / 1000.0
+      val endTimeNs = System.nanoTime()
+      val timeTaken: Double = TimeUnit.NANOSECONDS.toMillis(endTimeNs - startTimeNs) / 1000.0
       console.printInfo(s"Time taken: $timeTaken seconds")
       0
     } else {
@@ -364,13 +368,13 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           driver.init()
           val out = sessionState.out
           val err = sessionState.err
-          val start: Long = System.currentTimeMillis()
+          val startTimeNs: Long = System.nanoTime()
           if (sessionState.getIsVerbose) {
             out.println(cmd)
           }
           val rc = driver.run(cmd)
-          val end = System.currentTimeMillis()
-          val timeTaken: Double = (end - start) / 1000.0
+          val endTimeNs = System.nanoTime()
+          val timeTaken: Double = TimeUnit.NANOSECONDS.toMillis(endTimeNs - startTimeNs) / 1000.0
 
           ret = rc.getResponseCode
           if (ret != 0) {

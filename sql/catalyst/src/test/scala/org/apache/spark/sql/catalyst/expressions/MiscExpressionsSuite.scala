@@ -48,15 +48,15 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val r = new Random()
     val seed1 = Some(r.nextLong())
     assert(evaluateWithoutCodegen(Uuid(seed1)) === evaluateWithoutCodegen(Uuid(seed1)))
-    assert(evaluateWithGeneratedMutableProjection(Uuid(seed1)) ===
-      evaluateWithGeneratedMutableProjection(Uuid(seed1)))
+    assert(evaluateWithMutableProjection(Uuid(seed1)) ===
+      evaluateWithMutableProjection(Uuid(seed1)))
     assert(evaluateWithUnsafeProjection(Uuid(seed1)) ===
       evaluateWithUnsafeProjection(Uuid(seed1)))
 
     val seed2 = Some(r.nextLong())
     assert(evaluateWithoutCodegen(Uuid(seed1)) !== evaluateWithoutCodegen(Uuid(seed2)))
-    assert(evaluateWithGeneratedMutableProjection(Uuid(seed1)) !==
-      evaluateWithGeneratedMutableProjection(Uuid(seed2)))
+    assert(evaluateWithMutableProjection(Uuid(seed1)) !==
+      evaluateWithMutableProjection(Uuid(seed2)))
     assert(evaluateWithUnsafeProjection(Uuid(seed1)) !==
       evaluateWithUnsafeProjection(Uuid(seed2)))
 
@@ -79,7 +79,7 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val outputEval = errorStream.toString
       errorStream.reset()
       // check with codegen
-      checkEvaluationWithGeneratedMutableProjection(PrintToStderr(inputExpr), 1)
+      checkEvaluationWithMutableProjection(PrintToStderr(inputExpr), 1)
       val outputCodegen = errorStream.toString
       (outputEval, outputCodegen)
     } finally {

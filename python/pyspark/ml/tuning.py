@@ -489,8 +489,6 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
 class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollectSubModels,
                            MLReadable, MLWritable):
     """
-    .. note:: Experimental
-
     Validation for hyper-parameter tuning. Randomly splits the input dataset into train and
     validation sets, and uses evaluation metric on the validation set to select the best model.
     Similar to :class:`CrossValidator`, but only splits the set once.
@@ -504,15 +502,15 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
     ...      (Vectors.dense([0.5]), 0.0),
     ...      (Vectors.dense([0.6]), 1.0),
     ...      (Vectors.dense([1.0]), 1.0)] * 10,
-    ...     ["features", "label"])
+    ...     ["features", "label"]).repartition(1)
     >>> lr = LogisticRegression()
     >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
     >>> evaluator = BinaryClassificationEvaluator()
     >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
-    ...     parallelism=2)
+    ...     parallelism=1, seed=42)
     >>> tvsModel = tvs.fit(dataset)
     >>> evaluator.evaluate(tvsModel.transform(dataset))
-    0.8333...
+    0.833...
 
     .. versionadded:: 2.0.0
     """
@@ -666,8 +664,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
 
 class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
     """
-    .. note:: Experimental
-
     Model from train validation split.
 
     .. versionadded:: 2.0.0

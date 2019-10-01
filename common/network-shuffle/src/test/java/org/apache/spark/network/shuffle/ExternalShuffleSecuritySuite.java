@@ -41,14 +41,14 @@ public class ExternalShuffleSecuritySuite {
 
   TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
   TransportServer server;
+  TransportContext transportContext;
 
   @Before
   public void beforeEach() throws IOException {
-    TransportContext context =
-      new TransportContext(conf, new ExternalShuffleBlockHandler(conf, null));
+    transportContext = new TransportContext(conf, new ExternalBlockHandler(conf, null));
     TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf,
         new TestSecretKeyHolder("my-app-id", "secret"));
-    this.server = context.createServer(Arrays.asList(bootstrap));
+    this.server = transportContext.createServer(Arrays.asList(bootstrap));
   }
 
   @After
@@ -56,6 +56,10 @@ public class ExternalShuffleSecuritySuite {
     if (server != null) {
       server.close();
       server = null;
+    }
+    if (transportContext != null) {
+      transportContext.close();
+      transportContext = null;
     }
   }
 
@@ -87,7 +91,7 @@ public class ExternalShuffleSecuritySuite {
     validate("my-app-id", "secret", true);
   }
 
-  /** Creates an ExternalShuffleClient and attempts to register with the server. */
+  /** Creates an ExternalBlockStoreClient and attempts to register with the server. */
   private void validate(String appId, String secretKey, boolean encrypt)
         throws IOException, InterruptedException {
     TransportConf testConf = conf;
@@ -96,14 +100,16 @@ public class ExternalShuffleSecuritySuite {
         ImmutableMap.of("spark.authenticate.enableSaslEncryption", "true")));
     }
 
-    ExternalShuffleClient client =
-      new ExternalShuffleClient(testConf, new TestSecretKeyHolder(appId, secretKey), true, 5000);
-    client.init(appId);
-    // Registration either succeeds or throws an exception.
-    client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(), "exec0",
-      new ExecutorShuffleInfo(new String[0], 0,
-        "org.apache.spark.shuffle.sort.SortShuffleManager"));
-    client.close();
+    try (ExternalBlockStoreClient client =
+        new ExternalBlockStoreClient(
+          testConf, new TestSecretKeyHolder(appId, secretKey), true, 5000)) {
+      client.init(appId);
+      // Registration either succeeds or throws an exception.
+      client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(), "exec0",
+        new ExecutorShuffleInfo(
+          new String[0], 0, "org.apache.spark.shuffle.sort.SortShuffleManager")
+      );
+    }
   }
 
   /** Provides a secret key holder which always returns the given secret key, for a single appId. */

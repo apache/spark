@@ -23,7 +23,6 @@ import java.util.Random
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, WrappedArray}
-import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.commons.io.FileUtils
@@ -601,7 +600,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val df = maybeDf.get._2
 
     val expected = estimator.fit(df)
-    val actuals = dfs.filter(_ != baseType).map(t => (t, estimator.fit(t._2)))
+    val actuals = dfs.map(t => (t, estimator.fit(t._2)))
     actuals.foreach { case (_, actual) => check(expected, actual) }
     actuals.foreach { case (t, actual) => check2(expected, actual, t._2, t._1.encoder) }
 
@@ -696,12 +695,14 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     withClue("transform should fail when ids exceed integer range. ") {
       val model = als.fit(df)
       def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
-        assert(intercept[SparkException] {
+        val e1 = intercept[SparkException] {
           model.transform(dataFrame).first
-        }.getMessage.contains(msg))
-        assert(intercept[StreamingQueryException] {
+        }
+        TestUtils.assertExceptionMsg(e1, msg)
+        val e2 = intercept[StreamingQueryException] {
           testTransformer[A](dataFrame, model, "prediction") { _ => }
-        }.getMessage.contains(msg))
+        }
+        TestUtils.assertExceptionMsg(e2, msg)
       }
       testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
         df("item")))
@@ -915,6 +916,38 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val itemSubsetRecs = model.recommendForItemSubset(itemSubset, k)
     val allItemRecs = model.recommendForAllItems(k).as[(Int, Seq[(Int, Float)])].collect().toMap
     checkRecommendations(itemSubsetRecs, allItemRecs, "user")
+  }
+
+  test("ALS should not introduce unnecessary shuffle") {
+    def getShuffledDependencies(rdd: RDD[_]): Seq[ShuffleDependency[_, _, _]] = {
+      rdd.dependencies.flatMap {
+        case s: ShuffleDependency[_, _, _] =>
+          Seq(s) ++ getShuffledDependencies(s.rdd)
+        case o =>
+          Seq.empty ++ getShuffledDependencies(o.rdd)
+      }
+    }
+
+    val spark = this.spark
+    import spark.implicits._
+    val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+    val data = ratings.toDF
+    val model = new ALS()
+      .setMaxIter(2)
+      .setImplicitPrefs(true)
+      .setCheckpointInterval(-1)
+      .fit(data)
+
+    val userFactors = model.userFactors
+    val itemFactors = model.itemFactors
+    val shuffledUserFactors = getShuffledDependencies(userFactors.rdd).filter { dep =>
+      dep.rdd.name != null && dep.rdd.name.contains("userFactors")
+    }
+    val shuffledItemFactors = getShuffledDependencies(itemFactors.rdd).filter { dep =>
+      dep.rdd.name != null && dep.rdd.name.contains("itemFactors")
+    }
+    assert(shuffledUserFactors.size == 0)
+    assert(shuffledItemFactors.size == 0)
   }
 
   private def checkRecommendations(

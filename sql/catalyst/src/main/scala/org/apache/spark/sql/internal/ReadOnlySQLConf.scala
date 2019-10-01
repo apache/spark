@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.util.{Map => JMap}
 
-import org.apache.spark.{TaskContext, TaskContextImpl}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.config.{ConfigEntry, ConfigProvider, ConfigReader}
 
 /**
@@ -29,7 +29,7 @@ import org.apache.spark.internal.config.{ConfigEntry, ConfigProvider, ConfigRead
 class ReadOnlySQLConf(context: TaskContext) extends SQLConf {
 
   @transient override val settings: JMap[String, String] = {
-    context.asInstanceOf[TaskContextImpl].getLocalProperties().asInstanceOf[JMap[String, String]]
+    context.getLocalProperties.asInstanceOf[JMap[String, String]]
   }
 
   @transient override protected val reader: ConfigReader = {

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
  * Helper class to compute approximate quantile summary.
  * This implementation is based on the algorithm proposed in the paper:
  * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
- * and Khanna, Sanjeev. (http://dx.doi.org/10.1145/375663.375670)
+ * and Khanna, Sanjeev. (https://doi.org/10.1145/375663.375670)
  *
  * In order to optimize for speed, it maintains an internal buffer of the last seen samples,
  * and only inserts them after crossing a certain size threshold. This guarantees a near-constant

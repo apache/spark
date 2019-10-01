@@ -156,7 +156,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         generateStatTable() ++
           generateBatchListTables()
       }
-    SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent, Some(5000))
+    SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent)
   }
 
   /**

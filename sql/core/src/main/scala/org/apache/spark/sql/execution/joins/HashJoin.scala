@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.{ExplainUtils, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
 
@@ -36,6 +36,24 @@ trait HashJoin {
   val condition: Option[Expression]
   val left: SparkPlan
   val right: SparkPlan
+
+  override def simpleStringWithNodeId(): String = {
+    val opId = ExplainUtils.getOpId(this)
+    s"$nodeName $joinType ${buildSide} ($opId)".trim
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val joinCondStr = if (condition.isDefined) {
+      s"${condition.get}"
+    } else "None"
+
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Left keys: ${leftKeys}
+       |Right keys: ${rightKeys}
+       |Join condition: ${joinCondStr}
+     """.stripMargin
+  }
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -64,9 +82,8 @@ trait HashJoin {
   protected lazy val (buildKeys, streamedKeys) = {
     require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
       "Join keys from two sides should have same types")
-    val lkeys = HashJoin.rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
-    val rkeys = HashJoin.rewriteKeyExpr(rightKeys)
-      .map(BindReferences.bindReference(_, right.output))
+    val lkeys = bindReferences(HashJoin.rewriteKeyExpr(leftKeys), left.output)
+    val rkeys = bindReferences(HashJoin.rewriteKeyExpr(rightKeys), right.output)
     buildSide match {
       case BuildLeft => (lkeys, rkeys)
       case BuildRight => (rkeys, lkeys)
@@ -194,8 +211,7 @@ trait HashJoin {
   protected def join(
       streamedIter: Iterator[InternalRow],
       hashed: HashedRelation,
-      numOutputRows: SQLMetric,
-      avgHashProbe: SQLMetric): Iterator[InternalRow] = {
+      numOutputRows: SQLMetric): Iterator[InternalRow] = {
 
     val joinedIter = joinType match {
       case _: InnerLike =>
@@ -213,10 +229,6 @@ trait HashJoin {
           s"BroadcastHashJoin should not take $x as the JoinType")
     }
 
-    // At the end of the task, we update the avg hash probe.
-    TaskContext.get().addTaskCompletionListener[Unit](_ =>
-      avgHashProbe.set(hashed.getAverageProbesPerLookup))
-
     val resultProj = createResultProjection
     joinedIter.map { r =>
       numOutputRows += 1
@@ -231,7 +243,7 @@ object HashJoin {
    *
    * If not, returns the original expressions.
    */
-  private[joins] def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
+  def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
     assert(keys.nonEmpty)
     // TODO: support BooleanType, DateType and TimestampType
     if (keys.exists(!_.dataType.isInstanceOf[IntegralType])
@@ -250,5 +262,25 @@ object HashJoin {
         BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
     }
     keyExpr :: Nil
+  }
+
+  /**
+   * Extract a given key which was previously packed in a long value using its index to
+   * determine the number of bits to shift
+   */
+  def extractKeyExprAt(keys: Seq[Expression], index: Int): Expression = {
+    // jump over keys that have a higher index value than the required key
+    if (keys.size == 1) {
+      assert(index == 0)
+      Cast(BoundReference(0, LongType, nullable = false), keys(index).dataType)
+    } else {
+      val shiftedBits =
+        keys.slice(index + 1, keys.size).map(_.dataType.defaultSize * 8).sum
+      val mask = (1L << (keys(index).dataType.defaultSize * 8)) - 1
+      // build the schema for unpacking the required key
+      Cast(BitwiseAnd(
+        ShiftRightUnsigned(BoundReference(0, LongType, nullable = false), Literal(shiftedBits)),
+        Literal(mask)), keys(index).dataType)
+    }
   }
 }

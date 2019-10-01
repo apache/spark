@@ -21,16 +21,11 @@ import java.util.regex.{Matcher, Pattern}
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
@@ -188,41 +183,17 @@ object YarnSparkHadoopUtil {
     ConverterUtils.toContainerId(containerIdString)
   }
 
-  /** The filesystems for which YARN should fetch delegation tokens. */
-  def hadoopFSsToAccess(
-      sparkConf: SparkConf,
-      hadoopConf: Configuration): Set[FileSystem] = {
-    val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .toSet
-
-    val stagingFS = sparkConf.get(STAGING_DIR)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .getOrElse(FileSystem.get(hadoopConf))
-
-    // Add the list of available namenodes for all namespaces in HDFS federation.
-    // If ViewFS is enabled, this is skipped as ViewFS already handles delegation tokens for its
-    // namespaces.
-    val hadoopFilesystems = if (stagingFS.getScheme == "viewfs") {
-      Set.empty
+  /**
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
+      require(sizeInMB > 0,
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      sizeInMB
     } else {
-      val nameservices = hadoopConf.getTrimmedStrings("dfs.nameservices")
-      // Retrieving the filesystem for the nameservices where HA is not enabled
-      val filesystemsWithoutHA = nameservices.flatMap { ns =>
-        Option(hadoopConf.get(s"dfs.namenode.rpc-address.$ns")).map { nameNode =>
-          new Path(s"hdfs://$nameNode").getFileSystem(hadoopConf)
-        }
-      }
-      // Retrieving the filesystem for the nameservices where HA is enabled
-      val filesystemsWithHA = nameservices.flatMap { ns =>
-        Option(hadoopConf.get(s"dfs.ha.namenodes.$ns")).map { _ =>
-          new Path(s"hdfs://$ns").getFileSystem(hadoopConf)
-        }
-      }
-      (filesystemsWithoutHA ++ filesystemsWithHA).toSet
+      0
     }
-
-    filesystemsToAccess ++ hadoopFilesystems + stagingFS
   }
-
 }

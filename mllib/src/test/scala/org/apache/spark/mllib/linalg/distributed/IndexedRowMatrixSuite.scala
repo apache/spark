@@ -22,6 +22,7 @@ import breeze.linalg.{diag => brzDiag, DenseMatrix => BDM, DenseVector => BDV}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 
 class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -35,7 +36,7 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   ).map(x => IndexedRow(x._1, x._2))
   var indexedRows: RDD[IndexedRow] = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     indexedRows = sc.parallelize(data, 2)
   }
@@ -238,7 +239,7 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     for (i <- 0 until n; j <- i + 1 until n) {
       val trueResult = gram(i, j) / scala.math.sqrt(gram(i, i) * gram(j, j))
-      assert(math.abs(G(i, j) - trueResult) < 1e-6)
+      assert(G(i, j) ~== trueResult absTol 1e-6)
     }
   }
 

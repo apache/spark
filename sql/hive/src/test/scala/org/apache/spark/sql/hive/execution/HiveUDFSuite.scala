@@ -454,14 +454,14 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       // EXTERNAL OpenCSVSerde table pointing to LOCATION
 
       val file1 = new File(tempDir + "/data1")
-      val writer1 = new PrintWriter(file1)
-      writer1.write("1,2")
-      writer1.close()
+      Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+        writer.write("1,2")
+      }
 
       val file2 = new File(tempDir + "/data2")
-      val writer2 = new PrintWriter(file2)
-      writer2.write("1,2")
-      writer2.close()
+      Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+        writer.write("1,2")
+      }
 
       sql(
         s"""CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
@@ -638,6 +638,31 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         Row(3) :: Row(3) :: Nil)
     }
   }
+
+  test("SPARK-25768 constant argument expecting Hive UDF") {
+    withTempView("inputTable") {
+      spark.range(10).createOrReplaceTempView("inputTable")
+      withUserDefinedFunction("testGenericUDAFPercentileApprox" -> false) {
+        val numFunc = spark.catalog.listFunctions().count()
+        sql(s"CREATE FUNCTION testGenericUDAFPercentileApprox AS '" +
+          s"${classOf[GenericUDAFPercentileApprox].getName}'")
+        checkAnswer(
+          sql("SELECT testGenericUDAFPercentileApprox(id, 0.5) FROM inputTable"),
+          Seq(Row(4.0)))
+      }
+    }
+  }
+  test("SPARK-28012 Hive UDF supports struct type foldable expression") {
+    withUserDefinedFunction("testUDFStructType" -> false) {
+      // Simulate a hive udf that supports struct parameters
+      sql("CREATE FUNCTION testUDFStructType AS '" +
+        s"${classOf[GenericUDFArray].getName}'")
+      checkAnswer(
+        sql("SELECT testUDFStructType(named_struct('name', 'xx', 'value', 1))[0].value"),
+        Seq(Row(1)))
+    }
+  }
+
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {

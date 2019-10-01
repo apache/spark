@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.PrintStream
+import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
@@ -32,7 +33,7 @@ private[hive] object SparkSQLEnv extends Logging {
   var sqlContext: SQLContext = _
   var sparkContext: SparkContext = _
 
-  def init() {
+  def init(): Unit = {
     if (sqlContext == null) {
       val sparkConf = new SparkConf(loadDefaults = true)
       // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
@@ -51,15 +52,15 @@ private[hive] object SparkSQLEnv extends Logging {
 
       val metadataHive = sparkSession
         .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
-      metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
-      metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
-      metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
+      metadataHive.setOut(new PrintStream(System.out, true, UTF_8.name()))
+      metadataHive.setInfo(new PrintStream(System.err, true, UTF_8.name()))
+      metadataHive.setError(new PrintStream(System.err, true, UTF_8.name()))
       sparkSession.conf.set(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
     }
   }
 
   /** Cleans up and shuts down the Spark SQL environments. */
-  def stop() {
+  def stop(): Unit = {
     logDebug("Shutting down Spark SQL Environment")
     // Stop the SparkContext
     if (SparkSQLEnv.sparkContext != null) {

@@ -21,9 +21,9 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
+class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
 
   test("translate simple expression") {
     val attrInt = 'cint.int
@@ -217,6 +217,13 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
         // Functions such as 'Abs' are not supported
         EqualTo(Abs(attrInt), 6),
         IsNotNull(attrInt))), None)
+  }
+
+  test("SPARK-26865 DataSourceV2Strategy should push normalized filters") {
+    val attrInt = 'cint.int
+    assertResult(Seq(IsNotNull(attrInt))) {
+      DataSourceStrategy.normalizeFilters(Seq(IsNotNull(attrInt.withName("CiNt"))), Seq(attrInt))
+    }
   }
 
   /**

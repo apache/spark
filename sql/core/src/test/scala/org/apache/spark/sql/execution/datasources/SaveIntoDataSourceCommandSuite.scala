@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class SaveIntoDataSourceCommandSuite extends SharedSQLContext {
+class SaveIntoDataSourceCommandSuite extends SharedSparkSession {
 
   test("simpleString is redacted") {
     val URL = "connection.url"
-    val PASS = "123"
+    val PASS = "mypassword"
     val DRIVER = "mydriver"
 
     val dataSource = DataSource(

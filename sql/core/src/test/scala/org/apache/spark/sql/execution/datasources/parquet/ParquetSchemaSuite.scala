@@ -23,15 +23,15 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
+abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
 
   /**
    * Checks whether the reflected Parquet message type for product type `T` conforms `messageType`.
@@ -427,7 +427,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       assert(errMsg.startsWith("Parquet column cannot be converted in file"))
       val file = errMsg.substring("Parquet column cannot be converted in file ".length,
         errMsg.indexOf(". "))
-      val col = spark.read.parquet(file).schema.fields.filter(_.name.equals("a"))
+      val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
         assert(errMsg.contains("Column: [a], Expected: int, Found: BINARY"))

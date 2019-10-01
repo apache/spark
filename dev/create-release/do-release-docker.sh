@@ -127,6 +127,7 @@ GPG_KEY=$GPG_KEY
 ASF_PASSWORD=$ASF_PASSWORD
 GPG_PASSPHRASE=$GPG_PASSPHRASE
 RELEASE_STEP=$RELEASE_STEP
+USER=$USER
 EOF
 
 JAVA_VOL=
@@ -134,6 +135,9 @@ if [ -n "$JAVA" ]; then
   echo "JAVA_HOME=/opt/spark-java" >> $ENVFILE
   JAVA_VOL="--volume $JAVA:/opt/spark-java"
 fi
+
+# SPARK-24530: Sphinx must work with python 3 to generate doc correctly.
+echo "SPHINXPYTHON=/opt/p35/bin/python" >> $ENVFILE
 
 echo "Building $RELEASE_TAG; output will be at $WORKDIR/output"
 docker run -ti \

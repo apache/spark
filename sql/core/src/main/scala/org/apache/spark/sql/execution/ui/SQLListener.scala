@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.ui
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.JavaType
 import com.fasterxml.jackson.databind.`type`.TypeFactory
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
@@ -24,8 +25,14 @@ import com.fasterxml.jackson.databind.util.Converter
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.execution.SparkPlanInfo
-import org.apache.spark.sql.execution.metric._
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlanInfo}
+
+@DeveloperApi
+case class SparkListenerSQLAdaptiveExecutionUpdate(
+  executionId: Long,
+  physicalPlanDescription: String,
+  sparkPlanInfo: SparkPlanInfo)
+  extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerSQLExecutionStart(
@@ -39,7 +46,22 @@ case class SparkListenerSQLExecutionStart(
 
 @DeveloperApi
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
-  extends SparkListenerEvent
+  extends SparkListenerEvent {
+
+  // The name of the execution, e.g. `df.collect` will trigger a SQL execution with name "collect".
+  @JsonIgnore private[sql] var executionName: Option[String] = None
+
+  // The following 3 fields are only accessed when `executionName` is defined.
+
+  // The duration of the SQL execution, in nanoseconds.
+  @JsonIgnore private[sql] var duration: Long = 0L
+
+  // The `QueryExecution` instance that represents the SQL execution
+  @JsonIgnore private[sql] var qe: QueryExecution = null
+
+  // The exception object that caused this execution to fail. None if the execution doesn't fail.
+  @JsonIgnore private[sql] var executionFailure: Option[Throwable] = None
+}
 
 /**
  * A message used to update SQL metric value for driver-side updates (which doesn't get reflected
@@ -74,12 +96,12 @@ private class LongLongTupleConverter extends Converter[(Object, Object), (Long, 
   }
 
   override def getInputType(typeFactory: TypeFactory): JavaType = {
-    val objectType = typeFactory.uncheckedSimpleType(classOf[Object])
-    typeFactory.constructSimpleType(classOf[(_, _)], classOf[(_, _)], Array(objectType, objectType))
+    val objectType = typeFactory.constructType(classOf[Object])
+    typeFactory.constructSimpleType(classOf[(_, _)], Array(objectType, objectType))
   }
 
   override def getOutputType(typeFactory: TypeFactory): JavaType = {
-    val longType = typeFactory.uncheckedSimpleType(classOf[Long])
-    typeFactory.constructSimpleType(classOf[(_, _)], classOf[(_, _)], Array(longType, longType))
+    val longType = typeFactory.constructType(classOf[Long])
+    typeFactory.constructSimpleType(classOf[(_, _)], Array(longType, longType))
   }
 }

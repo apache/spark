@@ -56,11 +56,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     checkDecimal(Decimal(1000000000000000000L, 20, 2), "10000000000000000.00", 20, 2)
     checkDecimal(Decimal(Long.MaxValue), Long.MaxValue.toString, 20, 0)
     checkDecimal(Decimal(Long.MinValue), Long.MinValue.toString, 20, 0)
-    intercept[IllegalArgumentException](Decimal(170L, 2, 1))
-    intercept[IllegalArgumentException](Decimal(170L, 2, 0))
-    intercept[IllegalArgumentException](Decimal(BigDecimal("10.030"), 2, 1))
-    intercept[IllegalArgumentException](Decimal(BigDecimal("-9.95"), 2, 1))
-    intercept[IllegalArgumentException](Decimal(1e17.toLong, 17, 0))
+    intercept[ArithmeticException](Decimal(170L, 2, 1))
+    intercept[ArithmeticException](Decimal(170L, 2, 0))
+    intercept[ArithmeticException](Decimal(BigDecimal("10.030"), 2, 1))
+    intercept[ArithmeticException](Decimal(BigDecimal("-9.95"), 2, 1))
+    intercept[ArithmeticException](Decimal(1e17.toLong, 17, 0))
   }
 
   test("creating decimals with negative scale") {
@@ -227,5 +227,16 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     val bigInt = scala.math.BigInt("9223372036854775808")
     val decimal = Decimal.apply(bigInt)
     assert(decimal.toJavaBigDecimal.unscaledValue.toString === "9223372036854775808")
+  }
+
+  test("SPARK-26038: toScalaBigInt/toJavaBigInteger") {
+    // not fitting long
+    val decimal = Decimal("1234568790123456789012348790.1234879012345678901234568790")
+    assert(decimal.toScalaBigInt == scala.math.BigInt("1234568790123456789012348790"))
+    assert(decimal.toJavaBigInteger == new java.math.BigInteger("1234568790123456789012348790"))
+    // fitting long
+    val decimalLong = Decimal(123456789123456789L, 18, 9)
+    assert(decimalLong.toScalaBigInt == scala.math.BigInt("123456789"))
+    assert(decimalLong.toJavaBigInteger == new java.math.BigInteger("123456789"))
   }
 }

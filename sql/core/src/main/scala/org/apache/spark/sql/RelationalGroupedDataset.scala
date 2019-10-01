@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
@@ -45,10 +45,10 @@ import org.apache.spark.sql.types.{NumericType, StructType}
  *
  * @since 2.0.0
  */
-@InterfaceStability.Stable
+@Stable
 class RelationalGroupedDataset protected[sql](
-    df: DataFrame,
-    groupingExprs: Seq[Expression],
+    private[sql] val df: DataFrame,
+    private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
@@ -330,6 +330,15 @@ class RelationalGroupedDataset protected[sql](
    *   df.groupBy("year").pivot("course").sum("earnings")
    * }}}
    *
+   * From Spark 3.0.0, values can be literal columns, for instance, struct. For pivoting by
+   * multiple columns, use the `struct` function to combine the columns and values:
+   *
+   * {{{
+   *   df.groupBy("year")
+   *     .pivot("trainingCourse", Seq(struct(lit("java"), lit("Experts"))))
+   *     .agg(sum($"earnings"))
+   * }}}
+   *
    * @param pivotColumn Name of the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
    * @since 1.6.0
@@ -413,10 +422,14 @@ class RelationalGroupedDataset protected[sql](
   def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
+        val valueExprs = values.map(_ match {
+          case c: Column => c.expr
+          case v => Literal.apply(v)
+        })
         new RelationalGroupedDataset(
           df,
           groupingExprs,
-          RelationalGroupedDataset.PivotType(pivotColumn.expr, values.map(Literal.apply)))
+          RelationalGroupedDataset.PivotType(pivotColumn.expr, valueExprs))
       case _: RelationalGroupedDataset.PivotType =>
         throw new UnsupportedOperationException("repeated pivots are not supported")
       case _ =>
@@ -510,6 +523,48 @@ class RelationalGroupedDataset protected[sql](
     Dataset.ofRows(df.sparkSession, plan)
   }
 
+  /**
+   * Applies a vectorized python user-defined function to each cogrouped data.
+   * The user-defined function defines a transformation:
+   * `pandas.DataFrame`, `pandas.DataFrame` -> `pandas.DataFrame`.
+   *  For each group in the cogrouped data, all elements in the group are passed as a
+   * `pandas.DataFrame` and the results for all cogroups are combined into a new [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def flatMapCoGroupsInPandas(
+      r: RelationalGroupedDataset,
+      expr: PythonUDF): DataFrame = {
+    require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      "Must pass a cogrouped map udf")
+    require(expr.dataType.isInstanceOf[StructType],
+      s"The returnType of the udf must be a ${StructType.simpleString}")
+
+    val leftGroupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+
+    val rightGroupingNamedExpressions = r.groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+
+    val leftAttributes = leftGroupingNamedExpressions.map(_.toAttribute)
+    val rightAttributes = rightGroupingNamedExpressions.map(_.toAttribute)
+
+    val leftChild = df.logicalPlan
+    val rightChild = r.df.logicalPlan
+
+    val left = Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild)
+    val right = Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)
+
+    val output = expr.dataType.asInstanceOf[StructType].toAttributes
+    val plan = FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, expr, output, left, right)
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
   override def toString: String = {
     val builder = new StringBuilder
     builder.append("RelationalGroupedDataset: [grouping expressions: [")
@@ -561,5 +616,5 @@ private[sql] object RelationalGroupedDataset {
   /**
    * To indicate it's the PIVOT
    */
-  private[sql] case class PivotType(pivotCol: Expression, values: Seq[Literal]) extends GroupType
+  private[sql] case class PivotType(pivotCol: Expression, values: Seq[Expression]) extends GroupType
 }

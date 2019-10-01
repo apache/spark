@@ -19,10 +19,6 @@ package org.apache.spark.ml.feature
 
 import java.{util => ju}
 
-import org.json4s.JsonDSL._
-import org.json4s.JValue
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Model
@@ -89,7 +85,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
+   * Param for how to handle invalid entries containing NaN values. Values outside the splits
+   * will always be treated as errors. Options are 'skip' (filter out rows with
    * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
    * additional bucket). Note that in the multiple column case, the invalid handling is applied
    * to all columns. That said for 'error' it will throw an error if any invalids are found in
@@ -99,7 +96,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    */
   @Since("2.1.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
-    "how to handle invalid entries. Options are skip (filter out rows with invalid values), " +
+    "how to handle invalid entries containing NaN values. Values outside the splits will always " +
+    "be treated as errorsOptions are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
 

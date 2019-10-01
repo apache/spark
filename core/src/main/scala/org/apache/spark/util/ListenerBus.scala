@@ -61,6 +61,14 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   }
 
   /**
+   * Remove all listeners and they won't receive any events. This method is thread-safe and can be
+   * called in any thread.
+   */
+  final def removeAllListeners(): Unit = {
+    listenersPlusTimers.clear()
+  }
+
+  /**
    * This can be overridden by subclasses if there is any extra cleanup to do when removing a
    * listener.  In particular AsyncEventQueues can clean up queues in the LiveListenerBus.
    */

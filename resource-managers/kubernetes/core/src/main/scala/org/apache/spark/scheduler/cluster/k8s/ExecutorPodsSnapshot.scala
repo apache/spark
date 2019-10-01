@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.util.Locale
+
 import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.Constants._
@@ -52,7 +54,7 @@ object ExecutorPodsSnapshot extends Logging {
     if (isDeleted(pod)) {
       PodDeleted(pod)
     } else {
-      val phase = pod.getStatus.getPhase.toLowerCase
+      val phase = pod.getStatus.getPhase.toLowerCase(Locale.ROOT)
       phase match {
         case "pending" =>
           PodPending(pod)

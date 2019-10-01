@@ -23,6 +23,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.SparkContext
@@ -124,7 +125,7 @@ class InMemoryFileIndex(
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch, hadoopConf, filter, sparkSession)
+      pathsToFetch, hadoopConf, filter, sparkSession, areRootPaths = true)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -166,12 +167,22 @@ object InMemoryFileIndex extends Logging {
       paths: Seq[Path],
       hadoopConf: Configuration,
       filter: PathFilter,
-      sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
+      sparkSession: SparkSession,
+      areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
+
+    val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       return paths.map { path =>
-        (path, listLeafFiles(path, hadoopConf, filter, Some(sparkSession)))
+        val leafFiles = listLeafFiles(
+          path,
+          hadoopConf,
+          filter,
+          Some(sparkSession),
+          ignoreMissingFiles = ignoreMissingFiles,
+          isRootPath = areRootPaths)
+        (path, leafFiles)
       }
     }
 
@@ -204,7 +215,14 @@ object InMemoryFileIndex extends Logging {
         .mapPartitions { pathStrings =>
           val hadoopConf = serializableConfiguration.value
           pathStrings.map(new Path(_)).toSeq.map { path =>
-            (path, listLeafFiles(path, hadoopConf, filter, None))
+            val leafFiles = listLeafFiles(
+              path,
+              hadoopConf,
+              filter,
+              None,
+              ignoreMissingFiles = ignoreMissingFiles,
+              isRootPath = areRootPaths)
+            (path, leafFiles)
           }.iterator
         }.map { case (path, statuses) =>
         val serializableStatuses = statuses.map { status =>
@@ -267,15 +285,49 @@ object InMemoryFileIndex extends Logging {
       path: Path,
       hadoopConf: Configuration,
       filter: PathFilter,
-      sessionOpt: Option[SparkSession]): Seq[FileStatus] = {
+      sessionOpt: Option[SparkSession],
+      ignoreMissingFiles: Boolean,
+      isRootPath: Boolean): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
 
-    // [SPARK-17599] Prevent InMemoryFileIndex from failing if path doesn't exist
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.
-    val statuses = try fs.listStatus(path) catch {
-      case _: FileNotFoundException =>
+    val statuses: Array[FileStatus] = try {
+      fs match {
+        // DistributedFileSystem overrides listLocatedStatus to make 1 single call to namenode
+        // to retrieve the file status with the file block location. The reason to still fallback
+        // to listStatus is because the default implementation would potentially throw a
+        // FileNotFoundException which is better handled by doing the lookups manually below.
+        case _: DistributedFileSystem =>
+          val remoteIter = fs.listLocatedStatus(path)
+          new Iterator[LocatedFileStatus]() {
+            def next(): LocatedFileStatus = remoteIter.next
+            def hasNext(): Boolean = remoteIter.hasNext
+          }.toArray
+        case _ => fs.listStatus(path)
+      }
+    } catch {
+      // If we are listing a root path (e.g. a top level directory of a table), we need to
+      // ignore FileNotFoundExceptions during this root level of the listing because
+      //
+      //  (a) certain code paths might construct an InMemoryFileIndex with root paths that
+      //      might not exist (i.e. not all callers are guaranteed to have checked
+      //      path existence prior to constructing InMemoryFileIndex) and,
+      //  (b) we need to ignore deleted root paths during REFRESH TABLE, otherwise we break
+      //      existing behavior and break the ability drop SessionCatalog tables when tables'
+      //      root directories have been deleted (which breaks a number of Spark's own tests).
+      //
+      // If we are NOT listing a root path then a FileNotFoundException here means that the
+      // directory was present in a previous level of file listing but is absent in this
+      // listing, likely indicating a race condition (e.g. concurrent table overwrite or S3
+      // list inconsistency).
+      //
+      // The trade-off in supporting existing behaviors / use-cases is that we won't be
+      // able to detect race conditions involving root paths being deleted during
+      // InMemoryFileIndex construction. However, it's still a net improvement to detect and
+      // fail-fast on the non-root cases. For more info see the SPARK-27676 review discussion.
+      case _: FileNotFoundException if isRootPath || ignoreMissingFiles =>
         logWarning(s"The directory $path was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
     }
@@ -286,9 +338,23 @@ object InMemoryFileIndex extends Logging {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
       val nestedFiles: Seq[FileStatus] = sessionOpt match {
         case Some(session) =>
-          bulkListLeafFiles(dirs.map(_.getPath), hadoopConf, filter, session).flatMap(_._2)
+          bulkListLeafFiles(
+            dirs.map(_.getPath),
+            hadoopConf,
+            filter,
+            session,
+            areRootPaths = false
+          ).flatMap(_._2)
         case _ =>
-          dirs.flatMap(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
+          dirs.flatMap { dir =>
+            listLeafFiles(
+              dir.getPath,
+              hadoopConf,
+              filter,
+              sessionOpt,
+              ignoreMissingFiles = ignoreMissingFiles,
+              isRootPath = false)
+          }
       }
       val allFiles = topLevelFiles ++ nestedFiles
       if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
@@ -308,14 +374,21 @@ object InMemoryFileIndex extends Logging {
       //   implementations don't actually issue RPC for this method.
       //
       // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
-      //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
+      //   be a big deal since we always use to `bulkListLeafFiles` when the number of
       //   paths exceeds threshold.
       case f =>
         // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
         // which is very slow on some file system (RawLocalFileSystem, which is launch a
         // subprocess and parse the stdout).
         try {
-          val locations = fs.getFileBlockLocations(f, 0, f.getLen)
+          val locations = fs.getFileBlockLocations(f, 0, f.getLen).map { loc =>
+            // Store BlockLocation objects to consume less memory
+            if (loc.getClass == classOf[BlockLocation]) {
+              loc
+            } else {
+              new BlockLocation(loc.getNames, loc.getHosts, loc.getOffset, loc.getLength)
+            }
+          }
           val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
             f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
           if (f.isSymlink) {
@@ -323,7 +396,7 @@ object InMemoryFileIndex extends Logging {
           }
           Some(lfs)
         } catch {
-          case _: FileNotFoundException =>
+          case _: FileNotFoundException if ignoreMissingFiles =>
             missingFiles += f.getPath.toString
             None
         }
