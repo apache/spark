@@ -2,126 +2,126 @@
 filter & aggregate without group
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 range/filter/sum:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-range/filter/sum wholestage off                   45894          47528        2310         45.7          21.9       1.0X
-range/filter/sum wholestage on                     3193           3572         213        656.8           1.5      14.4X
+range/filter/sum wholestage off                   52841          53513         951         39.7          25.2       1.0X
+range/filter/sum wholestage on                     3104           3188         109        675.6           1.5      17.0X
 
 
 ================================================================================================
 range/limit/sum
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 range/limit/sum:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-range/limit/sum wholestage off                      202            207           7       2593.1           0.4       1.0X
-range/limit/sum wholestage on                       148            161          20       3545.1           0.3       1.4X
+range/limit/sum wholestage off                      199            222          32       2633.5           0.4       1.0X
+range/limit/sum wholestage on                       131            138           7       3991.0           0.3       1.5X
 
 
 ================================================================================================
 sample
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 sample with replacement:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-sample with replacement wholestage off            12337          12657         452         10.6          94.1       1.0X
-sample with replacement wholestage on              7355           7368          14         17.8          56.1       1.7X
+sample with replacement wholestage off            13015          13441         602         10.1          99.3       1.0X
+sample with replacement wholestage on              7688           7745          91         17.0          58.7       1.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 sample without replacement:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-sample without replacement wholestage off           3050           3060          14         43.0          23.3       1.0X
-sample without replacement wholestage on           1103           1118          22        118.8           8.4       2.8X
+sample without replacement wholestage off           2990           2993           4         43.8          22.8       1.0X
+sample without replacement wholestage on           1172           1186          13        111.9           8.9       2.6X
 
 
 ================================================================================================
 collect
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 collect:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-collect 1 million                                   324            361          41          3.2         309.4       1.0X
-collect 2 millions                                  619            700          70          1.7         590.4       0.5X
-collect 4 millions                                 1214           1293         111          0.9        1158.2       0.3X
+collect 1 million                                   317            425         188          3.3         301.9       1.0X
+collect 2 millions                                  575            598          26          1.8         548.2       0.6X
+collect 4 millions                                 1350           1848         704          0.8        1287.6       0.2X
 
 
 ================================================================================================
 collect limit
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 collect limit:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-collect limit 1 million                             391            396           5          2.7         373.0       1.0X
-collect limit 2 millions                            746            769          26          1.4         711.8       0.5X
+collect limit 1 million                             375            387          14          2.8         358.0       1.0X
+collect limit 2 millions                            714            736          28          1.5         681.3       0.5X
 
 
 ================================================================================================
 generate explode
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate explode array:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-generate explode array wholestage off             15063          16007        1335          1.1         897.8       1.0X
-generate explode array wholestage on              10909          10932          20          1.5         650.2       1.4X
+generate explode array wholestage off             19669          19829         227          0.9        1172.3       1.0X
+generate explode array wholestage on              10983          11020          35          1.5         654.7       1.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate explode map:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-generate explode map wholestage off               55011          55580         806          0.3        3278.9       1.0X
-generate explode map wholestage on                46009          46445         399          0.4        2742.3       1.2X
+generate explode map wholestage off               57756          57928         243          0.3        3442.5       1.0X
+generate explode map wholestage on                47398          47703         250          0.4        2825.2       1.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate posexplode array:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-generate posexplode array wholestage off          17987          18866        1244          0.9        1072.1       1.0X
-generate posexplode array wholestage on           11400          11444          38          1.5         679.5       1.6X
+generate posexplode array wholestage off          21402          21525         174          0.8        1275.7       1.0X
+generate posexplode array wholestage on           11898          11982          67          1.4         709.2       1.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate inline array:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-generate inline array wholestage off              14905          14991         122          1.1         888.4       1.0X
-generate inline array wholestage on                9919          10129         160          1.7         591.2       1.5X
+generate inline array wholestage off              15570          15597          37          1.1         928.1       1.0X
+generate inline array wholestage on               10044          10161          87          1.7         598.6       1.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate big struct array:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-generate big struct array wholestage off            508            577          98          0.1        8474.0       1.0X
-generate big struct array wholestage on             451            485          26          0.1        7523.2       1.1X
+generate big struct array wholestage off            601            615          19          0.1       10023.5       1.0X
+generate big struct array wholestage on             388            410          25          0.2        6458.7       1.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate big nested struct array:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-generate big nested struct array wholestage off            537            567          43          0.1        8944.4       1.0X
-generate big nested struct array wholestage on            528            546          24          0.1        8804.2       1.0X
+generate big nested struct array wholestage off            492            525          48          0.1        8191.7       1.0X
+generate big nested struct array wholestage on            468            496          30          0.1        7796.4       1.1X
 
 
 ================================================================================================
 generate regular generator
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 generate stack:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-generate stack wholestage off                     27220          27608         548          0.6        1622.5       1.0X
-generate stack wholestage on                      20070          20170         117          0.8        1196.3       1.4X
+generate stack wholestage off                     28014          28091         109          0.6        1669.8       1.0X
+generate stack wholestage on                      19246          19267          27          0.9        1147.2       1.5X
 
 
