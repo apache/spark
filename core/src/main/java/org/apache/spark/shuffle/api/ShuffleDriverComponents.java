@@ -30,17 +30,21 @@ import java.util.Map;
 public interface ShuffleDriverComponents {
 
   /**
-   * Called once in the driver to bootstrap this module that is specific
-   * to this application.
+   * Called once in the driver to bootstrap this module that is specific to this application.
+   * This method should prepare the module with its shuffle components i.e. registering against
+   * an external file servers or shuffle services, or creating tables in a shuffle
+   * storage data database.
    *
-   * @return additional SparkConf settings necessary for initializing the executors.
+   * @return additional SparkConf settings necessary for initializing the executors. This would
+   * include configurations that cannot be statically set on the application, like the host:port
+   * of external services for shuffle storage.
    */
   Map<String, String> initializeApplication();
 
   /**
    * Called once at the end of the Spark application to clean up any existing shuffle state.
    */
-  default void cleanupApplication() throws IOException {}
+  void cleanupApplication() throws IOException;
 
   /**
    * Called once per shuffle id when the shuffle id is first generated for a shuffle stage.

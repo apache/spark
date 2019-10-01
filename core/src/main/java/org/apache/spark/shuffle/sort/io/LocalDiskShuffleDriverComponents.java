@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.sort.lifecycle;
+package org.apache.spark.shuffle.sort.io;
 
+import java.io.IOException;
 import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
@@ -25,7 +26,7 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.api.ShuffleDriverComponents;
 import org.apache.spark.storage.BlockManagerMaster;
 
-public class DefaultShuffleDriverComponents implements ShuffleDriverComponents {
+public class LocalDiskShuffleDriverComponents implements ShuffleDriverComponents {
 
   private BlockManagerMaster blockManagerMaster;
 
@@ -33,6 +34,11 @@ public class DefaultShuffleDriverComponents implements ShuffleDriverComponents {
   public Map<String, String> initializeApplication() {
     blockManagerMaster = SparkEnv.get().blockManager().master();
     return ImmutableMap.of();
+  }
+
+  @Override
+  public void cleanupApplication() throws IOException {
+    // nothing to clean up
   }
 
   @Override

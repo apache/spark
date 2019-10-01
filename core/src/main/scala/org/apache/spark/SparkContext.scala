@@ -27,9 +27,8 @@ import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
-
 import com.google.common.collect.MapMaker
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -58,6 +57,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
+import org.apache.spark.shuffle.ShuffleDataIOUtils
 import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents}
 import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.ThreadStackTrace
@@ -528,18 +528,15 @@ class SparkContext(config: SparkConf) extends Logging {
     executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
 
-    val configuredPluginClasses = conf.get(SHUFFLE_IO_PLUGIN_CLASS)
-    val maybeIO = Utils.loadExtensions(
-      classOf[ShuffleDataIO], Seq(configuredPluginClasses), conf)
-    require(maybeIO.nonEmpty, s"At least one valid shuffle plugin must be specified by config " +
-      s"${SHUFFLE_IO_PLUGIN_CLASS.key}, but $configuredPluginClasses resulted in zero valid " +
-      s"plugins.")
-    require(maybeIO.size == 1,
-        s"Specified shuffle plugin(s) $configuredPluginClasses resulted in more than one valid " +
-        s"plugin, but only one valid plugin should be specified")
-    _shuffleDriverComponents = maybeIO.head.driver()
+    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
     _shuffleDriverComponents.initializeApplication().asScala.foreach {
-      case (k, v) => _conf.set(ShuffleDataIO.SHUFFLE_SPARK_CONF_PREFIX + k, v) }
+      case (k, v) =>
+        val key = ShuffleDataIO.SHUFFLE_SPARK_CONF_PREFIX + k
+        if (_conf.contains(key)) {
+          logDebug(s"Setting shuffle spark config ${key} to ${v}")
+          _conf.set(ShuffleDataIO.SHUFFLE_SPARK_CONF_PREFIX + k, v)
+        }
+      }
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)

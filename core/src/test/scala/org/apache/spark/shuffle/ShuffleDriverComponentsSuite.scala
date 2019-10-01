@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle
 
 import java.util.{Map => JMap}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import com.google.common.collect.ImmutableMap
 
@@ -37,13 +38,9 @@ class ShuffleDriverComponentsSuite extends SparkFunSuite with LocalSparkContext 
 
     sc.parallelize(Seq((1, "one"), (2, "two"), (3, "three")), 3)
       .groupByKey()
+      .map{ x => assert(TestShuffleExecutorComponents.initialized.get()); x}
       .collect()
   }
-}
-
-class TestShuffleDriverComponents extends ShuffleDriverComponents {
-  override def initializeApplication(): JMap[String, String] =
-    ImmutableMap.of("test-key", "test-value")
 }
 
 class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
@@ -53,6 +50,19 @@ class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
 
   override def executor(): ShuffleExecutorComponents =
     new TestShuffleExecutorComponents(delegate.executor())
+}
+
+object TestShuffleExecutorComponents {
+  var initialized = new AtomicBoolean(false)
+}
+
+class TestShuffleDriverComponents extends ShuffleDriverComponents {
+  override def initializeApplication(): JMap[String, String] = {
+    TestShuffleExecutorComponents.initialized.set(true)
+    ImmutableMap.of()
+  }
+
+  override def cleanupApplication(): Unit = {}
 }
 
 class TestShuffleExecutorComponents(delegate: ShuffleExecutorComponents)

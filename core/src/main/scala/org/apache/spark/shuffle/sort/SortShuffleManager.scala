@@ -217,11 +217,7 @@ private[spark] object SortShuffleManager extends Logging {
   }
 
   private def loadShuffleExecutorComponents(conf: SparkConf): ShuffleExecutorComponents = {
-    val configuredPluginClasses = conf.get(config.SHUFFLE_IO_PLUGIN_CLASS)
-    val maybeIO = Utils.loadExtensions(
-      classOf[ShuffleDataIO], Seq(configuredPluginClasses), conf)
-    require(maybeIO.size == 1, s"Failed to load plugins of type $configuredPluginClasses")
-    val executorComponents = maybeIO.head.executor()
+    val executorComponents = ShuffleDataIOUtils.loadShuffleDataIO(conf).executor()
     val extraConfigs = conf.getAllWithPrefix(ShuffleDataIO.SHUFFLE_SPARK_CONF_PREFIX)
         .toMap
     executorComponents.initializeExecutor(
