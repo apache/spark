@@ -68,8 +68,10 @@ class TestShuffleDriverComponents extends ShuffleDriverComponents {
 class TestShuffleExecutorComponents(delegate: ShuffleExecutorComponents)
   extends ShuffleExecutorComponents {
 
-  override def initializeExecutor(appId: String, execId: String,
-                                  extraConfigs: JMap[String, String]): Unit = {
+  override def initializeExecutor(
+      appId: String,
+      execId: String,
+      extraConfigs: JMap[String, String]): Unit = {
     assert(extraConfigs.get("test-key") == "test-value")
     delegate.initializeExecutor(appId, execId, extraConfigs)
   }

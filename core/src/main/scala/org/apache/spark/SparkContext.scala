@@ -529,14 +529,13 @@ class SparkContext(config: SparkConf) extends Logging {
     executorEnvs("SPARK_USER") = sparkUser
 
     _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
-    _shuffleDriverComponents.initializeApplication().asScala.foreach {
-      case (k, v) =>
-        val key = ShuffleDataIO.SHUFFLE_SPARK_CONF_PREFIX + k
-        if (_conf.contains(key)) {
-          logDebug(s"Setting shuffle spark config ${key} to ${v}")
-          _conf.set(ShuffleDataIO.SHUFFLE_SPARK_CONF_PREFIX + k, v)
-        }
+    _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
+      val key = ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k
+      if (_conf.contains(key)) {
+        logDebug(s"Setting shuffle spark config ${key} to ${v}")
+        _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
       }
+    }
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)

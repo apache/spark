@@ -17,10 +17,8 @@
 
 package org.apache.spark.shuffle.sort.io;
 
-import java.io.IOException;
+import java.util.Collections;
 import java.util.Map;
-
-import com.google.common.collect.ImmutableMap;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.api.ShuffleDriverComponents;
@@ -33,23 +31,19 @@ public class LocalDiskShuffleDriverComponents implements ShuffleDriverComponents
   @Override
   public Map<String, String> initializeApplication() {
     blockManagerMaster = SparkEnv.get().blockManager().master();
-    return ImmutableMap.of();
+    return Collections.emptyMap();
   }
 
   @Override
-  public void cleanupApplication() throws IOException {
+  public void cleanupApplication() {
     // nothing to clean up
   }
 
   @Override
   public void removeShuffle(int shuffleId, boolean blocking) {
-    checkInitialized();
-    blockManagerMaster.removeShuffle(shuffleId, blocking);
-  }
-
-  private void checkInitialized() {
     if (blockManagerMaster == null) {
       throw new IllegalStateException("Driver components must be initialized before using");
     }
+    blockManagerMaster.removeShuffle(shuffleId, blocking);
   }
 }

@@ -42,11 +42,6 @@ import org.apache.spark.annotation.Private;
 public interface ShuffleDataIO {
 
   /**
-   * The prefix of spark config keys that are passed from the driver to the executor.
-   */
-  String SHUFFLE_SPARK_CONF_PREFIX = "spark.shuffle.plugin.";
-
-  /**
    * Called once on executor processes to bootstrap the shuffle data storage modules that
    * are only invoked on the executors.
    */
