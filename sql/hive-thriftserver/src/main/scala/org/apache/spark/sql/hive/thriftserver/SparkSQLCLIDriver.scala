@@ -165,6 +165,13 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
     }
 
+    // The class loader of CliSessionState's conf is current main thread's class loader
+    // used to load jars passed by --jars. One class loader used by AddJarCommand is
+    // sharedState.jarClassLoader which contain jar path passed by --jars in main thread.
+    // We set CliSessionState's conf class loader to sharedState.jarClassLoader.
+    // Thus we can load all jars passed by --jars and AddJarCommand.
+    sessionState.getConf.setClassLoader(SparkSQLEnv.sqlContext.sharedState.jarClassLoader)
+
     // TODO work around for set the log output to console, because the HiveContext
     // will set the output into an invalid buffer.
     sessionState.in = System.in
