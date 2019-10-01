@@ -27,6 +27,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SPARK_TASK_PREFIX
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
@@ -47,7 +48,9 @@ private[spark] case class ResourceRequest(
     discoveryScript: Option[String],
     vendor: Option[String])
 
-private[spark] case class ResourceRequirement(resourceName: String, amount: Int)
+private[spark] case class ResourceRequirement(resourceName: String, amount: Int,
+                                              numParts: Int = 1) {
+}
 
 /**
  * Case class representing allocated resource addresses for a specific resource.
@@ -94,8 +97,28 @@ private[spark] object ResourceUtils extends Logging {
 
   def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
     : Seq[ResourceRequirement] = {
-    parseAllResourceRequests(sparkConf, componentName).map { request =>
-      ResourceRequirement(request.id.resourceName, request.amount)
+    listResourceIds(sparkConf, componentName).map { resourceId =>
+      val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
+      val amountDouble = settings.getOrElse(AMOUNT,
+        throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+      ).toDouble
+      val (amount, parts) = if (componentName.equalsIgnoreCase(SPARK_TASK_PREFIX)) {
+        val parts = if (amountDouble <= 0.5) {
+          Math.floor(1.0 / amountDouble).toInt
+        } else if (amountDouble % 1 != 0) {
+          throw new SparkException(
+            s"The resource amount ${amountDouble} must be either <= 0.5, or a whole number.")
+        } else {
+          1
+        }
+        (Math.ceil(amountDouble).toInt, parts)
+      } else if (amountDouble % 1 != 0) {
+        throw new SparkException(
+          s"Only tasks support fractional resources, please check your $componentName settings")
+      } else {
+        (amountDouble.toInt, 1)
+      }
+      ResourceRequirement(resourceId.resourceName, amount, parts)
     }
   }
 

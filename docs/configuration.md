@@ -1997,9 +1997,13 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.resource.{resourceName}.amount</code></td>
   <td>1</td>
   <td>
-    Amount of a particular resource type to allocate for each task. If this is specified
-    you must also provide the executor config <code>spark.executor.resource.{resourceName}.amount</code>
-    and any corresponding discovery configs so that your executors are created with that resource type.
+    Amount of a particular resource type to allocate for each task, note that this can be a double.
+    If this is specified you must also provide the executor config 
+    <code>spark.executor.resource.{resourceName}.amount</code> and any corresponding discovery configs 
+    so that your executors are created with that resource type. In addition to whole amounts, 
+    a fractional amount (for example, 0.25, or 1/4th of a resource) may be specified. 
+    Fractional amounts must be less than or equal to 0.5, or in other words, the minimum amount of
+    resource sharing is 2 tasks per resource.
   </td>
 </tr>
 <tr>

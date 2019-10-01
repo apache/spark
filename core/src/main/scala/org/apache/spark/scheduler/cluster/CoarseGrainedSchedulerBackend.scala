@@ -68,6 +68,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
   private val createTimeNs = System.nanoTime()
 
+  private val taskResources = scheduler.resourcesReqsPerTask
+
   // Accessing `executorDataMap` in the inherited methods from ThreadSafeRpcEndpoint doesn't need
   // any protection. But accessing `executorDataMap` out of the inherited methods must be
   // protected by `CoarseGrainedSchedulerBackend.this`. Besides, `executorDataMap` should only
@@ -215,7 +217,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val resourcesInfo = resources.map{ case (k, v) =>
-            (v.name, new ExecutorResourceInfo(v.name, v.addresses))}
+            (v.name,
+             new ExecutorResourceInfo(v.name, v.addresses,
+               taskResources
+                 .filter(r => r.resourceName == v.name)
+                 .map(_.numParts)
+                 .headOption
+                 .getOrElse(1)))
+          }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
             resourcesInfo)
