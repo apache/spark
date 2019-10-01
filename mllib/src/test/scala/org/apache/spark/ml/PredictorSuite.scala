@@ -55,14 +55,50 @@ class PredictorSuite extends SparkFunSuite with MLlibTestSparkContext {
       predictor.fit(df.select(col("label"), col("weight").cast(StringType), col("features")))
     }
   }
+
+  test("multiple columns for features should work well without side effect") {
+    // Should fail due to not supporting multiple columns
+    intercept[IllegalArgumentException] {
+      new MockPredictor(false).setFeaturesCol(Array("feature1", "feature2", "feature3"))
+    }
+
+    // Only use multiple columns for features
+    val df = spark.createDataFrame(Seq(
+      (0, 1, 0, 2, 3),
+      (1, 2, 0, 3, 9),
+      (0, 3, 0, 2, 6)
+    )).toDF("label", "weight", "feature1", "feature2", "feature3")
+
+    val predictor = new MockPredictor().setWeightCol("weight")
+      .setFeaturesCol(Array("feature1", "feature2", "feature3"))
+    predictor.fit(df)
+
+    // Should fail due to wrong type for column "feature1" in schema
+    intercept[IllegalArgumentException] {
+      predictor.fit(df.select(col("label"), col("weight"),
+        col("feature1").cast(StringType), col("feature2"), col("feature3")))
+    }
+
+    val df2 = df.toDF("label", "weight", "features", "feature2", "feature3")
+    // Should fail due to missing "feature1" in schema
+    intercept[IllegalArgumentException] {
+      predictor.setFeaturesCol(Array("feature1", "feature2", "feature3")).fit(df2)
+    }
+
+    // Should fail due to wrong type in schema for single column of features
+    intercept[IllegalArgumentException] {
+      predictor.setFeaturesCol(Array("feature2", "feature3")).fit(df2)
+    }
+  }
 }
 
 object PredictorSuite {
 
-  class MockPredictor(override val uid: String)
+  class MockPredictor(override val uid: String, val supportMultiColumns: Boolean)
     extends Predictor[Vector, MockPredictor, MockPredictionModel] with HasWeightCol {
 
-    def this() = this(Identifiable.randomUID("mockpredictor"))
+    def this(supportMulti: Boolean) = this(Identifiable.randomUID("mockpredictor"), supportMulti)
+    def this() = this(true)
 
     def setWeightCol(value: String): this.type = set(weightCol, value)
 
@@ -74,6 +110,8 @@ object PredictorSuite {
 
     override def copy(extra: ParamMap): MockPredictor =
       throw new UnsupportedOperationException()
+
+    override protected def isSupportMultiColumnsForFeatures: Boolean = supportMultiColumns
   }
 
   class MockPredictionModel(override val uid: String)

@@ -78,6 +78,28 @@ trait HasFeaturesCol extends Params {
 }
 
 /**
+ * Trait for shared param featuresCols. (default: Array.empty[String]) This trait may be changed or
+ * removed between minor versions.
+ *
+ * This is to support multiple columns for features.
+ */
+@DeveloperApi
+trait HasFeaturesCols extends Params {
+
+  /**
+   * Param for features columns names.
+   * @group param
+   */
+  final val featuresCols: StringArrayParam = new StringArrayParam(this, "featuresCols",
+    "names of the multiple columns for features")
+
+  setDefault(featuresCols, Array.empty[String])
+
+  /** @group getParam */
+  final def getFeaturesCols: Array[String] = $(featuresCols)
+}
+
+/**
  * Trait for shared param labelCol (default: "label"). This trait may be changed or
  * removed between minor versions.
  */

@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * (private[ml])  Trait for parameters for prediction (regression and classification).
  */
 private[ml] trait PredictorParams extends Params
-  with HasLabelCol with HasFeaturesCol with HasPredictionCol {
+  with HasLabelCol with HasFeaturesCol with HasPredictionCol with HasFeaturesCols {
 
   /**
    * Validates and transforms the input schema with the provided param map.
@@ -48,7 +48,16 @@ private[ml] trait PredictorParams extends Params
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
-    SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
+    $(featuresCols).foreach(SchemaUtils.checkNumericType(schema, _))
+
+    // Now features column(s) can be specified via either the original 'featuresCol', or
+    // the new added 'featuresCols'. So need to bypass the check of 'featuresCol' only when
+    // 'featuresCols' is used but 'featuresCol' is not used.
+    if ($(featuresCols).isEmpty ||
+        ($(featuresCols).nonEmpty && schema.fieldNames.contains($(featuresCol)))) {
+      SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
+    }
+
     if (fitting) {
       SchemaUtils.checkNumericType(schema, $(labelCol))
 
@@ -126,6 +135,27 @@ abstract class Predictor[
 
   /** @group setParam */
   def setPredictionCol(value: String): Learner = set(predictionCol, value).asInstanceOf[Learner]
+
+  /**
+   * @group setParam
+   * An overloaded version to support multiple columns for features.
+   *
+   * Please note it will save the features columns names to a new parameter "featuresCols" as
+   * an Array[String].
+   */
+  def setFeaturesCol(value: Array[String]): Learner = {
+    require(isSupportMultiColumnsForFeatures,
+      s"Multiple columns for features is not supported by ${getClass.getSimpleName}")
+    set(featuresCols, value).asInstanceOf[Learner]
+  }
+
+  /**
+   * Children classes should override this to tell whether supporting multiple columns
+   * for features, meaning to fetch features columns names from parameter 'featuresCols'.
+   *
+   * @return Whether this predictor support multiple columns for features
+   */
+  protected def isSupportMultiColumnsForFeatures: Boolean = false
 
   override def fit(dataset: Dataset[_]): M = {
     // This handles a few items such as schema validation.
@@ -206,6 +236,27 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
 
   /** @group setParam */
   def setPredictionCol(value: String): M = set(predictionCol, value).asInstanceOf[M]
+
+  /**
+   * @group setParam
+   * An overloaded version to support multiple columns for features.
+   *
+   * Please note it is to call `getFeaturesCols` or `$(featuresCols)` to get the features columns
+   * names as an Array.
+   */
+  def setFeaturesCol(value: Array[String]): M = {
+    require(isSupportMultiColumnsForFeatures,
+      s"Multiple columns for features is not supported by ${getClass.getSimpleName}")
+    set(featuresCols, value).asInstanceOf[M]
+  }
+
+  /**
+   * Children classes should override this to tell whether supporting multiple columns
+   * for features, meaning to fetch features columns names from parameter 'featuresCols'.
+   *
+   * @return Whether this predictor support multiple columns for features
+   */
+  protected def isSupportMultiColumnsForFeatures: Boolean = false
 
   /** Returns the number of features the model was trained on. If unknown, returns -1 */
   @Since("1.6.0")
