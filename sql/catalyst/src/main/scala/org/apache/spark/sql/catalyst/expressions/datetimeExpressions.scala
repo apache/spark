@@ -298,6 +298,30 @@ case class Second(child: Expression, timeZoneId: Option[String] = None)
   }
 }
 
+case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+
+  def this(child: Expression) = this(child, None)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+
+  // 2 digits for seconds, and 6 digits for the fractional part with microsecond precision.
+  override def dataType: DataType = DecimalType(8, 6)
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    DateTimeUtils.getSecondsWithFraction(timestamp.asInstanceOf[Long], timeZone)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.getSecondsWithFraction($c, $tz)")
+  }
+}
+
 case class Milliseconds(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
@@ -1997,7 +2021,7 @@ object DatePart {
     case "DOY" => DayOfYear(source)
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
     case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
-    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Second(source)
+    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondWithFraction(source)
     case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
       Milliseconds(source)
     case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
