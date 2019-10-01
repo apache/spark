@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -41,6 +42,7 @@ object MakeDateTimeBenchmark extends SqlBasedBenchmark {
         .selectExpr(exprs: _*)
         .write
         .format("noop")
+        .mode(Overwrite)
         .save()
     }
   }
