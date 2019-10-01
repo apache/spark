@@ -719,8 +719,8 @@ public abstract class AbstractBytesToBytesMapSuite {
   public void freeAfterFailedReset() {
     // SPARK-29244: BytesToBytesMap.free after a OOM reset operation should not cause failure.
     memoryManager.limit(5000);
-    BytesToBytesMap map =
-      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000, false);
+    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager,
+      256, 0.5, 4000, false);
     // Force OOM on next memory allocation.
     memoryManager.markExecutionAsOutOfMemoryOnce();
     try {
