@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
-import org.scalatest.mockito.MockitoSugar._
+import org.scalatestplus.mockito.MockitoSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.Kryo._

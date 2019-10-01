@@ -19,7 +19,7 @@ package org.apache.spark.unsafe.types
 
 import org.apache.commons.text.similarity.LevenshteinDistance
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 // scalastyle:off
 import org.scalatest.{FunSuite, Matchers}
 
@@ -28,7 +28,7 @@ import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 /**
  * This TestSuite utilize ScalaCheck to generate randomized inputs for UTF8String testing.
  */
-class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenPropertyChecks with Matchers {
+class UTF8StringPropertyCheckSuite extends FunSuite with ScalaCheckDrivenPropertyChecks with Matchers {
 // scalastyle:on
 
   test("toString") {

@@ -26,7 +26,7 @@ import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging

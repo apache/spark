@@ -36,7 +36,7 @@ import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.streaming.scheduler._
