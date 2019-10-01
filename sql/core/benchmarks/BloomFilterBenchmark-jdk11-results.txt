@@ -2,23 +2,23 @@
 ORC Write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Write 100M rows:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter                              18614          18677          89          5.4         186.1       1.0X
-With bloom filter                                 21477          21551         106          4.7         214.8       0.9X
+Without bloom filter                              19601          19676         106          5.1         196.0       1.0X
+With bloom filter                                 22768          22800          46          4.4         227.7       0.9X
 
 
 ================================================================================================
 ORC Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter                               1829           1888          84         54.7          18.3       1.0X
-With bloom filter                                  1433           1519         122         69.8          14.3       1.3X
+Without bloom filter                               2143           2186          60         46.7          21.4       1.0X
+With bloom filter                                  1538           1557          27         65.0          15.4       1.4X
 
 

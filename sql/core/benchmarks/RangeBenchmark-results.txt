@@ -2,15 +2,14 @@
 range
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_161-b12 on Mac OS X 10.13.6
-Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
-
-range:                                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-------------------------------------------------------------------------------------------------
-full scan                                   12674 / 12840         41.4          24.2       1.0X
-limit after range                               33 /   37      15900.2           0.1     384.4X
-filter after range                             969 /  985        541.0           1.8      13.1X
-count after range                               42 /   42      12510.5           0.1     302.4X
-count after limit after range                   32 /   33      16337.0           0.1     394.9X
+OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+range:                                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+full scan                                         19051          19631         431         27.5          36.3       1.0X
+limit after range                                   100            103           2       5219.1           0.2     189.6X
+filter after range                                 1797           1866          84        291.7           3.4      10.6X
+count after range                                    87             92           4       6010.4           0.2     218.4X
+count after limit after range                       100            101           2       5266.0           0.2     191.4X
 
 

@@ -2,44 +2,44 @@
 WITHOUT SPILL
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Array with 100000 rows:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                        7646           7732         121         13.4          74.7       1.0X
-ExternalAppendOnlyUnsafeRowArray                   8234           8348         161         12.4          80.4       0.9X
+ArrayBuffer                                        6962           6990          38         14.7          68.0       1.0X
+ExternalAppendOnlyUnsafeRowArray                   9590           9724         188         10.7          93.7       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Array with 1000 rows:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                       11513          11516           4         22.8          43.9       1.0X
-ExternalAppendOnlyUnsafeRowArray                  38550          38673         175          6.8         147.1       0.3X
+ArrayBuffer                                        9156           9159           4         28.6          34.9       1.0X
+ExternalAppendOnlyUnsafeRowArray                  37810          37824          19          6.9         144.2       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Array with 30000 rows:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                       22690          22697          11         21.7          46.2       1.0X
-ExternalAppendOnlyUnsafeRowArray                  32436          32581         206         15.2          66.0       0.7X
+ArrayBuffer                                       18478          18643         234         26.6          37.6       1.0X
+ExternalAppendOnlyUnsafeRowArray                  37022          38104        1530         13.3          75.3       0.5X
 
 
 ================================================================================================
 WITH SPILL
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Spilling with 1000 rows:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                              30303          30323          28          8.7         115.6       1.0X
-ExternalAppendOnlyUnsafeRowArray                  14289          14290           1         18.3          54.5       2.1X
+UnsafeExternalSorter                              29073          29134          87          9.0         110.9       1.0X
+ExternalAppendOnlyUnsafeRowArray                  12672          12698          37         20.7          48.3       2.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Spilling with 10000 rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                                 11             11           0         14.7          67.8       1.0X
-ExternalAppendOnlyUnsafeRowArray                      9              9           0         17.6          56.7       1.2X
+UnsafeExternalSorter                                 11             12           0         14.1          71.1       1.0X
+ExternalAppendOnlyUnsafeRowArray                      8              8           0         19.9          50.2       1.4X
 
 
