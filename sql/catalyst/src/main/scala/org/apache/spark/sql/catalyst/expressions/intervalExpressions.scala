@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions.interval
+package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
@@ -31,9 +30,7 @@ abstract class IntervalPart(
     val dataType: DataType,
     func: CalendarInterval => Any,
     funcName: String)
-    extends UnaryExpression
-    with ExpectsInputTypes
-    with Serializable {
+  extends UnaryExpression with ExpectsInputTypes with Serializable {
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
   override protected def nullSafeEval(interval: Any): Any = {
     func(interval.asInstanceOf[CalendarInterval])
@@ -44,41 +41,45 @@ abstract class IntervalPart(
   }
 }
 
-case class Millenniums(child: Expression)
-    extends IntervalPart(child, IntegerType, getMillenniums, "getMillenniums")
+case class IntervalMillenniums(child: Expression)
+  extends IntervalPart(child, IntegerType, getMillenniums, "getMillenniums")
 
-case class Centuries(child: Expression)
-    extends IntervalPart(child, IntegerType, getCenturies, "getCenturies")
+case class IntervalCenturies(child: Expression)
+  extends IntervalPart(child, IntegerType, getCenturies, "getCenturies")
 
-case class Decades(child: Expression)
-    extends IntervalPart(child, IntegerType, getDecades, "getDecades")
+case class IntervalDecades(child: Expression)
+  extends IntervalPart(child, IntegerType, getDecades, "getDecades")
 
-case class Years(child: Expression) extends IntervalPart(child, IntegerType, getYears, "getYears")
+case class IntervalYears(child: Expression)
+  extends IntervalPart(child, IntegerType, getYears, "getYears")
 
-case class Quarters(child: Expression)
-    extends IntervalPart(child, ByteType, getQuarters, "getQuarters")
+case class IntervalQuarters(child: Expression)
+  extends IntervalPart(child, ByteType, getQuarters, "getQuarters")
 
-case class Months(child: Expression) extends IntervalPart(child, ByteType, getMonths, "getMonths")
+case class IntervalMonths(child: Expression)
+  extends IntervalPart(child, ByteType, getMonths, "getMonths")
 
-case class Days(child: Expression) extends IntervalPart(child, LongType, getDays, "getDays")
+case class IntervalDays(child: Expression)
+  extends IntervalPart(child, LongType, getDays, "getDays")
 
-case class Hours(child: Expression) extends IntervalPart(child, ByteType, getHours, "getHours")
+case class IntervalHours(child: Expression)
+  extends IntervalPart(child, ByteType, getHours, "getHours")
 
-case class Minutes(child: Expression)
-    extends IntervalPart(child, ByteType, getMinutes, "getMinutes")
+case class IntervalMinutes(child: Expression)
+  extends IntervalPart(child, ByteType, getMinutes, "getMinutes")
 
-case class Seconds(child: Expression)
-    extends IntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
+case class IntervalSeconds(child: Expression)
+  extends IntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
 
-case class Milliseconds(child: Expression)
+case class IntervalMilliseconds(child: Expression)
   extends IntervalPart(child, DecimalType(8, 3), getMilliseconds, "getMilliseconds")
 
-case class Microseconds(child: Expression)
+case class IntervalMicroseconds(child: Expression)
   extends IntervalPart(child, LongType, getMicroseconds, "getMicroseconds")
 
 // Number of seconds in 10000 years is 315576000001 (30 days per one month)
 // which is 12 digits + 6 digits for the fractional part of seconds.
-case class Epoch(child: Expression)
+case class IntervalEpoch(child: Expression)
   extends IntervalPart(child, DecimalType(18, 6), getEpoch, "getEpoch")
 
 object IntervalPart {
@@ -87,21 +88,21 @@ object IntervalPart {
       extractField: String,
       source: Expression,
       errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millenniums(source)
-    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Centuries(source)
-    case "DECADE" | "DECADES" | "DEC" | "DECS" => Decades(source)
-    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Years(source)
-    case "QUARTER" | "QTR" => Quarters(source)
-    case "MONTH" | "MON" | "MONS" | "MONTHS" => Months(source)
-    case "DAY" | "D" | "DAYS" => Days(source)
-    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hours(source)
-    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minutes(source)
-    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Seconds(source)
+    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => IntervalMillenniums(source)
+    case "CENTURY" | "CENTURIES" | "C" | "CENT" => IntervalCenturies(source)
+    case "DECADE" | "DECADES" | "DEC" | "DECS" => IntervalDecades(source)
+    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => IntervalYears(source)
+    case "QUARTER" | "QTR" => IntervalQuarters(source)
+    case "MONTH" | "MON" | "MONS" | "MONTHS" => IntervalMonths(source)
+    case "DAY" | "D" | "DAYS" => IntervalDays(source)
+    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => IntervalHours(source)
+    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => IntervalMinutes(source)
+    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => IntervalSeconds(source)
     case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
-      Milliseconds(source)
+      IntervalMilliseconds(source)
     case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
-      Microseconds(source)
-    case "EPOCH" => Epoch(source)
+      IntervalMicroseconds(source)
+    case "EPOCH" => IntervalEpoch(source)
     case _ => errorHandleFunc
   }
 }
