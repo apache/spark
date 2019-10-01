@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.ScroogeLikeExample
@@ -1840,6 +1841,24 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
 
     val instant = java.time.Instant.parse("2019-03-30T09:54:00Z")
     assert(spark.range(1).map { _ => instant }.head === instant)
+  }
+
+  val dotColumnTestModes = Table(
+    ("caseSensitive", "colName"),
+    ("true", "field.1"),
+    ("false", "Field.1")
+  )
+
+  test("SPARK-25153: Improve error messages for columns with dots/periods") {
+    forAll(dotColumnTestModes) { (caseSensitive, colName) =>
+      val ds = Seq(SpecialCharClass("1", "2")).toDS
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        val errorMsg = intercept[AnalysisException] {
+          ds(colName)
+        }
+        assert(errorMsg.getMessage.contains(s"did you mean to quote the `$colName` column?"))
+      }
+    }
   }
 }
 
