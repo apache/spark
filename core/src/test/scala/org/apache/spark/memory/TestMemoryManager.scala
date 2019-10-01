@@ -105,7 +105,7 @@ class TestMemoryManager(conf: SparkConf)
 
   /**
    * Causes the next call to [[acquireExecutionMemory()]] to fail to allocate
-   * memory (returning `0`), , simulating low-on-memory / out-of-memory conditions.
+   * memory (returning `0`), simulating low-on-memory / out-of-memory conditions.
    */
   def markExecutionAsOutOfMemoryOnce(): Unit = {
     markconsequentOOM(1)
