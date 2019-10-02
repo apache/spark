@@ -530,7 +530,7 @@ private[kafka010] class KafkaDataConsumer(
     }
     require(_consumer.isDefined, "Consumer must be defined")
     if (!KafkaTokenUtil.isConnectorUsingCurrentToken(_consumer.get.kafkaParamsWithSecurity,
-      _consumer.get.clusterConfig)) {
+        _consumer.get.clusterConfig)) {
       logDebug("Cached consumer uses an old delegation token, invalidating.")
       releaseConsumer()
       consumerPool.invalidateKey(cacheKey)
