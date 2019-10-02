@@ -262,8 +262,6 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   def dataType: DataType
 
-  def timeZoneId: Option[String]
-
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -276,8 +274,6 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
-
-  def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
   protected def ansiEnabled: Boolean
 
