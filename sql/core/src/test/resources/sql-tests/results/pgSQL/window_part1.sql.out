@@ -731,30 +731,30 @@ struct<four:int,ten:int,sum(ten) OVER (PARTITION BY four ORDER BY ten ASC NULLS 
 
 -- !query 43
 SELECT four, ten/4 as two,
-sum(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row),
-last(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row)
+sum(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row),
+last(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row)
 FROM (select distinct ten, four from tenk1) ss
 -- !query 43 schema
-struct<four:int,two:int,sum((ten div 4)) OVER (PARTITION BY four ORDER BY (ten div 4) ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint,last((ten div 4), false) OVER (PARTITION BY four ORDER BY (ten div 4) ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<four:int,two:int,sum((ten div 4)) OVER (PARTITION BY four ORDER BY (ten div 4) ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint,last((ten div 4), false) OVER (PARTITION BY four ORDER BY (ten div 4) ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
 -- !query 43 output
 0	0	0	0
 0	0	0	0
-0	1	1	1
+0	1	2	1
 0	1	2	1
 0	2	4	2
 1	0	0	0
 1	0	0	0
-1	1	1	1
+1	1	2	1
 1	1	2	1
 1	2	4	2
 2	0	0	0
 2	0	0	0
-2	1	1	1
+2	1	2	1
 2	1	2	1
 2	2	4	2
 3	0	0	0
 3	0	0	0
-3	1	1	1
+3	1	2	1
 3	1	2	1
 3	2	4	2
 

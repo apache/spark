@@ -187,16 +187,16 @@ sum(ten) over (partition by four order by ten range between unbounded preceding 
 last(ten) over (partition by four order by ten range between unbounded preceding and unbounded following)
 FROM (select distinct ten, four from tenk1) ss;
 
+SELECT four, ten/4 as two,
+sum(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row),
+last(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row)
+FROM (select distinct ten, four from tenk1) ss;
+
 -- Failing on thrift server
 -- SELECT four, ten/4 as two,
--- sum(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row),
--- last(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row)
+-- sum(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row),
+-- last(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row)
 -- FROM (select distinct ten, four from tenk1) ss;
-
-SELECT four, ten/4 as two,
-sum(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row),
-last(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row)
-FROM (select distinct ten, four from tenk1) ss;
 
 SELECT sum(unique1) over (order by four range between current row and unbounded following),
 unique1, four
