@@ -34,18 +34,26 @@ trait BroadcastedHadoopConf {
   val sparkSession: SparkSession
   val options: CaseInsensitiveStringMap
 
-  lazy val hadoopConf = {
-    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-    // Hadoop Configurations are case sensitive.
-    sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+  var cachedHadoopConf: Configuration = null
+  var cachedBroadcastedConf: Broadcast[SerializableConfiguration] = null
+
+  /**
+   * Override this if you need to generate your Hadoop configuration differently
+   */
+  def hadoopConf: Configuration = {
+    if (cachedHadoopConf eq null) {
+      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+      // Hadoop Configurations are case sensitive.
+      cachedHadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+    }
+    cachedHadoopConf
   }
 
-
-  // Override if you need to set some custom hadoop params beyond the map
-  protected def updateHadoopConf(): Configuration = {
-    hadoopConf
+  def broadcastedConf: Broadcast[SerializableConfiguration] = {
+    if (cachedBroadcastedConf eq null) {
+      cachedBroadcastedConf = sparkSession.sparkContext.broadcast(
+        new SerializableConfiguration(hadoopConf))
+    }
+    cachedBroadcastedConf
   }
-
-  lazy val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(updateHadoopConf()))
 }

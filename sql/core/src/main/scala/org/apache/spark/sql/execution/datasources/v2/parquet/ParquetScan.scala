@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetInputFormat
@@ -43,36 +45,42 @@ case class ParquetScan(
 
   override def isSplitable(path: Path): Boolean = true
 
-  override protected def updateHadoopConf(): Configuration = {
-    val readDataSchemaAsJson = readDataSchema.json
-    hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
-    hadoopConf.set(
-      ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-      readDataSchemaAsJson)
-    hadoopConf.set(
-      ParquetWriteSupport.SPARK_ROW_SCHEMA,
-      readDataSchemaAsJson)
-    hadoopConf.set(
-      SQLConf.SESSION_LOCAL_TIMEZONE.key,
-      sparkSession.sessionState.conf.sessionLocalTimeZone)
-    hadoopConf.setBoolean(
-      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
-      sparkSession.sessionState.conf.nestedSchemaPruningEnabled)
-    hadoopConf.setBoolean(
-      SQLConf.CASE_SENSITIVE.key,
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+  override def hadoopConf: Configuration = {
+    if (cachedHadoopConf eq null) {
+      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+      // Hadoop Configurations are case sensitive.
+      cachedHadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+      val readDataSchemaAsJson = readDataSchema.json
+      cachedHadoopConf.set(
+        ParquetInputFormat.READ_SUPPORT_CLASS,
+        classOf[ParquetReadSupport].getName)
+      cachedHadoopConf.set(
+        ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+        readDataSchemaAsJson)
+      cachedHadoopConf.set(
+        ParquetWriteSupport.SPARK_ROW_SCHEMA,
+        readDataSchemaAsJson)
+      cachedHadoopConf.set(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key,
+        sparkSession.sessionState.conf.sessionLocalTimeZone)
+      cachedHadoopConf.setBoolean(
+        SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
+        sparkSession.sessionState.conf.nestedSchemaPruningEnabled)
+      cachedHadoopConf.setBoolean(
+        SQLConf.CASE_SENSITIVE.key,
+        sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
-    ParquetWriteSupport.setSchema(readDataSchema, hadoopConf)
+      ParquetWriteSupport.setSchema(readDataSchema, cachedHadoopConf)
 
-    // Sets flags for `ParquetToSparkSchemaConverter`
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_BINARY_AS_STRING.key,
-      sparkSession.sessionState.conf.isParquetBinaryAsString)
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
-
-    hadoopConf
+      // Sets flags for `ParquetToSparkSchemaConverter`
+      cachedHadoopConf.setBoolean(
+        SQLConf.PARQUET_BINARY_AS_STRING.key,
+        sparkSession.sessionState.conf.isParquetBinaryAsString)
+      cachedHadoopConf.setBoolean(
+        SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
+        sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+    }
+    cachedHadoopConf
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {

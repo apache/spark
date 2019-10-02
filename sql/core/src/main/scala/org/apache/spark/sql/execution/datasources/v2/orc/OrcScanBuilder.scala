@@ -39,7 +39,7 @@ case class OrcScanBuilder(
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
 
   override def build(): Scan = {
-    OrcScan(sparkSession, fileIndex, dataSchema,
+    OrcScan(sparkSession, fileIndex, schema, dataSchema,
       readDataSchema(), readPartitionSchema(), options, pushedFilters())
   }
 

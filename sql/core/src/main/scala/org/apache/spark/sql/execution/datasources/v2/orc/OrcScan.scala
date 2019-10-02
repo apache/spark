@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.orc.mapreduce.OrcInputFormat
@@ -32,6 +34,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class OrcScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
+    schema: StructType,
     dataSchema: StructType,
     readDataSchema: StructType,
     readPartitionSchema: StructType,
@@ -42,13 +45,18 @@ case class OrcScan(
 
   override def isSplitable(path: Path): Boolean = true
 
-  override def updateHadoopConf(): Configuration = {
-    // The pushed filters will be set in `hadoopConf`. After that, we can simply use the
-    // changed `hadoopConf` in executors.
-    OrcFilters.createFilter(dataSchema, pushedFilters).foreach { f =>
-      OrcInputFormat.setSearchArgument(hadoopConf, f, dataSchema.fieldNames)
+  override def hadoopConf(): Configuration = {
+    if (cachedHadoopConf eq null) {
+      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
+      // Hadoop Configurations are case sensitive.
+      cachedHadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+      // The pushed filters will be set in `hadoopConf`. After that, we can simply use the
+      // changed `hadoopConf` in executors.
+      OrcFilters.createFilter(schema, pushedFilters).foreach { f =>
+        OrcInputFormat.setSearchArgument(hadoopConf, f, dataSchema.fieldNames)
+      }
     }
-    hadoopConf
+    cachedHadoopConf
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
