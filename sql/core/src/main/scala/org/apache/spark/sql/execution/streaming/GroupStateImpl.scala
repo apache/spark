@@ -21,6 +21,7 @@ import java.sql.Date
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -164,7 +165,7 @@ private[sql] class GroupStateImpl[S] private(
       throw new IllegalArgumentException(s"Provided duration ($duration) is not positive")
     }
 
-    val millisPerMonth = TimeUnit.MICROSECONDS.toMillis(CalendarInterval.MICROS_PER_DAY) * 31
+    val millisPerMonth = TimeUnit.SECONDS.toMillis(DateTimeUtils.SECONDS_PER_MONTH)
     cal.milliseconds + cal.months * millisPerMonth
   }
 
