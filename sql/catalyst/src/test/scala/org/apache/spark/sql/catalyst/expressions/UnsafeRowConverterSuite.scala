@@ -604,6 +604,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     val udt = new TestUDT.MyDenseVectorUDT()
     val udtRow = InternalRow.fromSeq(Seq(udt.serialize(vector)))
     val fields5 = Array[DataType](udt)
-    assert(convertBackToInternalRow(udtRow, fields5) === udtRow)
+    val safeProj = SafeProjection.create(fields5)
+    val safeRow = safeProj(udtRow)
+    assert(convertBackToInternalRow(udtRow, fields5) === safeRow)
   }
 }
