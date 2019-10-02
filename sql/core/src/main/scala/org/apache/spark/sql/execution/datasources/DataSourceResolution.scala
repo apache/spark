@@ -23,8 +23,8 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, ShowNamespaces, ShowTables, SubqueryAlias}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowNamespaces, ShowTables, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement, UseStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -178,7 +178,7 @@ case class DataSourceResolution(
       }
 
     case ShowNamespacesStatement(Some(namespace), pattern) =>
-      val CatalogNamespace(maybeCatalog, ns) = namespace
+      val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace
       maybeCatalog match {
         case Some(catalog) =>
           ShowNamespaces(catalog.asNamespaceCatalog, Some(ns), pattern)
@@ -202,7 +202,7 @@ case class DataSourceResolution(
       }
 
     case ShowTablesStatement(Some(namespace), pattern) =>
-      val CatalogNamespace(maybeCatalog, ns) = namespace
+      val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace
       maybeCatalog match {
         case Some(catalog) =>
           ShowTables(catalog.asTableCatalog, ns, pattern)
@@ -212,6 +212,15 @@ case class DataSourceResolution(
               s"The database name is not valid: ${namespace.quoted}")
           }
           ShowTablesCommand(Some(namespace.quoted), pattern)
+      }
+
+    case UseStatement(isNamespaceSet, nameParts) =>
+      if (isNamespaceSet) {
+        SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
+      } else {
+        val CurrentCatalogAndNamespace(catalog, namespace) = nameParts
+        val ns = if (namespace.isEmpty) { None } else { Some(namespace) }
+        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), ns)
       }
   }
 

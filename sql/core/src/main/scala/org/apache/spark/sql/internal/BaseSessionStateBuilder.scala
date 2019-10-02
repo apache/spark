@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.datasources._
@@ -153,6 +154,8 @@ abstract class BaseSessionStateBuilder(
 
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog, conf)
 
+  protected lazy val catalogManager = new CatalogManager(conf, v2SessionCatalog, catalog)
+
   /**
    * Interface exposed to the user for registering user-defined functions.
    *
@@ -166,7 +169,7 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalog, v2SessionCatalog, conf) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
@@ -225,7 +228,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on `catalog` and `experimentalMethods` fields.
    */
   protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalog, experimentalMethods) {
+    new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }

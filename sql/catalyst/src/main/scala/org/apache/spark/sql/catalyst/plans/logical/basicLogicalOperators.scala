@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types._
@@ -658,6 +658,14 @@ case class ShowTables(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
 }
+
+/**
+ * The logical plan of the USE/USE NAMESPACE command that works for v2 catalogs.
+ */
+case class SetCatalogAndNamespace(
+    catalogManager: CatalogManager,
+    catalogName: Option[String],
+    namespace: Option[Seq[String]]) extends Command
 
 /**
  * Insert query result into a directory.
