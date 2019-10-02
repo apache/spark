@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, ShowNamespaces, ShowTables}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowNamespaces, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UseStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
 
@@ -109,5 +109,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     // TODO (SPARK-29014): we should check if the current catalog is not session catalog here.
     case ShowTablesStatement(None, pattern) if defaultCatalog.isDefined =>
       ShowTables(defaultCatalog.get.asTableCatalog, catalogManager.currentNamespace, pattern)
+
+    case UseStatement(isNamespaceSet, nameParts) =>
+      if (isNamespaceSet) {
+        SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
+      } else {
+        val CurrentCatalogAndNamespace(catalog, namespace) = nameParts
+        val ns = if (namespace.isEmpty) { None } else { Some(namespace) }
+        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), ns)
+      }
   }
 }
