@@ -866,6 +866,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.name</code></td>
+  <td>spark_shuffle</td>
+  <td>
+    Name of the external shuffle service.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.port</code></td>
   <td>7337</td>
   <td>
