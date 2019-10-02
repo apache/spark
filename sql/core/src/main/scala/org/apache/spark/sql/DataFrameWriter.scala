@@ -594,8 +594,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         }
 
         // Drop the existing table
+        val catalogTable = df.sparkSession.sessionState.catalog.getTableMetadata(tableIdentWithDB)
         catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = true, purge = false)
-        createTable(tableIdentWithDB)
+        createTable(tableIdentWithDB, Option(catalogTable))
         // Refresh the cache of the table in the catalog.
         catalog.refreshTable(tableIdentWithDB)
 
@@ -603,23 +604,29 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def createTable(tableIdent: TableIdentifier): Unit = {
-    val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
-    val tableType = if (storage.locationUri.isDefined) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
+  private def createTable(tableIdent: TableIdentifier,
+      catalogTable: Option[CatalogTable] = None): Unit = {
+    val tableDesc = catalogTable match {
+      case Some(table) =>
+        table.copy(schema = new StructType,
+          stats = None)
+      case _ =>
+        val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
+        val tableType = if (storage.locationUri.isDefined) {
+          CatalogTableType.EXTERNAL
+        } else {
+          CatalogTableType.MANAGED
+        }
+
+        CatalogTable(
+          identifier = tableIdent,
+          tableType = tableType,
+          storage = storage,
+          schema = new StructType,
+          provider = Some(source),
+          partitionColumnNames = partitioningColumns.getOrElse(Nil),
+          bucketSpec = getBucketSpec)
     }
-
-    val tableDesc = CatalogTable(
-      identifier = tableIdent,
-      tableType = tableType,
-      storage = storage,
-      schema = new StructType,
-      provider = Some(source),
-      partitionColumnNames = partitioningColumns.getOrElse(Nil),
-      bucketSpec = getBucketSpec)
-
     runCommand(df.sparkSession, "saveAsTable")(
       CreateTable(tableDesc, mode, Some(df.logicalPlan)))
   }

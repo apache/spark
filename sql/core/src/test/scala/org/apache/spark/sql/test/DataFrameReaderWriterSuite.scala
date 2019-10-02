@@ -22,7 +22,6 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetFileReader
@@ -31,13 +30,13 @@ import org.apache.parquet.schema.PrimitiveType
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
@@ -778,6 +777,38 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         checkAnswer(spark.table("default.same_name"), spark.range(20).toDF())
       }
     }
+  }
+
+  test("saveAsTable with mode Overwrite should create table with same metadata") {
+    val table_name = "tbl"
+    withTable(table_name) {
+      sql(s"CREATE TABLE $table_name(id LONG) USING ORC")
+      val catalogTable1 = spark.sessionState.catalog
+        .getTableMetadata(TableIdentifier(table_name))
+      spark.range(20).write.mode(SaveMode.Overwrite).saveAsTable(table_name)
+      checkAnswer(spark.table(table_name), spark.range(20).toDF())
+      val catalogTable2 = spark.sessionState.catalog
+        .getTableMetadata(TableIdentifier(table_name))
+
+      assert(checkTableMetadataSame(catalogTable1, catalogTable2),
+        s"Table metadata different after overwrite to table: " +
+          s"expected: $catalogTable1 Got: $catalogTable2")
+      assert(catalogTable1.stats.isEmpty)
+    }
+  }
+
+  def checkTableMetadataSame(t1: CatalogTable, t2: CatalogTable): Boolean = {
+    t1.identifier == t2.identifier &&
+      t1.schema == t2.schema &&
+      t1.storage == t2.storage &&
+      t1.location == t2.location &&
+      t1.bucketSpec == t2.bucketSpec &&
+      t1.partitionColumnNames == t2.partitionColumnNames &&
+      t1.provider == t2.provider &&
+      t1.tableType == t2.tableType &&
+      t1.viewText == t2.viewText &&
+      t1.comment == t2.comment &&
+      t1.owner  == t2.owner
   }
 
   test("saveAsTable with mode Ignore should create the table if the table not exists " +
