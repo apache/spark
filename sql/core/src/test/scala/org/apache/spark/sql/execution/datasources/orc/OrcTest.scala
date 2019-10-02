@@ -28,8 +28,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileBasedDataSourceTest}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.orc.{OrcScan, OrcTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 
@@ -118,12 +118,22 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters,
-      DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
+      case PhysicalOperation(_, filters, DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         val scanBuilder = orcTable.newScanBuilder(options)
         scanBuilder.pushFilters(filters.flatMap(DataSourceStrategy.translateFilter).toArray)
         val pushedFilters = scanBuilder.pushedFilters()
+        if (noneSupported) {
+          assert(pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
+        } else {
+          assert(pushedFilters.nonEmpty, "No filter is pushed down")
+          val maybeFilter = OrcFilters.createFilter(query.schema, pushedFilters)
+          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for $pushedFilters")
+        }
+
+      case PhysicalOperation(_, filters,
+          DataSourceV2ScanRelation(_, OrcScan(_, _, _, _, _, _, _, pushedFilters), _)) =>
+        assert(filters.nonEmpty, "No filter is analyzed from the given query")
         if (noneSupported) {
           assert(pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
         } else {

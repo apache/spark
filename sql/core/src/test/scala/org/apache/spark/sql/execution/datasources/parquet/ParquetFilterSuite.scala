@@ -33,9 +33,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.orc.OrcFilters
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.parquet.{ParquetScan, ParquetTable}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
@@ -1484,12 +1483,33 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
 
       query.queryExecution.optimizedPlan.collectFirst {
         case PhysicalOperation(_, filters,
-        DataSourceV2Relation(parquetTable: ParquetTable, _, options)) =>
+            DataSourceV2Relation(parquetTable: ParquetTable, _, options)) =>
           assert(filters.nonEmpty, "No filter is analyzed from the given query")
           val scanBuilder = parquetTable.newScanBuilder(options)
           val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter).toArray
           scanBuilder.pushFilters(sourceFilters)
           val pushedFilters = scanBuilder.pushedFilters()
+          assert(pushedFilters.nonEmpty, "No filter is pushed down")
+          val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
+          val parquetFilters = createParquetFilters(schema)
+          // In this test suite, all the simple predicates are convertible here.
+          assert(parquetFilters.convertibleFilters(sourceFilters) === pushedFilters)
+          val pushedParquetFilters = pushedFilters.map { pred =>
+            val maybeFilter = parquetFilters.createFilter(pred)
+            assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+            maybeFilter.get
+          }
+          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+          assert(pushedParquetFilters.exists(_.getClass === filterClass),
+            s"${pushedParquetFilters.map(_.getClass).toList} did not contain ${filterClass}.")
+
+          checker(stripSparkFilter(query), expected)
+
+        case PhysicalOperation(_, filters,
+            DataSourceV2ScanRelation(_, scan: ParquetScan, _)) =>
+          assert(filters.nonEmpty, "No filter is analyzed from the given query")
+          val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter).toArray
+          val pushedFilters = scan.pushedFilters
           assert(pushedFilters.nonEmpty, "No filter is pushed down")
           val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
           val parquetFilters = createParquetFilters(schema)

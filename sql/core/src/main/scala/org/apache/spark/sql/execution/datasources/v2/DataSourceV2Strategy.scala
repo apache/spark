@@ -47,7 +47,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       val withProjection = if (withFilter.output != project || !batchExec.supportsColumnar) {
         ProjectExec(project, withFilter)
       } else {
-        batchExec
+        withFilter
       }
 
       withProjection :: Nil
@@ -62,8 +62,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val (pushedFilters, postScanFiltersWithoutSubquery) =
-        PushDownUtils.pushFilters(scanBuilder, normalizedFilters)
+      val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
+        scanBuilder, normalizedFilters)
       val postScanFilters = postScanFiltersWithoutSubquery ++ withSubquery
       val (scan, output) = PushDownUtils.pruneColumns(
         scanBuilder, relation, project ++ postScanFilters)
