@@ -161,7 +161,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   /** Cleanup local dirs and stop shuffle sender. */
-  private[spark] def stop() {
+  private[spark] def stop(): Unit = {
     // Remove the shutdown hook.  It causes memory leaks if we leave it around.
     try {
       ShutdownHookManager.removeShutdownHook(shutdownHook)

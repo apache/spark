@@ -86,12 +86,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   override def blackList: Set[String] = Set(
     "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
     // Missing UDF
-    "pgSQL/boolean.sql",
-    "pgSQL/case.sql",
+    "postgreSQL/boolean.sql",
+    "postgreSQL/case.sql",
     // SPARK-28624
     "date.sql",
     // SPARK-28620
-    "pgSQL/float4.sql",
+    "postgreSQL/float4.sql",
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
@@ -117,7 +117,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
           // PostgreSQL enabled cartesian product by default.
           statement.execute(s"SET ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
-          statement.execute(s"SET ${SQLConf.PREFER_INTEGRAL_DIVISION.key} = true")
+          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
         case _ =>
       }
 
@@ -238,7 +238,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
       if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
         Seq.empty
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
@@ -290,7 +290,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
   }
 
-  private def withJdbcStatement(fs: (Statement => Unit)*) {
+  private def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
     val user = System.getProperty("user.name")
 
     val serverPort = hiveServer2.getHiveConf.get(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname)
@@ -367,7 +367,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     upperCase.startsWith("SELECT ") || upperCase.startsWith("SELECT\n") ||
       upperCase.startsWith("WITH ") || upperCase.startsWith("WITH\n") ||
       upperCase.startsWith("VALUES ") || upperCase.startsWith("VALUES\n") ||
-      // pgSQL/union.sql
+      // postgreSQL/union.sql
       upperCase.startsWith("(")
   }
 

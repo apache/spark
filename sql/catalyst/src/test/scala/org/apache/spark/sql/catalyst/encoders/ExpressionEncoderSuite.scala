@@ -553,7 +553,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     r
   }
 
-  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any) {
+  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any): Unit = {
     test(testName) {
       verifyNotLeakingReflectionObjects(testFun)
     }

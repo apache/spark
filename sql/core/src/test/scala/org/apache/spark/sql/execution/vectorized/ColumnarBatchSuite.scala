@@ -1067,7 +1067,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
-  private def compareStruct(fields: Seq[StructField], r1: InternalRow, r2: Row, seed: Long) {
+  private def compareStruct(fields: Seq[StructField], r1: InternalRow, r2: Row,
+      seed: Long): Unit = {
     fields.zipWithIndex.foreach { case (field: StructField, ordinal: Int) =>
       assert(r1.isNullAt(ordinal) == r2.isNullAt(ordinal), "Seed = " + seed)
       if (!r1.isNullAt(ordinal)) {
@@ -1159,7 +1160,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
    * This test generates a random schema data, serializes it to column batches and verifies the
    * results.
    */
-  def testRandomRows(flatSchema: Boolean, numFields: Int) {
+  def testRandomRows(flatSchema: Boolean, numFields: Int): Unit = {
     // TODO: Figure out why StringType doesn't work on jenkins.
     val types = Array(
       BooleanType, ByteType, FloatType, DoubleType, IntegerType, LongType, ShortType,

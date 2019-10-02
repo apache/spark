@@ -81,7 +81,7 @@ class PercentileSuite extends SparkFunSuite {
 
   private def runTest(agg: Percentile,
         rows : Seq[Seq[Any]],
-        expectedPercentiles : Seq[Double]) {
+        expectedPercentiles : Seq[Double]): Unit = {
     assert(agg.nullable)
     val group1 = (0 until rows.length / 2)
     val group1Buffer = agg.createAggregationBuffer()

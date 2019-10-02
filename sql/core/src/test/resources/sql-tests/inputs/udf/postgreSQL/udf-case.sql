@@ -6,7 +6,7 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/case.sql
 -- Test the CASE statement
 --
--- This test file was converted from pgSQL/case.sql.
+-- This test file was converted from postgreSQL/case.sql.
 
 CREATE TABLE CASE_TBL (
   i integer,

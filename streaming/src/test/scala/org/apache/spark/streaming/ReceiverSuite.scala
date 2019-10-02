@@ -52,7 +52,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
 
     // Thread that runs the executor
     val executingThread = new Thread() {
-      override def run() {
+      override def run(): Unit = {
         executor.start()
         executorStarted.release(1)
         executor.awaitTermination()
@@ -232,7 +232,7 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
       }
     }
 
-    def printLogFiles(message: String, files: Seq[String]) {
+    def printLogFiles(message: String, files: Seq[String]): Unit = {
       logInfo(s"$message (${files.size} files):\n" + files.mkString("\n"))
     }
 
@@ -302,32 +302,32 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
         arrayBuffers.isEmpty && errors.isEmpty
     }
 
-    def pushSingle(data: Any) {
+    def pushSingle(data: Any): Unit = {
       singles += data
     }
 
     def pushBytes(
         bytes: ByteBuffer,
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]) {
+        optionalBlockId: Option[StreamBlockId]): Unit = {
       byteBuffers += bytes
     }
 
     def pushIterator(
         iterator: Iterator[_],
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]) {
+        optionalBlockId: Option[StreamBlockId]): Unit = {
       iterators += iterator
     }
 
     def pushArrayBuffer(
         arrayBuffer: ArrayBuffer[_],
         optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]) {
+        optionalBlockId: Option[StreamBlockId]): Unit = {
       arrayBuffers +=  arrayBuffer
     }
 
-    def reportError(message: String, throwable: Throwable) {
+    def reportError(message: String, throwable: Throwable): Unit = {
       errors += throwable
     }
 
@@ -355,17 +355,17 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
     val arrayBuffers = new ArrayBuffer[ArrayBuffer[Int]]
     val errors = new ArrayBuffer[Throwable]
 
-    def onAddData(data: Any, metadata: Any) { }
+    def onAddData(data: Any, metadata: Any): Unit = { }
 
-    def onGenerateBlock(blockId: StreamBlockId) { }
+    def onGenerateBlock(blockId: StreamBlockId): Unit = { }
 
-    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]): Unit = {
       val bufferOfInts = arrayBuffer.map(_.asInstanceOf[Int])
       arrayBuffers += bufferOfInts
       Thread.sleep(0)
     }
 
-    def onError(message: String, throwable: Throwable) {
+    def onError(message: String, throwable: Throwable): Unit = {
       errors += throwable
     }
   }
@@ -381,9 +381,9 @@ class FakeReceiver(sendData: Boolean = false) extends Receiver[Int](StorageLevel
   // tracks calls of "onStart", "onStop"
   @transient lazy val callsRecorder = new MethodsCallRecorder()
 
-  def onStart() {
+  def onStart(): Unit = {
     otherThread = new Thread() {
-      override def run() {
+      override def run(): Unit = {
         receiving = true
         try {
           var count = 0
@@ -403,7 +403,7 @@ class FakeReceiver(sendData: Boolean = false) extends Receiver[Int](StorageLevel
     otherThread.start()
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     callsRecorder.record()
     otherThread.join()
   }

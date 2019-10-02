@@ -262,7 +262,7 @@ class FileStreamSource(
     // and the value of the maxFileAge parameter.
   }
 
-  override def stop() {}
+  override def stop(): Unit = {}
 }
 
 

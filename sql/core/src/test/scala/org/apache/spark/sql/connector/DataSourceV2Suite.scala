@@ -225,8 +225,12 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select('id, -'id))
 
-        // default save mode is append
-        spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
+        // default save mode is ErrorIfExists
+        intercept[AnalysisException] {
+          spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
+            .option("path", path).save()
+        }
+        spark.range(10).select('id as 'i, -'id as 'j).write.mode("append").format(cls.getName)
           .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
@@ -281,7 +285,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
 
         val numPartition = 6
         spark.range(0, 10, 1, numPartition).select('id as 'i, -'id as 'j).write.format(cls.getName)
-          .option("path", path).save()
+          .mode("append").option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select('id, -'id))
@@ -368,7 +372,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
           val format = classOf[SimpleWritableDataSource].getName
 
           val df = Seq((1L, 2L)).toDF("i", "j")
-          df.write.format(format).option("path", optionPath).save()
+          df.write.format(format).mode("append").option("path", optionPath).save()
           assert(!new File(sessionPath).exists)
           checkAnswer(spark.read.format(format).option("path", optionPath).load(), df)
         }

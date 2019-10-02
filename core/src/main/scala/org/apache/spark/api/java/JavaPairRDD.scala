@@ -791,7 +791,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: JobConf) {
+      conf: JobConf): Unit = {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
   }
 
@@ -800,7 +800,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       path: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[F]) {
+      outputFormatClass: Class[F]): Unit = {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass)
   }
 
@@ -810,7 +810,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      codec: Class[_ <: CompressionCodec]) {
+      codec: Class[_ <: CompressionCodec]): Unit = {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, codec)
   }
 
@@ -820,7 +820,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: Configuration) {
+      conf: Configuration): Unit = {
     rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
   }
 
@@ -828,7 +828,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported storage system, using
    * a Configuration object for that storage system.
    */
-  def saveAsNewAPIHadoopDataset(conf: Configuration) {
+  def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = {
     rdd.saveAsNewAPIHadoopDataset(conf)
   }
 
@@ -837,7 +837,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       path: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[F]) {
+      outputFormatClass: Class[F]): Unit = {
     rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass)
   }
 
@@ -847,7 +847,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
    * MapReduce job.
    */
-  def saveAsHadoopDataset(conf: JobConf) {
+  def saveAsHadoopDataset(conf: JobConf): Unit = {
     rdd.saveAsHadoopDataset(conf)
   }
 

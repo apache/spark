@@ -192,7 +192,7 @@ private[deploy] class Master(
     leaderElectionAgent = leaderElectionAgent_
   }
 
-  override def onStop() {
+  override def onStop(): Unit = {
     masterMetricsSystem.report()
     applicationMetricsSystem.report()
     // prevent the CompleteRecovery message sending to restarted master
@@ -211,11 +211,11 @@ private[deploy] class Master(
     leaderElectionAgent.stop()
   }
 
-  override def electedLeader() {
+  override def electedLeader(): Unit = {
     self.send(ElectedLeader)
   }
 
-  override def revokedLeadership() {
+  override def revokedLeadership(): Unit = {
     self.send(RevokedLeadership)
   }
 
@@ -529,7 +529,7 @@ private[deploy] class Master(
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
-      storedWorkers: Seq[WorkerInfo]) {
+      storedWorkers: Seq[WorkerInfo]): Unit = {
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
       try {
@@ -559,7 +559,7 @@ private[deploy] class Master(
     }
   }
 
-  private def completeRecovery() {
+  private def completeRecovery(): Unit = {
     // Ensure "only-once" recovery semantics using a short synchronization period.
     if (state != RecoveryState.RECOVERING) { return }
     state = RecoveryState.COMPLETING_RECOVERY
@@ -850,7 +850,7 @@ private[deploy] class Master(
     true
   }
 
-  private def removeWorker(worker: WorkerInfo, msg: String) {
+  private def removeWorker(worker: WorkerInfo, msg: String): Unit = {
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
@@ -879,7 +879,7 @@ private[deploy] class Master(
     persistenceEngine.removeWorker(worker)
   }
 
-  private def relaunchDriver(driver: DriverInfo) {
+  private def relaunchDriver(driver: DriverInfo): Unit = {
     // We must setup a new driver with a new driver id here, because the original driver may
     // be still running. Consider this scenario: a worker is network partitioned with master,
     // the master then relaunches driver driverID1 with a driver id driverID2, then the worker
@@ -919,11 +919,11 @@ private[deploy] class Master(
     waitingApps += app
   }
 
-  private def finishApplication(app: ApplicationInfo) {
+  private def finishApplication(app: ApplicationInfo): Unit = {
     removeApplication(app, ApplicationState.FINISHED)
   }
 
-  def removeApplication(app: ApplicationInfo, state: ApplicationState.Value) {
+  def removeApplication(app: ApplicationInfo, state: ApplicationState.Value): Unit = {
     if (apps.contains(app)) {
       logInfo("Removing app " + app.id)
       apps -= app
@@ -1047,7 +1047,7 @@ private[deploy] class Master(
   }
 
   /** Check for, and remove, any timed-out workers */
-  private def timeOutDeadWorkers() {
+  private def timeOutDeadWorkers(): Unit = {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
     val currentTime = System.currentTimeMillis()
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - workerTimeoutMs).toArray
@@ -1077,7 +1077,7 @@ private[deploy] class Master(
     new DriverInfo(now, newDriverId(date), desc, date)
   }
 
-  private def launchDriver(worker: WorkerInfo, driver: DriverInfo) {
+  private def launchDriver(worker: WorkerInfo, driver: DriverInfo): Unit = {
     logInfo("Launching driver " + driver.id + " on worker " + worker.id)
     worker.addDriver(driver)
     driver.worker = Some(worker)
@@ -1088,7 +1088,7 @@ private[deploy] class Master(
   private def removeDriver(
       driverId: String,
       finalState: DriverState,
-      exception: Option[Exception]) {
+      exception: Option[Exception]): Unit = {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
@@ -1113,7 +1113,7 @@ private[deploy] object Master extends Logging {
   val SYSTEM_NAME = "sparkMaster"
   val ENDPOINT_NAME = "Master"
 
-  def main(argStrings: Array[String]) {
+  def main(argStrings: Array[String]): Unit = {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(
       exitOnUncaughtException = false))
     Utils.initDaemon(log)

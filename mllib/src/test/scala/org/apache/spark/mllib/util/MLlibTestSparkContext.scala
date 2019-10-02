@@ -31,7 +31,7 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
   @transient var sc: SparkContext = _
   @transient var checkpointDir: String = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     spark = SparkSession.builder
       .master("local[2]")
@@ -43,7 +43,7 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
     sc.setCheckpointDir(checkpointDir)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       Utils.deleteRecursively(new File(checkpointDir))
       SparkSession.clearActiveSession()

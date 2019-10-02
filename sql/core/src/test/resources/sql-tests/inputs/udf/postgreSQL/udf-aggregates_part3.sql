@@ -5,7 +5,7 @@
 -- AGGREGATES [Part 3]
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/aggregates.sql#L352-L605
 
--- This test file was converted from pgSQL/aggregates_part3.sql.
+-- This test file was converted from postgreSQL/aggregates_part3.sql.
 
 -- [SPARK-28865] Table inheritance
 -- try it on an inheritance tree
