@@ -170,22 +170,11 @@ case class DataSourceResolution(
       DeleteFromTable(aliased, delete.condition)
 
     case ShowNamespacesStatement(None, pattern) =>
-      defaultCatalog match {
-        case Some(catalog) =>
-          ShowNamespaces(catalog.asNamespaceCatalog, None, pattern)
-        case None =>
-          throw new AnalysisException("No default v2 catalog is set.")
-      }
+      ShowNamespaces(currentCatalog.asNamespaceCatalog, None, pattern)
 
     case ShowNamespacesStatement(Some(namespace), pattern) =>
-      val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace
-      maybeCatalog match {
-        case Some(catalog) =>
-          ShowNamespaces(catalog.asNamespaceCatalog, Some(ns), pattern)
-        case None =>
-          throw new AnalysisException(
-            s"No v2 catalog is available for ${namespace.quoted}")
-      }
+      val CurrentCatalogAndNamespace(catalog, ns) = namespace
+      ShowNamespaces(catalog.asNamespaceCatalog, Some(ns), pattern)
 
     case update: UpdateTableStatement =>
       throw new AnalysisException(s"Update table is not supported temporarily.")

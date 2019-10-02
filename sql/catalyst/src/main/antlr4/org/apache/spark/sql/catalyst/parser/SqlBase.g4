@@ -93,8 +93,7 @@ statement
         SET locationSpec                                               #setDatabaseLocation
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
-    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
-    | SHOW NAMESPACES ((FROM | IN) multipartIdentifier)?
+    | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
