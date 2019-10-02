@@ -190,14 +190,14 @@ private[deploy] class Worker(
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
 
-  private def createWorkDir() {
+  private def createWorkDir(): Unit = {
     workDir = Option(workDirPath).map(new File(_)).getOrElse(new File(sparkHome, "work"))
     if (!Utils.createDirectory(workDir)) {
       System.exit(1)
     }
   }
 
-  override def onStart() {
+  override def onStart(): Unit = {
     assert(!registered)
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       host, port, cores, Utils.megabytesToString(memory)))
@@ -268,7 +268,8 @@ private[deploy] class Worker(
    * @param masterAddress the new master address which the worker should use to connect in case of
    *                      failure
    */
-  private def changeMaster(masterRef: RpcEndpointRef, uiUrl: String, masterAddress: RpcAddress) {
+  private def changeMaster(masterRef: RpcEndpointRef, uiUrl: String,
+      masterAddress: RpcAddress): Unit = {
     // activeMasterUrl it's a valid Spark url since we receive it from master.
     activeMasterUrl = masterRef.address.toSparkURL
     activeMasterWebUiUrl = uiUrl
@@ -391,7 +392,7 @@ private[deploy] class Worker(
     registrationRetryTimer = None
   }
 
-  private def registerWithMaster() {
+  private def registerWithMaster(): Unit = {
     // onDisconnected may be triggered multiple times, so don't attempt registration
     // if there are outstanding registration attempts scheduled.
     registrationRetryTimer match {
@@ -410,7 +411,7 @@ private[deploy] class Worker(
     }
   }
 
-  private def startExternalShuffleService() {
+  private def startExternalShuffleService(): Unit = {
     try {
       shuffleService.startIfEnabled()
     } catch {
@@ -690,7 +691,7 @@ private[deploy] class Worker(
     }
   }
 
-  private def masterDisconnected() {
+  private def masterDisconnected(): Unit = {
     logError("Connection to master failed! Waiting for master to reconnect...")
     connected = false
     registerWithMaster()
@@ -736,7 +737,7 @@ private[deploy] class Worker(
     "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
   }
 
-  override def onStop() {
+  override def onStop(): Unit = {
     releaseResources(conf, SPARK_WORKER_PREFIX, resources, pid)
     cleanupThreadExecutor.shutdownNow()
     metricsSystem.report()
@@ -834,7 +835,7 @@ private[deploy] object Worker extends Logging {
   val ENDPOINT_NAME = "Worker"
   private val SSL_NODE_LOCAL_CONFIG_PATTERN = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
 
-  def main(argStrings: Array[String]) {
+  def main(argStrings: Array[String]): Unit = {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(
       exitOnUncaughtException = false))
     Utils.initDaemon(log)

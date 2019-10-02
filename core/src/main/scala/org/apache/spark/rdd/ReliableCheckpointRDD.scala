@@ -166,7 +166,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   def writePartitionToCheckpointFile[T: ClassTag](
       path: String,
       broadcastedConf: Broadcast[SerializableConfiguration],
-      blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) {
+      blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]): Unit = {
     val env = SparkEnv.get
     val outputDir = new Path(path)
     val fs = outputDir.getFileSystem(broadcastedConf.value.value)

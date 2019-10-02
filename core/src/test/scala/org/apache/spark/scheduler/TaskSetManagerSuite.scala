@@ -38,7 +38,7 @@ import org.apache.spark.util.{AccumulatorV2, ManualClock}
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
 
-  override def taskStarted(task: Task[_], taskInfo: TaskInfo) {
+  override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {
     taskScheduler.startedTasks += taskInfo.index
   }
 
@@ -48,13 +48,13 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       result: Any,
       accumUpdates: Seq[AccumulatorV2[_, _]],
       metricPeaks: Array[Long],
-      taskInfo: TaskInfo) {
+      taskInfo: TaskInfo): Unit = {
     taskScheduler.endedTasks(taskInfo.index) = reason
   }
 
-  override def executorAdded(execId: String, host: String) {}
+  override def executorAdded(execId: String, host: String): Unit = {}
 
-  override def executorLost(execId: String, reason: ExecutorLossReason) {}
+  override def executorLost(execId: String, reason: ExecutorLossReason): Unit = {}
 
   override def taskSetFailed(
       taskSet: TaskSet,
@@ -74,13 +74,13 @@ object FakeRackUtil {
   var numBatchInvocation = 0
   var numSingleHostInvocation = 0
 
-  def cleanUp() {
+  def cleanUp(): Unit = {
     hostToRack.clear()
     numBatchInvocation = 0
     numSingleHostInvocation = 0
   }
 
-  def assignHostToRack(host: String, rack: String) {
+  def assignHostToRack(host: String, rack: String): Unit = {
     hostToRack(host) = rack
   }
 
@@ -124,7 +124,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
   dagScheduler = new FakeDAGScheduler(sc, this)
 
-  def removeExecutor(execId: String) {
+  def removeExecutor(execId: String): Unit = {
     executors -= execId
     val host = executorIdToHost.get(execId)
     assert(host != None)
@@ -149,7 +149,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     hostsByRack.get(rack) != None
   }
 
-  def addExecutor(execId: String, host: String) {
+  def addExecutor(execId: String, host: String): Unit = {
     executors.put(execId, host)
     val executorsOnHost = hostToExecutors.getOrElseUpdate(host, new mutable.HashSet[String])
     executorsOnHost += execId

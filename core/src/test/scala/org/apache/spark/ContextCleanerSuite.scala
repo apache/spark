@@ -97,7 +97,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
   }
 
   /** Run GC and make sure it actually has run */
-  protected def runGC() {
+  protected def runGC(): Unit = {
     val weakRef = new WeakReference(new Object())
     val startTimeNs = System.nanoTime()
     System.gc() // Make a best effort to run the garbage collection. It *usually* runs GC.
@@ -406,7 +406,7 @@ class CleanerTester(
   sc.cleaner.get.attachListener(cleanerListener)
 
   /** Assert that all the stuff has been cleaned up */
-  def assertCleanup()(implicit waitTimeout: PatienceConfiguration.Timeout) {
+  def assertCleanup()(implicit waitTimeout: PatienceConfiguration.Timeout): Unit = {
     try {
       eventually(waitTimeout, interval(100.milliseconds)) {
         assert(isAllCleanedUp,
@@ -419,7 +419,7 @@ class CleanerTester(
   }
 
   /** Verify that RDDs, shuffles, etc. occupy resources */
-  private def preCleanupValidate() {
+  private def preCleanupValidate(): Unit = {
     assert(rddIds.nonEmpty || shuffleIds.nonEmpty || broadcastIds.nonEmpty ||
       checkpointIds.nonEmpty, "Nothing to cleanup")
 
@@ -465,7 +465,7 @@ class CleanerTester(
    * Verify that RDDs, shuffles, etc. do not occupy resources. Tests multiple times as there is
    * as there is not guarantee on how long it will take clean up the resources.
    */
-  private def postCleanupValidate() {
+  private def postCleanupValidate(): Unit = {
     // Verify the RDDs have been persisted and blocks are present
     rddIds.foreach { rddId =>
       assert(

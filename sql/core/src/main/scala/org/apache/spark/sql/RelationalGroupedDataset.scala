@@ -47,8 +47,8 @@ import org.apache.spark.sql.types.{NumericType, StructType}
  */
 @Stable
 class RelationalGroupedDataset protected[sql](
-    val df: DataFrame,
-    val groupingExprs: Seq[Expression],
+    private[sql] val df: DataFrame,
+    private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {

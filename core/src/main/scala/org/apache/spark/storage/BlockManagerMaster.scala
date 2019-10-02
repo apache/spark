@@ -38,7 +38,8 @@ class BlockManagerMaster(
   val timeout = RpcUtils.askRpcTimeout(conf)
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
-  def removeExecutor(execId: String) {
+
+  def removeExecutor(execId: String): Unit = {
     driverHeartbeatEndPoint.askSync[Boolean](RemoveExecutor(execId))
     tell(RemoveExecutor(execId))
     logInfo("Removed " + execId + " successfully in removeExecutor")
@@ -47,7 +48,8 @@ class BlockManagerMaster(
   /** Request removal of a dead executor from the driver endpoint.
    *  This is only called on the driver side. Non-blocking
    */
-  def removeExecutorAsync(execId: String) {
+
+  def removeExecutorAsync(execId: String): Unit = {
     driverHeartbeatEndPoint.ask[Boolean](RemoveExecutor(execId))
     driverEndpoint.ask[Boolean](RemoveExecutor(execId))
     logInfo("Removal of executor " + execId + " requested")
@@ -126,12 +128,12 @@ class BlockManagerMaster(
    * Remove a block from the slaves that have it. This can only be used to remove
    * blocks that the driver knows about.
    */
-  def removeBlock(blockId: BlockId) {
+  def removeBlock(blockId: BlockId): Unit = {
     driverEndpoint.askSync[Boolean](RemoveBlock(blockId))
   }
 
   /** Remove all blocks belonging to the given RDD. */
-  def removeRdd(rddId: Int, blocking: Boolean) {
+  def removeRdd(rddId: Int, blocking: Boolean): Unit = {
     val future = driverEndpoint.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
     future.failed.foreach(e =>
       logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}", e)
@@ -142,7 +144,7 @@ class BlockManagerMaster(
   }
 
   /** Remove all blocks belonging to the given shuffle. */
-  def removeShuffle(shuffleId: Int, blocking: Boolean) {
+  def removeShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     val future = driverEndpoint.askSync[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
     future.failed.foreach(e =>
       logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}", e)
@@ -153,7 +155,7 @@ class BlockManagerMaster(
   }
 
   /** Remove all blocks belonging to the given broadcast. */
-  def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean) {
+  def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean): Unit = {
     val future = driverEndpoint.askSync[Future[Seq[Int]]](
       RemoveBroadcast(broadcastId, removeFromMaster))
     future.failed.foreach(e =>
@@ -232,7 +234,7 @@ class BlockManagerMaster(
   }
 
   /** Stop the driver endpoint, called only on the Spark driver node */
-  def stop() {
+  def stop(): Unit = {
     if (driverEndpoint != null && isDriver) {
       tell(StopBlockManagerMaster)
       driverEndpoint = null
@@ -242,7 +244,7 @@ class BlockManagerMaster(
   }
 
   /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
-  private def tell(message: Any) {
+  private def tell(message: Any): Unit = {
     if (!driverEndpoint.askSync[Boolean](message)) {
       throw new SparkException("BlockManagerMasterEndpoint returned false, expected true.")
     }

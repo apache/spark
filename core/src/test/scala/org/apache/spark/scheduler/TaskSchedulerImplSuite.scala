@@ -26,7 +26,7 @@ import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -36,9 +36,9 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.ManualClock
 
 class FakeSchedulerBackend extends SchedulerBackend {
-  def start() {}
-  def stop() {}
-  def reviveOffers() {}
+  def start(): Unit = {}
+  def stop(): Unit = {}
+  def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
   def maxNumConcurrentTasks(): Int = 0
 }
@@ -962,8 +962,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+      override def executorAdded(execId: String, host: String): Unit = {}
     }
 
     val e0Offers = IndexedSeq(WorkerOffer("executor0", "host0", 1))
@@ -993,8 +993,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+      override def executorAdded(execId: String, host: String): Unit = {}
     }
 
     val e0Offers = IndexedSeq(WorkerOffer("executor0", "host0", 1))
@@ -1044,8 +1044,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+      override def executorAdded(execId: String, host: String): Unit = {}
     }
     taskScheduler.initialize(new FakeSchedulerBackend)
 
@@ -1084,8 +1084,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+      override def executorAdded(execId: String, host: String): Unit = {}
     }
     taskScheduler.initialize(new FakeSchedulerBackend)
     // make an offer on the preferred host so the scheduler knows its alive.  This is necessary

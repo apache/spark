@@ -240,7 +240,7 @@ class BlockManagerMasterEndpoint(
     Future.sequence(futures)
   }
 
-  private def removeBlockManager(blockManagerId: BlockManagerId) {
+  private def removeBlockManager(blockManagerId: BlockManagerId): Unit = {
     val info = blockManagerInfo(blockManagerId)
 
     // Remove the block manager from blockManagerIdByExecutor.
@@ -282,14 +282,14 @@ class BlockManagerMasterEndpoint(
 
   }
 
-  private def removeExecutor(execId: String) {
+  private def removeExecutor(execId: String): Unit = {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
   }
 
   // Remove a block from the slaves that have it. This can only be used to remove
   // blocks that the master knows about.
-  private def removeBlockFromWorkers(blockId: BlockId) {
+  private def removeBlockFromWorkers(blockId: BlockId): Unit = {
     val locations = blockLocations.get(blockId)
     if (locations != null) {
       locations.foreach { blockManagerId: BlockManagerId =>
@@ -579,7 +579,7 @@ private[spark] class BlockManagerInfo(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long) {
+      diskSize: Long): Unit = {
 
     val blockExists = _blocks.containsKey(blockId)
     var originalMemSize: Long = 0
@@ -657,7 +657,7 @@ private[spark] class BlockManagerInfo(
     }
   }
 
-  def removeBlock(blockId: BlockId) {
+  def removeBlock(blockId: BlockId): Unit = {
     if (_blocks.containsKey(blockId)) {
       _remainingMem += _blocks.get(blockId).memSize
       _blocks.remove(blockId)
@@ -673,7 +673,7 @@ private[spark] class BlockManagerInfo(
 
   override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
 
-  def clear() {
+  def clear(): Unit = {
     _blocks.clear()
   }
 }

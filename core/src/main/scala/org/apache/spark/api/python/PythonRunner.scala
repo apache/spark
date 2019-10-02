@@ -194,7 +194,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     def exception: Option[Throwable] = Option(_exception)
 
     /** Terminates the writer thread, ignoring any exceptions that may occur due to cleanup. */
-    def shutdownOnTaskCompletion() {
+    def shutdownOnTaskCompletion(): Unit = {
       assert(context.isCompleted)
       this.interrupt()
     }
@@ -412,7 +412,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
     }
 
-    def writeUTF(str: String, dataOut: DataOutputStream) {
+    def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
       val bytes = str.getBytes(UTF_8)
       dataOut.writeInt(bytes.length)
       dataOut.write(bytes)
@@ -531,7 +531,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     setDaemon(true)
 
-    override def run() {
+    override def run(): Unit = {
       // Kill the worker if it is interrupted, checking until task completion.
       // TODO: This has a race condition if interruption occurs, as completed may still become true.
       while (!context.isInterrupted && !context.isCompleted) {

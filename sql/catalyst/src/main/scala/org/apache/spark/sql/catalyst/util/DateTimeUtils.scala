@@ -462,6 +462,14 @@ object DateTimeUtils {
   }
 
   /**
+   * Returns the seconds part and its fractional part with microseconds.
+   */
+  def getSecondsWithFraction(microsec: SQLTimestamp, timeZone: TimeZone): Decimal = {
+    val secFrac = localTimestamp(microsec, timeZone) % (MILLIS_PER_MINUTE * MICROS_PER_MILLIS)
+    Decimal(secFrac, 8, 6)
+  }
+
+  /**
    * Returns seconds, including fractional parts, multiplied by 1000. The timestamp
    * is expressed in microseconds since the epoch.
    */

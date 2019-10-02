@@ -309,7 +309,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
    * is correct. Then it also drops the block from memory of each store (using LRU) and
    * again checks whether the master's knowledge gets updated.
    */
-  protected def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]) {
+  protected def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]): Unit = {
     import org.apache.spark.storage.StorageLevel._
 
     assert(maxReplication > 1,
@@ -432,7 +432,7 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     }
   }
 
-  def testProactiveReplication(replicationFactor: Int) {
+  def testProactiveReplication(replicationFactor: Int): Unit = {
     val blockSize = 1000
     val storeSize = 10000
     val initialStores = (1 to 10).map { i => makeBlockManager(storeSize, s"store$i") }

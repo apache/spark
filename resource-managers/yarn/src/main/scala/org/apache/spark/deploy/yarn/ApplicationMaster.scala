@@ -716,7 +716,7 @@ private[spark] class ApplicationMaster(
       .getMethod("main", classOf[Array[String]])
 
     val userThread = new Thread {
-      override def run() {
+      override def run(): Unit = {
         try {
           if (!Modifier.isStatic(mainMethod.getModifiers)) {
             logError(s"Could not find static main method in object ${args.userClass}")

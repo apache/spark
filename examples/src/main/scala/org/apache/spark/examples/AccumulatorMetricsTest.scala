@@ -36,7 +36,7 @@ import org.apache.spark.sql.SparkSession
  * accumulator source) are reported to stdout as well.
  */
 object AccumulatorMetricsTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val spark = SparkSession
       .builder()
