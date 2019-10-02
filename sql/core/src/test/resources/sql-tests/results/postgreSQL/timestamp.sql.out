@@ -228,7 +228,7 @@ SELECT '' AS `54`, d1 as `timestamp`,
     date_part( 'minute', d1) AS `minute`, date_part( 'second', d1) AS `second`
     FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01'
 -- !query 25 schema
-struct<54:string,timestamp:timestamp,year:int,month:int,day:int,hour:int,minute:int,second:int>
+struct<54:string,timestamp:timestamp,year:int,month:int,day:int,hour:int,minute:int,second:decimal(8,6)>
 -- !query 25 output
 	1969-12-31 16:00:00	1969	12	31	16	0	0
 	1997-01-02 00:00:00	1997	1	2	0	0	0
