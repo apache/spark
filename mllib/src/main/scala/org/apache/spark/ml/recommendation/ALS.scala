@@ -801,7 +801,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
      * Given a triangular matrix in the order of fillXtX above, compute the full symmetric square
      * matrix that it represents, storing it into destMatrix.
      */
-    private def fillAtA(triAtA: Array[Double], lambda: Double) {
+    private def fillAtA(triAtA: Array[Double], lambda: Double): Unit = {
       var i = 0
       var pos = 0
       var a = 0.0

@@ -28,14 +28,14 @@ private[spark] class JmxSink(val property: Properties, val registry: MetricRegis
 
   val reporter: JmxReporter = JmxReporter.forRegistry(registry).build()
 
-  override def start() {
+  override def start(): Unit = {
     reporter.start()
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     reporter.stop()
   }
 
-  override def report() { }
+  override def report(): Unit = { }
 
 }

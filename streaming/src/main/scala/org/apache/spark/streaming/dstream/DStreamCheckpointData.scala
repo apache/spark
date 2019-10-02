@@ -46,7 +46,7 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
    * the graph checkpoint is initiated. Default implementation records the
    * checkpoint files at which the generated RDDs of the DStream have been saved.
    */
-  def update(time: Time) {
+  def update(time: Time): Unit = {
 
     // Get the checkpointed RDDs from the generated RDDs
     val checkpointFiles = dstream.generatedRDDs.filter(_._2.getCheckpointFile.isDefined)
@@ -69,7 +69,7 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
    * Cleanup old checkpoint data. This gets called after a checkpoint of `time` has been
    * written to the checkpoint directory.
    */
-  def cleanup(time: Time) {
+  def cleanup(time: Time): Unit = {
     // Get the time of the oldest checkpointed RDD that was written as part of the
     // checkpoint of `time`
     timeToOldestCheckpointFileTime.remove(time) match {
@@ -109,7 +109,7 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
    * (along with its output DStreams) is being restored from a graph checkpoint file.
    * Default implementation restores the RDDs from their checkpoint files.
    */
-  def restore() {
+  def restore(): Unit = {
     // Create RDDs from the checkpoint data
     currentCheckpointFiles.foreach {
       case(time, file) =>

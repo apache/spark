@@ -357,41 +357,41 @@ struct<date_part('minutes', t.`c`):int>
 -- !query 44
 select date_part('second', c) from t
 -- !query 44 schema
-struct<date_part('second', t.`c`):int>
+struct<date_part('second', t.`c`):decimal(8,6)>
 -- !query 44 output
-9
+9.123456
 
 
 -- !query 45
 select date_part('s', c) from t
 -- !query 45 schema
-struct<date_part('s', t.`c`):int>
+struct<date_part('s', t.`c`):decimal(8,6)>
 -- !query 45 output
-9
+9.123456
 
 
 -- !query 46
 select date_part('sec', c) from t
 -- !query 46 schema
-struct<date_part('sec', t.`c`):int>
+struct<date_part('sec', t.`c`):decimal(8,6)>
 -- !query 46 output
-9
+9.123456
 
 
 -- !query 47
 select date_part('seconds', c) from t
 -- !query 47 schema
-struct<date_part('seconds', t.`c`):int>
+struct<date_part('seconds', t.`c`):decimal(8,6)>
 -- !query 47 output
-9
+9.123456
 
 
 -- !query 48
 select date_part('secs', c) from t
 -- !query 48 schema
-struct<date_part('secs', t.`c`):int>
+struct<date_part('secs', t.`c`):decimal(8,6)>
 -- !query 48 output
-9
+9.123456
 
 
 -- !query 49

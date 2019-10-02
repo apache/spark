@@ -35,7 +35,7 @@ import org.apache.spark.mllib.linalg.distributed.RowMatrix
  * represents a 3-by-2 matrix, whose first row is (0.5, 1.0).
  */
 object TallSkinnyPCA {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 1) {
       System.err.println("Usage: TallSkinnyPCA <input>")
       System.exit(1)

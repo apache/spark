@@ -42,7 +42,7 @@ object MasterFailureTest extends Logging {
   @volatile var killCount = 0
   @volatile var setupCalled = false
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // scalastyle:off println
     if (args.size < 2) {
       println(
@@ -64,7 +64,7 @@ object MasterFailureTest extends Logging {
     // scalastyle:on println
   }
 
-  def testMap(directory: String, numBatches: Int, batchDuration: Duration) {
+  def testMap(directory: String, numBatches: Int, batchDuration: Duration): Unit = {
     // Input: time=1 ==> [ 1 ] , time=2 ==> [ 2 ] , time=3 ==> [ 3 ] , ...
     val input = (1 to numBatches).map(_.toString).toSeq
     // Expected output: time=1 ==> [ 1 ] , time=2 ==> [ 2 ] , time=3 ==> [ 3 ] , ...
@@ -86,7 +86,7 @@ object MasterFailureTest extends Logging {
   }
 
 
-  def testUpdateStateByKey(directory: String, numBatches: Int, batchDuration: Duration) {
+  def testUpdateStateByKey(directory: String, numBatches: Int, batchDuration: Duration): Unit = {
     // Input: time=1 ==> [ a ] , time=2 ==> [ a, a ] , time=3 ==> [ a, a, a ] , ...
     val input = (1 to numBatches).map(i => (1 to i).map(_ => "a").mkString(" ")).toSeq
     // Expected output: time=1 ==> [ (a, 1) ] , time=2 ==> [ (a, 3) ] , time=3 ==> [ (a,6) ] , ...
@@ -293,7 +293,7 @@ object MasterFailureTest extends Logging {
    * duplicate batch outputs of values from the `output`. As a result, the
    * expected output should not have consecutive batches with the same values as output.
    */
-  private def verifyOutput[T: ClassTag](output: Seq[T], expectedOutput: Seq[T]) {
+  private def verifyOutput[T: ClassTag](output: Seq[T], expectedOutput: Seq[T]): Unit = {
     // Verify whether expected outputs do not consecutive batches with same output
     for (i <- 0 until expectedOutput.size - 1) {
       assert(expectedOutput(i) != expectedOutput(i + 1),
@@ -315,7 +315,7 @@ object MasterFailureTest extends Logging {
   }
 
   /** Resets counter to prepare for the test */
-  private def reset() {
+  private def reset(): Unit = {
     killed = false
     killCount = 0
     setupCalled = false
@@ -328,7 +328,7 @@ object MasterFailureTest extends Logging {
 private[streaming]
 class KillingThread(ssc: StreamingContext, maxKillWaitTime: Long) extends Thread with Logging {
 
-  override def run() {
+  override def run(): Unit = {
     try {
       // If it is the first killing, then allow the first checkpoint to be created
       var minKillWaitTime = if (MasterFailureTest.killCount == 0) 5000 else 2000
@@ -362,7 +362,7 @@ private[streaming]
 class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
   extends Thread with Logging {
 
-  override def run() {
+  override def run(): Unit = {
     val localTestDir = Utils.createTempDir()
     var fs = testDir.getFileSystem(new Configuration())
     val maxTries = 3

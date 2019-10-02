@@ -42,12 +42,12 @@ import org.apache.spark.util.Utils
 class FileSuite extends SparkFunSuite with LocalSparkContext {
   var tempDir: File = _
 
-  override def beforeEach() {
+  override def beforeEach(): Unit = {
     super.beforeEach()
     tempDir = Utils.createTempDir()
   }
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       Utils.deleteRecursively(tempDir)
     } finally {

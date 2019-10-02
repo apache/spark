@@ -56,7 +56,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
    * Note: In order to support update decimal with precision > 18 in UnsafeRow,
    * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
    */
-  def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
+  def setDecimal(i: Int, value: Decimal, precision: Int): Unit = update(i, value)
 
   /**
    * Make a copy of the current [[InternalRow]] object.

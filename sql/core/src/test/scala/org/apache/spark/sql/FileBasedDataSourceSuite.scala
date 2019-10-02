@@ -481,7 +481,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
         spark.range(1000).repartition(1).write.csv(path)
         val bytesReads = new mutable.ArrayBuffer[Long]()
         val bytesReadListener = new SparkListener() {
-          override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+          override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
             bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
           }
         }

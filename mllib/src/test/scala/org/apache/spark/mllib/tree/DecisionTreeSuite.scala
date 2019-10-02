@@ -437,7 +437,7 @@ object DecisionTreeSuite extends SparkFunSuite {
   def validateClassifier(
       model: DecisionTreeModel,
       input: Seq[LabeledPoint],
-      requiredAccuracy: Double) {
+      requiredAccuracy: Double): Unit = {
     val predictions = input.map(x => model.predict(x.features))
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label
@@ -450,7 +450,7 @@ object DecisionTreeSuite extends SparkFunSuite {
   def validateRegressor(
       model: DecisionTreeModel,
       input: Seq[LabeledPoint],
-      requiredMSE: Double) {
+      requiredMSE: Double): Unit = {
     val predictions = input.map(x => model.predict(x.features))
     val squaredError = predictions.zip(input).map { case (prediction, expected) =>
       val err = prediction - expected.label

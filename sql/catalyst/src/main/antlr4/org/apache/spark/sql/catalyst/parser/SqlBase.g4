@@ -89,6 +89,8 @@ statement
          (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
     | ALTER database db=errorCapturingIdentifier
         SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
+    | ALTER database db=errorCapturingIdentifier
+        SET locationSpec                                               #setDatabaseLocation
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
     | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases

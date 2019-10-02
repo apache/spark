@@ -113,7 +113,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
    * Add an element to the set. If the set is over capacity after the insertion, grow the set
    * and rehash all elements.
    */
-  def add(k: T) {
+  def add(k: T): Unit = {
     addWithoutResize(k)
     rehashIfNeeded(k, grow, move)
   }
@@ -166,7 +166,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
    * @param moveFunc Callback invoked when we move the key from one position (in the old data array)
    *                 to a new position (in the new data array).
    */
-  def rehashIfNeeded(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
+  def rehashIfNeeded(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit): Unit = {
     if (_size > _growThreshold) {
       rehash(k, allocateFunc, moveFunc)
     }
@@ -227,7 +227,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
    * @param moveFunc Callback invoked when we move the key from one position (in the old data array)
    *                 to a new position (in the new data array).
    */
-  private def rehash(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
+  private def rehash(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit): Unit = {
     val newCapacity = _capacity * 2
     require(newCapacity > 0 && newCapacity <= OpenHashSet.MAX_CAPACITY,
       s"Can't contain more than ${(loadFactor * OpenHashSet.MAX_CAPACITY).toInt} elements")
@@ -320,8 +320,8 @@ object OpenHashSet {
     override def hash(o: Float): Int = java.lang.Float.floatToIntBits(o)
   }
 
-  private def grow1(newSize: Int) {}
-  private def move1(oldPos: Int, newPos: Int) { }
+  private def grow1(newSize: Int): Unit = {}
+  private def move1(oldPos: Int, newPos: Int): Unit = { }
 
   private val grow = grow1 _
   private val move = move1 _

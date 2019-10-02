@@ -74,7 +74,7 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
 private[spark] class SaveExecutorInfo extends SparkListener {
   val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
 
-  override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
+  override def onExecutorAdded(executor: SparkListenerExecutorAdded): Unit = {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
   }
 }

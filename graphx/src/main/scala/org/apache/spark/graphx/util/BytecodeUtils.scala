@@ -118,7 +118,7 @@ private[graphx] object BytecodeUtils {
       if (name == methodName) {
         new MethodVisitor(ASM7) {
           override def visitMethodInsn(
-              op: Int, owner: String, name: String, desc: String, itf: Boolean) {
+              op: Int, owner: String, name: String, desc: String, itf: Boolean): Unit = {
             if (op == INVOKEVIRTUAL || op == INVOKESPECIAL || op == INVOKESTATIC) {
               if (!skipClass(owner)) {
                 methodsInvoked.add((Utils.classForName(owner.replace("/", ".")), name))

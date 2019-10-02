@@ -311,12 +311,13 @@ abstract class AbstractIntArraySortDataFormat[K] extends SortDataFormat[K, Array
     data(pos1) = tmp
   }
 
-  override def copyElement(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int) {
+  override def copyElement(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int): Unit = {
     dst(dstPos) = src(srcPos)
   }
 
   /** Copy a range of elements starting at src(srcPos) to dest, starting at destPos. */
-  override def copyRange(src: Array[Int], srcPos: Int, dst: Array[Int], dstPos: Int, length: Int) {
+  override def copyRange(src: Array[Int], srcPos: Int,
+      dst: Array[Int], dstPos: Int, length: Int): Unit = {
     System.arraycopy(src, srcPos, dst, dstPos, length)
   }
 
@@ -334,13 +335,13 @@ abstract class AbstractByteArraySortDataFormat[K] extends SortDataFormat[K, Arra
     data(pos1) = tmp
   }
 
-  override def copyElement(src: Array[Byte], srcPos: Int, dst: Array[Byte], dstPos: Int) {
+  override def copyElement(src: Array[Byte], srcPos: Int, dst: Array[Byte], dstPos: Int): Unit = {
     dst(dstPos) = src(srcPos)
   }
 
   /** Copy a range of elements starting at src(srcPos) to dest, starting at destPos. */
   override def copyRange(src: Array[Byte],
-                         srcPos: Int, dst: Array[Byte], dstPos: Int, length: Int) {
+                         srcPos: Int, dst: Array[Byte], dstPos: Int, length: Int): Unit = {
     System.arraycopy(src, srcPos, dst, dstPos, length)
   }
 

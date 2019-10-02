@@ -27,12 +27,11 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.contrib.udf.example.UDFExampleFormat
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -202,7 +201,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Commands using SerDe provided in --jars") {
-    val jarFile = HiveTestUtils.getHiveHcatalogCoreJar.getCanonicalPath
+    val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
 
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
@@ -223,6 +222,32 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "DROP TABLE t1;"
         -> "",
       "DROP TABLE sourceTable;"
+        -> ""
+    )
+  }
+
+  test("SPARK-29022: Commands using SerDe provided in --hive.aux.jars.path") {
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+    runCliWithin(
+      3.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      """CREATE TABLE addJarWithHiveAux(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+      """.stripMargin
+        -> "",
+      "CREATE TABLE sourceTableForWithHiveAux (key INT, val STRING);"
+        -> "",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithHiveAux;"
+        -> "",
+      "INSERT INTO TABLE addJarWithHiveAux SELECT key, val FROM sourceTableForWithHiveAux;"
+        -> "",
+      "SELECT collect_list(array(val)) FROM addJarWithHiveAux;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+      "DROP TABLE addJarWithHiveAux;"
+        -> "",
+      "DROP TABLE sourceTableForWithHiveAux;"
         -> ""
     )
   }
@@ -297,11 +322,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Support hive.aux.jars.path") {
-    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(
       1.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
-      s"CREATE TEMPORARY FUNCTION example_format AS '${classOf[UDFExampleFormat].getName}';" -> "",
+      "CREATE TEMPORARY FUNCTION example_format AS " +
+        "'org.apache.hadoop.hive.contrib.udf.example.UDFExampleFormat';" -> "",
       "SELECT example_format('%o', 93);" -> "135"
     )
   }
@@ -319,7 +345,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("SPARK-28840 test --jars and hive.aux.jars.path command") {
     val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
-    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(
       1.minute,
       Seq("--jars", s"$jarFile", "--conf",
@@ -330,6 +356,32 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "CREATE TEMPORARY FUNCTION example_max AS " +
         "'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax';" -> "",
       "SELECT concat_ws(',', 'First', example_max(1234321), 'Third');" -> "First,1234321,Third"
+    )
+  }
+
+  test("SPARK-29022 Commands using SerDe provided in ADD JAR sql") {
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+    runCliWithin(
+      3.minute)(
+      s"ADD JAR ${hiveContribJar};" -> "",
+      """CREATE TABLE addJarWithSQL(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+      """.stripMargin
+        -> "",
+      "CREATE TABLE sourceTableForWithSQL(key INT, val STRING);"
+        -> "",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithSQL;"
+        -> "",
+      "INSERT INTO TABLE addJarWithSQL SELECT key, val FROM sourceTableForWithSQL;"
+        -> "",
+      "SELECT collect_list(array(val)) FROM addJarWithSQL;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+      "DROP TABLE addJarWithSQL;"
+        -> "",
+      "DROP TABLE sourceTableForWithSQL;"
+        -> ""
     )
   }
 }

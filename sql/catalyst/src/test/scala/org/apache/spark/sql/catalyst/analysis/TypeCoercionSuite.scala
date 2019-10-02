@@ -690,7 +690,8 @@ class TypeCoercionSuite extends AnalysisTest {
       Some(new StructType().add("a", StringType)))
   }
 
-  private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
+  private def ruleTest(rule: Rule[LogicalPlan],
+      initial: Expression, transformed: Expression): Unit = {
     ruleTest(Seq(rule), initial, transformed)
   }
 

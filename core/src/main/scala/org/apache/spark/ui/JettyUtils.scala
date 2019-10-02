@@ -73,7 +73,7 @@ private[spark] object JettyUtils extends Logging {
       servletParams: ServletParams[T],
       conf: SparkConf): HttpServlet = {
     new HttpServlet {
-      override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
+      override def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         try {
           response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
           response.setStatus(HttpServletResponse.SC_OK)

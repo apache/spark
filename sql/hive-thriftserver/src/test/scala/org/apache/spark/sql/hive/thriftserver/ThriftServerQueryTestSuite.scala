@@ -290,7 +290,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
   }
 
-  private def withJdbcStatement(fs: (Statement => Unit)*) {
+  private def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
     val user = System.getProperty("user.name")
 
     val serverPort = hiveServer2.getHiveConf.get(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname)
