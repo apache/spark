@@ -59,9 +59,7 @@ object SimpleAnalyzer extends Analyzer(
       new InMemoryCatalog,
       EmptyFunctionRegistry,
       new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
-      override def createDatabase(
-          dbDefinition: CatalogDatabase,
-          ignoreIfExists: Boolean): Unit = {}
+      override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
     }),
   new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
