@@ -20,11 +20,9 @@ package test.org.apache.spark.sql;
 import java.util.HashMap;
 import java.util.List;
 
-import scala.collection.Seq;
 import static scala.collection.JavaConverters.mapAsScalaMap;
 
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -35,7 +33,6 @@ import static org.apache.spark.sql.types.DataTypes.*;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSparkSession;
 import static test.org.apache.spark.sql.JavaTestUtils.*;
-import test.org.apache.spark.sql.JavaTestUtils;
 
 public class JavaHigherOrderFunctionsSuite {
     private transient TestSparkSession spark;
