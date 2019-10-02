@@ -1053,4 +1053,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
     checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
   }
+
+  test("extract the seconds part with fraction from timestamps") {
+    outstandingTimezonesIds.foreach { timezone =>
+      val timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
+        Literal(0), Literal(0), Literal(Decimal(10.123456, 8, 6)),
+        Some(Literal(timezone)))
+
+      checkEvaluation(SecondWithFraction(timestamp), Decimal(10.123456, 8, 6))
+      checkEvaluation(
+        SecondWithFraction(timestamp.copy(sec = Literal(Decimal(59000001, 8, 6)))),
+        Decimal(59000001, 8, 6))
+      checkEvaluation(
+        SecondWithFraction(timestamp.copy(sec = Literal(Decimal(1, 8, 6)))),
+        Decimal(0.000001, 8, 6))
+    }
+  }
 }
