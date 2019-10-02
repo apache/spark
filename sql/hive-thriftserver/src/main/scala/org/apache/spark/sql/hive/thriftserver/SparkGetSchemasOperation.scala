@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.util.UUID
 import java.util.regex.Pattern
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetSchemasOperation
@@ -87,11 +88,18 @@ private[hive] class SparkGetSchemasOperation(
       }
       setState(OperationState.FINISHED)
     } catch {
-      case e: HiveSQLException =>
+      case e: Throwable =>
+        logError(s"Error executing get schemas operation with $statementId", e)
         setState(OperationState.ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
-        throw e
+        if (e.isInstanceOf[HiveSQLException]) {
+          throw e.asInstanceOf[HiveSQLException]
+        } else {
+          val root = ExceptionUtils.getRootCause(e)
+          throw new HiveSQLException("Error getting schemas: " +
+            (if (root == null) e.toString else root.toString), e)
+        }
     }
     HiveThriftServer2.listener.onStatementFinish(statementId)
   }
