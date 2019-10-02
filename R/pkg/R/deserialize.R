@@ -232,11 +232,7 @@ readMultipleObjectsWithKeys <- function(inputCon) {
 }
 
 readDeserializeInArrow <- function(inputCon) {
-  # This is a hack to avoid CRAN check. Arrow is not uploaded into CRAN now. See ARROW-3204.
-  requireNamespace1 <- requireNamespace
-  if (requireNamespace1("arrow", quietly = TRUE)) {
-    RecordBatchStreamReader <- get(
-      "RecordBatchStreamReader", envir = asNamespace("arrow"), inherits = FALSE)
+  if (requireNamespace("arrow", quietly = TRUE)) {
     # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
     useAsTibble <- exists("as_tibble", envir = asNamespace("arrow"))
 
@@ -246,7 +242,7 @@ readDeserializeInArrow <- function(inputCon) {
     # for now.
     dataLen <- readInt(inputCon)
     arrowData <- readBin(inputCon, raw(), as.integer(dataLen), endian = "big")
-    batches <- RecordBatchStreamReader(arrowData)$batches()
+    batches <- arrow::RecordBatchStreamReader(arrowData)$batches()
 
     if (useAsTibble) {
       as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
