@@ -36,9 +36,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-/**
- * Test suite for data type casting expression [[Cast]].
- */
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   protected def requireAnsiEnabled: Boolean
@@ -1045,6 +1042,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 }
 
+/**
+ * Test suite for data type casting expression [[Cast]].
+ */
 class CastSuite extends CastSuiteBase {
 
   override protected def requireAnsiEnabled: Boolean = true
@@ -1203,6 +1203,9 @@ class CastSuite extends CastSuiteBase {
   }
 }
 
+/**
+ * Test suite for data type casting expression [[AnsiCast]].
+ */
 class AnsiCastSuite extends CastSuiteBase {
   override protected def requireAnsiEnabled: Boolean = false
 

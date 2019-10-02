@@ -243,19 +243,6 @@ object Cast {
   }
 }
 
-/**
- * Cast the child expression to the target data type.
- *
- * When cast from/to timezone related types, we need timeZoneId, which will be resolved with
- * session local timezone by an analyzer [[ResolveTimeZone]].
- */
-@ExpressionDescription(
-  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('10' as int);
-       10
-  """)
 abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
 
   def child: Expression
@@ -1644,6 +1631,19 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 }
 
+/**
+ * Cast the child expression to the target data type.
+ *
+ * When cast from/to timezone related types, we need timeZoneId, which will be resolved with
+ * session local timezone by an analyzer [[ResolveTimeZone]].
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('10' as int);
+       10
+  """)
 case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -1652,6 +1652,21 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   override protected val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
 }
 
+/**
+ * Cast the child expression to the target data type as per ANSI SQL standard.
+ * A runtime exception will be thrown on casting failure such as converting an out-of-range value
+ * to an integral type.
+ *
+ * When cast from/to timezone related types, we need timeZoneId, which will be resolved with
+ * session local timezone by an analyzer [[ResolveTimeZone]].
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('10' as int);
+       10
+  """)
 case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
