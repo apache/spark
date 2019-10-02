@@ -19,13 +19,20 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.write.streaming.StreamingWrite
+import org.apache.spark.sql.connector.catalog.SupportsWrite
+import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
 
 /**
  * The logical plan for writing data in a continuous stream.
  */
-case class WriteToContinuousDataSource(write: StreamingWrite, query: LogicalPlan)
-  extends LogicalPlan {
+case class WriteToContinuousDataSource(
+    table: SupportsWrite,
+    query: LogicalPlan,
+    queryId: String,
+    querySchema: StructType,
+    outputMode: OutputMode,
+    options: Map[String, String]) extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
 }

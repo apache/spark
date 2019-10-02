@@ -39,17 +39,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
- * Deprecated logical plan for writing data into data source v2. This is being replaced by more
- * specific logical plans, like [[org.apache.spark.sql.catalyst.plans.logical.AppendData]].
- */
-@deprecated("Use specific logical plans like AppendData instead", "2.4.0")
-case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
-  extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Seq(query)
-  override def output: Seq[Attribute] = Nil
-}
-
-/**
  * Physical plan node for v2 create table as select when the catalog does not support staging
  * the table creation.
  *
@@ -312,17 +301,6 @@ case class OverwritePartitionsDynamicExec(
       case _ =>
         throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
     }
-  }
-}
-
-case class WriteToDataSourceV2Exec(
-    batchWrite: BatchWrite,
-    query: SparkPlan) extends V2TableWriteExec {
-
-  def writeOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    writeWithV2(batchWrite)
   }
 }
 

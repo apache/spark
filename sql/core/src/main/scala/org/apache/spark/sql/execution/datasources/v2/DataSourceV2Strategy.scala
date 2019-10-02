@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownF
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.streaming.{WriteMicroBatch, WriteMicroBatchExec}
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -176,9 +177,6 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
       withProjection :: Nil
 
-    case WriteToDataSourceV2(writer, query) =>
-      WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
-
     case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
       CreateTableExec(catalog, ident, schema, parts, props, ifNotExists) :: Nil
 
@@ -265,8 +263,13 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
           }).toArray
       DeleteFromTableExec(r.table.asDeletable, filters) :: Nil
 
-    case WriteToContinuousDataSource(writer, query) =>
-      WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
+    case WriteMicroBatch(table, query, queryId, querySchema, outputMode, options, epochId) =>
+      WriteMicroBatchExec(
+        table, planLater(query), queryId, querySchema, outputMode, options, epochId) :: Nil
+
+    case WriteToContinuousDataSource(table, query, queryId, querySchema, outputMode, options) =>
+      WriteToContinuousDataSourceExec(
+        table, planLater(query), queryId, querySchema, outputMode, options) :: Nil
 
     case Repartition(1, false, child) =>
       val isContinuous = child.find {

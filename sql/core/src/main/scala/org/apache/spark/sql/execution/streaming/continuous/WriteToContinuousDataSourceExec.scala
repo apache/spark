@@ -23,35 +23,37 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.streaming.{BaseStreamingWriteExec, StreamExecution}
+import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
 
 /**
  * The physical plan for writing data into a continuous processing [[StreamingWrite]].
  */
-case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPlan)
-  extends UnaryExecNode with Logging {
-
-  override def child: SparkPlan = query
-  override def output: Seq[Attribute] = Nil
+case class WriteToContinuousDataSourceExec(
+    table: SupportsWrite,
+    query: SparkPlan,
+    queryId: String,
+    querySchema: StructType,
+    outputMode: OutputMode,
+    options: Map[String, String]) extends BaseStreamingWriteExec with Logging {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writerFactory = write.createStreamingWriterFactory()
-    val rdd = new ContinuousWriteRDD(query.execute(), writerFactory)
-
-    logInfo(s"Start processing data source write support: $write. " +
-      s"The input RDD has ${rdd.partitions.length} partitions.")
+    logInfo(s"Start processing data source StreamWrite: $streamWrite. " +
+      s"The input RDD has ${inputRDD.partitions.length} partitions.")
     EpochCoordinatorRef.get(
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
-      sparkContext.env)
-      .askSync[Unit](SetWriterPartitions(rdd.getNumPartitions))
+      sparkContext.env
+    ).askSync[Unit](SetWriterPartitions(inputRDD.getNumPartitions))
 
+    val writerFactory = streamWrite.createStreamingWriterFactory()
     try {
       // Force the RDD to run so continuous processing starts; no data is actually being collected
       // to the driver, as ContinuousWriteRDD outputs nothing.
-      rdd.collect()
+      new ContinuousWriteRDD(inputRDD, writerFactory).collect()
     } catch {
       case _: InterruptedException =>
         // Interruption is how continuous queries are ended, so accept and ignore the exception.

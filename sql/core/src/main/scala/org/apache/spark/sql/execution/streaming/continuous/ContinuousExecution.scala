@@ -88,7 +88,7 @@ class ContinuousExecution(
 
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     WriteToContinuousDataSource(
-      createStreamingWrite(sink, extraOptions, _logicalPlan), _logicalPlan)
+      sink, _logicalPlan, id.toString, _logicalPlan.schema, outputMode, extraOptions)
   }
 
   private val triggerExecutor = trigger match {
@@ -178,7 +178,7 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    reportTimeTaken("queryPlanning") {
+    val write = reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
         sparkSessionForQuery,
         withNewSources,
@@ -188,7 +188,8 @@ class ContinuousExecution(
         runId,
         currentBatchId,
         offsetSeqMetadata)
-      lastExecution.executedPlan // Force the lazy generation of execution plan
+      // Force the lazy generation of execution plan and get the `StreamWrite`.
+      lastExecution.executedPlan.asInstanceOf[WriteToContinuousDataSourceExec].streamWrite
     }
 
     val stream = withNewSources.collect {
@@ -212,7 +213,7 @@ class ContinuousExecution(
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint = EpochCoordinatorRef.create(
-      logicalPlan.write,
+      write,
       stream,
       this,
       epochCoordinatorId,

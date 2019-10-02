@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.{RateControlMicroBatchStream, WriteToMicroBatchDataSource}
+import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress}
+import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.util.Clock
@@ -127,8 +127,8 @@ class MicroBatchExecution(
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     sink match {
       case s: SupportsWrite =>
-        val streamingWrite = createStreamingWrite(s, extraOptions, _logicalPlan)
-        WriteToMicroBatchDataSource(streamingWrite, _logicalPlan)
+        WriteToMicroBatchDataSource(
+          s, _logicalPlan, id.toString, _logicalPlan.schema, outputMode, extraOptions)
 
       case _ => _logicalPlan
     }
@@ -557,7 +557,7 @@ class MicroBatchExecution(
             nextBatch.collect()
         }
         lastExecution.executedPlan match {
-          case w: WriteToDataSourceV2Exec => w.commitProgress
+          case w: WriteMicroBatchExec => w.commitProgress
           case _ => None
         }
       }

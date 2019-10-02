@@ -584,35 +584,6 @@ abstract class StreamExecution(
         |batch = $batchDescription""".stripMargin
   }
 
-  protected def createStreamingWrite(
-      table: SupportsWrite,
-      options: Map[String, String],
-      inputPlan: LogicalPlan): StreamingWrite = {
-    val writeBuilder = table.newWriteBuilder(new CaseInsensitiveStringMap(options.asJava))
-      .withQueryId(id.toString)
-      .withInputDataSchema(inputPlan.schema)
-    outputMode match {
-      case Append =>
-        writeBuilder.buildForStreaming()
-
-      case Complete =>
-        // TODO: we should do this check earlier when we have capability API.
-        require(writeBuilder.isInstanceOf[SupportsTruncate],
-          table.name + " does not support Complete mode.")
-        writeBuilder.asInstanceOf[SupportsTruncate].truncate().buildForStreaming()
-
-      case Update =>
-        // Although no v2 sinks really support Update mode now, but during tests we do want them
-        // to pretend to support Update mode, and treat Update mode same as Append mode.
-        if (Utils.isTesting) {
-          writeBuilder.buildForStreaming()
-        } else {
-          throw new IllegalArgumentException(
-            "Data source v2 streaming sinks does not support Update mode.")
-        }
-    }
-  }
-
   protected def purge(threshold: Long): Unit = {
     logDebug(s"Purging metadata at threshold=$threshold")
     offsetLog.purge(threshold)
