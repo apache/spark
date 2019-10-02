@@ -67,7 +67,6 @@ object DateTimeUtils {
   // The mean year length in seconds is:
   //  60 * 60 * 24 * 365.2425 = 31556952.0 = 12 * 2629746
   final val SECONDS_PER_MONTH: Int = 2629746
-  final val SECONDS_PER_YEAR: Int = 12 * SECONDS_PER_MONTH
   final val MILLIS_PER_MONTH: Long = SECONDS_PER_MONTH * MILLIS_PER_SECOND
 
   // number of days between 1.1.1970 and 1.1.2001
