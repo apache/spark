@@ -178,9 +178,7 @@ abstract class RDD[T: ClassTag](
    * @param newLevel the target storage level
    * @param allowOverride whether to override any existing level with the new one
    */
-  private def persist(
-      newLevel: StorageLevel,
-      allowOverride: Boolean): this.type = stateLock.synchronized {
+  private def persist(newLevel: StorageLevel, allowOverride: Boolean): this.type = {
     // TODO: Handle changes of StorageLevel
     if (storageLevel != StorageLevel.NONE && newLevel != storageLevel && !allowOverride) {
       throw new UnsupportedOperationException(
@@ -236,7 +234,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
-  def getStorageLevel: StorageLevel = stateLock.synchronized { storageLevel }
+  def getStorageLevel: StorageLevel = storageLevel
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
@@ -306,7 +304,7 @@ abstract class RDD[T: ClassTag](
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
-    if (getStorageLevel != StorageLevel.NONE) {
+    if (storageLevel != StorageLevel.NONE) {
       getOrCompute(split, context)
     } else {
       computeOrReadCheckpoint(split, context)
@@ -356,7 +354,7 @@ abstract class RDD[T: ClassTag](
     val blockId = RDDBlockId(id, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
-    SparkEnv.get.blockManager.getOrElseUpdate(blockId, getStorageLevel, elementClassTag, () => {
+    SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, elementClassTag, () => {
       readCachedBlock = false
       computeOrReadCheckpoint(partition, context)
     }) match {
@@ -1627,12 +1625,10 @@ abstract class RDD[T: ClassTag](
     // the storage level he/she specified to one that is appropriate for local checkpointing
     // (i.e. uses disk) to guarantee correctness.
 
-    stateLock.synchronized {
-      if (storageLevel == StorageLevel.NONE) {
-        persist(LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
-      } else {
-        persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
-      }
+    if (storageLevel == StorageLevel.NONE) {
+      persist(LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
+    } else {
+      persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
     }
 
     // If this RDD is already checkpointed and materialized, its lineage is already truncated.
@@ -1811,7 +1807,7 @@ abstract class RDD[T: ClassTag](
    * Changes the dependencies of this RDD from its original parents to a new RDD (`newRDD`)
    * created from the checkpoint file, and forget its old dependencies and partitions.
    */
-  private[spark] def markCheckpointed(): Unit = {
+  private[spark] def markCheckpointed(): Unit = stateLock.synchronized {
     clearDependencies()
     partitions_ = null
     deps = null    // Forget the constructor argument for dependencies too
@@ -1823,7 +1819,7 @@ abstract class RDD[T: ClassTag](
    * collected. Subclasses of RDD may override this method for implementing their own cleaning
    * logic. See [[org.apache.spark.rdd.UnionRDD]] for an example.
    */
-  protected def clearDependencies(): Unit = {
+  protected def clearDependencies(): Unit = stateLock.synchronized {
     dependencies_ = null
   }
 
@@ -1833,8 +1829,7 @@ abstract class RDD[T: ClassTag](
     def debugSelf(rdd: RDD[_]): Seq[String] = {
       import Utils.bytesToString
 
-      val sl = getStorageLevel
-      val persistence = if (sl != StorageLevel.NONE) sl.description else ""
+      val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
       val storageInfo = rdd.context.getRDDStorageInfo(_.id == rdd.id).map(info =>
         "    CachedPartitions: %d; MemorySize: %s; ExternalBlockStoreSize: %s; DiskSize: %s".format(
           info.numCachedPartitions, bytesToString(info.memSize),
