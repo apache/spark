@@ -448,7 +448,7 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
   usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
   examples = """
     Examples:
-      > SELECT 2 _FUNC_ 1.8;
+      > SELECT 2 % 1.8;
        0.2
       > SELECT MOD(2, 1.8);
        0.2

@@ -22,6 +22,7 @@ import java.net.URI
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -201,6 +202,22 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val database = client.getDatabase("temporary").copy(properties = Map("flag" -> "true"))
       client.alterDatabase(database)
       assert(client.getDatabase("temporary").properties.contains("flag"))
+
+      // test alter database location
+      val tempDatabasePath2 = Utils.createTempDir().toURI
+      // Hive support altering database location since HIVE-8472.
+      if (version == "3.0" || version == "3.1") {
+        client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
+        val uriInCatalog = client.getDatabase("temporary").locationUri
+        assert("file" === uriInCatalog.getScheme)
+        assert(new Path(tempDatabasePath2.getPath).toUri.getPath === uriInCatalog.getPath,
+          "Failed to alter database location")
+      } else {
+        val e = intercept[AnalysisException] {
+          client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
+        }
+        assert(e.getMessage.contains("does not support altering database location"))
+      }
     }
 
     test(s"$version: dropDatabase") {

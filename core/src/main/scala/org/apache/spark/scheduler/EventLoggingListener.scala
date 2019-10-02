@@ -99,7 +99,7 @@ private[spark] class EventLoggingListener(
   /**
    * Creates the log file in the configured log directory.
    */
-  def start() {
+  def start(): Unit = {
     if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
       throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
     }
@@ -141,7 +141,7 @@ private[spark] class EventLoggingListener(
   }
 
   /** Log the event as JSON. */
-  private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
+  private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false): Unit = {
     val eventJson = JsonProtocol.sparkEventToJson(event)
     // scalastyle:off println
     writer.foreach(_.println(compact(render(eventJson))))

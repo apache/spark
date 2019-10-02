@@ -70,7 +70,7 @@ private[spark] class CoarseGrainedExecutorBackend(
    */
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
-  override def onStart() {
+  override def onStart(): Unit = {
     logInfo("Connecting to driver: " + driverUrl)
     val resources = parseOrFindResources(resourcesFileOpt)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
@@ -186,7 +186,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
   }
 
-  override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
+  override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
     val resources = taskResources.getOrElse(taskId, Map.empty[String, ResourceInformation])
     val msg = StatusUpdate(executorId, taskId, state, data, resources)
     if (TaskState.isFinished(state)) {

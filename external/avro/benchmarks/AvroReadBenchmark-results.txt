@@ -6,37 +6,37 @@ OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 SQL Single TINYINT Column Scan:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2958           3072         161          5.3         188.1       1.0X
+Sum                                                3067           3132          91          5.1         195.0       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 SQL Single SMALLINT Column Scan:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2856           2866          15          5.5         181.6       1.0X
+Sum                                                2927           2929           3          5.4         186.1       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 SQL Single INT Column Scan:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2883           2890          10          5.5         183.3       1.0X
+Sum                                                2928           2990          87          5.4         186.2       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 SQL Single BIGINT Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                3336           3360          34          4.7         212.1       1.0X
+Sum                                                3374           3447         104          4.7         214.5       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 SQL Single FLOAT Column Scan:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2728           2760          45          5.8         173.5       1.0X
+Sum                                                2896           2901           7          5.4         184.1       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 SQL Single DOUBLE Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum                                                2826           2833           9          5.6         179.7       1.0X
+Sum                                                3004           3006           3          5.2         191.0       1.0X
 
 
 ================================================================================================
@@ -47,7 +47,7 @@ OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Int and String Scan:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of columns                                     4682           4704          30          2.2         446.6       1.0X
+Sum of columns                                     4814           4830          22          2.2         459.1       1.0X
 
 
 ================================================================================================
@@ -58,9 +58,9 @@ OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Partitioned Table:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Data column                                        3206           3265          84          4.9         203.8       1.0X
-Partition column                                   3314           3316           3          4.7         210.7       1.0X
-Both columns                                       3353           3367          20          4.7         213.2       1.0X
+Data column                                        3361           3362           1          4.7         213.7       1.0X
+Partition column                                   2999           3013          20          5.2         190.7       1.1X
+Both columns                                       3613           3615           2          4.4         229.7       0.9X
 
 
 ================================================================================================
@@ -71,7 +71,7 @@ OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Repeated String:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               3364           3367           4          3.1         320.8       1.0X
+Sum of string length                               3415           3416           1          3.1         325.7       1.0X
 
 
 ================================================================================================
@@ -82,19 +82,19 @@ OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 String with Nulls Scan (0.0%):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               5403           5410          10          1.9         515.3       1.0X
+Sum of string length                               5535           5536           2          1.9         527.8       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 String with Nulls Scan (50.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               4524           4526           2          2.3         431.5       1.0X
+Sum of string length                               4567           4575          11          2.3         435.6       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 String with Nulls Scan (95.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of string length                               3121           3129          11          3.4         297.7       1.0X
+Sum of string length                               3248           3268          29          3.2         309.7       1.0X
 
 
 ================================================================================================
@@ -105,18 +105,18 @@ OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Single Column Scan from 100 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                               4537           4541           6          0.2        4326.9       1.0X
+Sum of single column                               5486           5497          15          0.2        5232.0       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Single Column Scan from 200 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                               8768           8776          11          0.1        8361.8       1.0X
+Sum of single column                              10682          10746          90          0.1       10186.8       1.0X
 
 OpenJDK 64-Bit Server VM 1.8.0_222-b10 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 Single Column Scan from 300 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sum of single column                              13042          13064          31          0.1       12437.6       1.0X
+Sum of single column                              16177          16177           0          0.1       15427.7       1.0X
 
 

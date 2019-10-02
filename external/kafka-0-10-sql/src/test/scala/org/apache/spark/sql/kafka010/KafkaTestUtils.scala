@@ -550,7 +550,7 @@ class KafkaTestUtils(
       zkUtils: ZkUtils,
       topic: String,
       numPartitions: Int,
-      servers: Seq[KafkaServer]) {
+      servers: Seq[KafkaServer]): Unit = {
     eventually(timeout(1.minute), interval(200.milliseconds)) {
       try {
         verifyTopicDeletion(topic, numPartitions, servers)
@@ -613,7 +613,7 @@ class KafkaTestUtils(
 
     val actualPort = factory.getLocalPort
 
-    def shutdown() {
+    def shutdown(): Unit = {
       factory.shutdown()
       // The directories are not closed even if the ZooKeeper server is shut down.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures

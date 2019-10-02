@@ -206,7 +206,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
   def validatePrediction(
       predictions: Seq[Double],
       input: Seq[LabeledPoint],
-      expectedAcc: Double = 0.83) {
+      expectedAcc: Double = 0.83): Unit = {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label
     }

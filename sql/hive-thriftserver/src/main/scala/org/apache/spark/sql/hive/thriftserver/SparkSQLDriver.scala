@@ -94,7 +94,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
 
   override def getSchema: Schema = tableSchema
 
-  override def destroy() {
+  override def destroy(): Unit = {
     super.destroy()
     hiveResponse = null
     tableSchema = null

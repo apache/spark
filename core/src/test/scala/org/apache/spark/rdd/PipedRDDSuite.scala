@@ -237,7 +237,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
     testExportInputFile("mapreduce_map_input_file")
   }
 
-  def testExportInputFile(varName: String) {
+  def testExportInputFile(varName: String): Unit = {
     assume(TestUtils.testCommandAvailable(envCommand))
     val nums = new HadoopRDD(sc, new JobConf(), classOf[TextInputFormat], classOf[LongWritable],
       classOf[Text], 2) {

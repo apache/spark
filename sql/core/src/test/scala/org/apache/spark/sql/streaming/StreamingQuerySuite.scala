@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.internal.Logging

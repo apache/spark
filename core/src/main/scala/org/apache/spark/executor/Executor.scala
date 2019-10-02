@@ -857,7 +857,7 @@ private[spark] class Executor(
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
-  private def updateDependencies(newFiles: Map[String, Long], newJars: Map[String, Long]) {
+  private def updateDependencies(newFiles: Map[String, Long], newJars: Map[String, Long]): Unit = {
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies

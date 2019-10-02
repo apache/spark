@@ -82,13 +82,15 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE db=errorCapturingIdentifier                                  #use
+    | USE NAMESPACE? multipartIdentifier                               #use
     | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
          (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
     | ALTER database db=errorCapturingIdentifier
         SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
+    | ALTER database db=errorCapturingIdentifier
+        SET locationSpec                                               #setDatabaseLocation
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
     | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
@@ -1017,6 +1019,7 @@ ansiNonReserved
     | MINUTES
     | MONTHS
     | MSCK
+    | NAMESPACE
     | NAMESPACES
     | NO
     | NULLS
@@ -1268,6 +1271,7 @@ nonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAMESPACE
     | NAMESPACES
     | NO
     | NOT
@@ -1530,6 +1534,7 @@ MINUTES: 'MINUTES';
 MONTH: 'MONTH';
 MONTHS: 'MONTHS';
 MSCK: 'MSCK';
+NAMESPACE: 'NAMESPACE';
 NAMESPACES: 'NAMESPACES';
 NATURAL: 'NATURAL';
 NO: 'NO';

@@ -178,7 +178,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
    */
   private def testEventLogging(
       compressionCodec: Option[String] = None,
-      extraConf: Map[String, String] = Map()) {
+      extraConf: Map[String, String] = Map()): Unit = {
     val conf = getLoggingConf(testDirPath, compressionCodec)
     extraConf.foreach { case (k, v) => conf.set(k, v) }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
@@ -218,7 +218,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
    * Test end-to-end event logging functionality in an application.
    * This runs a simple Spark job and asserts that the expected events are logged when expected.
    */
-  private def testApplicationEventLogging(compressionCodec: Option[String] = None) {
+  private def testApplicationEventLogging(compressionCodec: Option[String] = None): Unit = {
     // Set defaultFS to something that would cause an exception, to make sure we don't run
     // into SPARK-6688.
     val conf = getLoggingConf(testDirPath, compressionCodec)
@@ -284,7 +284,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
    * from SparkListenerTaskEnd events for tasks belonging to the stage are
    * logged in a StageExecutorMetrics event for each executor at stage completion.
    */
-  private def testStageExecutorMetricsEventLogging() {
+  private def testStageExecutorMetricsEventLogging(): Unit = {
     val conf = getLoggingConf(testDirPath, None)
     val logName = "stageExecutorMetrics-test"
     val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
@@ -621,19 +621,19 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     var jobEnded = false
     var appEnded = false
 
-    override def onJobStart(jobStart: SparkListenerJobStart) {
+    override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
       jobStarted = true
     }
 
-    override def onJobEnd(jobEnd: SparkListenerJobEnd) {
+    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
       jobEnded = true
     }
 
-    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
+    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       appEnded = true
     }
 
-    def assertAllCallbacksInvoked() {
+    def assertAllCallbacksInvoked(): Unit = {
       assert(jobStarted, "JobStart callback not invoked!")
       assert(jobEnded, "JobEnd callback not invoked!")
       assert(appEnded, "ApplicationEnd callback not invoked!")

@@ -422,9 +422,9 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateName
   examples = """
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
-       map("a":"1","b":"2","c":"3")
+       {"a":"1","b":"2","c":"3"}
       > SELECT _FUNC_('a');
-       map("a":null)
+       {"a":null}
   """)
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)

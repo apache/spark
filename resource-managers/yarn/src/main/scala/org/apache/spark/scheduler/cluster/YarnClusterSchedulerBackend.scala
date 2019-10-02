@@ -27,7 +27,7 @@ private[spark] class YarnClusterSchedulerBackend(
     sc: SparkContext)
   extends YarnSchedulerBackend(scheduler, sc) {
 
-  override def start() {
+  override def start(): Unit = {
     val attemptId = ApplicationMaster.getAttemptId
     bindToYarn(attemptId.getApplicationId(), Some(attemptId))
     super.start()

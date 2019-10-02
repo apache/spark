@@ -316,7 +316,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
     val actualPort = factory.getLocalPort
 
-    def shutdown() {
+    def shutdown(): Unit = {
       factory.shutdown()
       // The directories are not closed even if the ZooKeeper server is shut down.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures

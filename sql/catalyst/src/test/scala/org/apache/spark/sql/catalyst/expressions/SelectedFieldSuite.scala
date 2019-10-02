@@ -508,7 +508,7 @@ class SelectedFieldSuite extends AnalysisTest {
   // Test that the given SELECT expressions prune the test schema to the single-column schema
   // defined by the given field
   private def testSelect(inputSchema: StructType, selectExprs: String*)
-                        (expected: StructField) {
+                        (expected: StructField): Unit = {
     test(s"SELECT ${selectExprs.map(s => s""""$s"""").mkString(", ")} should select the schema\n" +
       indent(StructType(expected :: Nil).treeString)) {
       for (selectExpr <- selectExprs) {

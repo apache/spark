@@ -109,7 +109,7 @@ class JdbcRDD[T: ClassTag](
       }
     }
 
-    override def close() {
+    override def close(): Unit = {
       try {
         if (null != rs) {
           rs.close()

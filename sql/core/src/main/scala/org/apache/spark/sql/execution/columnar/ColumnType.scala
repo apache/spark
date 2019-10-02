@@ -221,7 +221,8 @@ private[columnar] object INT extends NativeColumnType(IntegerType, 4) {
   override def getField(row: InternalRow, ordinal: Int): Int = row.getInt(ordinal)
 
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setInt(toOrdinal, from.getInt(fromOrdinal))
   }
 }
@@ -249,7 +250,8 @@ private[columnar] object LONG extends NativeColumnType(LongType, 8) {
 
   override def getField(row: InternalRow, ordinal: Int): Long = row.getLong(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setLong(toOrdinal, from.getLong(fromOrdinal))
   }
 }
@@ -277,7 +279,8 @@ private[columnar] object FLOAT extends NativeColumnType(FloatType, 4) {
 
   override def getField(row: InternalRow, ordinal: Int): Float = row.getFloat(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setFloat(toOrdinal, from.getFloat(fromOrdinal))
   }
 }
@@ -305,7 +308,8 @@ private[columnar] object DOUBLE extends NativeColumnType(DoubleType, 8) {
 
   override def getField(row: InternalRow, ordinal: Int): Double = row.getDouble(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setDouble(toOrdinal, from.getDouble(fromOrdinal))
   }
 }
@@ -331,7 +335,8 @@ private[columnar] object BOOLEAN extends NativeColumnType(BooleanType, 1) {
 
   override def getField(row: InternalRow, ordinal: Int): Boolean = row.getBoolean(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setBoolean(toOrdinal, from.getBoolean(fromOrdinal))
   }
 }
@@ -359,7 +364,8 @@ private[columnar] object BYTE extends NativeColumnType(ByteType, 1) {
 
   override def getField(row: InternalRow, ordinal: Int): Byte = row.getByte(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setByte(toOrdinal, from.getByte(fromOrdinal))
   }
 }
@@ -387,7 +393,8 @@ private[columnar] object SHORT extends NativeColumnType(ShortType, 2) {
 
   override def getField(row: InternalRow, ordinal: Int): Short = row.getShort(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setShort(toOrdinal, from.getShort(fromOrdinal))
   }
 }
@@ -452,7 +459,8 @@ private[columnar] object STRING
     row.getUTF8String(ordinal)
   }
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
 
@@ -496,7 +504,8 @@ private[columnar] case class COMPACT_DECIMAL(precision: Int, scale: Int)
     row.setDecimal(ordinal, value, precision)
   }
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
 }

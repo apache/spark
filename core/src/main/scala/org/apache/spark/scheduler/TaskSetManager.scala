@@ -474,7 +474,7 @@ private[spark] class TaskSetManager(
     }
   }
 
-  private def maybeFinishTaskSet() {
+  private def maybeFinishTaskSet(): Unit = {
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
       if (tasksSuccessful == numTasks) {
@@ -758,7 +758,7 @@ private[spark] class TaskSetManager(
    * Marks the task as failed, re-adds it to the list of pending tasks, and notifies the
    * DAG Scheduler.
    */
-  def handleFailedTask(tid: Long, state: TaskState, reason: TaskFailedReason) {
+  def handleFailedTask(tid: Long, state: TaskState, reason: TaskFailedReason): Unit = {
     val info = taskInfos(tid)
     if (info.failed || info.killed) {
       return
@@ -886,14 +886,14 @@ private[spark] class TaskSetManager(
    *
    * Used to keep track of the number of running tasks, for enforcing scheduling policies.
    */
-  def addRunningTask(tid: Long) {
+  def addRunningTask(tid: Long): Unit = {
     if (runningTasksSet.add(tid) && parent != null) {
       parent.increaseRunningTasks(1)
     }
   }
 
   /** If the given task ID is in the set of running tasks, removes it. */
-  def removeRunningTask(tid: Long) {
+  def removeRunningTask(tid: Long): Unit = {
     if (runningTasksSet.remove(tid) && parent != null) {
       parent.decreaseRunningTasks(1)
     }
@@ -903,9 +903,9 @@ private[spark] class TaskSetManager(
     null
   }
 
-  override def addSchedulable(schedulable: Schedulable) {}
+  override def addSchedulable(schedulable: Schedulable): Unit = {}
 
-  override def removeSchedulable(schedulable: Schedulable) {}
+  override def removeSchedulable(schedulable: Schedulable): Unit = {}
 
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
     val sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]()
@@ -914,7 +914,7 @@ private[spark] class TaskSetManager(
   }
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
-  override def executorLost(execId: String, host: String, reason: ExecutorLossReason) {
+  override def executorLost(execId: String, host: String, reason: ExecutorLossReason): Unit = {
     // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage,
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
@@ -1035,14 +1035,14 @@ private[spark] class TaskSetManager(
     levels.toArray
   }
 
-  def recomputeLocality() {
+  def recomputeLocality(): Unit = {
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
     myLocalityLevels = computeValidLocalityLevels()
     localityWaits = myLocalityLevels.map(getLocalityWait)
     currentLocalityIndex = getLocalityIndex(previousLocalityLevel)
   }
 
-  def executorAdded() {
+  def executorAdded(): Unit = {
     recomputeLocality()
   }
 }

@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
-import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveSingleton}
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
@@ -1103,10 +1103,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("Call add jar in a different thread (SPARK-8306)") {
     @volatile var error: Option[Throwable] = None
     val thread = new Thread {
-      override def run() {
+      override def run(): Unit = {
         // To make sure this test works, this jar should not be loaded in another place.
         sql(
-          s"ADD JAR ${HiveTestUtils.getHiveContribJar.getCanonicalPath}")
+          s"ADD JAR ${HiveTestJars.getHiveContribJar().getCanonicalPath}")
         try {
           sql(
             """

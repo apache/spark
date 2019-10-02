@@ -485,7 +485,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  def binaryClassificationTestWithContinuousFeaturesAndSubsampledFeatures(strategy: OldStrategy) {
+  def binaryClassificationTestWithContinuousFeaturesAndSubsampledFeatures(
+      strategy: OldStrategy): Unit = {
     val numFeatures = 50
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures, 1000)
     val rdd = sc.parallelize(arr).map(_.asML.toInstance)

@@ -224,7 +224,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext {
       negativeWeights: Boolean = false,
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
-      negativeFactors: Boolean = true) {
+      negativeFactors: Boolean = true): Unit = {
     // scalastyle:on
 
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,

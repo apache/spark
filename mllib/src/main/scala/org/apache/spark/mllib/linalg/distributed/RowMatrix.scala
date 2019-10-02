@@ -770,7 +770,7 @@ class RowMatrix @Since("1.0.0") (
   }
 
   /** Updates or verifies the number of rows. */
-  private def updateNumRows(m: Long) {
+  private def updateNumRows(m: Long): Unit = {
     if (nRows <= 0) {
       nRows = m
     } else {

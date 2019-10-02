@@ -23,8 +23,8 @@ import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
 import org.apache.spark.internal.config.UI.UI_ENABLED

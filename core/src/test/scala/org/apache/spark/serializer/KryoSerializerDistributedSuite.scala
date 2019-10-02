@@ -56,7 +56,7 @@ object KryoDistributedTest {
   class MyCustomClass
 
   class AppJarRegistrator extends KryoRegistrator {
-    override def registerClasses(k: Kryo) {
+    override def registerClasses(k: Kryo): Unit = {
       k.register(Utils.classForName(AppJarRegistrator.customClassName,
         noSparkClassLoader = true))
     }

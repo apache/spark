@@ -190,7 +190,7 @@ final class ShuffleBlockFetcherIterator(
   /**
    * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
    */
-  private[storage] def cleanup() {
+  private[storage] def cleanup(): Unit = {
     synchronized {
       isZombie = true
     }
@@ -219,7 +219,7 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
-  private[this] def sendRequest(req: FetchRequest) {
+  private[this] def sendRequest(req: FetchRequest): Unit = {
     logDebug("Sending request for %d blocks (%s) from %s".format(
       req.blocks.size, Utils.bytesToString(req.size), req.address.hostPort))
     bytesInFlight += req.size
@@ -340,7 +340,7 @@ final class ShuffleBlockFetcherIterator(
    * `ManagedBuffer`'s memory is allocated lazily when we create the input stream, so all we
    * track in-memory are the ManagedBuffer references themselves.
    */
-  private[this] def fetchLocalBlocks() {
+  private[this] def fetchLocalBlocks(): Unit = {
     logDebug(s"Start fetching local blocks: ${localBlocks.mkString(", ")}")
     val iter = localBlocks.iterator
     while (iter.hasNext) {

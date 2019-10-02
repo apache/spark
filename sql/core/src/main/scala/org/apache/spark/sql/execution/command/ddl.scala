@@ -133,6 +133,27 @@ case class AlterDatabasePropertiesCommand(
 }
 
 /**
+ * A command for users to set new location path for a database
+ * If the database does not exist, an error message will be issued to indicate the database
+ * does not exist.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    ALTER (DATABASE|SCHEMA) database_name SET LOCATION path
+ * }}}
+ */
+case class AlterDatabaseSetLocationCommand(databaseName: String, location: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val oldDb = catalog.getDatabaseMetadata(databaseName)
+    catalog.alterDatabase(oldDb.copy(locationUri = CatalogUtils.stringToURI(location)))
+
+    Seq.empty[Row]
+  }
+}
+
+/**
  * A command for users to show the name of the database, its comment (if one has been set), and its
  * root location on the filesystem. When extended is true, it also shows the database's properties
  * If the database does not exist, an error message will be issued to indicate the database

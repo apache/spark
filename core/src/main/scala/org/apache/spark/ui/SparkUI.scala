@@ -97,7 +97,7 @@ private[spark] class SparkUI private (
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
-  override def stop() {
+  override def stop(): Unit = {
     super.stop()
     logInfo(s"Stopped Spark web UI at $webUrl")
   }

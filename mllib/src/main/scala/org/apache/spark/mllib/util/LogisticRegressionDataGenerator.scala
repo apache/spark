@@ -65,7 +65,7 @@ object LogisticRegressionDataGenerator {
   }
 
   @Since("0.8.0")
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 5) {
       // scalastyle:off println
       println("Usage: LogisticRegressionGenerator " +

@@ -830,6 +830,67 @@ class DataSourceV2SQLSuite
     assert(df.collect().map(_.getAs[String](0)).sorted === expected.sorted)
   }
 
+  test("Use: basic tests with USE statements") {
+    val catalogManager = spark.sessionState.catalogManager
+
+    // Validate the initial current catalog and namespace.
+    assert(catalogManager.currentCatalog.name() == "session")
+    assert(catalogManager.currentNamespace === Array("default"))
+
+    // The following implicitly creates namespaces.
+    sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat2.ns2.ns2_2.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat2.ns3.ns3_3.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat2.testcat.table (id bigint) USING foo")
+
+    // Catalog is resolved to 'testcat'.
+    sql("USE testcat.ns1.ns1_1")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+    assert(catalogManager.currentNamespace === Array("ns1", "ns1_1"))
+
+    // Catalog is resolved to 'testcat2'.
+    sql("USE testcat2.ns2.ns2_2")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assert(catalogManager.currentNamespace === Array("ns2", "ns2_2"))
+
+    // Only the namespace is changed.
+    sql("USE ns3.ns3_3")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assert(catalogManager.currentNamespace === Array("ns3", "ns3_3"))
+
+    // Only the namespace is changed (explicit).
+    sql("USE NAMESPACE testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assert(catalogManager.currentNamespace === Array("testcat"))
+
+    // Catalog is resolved to `testcat`.
+    sql("USE testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+    assert(catalogManager.currentNamespace === Array())
+  }
+
+  test("Use: set v2 catalog as a current catalog") {
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == "session")
+
+    sql("USE testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+  }
+
+  test("Use: v2 session catalog is used and namespace does not exist") {
+    val exception = intercept[NoSuchDatabaseException] {
+      sql("USE ns1")
+    }
+    assert(exception.getMessage.contains("Database 'ns1' not found"))
+  }
+
+  test("Use: v2 catalog is used and namespace does not exist") {
+    // Namespaces are not required to exist for v2 catalogs.
+    sql("USE testcat.ns1.ns2")
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentNamespace === Array("ns1", "ns2"))
+  }
+
   test("tableCreation: partition column case insensitive resolution") {
     val testCatalog = catalog("testcat").asTableCatalog
     val sessionCatalog = catalog("session").asTableCatalog
