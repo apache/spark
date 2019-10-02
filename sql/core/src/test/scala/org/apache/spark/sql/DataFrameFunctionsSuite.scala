@@ -2290,6 +2290,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     testNonPrimitiveType()
   }
 
+  test("filter function - index argument") {
+    val df = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    def testIndexArgument(): Unit = {
+      checkAnswer(df.selectExpr("filter(s, (x, i) -> i % 2 == 0)"),
+        Seq(
+          Row(Seq("c", "b")),
+          Row(Seq("b", "c")),
+          Row(Seq.empty),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testIndexArgument()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testIndexArgument()
+  }
+
   test("filter function - invalid") {
     val df = Seq(
       (Seq("c", "a", "b"), 1),
@@ -2299,9 +2323,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("s", "i")
 
     val ex1 = intercept[AnalysisException] {
-      df.selectExpr("filter(s, (x, y) -> x + y)")
+      df.selectExpr("filter(s, (x, y, z) -> x + y)")
     }
-    assert(ex1.getMessage.contains("The number of lambda function arguments '2' does not match"))
+    assert(ex1.getMessage.contains("The number of lambda function arguments '3' does not match"))
 
     val ex2 = intercept[AnalysisException] {
       df.selectExpr("filter(i, x -> x)")
