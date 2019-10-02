@@ -99,7 +99,7 @@ class ClusteringSummary(JavaWrapper):
 class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
                              HasProbabilityCol, HasTol):
     """
-    Params for :py:attr:`GaussianMixture` and :py:attr:`GaussianMixtureModel`.
+    Params for :py:class:`GaussianMixture` and :py:class:`GaussianMixtureModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -344,7 +344,7 @@ class KMeansSummary(ClusteringSummary):
 class _KMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol,
                     HasDistanceMeasure):
     """
-    Params for :py:attr:`KMeans` and :py:attr:`KMeansModel`.
+    Params for :py:class:`KMeans` and :py:class:`KMeansModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -536,7 +536,7 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
 class _BisectingKMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
                              HasDistanceMeasure):
     """
-    Params for :py:attr:`BisectingKMeans` and :py:attr:`BisectingKMeansModel`.
+    Params for :py:class:`BisectingKMeans` and :py:class:`BisectingKMeansModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -747,7 +747,7 @@ class BisectingKMeansSummary(ClusteringSummary):
 @inherit_doc
 class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
     """
-    Params for :py:attr:`LDA` and :py:attr:`LDAModel`.
+    Params for :py:class:`LDA` and :py:class:`LDAModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -1240,7 +1240,7 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
 @inherit_doc
 class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
     """
-    Params for :py:attr:`PowerIterationClustering`.
+    Params for :py:class:`PowerIterationClustering`.
 
     .. versionadded:: 3.0.0
     """
