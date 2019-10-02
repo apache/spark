@@ -89,7 +89,8 @@ public class JavaHigherOrderFunctionsSuite {
                 makeArray(6, 9, 10, 8, 3),
                 JavaTestUtils.<Integer>makeArray(),
                 null
-            ));
+            )
+        );
         checkAnswer(
             arrDf.select(transform(col("x"), (x, i) -> x.plus(i))),
             toRows(
@@ -97,7 +98,8 @@ public class JavaHigherOrderFunctionsSuite {
                 makeArray(5, 9, 11, 10, 6),
                 JavaTestUtils.<Integer>makeArray(),
                 null
-            ));
+            )
+        );
     }
 
     @Test
@@ -109,7 +111,8 @@ public class JavaHigherOrderFunctionsSuite {
                 makeArray(9),
                 JavaTestUtils.<Integer>makeArray(),
                 null
-            ));
+            )
+        );
     }
 
     @Test
@@ -121,7 +124,8 @@ public class JavaHigherOrderFunctionsSuite {
                 true,
                 false,
                 null
-            ));
+            )
+        );
     }
 
     @Test
@@ -133,7 +137,8 @@ public class JavaHigherOrderFunctionsSuite {
                 false,
                 true,
                 null
-            ));
+            )
+        );
     }
 
     @Test
@@ -145,7 +150,8 @@ public class JavaHigherOrderFunctionsSuite {
                 31,
                 0,
                 null
-            ));
+            )
+        );
         checkAnswer(
             arrDf.select(aggregate(col("x"), lit(0), (acc, x) -> acc.plus(x), x -> x)),
             toRows(
@@ -153,7 +159,8 @@ public class JavaHigherOrderFunctionsSuite {
                 31,
                 0,
                 null
-            ));
+            )
+        );
     }
 
     @Test
@@ -165,7 +172,8 @@ public class JavaHigherOrderFunctionsSuite {
                 makeArray(42, 42, 42, 42, 42),
                 JavaTestUtils.<Integer>makeArray(),
                 null
-            ));
+            )
+        );
     }
 
     @Test
@@ -173,13 +181,13 @@ public class JavaHigherOrderFunctionsSuite {
         checkAnswer(
             mapDf.select(transform_keys(col("x"), (k, v) -> k.plus(v))),
             toRows(
-                mapAsScalaMap(
-                new HashMap<Integer, Integer>() {{
+                mapAsScalaMap(new HashMap<Integer, Integer>() {{
                     put(2, 1);
                     put(4, 2);
                 }}),
                 null
-            ));
+            )
+        );
     }
 
     @Test
@@ -187,13 +195,13 @@ public class JavaHigherOrderFunctionsSuite {
         checkAnswer(
             mapDf.select(transform_values(col("x"), (k, v) -> k.plus(v))),
             toRows(
-                mapAsScalaMap(
-                new HashMap<Integer, Integer>() {{
+                mapAsScalaMap(new HashMap<Integer, Integer>() {{
                     put(1, 2);
                     put(2, 4);
                 }}),
                 null
-            ));
+            )
+        );
     }
 
     @Test
@@ -203,7 +211,8 @@ public class JavaHigherOrderFunctionsSuite {
             toRows(
                 mapAsScalaMap(new HashMap<Integer, Integer>()),
                 null
-            ));
+            )
+        );
     }
 
     @Test
@@ -216,6 +225,7 @@ public class JavaHigherOrderFunctionsSuite {
                     put(2, false);
                 }}),
                 null
-            ));
+            )
+        );
     }
 }

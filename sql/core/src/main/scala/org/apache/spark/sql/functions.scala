@@ -3466,8 +3466,11 @@ object functions {
    * @group collection_funcs
    * @since 3.0.0
    */
-  def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column,
-                finish: Column => Column): Column = withExpr {
+  def aggregate(
+      expr: Column,
+      zero: Column,
+      merge: (Column, Column) => Column,
+      finish: Column => Column): Column = withExpr {
     ArrayAggregate(
       expr.expr,
       zero.expr,
@@ -3536,8 +3539,10 @@ object functions {
    * @group collection_funcs
    * @since 3.0.0
    */
-  def map_zip_with(left: Column, right: Column,
-                   f: (Column, Column, Column) => Column): Column = withExpr {
+  def map_zip_with(
+      left: Column,
+      right: Column,
+      f: (Column, Column, Column) => Column): Column = withExpr {
     MapZipWith(left.expr, right.expr, createLambda(f))
   }
 
