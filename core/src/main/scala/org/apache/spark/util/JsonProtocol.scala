@@ -391,6 +391,7 @@ private[spark] object JsonProtocol {
     ("Executor Deserialize CPU Time" -> taskMetrics.executorDeserializeCpuTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
     ("Executor CPU Time" -> taskMetrics.executorCpuTime) ~
+    ("Peak Execution Memory" -> taskMetrics.peakExecutionMemory) ~
     ("Result Size" -> taskMetrics.resultSize) ~
     ("JVM GC Time" -> taskMetrics.jvmGCTime) ~
     ("Result Serialization Time" -> taskMetrics.resultSerializationTime) ~
@@ -400,8 +401,7 @@ private[spark] object JsonProtocol {
     ("Shuffle Write Metrics" -> shuffleWriteMetrics) ~
     ("Input Metrics" -> inputMetrics) ~
     ("Output Metrics" -> outputMetrics) ~
-    ("Updated Blocks" -> updatedBlocks) ~
-    ("Peak Execution Memory" -> taskMetrics.peakExecutionMemory)
+    ("Updated Blocks" -> updatedBlocks)
   }
 
   /** Convert executor metrics to JSON. */
