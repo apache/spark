@@ -254,10 +254,16 @@ class Dataset[T] private[sql](
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
   private[sql] def resolve(colName: String): NamedExpression = {
-    queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    queryExecution.analyzed.resolveQuoted(colName, resolver)
       .getOrElse {
-        throw new AnalysisException(
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+        val fields = schema.fieldNames
+        val extraMsg = if (fields.exists(resolver(_, colName))) {
+          s"; did you mean to quote the `$colName` column?"
+        } else ""
+        val fieldsStr = fields.mkString(", ")
+        val errorMsg = s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}"""
+        throw new AnalysisException(errorMsg)
       }
   }
 
@@ -3121,6 +3127,34 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Create a write configuration builder for v2 sources.
+   *
+   * This builder is used to configure and execute write operations. For example, to append to an
+   * existing table, run:
+   *
+   * {{{
+   *   df.writeTo("catalog.db.table").append()
+   * }}}
+   *
+   * This can also be used to create or replace existing tables:
+   *
+   * {{{
+   *   df.writeTo("catalog.db.table").partitionedBy($"col").createOrReplace()
+   * }}}
+   *
+   * @group basic
+   * @since 3.0.0
+   */
+  def writeTo(table: String): DataFrameWriterV2[T] = {
+    // TODO: streaming could be adapted to use this interface
+    if (isStreaming) {
+      logicalPlan.failAnalysis(
+        "'writeTo' can not be called on streaming Dataset/DataFrame")
+    }
+    new DataFrameWriterV2[T](table, this)
+  }
+
+  /**
    * Interface for saving the content of the streaming Dataset out into external storage.
    *
    * @group basic
@@ -3328,9 +3362,9 @@ class Dataset[T] private[sql](
     }
   }
 
-  private[sql] def toPythonIterator(): Array[Any] = {
+  private[sql] def toPythonIterator(prefetchPartitions: Boolean = false): Array[Any] = {
     withNewExecutionId {
-      PythonRDD.toLocalIteratorAndServe(javaToPython.rdd)
+      PythonRDD.toLocalIteratorAndServe(javaToPython.rdd, prefetchPartitions)
     }
   }
 

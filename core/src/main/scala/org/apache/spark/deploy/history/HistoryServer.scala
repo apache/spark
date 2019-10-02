@@ -135,7 +135,7 @@ class HistoryServer(
    * This starts a background thread that periodically synchronizes information displayed on
    * this UI with the event logs in the provided base directory.
    */
-  def initialize() {
+  def initialize(): Unit = {
     attachPage(new HistoryPage(this))
 
     attachHandler(ApiRootResource.getServletHandler(this))
@@ -149,12 +149,12 @@ class HistoryServer(
   }
 
   /** Bind to the HTTP server behind this web interface. */
-  override def bind() {
+  override def bind(): Unit = {
     super.bind()
   }
 
   /** Stop the server and close the file system. */
-  override def stop() {
+  override def stop(): Unit = {
     super.stop()
     provider.stop()
   }
@@ -164,7 +164,7 @@ class HistoryServer(
       appId: String,
       attemptId: Option[String],
       ui: SparkUI,
-      completed: Boolean) {
+      completed: Boolean): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach { handler =>
       serverInfo.get.addHandler(handler, ui.securityManager)
@@ -327,7 +327,7 @@ object HistoryServer extends Logging {
     new SecurityManager(config)
   }
 
-  def initSecurity() {
+  def initSecurity(): Unit = {
     // If we are accessing HDFS and it has security enabled (Kerberos), we have to login
     // from a keytab file so that we can access HDFS beyond the kerberos ticket expiration.
     // As long as it is using Hadoop rpc (hdfs://), a relogin will automatically

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import edu.emory.mathcs.jtransforms.dct._
+import org.jtransforms.dct._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer

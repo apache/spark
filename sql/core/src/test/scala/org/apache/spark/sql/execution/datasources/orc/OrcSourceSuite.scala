@@ -60,7 +60,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       .createOrReplaceTempView("orc_temp_table")
   }
 
-  protected def testBloomFilterCreation(bloomFilterKind: Kind) {
+  protected def testBloomFilterCreation(bloomFilterKind: Kind): Unit = {
     val tableName = "bloomFilter"
 
     withTempDir { dir =>
@@ -120,7 +120,8 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  protected def testSelectiveDictionaryEncoding(isSelective: Boolean, isHive23: Boolean = false) {
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean,
+      isHive23: Boolean = false): Unit = {
     val tableName = "orcTable"
 
     withTempDir { dir =>
@@ -372,9 +373,10 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
 
       val orcFilePath = new Path(partFiles.head.getAbsolutePath)
       val readerOptions = OrcFile.readerOptions(new Configuration())
-      val reader = OrcFile.createReader(orcFilePath, readerOptions)
-      val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
-      assert(version === SPARK_VERSION_SHORT)
+      Utils.tryWithResource(OrcFile.createReader(orcFilePath, readerOptions)) { reader =>
+        val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
+        assert(version === SPARK_VERSION_SHORT)
+      }
     }
   }
 

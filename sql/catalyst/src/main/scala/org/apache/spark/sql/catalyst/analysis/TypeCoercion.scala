@@ -677,8 +677,9 @@ object TypeCoercion {
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
       case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
+        val preferIntegralDivision = conf.usePostgreSQLDialect
         (left.dataType, right.dataType) match {
-          case (_: IntegralType, _: IntegralType) if conf.preferIntegralDivision =>
+          case (_: IntegralType, _: IntegralType) if preferIntegralDivision =>
             IntegralDivide(left, right)
           case _ =>
             Divide(Cast(left, DoubleType), Cast(right, DoubleType))

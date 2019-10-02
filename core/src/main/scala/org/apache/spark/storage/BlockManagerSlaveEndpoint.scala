@@ -80,7 +80,7 @@ class BlockManagerSlaveEndpoint(
 
   }
 
-  private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T) {
+  private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T): Unit = {
     val future = Future {
       logDebug(actionMessage)
       body

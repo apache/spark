@@ -54,7 +54,7 @@ class CheckpointInputDStream(_ssc: StreamingContext) extends InputDStream[Int](_
   class FileInputDStreamCheckpointData extends DStreamCheckpointData(this) {
     @transient
     var restoredTimes = 0
-    override def restore() {
+    override def restore(): Unit = {
       restoredTimes += 1
       super.restore()
     }
@@ -84,7 +84,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
       numBatchesBeforeRestart: Int,
       batchDuration: Duration = Milliseconds(500),
       stopSparkContextAfterTest: Boolean = true
-    ) {
+    ): Unit = {
     require(numBatchesBeforeRestart < expectedOutput.size,
       "Number of batches before context restart less than number of expected output " +
         "(i.e. number of total batches to run)")

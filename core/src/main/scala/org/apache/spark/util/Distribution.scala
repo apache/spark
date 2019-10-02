@@ -65,7 +65,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
    * print a summary of this distribution to the given PrintStream.
    * @param out
    */
-  def summary(out: PrintStream = System.out) {
+  def summary(out: PrintStream = System.out): Unit = {
     // scalastyle:off println
     out.println(statCounter)
     showQuantiles(out)
@@ -83,7 +83,7 @@ private[spark] object Distribution {
     }
   }
 
-  def showQuantiles(out: PrintStream = System.out, quantiles: Iterable[Double]) {
+  def showQuantiles(out: PrintStream = System.out, quantiles: Iterable[Double]): Unit = {
     // scalastyle:off println
     out.println("min\t25%\t50%\t75%\tmax")
     quantiles.foreach{q => out.print(q + "\t")}

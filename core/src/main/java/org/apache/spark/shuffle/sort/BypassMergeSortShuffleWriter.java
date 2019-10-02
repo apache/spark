@@ -85,8 +85,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final Partitioner partitioner;
   private final ShuffleWriteMetricsReporter writeMetrics;
   private final int shuffleId;
-  private final int mapId;
-  private final long mapTaskAttemptId;
+  private final long mapId;
   private final Serializer serializer;
   private final ShuffleExecutorComponents shuffleExecutorComponents;
 
@@ -106,8 +105,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   BypassMergeSortShuffleWriter(
       BlockManager blockManager,
       BypassMergeSortShuffleHandle<K, V> handle,
-      int mapId,
-      long mapTaskAttemptId,
+      long mapId,
       SparkConf conf,
       ShuffleWriteMetricsReporter writeMetrics,
       ShuffleExecutorComponents shuffleExecutorComponents) {
@@ -117,7 +115,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;
-    this.mapTaskAttemptId = mapTaskAttemptId;
     this.shuffleId = dep.shuffleId();
     this.partitioner = dep.partitioner();
     this.numPartitions = partitioner.numPartitions();
@@ -130,11 +127,12 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   public void write(Iterator<Product2<K, V>> records) throws IOException {
     assert (partitionWriters == null);
     ShuffleMapOutputWriter mapOutputWriter = shuffleExecutorComponents
-        .createMapOutputWriter(shuffleId, mapId, mapTaskAttemptId, numPartitions);
+        .createMapOutputWriter(shuffleId, mapId, numPartitions);
     try {
       if (!records.hasNext()) {
         partitionLengths = mapOutputWriter.commitAllPartitions();
-        mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+        mapStatus = MapStatus$.MODULE$.apply(
+          blockManager.shuffleServerId(), partitionLengths, mapId);
         return;
       }
       final SerializerInstance serInstance = serializer.newInstance();
@@ -167,7 +165,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
 
       partitionLengths = writePartitionedData(mapOutputWriter);
-      mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+      mapStatus = MapStatus$.MODULE$.apply(
+        blockManager.shuffleServerId(), partitionLengths, mapId);
     } catch (Exception e) {
       try {
         mapOutputWriter.abort(e);

@@ -62,8 +62,7 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
   @Override
   public ShuffleMapOutputWriter createMapOutputWriter(
       int shuffleId,
-      int mapId,
-      long mapTaskAttemptId,
+      long mapId,
       int numPartitions) {
     if (blockResolver == null) {
       throw new IllegalStateException(
@@ -76,8 +75,7 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
   @Override
   public Optional<SingleSpillShuffleMapOutputWriter> createSingleFileMapOutputWriter(
       int shuffleId,
-      int mapId,
-      long mapTaskAttemptId) {
+      long mapId) {
     if (blockResolver == null) {
       throw new IllegalStateException(
           "Executor components must be initialized before getting writers.");

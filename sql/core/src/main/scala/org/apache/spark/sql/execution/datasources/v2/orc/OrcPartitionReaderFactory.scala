@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * A factory used to create Orc readers.
@@ -74,10 +74,11 @@ case class OrcPartitionReaderFactory(
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val reader = OrcFile.createReader(filePath, readerOptions)
-
-    val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-      isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+    val requestedColIdsOrEmptyFile =
+      Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+        OrcUtils.requestedColumnIds(
+          isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+      }
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader[InternalRow]
@@ -119,10 +120,11 @@ case class OrcPartitionReaderFactory(
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val reader = OrcFile.createReader(filePath, readerOptions)
-
-    val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-      isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+    val requestedColIdsOrEmptyFile =
+      Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+        OrcUtils.requestedColumnIds(
+          isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+      }
 
     if (requestedColIdsOrEmptyFile.isEmpty) {
       new EmptyPartitionReader

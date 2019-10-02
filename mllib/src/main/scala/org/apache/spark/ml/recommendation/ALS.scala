@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext}
+import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -42,7 +42,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -564,6 +564,13 @@ object ALSModel extends MLReadable[ALSModel] {
  * r is greater than 0 and 0 if r is less than or equal to 0. The ratings then act as 'confidence'
  * values related to strength of indicated user
  * preferences rather than explicit ratings given to items.
+ *
+ * Note: the input rating dataset to the ALS implementation should be deterministic.
+ * Nondeterministic data can cause failure during fitting ALS model.
+ * For example, an order-sensitive operation like sampling after a repartition makes dataset
+ * output nondeterministic, like `dataset.repartition(2).sample(false, 0.5, 1618)`.
+ * Checkpointing sampled dataset or adding a sort before sampling can help make the dataset
+ * deterministic.
  */
 @Since("1.3.0")
 class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams
@@ -794,7 +801,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
      * Given a triangular matrix in the order of fillXtX above, compute the full symmetric square
      * matrix that it represents, storing it into destMatrix.
      */
-    private def fillAtA(triAtA: Array[Double], lambda: Double) {
+    private def fillAtA(triAtA: Array[Double], lambda: Double): Unit = {
       var i = 0
       var pos = 0
       var a = 0.0
@@ -1666,6 +1673,13 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         }
     }
     val merged = srcOut.groupByKey(new ALSPartitioner(dstInBlocks.partitions.length))
+
+    // SPARK-28927: Nondeterministic RDDs causes inconsistent in/out blocks in case of rerun.
+    // It can cause runtime error when matching in/out user/item blocks.
+    val isBlockRDDNondeterministic =
+      dstInBlocks.outputDeterministicLevel == DeterministicLevel.INDETERMINATE ||
+        srcOutBlocks.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+
     dstInBlocks.join(merged).mapValues {
       case (InBlock(dstIds, srcPtrs, srcEncodedIndices, ratings), srcFactors) =>
         val sortedSrcFactors = new Array[FactorBlock](numSrcBlocks)
@@ -1686,7 +1700,19 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
             val encoded = srcEncodedIndices(i)
             val blockId = srcEncoder.blockId(encoded)
             val localIndex = srcEncoder.localIndex(encoded)
-            val srcFactor = sortedSrcFactors(blockId)(localIndex)
+            var srcFactor: Array[Float] = null
+            try {
+              srcFactor = sortedSrcFactors(blockId)(localIndex)
+            } catch {
+              case a: ArrayIndexOutOfBoundsException if isBlockRDDNondeterministic =>
+                val errMsg = "A failure detected when matching In/Out blocks of users/items. " +
+                  "Because at least one In/Out block RDD is found to be nondeterministic now, " +
+                  "the issue is probably caused by nondeterministic input data. You can try to " +
+                  "checkpoint training data to make it deterministic. If you do `repartition` + " +
+                  "`sample` or `randomSplit`, you can also try to sort it before `sample` or " +
+                  "`randomSplit` to make it deterministic."
+                throw new SparkException(errMsg, a)
+            }
             val rating = ratings(i)
             if (implicitPrefs) {
               // Extension to the original paper to handle rating < 0. confidence is a function

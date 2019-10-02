@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming.continuous
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
 
 import org.mockito.Mockito._
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rpc.RpcEndpointRef

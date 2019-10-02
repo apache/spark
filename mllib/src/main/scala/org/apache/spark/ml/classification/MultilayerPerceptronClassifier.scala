@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.feature.OneHotEncoderModel
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._

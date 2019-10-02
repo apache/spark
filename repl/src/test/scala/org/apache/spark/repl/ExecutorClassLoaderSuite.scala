@@ -36,7 +36,7 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TestUtils.JavaSourceFromString
@@ -58,7 +58,7 @@ class ExecutorClassLoaderSuite
   var url1: String = _
   var urls2: Array[URL] = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     tempDir1 = Utils.createTempDir()
     tempDir2 = Utils.createTempDir()
@@ -71,7 +71,7 @@ class ExecutorClassLoaderSuite
     parentClassNames.foreach(TestUtils.createCompiledClass(_, tempDir2, "2"))
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       Utils.deleteRecursively(tempDir1)
       Utils.deleteRecursively(tempDir2)
@@ -272,7 +272,8 @@ class ExecutorClassLoaderSuite
         assert(e.getMessage.contains("ThisIsAClassName"))
         // RemoteClassLoaderError must not be LinkageError nor ClassNotFoundException. Otherwise,
         // JVM will cache it and doesn't retry to load a class.
-        assert(!e.isInstanceOf[LinkageError] && !e.isInstanceOf[ClassNotFoundException])
+        assert(!(classOf[LinkageError].isAssignableFrom(e.getClass)))
+        assert(!(classOf[ClassNotFoundException].isAssignableFrom(e.getClass)))
       } finally {
         rpcEnv.shutdown()
         rpcEnv.awaitTermination()

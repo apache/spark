@@ -107,7 +107,7 @@ class PoissonGenerator @Since("1.1.0") (
   override def nextValue(): Double = rng.sample()
 
   @Since("1.1.0")
-  override def setSeed(seed: Long) {
+  override def setSeed(seed: Long): Unit = {
     rng.reseedRandomGenerator(seed)
   }
 
@@ -132,7 +132,7 @@ class ExponentialGenerator @Since("1.3.0") (
   override def nextValue(): Double = rng.sample()
 
   @Since("1.3.0")
-  override def setSeed(seed: Long) {
+  override def setSeed(seed: Long): Unit = {
     rng.reseedRandomGenerator(seed)
   }
 
@@ -159,7 +159,7 @@ class GammaGenerator @Since("1.3.0") (
   override def nextValue(): Double = rng.sample()
 
   @Since("1.3.0")
-  override def setSeed(seed: Long) {
+  override def setSeed(seed: Long): Unit = {
     rng.reseedRandomGenerator(seed)
   }
 
@@ -187,7 +187,7 @@ class LogNormalGenerator @Since("1.3.0") (
   override def nextValue(): Double = rng.sample()
 
   @Since("1.3.0")
-  override def setSeed(seed: Long) {
+  override def setSeed(seed: Long): Unit = {
     rng.reseedRandomGenerator(seed)
   }
 

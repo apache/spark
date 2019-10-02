@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHive}
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -56,7 +56,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   def spark: SparkSession = sparkSession
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
@@ -67,7 +67,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
       TimeZone.setDefault(originalTimeZone)
@@ -817,7 +817,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("ADD JAR command 2") {
     // this is a test case from mapjoin_addjar.q
-    val testJar = HiveTestUtils.getHiveHcatalogCoreJar.toURI
+    val testJar = HiveTestJars.getHiveHcatalogCoreJar().toURI
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     sql(s"ADD JAR $testJar")
     sql(
@@ -827,9 +827,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("select * from src join t1 on src.key = t1.a")
     sql("DROP TABLE t1")
     assert(sql("list jars").
-      filter(_.getString(0).contains(HiveTestUtils.getHiveHcatalogCoreJar.getName)).count() > 0)
+      filter(_.getString(0).contains(HiveTestJars.getHiveHcatalogCoreJar().getName)).count() > 0)
     assert(sql("list jar").
-      filter(_.getString(0).contains(HiveTestUtils.getHiveHcatalogCoreJar.getName)).count() > 0)
+      filter(_.getString(0).contains(HiveTestJars.getHiveHcatalogCoreJar().getName)).count() > 0)
     val testJar2 = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
     sql(s"ADD JAR $testJar2")
     assert(sql(s"list jar $testJar").count() == 1)

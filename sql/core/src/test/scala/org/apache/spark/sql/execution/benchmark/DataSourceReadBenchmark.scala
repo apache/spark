@@ -22,11 +22,10 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.apache.spark.SparkConf
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -44,21 +43,26 @@ import org.apache.spark.sql.vectorized.ColumnVector
  *      Results will be written to "benchmarks/DataSourceReadBenchmark-results.txt".
  * }}}
  */
-object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
-  val conf = new SparkConf()
-    .setAppName("DataSourceReadBenchmark")
-    // Since `spark.master` always exists, overrides this value
-    .set("spark.master", "local[1]")
-    .setIfMissing("spark.driver.memory", "3g")
-    .setIfMissing("spark.executor.memory", "3g")
-    .setIfMissing(UI_ENABLED, false)
+object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
-  val spark = SparkSession.builder.config(conf).getOrCreate()
+  override def getSparkSession: SparkSession = {
+    val conf = new SparkConf()
+      .setAppName("DataSourceReadBenchmark")
+      // Since `spark.master` always exists, overrides this value
+      .set("spark.master", "local[1]")
+      .setIfMissing("spark.driver.memory", "3g")
+      .setIfMissing("spark.executor.memory", "3g")
+      .setIfMissing(UI_ENABLED, false)
 
-  // Set default configs. Individual cases will change them if necessary.
-  spark.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
-  spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
-  spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+    val sparkSession = SparkSession.builder.config(conf).getOrCreate()
+
+    // Set default configs. Individual cases will change them if necessary.
+    sparkSession.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
+    sparkSession.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
+    sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+
+    sparkSession
+  }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)

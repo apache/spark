@@ -38,7 +38,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
 
   setupTestData()
 
-  private def cachePrimitiveTest(data: DataFrame, dataType: String) {
+  private def cachePrimitiveTest(data: DataFrame, dataType: String): Unit = {
     data.createOrReplaceTempView(s"testData$dataType")
     val storageLevel = MEMORY_ONLY
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan

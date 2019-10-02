@@ -38,7 +38,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
     checkRefreshView(isTemp = false)
   }
 
-  private def checkRefreshView(isTemp: Boolean) {
+  private def checkRefreshView(isTemp: Boolean): Unit = {
     withView("view_refresh") {
       withTable("view_table") {
         // Create a Parquet directory

@@ -47,8 +47,8 @@ import org.apache.spark.sql.types.{NumericType, StructType}
  */
 @Stable
 class RelationalGroupedDataset protected[sql](
-    df: DataFrame,
-    groupingExprs: Seq[Expression],
+    private[sql] val df: DataFrame,
+    private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
@@ -520,6 +520,48 @@ class RelationalGroupedDataset protected[sql](
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
     val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
 
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  /**
+   * Applies a vectorized python user-defined function to each cogrouped data.
+   * The user-defined function defines a transformation:
+   * `pandas.DataFrame`, `pandas.DataFrame` -> `pandas.DataFrame`.
+   *  For each group in the cogrouped data, all elements in the group are passed as a
+   * `pandas.DataFrame` and the results for all cogroups are combined into a new [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def flatMapCoGroupsInPandas(
+      r: RelationalGroupedDataset,
+      expr: PythonUDF): DataFrame = {
+    require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      "Must pass a cogrouped map udf")
+    require(expr.dataType.isInstanceOf[StructType],
+      s"The returnType of the udf must be a ${StructType.simpleString}")
+
+    val leftGroupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+
+    val rightGroupingNamedExpressions = r.groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+
+    val leftAttributes = leftGroupingNamedExpressions.map(_.toAttribute)
+    val rightAttributes = rightGroupingNamedExpressions.map(_.toAttribute)
+
+    val leftChild = df.logicalPlan
+    val rightChild = r.df.logicalPlan
+
+    val left = Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild)
+    val right = Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)
+
+    val output = expr.dataType.asInstanceOf[StructType].toAttributes
+    val plan = FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, expr, output, left, right)
     Dataset.ofRows(df.sparkSession, plan)
   }
 

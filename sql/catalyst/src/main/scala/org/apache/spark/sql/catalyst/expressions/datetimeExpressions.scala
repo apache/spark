@@ -76,9 +76,7 @@ case class CurrentDate(timeZoneId: Option[String] = None)
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def eval(input: InternalRow): Any = {
-    localDateToDays(LocalDate.now(zoneId))
-  }
+  override def eval(input: InternalRow): Any = currentDate(zoneId)
 
   override def prettyName: String = "current_date"
 }
@@ -98,9 +96,7 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 
   override def dataType: DataType = TimestampType
 
-  override def eval(input: InternalRow): Any = {
-    instantToMicros(Instant.now())
-  }
+  override def eval(input: InternalRow): Any = currentTimestamp()
 
   override def prettyName: String = "current_timestamp"
 }
@@ -635,7 +631,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
-       1460041200
+       1460098800
   """,
   since = "1.6.0")
 case class ToUnixTimestamp(
@@ -846,7 +842,7 @@ abstract class UnixTime extends ToTimestamp {
   examples = """
     Examples:
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
-       1970-01-01 00:00:00
+       1969-12-31 16:00:00
   """,
   since = "1.5.0")
 case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[String] = None)
@@ -1101,7 +1097,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   usage = "_FUNC_(timestamp, timezone) - Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14 03:40:00.0'.",
   examples = """
     Examples:
-      > SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul');
+      > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-31 09:00:00
   """,
   since = "1.5.0",
@@ -1770,10 +1766,10 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
        2014-12-28 06:30:45.887
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
-       2014-12-28 10:30:45.887
-      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60)
+       2014-12-27 21:30:45.887
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
        2019-07-01 00:00:00
-      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 13);
+      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 'PST');
        NULL
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL
@@ -2055,10 +2051,15 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
       if (!field.foldable) {
         throw new AnalysisException("The field parameter needs to be a foldable string value.")
       }
-      val fieldStr = field.eval().asInstanceOf[UTF8String].toString
-      DatePart.parseExtractField(fieldStr, source, {
-        throw new AnalysisException(s"Literals of type '$fieldStr' are currently not supported.")
-      })
+      val fieldEval = field.eval()
+      if (fieldEval == null) {
+        Literal(null, DoubleType)
+      } else {
+        val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
+        DatePart.parseExtractField(fieldStr, source, {
+          throw new AnalysisException(s"Literals of type '$fieldStr' are currently not supported.")
+        })
+      }
     })
   }
 
