@@ -2305,6 +2305,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(Seq("b", "c")),
           Row(Seq.empty),
           Row(null)))
+      checkAnswer(df.select(filter(col("s"), (x, i) => i % 2 === 0)),
+        Seq(
+          Row(Seq("c", "b")),
+          Row(Seq("b", "c")),
+          Row(Seq.empty),
+          Row(null)))
     }
 
     // Test with local relation, the Project will be evaluated without codegen

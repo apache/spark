@@ -110,6 +110,15 @@ public class JavaHigherOrderFunctionsSuite {
                 null
             )
         );
+        checkAnswer(
+            arrDf.select(filter(col("x"), (x, i) -> x.plus(i).equalTo(10))),
+            toRows(
+                makeArray(9, 8, 7),
+                makeArray(7),
+                JavaTestUtils.<Integer>makeArray(),
+                null
+            )
+        );
     }
 
     @Test
