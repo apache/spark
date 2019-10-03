@@ -22,8 +22,6 @@ import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
-import scala.collection.mutable
-
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -32,6 +30,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
+import org.apache.spark.deploy.history.RollingEventLogFilesWriter._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -41,8 +40,7 @@ import org.apache.spark.util.Utils
 abstract class EventLogFileReadersSuite extends SparkFunSuite with LocalSparkContext
   with BeforeAndAfter with Logging {
 
-  protected val fileSystem = Utils.getHadoopFileSystem("/",
-    SparkHadoopUtil.get.conf)
+  protected val fileSystem = Utils.getHadoopFileSystem("/", SparkHadoopUtil.get.conf)
   protected var testDir: File = _
   protected var testDirPath: Path = _
 
@@ -69,7 +67,7 @@ abstract class EventLogFileReadersSuite extends SparkFunSuite with LocalSparkCon
       }
     }
 
-    def testForPathWithoutSeq(
+    def testCreateEventLogReaderWithPath(
         path: Path,
         isFile: Boolean,
         expectedClazz: Option[Class[_ <: EventLogFileReader]]): Unit = {
@@ -85,7 +83,7 @@ abstract class EventLogFileReadersSuite extends SparkFunSuite with LocalSparkCon
       assertInstanceOfEventLogReader(expectedClazz, reader)
       val reader2 = EventLogFileReader(fileSystem,
         fileSystem.getFileStatus(path))
-      assertInstanceOfEventLogReader(expectedClazz, reader)
+      assertInstanceOfEventLogReader(expectedClazz, reader2)
     }
 
     // path with no last index - single event log
@@ -95,25 +93,26 @@ abstract class EventLogFileReadersSuite extends SparkFunSuite with LocalSparkCon
 
     // path with last index - rolling event log
     val reader2 = EventLogFileReader(fileSystem,
-      new Path(testDirPath, "eventlog_v2_aaa"), Some(3))
+      new Path(testDirPath, s"${EVENT_LOG_DIR_NAME_PREFIX}aaa"), Some(3))
     assertInstanceOfEventLogReader(Some(classOf[RollingEventLogFilesFileReader]), Some(reader2))
 
     // path - file (both path and FileStatus)
     val eventLogFile = new Path(testDirPath, "bbb")
-    testForPathWithoutSeq(eventLogFile, isFile = true, Some(classOf[SingleFileEventLogFileReader]))
+    testCreateEventLogReaderWithPath(eventLogFile, isFile = true,
+      Some(classOf[SingleFileEventLogFileReader]))
 
     // path - file starting with "."
     val invalidEventLogFile = new Path(testDirPath, ".bbb")
-    testForPathWithoutSeq(invalidEventLogFile, isFile = true, None)
+    testCreateEventLogReaderWithPath(invalidEventLogFile, isFile = true, None)
 
     // path - directory with "eventlog_v2_" prefix
-    val eventLogDir = new Path(testDirPath, "eventlog_v2_ccc")
-    testForPathWithoutSeq(eventLogDir, isFile = false,
+    val eventLogDir = new Path(testDirPath, s"${EVENT_LOG_DIR_NAME_PREFIX}ccc")
+    testCreateEventLogReaderWithPath(eventLogDir, isFile = false,
       Some(classOf[RollingEventLogFilesFileReader]))
 
     // path - directory with no "eventlog_v2_" prefix
     val invalidEventLogDir = new Path(testDirPath, "ccc")
-    testForPathWithoutSeq(invalidEventLogDir, isFile = false, None)
+    testCreateEventLogReaderWithPath(invalidEventLogDir, isFile = false, None)
   }
 
   val allCodecs = Seq(None) ++
@@ -135,8 +134,7 @@ abstract class EventLogFileReadersSuite extends SparkFunSuite with LocalSparkCon
       dummyData.foreach(writer.writeEvent(_, flushLogger = true))
 
       val logPathIncompleted = getCurrentLogPath(writer.logPath, isCompleted = false)
-      val readerOpt = EventLogFileReader(fileSystem,
-        new Path(logPathIncompleted))
+      val readerOpt = EventLogFileReader(fileSystem, new Path(logPathIncompleted))
       assertAppropriateReader(readerOpt)
       val reader = readerOpt.get
 
@@ -196,19 +194,19 @@ class SingleFileEventLogFileReaderSuite extends EventLogFileReadersSuite {
       logPath: Path,
       compressionCodecShortName: Option[String],
       isCompleted: Boolean): Unit = {
-    val stats = fileSystem.getFileStatus(logPath)
+    val status = fileSystem.getFileStatus(logPath)
 
-    assert(stats.isFile)
+    assert(status.isFile)
     assert(reader.rootPath === fileSystem.makeQualified(logPath))
     assert(reader.lastIndex.isEmpty)
-    assert(reader.fileSizeForLastIndex === stats.getLen)
+    assert(reader.fileSizeForLastIndex === status.getLen)
     assert(reader.completed === isCompleted)
-    assert(reader.modificationTime === stats.getModificationTime)
+    assert(reader.modificationTime === status.getModificationTime)
     assert(reader.listEventLogFiles.length === 1)
     assert(reader.listEventLogFiles.map(_.getPath.toUri.getPath) ===
       Seq(logPath.toUri.getPath))
     assert(reader.compressionCodec === compressionCodecShortName)
-    assert(reader.totalSize === stats.getLen)
+    assert(reader.totalSize === status.getLen)
 
     val underlyingStream = new ByteArrayOutputStream()
     Utils.tryWithResource(new ZipOutputStream(underlyingStream)) { os =>
@@ -245,14 +243,10 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
 
       val dummyString = "dummy"
       val dummyStringBytesLen = dummyString.getBytes(StandardCharsets.UTF_8).length
-      val expectedLines = mutable.ArrayBuffer[String]()
 
       // write log more than 2k (intended to roll over to 3 files)
       val repeatCount = Math.floor((1024 * 2) / dummyStringBytesLen).toInt
-      (0 until repeatCount).foreach { _ =>
-        expectedLines.append(dummyString)
-        writer.writeEvent(dummyString, flushLogger = true)
-      }
+      writeTestEvents(writer, dummyString, repeatCount)
 
       val logPathIncompleted = getCurrentLogPath(writer.logPath, isCompleted = false)
       val readerOpt = EventLogFileReader(fileSystem,
@@ -265,7 +259,7 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
       val logPathCompleted = getCurrentLogPath(writer.logPath, isCompleted = true)
       val readerOpt2 = EventLogFileReader(fileSystem, new Path(logPathCompleted))
       verifyReader(readerOpt2.get, new Path(logPathCompleted), codecShortName, isCompleted = true)
-      assert(readerOpt.get.listEventLogFiles.length === 3)
+      assert(readerOpt2.get.listEventLogFiles.length === 3)
     }
   }
 
@@ -293,11 +287,11 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
       isCompleted: Boolean): Unit = {
     import RollingEventLogFilesWriter._
 
-    val stats = fileSystem.getFileStatus(logPath)
-    assert(stats.isDirectory)
+    val status = fileSystem.getFileStatus(logPath)
+    assert(status.isDirectory)
 
-    val statsInDir = fileSystem.listStatus(logPath)
-    val eventFiles = statsInDir.filter(isEventLogFile).sortBy(s => getIndex(s.getPath.getName))
+    val statusInDir = fileSystem.listStatus(logPath)
+    val eventFiles = statusInDir.filter(isEventLogFile).sortBy { s => getIndex(s.getPath.getName) }
     assert(eventFiles.nonEmpty)
     val lastEventFile = eventFiles.last
     val allLen = eventFiles.map(_.getLen).sum
@@ -320,25 +314,35 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
     Utils.tryWithResource(new ZipInputStream(
       new ByteArrayInputStream(underlyingStream.toByteArray))) { is =>
 
-      var entry = is.getNextEntry
+      val entry = is.getNextEntry
       assert(entry != null)
 
       // directory
       assert(entry.getName === logPath.getName + "/")
 
-      fileSystem.listStatus(logPath).foreach { file =>
-        entry = is.getNextEntry
-        assert(entry != null)
+      val allFileNames = fileSystem.listStatus(logPath).map(_.getPath.getName).toSet
 
-        assert(entry.getName === logPath.getName + "/" + file.getPath.getName)
+      var count = 0
+      var noMoreEntry = false
+      while (!noMoreEntry) {
+        val entry = is.getNextEntry
+        if (entry == null) {
+          noMoreEntry = true
+        } else {
+          count += 1
 
-        val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
-        val expected = Files.toString(new File(logPath.toString, file.getPath.getName),
-          StandardCharsets.UTF_8)
-        assert(actual === expected)
+          assert(entry.getName.startsWith(logPath.getName + "/"))
+          val fileName = entry.getName.stripPrefix(logPath.getName + "/")
+          assert(allFileNames.contains(fileName))
+
+          val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
+          val expected = Files.toString(new File(logPath.toString, fileName),
+            StandardCharsets.UTF_8)
+          assert(actual === expected)
+        }
       }
 
-      assert(is.getNextEntry === null)
+      assert(count === allFileNames.size)
     }
   }
 }

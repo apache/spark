@@ -46,7 +46,6 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
 
   before {
     testDir = Utils.createTempDir(namePrefix = s"event log")
-    testDir.deleteOnExit()
     testDirPath = new Path(testDir.getAbsolutePath())
   }
 
@@ -60,8 +59,7 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
         getUniqueApplicationId, None, testDirPath.toUri, conf,
         SparkHadoopUtil.get.newConfiguration(conf))
       val writerClazz = writer.getClass
-      assert(expectedClazz === writerClazz,
-        s"default file writer should be $expectedClazz, but $writerClazz")
+      assert(expectedClazz === writerClazz)
     }
 
     val conf = new SparkConf
@@ -231,27 +229,27 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
     // happy case with app ID
     val logDir = RollingEventLogFilesWriter.getAppEventLogDirPath(baseDirUri, appId, None)
-    assert(s"${baseDirUri.toString}/eventlog_v2_app1" === logDir.toString)
+    assert(s"${baseDirUri.toString}/${EVENT_LOG_DIR_NAME_PREFIX}${appId}" === logDir.toString)
 
     // appstatus: inprogress or completed
-    assert(s"$logDir/appstatus_app1.inprogress" ===
+    assert(s"$logDir/${APPSTATUS_FILE_NAME_PREFIX}${appId}${EventLogFileWriter.IN_PROGRESS}" ===
       RollingEventLogFilesWriter.getAppStatusFilePath(logDir, appId, appAttemptId,
         inProgress = true).toString)
-    assert(s"$logDir/appstatus_app1" ===
+    assert(s"$logDir/${APPSTATUS_FILE_NAME_PREFIX}${appId}" ===
       RollingEventLogFilesWriter.getAppStatusFilePath(logDir, appId, appAttemptId,
         inProgress = false).toString)
 
     // without compression
-    assert(s"$logDir/events_1_app1" ===
+    assert(s"$logDir/${EVENT_LOG_FILE_NAME_PREFIX}1_${appId}" ===
       RollingEventLogFilesWriter.getEventLogFilePath(logDir, appId, appAttemptId, 1, None).toString)
 
     // with compression
-    assert(s"$logDir/events_1_app1.lzf" ===
+    assert(s"$logDir/${EVENT_LOG_FILE_NAME_PREFIX}1_${appId}.lzf" ===
       RollingEventLogFilesWriter.getEventLogFilePath(logDir, appId, appAttemptId,
         1, Some("lzf")).toString)
 
     // illegal characters in app ID
-    assert(s"${baseDirUri.toString}/eventlog_v2_a-fine-mind_dollar_bills__1" ===
+    assert(s"${baseDirUri.toString}/${EVENT_LOG_DIR_NAME_PREFIX}a-fine-mind_dollar_bills__1" ===
       RollingEventLogFilesWriter.getAppEventLogDirPath(baseDirUri,
         "a fine:mind$dollar{bills}.1", None).toString)
   }
@@ -288,12 +286,12 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
   allCodecs.foreach { codecShortName =>
     test(s"rolling event log files - codec $codecShortName") {
-      def assertEventLogFilesSequence(
+      def assertEventLogFilesIndex(
           eventLogFiles: Seq[FileStatus],
-          expectedLastSequence: Int,
+          expectedLastIndex: Int,
           expectedMaxSizeBytes: Long): Unit = {
-        assert(eventLogFiles.forall(f => f.getLen < expectedMaxSizeBytes))
-        assert((1 to expectedLastSequence) ===
+        assert(eventLogFiles.forall(f => f.getLen <= expectedMaxSizeBytes))
+        assert((1 to expectedLastIndex) ===
           eventLogFiles.map(f => getIndex(f.getPath.getName)))
       }
 
@@ -311,24 +309,20 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
       val dummyString = "dummy"
       val dummyStringBytesLen = dummyString.getBytes(StandardCharsets.UTF_8).length
-      val expectedLines = mutable.ArrayBuffer[String]()
 
       // write log more than 2k (intended to roll over to 3 files)
       val repeatCount = Math.floor((1024 * 2) / dummyStringBytesLen).toInt
-      (0 until repeatCount).foreach { _ =>
-        expectedLines.append(dummyString)
-        writer.writeEvent(dummyString, flushLogger = true)
-      }
+      val expectedLines = writeTestEvents(writer, dummyString, repeatCount)
 
       val logDirPath = getAppEventLogDirPath(testDirPath.toUri, appId, attemptId)
 
       val eventLogFiles = listEventLogFiles(logDirPath)
-      assertEventLogFilesSequence(eventLogFiles, 3, 1024 * 1024)
+      assertEventLogFilesIndex(eventLogFiles, 3, 1024 * 1024)
 
       writer.stop()
 
       val eventLogFiles2 = listEventLogFiles(logDirPath)
-      assertEventLogFilesSequence(eventLogFiles2, 3, 1024 * 1024)
+      assertEventLogFilesIndex(eventLogFiles2, 3, 1024 * 1024)
 
       verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri,
         codecShortName, expectedLines)
@@ -368,6 +362,6 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
   private def listEventLogFiles(logDirPath: Path): Seq[FileStatus] = {
     fileSystem.listStatus(logDirPath).filter(isEventLogFile)
-      .sortBy(fs => getIndex(fs.getPath.getName))
+      .sortBy { fs => getIndex(fs.getPath.getName) }
   }
 }

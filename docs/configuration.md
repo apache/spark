@@ -1013,14 +1013,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether rolling over event log files is enabled. If set to true, it cuts down each event
-     log file to be configured size.
+    log file to the configured size.
   </td>
 </tr>
 <tr>
   <td><code>spark.eventLog.logRolling.maxFileSize</code></td>
   <td>128m</td>
   <td>
-    The max size of event log file to be rolled over.
+    The max size of event log file before it's rolled over.
   </td>
 </tr>
 <tr>

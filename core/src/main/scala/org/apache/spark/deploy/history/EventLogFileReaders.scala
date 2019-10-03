@@ -256,5 +256,5 @@ class RollingEventLogFilesFileReader(
     files.filter(isEventLogFile).sortBy { status => getIndex(status.getPath.getName) }
   }
 
-  private def lastEventLogFile: FileStatus = eventLogFiles.reverse.head
+  private def lastEventLogFile: FileStatus = eventLogFiles.last
 }

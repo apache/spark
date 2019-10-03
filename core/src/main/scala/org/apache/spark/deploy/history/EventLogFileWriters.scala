@@ -88,8 +88,8 @@ abstract class EventLogFileWriter(
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
     val uri = path.toUri
 
-    /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
-     * Therefore, for local files, use FileOutputStream instead. */
+    // The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
+    // Therefore, for local files, use FileOutputStream instead.
     val dstream =
       if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
         new FileOutputStream(uri.getPath)
@@ -299,7 +299,7 @@ class RollingEventLogFilesWriter(
 
   private var countingOutputStream: Option[CountingOutputStream] = None
 
-  // seq and event log path will be updated soon in rollEventLogFile, which `start` will call
+  // index and event log path will be updated soon in rollEventLogFile, which `start` will call
   private var index: Long = 0L
   private var currentEventLogFilePath: Path = _
 
@@ -364,9 +364,9 @@ class RollingEventLogFilesWriter(
 }
 
 object RollingEventLogFilesWriter {
-  private val EVENT_LOG_DIR_NAME_PREFIX = "eventlog_v2_"
-  private val EVENT_LOG_FILE_NAME_PREFIX = "events_"
-  private val APPSTATUS_FILE_NAME_PREFIX = "appstatus_"
+  private[history] val EVENT_LOG_DIR_NAME_PREFIX = "eventlog_v2_"
+  private[history] val EVENT_LOG_FILE_NAME_PREFIX = "events_"
+  private[history] val APPSTATUS_FILE_NAME_PREFIX = "appstatus_"
 
   def getAppEventLogDirPath(logBaseDir: URI, appId: String, appAttemptId: Option[String]): Path =
     new Path(new Path(logBaseDir), EVENT_LOG_DIR_NAME_PREFIX +
@@ -408,8 +408,8 @@ object RollingEventLogFilesWriter {
   }
 
   def getIndex(eventLogFileName: String): Long = {
-    require(eventLogFileName.startsWith(EVENT_LOG_FILE_NAME_PREFIX), "Not a event log file!")
-    val seq = eventLogFileName.stripPrefix(EVENT_LOG_FILE_NAME_PREFIX).split("_")(0)
-    seq.toLong
+    require(eventLogFileName.startsWith(EVENT_LOG_FILE_NAME_PREFIX), "Not an event log file!")
+    val index = eventLogFileName.stripPrefix(EVENT_LOG_FILE_NAME_PREFIX).split("_")(0)
+    index.toLong
   }
 }

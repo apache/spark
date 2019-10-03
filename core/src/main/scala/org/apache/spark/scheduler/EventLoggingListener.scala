@@ -42,7 +42,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  *   spark.eventLog.logBlockUpdates.enabled - Whether to log block updates
  *   spark.eventLog.logStageExecutorMetrics.enabled - Whether to log stage executor metrics
  *
- * Event log file writer maintains its own parameters: refer the javadoc of [[EventLogFileWriter]]
+ * Event log file writer maintains its own parameters: refer the doc of [[EventLogFileWriter]]
  * and its descendant for more details.
  */
 private[spark] class EventLoggingListener(

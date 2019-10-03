@@ -42,4 +42,14 @@ object EventLogTestHelper {
     conf.set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
     conf
   }
+
+  def writeTestEvents(
+      writer: EventLogFileWriter,
+      eventStr: String,
+      eventCount: Int): Seq[String] = {
+    (0 until eventCount).map { _ =>
+      writer.writeEvent(eventStr, flushLogger = true)
+      eventStr
+    }
+  }
 }

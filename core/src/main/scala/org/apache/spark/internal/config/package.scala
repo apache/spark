@@ -181,7 +181,8 @@ package object config {
 
   private[spark] val EVENT_LOG_ENABLE_ROLLING =
     ConfigBuilder("spark.eventLog.logRolling.enabled")
-      .doc("Whether rolling over event log files is enabled.")
+      .doc("Whether rolling over event log files is enabled.  If set to true, it cuts down " +
+        "each event log file to the configured size.")
       .booleanConf
       .createWithDefault(false)
 
