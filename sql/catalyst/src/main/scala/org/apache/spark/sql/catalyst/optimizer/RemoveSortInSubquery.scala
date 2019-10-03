@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
+import org.apache.spark.sql.catalyst.expressions.aggregate.OrderIrrelevantAggs
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -56,7 +57,7 @@ object RemoveSortInSubquery extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case j @ Join(oldLeft, oldRight, _, _, _) =>
       j.copy(left = removeTopLevelSort(oldLeft), right = removeTopLevelSort(oldRight))
-    case g @ Aggregate(_, _, oldChild) =>
+    case g @ Aggregate(_, aggs, oldChild) if aggs.forall(_.isInstanceOf[OrderIrrelevantAggs]) =>
       g.copy(child = removeTopLevelSort(oldChild))
   }
 }

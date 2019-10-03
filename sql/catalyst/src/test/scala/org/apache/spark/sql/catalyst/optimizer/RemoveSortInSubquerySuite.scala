@@ -37,12 +37,39 @@ class RemoveSortInSubquerySuite extends PlanTest {
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelationB = LocalRelation('d.int)
 
-  test("remove orderBy in groupBy subquery") {
+  test("remove orderBy in groupBy subquery with count aggs") {
     val projectPlan = testRelation.select('a, 'b)
     val unnecessaryOrderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
     val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(count(1))
     val optimized = Optimize.execute(groupByPlan.analyze)
     val correctAnswer = projectPlan.groupBy('a)(count(1)).analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("remove orderBy in groupBy subquery with sum aggs") {
+    val projectPlan = testRelation.select('a, 'b)
+    val unnecessaryOrderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(sum('a))
+    val optimized = Optimize.execute(groupByPlan.analyze)
+    val correctAnswer = projectPlan.groupBy('a)(sum('a)).analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("remove orderBy in groupBy subquery with first aggs") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val groupByPlan = orderByPlan.groupBy('a)(first('a))
+    val optimized = Optimize.execute(groupByPlan.analyze)
+    val correctAnswer = groupByPlan.analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("remove orderBy in groupBy subquery with first and count aggs") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val groupByPlan = orderByPlan.groupBy('a)(first('a), count(1))
+    val optimized = Optimize.execute(groupByPlan.analyze)
+    val correctAnswer = groupByPlan.analyze
     comparePlans(Optimize.execute(optimized), correctAnswer)
   }
 

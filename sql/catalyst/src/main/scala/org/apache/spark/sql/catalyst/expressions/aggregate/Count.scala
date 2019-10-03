@@ -41,7 +41,7 @@ import org.apache.spark.sql.types._
   """,
   since = "1.0.0")
 // scalastyle:on line.size.limit
-case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
+case class Count(children: Seq[Expression]) extends DeclarativeAggregate with OrderIrrelevantAggs {
   override def nullable: Boolean = false
 
   // Return data type.

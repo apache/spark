@@ -33,7 +33,8 @@ import org.apache.spark.sql.types._
        1.5
   """,
   since = "1.0.0")
-case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
+case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes
+  with OrderIrrelevantAggs {
 
   override def prettyName: String = "avg"
 

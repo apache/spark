@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
        50
   """,
   since = "1.0.0")
-case class Max(child: Expression) extends DeclarativeAggregate {
+case class Max(child: Expression) extends DeclarativeAggregate with OrderIrrelevantAggs {
 
   override def children: Seq[Expression] = child :: Nil
 

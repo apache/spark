@@ -36,7 +36,8 @@ import org.apache.spark.sql.types._
        NULL
   """,
   since = "1.0.0")
-case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
+case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes
+  with OrderIrrelevantAggs {
 
   override def children: Seq[Expression] = child :: Nil
 
