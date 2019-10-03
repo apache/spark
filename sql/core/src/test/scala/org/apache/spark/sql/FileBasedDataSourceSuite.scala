@@ -666,7 +666,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           dir.delete()
           spark.range(1000).write.orc(dir.toString)
           val df = spark.read.orc(dir.toString)
-          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
+          assert(df.queryExecution.optimizedPlan.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
         }
       }
     }
