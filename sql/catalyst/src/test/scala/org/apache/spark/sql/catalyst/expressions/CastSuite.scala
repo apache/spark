@@ -1220,6 +1220,7 @@ class AnsiCastSuite extends CastSuiteBase {
     super.checkExceptionInExpression(convertCastToAnsiCast(expression), expectedErrMsg)
   }
 
+  // For Ansi store assignment policy, expression `AnsiCast` is used instead of `Cast`.
   private def convertCastToAnsiCast(expression: => Expression): Expression = expression match {
     case c: Cast => AnsiCast(c.child, c.dataType, c.timeZoneId)
     case other => other
