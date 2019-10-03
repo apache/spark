@@ -31,6 +31,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -373,5 +375,15 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       assert(relation.stats.rowCount.isEmpty)
       assert(relation.stats.attributeStats.isEmpty)
     }
+  }
+
+  def checkNumBroadcastHashJoins(df: DataFrame, expectedNumBhj: Int, clue: String): Unit = {
+    val plan = EnsureRequirements(spark.sessionState.conf).apply(df.queryExecution.sparkPlan)
+    assert(plan.collect { case p: BroadcastHashJoinExec => p }.size === expectedNumBhj, clue)
+  }
+
+  def checkNumSortMergeJoins(df: DataFrame, expectedNumSmj: Int, clue: String): Unit = {
+    val plan = EnsureRequirements(spark.sessionState.conf).apply(df.queryExecution.sparkPlan)
+    assert(plan.collect { case p: SortMergeJoinExec => p }.size === expectedNumSmj, clue)
   }
 }

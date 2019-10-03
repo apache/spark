@@ -127,6 +127,7 @@ case class AnalyzeColumnCommand(
       // We also update table-level stats in order to keep them consistent with column-level stats.
       val statistics = CatalogStatistics(
         sizeInBytes = sizeInBytes,
+        deserFactor = tableMeta.stats.flatMap(_.deserFactor),
         rowCount = Some(rowCount),
         // Newly computed column stats should override the existing ones.
         colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColCatalogStats)

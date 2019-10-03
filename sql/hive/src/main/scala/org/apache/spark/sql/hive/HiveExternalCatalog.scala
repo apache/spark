@@ -632,7 +632,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // to retain the spark specific format if it is.
       val propsFromOldTable = oldTableDef.properties.filter { case (k, v) =>
         k.startsWith(DATASOURCE_PREFIX) || k.startsWith(STATISTICS_PREFIX) ||
-          k.startsWith(CREATED_SPARK_VERSION)
+          k.startsWith(CREATED_SPARK_VERSION) || k == DESER_FACTOR
       }
       val newTableProps = propsFromOldTable ++ tableDefinition.properties + partitionProviderProp
 
@@ -702,7 +702,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         new mutable.HashMap[String, String]()
       }
 
-    val oldTableNonStatsProps = rawTable.properties.filterNot(_._1.startsWith(STATISTICS_PREFIX))
+    val oldTableNonStatsProps = rawTable.properties.filterNot { prop =>
+      prop._1.startsWith(STATISTICS_PREFIX) || prop._1 == DESER_FACTOR
+    }
     val updatedTable = rawTable.copy(properties = oldTableNonStatsProps ++ statsProperties)
     client.alterTable(updatedTable)
   }
@@ -1083,6 +1085,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     if (stats.rowCount.isDefined) {
       statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
     }
+    if (stats.deserFactor.isDefined) {
+      statsProperties += DESER_FACTOR -> stats.deserFactor.get.toString()
+    }
 
     stats.colStats.foreach { case (colName, colStat) =>
       colStat.toMap(colName).foreach { case (k, v) =>
@@ -1124,6 +1129,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
       Some(CatalogStatistics(
         sizeInBytes = BigInt(statsProps(STATISTICS_TOTAL_SIZE)),
+        deserFactor = properties.get(DESER_FACTOR).map(_.toInt),
         rowCount = statsProps.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
         colStats = colStats.toMap))
     }
@@ -1334,6 +1340,11 @@ object HiveExternalCatalog {
 
   val STATISTICS_PREFIX = SPARK_SQL_PREFIX + "statistics."
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
+
+  // The deserialization factor is special statistics which is calculated by analyze table (when its
+  // calculation is enabled by a config) but to make the factor modifiable as table property
+  // it does not start with the SPARK_SQL_PREFIX.
+  val DESER_FACTOR = "spark.deserFactor"
   val STATISTICS_NUM_ROWS = STATISTICS_PREFIX + "numRows"
   val STATISTICS_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
 

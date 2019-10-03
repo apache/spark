@@ -56,7 +56,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveExternalCatalog
-import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
+import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX, DESER_FACTOR}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl._
 import org.apache.spark.sql.internal.SQLConf
@@ -1200,10 +1200,17 @@ private[hive] object HiveClientImpl {
     // return None.
     // In Hive, when statistics gathering is disabled, `rawDataSize` and `numRows` is always
     // zero after INSERT command. So they are used here only if they are larger than zero.
+    val deserFactor = properties.get(DESER_FACTOR).map(_.toInt)
     if (totalSize.isDefined && totalSize.get > 0L) {
-      Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount.filter(_ > 0)))
+      Some(CatalogStatistics(
+        sizeInBytes = totalSize.get,
+        deserFactor = deserFactor,
+        rowCount = rowCount.filter(_ > 0)))
     } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
-      Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount.filter(_ > 0)))
+      Some(CatalogStatistics(
+        sizeInBytes = rawDataSize.get,
+        deserFactor = None,
+        rowCount = rowCount.filter(_ > 0)))
     } else {
       // TODO: still fill the rowCount even if sizeInBytes is empty. Might break anything?
       None

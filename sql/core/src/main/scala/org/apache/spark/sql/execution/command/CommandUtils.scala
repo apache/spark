@@ -57,7 +57,8 @@ object CommandUtils extends Logging {
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
       val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
-      val newStats = CatalogStatistics(sizeInBytes = newSize)
+      val oldDeserFactor = newTable.stats.flatMap(_.deserFactor)
+      val newStats = CatalogStatistics(sizeInBytes = newSize, deserFactor = oldDeserFactor)
       catalog.alterTableStats(table.identifier, Some(newStats))
     } else if (table.stats.nonEmpty) {
       catalog.alterTableStats(table.identifier, None)
@@ -178,7 +179,9 @@ object CommandUtils extends Logging {
     val oldRowCount = oldStats.flatMap(_.rowCount).getOrElse(BigInt(-1))
     var newStats: Option[CatalogStatistics] = None
     if (newTotalSize >= 0 && newTotalSize != oldTotalSize) {
-      newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
+      newStats = Some(CatalogStatistics(
+        sizeInBytes = newTotalSize,
+        deserFactor = oldStats.flatMap(_.deserFactor)))
     }
     // We only set rowCount when noscan is false, because otherwise:
     // 1. when total size is not changed, we don't need to alter the table;
@@ -189,7 +192,10 @@ object CommandUtils extends Logging {
         newStats = if (newStats.isDefined) {
           newStats.map(_.copy(rowCount = newRowCount))
         } else {
-          Some(CatalogStatistics(sizeInBytes = oldTotalSize, rowCount = newRowCount))
+          Some(CatalogStatistics(
+            sizeInBytes = oldTotalSize,
+            deserFactor = oldStats.flatMap(_.deserFactor),
+            rowCount = newRowCount))
         }
       }
     }

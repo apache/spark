@@ -489,7 +489,9 @@ case class AlterTableAddPartitionCommand(
         val addedSize = CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
           parts.map(_.storage.locationUri)).sum
         if (addedSize > 0) {
-          val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
+          val newStats = CatalogStatistics(
+            sizeInBytes = table.stats.get.sizeInBytes + addedSize,
+            deserFactor = table.stats.flatMap(_.deserFactor))
           catalog.alterTableStats(table.identifier, Some(newStats))
         }
       } else {
