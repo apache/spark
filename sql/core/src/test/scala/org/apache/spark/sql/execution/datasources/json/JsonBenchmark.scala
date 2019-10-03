@@ -40,7 +40,7 @@ import org.apache.spark.sql.types._
  * }}}
  */
 
-object JSONBenchmark extends SqlBasedBenchmark {
+object JsonBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
   private def prepareDataInfo(benchmark: Benchmark): Unit = {
