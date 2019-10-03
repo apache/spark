@@ -205,8 +205,8 @@ class LSHModel(JavaModel, _LSHParams):
 
 class _BucketedRandomProjectionLSHParams():
     """
-    Params for :py:attr:`BucketedRandomProjectionLSH` and
-    :py:attr:`BucketedRandomProjectionLSHModel`.
+    Params for :py:class:`BucketedRandomProjectionLSH` and
+    :py:class:`BucketedRandomProjectionLSHModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -486,7 +486,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
 
 class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
     """
-    Params for :py:attr:`CountVectorizer` and :py:attr:`CountVectorizerModel`.
+    Params for :py:class:`CountVectorizer` and :py:class:`CountVectorizerModel`.
     """
 
     minTF = Param(
@@ -1034,7 +1034,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
 
 class _IDFParams(HasInputCol, HasOutputCol):
     """
-    Params for :py:attr:`IDF` and :py:attr:`IDFModel`.
+    Params for :py:class:`IDF` and :py:class:`IDFModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -1155,7 +1155,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
 
 class _ImputerParams(HasInputCols, HasOutputCols):
     """
-    Params for :py:attr:`Imputer` and :py:attr:`ImputerModel`.
+    Params for :py:class:`Imputer` and :py:class:`ImputerModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -1355,7 +1355,7 @@ class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, J
 
 class _MaxAbsScalerParams(HasInputCol, HasOutputCol):
     """
-    Params for :py:attr:`MaxAbsScaler` and :py:attr:`MaxAbsScalerModel`.
+    Params for :py:class:`MaxAbsScaler` and :py:class:`MaxAbsScalerModel`.
     .. versionadded:: 3.0.0
     """
     pass
@@ -1535,7 +1535,7 @@ class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
 
 class _MinMaxScalerParams(HasInputCol, HasOutputCol):
     """
-    Params for :py:attr:`MinMaxScaler` and :py:attr:`MinMaxScalerModel`.
+    Params for :py:class:`MinMaxScaler` and :py:class:`MinMaxScalerModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -1815,7 +1815,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
 class _OneHotEncoderParams(HasInputCols, HasOutputCols, HasHandleInvalid):
     """
-    Params for :py:attr:`OneHotEncoder` and :py:attr:`OneHotEncoderModel`.
+    Params for :py:class:`OneHotEncoder` and :py:class:`OneHotEncoderModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -2200,7 +2200,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
 
 class _RobustScalerParams(HasInputCol, HasOutputCol):
     """
-    Params for :py:attr:`RobustScaler` and :py:attr:`RobustScalerModel`.
+    Params for :py:class:`RobustScaler` and :py:class:`RobustScalerModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -2559,7 +2559,7 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
 
 class _StandardScalerParams(HasInputCol, HasOutputCol):
     """
-    Params for :py:attr:`StandardScaler` and :py:attr:`StandardScalerModel`.
+    Params for :py:class:`StandardScaler` and :py:class:`StandardScalerModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -2691,7 +2691,7 @@ class StandardScalerModel(JavaModel, _StandardScalerParams, JavaMLReadable, Java
 class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol,
                            HasInputCols, HasOutputCols):
     """
-    Params for :py:attr:`StringIndexer` and :py:attr:`StringIndexerModel`.
+    Params for :py:class:`StringIndexer` and :py:class:`StringIndexerModel`.
     """
 
     stringOrderType = Param(Params._dummy(), "stringOrderType",
@@ -3189,7 +3189,7 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
 
 class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
     """
-    Params for :py:attr:`VectorIndexer` and :py:attr:`VectorIndexerModel`.
+    Params for :py:class:`VectorIndexer` and :py:class:`VectorIndexerModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -3456,7 +3456,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
 
 class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
     """
-    Params for :py:attr:`Word2Vec` and :py:attr:`Word2VecModel`.
+    Params for :py:class:`Word2Vec` and :py:class:`Word2VecModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -3684,7 +3684,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable, JavaMLWritable):
 
 class _PCAParams(HasInputCol, HasOutputCol):
     """
-    Params for :py:attr:`PCA` and :py:attr:`PCAModel`.
+    Params for :py:class:`PCA` and :py:class:`PCAModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -3795,7 +3795,7 @@ class PCAModel(JavaModel, _PCAParams, JavaMLReadable, JavaMLWritable):
 
 class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
     """
-    Params for :py:attr:`RFormula` and :py:attr:`RFormula`.
+    Params for :py:class:`RFormula` and :py:class:`RFormula`.
     .. versionadded:: 3.0.0
     """
 
@@ -3986,7 +3986,7 @@ class RFormulaModel(JavaModel, _RFormulaParams, JavaMLReadable, JavaMLWritable):
 
 class _ChiSqSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
     """
-    Params for :py:attr:`ChiSqSelector` and :py:attr:`ChiSqSelectorModel`.
+    Params for :py:class:`ChiSqSelector` and :py:class:`ChiSqSelectorModel`.
     .. versionadded:: 3.0.0
     """
 
