@@ -21,6 +21,8 @@ import java.sql.{Date, Timestamp}
 import java.util.{Calendar, TimeZone}
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.parallel.immutable.ParVector
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -113,7 +115,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
-    ALL_TIMEZONES.par.foreach { tz =>
+    new ParVector(ALL_TIMEZONES.toVector).foreach { tz =>
       def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
         checkEvaluation(cast(Literal(str), TimestampType, Option(tz.getID)), expected)
       }
