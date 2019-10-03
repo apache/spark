@@ -105,6 +105,31 @@ public class CalendarIntervalSuite {
   }
 
   @Test
+  public void fromCaseInsensitiveStringTest() {
+    for (String input : new String[]{"5 MINUTES", "5 minutes", "5 Minutes"}) {
+      assertEquals(fromCaseInsensitiveString(input), new CalendarInterval(0, 5L * 60 * 1_000_000));
+    }
+
+    for (String input : new String[]{null, "", " "}) {
+      try {
+        fromCaseInsensitiveString(input);
+        fail("Expected to throw an exception for the invalid input");
+      } catch (IllegalArgumentException e) {
+        assertTrue(e.getMessage().contains("cannot be null or blank"));
+      }
+    }
+
+    for (String input : new String[]{"interval", "interval1 day", "foo", "foo 1 day"}) {
+      try {
+        fromCaseInsensitiveString(input);
+        fail("Expected to throw an exception for the invalid input");
+      } catch (IllegalArgumentException e) {
+        assertTrue(e.getMessage().contains("Invalid interval"));
+      }
+    }
+  }
+
+  @Test
   public void fromYearMonthStringTest() {
     String input;
     CalendarInterval i;
