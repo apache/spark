@@ -30,7 +30,7 @@ __all__ = ['ALS', 'ALSModel']
 @inherit_doc
 class _ALSModelParams(HasPredictionCol):
     """
-    Params for :py:attr:`ALS` and :py:attr:`ALSModel`.
+    Params for :py:class:`ALS` and :py:class:`ALSModel`.
     .. versionadded:: 3.0.0
     """
 
@@ -70,7 +70,7 @@ class _ALSModelParams(HasPredictionCol):
 @inherit_doc
 class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval, HasSeed):
     """
-    Params for :py:attr:`ALS`.
+    Params for :py:class:`ALS`.
     .. versionadded:: 3.0.0
     """
 
