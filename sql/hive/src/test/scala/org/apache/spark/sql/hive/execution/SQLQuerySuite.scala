@@ -2012,6 +2012,26 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-28084 check for case insensitive property of partition column name in load command") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      Files.append("1", new File(dirPath, "part-r-000011"), StandardCharsets.UTF_8)
+      withTable("part_table") {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          sql(
+            """
+              |CREATE TABLE part_table (c STRING)
+              |PARTITIONED BY (d STRING)
+            """.stripMargin)
+          sql(s"LOAD DATA LOCAL INPATH '$path/part-r-000011' " +
+            "INTO TABLE part_table PARTITION(D ='1')")
+          checkAnswer(sql("SELECT * FROM part_table"), Seq(Row("1", "1")))
+        }
+      }
+    }
+  }
+
   test("SPARK-25738: defaultFs can have a port") {
     val defaultURI = new URI("hdfs://fizz.buzz.com:8020")
     val r = LoadDataCommand.makeQualified(defaultURI, new Path("/foo/bar"), new Path("/flim/flam"))
