@@ -38,7 +38,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
-  protected def requireAnsiEnabled: Boolean
+  // Whether it is required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
+  protected def requiredAnsiEnabledForOverflowTestCases: Boolean
 
   protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
     v match {
@@ -891,7 +892,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to decimal type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requireAnsiEnabled.toString) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       checkExceptionInExpression[ArithmeticException](
         Cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
       checkExceptionInExpression[ArithmeticException](
@@ -957,7 +958,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to byte type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requireAnsiEnabled.toString) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testIntMaxAndMin(ByteType)
       Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
         checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
@@ -982,7 +983,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to short type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requireAnsiEnabled.toString) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testIntMaxAndMin(ShortType)
       Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
         checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
@@ -1007,7 +1008,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to int type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requireAnsiEnabled.toString) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testIntMaxAndMin(IntegerType)
       testLongMaxAndMin(IntegerType)
 
@@ -1024,7 +1025,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to long type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requireAnsiEnabled.toString) {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       testLongMaxAndMin(LongType)
 
       Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
@@ -1046,8 +1047,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
  * Test suite for data type casting expression [[Cast]].
  */
 class CastSuite extends CastSuiteBase {
-
-  override protected def requireAnsiEnabled: Boolean = true
+  // It is required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
+  override protected def requiredAnsiEnabledForOverflowTestCases: Boolean = true
 
   test("cast from int") {
     checkCast(0, false)
@@ -1207,7 +1208,8 @@ class CastSuite extends CastSuiteBase {
  * Test suite for data type casting expression [[AnsiCast]].
  */
 class AnsiCastSuite extends CastSuiteBase {
-  override protected def requireAnsiEnabled: Boolean = false
+  // It is not required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
+  override protected def requiredAnsiEnabledForOverflowTestCases: Boolean = false
 
   override def checkEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
