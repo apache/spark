@@ -20,8 +20,8 @@ license: |
 ---
 ### Description
 
-`SHOW TABLES` statement returns all the tables for an optionally specified `database`.
-Additionally, the output of this statement may be filtered via an optional matching
+The `SHOW TABLES` statement returns all the tables for an optionally specified `database`.
+Additionally, the output of this statement may be filtered by an optional matching
 pattern. If no database is specified then the tables are returned from the 
 current database.
 
