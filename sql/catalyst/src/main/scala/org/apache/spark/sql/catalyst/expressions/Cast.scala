@@ -1660,13 +1660,6 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
  * When cast from/to timezone related types, we need timeZoneId, which will be resolved with
  * session local timezone by an analyzer [[ResolveTimeZone]].
  */
-@ExpressionDescription(
-  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('10' as int);
-       10
-  """)
 case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =

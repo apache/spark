@@ -41,12 +41,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   // Whether it is required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
   protected def requiredAnsiEnabledForOverflowTestCases: Boolean
 
-  protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
-    v match {
-      case lit: Expression => Cast(lit, targetType, timeZoneId)
-      case _ => Cast(Literal(v), targetType, timeZoneId)
-    }
-  }
+  protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase
 
   // expected cannot be null
   protected def checkCast(v: Any, expected: Any): Unit = {
@@ -894,14 +889,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   test("Throw exception on casting out-of-range value to decimal type") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
       checkExceptionInExpression[ArithmeticException](
-        Cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
+        cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
       checkExceptionInExpression[ArithmeticException](
-        Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)),
+        cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)),
         "cannot be represented")
       checkExceptionInExpression[ArithmeticException](
-        Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
+        cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
       checkExceptionInExpression[ArithmeticException](
-        Cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
+        cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
     }
   }
 
@@ -1049,6 +1044,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 class CastSuite extends CastSuiteBase {
   // It is required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
   override protected def requiredAnsiEnabledForOverflowTestCases: Boolean = true
+
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
+    v match {
+      case lit: Expression => Cast(lit, targetType, timeZoneId)
+      case _ => Cast(Literal(v), targetType, timeZoneId)
+    }
+  }
+
 
   test("cast from int") {
     checkCast(0, false)
@@ -1211,20 +1214,10 @@ class AnsiCastSuite extends CastSuiteBase {
   // It is not required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
   override protected def requiredAnsiEnabledForOverflowTestCases: Boolean = false
 
-  override def checkEvaluation(
-      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
-    super.checkEvaluation(convertCastToAnsiCast(expression), expected, inputRow)
-  }
-
-  override def checkExceptionInExpression[T <: Throwable : ClassTag](
-      expression: => Expression,
-      expectedErrMsg: String): Unit = {
-    super.checkExceptionInExpression(convertCastToAnsiCast(expression), expectedErrMsg)
-  }
-
-  // For Ansi store assignment policy, expression `AnsiCast` is used instead of `Cast`.
-  private def convertCastToAnsiCast(expression: => Expression): Expression = expression match {
-    case c: Cast => AnsiCast(c.child, c.dataType, c.timeZoneId)
-    case other => other
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
+    v match {
+      case lit: Expression => AnsiCast(lit, targetType, timeZoneId)
+      case _ => AnsiCast(Literal(v), targetType, timeZoneId)
+    }
   }
 }

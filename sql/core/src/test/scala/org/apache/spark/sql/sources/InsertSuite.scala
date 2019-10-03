@@ -634,46 +634,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("Throw exceptions on inserting out-of-range byte value with ANSI casting policy") {
-    withSQLConf(
-      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
-      withTable("t") {
-        sql("create table t(b byte) using parquet")
-        val outOfRangeValue1 = Byte.MaxValue + 1
-        var msg = intercept[SparkException] {
-          sql(s"insert into t values($outOfRangeValue1)")
-        }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue1 to byte causes overflow"))
-
-        val outOfRangeValue2 = Byte.MinValue - 1
-        msg = intercept[SparkException] {
-          sql(s"insert into t values($outOfRangeValue2)")
-        }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue2 to byte causes overflow"))
-      }
-    }
-  }
-
-  test("Throw exceptions on inserting out-of-range short value with ANSI casting policy") {
-    withSQLConf(
-      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
-      withTable("t") {
-        sql("create table t(b short) using parquet")
-        val outOfRangeValue1 = Short.MaxValue + 1
-        var msg = intercept[SparkException] {
-          sql(s"insert into t values($outOfRangeValue1)")
-        }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue1 to short causes overflow"))
-
-        val outOfRangeValue2 = Short.MinValue - 1
-        msg = intercept[SparkException] {
-          sql(s"insert into t values($outOfRangeValue2)")
-        }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue2 to short causes overflow"))
-      }
-    }
-  }
-
   test("Throw exceptions on inserting out-of-range int value with ANSI casting policy") {
     withSQLConf(
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
