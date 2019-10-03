@@ -93,26 +93,6 @@ public final class CalendarInterval implements Serializable {
     }
   }
 
-  /**
-   * Convert a string to CalendarInterval. Unlike fromString, this method is case-insensitive and
-   * will throw IllegalArgumentException when the input string is not a valid interval.
-   *
-   * @throws IllegalArgumentException if the string is not a valid internal.
-   */
-  public static CalendarInterval fromCaseInsensitiveString(String s) {
-    if (s == null || s.trim().isEmpty()) {
-      throw new IllegalArgumentException("Interval cannot be null or blank.");
-    }
-    String sInLowerCase = s.trim().toLowerCase(Locale.ROOT);
-    String interval =
-      sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
-    CalendarInterval cal = fromString(interval);
-    if (cal == null) {
-      throw new IllegalArgumentException("Invalid interval: " + s);
-    }
-    return cal;
-  }
-
   public static long toLongWithRange(String fieldName,
       String s, long minValue, long maxValue) throws IllegalArgumentException {
     long result = 0;
