@@ -320,4 +320,8 @@ package object config {
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
   private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."
 
+
+  private[yarn] val YARN_SHUFFLE_SERVICE_NAME = ConfigBuilder("spark.yarn.shuffle.service.name")
+    .stringConf
+    .createWithDefault("spark_shuffle")
 }

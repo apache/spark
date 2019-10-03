@@ -492,6 +492,13 @@ To use a custom metrics.properties for the application master and executors, upd
   If it is not set then the YARN application ID is used.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.shuffle.service.name</code></td>
+  <td><code>spark_shuffle</code></td>
+  <td>
+    Name of the external shuffle service.
+  </td>
+</tr>
 </table>
 
 #### Available patterns for SHS custom executor log URL

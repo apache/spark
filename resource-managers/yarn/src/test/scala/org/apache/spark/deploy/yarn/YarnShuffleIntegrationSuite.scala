@@ -55,7 +55,7 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     logInfo("Shuffle service port = " + shuffleServicePort)
 
     Map(
-      SHUFFLE_SERVICE_NAME.key -> "spark2_shuffle",
+      YARN_SHUFFLE_SERVICE_NAME.key -> "spark2_shuffle",
       SHUFFLE_SERVICE_ENABLED.key -> "true",
       SHUFFLE_SERVICE_PORT.key -> shuffleServicePort.toString,
       MAX_EXECUTOR_FAILURES.key -> "1"

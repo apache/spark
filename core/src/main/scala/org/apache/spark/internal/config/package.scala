@@ -443,9 +443,6 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").intConf.createWithDefault(7337)
 
-  private[spark] val SHUFFLE_SERVICE_NAME =
-    ConfigBuilder("spark.shuffle.service.name").stringConf.createWithDefault("spark_shuffle")
-
   private[spark] val KEYTAB = ConfigBuilder("spark.kerberos.keytab")
     .doc("Location of user's keytab.")
     .stringConf.createOptional
