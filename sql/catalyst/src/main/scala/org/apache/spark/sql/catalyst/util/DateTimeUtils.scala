@@ -628,7 +628,8 @@ object DateTimeUtils {
     val secondsInDay1 = MILLISECONDS.toSeconds(millis1 - daysToMillis(date1, timeZone))
     val secondsInDay2 = MILLISECONDS.toSeconds(millis2 - daysToMillis(date2, timeZone))
     val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
-    val diff = monthDiff + secondsDiff / SECONDS_PER_MONTH.toDouble
+    val secondsInMonth = DAYS.toSeconds(31)
+    val diff = monthDiff + secondsDiff / secondsInMonth.toDouble
     if (roundOff) {
       // rounding to 8 digits
       math.round(diff * 1e8) / 1e8
