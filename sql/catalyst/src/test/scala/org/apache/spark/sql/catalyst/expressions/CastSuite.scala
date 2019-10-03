@@ -22,7 +22,6 @@ import java.util.{Calendar, TimeZone}
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.parallel.immutable.ParVector
-import scala.reflect.ClassTag
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
