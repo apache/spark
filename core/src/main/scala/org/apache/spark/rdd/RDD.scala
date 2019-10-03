@@ -103,17 +103,6 @@ abstract class RDD[T: ClassTag](
     _sc
   }
 
-  /**
-   * Lock for all mutable state of this RDD (persistence, partitions, dependencies, etc.).  We do
-   * not use `this` because RDDs are user-visible, so users might have added their own locking on
-   * RDDs; sharing that could lead to a deadlock.
-   *
-   * One thread might hold the lock on many of these, for a chain of RDD dependencies; but
-   * because DAGs are acyclic, and we only ever hold locks for one path in that DAG, there is no
-   * chance of deadlock.
-   */
-  private val stateLock = new SerializableObject()
-
   /** Construct an RDD with just a one-to-one dependency on one parent */
   def this(@transient oneParent: RDD[_]) =
     this(oneParent.context, List(new OneToOneDependency(oneParent)))
@@ -235,6 +224,20 @@ abstract class RDD[T: ClassTag](
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel: StorageLevel = storageLevel
+
+  /**
+   * Lock for all mutable state of this RDD (persistence, partitions, dependencies, etc.).  We do
+   * not use `this` because RDDs are user-visible, so users might have added their own locking on
+   * RDDs; sharing that could lead to a deadlock.
+   *
+   * One thread might hold the lock on many of these, for a chain of RDD dependencies; but
+   * because DAGs are acyclic, and we only ever hold locks for one path in that DAG, there is no
+   * chance of deadlock.
+   *
+   * The use of Integer is simply so this is serializable -- executors may reference the shared
+   * fields (though they should never mutate them, that only happens on the driver).
+   */
+  private val stateLock = new Integer(0)
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
@@ -1979,13 +1982,6 @@ abstract class RDD[T: ClassTag](
     }
   }
 
-  /**
-   * The only purpose of this class is to have something to lock (like a generic Object) but that
-   * will also survive serialization.  Obviously, the locks themselves don't survive serialization,
-   * but we really only need the locks in the driver, and just don't want things to break with NPEs
-   * on the executors.
-   */
-  private class SerializableObject extends Serializable
 }
 
 
