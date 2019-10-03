@@ -488,13 +488,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal(new Timestamp(sdf.parse("1997-02-28 10:30:00").getTime)),
           Literal(new Timestamp(sdf.parse("1996-10-30 00:00:00").getTime)),
           Literal.TrueLiteral,
-          timeZoneId = timeZoneId), 3.94866424)
+          timeZoneId = timeZoneId), 3.94959677)
       checkEvaluation(
         MonthsBetween(
           Literal(new Timestamp(sdf.parse("1997-02-28 10:30:00").getTime)),
           Literal(new Timestamp(sdf.parse("1996-10-30 00:00:00").getTime)),
           Literal.FalseLiteral,
-          timeZoneId = timeZoneId), 3.9486642436189654)
+          timeZoneId = timeZoneId), 3.9495967741935485)
 
       Seq(Literal.FalseLiteral, Literal.TrueLiteral). foreach { roundOff =>
         checkEvaluation(
