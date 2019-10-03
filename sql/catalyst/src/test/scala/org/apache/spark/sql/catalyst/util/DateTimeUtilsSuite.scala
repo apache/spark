@@ -385,8 +385,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
   test("monthsBetween") {
     val date1 = date(1997, 2, 28, 10, 30, 0)
     var date2 = date(1996, 10, 30)
-    assert(monthsBetween(date1, date2, true, TimeZoneUTC) === 3.94866424)
-    assert(monthsBetween(date1, date2, false, TimeZoneUTC) === 3.9486642436189654)
+    assert(monthsBetween(date1, date2, true, TimeZoneUTC) === 3.94959677)
+    assert(monthsBetween(date1, date2, false, TimeZoneUTC) === 3.9495967741935485)
     Seq(true, false).foreach { roundOff =>
       date2 = date(2000, 2, 28)
       assert(monthsBetween(date1, date2, roundOff, TimeZoneUTC) === -36)
@@ -399,8 +399,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
     val date3 = date(2000, 2, 28, 16, tz = TimeZonePST)
     val date4 = date(1997, 2, 28, 16, tz = TimeZonePST)
     assert(monthsBetween(date3, date4, true, TimeZonePST) === 36.0)
-    assert(monthsBetween(date3, date4, true, TimeZoneGMT) === 35.91993675)
-    assert(monthsBetween(date3, date4, false, TimeZoneGMT) === 35.919936754348136)
+    assert(monthsBetween(date3, date4, true, TimeZoneGMT) === 35.90322581)
+    assert(monthsBetween(date3, date4, false, TimeZoneGMT) === 35.903225806451616)
   }
 
   test("from UTC timestamp") {
