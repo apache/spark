@@ -2992,6 +2992,19 @@
     <profile>
       <id>scala-2.12</id>
     </profile>
+    
+    <profile>
+      <id>scala-2.13</id>
+      <dependencyManagement>
+        <dependencies>
+          <dependency>
+            <groupId>org.scala-lang.modules</groupId>
+            <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+            <version>0.2.0</version>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
+    </profile>
 
     <!--
      This is a profile to enable the use of the ASF snapshot and staging repositories
