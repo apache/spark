@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
