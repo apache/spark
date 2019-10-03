@@ -1028,7 +1028,6 @@ enum TFetchOrientation {
   FETCH_NEXT,
 
   // Get the previous rowset. The fetch offset is ignored.
-  // NOT SUPPORTED
   FETCH_PRIOR,
 
   // Return the rowset at the given fetch offset relative
