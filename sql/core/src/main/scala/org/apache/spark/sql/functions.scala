@@ -3460,6 +3460,16 @@ object functions {
   }
 
   /**
+   * Returns an array of elements for which a predicate holds in a given array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def filter(column: Column, f: (Column, Column) => Column): Column = withExpr {
+    ArrayFilter(column.expr, createLambda(f))
+  }
+
+  /**
    * Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state. The final state is converted into the final result
    * by applying a finish function.
