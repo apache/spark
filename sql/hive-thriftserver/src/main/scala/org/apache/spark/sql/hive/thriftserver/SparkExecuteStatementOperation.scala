@@ -57,7 +57,8 @@ private[hive] class SparkExecuteStatementOperation(
   // This is only used when `spark.sql.thriftServer.incrementalCollect` is set to `false`.
   // In case of `true`, this will be `None` and FETCH_FIRST will trigger re-execution.
   private var resultList: Option[Array[SparkRow]] = _
-
+  private var previousFetchEndOffset: Long = 0
+  private var previousFetchStartOffset: Long = 0
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
@@ -113,14 +114,18 @@ private[hive] class SparkExecuteStatementOperation(
   }
 
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = withSchedulerPool {
+    log.info(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
+      s"with ${statementId}")
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
     val resultRowSet: RowSet =
       ThriftserverShimUtils.resultRowSet(getResultSetSchema, getProtocolVersion)
 
-    // Reset iter to header when fetching start from first row
-    if (order.equals(FetchOrientation.FETCH_FIRST)) {
+    // Reset iter when FETCH_FIRST or FETCH_PRIOR
+    if ((order.equals(FetchOrientation.FETCH_FIRST) ||
+        order.equals(FetchOrientation.FETCH_PRIOR)) && previousFetchEndOffset != 0) {
+      // Reset the iterator to the beginning of the query.
       iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
         resultList = None
         result.toLocalIterator.asScala
@@ -132,6 +137,28 @@ private[hive] class SparkExecuteStatementOperation(
       }
     }
 
+    var resultOffset = {
+      if (order.equals(FetchOrientation.FETCH_FIRST)) {
+        logInfo(s"FETCH_FIRST request with $statementId. Resetting to resultOffset=0")
+        0
+      } else if (order.equals(FetchOrientation.FETCH_PRIOR)) {
+        // TODO: FETCH_PRIOR should be handled more efficiently than rewinding to beginning and
+        // reiterating.
+        val targetOffset = math.max(previousFetchStartOffset - maxRowsL, 0)
+        logInfo(s"FETCH_PRIOR request with $statementId. Resetting to resultOffset=$targetOffset")
+        var off = 0
+        while (off < targetOffset && iter.hasNext) {
+          iter.next()
+          off += 1
+        }
+        off
+      } else { // FETCH_NEXT
+        previousFetchEndOffset
+      }
+    }
+
+    resultRowSet.setStartOffset(resultOffset)
+    previousFetchStartOffset = resultOffset
     if (!iter.hasNext) {
       resultRowSet
     } else {
@@ -152,7 +179,11 @@ private[hive] class SparkExecuteStatementOperation(
         }
         resultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
         curRow += 1
+        resultOffset += 1
       }
+      previousFetchEndOffset = resultOffset
+      log.info(s"Returning result set with ${curRow} rows from offsets +" +
+        s"[$previousFetchStartOffset, $previousFetchEndOffset) with $statementId")
       resultRowSet
     }
   }
