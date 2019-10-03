@@ -596,7 +596,7 @@ class IsotonicRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadabl
 
 class _DecisionTreeRegressorParams(DecisionTreeParams, TreeRegressorParams, HasVarianceCol):
     """
-    Params for :py:attr:`DecisionTreeRegressor` and :py:attr:`DecisionTreeRegressionModel`.
+    Params for :py:class:`DecisionTreeRegressor` and :py:class:`DecisionTreeRegressionModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -797,7 +797,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel, _DecisionTreeRegressorParam
 
 class _RandomForestRegressorParams(RandomForestParams, TreeRegressorParams):
     """
-    Params for :py:attr:`RandomForestRegressor` and :py:attr:`RandomForestRegressionModel`.
+    Params for :py:class:`RandomForestRegressor` and :py:class:`RandomForestRegressionModel`.
     .. versionadded:: 3.0.0
     """
     pass

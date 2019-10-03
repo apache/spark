@@ -943,7 +943,7 @@ class BinaryLogisticRegressionTrainingSummary(BinaryLogisticRegressionSummary,
 @inherit_doc
 class _DecisionTreeClassifierParams(DecisionTreeParams, TreeClassifierParams):
     """
-    Params for :py:attr:`DecisionTreeClassifier` and :py:attr:`DecisionTreeClassificationModel`.
+    Params for :py:class:`DecisionTreeClassifier` and :py:class:`DecisionTreeClassificationModel`.
     """
     pass
 
@@ -1154,7 +1154,7 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaProbabilisticClassi
 @inherit_doc
 class _RandomForestClassifierParams(RandomForestParams, TreeClassifierParams):
     """
-    Params for :py:attr:`RandomForestClassifier` and :py:attr:`RandomForestClassificationModel`.
+    Params for :py:class:`RandomForestClassifier` and :py:class:`RandomForestClassificationModel`.
     """
     pass
 
