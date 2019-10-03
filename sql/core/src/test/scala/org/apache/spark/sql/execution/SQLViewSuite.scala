@@ -179,7 +179,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   private def assertViewNotSupported(query: String): Unit = {
     val e = intercept[AnalysisException](sql(query))
-    assert(e.message.contains("Cannot alter a view with ALTER TABLE"))
+    assert(e.message.contains("'testView' is a view not table"))
   }
 
   test("error handling: insert/load/truncate table commands against a view") {

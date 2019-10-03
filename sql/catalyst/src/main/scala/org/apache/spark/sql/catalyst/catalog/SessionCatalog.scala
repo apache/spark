@@ -781,8 +781,16 @@ class SessionCatalog(
     }
   }
 
-  def isTempView(nameParts: Seq[String]): Boolean = {
-    nameParts.length == 1 && getTempView(formatTableName(nameParts.head)).isDefined
+  def isView(nameParts: Seq[String]): Boolean = {
+    nameParts.length <= 2 && {
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      val ident = nameParts.asTableIdentifier
+      try {
+        getTempViewOrPermanentTableMetadata(ident).tableType == CatalogTableType.VIEW
+      } catch {
+        case _: NoSuchTableException => false
+      }
+    }
   }
 
   /**

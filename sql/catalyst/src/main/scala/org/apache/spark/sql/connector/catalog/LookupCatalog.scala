@@ -170,23 +170,4 @@ private[sql] trait LookupCatalog extends Logging {
       }
     }
   }
-
-  /**
-   * Extract catalog and table with its name from a multi-part identifier. If the table can't be
-   * found, return None.
-   */
-  object CatalogAndTable {
-    import CatalogV2Implicits._
-    import CatalogV2Util._
-
-    def unapply(nameParts: Seq[String]): Option[(TableCatalog, Seq[String], Table)] = {
-      assert(nameParts.nonEmpty)
-      nameParts match {
-        case CatalogAndIdentifierParts(catalog, restNameParts) =>
-          loadTable(catalog, restNameParts.asIdentifier).map { table =>
-            (catalog.asTableCatalog, restNameParts, table)
-          }
-      }
-    }
-  }
 }

@@ -20,4 +20,4 @@ package org.apache.spark.sql.catalyst.plans.logical.sql
 case class DescribeColumnStatement(
     tableName: Seq[String],
     colNameParts: Seq[String],
-    isExtended: Boolean) extends StatementRequiringTable
+    isExtended: Boolean) extends ParsedStatement

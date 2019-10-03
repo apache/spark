@@ -22,4 +22,4 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 case class DescribeTableStatement(
     tableName: Seq[String],
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends StatementRequiringTable
+    isExtended: Boolean) extends ParsedStatement

@@ -128,6 +128,8 @@ class Analyzer(
 
   private val catalog: SessionCatalog = catalogManager.v1SessionCatalog
 
+  override def isView(nameParts: Seq[String]): Boolean = catalog.isView(nameParts)
+
   // Only for tests.
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(
@@ -139,8 +141,6 @@ class Analyzer(
   def this(catalogManager: CatalogManager, conf: SQLConf) = {
     this(catalogManager, conf, conf.optimizerMaxIterations)
   }
-
-  override protected def isTempView(nameParts: Seq[String]): Boolean = catalog.isTempView(nameParts)
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {
@@ -198,7 +198,6 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       new ResolveCatalogs(catalogManager) ::
-      new ResolveCatalogAndTables(catalogManager) ::
       ResolveInsertInto ::
       ResolveTables ::
       ResolveRelations ::
@@ -682,6 +681,11 @@ class Analyzer(
         lookupV2Relation(u.multipartIdentifier)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
+
+      case u: UnresolvedV2Table =>
+        CatalogV2Util.loadTable(u.catalog, u.tableName).map { table =>
+          DataSourceV2Relation.create(table)
+        }.getOrElse(u)
     }
   }
 

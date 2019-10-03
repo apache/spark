@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableStatement, InsertIntoStatement, StatementRequiringTable}
+import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
  */
 trait CheckAnalysis extends PredicateHelper {
 
-  protected def isTempView(nameParts: Seq[String]): Boolean
+  protected def isView(nameParts: Seq[String]): Boolean
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -98,11 +98,12 @@ trait CheckAnalysis extends PredicateHelper {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
-      case a: AlterTableStatement if isTempView(a.tableName) =>
-        a.failAnalysis("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead.")
+      case u: UnresolvedV2Table if isView(u.originalNameParts) =>
+        u.failAnalysis(
+          s"Invalid command: '${u.originalNameParts.quoted}' is a view not table.")
 
-      case s: StatementRequiringTable =>
-        s.failAnalysis(s"Table or view not found: ${s.tableName.quoted}")
+      case u: UnresolvedV2Table =>
+        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
