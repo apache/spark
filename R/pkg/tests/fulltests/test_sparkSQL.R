@@ -1444,9 +1444,9 @@ test_that("column functions", {
   df <- createDataFrame(list(list(a = as.Date("1997-02-28"),
                                   b = as.Date("1996-10-30"))))
   result1 <- collect(select(df, alias(months_between(df[[1]], df[[2]]), "month")))[[1]]
-  expect_equal(result1, 3.93429023)
+  expect_equal(result1, 3.93548387)
   result2 <- collect(select(df, alias(months_between(df[[1]], df[[2]], FALSE), "month")))[[1]]
-  expect_equal(result2, 3.934290231832276)
+  expect_equal(result2, 3.935483870967742)
 
   # Test array_contains(), array_max(), array_min(), array_position(), element_at() and reverse()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
