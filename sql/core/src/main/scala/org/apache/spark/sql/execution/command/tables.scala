@@ -586,7 +586,9 @@ case class TruncateTableCommand(
 
     if (table.stats.nonEmpty) {
       // empty table after truncation
-      val newStats = CatalogStatistics(sizeInBytes = 0, rowCount = Some(0))
+      val newStats = CatalogStatistics(sizeInBytes = 0,
+        deserFactor = None,
+        rowCount = Some(0))
       catalog.alterTableStats(tableName, Some(newStats))
     }
     Seq.empty[Row]

@@ -40,8 +40,9 @@ case class LogicalRelation(
     catalogTable = None)
 
   override def computeStats(): Statistics = {
+    val planStatsEnabled = conf.cboEnabled || conf.planStatsEnabled
     catalogTable
-      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled)))
+      .flatMap(_.stats.map(_.toPlanStats(output, planStatsEnabled, conf.deserFactorDistortion)))
       .getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
   }
 

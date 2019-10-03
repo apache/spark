@@ -31,11 +31,10 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBin, HistogramSerializer}
+import org.apache.spark.sql.catalyst.plans.logical.HistogramBin
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
 import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, CommandUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -204,9 +203,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .getTableMetadata(TableIdentifier(checkSizeTable))
           HiveCatalogMetrics.reset()
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
-          val size = CommandUtils.calculateTotalSize(spark, tableMeta)
+          val sizeWithDeserFactor = CommandUtils.calculateTotalSize(spark, tableMeta)
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
-          assert(size === BigInt(17436))
+          assert(sizeWithDeserFactor.sizeInBytes === BigInt(17436))
       }
     }
   }
@@ -1328,12 +1327,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
-      // Using `sparkPlan` because for relevant patterns in HashJoin to be
-      // matched, other strategies need to be applied.
-      var bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
-      assert(bhj.size === 1,
+      checkNumBroadcastHashJoins(df, 1,
         s"actual query plans do not contain broadcast join: ${df.queryExecution}")
-
       checkAnswer(df, expectedAnswer) // check correctness of output
 
       spark.sessionState.conf.settings.synchronized {
@@ -1341,11 +1336,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
         df = sql(query)
-        bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
-        assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
-        val shj = df.queryExecution.sparkPlan.collect { case j: SortMergeJoinExec => j }
-        assert(shj.size === 1,
+        checkNumBroadcastHashJoins(df, 0,
+        "BroadcastHashJoin still planned even though it is switched off")
+        checkNumSortMergeJoins(df, 1,
           "SortMergeJoin should be planned when BroadcastHashJoin is turned off")
 
         sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
@@ -1382,14 +1376,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold,
       s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
-    // Using `sparkPlan` because for relevant patterns in HashJoin to be
-    // matched, other strategies need to be applied.
-    var bhj = df.queryExecution.sparkPlan.collect {
-      case j: BroadcastHashJoinExec => j
-    }
-    assert(bhj.size === 1,
+    checkNumBroadcastHashJoins(df, 1,
       s"actual query plans do not contain broadcast join: ${df.queryExecution}")
-
     checkAnswer(df, answer) // check correctness of output
 
     spark.sessionState.conf.settings.synchronized {
@@ -1397,15 +1385,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
       df = sql(leftSemiJoinQuery)
-      bhj = df.queryExecution.sparkPlan.collect {
-        case j: BroadcastHashJoinExec => j
-      }
-      assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
-
-      val shj = df.queryExecution.sparkPlan.collect {
-        case j: SortMergeJoinExec => j
-      }
-      assert(shj.size === 1,
+      checkNumBroadcastHashJoins(df, 0,
+        "BroadcastHashJoin still planned even though it is switched off")
+      checkNumSortMergeJoins(df, 1,
         "SortMergeJoinExec should be planned when BroadcastHashJoin is turned off")
 
       sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp")
@@ -1553,6 +1535,111 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           assert(partStats.sizeInBytes == 601)
           assert(partStats.rowCount.get == 1)
         }
+      }
+    }
+  }
+
+  private def checkDeserializationFactor(tableName: String, exists: Boolean): Unit = {
+    spark.sessionState.catalog.refreshTable(TableIdentifier(tableName))
+    val catalogTable = getCatalogTable(tableName)
+    assert(catalogTable.stats.isDefined)
+    assert(catalogTable.stats.get.deserFactor.isDefined === exists)
+  }
+
+  test("SPARK-24914 - test deserialization factor (ORC)") {
+    val table = s"sizeTest"
+
+    withTable(table) {
+      import spark.implicits._
+      sql(s"CREATE TABLE $table (key INT, value1 BIGINT, value2 BIGINT, value3 BIGINT, " +
+        s"value4 BIGINT) PARTITIONED BY (ds STRING) STORED AS ORC")
+      spark.range(5000)
+        .map(i => (i * 6, i * 5, i * 4, i * 3, i * 2))
+        .toDF("key", "value1", "value2", "value3", "value4")
+        .createOrReplaceTempView("TMP1")
+      spark.range(5000)
+        .map(i => (1, 1, 1, 1, 1))
+        .toDF("key", "value1", "value2", "value3", "value4")
+        .createOrReplaceTempView("TMP2")
+
+      sql(s"INSERT INTO TABLE $table PARTITION (ds='2010-01-01') SELECT * FROM TMP1")
+
+      val catalogTable = getCatalogTable(table)
+      assert(catalogTable.stats.isEmpty)
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+      checkDeserializationFactor(table, exists = false)
+      val origSizeInBytes = spark.table(table).queryExecution.optimizedPlan.stats.sizeInBytes
+      logInfo(s"original sizeInBytes (file size): $origSizeInBytes")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"${origSizeInBytes - 1}") {
+        val res = sql(s"SELECT * FROM $table t1, $table t2 WHERE t1.key = t2.key")
+        checkNumBroadcastHashJoins(res, 0,
+          "sort merge join should be taken as threshold is smaller than table size")
+      }
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"${origSizeInBytes + 1}") {
+        val res = sql(s"SELECT * FROM $table t1, $table t2 WHERE t1.key = t2.key")
+        checkNumBroadcastHashJoins(res, 1,
+          "broadcast join should be taken as the threshold is greater than table size")
+      }
+
+      withSQLConf(
+        SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"${origSizeInBytes + 1}") {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+        checkDeserializationFactor(table, exists = true)
+        val newSizeInBytes = spark.table(table).queryExecution.optimizedPlan.stats.sizeInBytes
+        assert(2 * origSizeInBytes <= newSizeInBytes)
+        logInfo(s"sizeInBytes after applying deserFactor: $newSizeInBytes")
+        val res = sql(s"SELECT * FROM $table t1, $table t2 WHERE t1.key = t2.key")
+        checkNumBroadcastHashJoins(res, 0,
+          "sort merge join should be taken despite the threshold is greater than the table" +
+            "size as the deserialization factor is applied")
+      }
+
+      withSQLConf(
+        SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"${origSizeInBytes + 1}") {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+        checkDeserializationFactor(table, exists = true)
+        val res = sql(s"SELECT * FROM $table t1, $table t2 WHERE t1.key = t2.key")
+        checkNumBroadcastHashJoins(res, 0,
+        "sort merge join should be taken despite deserialization factor calculation is " +
+          "disabled as the old factor is reused")
+      }
+
+      withSQLConf(SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "true") {
+        val catalogTableBefore = getCatalogTable(table)
+        val deserFactorBefore = catalogTableBefore.stats.get.deserFactor.get
+        sql(s"INSERT INTO TABLE $table PARTITION (ds='2010-01-02') SELECT * FROM TMP1")
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+        spark.sessionState.catalog.refreshTable(TableIdentifier(table))
+        val catalogTable1 = getCatalogTable(table)
+        assert(catalogTable1.stats.isDefined &&
+          catalogTable1.stats.get.deserFactor.isDefined)
+        assert(catalogTable1.stats.get.deserFactor.get === deserFactorBefore,
+          "deserFactor should not change by adding a smaller or same size partition")
+
+        sql(s"INSERT INTO TABLE $table PARTITION (ds='2010-01-03') SELECT * FROM TMP2")
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+
+        spark.sessionState.catalog.refreshTable(TableIdentifier(table))
+        val catalogTable2 = getCatalogTable(table)
+        assert(catalogTable2.stats.isDefined &&
+          catalogTable2.stats.get.deserFactor.isDefined)
+        assert(catalogTable2.stats.get.deserFactor.get > deserFactorBefore,
+          "deserialization factor increased after adding a partition which is more compressed")
+      }
+
+      sql(s"TRUNCATE TABLE $table")
+      withSQLConf(
+        SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"${origSizeInBytes + 1}") {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+        checkDeserializationFactor(table, exists = false)
+        val res = sql(s"SELECT * FROM $table t1, $table t2 WHERE t1.key = t2.key")
+        checkNumBroadcastHashJoins(res, 1,
+          "broadcast join should be taken as deserialization factor is deleted by TRUNCATE")
       }
     }
   }

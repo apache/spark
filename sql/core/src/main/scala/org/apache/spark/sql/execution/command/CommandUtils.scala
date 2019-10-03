@@ -22,20 +22,24 @@ import java.net.URI
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
+import org.apache.spark.sql.execution.datasources.orc.OrcUtils
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
+
+case class SizeInBytesWithDeserFactor(sizeInBytes: BigInt, deserFactor: Option[Int])
 
 /**
  * For the purpose of calculating total directory sizes, use this filter to
@@ -56,8 +60,11 @@ object CommandUtils extends Logging {
     val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
-      val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
-      val newStats = CatalogStatistics(sizeInBytes = newSize)
+      val oldDeserFactor = newTable.stats.flatMap(_.deserFactor)
+      val newSizeWithDeserFactor = CommandUtils.calculateTotalSize(sparkSession, newTable)
+      val newStats = CatalogStatistics(
+        sizeInBytes = newSizeWithDeserFactor.sizeInBytes,
+        deserFactor = newSizeWithDeserFactor.deserFactor.orElse(oldDeserFactor))
       catalog.alterTableStats(table.identifier, Some(newStats))
     } else if (table.stats.nonEmpty) {
       catalog.alterTableStats(table.identifier, None)
@@ -67,7 +74,8 @@ object CommandUtils extends Logging {
     }
   }
 
-  def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
+  def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable)
+    : SizeInBytesWithDeserFactor = {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
     val totalSize = if (catalogTable.partitionColumnNames.isEmpty) {
@@ -78,17 +86,54 @@ object CommandUtils extends Logging {
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       val paths = partitions.map(_.storage.locationUri)
-      calculateMultipleLocationSizes(spark, catalogTable.identifier, paths).sum
+      sumSizeWithMaxDeserializationFactor(
+        calculateMultipleLocationSizes(spark, catalogTable.identifier, paths))
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
     totalSize
   }
 
+   def sumSizeWithMaxDeserializationFactor(sizesWithFactors: Seq[SizeInBytesWithDeserFactor])
+    : SizeInBytesWithDeserFactor = {
+    val definedFactors = sizesWithFactors.filter(_.deserFactor.isDefined).map(_.deserFactor.get)
+    SizeInBytesWithDeserFactor(
+      sizesWithFactors.map(_.sizeInBytes).sum,
+      if (definedFactors.isEmpty) None else Some(definedFactors.max))
+  }
+
+  def sizeInBytesWithDeserFactor(
+      calcDeserFact: Boolean,
+      hadoopConf: Configuration,
+      fStatus: FileStatus): SizeInBytesWithDeserFactor = {
+    assert(fStatus.isFile)
+    val factor = if (calcDeserFact) {
+      val rawSize = if (fStatus.getPath.getName.endsWith(".orc")) {
+        Some(OrcUtils.rawSize(hadoopConf, fStatus.getPath))
+      } else {
+        None
+      }
+
+      rawSize.map { rawSize =>
+        // deserialization factor is a ratio of the data size in memory to file size rounded up
+        // to the next integer number
+        val divAndRemain = rawSize /% BigInt(fStatus.getLen)
+        val deserFactor = divAndRemain._1.toInt + (if (divAndRemain._2.signum == 1) 1 else 0)
+        logDebug(s"${fStatus.getPath.getName} : " +
+          s"$rawSize (rawSize) / ${fStatus.getLen} (fileSize) = $deserFactor (deserFactor)")
+        deserFactor
+      }
+    } else {
+      None
+    }
+    SizeInBytesWithDeserFactor(fStatus.getLen, factor)
+  }
+
+
   def calculateSingleLocationSize(
       sessionState: SessionState,
       identifier: TableIdentifier,
-      locationUri: Option[URI]): Long = {
+      locationUri: Option[URI]): SizeInBytesWithDeserFactor = {
     // This method is mainly based on
     // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
     // in Hive 0.13 (except that we do not use fs.getContentSummary).
@@ -98,49 +143,49 @@ object CommandUtils extends Logging {
     // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
     // countFileSize to count the table size.
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+    val hadoopConf = sessionState.newHadoopConf()
 
-    def getPathSize(fs: FileSystem, path: Path): Long = {
+    val calcDeserFactEnabled = sessionState.conf.deserFactorStatCalcEnabled
+    def getSumSizeInBytesWithDeserFactor(fs: FileSystem, path: Path): SizeInBytesWithDeserFactor = {
       val fileStatus = fs.getFileStatus(path)
-      val size = if (fileStatus.isDirectory) {
-        fs.listStatus(path)
-          .map { status =>
-            if (isDataPath(status.getPath, stagingDir)) {
-              getPathSize(fs, status.getPath)
-            } else {
-              0L
-            }
-          }.sum
+      if (fileStatus.isDirectory) {
+        val fileSizesWithDeserFactor = fs.listStatus(path).map { status =>
+          if (isDataPath(status.getPath, stagingDir)) {
+            getSumSizeInBytesWithDeserFactor(fs, status.getPath)
+          } else {
+            SizeInBytesWithDeserFactor(0L, None)
+          }
+        }
+        sumSizeWithMaxDeserializationFactor(fileSizesWithDeserFactor)
       } else {
-        fileStatus.getLen
+        sizeInBytesWithDeserFactor(calcDeserFactEnabled, hadoopConf, fileStatus)
       }
-
-      size
     }
 
     val startTime = System.nanoTime()
-    val size = locationUri.map { p =>
+    val fileSizesWithDeserFactor = locationUri.map { p =>
       val path = new Path(p)
       try {
-        val fs = path.getFileSystem(sessionState.newHadoopConf())
-        getPathSize(fs, path)
+        val fs = path.getFileSystem(hadoopConf)
+        getSumSizeInBytesWithDeserFactor(fs, path)
       } catch {
         case NonFatal(e) =>
           logWarning(
             s"Failed to get the size of table ${identifier.table} in the " +
               s"database ${identifier.database} because of ${e.toString}", e)
-          0L
+          SizeInBytesWithDeserFactor(0L, None)
       }
-    }.getOrElse(0L)
+    }.getOrElse(SizeInBytesWithDeserFactor(0L, None))
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
     logDebug(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
 
-    size
+    fileSizesWithDeserFactor
   }
 
   def calculateMultipleLocationSizes(
       sparkSession: SparkSession,
       tid: TableIdentifier,
-      paths: Seq[Option[URI]]): Seq[Long] = {
+      paths: Seq[Option[URI]]): Seq[SizeInBytesWithDeserFactor] = {
     if (sparkSession.sessionState.conf.parallelFileListingInStatsComputation) {
       calculateMultipleLocationSizesInParallel(sparkSession, paths.map(_.map(new Path(_))))
     } else {
@@ -158,22 +203,29 @@ object CommandUtils extends Logging {
    */
   def calculateMultipleLocationSizesInParallel(
       sparkSession: SparkSession,
-      paths: Seq[Option[Path]]): Seq[Long] = {
+      paths: Seq[Option[Path]]): Seq[SizeInBytesWithDeserFactor] = {
     val stagingDir = sparkSession.sessionState.conf
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
+    val calcDeserFactEnabled = sparkSession.sessionState.conf.deserFactorStatCalcEnabled
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
     val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
       sparkSession.sessionState.newHadoopConf(), filter, sparkSession, areRootPaths = true).map {
-      case (_, files) => files.map(_.getLen).sum
+      case (_, files) =>
+        sumSizeWithMaxDeserializationFactor(
+          files.map(sizeInBytesWithDeserFactor(calcDeserFactEnabled, hadoopConf, _)))
     }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined
-    paths.zipWithIndex.map { case (p, idx) => p.map(_ => sizes(idx)).getOrElse(0L) }
+    paths.zipWithIndex.map { case (p, idx) =>
+      p.map(_ => sizes(idx)).getOrElse(SizeInBytesWithDeserFactor(0L, None))
+    }
   }
 
   def compareAndGetNewStats(
       oldStats: Option[CatalogStatistics],
-      newTotalSize: BigInt,
+      newSizeWithDeserFactor: SizeInBytesWithDeserFactor,
       newRowCount: Option[BigInt]): Option[CatalogStatistics] = {
+    val newTotalSize = newSizeWithDeserFactor.sizeInBytes
     val oldTotalSize = oldStats.map(_.sizeInBytes).getOrElse(BigInt(-1))
     val oldRowCount = oldStats.flatMap(_.rowCount).getOrElse(BigInt(-1))
     var newStats: Option[CatalogStatistics] = None
@@ -184,13 +236,23 @@ object CommandUtils extends Logging {
     // 1. when total size is not changed, we don't need to alter the table;
     // 2. when total size is changed, `oldRowCount` becomes invalid.
     // This is to make sure that we only record the right statistics.
-    if (newRowCount.isDefined) {
-      if (newRowCount.get >= 0 && newRowCount.get != oldRowCount) {
-        newStats = if (newStats.isDefined) {
-          newStats.map(_.copy(rowCount = newRowCount))
-        } else {
-          Some(CatalogStatistics(sizeInBytes = oldTotalSize, rowCount = newRowCount))
-        }
+    newRowCount.foreach { rowCount =>
+      if (rowCount >= 0 && rowCount != oldRowCount) {
+        newStats = newStats
+          .map(_.copy(rowCount = newRowCount))
+          .orElse(Some(CatalogStatistics(sizeInBytes = oldTotalSize, rowCount = newRowCount)))
+      }
+    }
+    val oldDeserFactor = oldStats.flatMap(_.deserFactor)
+    val newDeserFactor = newSizeWithDeserFactor.deserFactor.orElse(oldDeserFactor)
+    if (oldDeserFactor != newDeserFactor || newStats.isDefined) {
+      newDeserFactor.foreach { _ =>
+        newStats = newStats
+          .map(_.copy(deserFactor = newDeserFactor))
+          .orElse(Some(CatalogStatistics(
+            sizeInBytes = oldTotalSize,
+            deserFactor = newDeserFactor,
+            rowCount = None)))
       }
     }
     newStats

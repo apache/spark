@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.math.RoundingMode.UP
 import java.net.URI
 import java.time.ZoneOffset
 import java.util.Date
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
+
+import com.google.common.math.DoubleMath.roundToBigInteger
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -422,6 +425,7 @@ object CatalogTable {
  */
 case class CatalogStatistics(
     sizeInBytes: BigInt,
+    deserFactor: Option[Int] = None,
     rowCount: Option[BigInt] = None,
     colStats: Map[String, CatalogColumnStat] = Map.empty) {
 
@@ -429,7 +433,10 @@ case class CatalogStatistics(
    * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
    * on column names.
    */
-  def toPlanStats(planOutput: Seq[Attribute], planStatsEnabled: Boolean): Statistics = {
+  def toPlanStats(
+      planOutput: Seq[Attribute],
+      planStatsEnabled: Boolean,
+      deserFactorDistortion: Double): Statistics = {
     if (planStatsEnabled && rowCount.isDefined) {
       val attrStats = AttributeMap(planOutput
         .flatMap(a => colStats.get(a.name).map(a -> _.toPlanStat(a.name, a.dataType))))
@@ -439,14 +446,18 @@ case class CatalogStatistics(
     } else {
       // When plan statistics are disabled or the table doesn't have other statistics,
       // we apply the size-only estimation strategy and only propagate sizeInBytes in statistics.
-      Statistics(sizeInBytes = sizeInBytes)
+      val size = deserFactor.map { factor =>
+        BigInt(roundToBigInteger(sizeInBytes.doubleValue * deserFactorDistortion * factor, UP))
+      }.getOrElse(sizeInBytes)
+      Statistics(sizeInBytes = size)
     }
   }
 
   /** Readable string representation for the CatalogStatistics. */
   def simpleString: String = {
-    val rowCountString = if (rowCount.isDefined) s", ${rowCount.get} rows" else ""
-    s"$sizeInBytes bytes$rowCountString"
+    val rowCountString = rowCount.map(c => s", $c rows").getOrElse("")
+    val deserFactorString = deserFactor.map(f => s", deserFactor=$f ").getOrElse("")
+    s"$sizeInBytes bytes$rowCountString$deserFactorString"
   }
 }
 
@@ -677,7 +688,10 @@ case class HiveTableRelation(
   )
 
   override def computeStats(): Statistics = {
-    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
+    val planStatsEnabled = conf.cboEnabled || conf.planStatsEnabled
+    tableMeta
+      .stats
+      .map(_.toPlanStats(output, planStatsEnabled, conf.deserFactorDistortion))
       .orElse(tableStats)
       .getOrElse {
       throw new IllegalStateException("table stats must be specified.")

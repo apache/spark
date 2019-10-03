@@ -94,8 +94,12 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         val prunedFsRelation =
           fsRelation.copy(location = prunedFileIndex)(fsRelation.sparkSession)
         // Change table stats based on the sizeInBytes of pruned files
-        val withStats = logicalRelation.catalogTable.map(_.copy(
-          stats = Some(CatalogStatistics(sizeInBytes = BigInt(prunedFileIndex.sizeInBytes)))))
+        val withStats = logicalRelation.catalogTable.map { catalogTable =>
+          catalogTable.copy(
+            stats = Some(CatalogStatistics(
+              sizeInBytes = BigInt(prunedFileIndex.sizeInBytes),
+              deserFactor = catalogTable.stats.flatMap(_.deserFactor))))
+        }
         val prunedLogicalRelation = logicalRelation.copy(
           relation = prunedFsRelation, catalogTable = withStats)
         // Keep partition-pruning predicates so that they are visible in physical planning

@@ -484,12 +484,22 @@ case class AlterTableAddPartitionCommand(
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
 
-    if (table.stats.nonEmpty) {
+    table.stats.foreach { stats =>
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
-        val addedSize = CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
-          parts.map(_.storage.locationUri)).sum
+        val sizesWithFactors =
+          CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
+            parts.map(_.storage.locationUri))
+        val newPartsTotalSizeAndDeserializationFactor =
+          CommandUtils.sumSizeWithMaxDeserializationFactor(sizesWithFactors)
+        val addedSize = newPartsTotalSizeAndDeserializationFactor.sizeInBytes
+        // if the calculation of the deserialization factor is disabled now then take the old factor
+        // otherwise take the largest factor
+        val newFactor = newPartsTotalSizeAndDeserializationFactor
+          .deserFactor
+          .map(Math.max(_, stats.deserFactor.getOrElse(0)))
+          .orElse(stats.deserFactor)
         if (addedSize > 0) {
-          val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
+          val newStats = CatalogStatistics(sizeInBytes = stats.sizeInBytes + addedSize, newFactor)
           catalog.alterTableStats(table.identifier, Some(newStats))
         }
       } else {

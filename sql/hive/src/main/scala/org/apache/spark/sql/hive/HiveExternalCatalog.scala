@@ -1083,6 +1083,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     if (stats.rowCount.isDefined) {
       statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
     }
+    if (stats.deserFactor.isDefined) {
+      statsProperties += STATISTICS_DESER_FACTOR -> stats.deserFactor.get.toString()
+    }
 
     stats.colStats.foreach { case (colName, colStat) =>
       colStat.toMap(colName).foreach { case (k, v) =>
@@ -1124,6 +1127,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
       Some(CatalogStatistics(
         sizeInBytes = BigInt(statsProps(STATISTICS_TOTAL_SIZE)),
+        deserFactor = statsProps.get(STATISTICS_DESER_FACTOR).map(_.toInt),
         rowCount = statsProps.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
         colStats = colStats.toMap))
     }
@@ -1334,6 +1338,7 @@ object HiveExternalCatalog {
 
   val STATISTICS_PREFIX = SPARK_SQL_PREFIX + "statistics."
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
+  val STATISTICS_DESER_FACTOR = STATISTICS_PREFIX + "deserFactor"
   val STATISTICS_NUM_ROWS = STATISTICS_PREFIX + "numRows"
   val STATISTICS_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
 

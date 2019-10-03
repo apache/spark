@@ -111,7 +111,7 @@ case class AnalyzeColumnCommand(
         throw new AnalysisException("ANALYZE TABLE is not supported on views.")
       }
     } else {
-      val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val sizeWithDeserFactor = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
       val relation = sparkSession.table(tableIdent).logicalPlan
       val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
 
@@ -126,7 +126,8 @@ case class AnalyzeColumnCommand(
 
       // We also update table-level stats in order to keep them consistent with column-level stats.
       val statistics = CatalogStatistics(
-        sizeInBytes = sizeInBytes,
+        sizeInBytes = sizeWithDeserFactor.sizeInBytes,
+        deserFactor = sizeWithDeserFactor.deserFactor,
         rowCount = Some(rowCount),
         // Newly computed column stats should override the existing ones.
         colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColCatalogStats)

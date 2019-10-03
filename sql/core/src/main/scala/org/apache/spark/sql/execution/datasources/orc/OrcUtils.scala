@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.io.IOException
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
@@ -45,6 +46,17 @@ object OrcUtils extends Logging {
     "SNAPPY" -> ".snappy",
     "ZLIB" -> ".zlib",
     "LZO" -> ".lzo")
+
+  def rawSize(hadoopConf: Configuration, filePath: Path): BigInt = {
+    val fs = filePath.getFileSystem(hadoopConf)
+    val readerOptions = OrcFile.readerOptions(hadoopConf).filesystem(fs)
+    try {
+      val reader = OrcFile.createReader(filePath, readerOptions)
+      reader.getRawDataSize
+    } catch {
+      case _: IOException => BigInt(0)
+    }
+  }
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)

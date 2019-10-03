@@ -1589,6 +1589,29 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DESERIALIZATION_FACTOR_CALC_ENABLED =
+    buildConf("spark.sql.statistics.deserFactor.calc.enabled")
+      .doc("Enables the calculation of the deserialization factor as a table statistic. " +
+        "This factor is intended to be calculated for columnar storage formats as a ratio of " +
+        "actual data size to raw file size but currently Spark calculates this only for the ORC " +
+        "format. Spark uses this ratio is to scale up the estimated size, which leads to " +
+        "better estimate of in-memory data size and improves the query optimization (i.e., join " +
+        "strategy). In case of partitioned table the maximum of these factors is taken. " +
+        "Spark stores this factor in the meta store and reuses it so the table " +
+        "can grow without having to recompute this statistic. " +
+        "The stored factor can be removed only by a TRUNCATE or a DROP table so even a " +
+        "subsequent ANALYZE TABLE where the calculation is disabled keeps the old value.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val DESERIALIZATION_FACTOR_EXTRA_DISTORTION =
+    buildConf("spark.sql.statistics.deserFactor.distortion")
+      .doc("Distortion value used as an extra multiplier at the application of the " +
+        "deserialization factor making one capable to modify the computed table size even after " +
+        "the deserialization factor is calculated and stored in the meta store.")
+      .doubleConf
+      .createWithDefault(1.0)
+
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
@@ -2884,6 +2907,10 @@ class SQLConf extends Serializable with Logging {
   def planStatsEnabled: Boolean = getConf(SQLConf.PLAN_STATS_ENABLED)
 
   def autoSizeUpdateEnabled: Boolean = getConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED)
+
+  def deserFactorStatCalcEnabled: Boolean = getConf(SQLConf.DESERIALIZATION_FACTOR_CALC_ENABLED)
+
+  def deserFactorDistortion: Double = getConf(SQLConf.DESERIALIZATION_FACTOR_EXTRA_DISTORTION)
 
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
