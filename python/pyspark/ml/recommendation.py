@@ -31,6 +31,7 @@ __all__ = ['ALS', 'ALSModel']
 class _ALSModelParams(HasPredictionCol):
     """
     Params for :py:class:`ALS` and :py:class:`ALSModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -71,6 +72,7 @@ class _ALSModelParams(HasPredictionCol):
 class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval, HasSeed):
     """
     Params for :py:class:`ALS`.
+
     .. versionadded:: 3.0.0
     """
 
