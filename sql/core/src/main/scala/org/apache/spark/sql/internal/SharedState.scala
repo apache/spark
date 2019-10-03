@@ -18,7 +18,8 @@
 package org.apache.spark.sql.internal
 
 import java.net.URL
-import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.{Locale, UUID}
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
 
@@ -109,6 +111,8 @@ private[sql] class SharedState(
    * Class for caching query results reused in future executions.
    */
   val cacheManager: CacheManager = new CacheManager
+
+  private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamingQueryManager]()
 
   /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
