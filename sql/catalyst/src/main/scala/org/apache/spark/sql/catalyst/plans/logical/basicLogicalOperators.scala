@@ -961,3 +961,51 @@ case class Deduplicate(
  * This is used to whitelist such commands in the subquery-related checks.
  */
 trait SupportsSubquery extends LogicalPlan
+
+/**
+ * Collect arbitrary (named) metrics from a dataset. As soon as the query reaches a completion
+ * point (batch query completes or streaming query epoch completes) an event is emitted on the
+ * driver which can be observed by attaching a listener to the spark session. The metrics are named
+ * so we can collect metrics at multiple places in a single dataset.
+ *
+ * This node behaves like a global aggregate. All the metrics collected must be aggregate functions
+ * or be literals.
+ */
+case class CollectMetrics(
+    name: String,
+    metrics: Seq[NamedExpression],
+    child: LogicalPlan)
+  extends UnaryNode {
+
+  /**
+   * Check if an expression is a valid metric. A metric must meet the following criteria:
+   * - Is not a window function;
+   * - Is not nested aggregate function;
+   * - Is not a distinct aggregate function;
+   * - Has only non-deterministic functions that are nested inside an aggregate function;
+   * - Has only attributes that are nested inside an aggregate function.
+   *
+   * @param e expression to check.
+   * @param seenAggregate `true` iff one of the parents on the expression is an aggregate function.
+   * @return `true` if the metric is valid, `false` otherwise.
+   */
+  private def isValidMetric(e: Expression, seenAggregate: Boolean = false): Boolean = {
+    e match {
+      case _: WindowExpression => false
+      case a: AggregateExpression if seenAggregate || a.isDistinct => false
+      case _: AggregateExpression => e.children.forall(isValidMetric(_, seenAggregate = true))
+      case _: Nondeterministic if !seenAggregate => false
+      case _: Attribute if !seenAggregate => false
+      case _ => e.children.forall(isValidMetric(_, seenAggregate))
+    }
+  }
+
+  override lazy val resolved: Boolean = {
+    def metricsResolved: Boolean = metrics.forall { e =>
+      e.resolved && isValidMetric(e)
+    }
+    name.nonEmpty && metrics.nonEmpty && metricsResolved && childrenResolved
+  }
+
+  override def output: Seq[Attribute] = child.output
+}

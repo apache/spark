@@ -29,11 +29,11 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
-  RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -649,5 +649,75 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("SPARK-28251: Insert into non-existing table error message is user friendly") {
     assertAnalysisError(parsePlan("INSERT INTO test VALUES (1)"),
       Seq("Table not found: test"))
+  }
+
+  test("check CollectMetrics resolved") {
+    val a = testRelation.output.head
+    val sum = Sum(a).toAggregateExpression().as("sum")
+    val random_sum = Sum(Rand(1L)).toAggregateExpression().as("rand_sum")
+    val literal = Literal(1).as("lit")
+
+    // Ok
+    assert(CollectMetrics("event", literal :: sum :: random_sum :: Nil, testRelation).resolved)
+
+    // Bad name
+    assert(!CollectMetrics("", sum :: Nil, testRelation).resolved)
+
+    def checkUnresolved(exprs: NamedExpression*): Unit = {
+      assert(!CollectMetrics("event", exprs, testRelation).resolved)
+    }
+    // No columns
+    checkUnresolved()
+
+    // Unwrapped attribute
+    checkUnresolved(a)
+
+    // Unwrapped non-deterministic expression
+    checkUnresolved(Rand(10).as("rnd"))
+
+    // Distinct aggregate
+    checkUnresolved(Sum(a).toAggregateExpression(isDistinct = true).as("sum"))
+
+    // Nested aggregate
+    checkUnresolved(Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum"))
+
+    // Windowed aggregate
+    val windowExpr = WindowExpression(
+      RowNumber(),
+      WindowSpecDefinition(Nil, a.asc :: Nil,
+        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+    checkUnresolved(windowExpr.as("rn"))
+  }
+
+  test("check CollectMetrics duplicates") {
+    val a = testRelation.output.head
+    val sum = Sum(a).toAggregateExpression().as("sum")
+    val count = Count(Literal(1)).toAggregateExpression().as("cnt")
+
+    // Same result - duplicate names are allowed
+    assertAnalysisSuccess(Union(
+      CollectMetrics("evt1", count :: Nil, testRelation) ::
+      CollectMetrics("evt1", count :: Nil, testRelation) :: Nil))
+
+    // Same children, structurally different metrics - fail
+    assertAnalysisError(Union(
+      CollectMetrics("evt1", count :: Nil, testRelation) ::
+      CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
+      "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+
+    // Different children, same metrics - fail
+    val b = 'b.string
+    val tblB = LocalRelation(b)
+    assertAnalysisError(Union(
+      CollectMetrics("evt1", count :: Nil, testRelation) ::
+      CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
+      "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+
+    // Subquery different tree - fail
+    val subquery = Aggregate(Nil, sum :: Nil, CollectMetrics("evt1", count :: Nil, testRelation))
+    val query = Project(
+      b :: ScalarSubquery(subquery, Nil).as("sum") :: Nil,
+      CollectMetrics("evt1", count :: Nil, tblB))
+    assertAnalysisError(query, "Multiple definitions of observed metrics" :: "evt1" :: Nil)
   }
 }

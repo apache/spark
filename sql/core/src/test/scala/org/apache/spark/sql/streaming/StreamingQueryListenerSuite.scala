@@ -29,7 +29,7 @@ import org.scalatest.concurrent.Waiters.Waiter
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.{Encoder, SparkSession}
+import org.apache.spark.sql.{Encoder, Row, SparkSession}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
@@ -404,6 +404,63 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     testReplayListenerBusWithBorkenEventJsons("query-event-logs-version-2.0.2.txt")
   }
 
+  test("listener propagates observable metrics") {
+    import org.apache.spark.sql.functions._
+    val clock = new StreamManualClock
+    val inputData = new MemoryStream[Int](0, sqlContext)
+    val df = inputData.toDF()
+      .observe(
+        name = "my_event",
+        min($"value").as("min_val"),
+        max($"value").as("max_val"),
+        sum($"value").as("sum_val"),
+        count(when($"value" % 2 === 0, 1)).as("num_even"))
+      .observe(
+        name = "other_event",
+        avg($"value").cast("int").as("avg_val"))
+    val listener = new EventCollector
+    def checkMetrics(f: java.util.Map[String, Row] => Unit): StreamAction = {
+      AssertOnQuery { _ =>
+        eventually(Timeout(streamingTimeout)) {
+          assert(listener.allProgressEvents.nonEmpty)
+          f(listener.allProgressEvents.last.observedMetrics)
+          true
+        }
+      }
+    }
+
+    try {
+      spark.streams.addListener(listener)
+      testStream(df, OutputMode.Append)(
+        StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
+        // Batch 1
+        AddData(inputData, 1, 2),
+        AdvanceManualClock(100),
+        checkMetrics { metrics =>
+          assert(metrics.get("my_event") === Row(1, 2, 3L, 1L))
+          assert(metrics.get("other_event") === Row(1))
+        },
+
+        // Batch 2
+        AddData(inputData, 10, 30, -10, 5),
+        AdvanceManualClock(100),
+        checkMetrics { metrics =>
+          assert(metrics.get("my_event") === Row(-10, 30, 35L, 3L))
+          assert(metrics.get("other_event") === Row(8))
+        },
+
+        // Batch 3 - no data
+        AdvanceManualClock(100),
+        checkMetrics { metrics =>
+          assert(metrics.isEmpty)
+        },
+        StopStream
+      )
+    } finally {
+      spark.streams.removeListener(listener)
+    }
+  }
+
   private def testReplayListenerBusWithBorkenEventJsons(fileName: String): Unit = {
     val input = getClass.getResourceAsStream(s"/structured-streaming/$fileName")
     val events = mutable.ArrayBuffer[SparkListenerEvent]()
@@ -452,6 +509,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
       _progressEvents.filter(_.numInputRows > 0)
+    }
+
+    def allProgressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
+      _progressEvents.clone()
     }
 
     def reset(): Unit = {

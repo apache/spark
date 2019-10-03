@@ -2853,6 +2853,12 @@ object CleanupAliases extends Rule[LogicalPlan] {
       Window(cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
 
+    case CollectMetrics(name, metrics, child) =>
+      val cleanedMetrics = metrics.map {
+        e => trimNonTopLevelAliases(e).asInstanceOf[NamedExpression]
+      }
+      CollectMetrics(name, cleanedMetrics, child)
+
     // Operators that operate on objects should only have expressions from encoders, which should
     // never have extra aliases.
     case o: ObjectConsumer => o

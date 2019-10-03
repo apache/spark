@@ -14,8 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.catalyst.analysis
+
+import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -521,6 +522,7 @@ trait CheckAnalysis extends PredicateHelper {
           case _ => // Analysis successful!
         }
     }
+    checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -612,6 +614,38 @@ trait CheckAnalysis extends PredicateHelper {
     // Validate to make sure the correlations appearing in the query are valid and
     // allowed by spark.
     checkCorrelationsInSubquery(expr.plan)
+  }
+
+  /**
+   * Validate that collected metrics names are unique. The same name cannot be used for metrics
+   * with different results. However multiple instances of metrics with with same result and name
+   * are allowed (e.g. self-joins).
+   */
+  private def checkCollectedMetrics(plan: LogicalPlan): Unit = {
+    val metricsMap = mutable.Map.empty[String, LogicalPlan]
+    def check(plan: LogicalPlan): Unit = plan.foreach { node =>
+      node match {
+        case metrics @ CollectMetrics(name, _, _) =>
+          metricsMap.get(name) match {
+            case Some(other) =>
+              // Exact duplicates are allowed. They can be the result
+              // of a CTE that is used multiple times or a self join.
+              if (!metrics.sameResult(other)) {
+                failAnalysis(
+                  s"Multiple definitions of observed metrics named '$name': $plan")
+              }
+            case None =>
+              metricsMap.put(name, metrics)
+          }
+        case _ =>
+      }
+      node.expressions.foreach(_.foreach {
+        case subquery: SubqueryExpression =>
+          check(subquery.plan)
+        case _ =>
+      })
+    }
+    check(plan)
   }
 
   /**
