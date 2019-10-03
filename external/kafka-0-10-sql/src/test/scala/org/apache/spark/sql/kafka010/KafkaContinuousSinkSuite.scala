@@ -25,6 +25,8 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{BinaryType, DataType}
 import org.apache.spark.util.Utils
@@ -215,6 +217,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
   test("streaming - write data with bad schema") {
     val inputTopic = newTopic()
     testUtils.createTopic(inputTopic, partitions = 1)
+    testUtils.sendMessages(inputTopic, Array("0"))
 
     val input = spark
       .readStream
@@ -226,21 +229,21 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    val ex = intercept[AnalysisException] {
+    val ex = intercept[StreamingQueryException] {
       /* No topic field or topic option */
       createKafkaWriter(input.toDF())(
         withSelectExpr = "value as key", "value"
-      )
+      ).processAllAvailable()
     }
     assert(ex.getMessage
       .toLowerCase(Locale.ROOT)
       .contains("topic option required when no 'topic' attribute is present"))
 
-    val ex2 = intercept[AnalysisException] {
+    val ex2 = intercept[StreamingQueryException] {
       /* No value field */
       createKafkaWriter(input.toDF())(
         withSelectExpr = s"'$topic' as topic", "value as key"
-      )
+      ).processAllAvailable()
     }
     assert(ex2.getMessage.toLowerCase(Locale.ROOT).contains(
       "required attribute 'value' not found"))
@@ -249,6 +252,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
   test("streaming - write data with valid schema but wrong types") {
     val inputTopic = newTopic()
     testUtils.createTopic(inputTopic, partitions = 1)
+    testUtils.sendMessages(inputTopic, Array("0"))
 
     val input = spark
       .readStream
@@ -261,28 +265,28 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    val ex = intercept[AnalysisException] {
+    val ex = intercept[StreamingQueryException] {
       /* topic field wrong type */
       createKafkaWriter(input.toDF())(
         withSelectExpr = s"CAST('1' as INT) as topic", "value"
-      )
+      ).processAllAvailable()
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("topic type must be a string"))
 
-    val ex2 = intercept[AnalysisException] {
+    val ex2 = intercept[StreamingQueryException] {
       /* value field wrong type */
       createKafkaWriter(input.toDF())(
         withSelectExpr = s"'$topic' as topic", "CAST(value as INT) as value"
-      )
+      ).processAllAvailable()
     }
     assert(ex2.getMessage.toLowerCase(Locale.ROOT).contains(
       "value attribute type must be a string or binary"))
 
-    val ex3 = intercept[AnalysisException] {
+    val ex3 = intercept[StreamingQueryException] {
       /* key field wrong type */
       createKafkaWriter(input.toDF())(
         withSelectExpr = s"'$topic' as topic", "CAST(value as INT) as key", "value"
-      )
+      ).processAllAvailable()
     }
     assert(ex3.getMessage.toLowerCase(Locale.ROOT).contains(
       "key attribute type must be a string or binary"))
@@ -330,18 +334,18 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
       .option("subscribe", inputTopic)
       .load()
 
-    val ex = intercept[IllegalArgumentException] {
+    val ex = intercept[StreamingQueryException] {
       createKafkaWriter(
         input.toDF(),
-        withOptions = Map("kafka.key.serializer" -> "foo"))()
+        withOptions = Map("kafka.key.serializer" -> "foo"))().processAllAvailable()
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       "kafka option 'key.serializer' is not supported"))
 
-    val ex2 = intercept[IllegalArgumentException] {
+    val ex2 = intercept[StreamingQueryException] {
       createKafkaWriter(
         input.toDF(),
-        withOptions = Map("kafka.value.serializer" -> "foo"))()
+        withOptions = Map("kafka.value.serializer" -> "foo"))().processAllAvailable()
     }
     assert(ex2.getMessage.toLowerCase(Locale.ROOT).contains(
       "kafka option 'value.serializer' is not supported"))

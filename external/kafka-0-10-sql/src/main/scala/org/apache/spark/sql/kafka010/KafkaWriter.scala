@@ -50,7 +50,7 @@ private[kafka010] object KafkaWriter extends Logging {
       topic: Option[String] = None): Unit = {
     schema.find(_.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
       if (topic.isEmpty) {
-        throw new AnalysisException(s"topic option required when no " +
+        throw new IllegalArgumentException(s"topic option required when no " +
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present. Use the " +
           s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a topic.")
       } else {
@@ -59,22 +59,22 @@ private[kafka010] object KafkaWriter extends Logging {
     ).dataType match {
       case StringType => // good
       case _ =>
-        throw new AnalysisException(s"Topic type must be a ${StringType.catalogString}")
+        throw new IllegalArgumentException(s"Topic type must be a ${StringType.catalogString}")
     }
     schema.find(_.name == KEY_ATTRIBUTE_NAME).getOrElse(
       Literal(null, StringType)
     ).dataType match {
       case StringType | BinaryType => // good
       case _ =>
-        throw new AnalysisException(s"$KEY_ATTRIBUTE_NAME attribute type " +
+        throw new IllegalArgumentException(s"$KEY_ATTRIBUTE_NAME attribute type " +
           s"must be a ${StringType.catalogString} or ${BinaryType.catalogString}")
     }
     schema.find(_.name == VALUE_ATTRIBUTE_NAME).getOrElse(
-      throw new AnalysisException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
+      throw new IllegalArgumentException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
     ).dataType match {
       case StringType | BinaryType => // good
       case _ =>
-        throw new AnalysisException(s"$VALUE_ATTRIBUTE_NAME attribute type " +
+        throw new IllegalArgumentException(s"$VALUE_ATTRIBUTE_NAME attribute type " +
           s"must be a ${StringType.catalogString} or ${BinaryType.catalogString}")
     }
     schema.find(_.name == HEADERS_ATTRIBUTE_NAME).getOrElse(
@@ -83,7 +83,7 @@ private[kafka010] object KafkaWriter extends Logging {
     ).dataType match {
       case KafkaRecordToRowConverter.headersType => // good
       case _ =>
-        throw new AnalysisException(s"$HEADERS_ATTRIBUTE_NAME attribute type " +
+        throw new IllegalArgumentException(s"$HEADERS_ATTRIBUTE_NAME attribute type " +
           s"must be a ${KafkaRecordToRowConverter.headersType.catalogString}")
     }
   }
