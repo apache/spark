@@ -49,7 +49,8 @@ public final class CalendarInterval implements Serializable {
 
   private static Pattern p = Pattern.compile("interval" + unitRegex("year") + unitRegex("month") +
     unitRegex("week") + unitRegex("day") + unitRegex("hour") + unitRegex("minute") +
-    unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"));
+    unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"),
+    Pattern.CASE_INSENSITIVE);
 
   private static Pattern yearMonthPattern =
     Pattern.compile("^(?:['|\"])?([+|-])?(\\d+)-(\\d+)(?:['|\"])?$");
