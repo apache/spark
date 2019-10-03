@@ -20,7 +20,7 @@ import scala.collection.mutable
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSeq, BindReferences, Expression, InterpretedMutableProjection, InterpretedUnsafeProjection, JoinedRow, MutableProjection, NamedExpression, Projection, SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSeq, BindReferences, Expression, InterpretedMutableProjection, InterpretedUnsafeProjection, JoinedRow, MutableProjection, NamedExpression, Projection, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, ImperativeAggregate, NoOp, TypedImperativeAggregate}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -33,15 +33,15 @@ class AggregatingAccumulator private(
     bufferSchema: Seq[DataType],
     initialValues: Seq[Expression],
     updateExpressions: Seq[Expression],
-    @transient private var mergeExpressions: Seq[Expression],
-    @transient private var resultExpressions: Seq[Expression],
+    @transient private val mergeExpressions: Seq[Expression],
+    @transient private val resultExpressions: Seq[Expression],
     imperatives: Array[ImperativeAggregate],
     typedImperatives: Array[TypedImperativeAggregate[_]],
-    @transient private var conf: SQLConf)
+    @transient private val conf: SQLConf)
   extends AccumulatorV2[InternalRow, InternalRow] {
   assert(bufferSchema.size == initialValues.size)
   assert(bufferSchema.size == updateExpressions.size)
-  assert(bufferSchema.size == mergeExpressions.size)
+  assert(mergeExpressions == null || bufferSchema.size == mergeExpressions.size)
 
   private[this] var joinedRow: JoinedRow = _
 
@@ -83,16 +83,26 @@ class AggregatingAccumulator private(
   }
 
   @transient
-  private[this] lazy val mergeProjection = SQLConf.withExistingConf(conf) {
-    initializeProjection {
-      InterpretedMutableProjection.createProjection(mergeExpressions)
-    }
+  private[this] lazy val mergeProjection = initializeProjection {
+    InterpretedMutableProjection.createProjection(mergeExpressions)
   }
 
   @transient
-  private[this] lazy val resultProjection = SQLConf.withExistingConf(conf) {
-    initializeProjection {
-      InterpretedUnsafeProjection.createProjection(resultExpressions)
+  private[this] lazy val resultProjection = initializeProjection {
+    InterpretedUnsafeProjection.createProjection(resultExpressions)
+  }
+
+  /**
+   * Driver side operations like `merge` and `value` are executed in the DAGScheduler thread. This
+   * thread does not have a SQL configuration so we attach our own here. Note that we can't (and
+   * shouldn't) call `merge` or `value` on an accumulator originating from an executor so we just
+   * return a default value here.
+   */
+  private[this] def withSQLConf[T](default: => T)(body: => T): T = {
+    if (conf != null) {
+      SQLConf.withExistingConf(conf)(body)
+    } else {
+      default
     }
   }
 
@@ -136,33 +146,31 @@ class AggregatingAccumulator private(
     }
   }
 
-  override def merge(other: AccumulatorV2[InternalRow, InternalRow]): Unit = {
-    SQLConf.withExistingConf(conf) {
-      if (!other.isZero) {
-        other match {
-          case agg: AggregatingAccumulator =>
-            val buffer = getOrCreateBuffer()
-            val otherBuffer = agg.buffer
-            mergeProjection.target(buffer)(joinedRow.withRight(otherBuffer))
-            var i = 0
-            while (i < imperatives.length) {
-              imperatives(i).merge(buffer, otherBuffer)
-              i += 1
-            }
-            i = 0
-            while (i < typedImperatives.length) {
-              typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
-              i += 1
-            }
-          case _ =>
-            throw new UnsupportedOperationException(
-              s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
-        }
+  override def merge(other: AccumulatorV2[InternalRow, InternalRow]): Unit = withSQLConf(()) {
+    if (!other.isZero) {
+      other match {
+        case agg: AggregatingAccumulator =>
+          val buffer = getOrCreateBuffer()
+          val otherBuffer = agg.buffer
+          mergeProjection.target(buffer)(joinedRow.withRight(otherBuffer))
+          var i = 0
+          while (i < imperatives.length) {
+            imperatives(i).merge(buffer, otherBuffer)
+            i += 1
+          }
+          i = 0
+          while (i < typedImperatives.length) {
+            typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
+            i += 1
+          }
+        case _ =>
+          throw new UnsupportedOperationException(
+            s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
       }
     }
   }
 
-  override def value: InternalRow = SQLConf.withExistingConf(conf) {
+  override def value: InternalRow = withSQLConf(InternalRow.empty) {
     // Either use the existing buffer or create a temporary one.
     val input = if (buffer != null) {
       buffer
