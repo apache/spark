@@ -112,7 +112,7 @@ abstract class RDD[T: ClassTag](
    * because DAGs are acyclic, and we only ever hold locks for one path in that DAG, there is no
    * chance of deadlock.
    */
-  private val stateLock = new Object()
+  private val stateLock = new SerializableObject()
 
   /** Construct an RDD with just a one-to-one dependency on one parent */
   def this(@transient oneParent: RDD[_]) =
@@ -1978,6 +1978,14 @@ abstract class RDD[T: ClassTag](
       deterministicLevelCandidates.maxBy(_.id)
     }
   }
+
+  /**
+   * The only purpose of this class is to have something to lock (like a generic Object) but that
+   * will also survive serialization.  Obviously, the locks themselves don't survive serialization,
+   * but we really only need the locks in the driver, and just don't want things to break with NPEs
+   * on the executors.
+   */
+  private class SerializableObject extends Serializable
 }
 
 
