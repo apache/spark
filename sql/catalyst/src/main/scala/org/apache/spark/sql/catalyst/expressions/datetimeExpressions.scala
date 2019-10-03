@@ -1273,9 +1273,9 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');
-       3.94866424
+       3.94959677
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30', false);
-       3.9486642436189654
+       3.9495967741935485
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
