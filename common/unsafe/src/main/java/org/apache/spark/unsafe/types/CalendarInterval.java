@@ -70,7 +70,7 @@ public final class CalendarInterval implements Serializable {
 
   /**
    * Convert a string to CalendarInterval. Return null if the input string is not a valid interval.
-   * This method is case-sensitive and all characters in the input string should be in lower case.
+   * This method is case-insensitive.
    */
   public static CalendarInterval fromString(String s) {
     if (s == null) {
@@ -94,12 +94,13 @@ public final class CalendarInterval implements Serializable {
   }
 
   /**
-   * Convert a string to CalendarInterval. Unlike fromString, this method is case-insensitive and
-   * will throw IllegalArgumentException when the input string is not a valid interval.
+   * Convert a string to CalendarInterval. Unlike fromString, this method can handle
+   * strings without the `interval` prefix and throws IllegalArgumentException
+   * when the input string is not a valid interval.
    *
    * @throws IllegalArgumentException if the string is not a valid internal.
    */
-  public static CalendarInterval fromCaseInsensitiveString(String s) {
+  public static CalendarInterval fromStringWithOptionalPrefix(String s) {
     if (s == null || s.trim().isEmpty()) {
       throw new IllegalArgumentException("Interval cannot be null or blank.");
     }
