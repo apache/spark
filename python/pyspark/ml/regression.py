@@ -798,6 +798,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel, _DecisionTreeRegressorParam
 class _RandomForestRegressorParams(RandomForestParams, TreeRegressorParams):
     """
     Params for :py:class:`RandomForestRegressor` and :py:class:`RandomForestRegressionModel`.
+
     .. versionadded:: 3.0.0
     """
     pass
