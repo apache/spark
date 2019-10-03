@@ -591,6 +591,8 @@ class CloudPickler(Pickler):
             state['annotations'] = func.__annotations__
         if hasattr(func, '__qualname__'):
             state['qualname'] = func.__qualname__
+        if hasattr(func, '__kwdefaults__'):
+            state['kwdefaults'] = func.__kwdefaults__
         save(state)
         write(pickle.TUPLE)
         write(pickle.REDUCE)  # applies _fill_function on the tuple
@@ -665,6 +667,15 @@ class CloudPickler(Pickler):
         # is no such limitation when using Cloudpickler.dump, as long as the
         # multiple invokations are bound to the same Cloudpickler.
         base_globals = self.globals_ref.setdefault(id(func.__globals__), {})
+
+        if base_globals == {}:
+            # Add module attributes used to resolve relative imports
+            # instructions inside func.
+            for k in ["__package__", "__name__", "__path__", "__file__"]:
+                # Some built-in functions/methods such as object.__new__  have
+                # their __globals__ set to None in PyPy
+                if func.__globals__ is not None and k in func.__globals__:
+                    base_globals[k] = func.__globals__[k]
 
         return (code, f_globals, defaults, closure, dct, base_globals)
 
@@ -979,43 +990,6 @@ def _restore_attr(obj, attr):
     return obj
 
 
-def _get_module_builtins():
-    return pickle.__builtins__
-
-
-def print_exec(stream):
-    ei = sys.exc_info()
-    traceback.print_exception(ei[0], ei[1], ei[2], None, stream)
-
-
-def _modules_to_main(modList):
-    """Force every module in modList to be placed into main"""
-    if not modList:
-        return
-
-    main = sys.modules['__main__']
-    for modname in modList:
-        if type(modname) is str:
-            try:
-                mod = __import__(modname)
-            except Exception:
-                sys.stderr.write('warning: could not import %s\n.  '
-                                 'Your function may unexpectedly error due to this import failing;'
-                                 'A version mismatch is likely.  Specific error was:\n' % modname)
-                print_exec(sys.stderr)
-            else:
-                setattr(main, mod.__name__, mod)
-
-
-# object generators:
-def _genpartial(func, args, kwds):
-    if not args:
-        args = ()
-    if not kwds:
-        kwds = {}
-    return partial(func, *args, **kwds)
-
-
 def _gen_ellipsis():
     return Ellipsis
 
@@ -1103,6 +1077,8 @@ def _fill_function(*args):
         func.__module__ = state['module']
     if 'qualname' in state:
         func.__qualname__ = state['qualname']
+    if 'kwdefaults' in state:
+        func.__kwdefaults__ = state['kwdefaults']
 
     cells = func.__closure__
     if cells is not None:
@@ -1186,15 +1162,6 @@ def _is_dynamic(module):
         except ImportError:
             return True
         return False
-
-
-"""Constructors for 3rd party libraries
-Note: These can never be renamed due to client compatibility issues"""
-
-
-def _getobject(modname, attribute):
-    mod = __import__(modname, fromlist=[attribute])
-    return mod.__dict__[attribute]
 
 
 """ Use copy_reg to extend global pickle definitions """
