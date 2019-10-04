@@ -165,13 +165,11 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${viewName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
-    case ShowNamespacesStatement(Some(NonSessionCatalog(catalog, nameParts)), pattern) =>
-      val namespace = if (nameParts.isEmpty) None else Some(nameParts)
+    case ShowNamespacesStatement(Some(CurrentCatalogAndNamespace(catalog, namespace)), pattern) =>
       ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)
 
-    // TODO (SPARK-29014): we should check if the current catalog is not session catalog here.
-    case ShowNamespacesStatement(None, pattern) if defaultCatalog.isDefined =>
-      ShowNamespaces(defaultCatalog.get.asNamespaceCatalog, None, pattern)
+    case ShowNamespacesStatement(None, pattern) =>
+      ShowNamespaces(currentCatalog.asNamespaceCatalog, None, pattern)
 
     case ShowTablesStatement(Some(NonSessionCatalog(catalog, nameParts)), pattern) =>
       ShowTables(catalog.asTableCatalog, nameParts, pattern)
@@ -185,8 +183,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
       } else {
         val CurrentCatalogAndNamespace(catalog, namespace) = nameParts
-        val ns = if (namespace.isEmpty) { None } else { Some(namespace) }
-        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), ns)
+        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
       }
   }
 

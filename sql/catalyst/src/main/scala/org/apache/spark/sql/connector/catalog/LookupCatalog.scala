@@ -102,7 +102,7 @@ private[sql] trait LookupCatalog extends Logging {
     }
   }
 
-  type CurrentCatalogAndNamespace = (CatalogPlugin, Seq[String])
+  type CurrentCatalogAndNamespace = (CatalogPlugin, Option[Seq[String]])
 
   /**
    * Extract catalog and namespace from a multi-part identifier with the current catalog if needed.
@@ -112,10 +112,11 @@ private[sql] trait LookupCatalog extends Logging {
     def unapply(parts: Seq[String]): Some[CurrentCatalogAndNamespace] = parts match {
       case Seq(catalogName, tail @ _*) =>
         try {
-          Some((catalogManager.catalog(catalogName), tail))
+          Some(
+            (catalogManager.catalog(catalogName), if (tail.isEmpty) { None } else { Some(tail) }))
         } catch {
           case _: CatalogNotFoundException =>
-            Some((currentCatalog, parts))
+            Some((currentCatalog, Some(parts)))
         }
     }
   }
