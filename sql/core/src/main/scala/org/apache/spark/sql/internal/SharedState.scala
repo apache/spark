@@ -112,6 +112,10 @@ private[sql] class SharedState(
    */
   val cacheManager: CacheManager = new CacheManager
 
+  /**
+   * A map of active streaming queries to the session specific StreamingQueryManager that manages
+   * the lifecycle of that stream.
+   */
   private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamingQueryManager]()
 
   /**
