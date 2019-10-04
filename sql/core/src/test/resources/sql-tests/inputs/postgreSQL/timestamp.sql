@@ -175,9 +175,8 @@ SELECT '' AS `16`, d1 FROM TIMESTAMP_TBL
 SELECT '' AS `49`, d1 FROM TIMESTAMP_TBL
    WHERE d1 >= timestamp '1997-01-02';
 
--- [SPARK-28425] Add more Date/Time Operators
--- SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
---    FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01';
+SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
+   FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01';
 
 SELECT '' AS date_trunc_week, date_trunc( 'week', timestamp '2004-02-29 15:44:17.71393' ) AS week_trunc;
 
