@@ -211,6 +211,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
       (localBmId, localBlocks.map(blockId => (blockId, 1L, 0))),
       (remoteBmId, remoteBlocks.map(blockId => (blockId, 1L, 1)))
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
+      (hostLocalBmIdNoLocDir, remoteBlocksAsFallback.keys.map(blockId => (blockId, 1L, 1)).toSeq)
     ).toIterator
 
     val taskContext = TaskContext.empty()
