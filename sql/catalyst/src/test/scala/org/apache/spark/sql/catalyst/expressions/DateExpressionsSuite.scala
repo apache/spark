@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{LocalDateTime, ZoneId, ZoneOffset}
+import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
@@ -1068,5 +1068,23 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         SecondWithFraction(timestamp.copy(sec = Literal(Decimal(1, 8, 6)))),
         Decimal(0.000001, 8, 6))
     }
+  }
+
+  test("timestamps difference") {
+    val end = Instant.parse("2019-10-04T11:04:01.123456Z")
+    checkEvaluation(TimestampDiff(Literal(end), Literal(end)),
+      new CalendarInterval(0, 0))
+    checkEvaluation(TimestampDiff(Literal(end), Literal(Instant.EPOCH)),
+      CalendarInterval.fromString("interval 18173 days " +
+        "11 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds"))
+    checkEvaluation(TimestampDiff(Literal(Instant.EPOCH), Literal(end)),
+      CalendarInterval.fromString("interval -18173 days " +
+        "-11 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds"))
+    checkEvaluation(
+      TimestampDiff(
+        Literal(Instant.parse("9999-12-31T23:59:59.999999Z")),
+        Literal(Instant.parse("0001-01-01T00:00:00Z"))),
+      CalendarInterval.fromString("interval 521722 weeks 4 days " +
+        "23 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds"))
   }
 }
