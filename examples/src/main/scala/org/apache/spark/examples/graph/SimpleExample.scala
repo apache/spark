@@ -23,8 +23,7 @@ import org.apache.spark.cypher.SparkCypherSession
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 
-object SimpleDemo {
-
+object SimpleExample {
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession.
     val spark = SparkSession
@@ -33,14 +32,14 @@ object SimpleDemo {
       .getOrCreate()
     val sc = spark.sparkContext
 
-    // Initialise a GraphSession
-    val cypherSession = SparkCypherSession.create(spark)
-
     // Create node df and edge df
     val nodeData: DataFrame = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob"))
       .toDF("id", "name")
     val relationshipData: DataFrame = spark.createDataFrame(Seq((0, 0, 1)))
       .toDF("id", "source", "target")
+
+    // Initialise a GraphSession
+    val cypherSession = SparkCypherSession.create(spark)
 
     // Create a PropertyGraph
     val graph = cypherSession.createGraph(nodeData, relationshipData)
