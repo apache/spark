@@ -29,10 +29,7 @@ class QuantileSummariesSuite extends SparkFunSuite {
   private val decreasing = "decreasing" -> (n until 0 by -1).map(_.toDouble)
   private val random = "random" -> Seq.fill(n)(math.ceil(r.nextDouble() * 1000))
 
-  private def buildSummary(
-      data: Seq[Double],
-      epsi: Double,
-      threshold: Int): QuantileSummaries = {
+  private def buildSummary(data: Seq[Double], epsi: Double, threshold: Int): QuantileSummaries = {
     var summary = new QuantileSummaries(threshold, epsi)
     data.foreach { x =>
       summary = summary.insert(x)
@@ -54,7 +51,10 @@ class QuantileSummariesSuite extends SparkFunSuite {
     summary
   }
 
-  private def checkQuantile(quant: Double, data: Seq[Double], summary: QuantileSummaries): Unit = {
+  private def checkQuantile(
+      quant: Double,
+      data: Seq[Double],
+      summary: QuantileSummaries): Unit = {
     if (data.nonEmpty) {
       val approx = summary.query(quant).get
       // Get the rank of the approximation.
@@ -100,8 +100,9 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantile(0.001, data, s)
     }
 
-    test(s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression " +
-      s"(interleaved)") {
+    test(
+      s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression " +
+        s"(interleaved)") {
       val s = buildCompressSummary(data, epsi, compression)
       assert(s.count == data.size, s"Found count=${s.count} but data size=${data.size}")
       checkQuantile(0.9999, data, s)
@@ -174,8 +175,9 @@ class QuantileSummariesSuite extends SparkFunSuite {
     val data21 = data.zipWithIndex.filter(_._2 % 5 != 0).map(_._1).toSeq
     val data22 = data.zipWithIndex.filter(_._2 % 5 == 0).map(_._1).toSeq
 
-    test(s"Merging unbalanced interleaved lists with epsi=$epsi and seq=$seq_name, " +
-    s"compression=$compression") {
+    test(
+      s"Merging unbalanced interleaved lists with epsi=$epsi and seq=$seq_name, " +
+        s"compression=$compression") {
       val s1 = buildSummary(data21, epsi, compression)
       val s2 = buildSummary(data22, epsi, compression)
       val s = s1.merge(s2)
