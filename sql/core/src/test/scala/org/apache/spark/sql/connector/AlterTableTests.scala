@@ -50,7 +50,7 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       assert(exc.getMessage.contains(s"${catalogAndNamespace}table_name"))
-      assert(exc.getMessage.contains("Table or view not found"))
+      assert(exc.getMessage.contains("Table not found"))
     }
   }
 
