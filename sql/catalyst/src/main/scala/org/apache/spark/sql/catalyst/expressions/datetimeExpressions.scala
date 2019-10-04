@@ -2113,6 +2113,6 @@ case class TimestampDiff(endTimestamp: Expression, startTimestamp: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (end, start) =>
-      s"new org.apache.spark.unsafe.types.CalendarInterval(0, $end - $start")
+      s"new org.apache.spark.unsafe.types.CalendarInterval(0, $end - $start)")
   }
 }
