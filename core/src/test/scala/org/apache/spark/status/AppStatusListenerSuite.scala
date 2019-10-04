@@ -699,8 +699,16 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val rdd2b1 = RddBlock(2, 1, 5L, 6L)
     val level = StorageLevel.MEMORY_AND_DISK
 
+    // Submit a stage for the first RDD before it's marked for caching, to make sure later
+    // the listener picks up the correct storage level.
+    val rdd1Info = new RDDInfo(rdd1b1.rddId, "rdd1", 2, StorageLevel.NONE, false, Nil)
+    val stage0 = new StageInfo(0, 0, "stage0", 4, Seq(rdd1Info), Nil, "details0")
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage0, new Properties()))
+    listener.onStageCompleted(SparkListenerStageCompleted(stage0))
+    assert(store.count(classOf[RDDStorageInfoWrapper]) === 0)
+
     // Submit a stage and make sure the RDDs are recorded.
-    val rdd1Info = new RDDInfo(rdd1b1.rddId, "rdd1", 2, level, false, Nil)
+    rdd1Info.storageLevel = level
     val rdd2Info = new RDDInfo(rdd2b1.rddId, "rdd2", 1, level, false, Nil)
     val stage = new StageInfo(1, 0, "stage1", 4, Seq(rdd1Info, rdd2Info), Nil, "details1")
     listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))

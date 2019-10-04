@@ -458,6 +458,12 @@ private class LiveStage extends LiveEntity {
 
 }
 
+/**
+ * Data about a single partition of a cached RDD. The RDD storage level is used to compute the
+ * effective storage level of the partition, which takes into account the storage actually being
+ * used by the partition in the executors, and thus may differ from the storage level requested
+ * by the application.
+ */
 private class LiveRDDPartition(val blockName: String, rddLevel: StorageLevel) {
 
   import LiveEntityHelpers._
@@ -522,9 +528,12 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
 }
 
 /**
- * Tracker for data related to a persisted RDD. Note the storage level is kept immutable here,
- * following the current behavior of `RDD.persist()`, even though it is mutable in the `RDDInfo`
- * structure.
+ * Tracker for data related to a persisted RDD.
+ *
+ * The RDD storage level is immutable, following the current behavior of `RDD.persist()`, even
+ * though it is mutable in the `RDDInfo` structure. Since the listener does not track unpersisted
+ * RDDs, this covers the case where an early stage is run on the unpersisted RDD, and a later stage
+ * it started after the RDD is marked for caching.
  */
 private class LiveRDD(val info: RDDInfo, storageLevel: StorageLevel) extends LiveEntity {
 
