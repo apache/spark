@@ -61,14 +61,14 @@ object UnresolvedRelation {
 }
 
 /**
- * A variant of [[UnresolvedRelation]] which can only be resolved to a v2 table
- * (`DataSourceV2Relation`), not view or temp view.
+ * A variant of [[UnresolvedRelation]] which can only be resolved to a v2 relation
+ * (`DataSourceV2Relation`), not v1 relation or temp view.
  *
  * @param originalNameParts the original table identifier name parts before catalog is resolved.
  * @param catalog The catalog which the table should be looked up from.
  * @param tableName The name of the table to look up.
  */
-case class UnresolvedV2Table(
+case class UnresolvedV2Relation(
     originalNameParts: Seq[String],
     catalog: TableCatalog,
     tableName: Identifier)

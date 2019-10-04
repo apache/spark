@@ -63,7 +63,7 @@ class ResolveSessionCatalog(
          nameParts @ SessionCatalog(catalog, tableName), colName, dataType, comment) =>
       loadTable(catalog, tableName.asIdentifier).collect {
         case v1Table: V1Table =>
-          // TODO: we should fallback to the v1 `AlterTableChangeColumnCommand`.
+          // TODO(SPARK-29353): we should fallback to the v1 `AlterTableChangeColumnCommand`.
           throw new AnalysisException("ALTER COLUMN is only supported with v2 tables.")
       }.getOrElse {
         val typeChange = dataType.map { newDataType =>
@@ -141,7 +141,7 @@ class ResolveSessionCatalog(
         case v1Table: V1Table =>
           throw new AnalysisException("DELETE FROM is only supported with v2 tables.")
       }.getOrElse {
-        val r = UnresolvedV2Table(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
+        val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
         val aliased = tableAlias.map(SubqueryAlias(_, r)).getOrElse(r)
         DeleteFromTable(aliased, condition)
       }
@@ -157,9 +157,9 @@ class ResolveSessionCatalog(
           DescribeTableCommand(tableName.asTableIdentifier, partitionSpec, isExtended)
         } else {
           if (partitionSpec.nonEmpty) {
-            throw new AnalysisException("DESC TABLE does not support partition for v2 tables.")
+            throw new AnalysisException("DESCRIBE TABLE does not support partition for v2 tables.")
           }
-          val r = UnresolvedV2Table(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
+          val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
           DescribeTable(r, isExtended)
         }
       }
@@ -321,16 +321,6 @@ class ResolveSessionCatalog(
         Some(catalog -> parts)
       case _ => None
     }
-  }
-
-  def createV2AlterTable(
-      catalog: CatalogPlugin,
-      tableName: Seq[String],
-      table: Table,
-      changes: Seq[TableChange]): AlterTable = {
-    val tableCatalog = catalog.asTableCatalog
-    val ident = tableName.asIdentifier
-    AlterTable(tableCatalog, ident, DataSourceV2Relation.create(table), changes)
   }
 
   private def assertTopLevelColumn(colName: Seq[String], command: String): Unit = {

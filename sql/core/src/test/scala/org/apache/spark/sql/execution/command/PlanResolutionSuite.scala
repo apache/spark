@@ -26,15 +26,15 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedV2Table}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelect, CreateV2Table, DescribeTable, DropTable, LogicalPlan}
 import org.apache.spark.sql.connector.InMemoryTableProvider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.internal.SQLConf.DEFAULT_V2_CATALOG
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
@@ -78,6 +78,11 @@ class PlanResolutionSuite extends AnalysisTest {
     newCatalog
   }
 
+  private val v1SessionCatalog: SessionCatalog = new SessionCatalog(
+    new InMemoryCatalog,
+    EmptyFunctionRegistry,
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+
   private val catalogManagerWithDefault = {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
@@ -90,6 +95,7 @@ class PlanResolutionSuite extends AnalysisTest {
     })
     when(manager.defaultCatalog).thenReturn(Some(testCat))
     when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
+    when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
 
@@ -105,6 +111,7 @@ class PlanResolutionSuite extends AnalysisTest {
     })
     when(manager.defaultCatalog).thenReturn(None)
     when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
+    when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
 
@@ -323,7 +330,7 @@ class PlanResolutionSuite extends AnalysisTest {
         |COMMENT 'This is the staging page view table'
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT 1
+        |AS SELECT * FROM src
       """.stripMargin
 
     val s2 =
@@ -333,7 +340,7 @@ class PlanResolutionSuite extends AnalysisTest {
         |LOCATION '/user/external/page_view'
         |COMMENT 'This is the staging page view table'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT 1
+        |AS SELECT * FROM src
       """.stripMargin
 
     val s3 =
@@ -343,7 +350,7 @@ class PlanResolutionSuite extends AnalysisTest {
         |COMMENT 'This is the staging page view table'
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT 1
+        |AS SELECT * FROM src
       """.stripMargin
 
     checkParsing(s1)
@@ -491,7 +498,7 @@ class PlanResolutionSuite extends AnalysisTest {
          |COMMENT 'table comment'
          |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
          |OPTIONS (path 's3://bucket/path/to/data', other 20)
-         |AS SELECT 1
+         |AS SELECT * FROM src
       """.stripMargin
 
     val expectedProperties = Map(
@@ -525,7 +532,7 @@ class PlanResolutionSuite extends AnalysisTest {
          |COMMENT 'table comment'
          |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
          |OPTIONS (path 's3://bucket/path/to/data', other 20)
-         |AS SELECT 1
+         |AS SELECT * FROM src
       """.stripMargin
 
     val expectedProperties = Map(
@@ -559,7 +566,7 @@ class PlanResolutionSuite extends AnalysisTest {
         |COMMENT 'This is the staging page view table'
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
-        |AS SELECT 1
+        |AS SELECT * FROM src
       """.stripMargin
 
     val expectedProperties = Map(
@@ -728,11 +735,11 @@ class PlanResolutionSuite extends AnalysisTest {
 
     // For non-existing tables, we convert it to v2 command with `UnresolvedV2Table`
     parsed4 match {
-      case AlterTable(_, _, _: UnresolvedV2Table, _) => // OK
+      case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
       case _ => fail("unexpected plan:\n" + parsed4.treeString)
     }
     parsed5 match {
-      case AlterTable(_, _, _: UnresolvedV2Table, _) => // OK
+      case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
       case _ => fail("unexpected plan:\n" + parsed5.treeString)
     }
   }
@@ -822,7 +829,7 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed3, expected3)
         } else {
           val e = intercept[AnalysisException](parseAndResolve(sql3))
-          assert(e.message.contains("DESC TABLE does not support partition for v2 tables"))
+          assert(e.message.contains("DESCRIBE TABLE does not support partition for v2 tables"))
         }
     }
 

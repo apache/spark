@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Table}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.plans.logical.AlterTable
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
@@ -275,7 +275,7 @@ private[sql] object CatalogV2Util {
       changes: Seq[TableChange]): AlterTable = {
     val tableCatalog = catalog.asTableCatalog
     val ident = tableName.asIdentifier
-    val unresolved = UnresolvedV2Table(originalNameParts, tableCatalog, ident)
+    val unresolved = UnresolvedV2Relation(originalNameParts, tableCatalog, ident)
     AlterTable(tableCatalog, ident, unresolved, changes)
   }
 }

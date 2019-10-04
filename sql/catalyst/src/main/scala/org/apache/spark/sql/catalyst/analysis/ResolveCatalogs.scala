@@ -92,19 +92,19 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case DeleteFromStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), tableAlias, condition) =>
-      val r = UnresolvedV2Table(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
+      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
       val aliased = tableAlias.map(SubqueryAlias(_, r)).getOrElse(r)
       DeleteFromTable(aliased, condition)
 
     case update: UpdateTableStatement =>
-      throw new AnalysisException(s"Update table is not supported temporarily.")
+      throw new AnalysisException(s"UPDATE TABLE is not supported temporarily.")
 
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
-        throw new AnalysisException("DESC TABLE does not support partition for v2 tables.")
+        throw new AnalysisException("DESCRIBE TABLE does not support partition for v2 tables.")
       }
-      val r = UnresolvedV2Table(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
+      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
       DescribeTable(r, isExtended)
 
     case DescribeColumnStatement(
@@ -157,7 +157,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         writeOptions = c.options.filterKeys(_ != "path"),
         orCreate = c.orCreate)
 
-    case DropTableStatement(NonSessionCatalog(catalog, tableName), ifExists, purge) =>
+    case DropTableStatement(NonSessionCatalog(catalog, tableName), ifExists, _) =>
       DropTable(catalog.asTableCatalog, tableName.asIdentifier, ifExists)
 
     case DropViewStatement(NonSessionCatalog(catalog, viewName), _) =>

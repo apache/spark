@@ -1138,7 +1138,7 @@ class DataSourceV2SQLSuite
            |(4L, 'Frank', 33, 3)
          """.stripMargin)
     }
-    val errMsg = "Update table is not supported temporarily"
+    val errMsg = "UPDATE TABLE is not supported temporarily"
     testCreateAnalysisError(
       s"UPDATE $t SET name='Robert', age=32",
       errMsg
