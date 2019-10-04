@@ -328,8 +328,8 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
         return BucketedRandomProjectionLSHModel(java_model)
 
 
-class BucketedRandomProjectionLSHModel(_LSHModel, _BucketedRandomProjectionLSHParams, JavaMLReadable,
-                                       JavaMLWritable):
+class BucketedRandomProjectionLSHModel(_LSHModel, _BucketedRandomProjectionLSHParams,
+                                       JavaMLReadable, JavaMLWritable):
     r"""
     Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are
     stored. The vectors are normalized to be unit vectors and each vector is used in a hash
