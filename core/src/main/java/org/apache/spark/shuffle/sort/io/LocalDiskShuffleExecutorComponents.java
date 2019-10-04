@@ -62,14 +62,14 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
   @Override
   public ShuffleMapOutputWriter createMapOutputWriter(
       int shuffleId,
-      long mapId,
+      long mapTaskId,
       int numPartitions) {
     if (blockResolver == null) {
       throw new IllegalStateException(
           "Executor components must be initialized before getting writers.");
     }
     return new LocalDiskShuffleMapOutputWriter(
-        shuffleId, mapId, numPartitions, blockResolver, sparkConf);
+        shuffleId, mapTaskId, numPartitions, blockResolver, sparkConf);
   }
 
   @Override

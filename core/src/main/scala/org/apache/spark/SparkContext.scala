@@ -533,9 +533,11 @@ class SparkContext(config: SparkConf) extends Logging {
     _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
       val key = ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k
       if (_conf.contains(key)) {
-        logDebug(s"Setting shuffle spark config ${key} to ${v}")
-        _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
+        logWarning(s"Overriding user-set spark config key ${key} with value configured" +
+          s"by the shuffle plugin")
       }
+      _conf.set(key, v)
+        assert(k != "test-plugin-key", "Blah")
     }
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
