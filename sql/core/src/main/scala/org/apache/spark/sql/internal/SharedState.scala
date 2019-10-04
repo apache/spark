@@ -18,8 +18,8 @@
 package org.apache.spark.sql.internal
 
 import java.net.URL
-import java.util.concurrent.ConcurrentHashMap
 import java.util.{Locale, UUID}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
