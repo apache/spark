@@ -21,7 +21,7 @@ license: |
 
 ### Description
 The `DROP FUNCTION` statement drops a temporary or user defined function (UDF). An exception will
- be thrown if the function does not exists. 
+ be thrown if the function does not exist. 
 
 ### Syntax
 {% highlight sql %}
