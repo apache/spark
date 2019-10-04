@@ -529,14 +529,13 @@ class SparkContext(config: SparkConf) extends Logging {
     executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
 
+    val redactionRegex = _conf.get(SECRET_REDACTION_PATTERN)
     _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
     _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
       val key = ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k
-      if (_conf.contains(key)) {
-        logWarning(s"Overriding user-set spark config key ${key} with value configured" +
-          s"by the shuffle plugin")
-      }
       _conf.set(key, v)
+        logDebug(s"Setting shuffle spark configuration ${key} to " +
+          s"${Utils.redact(Some(redactionRegex), v)}")
     }
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
