@@ -43,9 +43,11 @@ class ShuffleDriverComponentsSuite
 
     val out = sc.parallelize(Seq((1, "one"), (2, "two"), (3, "three")), 3)
       .groupByKey()
-      .collect()
-
-    assert(TestShuffleExecutorComponentsInitialized.initialized.get())
+      .foreach { x =>
+        if (!TestShuffleExecutorComponentsInitialized.initialized.get()) {
+          throw new RuntimeException("TestShuffleExecutorComponents wasn't initialized")
+        }
+      }
   }
 }
 
