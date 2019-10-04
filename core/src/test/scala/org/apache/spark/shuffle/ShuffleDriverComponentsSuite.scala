@@ -31,39 +31,35 @@ import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 class ShuffleDriverComponentsSuite
     extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach {
 
-  override def beforeEach(): Unit = {
-    TestShuffleExecutorComponents.initialized.set(false)
-  }
-
   test(s"test serialization of shuffle initialization conf to executors") {
     val testConf = new SparkConf()
       .setAppName("testing")
+      .set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + "test-plugin-key", "user-set-value")
+      .set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + "test-user-key", "user-set-value")
       .setMaster("local-cluster[2,1,1024]")
       .set(SHUFFLE_IO_PLUGIN_CLASS, "org.apache.spark.shuffle.TestShuffleDataIO")
 
     sc = new SparkContext(testConf)
 
-    sc.parallelize(Seq((1, "one"), (2, "two"), (3, "three")), 3)
+    val out = sc.parallelize(Seq((1, "one"), (2, "two"), (3, "three")), 3)
       .groupByKey()
       .collect()
 
-    assert(TestShuffleExecutorComponents.initialized.get())
+    assert(TestShuffleExecutorComponentsInitialized.initialized.get())
   }
 }
 
+object TestShuffleExecutorComponentsInitialized {
+  var initialized = new AtomicBoolean(false)
+}
+
 class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
-  sparkConf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + "test-plugin-key", "user-set-value")
-  sparkConf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + "test-user-key", "user-set-value")
   private val delegate = new LocalDiskShuffleDataIO(sparkConf)
 
   override def driver(): ShuffleDriverComponents = new TestShuffleDriverComponents()
 
   override def executor(): ShuffleExecutorComponents =
-    new TestShuffleExecutorComponents(delegate.executor())
-}
-
-object TestShuffleExecutorComponents {
-  var initialized = new AtomicBoolean(false)
+    new TestShuffleExecutorComponentsInitialized(delegate.executor())
 }
 
 class TestShuffleDriverComponents extends ShuffleDriverComponents {
@@ -74,7 +70,7 @@ class TestShuffleDriverComponents extends ShuffleDriverComponents {
   override def cleanupApplication(): Unit = {}
 }
 
-class TestShuffleExecutorComponents(delegate: ShuffleExecutorComponents)
+class TestShuffleExecutorComponentsInitialized(delegate: ShuffleExecutorComponents)
     extends ShuffleExecutorComponents {
 
   override def initializeExecutor(
@@ -82,12 +78,9 @@ class TestShuffleExecutorComponents(delegate: ShuffleExecutorComponents)
       execId: String,
       extraConfigs: JMap[String, String]): Unit = {
     delegate.initializeExecutor(appId, execId, extraConfigs)
-    TestShuffleExecutorComponents.initialized.set(true)
-    // scalastyle:off
-    println("blah" + extraConfigs)
-    // scalastyle:on
     assert(extraConfigs.get("test-plugin-key") == "plugin-set-value", extraConfigs)
     assert(extraConfigs.get("test-user-key") == "user-set-value")
+    TestShuffleExecutorComponentsInitialized.initialized.set(true)
   }
 
   override def createMapOutputWriter(

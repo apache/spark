@@ -537,7 +537,6 @@ class SparkContext(config: SparkConf) extends Logging {
           s"by the shuffle plugin")
       }
       _conf.set(key, v)
-        assert(k != "test-plugin-key", "Blah")
     }
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
