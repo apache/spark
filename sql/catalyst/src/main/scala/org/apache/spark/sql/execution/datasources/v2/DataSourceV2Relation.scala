@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2S
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.connector.write.WriteBuilder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 /**
  * A logical plan representing a data source v2 table.
@@ -52,6 +53,25 @@ case class DataSourceV2Relation(
 
   def newScanBuilder(): ScanBuilder = {
     table.asReadable.newScanBuilder(options)
+  }
+
+  override def computeStats(): Statistics = {
+    if (Utils.isTesting) {
+      // when testing, throw an exception if this computeStats method is called because stats should
+      // not be accessed before pushing the projection and filters to create a scan. otherwise, the
+      // stats are not accurate because they are based on a full table scan of all columns.
+      throw new UnsupportedOperationException(
+        s"BUG: computeStats called before pushdown on DSv2 relation: $name")
+    } else {
+      // when not testing, return stats because bad stats are better than failing a query
+      newScanBuilder() match {
+        case r: SupportsReportStatistics =>
+          val statistics = r.estimateStatistics()
+          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+        case _ =>
+          Statistics(sizeInBytes = conf.defaultSizeInBytes)
+      }
+    }
   }
 
   override def newInstance(): DataSourceV2Relation = {
