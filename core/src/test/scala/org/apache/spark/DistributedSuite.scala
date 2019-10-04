@@ -342,7 +342,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("reference partitions inside a task") {
     // Run a simple job which just makes sure there is no failure if we touch rdd.partitions
     // inside a task.  This requires the stateLock to be serializable.  This is very convoluted
-    // use case, its just a check for backwards-compatibility after the fix for SPARK-28917.
+    // use case, it's just a check for backwards-compatibility after the fix for SPARK-28917.
     sc = new SparkContext("local-cluster[1,1,1024]", "test")
     val rdd1 = sc.parallelize(1 to 10, 1)
     val rdd2 = rdd1.map { x => x + 1}
