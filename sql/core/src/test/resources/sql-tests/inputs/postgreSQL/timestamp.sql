@@ -180,12 +180,11 @@ SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
 
 SELECT '' AS date_trunc_week, date_trunc( 'week', timestamp '2004-02-29 15:44:17.71393' ) AS week_trunc;
 
--- [SPARK-28425] Add more Date/Time Operators
 -- Test casting within a BETWEEN qualifier
--- SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
---   FROM TIMESTAMP_TBL
---   WHERE d1 BETWEEN timestamp '1902-01-01'
---    AND timestamp '2038-01-01';
+SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
+  FROM TIMESTAMP_TBL
+  WHERE d1 BETWEEN timestamp '1902-01-01'
+   AND timestamp '2038-01-01';
 
 SELECT '' AS `54`, d1 as `timestamp`,
     date_part( 'year', d1) AS `year`, date_part( 'month', d1) AS `month`,
