@@ -1990,7 +1990,11 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       _heartbeater = null
     }
-    _shuffleDriverComponents.cleanupApplication()
+    if (_shuffleDriverComponents != null) {
+      Utils.tryLogNonFatalError {
+        _shuffleDriverComponents.cleanupApplication()
+      }
+    }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {
         env.rpcEnv.stop(_heartbeatReceiver)
