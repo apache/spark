@@ -598,13 +598,6 @@ case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Comm
   override val output = DescribeTableSchema.describeTableAttributes()
 }
 
-case class DeleteFromTable(
-    child: LogicalPlan,
-    condition: Option[Expression]) extends Command {
-
-  override def children: Seq[LogicalPlan] = child :: Nil
-}
-
 /**
  * Drop a table.
  */
@@ -1240,6 +1233,12 @@ case class Deduplicate(
 
   override def output: Seq[Attribute] = child.output
 }
+
+/**
+ * A trait to represent the commands that support subqueries.
+ * This is used to whitelist such commands in the subquery-related checks.
+ */
+trait SupportsSubquery extends LogicalPlan
 
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {

@@ -15,13 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical.sql
+package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.Expression
 
-case class UpdateTableStatement(
-    tableName: Seq[String],
-    tableAlias: Option[String],
-    columns: Seq[Seq[String]],
+case class DeleteFromTable(
+    table: LogicalPlan,
+    condition: Option[Expression]) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+case class UpdateTable(
+    table: LogicalPlan,
+    columns: Seq[Expression],
     values: Seq[Expression],
-    condition: Option[Expression]) extends ParsedStatement
+    condition: Option[Expression]) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}

@@ -938,19 +938,19 @@ class DataSourceV2SQLSuite
     val errorMsg = "Found duplicate column(s) in the table definition of `t`"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
@@ -962,19 +962,19 @@ class DataSourceV2SQLSuite
     val errorMsg = "Found duplicate column(s) in the table definition of `t`"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
@@ -984,20 +984,20 @@ class DataSourceV2SQLSuite
 
   test("tableCreation: bucket column names not in table definition") {
     val errorMsg = "Couldn't find column c in"
-    testCreateAnalysisError(
+    assertAnalysisError(
       s"CREATE TABLE tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
     )
-    testCreateAnalysisError(
+    assertAnalysisError(
       s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
     )
-    testCreateAnalysisError(
+    assertAnalysisError(
       s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source " +
         "CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
     )
-    testCreateAnalysisError(
+    assertAnalysisError(
       s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source " +
         "CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
@@ -1008,19 +1008,19 @@ class DataSourceV2SQLSuite
     val errorMsg = "Found duplicate column(s) in the partitioning"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
@@ -1032,22 +1032,22 @@ class DataSourceV2SQLSuite
     val errorMsg = "Found duplicate column(s) in the bucket definition"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
@@ -1120,7 +1120,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("Update: basic - update all") {
+  test("UPDATE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(
@@ -1129,23 +1129,29 @@ class DataSourceV2SQLSuite
            |USING foo
            |PARTITIONED BY (id, p)
          """.stripMargin)
-      sql(
-        s"""
-           |INSERT INTO $t
-           |VALUES (1L, 'Herry', 26, 1),
-           |(2L, 'Jack', 31, 2),
-           |(3L, 'Lisa', 28, 3),
-           |(4L, 'Frank', 33, 3)
-         """.stripMargin)
+
+      // UPDATE non-existing table
+      assertAnalysisError(
+        "UPDATE dummy SET name='abc'",
+        "Table not found")
+
+      // UPDATE non-existing column
+      assertAnalysisError(
+        s"UPDATE $t SET dummy='abc'",
+        "cannot resolve")
+      assertAnalysisError(
+        s"UPDATE $t SET name='abc' WHERE dummy=1",
+        "cannot resolve")
+
+      // UPDATE is not implemented yet.
+      val e = intercept[UnsupportedOperationException] {
+        sql(s"UPDATE $t SET name='Robert', age=32 WHERE p=1")
+      }
+      assert(e.getMessage.contains("UPDATE TABLE is not supported temporarily"))
     }
-    val errMsg = "UPDATE TABLE is not supported temporarily"
-    testCreateAnalysisError(
-      s"UPDATE $t SET name='Robert', age=32",
-      errMsg
-    )
   }
 
-  private def testCreateAnalysisError(sqlStatement: String, expectedError: String): Unit = {
+  private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
     val errMsg = intercept[AnalysisException] {
       sql(sqlStatement)
     }.getMessage
