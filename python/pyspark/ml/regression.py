@@ -465,8 +465,38 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
         return self._call_java("totalIterations")
 
 
+class _IsotonicRegressionBase(HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol):
+    """
+    Params for :py:class:`IsotonicRegression` and :py:class:`IsotonicRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    isotonic = Param(
+        Params._dummy(), "isotonic",
+        "whether the output sequence should be isotonic/increasing (true) or" +
+        "antitonic/decreasing (false).", typeConverter=TypeConverters.toBoolean)
+    featureIndex = Param(
+        Params._dummy(), "featureIndex",
+        "The index of the feature if featuresCol is a vector column, no effect otherwise.",
+        typeConverter=TypeConverters.toInt)
+
+    def getIsotonic(self):
+        """
+        Gets the value of isotonic or its default value.
+        """
+        return self.getOrDefault(self.isotonic)
+
+    def getFeatureIndex(self):
+        """
+        Gets the value of featureIndex or its default value.
+        """
+        return self.getOrDefault(self.featureIndex)
+
+
 @inherit_doc
-class IsotonicRegression(JavaPredictor, HasWeightCol, JavaMLWritable, JavaMLReadable):
+class IsotonicRegression(JavaEstimator, _IsotonicRegressionBase, HasWeightCol,
+                         JavaMLWritable, JavaMLReadable):
     """
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
@@ -503,16 +533,6 @@ class IsotonicRegression(JavaPredictor, HasWeightCol, JavaMLWritable, JavaMLRead
 
     .. versionadded:: 1.6.0
     """
-
-    isotonic = \
-        Param(Params._dummy(), "isotonic",
-              "whether the output sequence should be isotonic/increasing (true) or" +
-              "antitonic/decreasing (false).", typeConverter=TypeConverters.toBoolean)
-    featureIndex = \
-        Param(Params._dummy(), "featureIndex",
-              "The index of the feature if featuresCol is a vector column, no effect otherwise.",
-              typeConverter=TypeConverters.toInt)
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  weightCol=None, isotonic=True, featureIndex=0):
@@ -547,26 +567,15 @@ class IsotonicRegression(JavaPredictor, HasWeightCol, JavaMLWritable, JavaMLRead
         """
         return self._set(isotonic=value)
 
-    def getIsotonic(self):
-        """
-        Gets the value of isotonic or its default value.
-        """
-        return self.getOrDefault(self.isotonic)
-
     def setFeatureIndex(self, value):
         """
         Sets the value of :py:attr:`featureIndex`.
         """
         return self._set(featureIndex=value)
 
-    def getFeatureIndex(self):
-        """
-        Gets the value of featureIndex or its default value.
-        """
-        return self.getOrDefault(self.featureIndex)
 
-
-class IsotonicRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class IsotonicRegressionModel(JavaModel, _IsotonicRegressionBase,
+                              JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`IsotonicRegression`.
 
