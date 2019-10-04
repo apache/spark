@@ -100,7 +100,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
   private val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
 
-  override def sparkConf: SparkConf = super.sparkConf
+  protected override def sparkConf: SparkConf = super.sparkConf
     // Fewer shuffle partitions to speed up testing.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
