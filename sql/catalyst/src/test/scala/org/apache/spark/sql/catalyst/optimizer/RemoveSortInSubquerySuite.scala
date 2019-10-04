@@ -122,9 +122,10 @@ class RemoveSortInSubquerySuite extends PlanTest {
       .join(projectPlanB, RightOuter)
       .limit(10)
     val optimized = Optimize.execute(joinPlan.analyze)
-    val correctAnswer = projectPlan
+    val noOrderByPlan = projectPlan
       .join(projectPlanB, RightOuter)
       .limit(10)
+    val correctAnswer = PushDownOptimizer.execute(noOrderByPlan.analyze)
     comparePlans(Optimize.execute(optimized), correctAnswer)
   }
 }

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.PredicateHelper
-import org.apache.spark.sql.catalyst.expressions.aggregate.OrderIrrelevantAggs
+import org.apache.spark.sql.catalyst.expressions.{Alias, NamedExpression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, OrderIrrelevantAggs}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -54,10 +54,17 @@ object RemoveSortInSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def isOrderIrrelevantAggs(expr: NamedExpression): Boolean = {
+    expr match {
+      case Alias(AggregateExpression(_: OrderIrrelevantAggs, _, _, _), _) => true
+      case _ => false
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case j @ Join(oldLeft, oldRight, _, _, _) =>
-      j.copy(left = removeTopLevelSort(oldLeft), right = removeTopLevelSort(oldRight))
-    case g @ Aggregate(_, aggs, oldChild) if aggs.forall(_.isInstanceOf[OrderIrrelevantAggs]) =>
-      g.copy(child = removeTopLevelSort(oldChild))
+    case j @ Join(originLeft, originRight, _, _, _) =>
+      j.copy(left = removeTopLevelSort(originLeft), right = removeTopLevelSort(originRight))
+    case g @ Aggregate(_, aggs, originChild) if aggs.forall(isOrderIrrelevantAggs) =>
+      g.copy(child = removeTopLevelSort(originChild))
   }
 }
