@@ -26,33 +26,62 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.AnalysisTest
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
-import org.apache.spark.sql.connector.{InMemoryTableCatalog, InMemoryTableProvider}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, TableCatalog}
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceResolution}
-import org.apache.spark.sql.internal.SQLConf.DEFAULT_V2_CATALOG
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelect, CreateV2Table, DescribeTable, DropTable, LogicalPlan}
+import org.apache.spark.sql.connector.InMemoryTableProvider
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
 
   private val v2Format = classOf[InMemoryTableProvider].getName
 
+  private val table: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(new StructType().add("i", "int"))
+    t
+  }
+
   private val testCat: TableCatalog = {
-    val newCatalog = new InMemoryTableCatalog
-    newCatalog.initialize("testcat", CaseInsensitiveStringMap.empty())
+    val newCatalog = mock(classOf[TableCatalog])
+    when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
+      invocation.getArgument[Identifier](0).name match {
+        case "tab" =>
+          table
+        case name =>
+          throw new NoSuchTableException(name)
+      }
+    })
+    when(newCatalog.name()).thenReturn("testcat")
     newCatalog
   }
 
-  private val v2SessionCatalog = {
-    val newCatalog = new InMemoryTableCatalog
-    newCatalog.initialize("session", CaseInsensitiveStringMap.empty())
+  private val v2SessionCatalog: TableCatalog = {
+    val newCatalog = mock(classOf[TableCatalog])
+    when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
+      invocation.getArgument[Identifier](0).name match {
+        case "v1Table" =>
+          mock(classOf[V1Table])
+        case "v2Table" =>
+          table
+        case name =>
+          throw new NoSuchTableException(name)
+      }
+    })
+    when(newCatalog.name()).thenReturn("session")
     newCatalog
   }
+
+  private val v1SessionCatalog: SessionCatalog = new SessionCatalog(
+    new InMemoryCatalog,
+    EmptyFunctionRegistry,
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
   private val catalogManagerWithDefault = {
     val manager = mock(classOf[CatalogManager])
@@ -66,6 +95,7 @@ class PlanResolutionSuite extends AnalysisTest {
     })
     when(manager.defaultCatalog).thenReturn(Some(testCat))
     when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
+    when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
 
@@ -81,18 +111,24 @@ class PlanResolutionSuite extends AnalysisTest {
     })
     when(manager.defaultCatalog).thenReturn(None)
     when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
+    when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
 
   def parseAndResolve(query: String, withDefault: Boolean = false): LogicalPlan = {
-    val newConf = conf.copy()
-    newConf.setConfString(DEFAULT_V2_CATALOG.key, "testcat")
     val catalogManager = if (withDefault) {
       catalogManagerWithDefault
     } else {
       catalogManagerWithoutDefault
     }
-    DataSourceResolution(newConf, catalogManager).apply(parsePlan(query))
+    val analyzer = new Analyzer(catalogManager, conf)
+    val rules = Seq(
+      new ResolveCatalogs(catalogManager),
+      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
+      analyzer.ResolveTables)
+    rules.foldLeft(parsePlan(query)) {
+      case (plan, rule) => rule.apply(plan)
+    }
   }
 
   private def parseResolveCompare(query: String, expected: LogicalPlan): Unit =
@@ -642,51 +678,166 @@ class PlanResolutionSuite extends AnalysisTest {
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
   // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
   test("alter table: alter table properties") {
-    val sql1_table = "ALTER TABLE table_name SET TBLPROPERTIES ('test' = 'test', " +
-        "'comment' = 'new_comment')"
-    val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
-    val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+    Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
+      case (tblName, useV1Command) =>
+        val sql1 = s"ALTER TABLE $tblName SET TBLPROPERTIES ('test' = 'test', " +
+          "'comment' = 'new_comment')"
+        val sql2 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES ('comment', 'test')"
+        val sql3 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
-    val parsed1_table = parseAndResolve(sql1_table)
-    val parsed2_table = parseAndResolve(sql2_table)
-    val parsed3_table = parseAndResolve(sql3_table)
+        val parsed1 = parseAndResolve(sql1)
+        val parsed2 = parseAndResolve(sql2)
+        val parsed3 = parseAndResolve(sql3)
 
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1_table = AlterTableSetPropertiesCommand(
-      tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = false)
-    val expected2_table = AlterTableUnsetPropertiesCommand(
-      tableIdent, Seq("comment", "test"), ifExists = false, isView = false)
-    val expected3_table = AlterTableUnsetPropertiesCommand(
-      tableIdent, Seq("comment", "test"), ifExists = true, isView = false)
+        val tableIdent = TableIdentifier(tblName, None)
+        if (useV1Command) {
+          val expected1 = AlterTableSetPropertiesCommand(
+            tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = false)
+          val expected2 = AlterTableUnsetPropertiesCommand(
+            tableIdent, Seq("comment", "test"), ifExists = false, isView = false)
+          val expected3 = AlterTableUnsetPropertiesCommand(
+            tableIdent, Seq("comment", "test"), ifExists = true, isView = false)
 
-    comparePlans(parsed1_table, expected1_table)
-    comparePlans(parsed2_table, expected2_table)
-    comparePlans(parsed3_table, expected3_table)
+          comparePlans(parsed1, expected1)
+          comparePlans(parsed2, expected2)
+          comparePlans(parsed3, expected3)
+        } else {
+          parsed1 match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(
+                TableChange.setProperty("test", "test"),
+                TableChange.setProperty("comment", "new_comment")))
+            case _ => fail("expect AlterTable")
+          }
+
+          parsed2 match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(
+                TableChange.removeProperty("comment"),
+                TableChange.removeProperty("test")))
+            case _ => fail("expect AlterTable")
+          }
+
+          parsed3 match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(
+                TableChange.removeProperty("comment"),
+                TableChange.removeProperty("test")))
+            case _ => fail("expect AlterTable")
+          }
+        }
+    }
+
+    val sql4 = "ALTER TABLE non_exist SET TBLPROPERTIES ('test' = 'test')"
+    val sql5 = "ALTER TABLE non_exist UNSET TBLPROPERTIES ('test')"
+    val parsed4 = parseAndResolve(sql4)
+    val parsed5 = parseAndResolve(sql5)
+
+    // For non-existing tables, we convert it to v2 command with `UnresolvedV2Table`
+    parsed4 match {
+      case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
+      case _ => fail("unexpected plan:\n" + parsed4.treeString)
+    }
+    parsed5 match {
+      case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
+      case _ => fail("unexpected plan:\n" + parsed5.treeString)
+    }
   }
 
   test("support for other types in TBLPROPERTIES") {
-    val sql =
-      """
-        |ALTER TABLE table_name
-        |SET TBLPROPERTIES ('a' = 1, 'b' = 0.1, 'c' = TRUE)
-      """.stripMargin
-    val parsed = parseAndResolve(sql)
-    val expected = AlterTableSetPropertiesCommand(
-      TableIdentifier("table_name"),
-      Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
-      isView = false)
+    Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
+      case (tblName, useV1Command) =>
+        val sql =
+          s"""
+            |ALTER TABLE $tblName
+            |SET TBLPROPERTIES ('a' = 1, 'b' = 0.1, 'c' = TRUE)
+          """.stripMargin
+        val parsed = parseAndResolve(sql)
+        if (useV1Command) {
+          val expected = AlterTableSetPropertiesCommand(
+            TableIdentifier(tblName),
+            Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+            isView = false)
 
-    comparePlans(parsed, expected)
+          comparePlans(parsed, expected)
+        } else {
+          parsed match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(
+                TableChange.setProperty("a", "1"),
+                TableChange.setProperty("b", "0.1"),
+                TableChange.setProperty("c", "true")))
+            case _ => fail("expect AlterTable")
+          }
+        }
+    }
   }
 
   test("alter table: set location") {
-    val sql1 = "ALTER TABLE table_name SET LOCATION 'new location'"
-    val parsed1 = parseAndResolve(sql1)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableSetLocationCommand(
-      tableIdent,
-      None,
-      "new location")
-    comparePlans(parsed1, expected1)
+    Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
+      case (tblName, useV1Command) =>
+        val sql = s"ALTER TABLE $tblName SET LOCATION 'new location'"
+        val parsed = parseAndResolve(sql)
+        if (useV1Command) {
+          val expected = AlterTableSetLocationCommand(
+            TableIdentifier(tblName, None),
+            None,
+            "new location")
+          comparePlans(parsed, expected)
+        } else {
+          parsed match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(TableChange.setProperty("location", "new location")))
+            case _ => fail("expect AlterTable")
+          }
+        }
+    }
   }
+
+  test("describe table") {
+    Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
+      case (tblName, useV1Command) =>
+        val sql1 = s"DESC TABLE $tblName"
+        val sql2 = s"DESC TABLE EXTENDED $tblName"
+        val parsed1 = parseAndResolve(sql1)
+        val parsed2 = parseAndResolve(sql2)
+        if (useV1Command) {
+          val expected1 = DescribeTableCommand(TableIdentifier(tblName, None), Map.empty, false)
+          val expected2 = DescribeTableCommand(TableIdentifier(tblName, None), Map.empty, true)
+
+          comparePlans(parsed1, expected1)
+          comparePlans(parsed2, expected2)
+        } else {
+          parsed1 match {
+            case DescribeTable(_: DataSourceV2Relation, isExtended) =>
+              assert(!isExtended)
+            case _ => fail("expect DescribeTable")
+          }
+
+          parsed2 match {
+            case DescribeTable(_: DataSourceV2Relation, isExtended) =>
+              assert(isExtended)
+            case _ => fail("expect DescribeTable")
+          }
+        }
+
+        val sql3 = s"DESC TABLE $tblName PARTITION(a=1)"
+        if (useV1Command) {
+          val parsed3 = parseAndResolve(sql3)
+          val expected3 = DescribeTableCommand(
+            TableIdentifier(tblName, None), Map("a" -> "1"), false)
+          comparePlans(parsed3, expected3)
+        } else {
+          val e = intercept[AnalysisException](parseAndResolve(sql3))
+          assert(e.message.contains("DESCRIBE TABLE does not support partition for v2 tables"))
+        }
+    }
+
+    // use v1 command to describe views.
+    val sql4 = "DESC TABLE v"
+    val parsed4 = parseAndResolve(sql4)
+    assert(parsed4.isInstanceOf[DescribeTableCommand])
+  }
+
+  // TODO: add tests for more commands.
 }

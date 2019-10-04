@@ -20,6 +20,9 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.types.DataType;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 /**
  * TableChange subclasses represent requested changes to a table. These are passed to
  * {@link TableCatalog#alterTable}. For example,
@@ -210,6 +213,20 @@ public interface TableChange {
     public String value() {
       return value;
     }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      SetProperty that = (SetProperty) o;
+      return property.equals(that.property) &&
+        value.equals(that.value);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(property, value);
+    }
   }
 
   /**
@@ -226,6 +243,19 @@ public interface TableChange {
 
     public String property() {
       return property;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      RemoveProperty that = (RemoveProperty) o;
+      return property.equals(that.property);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(property);
     }
   }
 
@@ -269,6 +299,24 @@ public interface TableChange {
     public String comment() {
       return comment;
     }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      AddColumn addColumn = (AddColumn) o;
+      return isNullable == addColumn.isNullable &&
+        Arrays.equals(fieldNames, addColumn.fieldNames) &&
+        dataType.equals(addColumn.dataType) &&
+        comment.equals(addColumn.comment);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Objects.hash(dataType, isNullable, comment);
+      result = 31 * result + Arrays.hashCode(fieldNames);
+      return result;
+    }
   }
 
   /**
@@ -295,6 +343,22 @@ public interface TableChange {
 
     public String newName() {
       return newName;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      RenameColumn that = (RenameColumn) o;
+      return Arrays.equals(fieldNames, that.fieldNames) &&
+        newName.equals(that.newName);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Objects.hash(newName);
+      result = 31 * result + Arrays.hashCode(fieldNames);
+      return result;
     }
   }
 
@@ -328,6 +392,23 @@ public interface TableChange {
     public boolean isNullable() {
       return isNullable;
     }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      UpdateColumnType that = (UpdateColumnType) o;
+      return isNullable == that.isNullable &&
+        Arrays.equals(fieldNames, that.fieldNames) &&
+        newDataType.equals(that.newDataType);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Objects.hash(newDataType, isNullable);
+      result = 31 * result + Arrays.hashCode(fieldNames);
+      return result;
+    }
   }
 
   /**
@@ -354,6 +435,22 @@ public interface TableChange {
     public String newComment() {
       return newComment;
     }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      UpdateColumnComment that = (UpdateColumnComment) o;
+      return Arrays.equals(fieldNames, that.fieldNames) &&
+        newComment.equals(that.newComment);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Objects.hash(newComment);
+      result = 31 * result + Arrays.hashCode(fieldNames);
+      return result;
+    }
   }
 
   /**
@@ -371,6 +468,19 @@ public interface TableChange {
     @Override
     public String[] fieldNames() {
       return fieldNames;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      DeleteColumn that = (DeleteColumn) o;
+      return Arrays.equals(fieldNames, that.fieldNames);
+    }
+
+    @Override
+    public int hashCode() {
+      return Arrays.hashCode(fieldNames);
     }
   }
 
