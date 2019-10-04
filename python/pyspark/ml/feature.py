@@ -146,7 +146,7 @@ class _LSHParams(HasInputCol, HasOutputCol):
         return self.getOrDefault(self.numHashTables)
 
 
-class LSH(JavaEstimator, _LSHParams, JavaMLReadable, JavaMLWritable):
+class _LSH(JavaEstimator, _LSHParams, JavaMLReadable, JavaMLWritable):
     """
     Mixin for Locality Sensitive Hashing (LSH).
     """
@@ -158,7 +158,7 @@ class LSH(JavaEstimator, _LSHParams, JavaMLReadable, JavaMLWritable):
         return self._set(numHashTables=value)
 
 
-class LSHModel(JavaModel, _LSHParams):
+class _LSHModel(JavaModel, _LSHParams):
     """
     Mixin for Locality Sensitive Hashing (LSH) models.
     """
@@ -207,6 +207,7 @@ class _BucketedRandomProjectionLSHParams():
     """
     Params for :py:class:`BucketedRandomProjectionLSH` and
     :py:class:`BucketedRandomProjectionLSHModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -223,7 +224,7 @@ class _BucketedRandomProjectionLSHParams():
 
 
 @inherit_doc
-class BucketedRandomProjectionLSH(LSH, _BucketedRandomProjectionLSHParams,
+class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
                                   HasSeed, JavaMLReadable, JavaMLWritable):
     """
     LSH class for Euclidean distance metrics.
@@ -327,7 +328,7 @@ class BucketedRandomProjectionLSH(LSH, _BucketedRandomProjectionLSHParams,
         return BucketedRandomProjectionLSHModel(java_model)
 
 
-class BucketedRandomProjectionLSHModel(LSHModel, _BucketedRandomProjectionLSHParams, JavaMLReadable,
+class BucketedRandomProjectionLSHModel(_LSHModel, _BucketedRandomProjectionLSHParams, JavaMLReadable,
                                        JavaMLWritable):
     r"""
     Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are
@@ -1035,6 +1036,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
 class _IDFParams(HasInputCol, HasOutputCol):
     """
     Params for :py:class:`IDF` and :py:class:`IDFModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -1156,6 +1158,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
 class _ImputerParams(HasInputCols, HasOutputCols):
     """
     Params for :py:class:`Imputer` and :py:class:`ImputerModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -1356,6 +1359,7 @@ class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, J
 class _MaxAbsScalerParams(HasInputCol, HasOutputCol):
     """
     Params for :py:class:`MaxAbsScaler` and :py:class:`MaxAbsScalerModel`.
+
     .. versionadded:: 3.0.0
     """
     pass
@@ -1440,7 +1444,7 @@ class MaxAbsScalerModel(JavaModel, _MaxAbsScalerParams, JavaMLReadable, JavaMLWr
 
 
 @inherit_doc
-class MinHashLSH(LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaMLWritable):
+class MinHashLSH(_LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaMLWritable):
 
     """
     LSH class for Jaccard distance.
@@ -1518,7 +1522,7 @@ class MinHashLSH(LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaML
         return MinHashLSHModel(java_model)
 
 
-class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
+class MinHashLSHModel(_LSHModel, JavaMLReadable, JavaMLWritable):
     r"""
     Model produced by :py:class:`MinHashLSH`, where where multiple hash functions are stored. Each
     hash function is picked from the following family of hash functions, where :math:`a_i` and
@@ -1536,6 +1540,7 @@ class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
 class _MinMaxScalerParams(HasInputCol, HasOutputCol):
     """
     Params for :py:class:`MinMaxScaler` and :py:class:`MinMaxScalerModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -1816,6 +1821,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 class _OneHotEncoderParams(HasInputCols, HasOutputCols, HasHandleInvalid):
     """
     Params for :py:class:`OneHotEncoder` and :py:class:`OneHotEncoderModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -2201,6 +2207,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
 class _RobustScalerParams(HasInputCol, HasOutputCol):
     """
     Params for :py:class:`RobustScaler` and :py:class:`RobustScalerModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -2560,6 +2567,7 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
 class _StandardScalerParams(HasInputCol, HasOutputCol):
     """
     Params for :py:class:`StandardScaler` and :py:class:`StandardScalerModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -3190,6 +3198,7 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
 class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
     """
     Params for :py:class:`VectorIndexer` and :py:class:`VectorIndexerModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -3457,6 +3466,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
 class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
     """
     Params for :py:class:`Word2Vec` and :py:class:`Word2VecModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -3685,6 +3695,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable, JavaMLWritable):
 class _PCAParams(HasInputCol, HasOutputCol):
     """
     Params for :py:class:`PCA` and :py:class:`PCAModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -3796,6 +3807,7 @@ class PCAModel(JavaModel, _PCAParams, JavaMLReadable, JavaMLWritable):
 class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
     """
     Params for :py:class:`RFormula` and :py:class:`RFormula`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -3987,6 +3999,7 @@ class RFormulaModel(JavaModel, _RFormulaParams, JavaMLReadable, JavaMLWritable):
 class _ChiSqSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
     """
     Params for :py:class:`ChiSqSelector` and :py:class:`ChiSqSelectorModel`.
+
     .. versionadded:: 3.0.0
     """
 
