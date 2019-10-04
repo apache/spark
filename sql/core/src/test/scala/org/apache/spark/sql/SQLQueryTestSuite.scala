@@ -135,6 +135,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
 
+  protected val emptySchema = StructType(Seq.empty).catalogString
+
   protected override def sparkConf: SparkConf = super.sparkConf
     // Fewer shuffle partitions to speed up testing.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
@@ -323,11 +325,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     }
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryOutput] = queries.map { sql =>
-      val (schema, output) = getNormalizedResult(localSparkSession, sql)
+      val (schema, output) = handleExceptions(getNormalizedResult(localSparkSession, sql))
       // We might need to do some query canonicalization in the future.
       QueryOutput(
         sql = sql,
-        schema = schema.catalogString,
+        schema = schema,
         output = output.mkString("\n").replaceAll("\\s+$", ""))
     }
 
@@ -388,8 +390,30 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  protected def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
+    try {
+      result
+    } catch {
+      case a: AnalysisException =>
+        // Do not output the logical plan tree which contains expression IDs.
+        // Also implement a crude way of masking expression IDs in the error message
+        // with a generic pattern "###".
+        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
+        (emptySchema, Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
+      case s: SparkException if s.getCause != null =>
+        // For a runtime exception, it is hard to match because its message contains
+        // information of stage, task ID, etc.
+        // To make result matching simpler, here we match the cause of the exception if it exists.
+        val cause = s.getCause
+        (emptySchema, Seq(cause.getClass.getName, cause.getMessage))
+      case NonFatal(e) =>
+        // If there is an exception, put the exception class followed by the message.
+        (emptySchema, Seq(e.getClass.getName, e.getMessage))
+    }
+  }
+
   /** Executes a query and returns the result as (schema of the output, normalized output). */
-  private def getNormalizedResult(session: SparkSession, sql: String): (StructType, Seq[String]) = {
+  private def getNormalizedResult(session: SparkSession, sql: String): (String, Seq[String]) = {
     // Returns true if the plan is supposed to be sorted.
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
@@ -401,34 +425,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       case _ => plan.children.iterator.exists(isSorted)
     }
 
-    try {
-      val df = session.sql(sql)
-      val schema = df.schema
-      // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-      val answer = SQLExecution.withNewExecutionId(session, df.queryExecution, Some(sql)) {
-        hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
-      }
-
-      // If the output is not pre-sorted, sort it.
-      if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
-
-    } catch {
-      case a: AnalysisException =>
-        // Do not output the logical plan tree which contains expression IDs.
-        // Also implement a crude way of masking expression IDs in the error message
-        // with a generic pattern "###".
-        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        (StructType(Seq.empty), Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
-      case s: SparkException if s.getCause != null =>
-        // For a runtime exception, it is hard to match because its message contains
-        // information of stage, task ID, etc.
-        // To make result matching simpler, here we match the cause of the exception if it exists.
-        val cause = s.getCause
-        (StructType(Seq.empty), Seq(cause.getClass.getName, cause.getMessage))
-      case NonFatal(e) =>
-        // If there is an exception, put the exception class followed by the message.
-        (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))
+    val df = session.sql(sql)
+    val schema = df.schema.catalogString
+    // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
+    val answer = SQLExecution.withNewExecutionId(session, df.queryExecution, Some(sql)) {
+      hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
     }
+
+    // If the output is not pre-sorted, sort it.
+    if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
   }
 
   protected def replaceNotIncludedMsg(line: String): String = {
