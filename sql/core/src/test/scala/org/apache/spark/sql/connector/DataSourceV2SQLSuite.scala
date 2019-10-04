@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
+import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -1066,6 +1067,13 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("REPLACE TABLE: v1 table") {
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
+    }
+    assert(e.message.contains("REPLACE TABLE is only supported with v2 tables"))
+  }
+
   test("DeleteFrom: basic - delete all") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1141,7 +1149,7 @@ class DataSourceV2SQLSuite
            |(4L, 'Frank', 33, 3)
          """.stripMargin)
     }
-    val errMsg = "Update table is not supported temporarily"
+    val errMsg = "UPDATE TABLE is not supported temporarily"
     testCreateAnalysisError(
       s"UPDATE $t SET name='Robert', age=32",
       errMsg

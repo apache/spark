@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableStatement, InsertIntoStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -33,6 +33,8 @@ import org.apache.spark.sql.types._
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
 trait CheckAnalysis extends PredicateHelper {
+
+  protected def isView(nameParts: Seq[String]): Boolean
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -95,6 +97,13 @@ trait CheckAnalysis extends PredicateHelper {
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
+        u.failAnalysis(
+          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
+
+      case u: UnresolvedV2Relation =>
+        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -356,9 +365,6 @@ trait CheckAnalysis extends PredicateHelper {
                 }
               case _ =>
             }
-
-          case alter: AlterTableStatement =>
-            alter.failAnalysis(s"Table or view not found: ${alter.tableName.quoted}")
 
           case alter: AlterTable if alter.childrenResolved =>
             val table = alter.table

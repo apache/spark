@@ -126,7 +126,8 @@ private[spark] class EventLoggingListener(
       }
 
     try {
-      val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
+      val cstream = compressionCodec.map(_.compressedContinuousOutputStream(dstream))
+        .getOrElse(dstream)
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
 
       EventLoggingListener.initEventLog(bstream, testing, loggedEvents)

@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.JavaConverters._
@@ -48,7 +49,29 @@ import org.apache.spark.util._
  */
 private class ShuffleStatus(numPartitions: Int) {
 
-  // All accesses to the following state must be guarded with `this.synchronized`.
+  private val (readLock, writeLock) = {
+    val lock = new ReentrantReadWriteLock()
+    (lock.readLock(), lock.writeLock())
+  }
+
+  // All accesses to the following state must be guarded with `withReadLock` or `withWriteLock`.
+  private def withReadLock[B](fn: => B): B = {
+    readLock.lock()
+    try {
+      fn
+    } finally {
+      readLock.unlock()
+    }
+  }
+
+  private def withWriteLock[B](fn: => B): B = {
+    writeLock.lock()
+    try {
+      fn
+    } finally {
+      writeLock.unlock()
+    }
+  }
 
   /**
    * MapStatus for each partition. The index of the array is the map partition id.
@@ -88,7 +111,7 @@ private class ShuffleStatus(numPartitions: Int) {
    * Register a map output. If there is already a registered location for the map output then it
    * will be replaced by the new location.
    */
-  def addMapOutput(mapIndex: Int, status: MapStatus): Unit = synchronized {
+  def addMapOutput(mapIndex: Int, status: MapStatus): Unit = withWriteLock {
     if (mapStatuses(mapIndex) == null) {
       _numAvailableOutputs += 1
       invalidateSerializedMapOutputStatusCache()
@@ -101,7 +124,7 @@ private class ShuffleStatus(numPartitions: Int) {
    * This is a no-op if there is no registered map output or if the registered output is from a
    * different block manager.
    */
-  def removeMapOutput(mapIndex: Int, bmAddress: BlockManagerId): Unit = synchronized {
+  def removeMapOutput(mapIndex: Int, bmAddress: BlockManagerId): Unit = withWriteLock {
     if (mapStatuses(mapIndex) != null && mapStatuses(mapIndex).location == bmAddress) {
       _numAvailableOutputs -= 1
       mapStatuses(mapIndex) = null
@@ -113,7 +136,7 @@ private class ShuffleStatus(numPartitions: Int) {
    * Removes all shuffle outputs associated with this host. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists).
    */
-  def removeOutputsOnHost(host: String): Unit = {
+  def removeOutputsOnHost(host: String): Unit = withWriteLock {
     removeOutputsByFilter(x => x.host == host)
   }
 
@@ -122,7 +145,7 @@ private class ShuffleStatus(numPartitions: Int) {
    * remove outputs which are served by an external shuffle server (if one exists), as they are
    * still registered with that execId.
    */
-  def removeOutputsOnExecutor(execId: String): Unit = synchronized {
+  def removeOutputsOnExecutor(execId: String): Unit = withWriteLock {
     removeOutputsByFilter(x => x.executorId == execId)
   }
 
@@ -130,8 +153,8 @@ private class ShuffleStatus(numPartitions: Int) {
    * Removes all shuffle outputs which satisfies the filter. Note that this will also
    * remove outputs which are served by an external shuffle server (if one exists).
    */
-  def removeOutputsByFilter(f: (BlockManagerId) => Boolean): Unit = synchronized {
-    for (mapIndex <- 0 until mapStatuses.length) {
+  def removeOutputsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
+    for (mapIndex <- mapStatuses.indices) {
       if (mapStatuses(mapIndex) != null && f(mapStatuses(mapIndex).location)) {
         _numAvailableOutputs -= 1
         mapStatuses(mapIndex) = null
@@ -143,14 +166,14 @@ private class ShuffleStatus(numPartitions: Int) {
   /**
    * Number of partitions that have shuffle outputs.
    */
-  def numAvailableOutputs: Int = synchronized {
+  def numAvailableOutputs: Int = withReadLock {
     _numAvailableOutputs
   }
 
   /**
    * Returns the sequence of partition ids that are missing (i.e. needs to be computed).
    */
-  def findMissingPartitions(): Seq[Int] = synchronized {
+  def findMissingPartitions(): Seq[Int] = withReadLock {
     val missing = (0 until numPartitions).filter(id => mapStatuses(id) == null)
     assert(missing.size == numPartitions - _numAvailableOutputs,
       s"${missing.size} missing, expected ${numPartitions - _numAvailableOutputs}")
@@ -169,18 +192,31 @@ private class ShuffleStatus(numPartitions: Int) {
   def serializedMapStatus(
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
-      minBroadcastSize: Int): Array[Byte] = synchronized {
-    if (cachedSerializedMapStatus eq null) {
-      val serResult = MapOutputTracker.serializeMapStatuses(
-          mapStatuses, broadcastManager, isLocal, minBroadcastSize)
-      cachedSerializedMapStatus = serResult._1
-      cachedSerializedBroadcast = serResult._2
+      minBroadcastSize: Int): Array[Byte] = {
+    var result: Array[Byte] = null
+
+    withReadLock {
+      if (cachedSerializedMapStatus != null) {
+        result = cachedSerializedMapStatus
+      }
     }
-    cachedSerializedMapStatus
+
+    if (result == null) withWriteLock {
+      if (cachedSerializedMapStatus == null) {
+        val serResult = MapOutputTracker.serializeMapStatuses(
+          mapStatuses, broadcastManager, isLocal, minBroadcastSize)
+        cachedSerializedMapStatus = serResult._1
+        cachedSerializedBroadcast = serResult._2
+      }
+      // The following line has to be outside if statement since it's possible that another thread
+      // initializes cachedSerializedMapStatus in-between `withReadLock` and `withWriteLock`.
+      result = cachedSerializedMapStatus
+    }
+    result
   }
 
   // Used in testing.
-  def hasCachedSerializedBroadcast: Boolean = synchronized {
+  def hasCachedSerializedBroadcast: Boolean = withReadLock {
     cachedSerializedBroadcast != null
   }
 
@@ -188,14 +224,14 @@ private class ShuffleStatus(numPartitions: Int) {
    * Helper function which provides thread-safe access to the mapStatuses array.
    * The function should NOT mutate the array.
    */
-  def withMapStatuses[T](f: Array[MapStatus] => T): T = synchronized {
+  def withMapStatuses[T](f: Array[MapStatus] => T): T = withReadLock {
     f(mapStatuses)
   }
 
   /**
    * Clears the cached serialized map output statuses.
    */
-  def invalidateSerializedMapOutputStatusCache(): Unit = synchronized {
+  def invalidateSerializedMapOutputStatusCache(): Unit = withWriteLock {
     if (cachedSerializedBroadcast != null) {
       // Prevent errors during broadcast cleanup from crashing the DAGScheduler (see SPARK-21444)
       Utils.tryLogNonFatalError {

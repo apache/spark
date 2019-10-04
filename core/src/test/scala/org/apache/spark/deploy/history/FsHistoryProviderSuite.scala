@@ -1254,7 +1254,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
   private def writeFile(file: File, codec: Option[CompressionCodec],
     events: SparkListenerEvent*) = {
     val fstream = new FileOutputStream(file)
-    val cstream = codec.map(_.compressedOutputStream(fstream)).getOrElse(fstream)
+    val cstream = codec.map(_.compressedContinuousOutputStream(fstream)).getOrElse(fstream)
     val bstream = new BufferedOutputStream(cstream)
     EventLoggingListener.initEventLog(bstream, false, null)
 
