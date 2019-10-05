@@ -1702,7 +1702,7 @@ case class DateDiff(endDate: Expression, startDate: Expression)
     val startDate = start.asInstanceOf[Int]
     val endDate = end.asInstanceOf[Int]
     if (returnInterval) {
-      dateDiff(startDate, endDate)
+      dateDiff(endDate, startDate)
     } else {
       endDate - startDate
     }
@@ -1712,7 +1712,7 @@ case class DateDiff(endDate: Expression, startDate: Expression)
     defineCodeGen(ctx, ev, (end, start) => {
       if (returnInterval) {
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-        s"$dtu.dateDiff($start, $end)"
+        s"$dtu.dateDiff($end, $start)"
       } else {
         s"$end - $start"
       }
