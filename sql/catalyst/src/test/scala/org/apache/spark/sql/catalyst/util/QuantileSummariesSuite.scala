@@ -181,9 +181,9 @@ class QuantileSummariesSuite extends SparkFunSuite {
       val s2 = buildSummary(data22, epsi, compression)
       val s = s1.merge(s2)
       // Check all quantiles
-      for (query_rank <- 1 to n) {
-        val query_quantile = query_rank.toDouble / n.toDouble
-        checkQuantile(query_quantile, data, s)
+      for (queryRank <- 1 to n) {
+        val queryQuantile = queryRank.toDouble / n.toDouble
+        checkQuantile(queryQuantile, data, s)
       }
     }
   }
