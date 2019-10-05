@@ -63,6 +63,7 @@ case class AdaptiveSparkPlanExec(
     initialPlan: SparkPlan,
     @transient session: SparkSession,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
+    @transient subqueryCache: TrieMap[SparkPlan, BaseSubqueryExec],
     @transient stageCache: TrieMap[SparkPlan, QueryStageExec],
     @transient queryExecution: QueryExecution)
   extends LeafExecNode {
@@ -89,7 +90,7 @@ case class AdaptiveSparkPlanExec(
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
-    ReuseSubquery(conf, queryExecution.subqueryCache),
+    ReuseSubquery(conf, subqueryCache),
     ReduceNumShufflePartitions(conf),
     ApplyColumnarRulesAndInsertTransitions(session.sessionState.conf,
       session.sessionState.columnarRules),

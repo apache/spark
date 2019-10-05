@@ -173,15 +173,11 @@ case class InSubqueryExec(
 /**
  * Plans scalar subqueries from that are present in the given [[SparkPlan]].
  */
-case class PlanSubqueries(
-    sparkSession: SparkSession,
-    subqueryCache: mutable.Map[SparkPlan, BaseSubqueryExec]) extends Rule[SparkPlan] {
+case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
-        val executedPlan =
-          new QueryExecution(sparkSession, subquery.plan, subqueryCache = subqueryCache)
-            .executedPlan
+        val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
         ScalarSubquery(
           SubqueryExec(s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
@@ -195,8 +191,7 @@ case class PlanSubqueries(
             }
           )
         }
-        val executedPlan =
-          new QueryExecution(sparkSession, query, subqueryCache = subqueryCache).executedPlan
+        val executedPlan = new QueryExecution(sparkSession, query).executedPlan
         InSubqueryExec(expr, SubqueryExec(s"subquery${exprId.id}", executedPlan), exprId)
     }
   }
@@ -208,20 +203,25 @@ case class PlanSubqueries(
  */
 case class ReuseSubquery(
     conf: SQLConf,
-    subqueryCache: mutable.Map[SparkPlan, BaseSubqueryExec]) extends Rule[SparkPlan] {
+    subqueryMap: mutable.Map[SparkPlan, BaseSubqueryExec] = mutable.Map.empty
+  ) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.subqueryReuseEnabled) {
       return plan
     }
 
-    plan.transformAllExpressions {
+    def reuse: PartialFunction[Expression, Expression] = {
       case sub: ExecSubqueryExpression =>
-        val newPlan = subqueryCache.getOrElseUpdate(sub.plan.canonicalized, sub.plan)
+        val newPlan = subqueryMap.getOrElseUpdate(sub.plan.canonicalized, sub.plan)
         if (newPlan.ne(sub.plan)) {
           sub.withNewPlan(ReusedSubqueryExec(newPlan))
         } else {
-          sub
+          sub.withNewPlan(sub.plan.transformAllExpressions(reuse))
         }
+    }
+
+    plan.transformAllExpressions {
+      reuse
     }
   }
 }

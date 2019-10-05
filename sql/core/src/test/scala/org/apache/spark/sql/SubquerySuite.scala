@@ -1383,23 +1383,18 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
             |LIMIT 1
           """.stripMargin)
 
-        var countSubqueryExec = 0
-        var countReuseSubqueryExec = 0
-        df.queryExecution.executedPlan.transformAllExpressions {
-          case s @ ScalarSubquery(_: SubqueryExec, _) =>
-            countSubqueryExec = countSubqueryExec + 1
-            s
-          case s @ ScalarSubquery(_: ReusedSubqueryExec, _) =>
-            countReuseSubqueryExec = countReuseSubqueryExec + 1
-            s
-        }
+        val plan = df.queryExecution.executedPlan
+
+        val countSubqueries = plan.collectInPlanAndSubqueries({ case _: SubqueryExec => 1 }).sum
+        val countReusedSubqueries =
+          plan.collectInPlanAndSubqueries({ case _: ReusedSubqueryExec => 1 }).sum
 
         if (reuse) {
-          assert(countSubqueryExec == 1, "Subquery reusing not working correctly")
-          assert(countReuseSubqueryExec == 1, "Subquery reusing not working correctly")
+          assert(countSubqueries == 2, "Subquery reusing not working correctly")
+          assert(countReusedSubqueries == 1, "Subquery reusing not working correctly")
         } else {
-          assert(countSubqueryExec == 2, "expect 2 SubqueryExec when not reusing")
-          assert(countReuseSubqueryExec == 0,
+          assert(countSubqueries == 3, "expect 3 SubqueryExec when not reusing")
+          assert(countReusedSubqueries == 0,
             "expect 0 ReusedSubqueryExec when not reusing")
         }
       }
