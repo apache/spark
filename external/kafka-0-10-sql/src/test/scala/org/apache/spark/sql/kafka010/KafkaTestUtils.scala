@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
-import java.net.InetSocketAddress
+import java.net.{InetAddress, InetSocketAddress}
 import java.nio.charset.StandardCharsets
 import java.util.{Collections, Map => JMap, Properties, UUID}
 import java.util.concurrent.TimeUnit
@@ -41,6 +41,8 @@ import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SaslConfigs
+import org.apache.kafka.common.header.Header
+import org.apache.kafka.common.header.internals.RecordHeader
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
 import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
@@ -66,10 +68,13 @@ class KafkaTestUtils(
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
 
+  private val localCanonicalHostName = InetAddress.getLoopbackAddress().getCanonicalHostName()
+  logInfo(s"Local host name is $localCanonicalHostName")
+
   private var kdc: MiniKdc = _
 
   // Zookeeper related configurations
-  private val zkHost = "localhost"
+  private val zkHost = localCanonicalHostName
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 10000
@@ -78,12 +83,12 @@ class KafkaTestUtils(
   private var zkUtils: ZkUtils = _
 
   // Kafka broker related configurations
-  private val brokerHost = "localhost"
+  private val brokerHost = localCanonicalHostName
   private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
   private val brokerServiceName = "kafka"
-  private val clientUser = "client/localhost"
+  private val clientUser = s"client/$localCanonicalHostName"
   private var clientKeytabFile: File = _
 
   // Kafka broker server
@@ -137,17 +142,17 @@ class KafkaTestUtils(
     assert(kdcReady, "KDC should be set up beforehand")
     val baseDir = Utils.createTempDir()
 
-    val zkServerUser = "zookeeper/localhost"
+    val zkServerUser = s"zookeeper/$localCanonicalHostName"
     val zkServerKeytabFile = new File(baseDir, "zookeeper.keytab")
     kdc.createPrincipal(zkServerKeytabFile, zkServerUser)
     logDebug(s"Created keytab file: ${zkServerKeytabFile.getAbsolutePath()}")
 
-    val zkClientUser = "zkclient/localhost"
+    val zkClientUser = s"zkclient/$localCanonicalHostName"
     val zkClientKeytabFile = new File(baseDir, "zkclient.keytab")
     kdc.createPrincipal(zkClientKeytabFile, zkClientUser)
     logDebug(s"Created keytab file: ${zkClientKeytabFile.getAbsolutePath()}")
 
-    val kafkaServerUser = "kafka/localhost"
+    val kafkaServerUser = s"kafka/$localCanonicalHostName"
     val kafkaServerKeytabFile = new File(baseDir, "kafka.keytab")
     kdc.createPrincipal(kafkaServerKeytabFile, kafkaServerUser)
     logDebug(s"Created keytab file: ${kafkaServerKeytabFile.getAbsolutePath()}")
@@ -348,38 +353,33 @@ class KafkaTestUtils(
     }
   }
 
-  /** Java-friendly function for sending messages to the Kafka broker */
-  def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
-    sendMessages(topic, Map(messageToFreq.asScala.mapValues(_.intValue()).toSeq: _*))
+  def sendMessages(topic: String, msgs: Array[String]): Seq[(String, RecordMetadata)] = {
+    sendMessages(topic, msgs, None)
   }
 
-  /** Send the messages to the Kafka broker */
-  def sendMessages(topic: String, messageToFreq: Map[String, Int]): Unit = {
-    val messages = messageToFreq.flatMap { case (s, freq) => Seq.fill(freq)(s) }.toArray
-    sendMessages(topic, messages)
-  }
-
-  /** Send the array of messages to the Kafka broker */
-  def sendMessages(topic: String, messages: Array[String]): Seq[(String, RecordMetadata)] = {
-    sendMessages(topic, messages, None)
-  }
-
-  /** Send the array of messages to the Kafka broker using specified partition */
   def sendMessages(
       topic: String,
-      messages: Array[String],
-      partition: Option[Int]): Seq[(String, RecordMetadata)] = {
+      msgs: Array[String],
+      part: Option[Int]): Seq[(String, RecordMetadata)] = {
+    val records = msgs.map { msg =>
+      val builder = new RecordBuilder(topic, msg)
+      part.foreach { p => builder.partition(p) }
+      builder.build()
+    }
+    sendMessages(records)
+  }
+
+  def sendMessage(msg: ProducerRecord[String, String]): Seq[(String, RecordMetadata)] = {
+    sendMessages(Array(msg))
+  }
+
+  def sendMessages(msgs: Seq[ProducerRecord[String, String]]): Seq[(String, RecordMetadata)] = {
     producer = new KafkaProducer[String, String](producerConfiguration)
     val offsets = try {
-      messages.map { m =>
-        val record = partition match {
-          case Some(p) => new ProducerRecord[String, String](topic, p, null, m)
-          case None => new ProducerRecord[String, String](topic, m)
-        }
-        val metadata =
-          producer.send(record).get(10, TimeUnit.SECONDS)
-          logInfo(s"\tSent $m to partition ${metadata.partition}, offset ${metadata.offset}")
-        (m, metadata)
+      msgs.map { msg =>
+        val metadata = producer.send(msg).get(10, TimeUnit.SECONDS)
+        logInfo(s"\tSent ($msg) to partition ${metadata.partition}, offset ${metadata.offset}")
+        (msg.value(), metadata)
       }
     } finally {
       if (producer != null) {
@@ -550,7 +550,7 @@ class KafkaTestUtils(
       zkUtils: ZkUtils,
       topic: String,
       numPartitions: Int,
-      servers: Seq[KafkaServer]) {
+      servers: Seq[KafkaServer]): Unit = {
     eventually(timeout(1.minute), interval(200.milliseconds)) {
       try {
         verifyTopicDeletion(topic, numPartitions, servers)
@@ -613,7 +613,7 @@ class KafkaTestUtils(
 
     val actualPort = factory.getLocalPort
 
-    def shutdown() {
+    def shutdown(): Unit = {
       factory.shutdown()
       // The directories are not closed even if the ZooKeeper server is shut down.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
@@ -634,4 +634,3 @@ class KafkaTestUtils(
     }
   }
 }
-

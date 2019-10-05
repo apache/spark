@@ -24,6 +24,7 @@ import java.util.concurrent.RejectedExecutionException
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ExecutionContextTaskSupport
+import scala.collection.parallel.immutable.ParVector
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 import org.apache.hadoop.conf.Configuration
@@ -313,7 +314,7 @@ private[streaming] object FileBasedWriteAheadLog {
     val groupSize = taskSupport.parallelismLevel.max(8)
 
     source.grouped(groupSize).flatMap { group =>
-      val parallelCollection = group.par
+      val parallelCollection = new ParVector(group.toVector)
       parallelCollection.tasksupport = taskSupport
       parallelCollection.map(handler)
     }.flatten

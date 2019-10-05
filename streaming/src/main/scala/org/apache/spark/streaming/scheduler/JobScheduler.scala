@@ -22,8 +22,6 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import scala.collection.JavaConverters._
 import scala.util.Failure
 
-import org.apache.commons.lang3.SerializationUtils
-
 import org.apache.spark.ExecutorAllocationClient
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
@@ -31,7 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.{EventLoop, ThreadUtils}
+import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
 
 
 private[scheduler] sealed trait JobSchedulerEvent
@@ -145,7 +143,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logInfo("Stopped JobScheduler")
   }
 
-  def submitJobSet(jobSet: JobSet) {
+  def submitJobSet(jobSet: JobSet): Unit = {
     if (jobSet.jobs.isEmpty) {
       logInfo("No jobs added for time " + jobSet.time)
     } else {
@@ -160,7 +158,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     jobSets.asScala.keys.toSeq
   }
 
-  def reportError(msg: String, e: Throwable) {
+  def reportError(msg: String, e: Throwable): Unit = {
     eventLoop.post(ErrorReported(msg, e))
   }
 
@@ -168,7 +166,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     eventLoop != null
   }
 
-  private def processEvent(event: JobSchedulerEvent) {
+  private def processEvent(event: JobSchedulerEvent): Unit = {
     try {
       event match {
         case JobStarted(job, startTime) => handleJobStart(job, startTime)
@@ -181,7 +179,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
   }
 
-  private def handleJobStart(job: Job, startTime: Long) {
+  private def handleJobStart(job: Job, startTime: Long): Unit = {
     val jobSet = jobSets.get(job.time)
     val isFirstJobOfJobSet = !jobSet.hasStarted
     jobSet.handleJobStart(job)
@@ -195,7 +193,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
   }
 
-  private def handleJobCompletion(job: Job, completedTime: Long) {
+  private def handleJobCompletion(job: Job, completedTime: Long): Unit = {
     val jobSet = jobSets.get(job.time)
     jobSet.handleJobCompletion(job)
     job.setEndTime(completedTime)
@@ -219,7 +217,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
   }
 
-  private def handleError(msg: String, e: Throwable) {
+  private def handleError(msg: String, e: Throwable): Unit = {
     logError(msg, e)
     ssc.waiter.notifyError(e)
     PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
@@ -228,10 +226,10 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private class JobHandler(job: Job) extends Runnable with Logging {
     import JobScheduler._
 
-    def run() {
+    def run(): Unit = {
       val oldProps = ssc.sparkContext.getLocalProperties
       try {
-        ssc.sparkContext.setLocalProperties(SerializationUtils.clone(ssc.savedProperties.get()))
+        ssc.sparkContext.setLocalProperties(Utils.cloneProperties(ssc.savedProperties.get()))
         val formattedTime = UIUtils.formatBatchTime(
           job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
         val batchUrl = s"/streaming/batch/?id=${job.time.milliseconds}"

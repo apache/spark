@@ -690,7 +690,8 @@ class TypeCoercionSuite extends AnalysisTest {
       Some(new StructType().add("a", StringType)))
   }
 
-  private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
+  private def ruleTest(rule: Rule[LogicalPlan],
+      initial: Expression, transformed: Expression): Unit = {
     ruleTest(Seq(rule), initial, transformed)
   }
 
@@ -1430,6 +1431,8 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(dateTimeOperations, Add(intValue, date), DateAdd(date, intValue))
     ruleTest(dateTimeOperations, Subtract(date, intValue), DateSub(date, intValue))
     ruleTest(dateTimeOperations, Subtract(date, date), DateDiff(date, date))
+    ruleTest(dateTimeOperations, Subtract(timestamp, timestamp),
+      TimestampDiff(timestamp, timestamp))
   }
 
   /**
@@ -1483,15 +1486,15 @@ class TypeCoercionSuite extends AnalysisTest {
 
   test("SPARK-28395 Division operator support integral division") {
     val rules = Seq(FunctionArgumentConversion, Division(conf))
-    Seq(true, false).foreach { preferIntegralDivision =>
-      withSQLConf(SQLConf.PREFER_INTEGRAL_DIVISION.key -> s"$preferIntegralDivision") {
-        val result1 = if (preferIntegralDivision) {
+    Seq(SQLConf.Dialect.SPARK, SQLConf.Dialect.POSTGRESQL).foreach { dialect =>
+      withSQLConf(SQLConf.DIALECT.key -> dialect.toString) {
+        val result1 = if (dialect == SQLConf.Dialect.POSTGRESQL) {
           IntegralDivide(1L, 1L)
         } else {
           Divide(Cast(1L, DoubleType), Cast(1L, DoubleType))
         }
         ruleTest(rules, Divide(1L, 1L), result1)
-        val result2 = if (preferIntegralDivision) {
+        val result2 = if (dialect == SQLConf.Dialect.POSTGRESQL) {
           IntegralDivide(1, Cast(1, ShortType))
         } else {
           Divide(Cast(1, DoubleType), Cast(Cast(1, ShortType), DoubleType))

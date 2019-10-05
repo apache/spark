@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
+import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -784,7 +785,8 @@ class DataSourceV2SQLSuite
       sql("SHOW NAMESPACES")
     }
 
-    assert(exception.getMessage.contains("No default v2 catalog is set"))
+    assert(exception.getMessage.contains(
+      "SHOW NAMESPACES is not supported with the session catalog"))
   }
 
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
@@ -812,12 +814,13 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("does not support namespaces"))
   }
 
-  test("ShowNamespaces: no v2 catalog is available") {
+  test("ShowNamespaces: session catalog") {
     val exception = intercept[AnalysisException] {
       sql("SHOW NAMESPACES in dummy")
     }
 
-    assert(exception.getMessage.contains("No v2 catalog is available"))
+    assert(exception.getMessage.contains(
+      "SHOW NAMESPACES is not supported with the session catalog"))
   }
 
   private def testShowNamespaces(
@@ -828,6 +831,67 @@ class DataSourceV2SQLSuite
     val df = spark.sql(sqlText)
     assert(df.schema === schema)
     assert(df.collect().map(_.getAs[String](0)).sorted === expected.sorted)
+  }
+
+  test("Use: basic tests with USE statements") {
+    val catalogManager = spark.sessionState.catalogManager
+
+    // Validate the initial current catalog and namespace.
+    assert(catalogManager.currentCatalog.name() == "session")
+    assert(catalogManager.currentNamespace === Array("default"))
+
+    // The following implicitly creates namespaces.
+    sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat2.ns2.ns2_2.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat2.ns3.ns3_3.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat2.testcat.table (id bigint) USING foo")
+
+    // Catalog is resolved to 'testcat'.
+    sql("USE testcat.ns1.ns1_1")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+    assert(catalogManager.currentNamespace === Array("ns1", "ns1_1"))
+
+    // Catalog is resolved to 'testcat2'.
+    sql("USE testcat2.ns2.ns2_2")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assert(catalogManager.currentNamespace === Array("ns2", "ns2_2"))
+
+    // Only the namespace is changed.
+    sql("USE ns3.ns3_3")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assert(catalogManager.currentNamespace === Array("ns3", "ns3_3"))
+
+    // Only the namespace is changed (explicit).
+    sql("USE NAMESPACE testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assert(catalogManager.currentNamespace === Array("testcat"))
+
+    // Catalog is resolved to `testcat`.
+    sql("USE testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+    assert(catalogManager.currentNamespace === Array())
+  }
+
+  test("Use: set v2 catalog as a current catalog") {
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == "session")
+
+    sql("USE testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+  }
+
+  test("Use: v2 session catalog is used and namespace does not exist") {
+    val exception = intercept[NoSuchDatabaseException] {
+      sql("USE ns1")
+    }
+    assert(exception.getMessage.contains("Database 'ns1' not found"))
+  }
+
+  test("Use: v2 catalog is used and namespace does not exist") {
+    // Namespaces are not required to exist for v2 catalogs.
+    sql("USE testcat.ns1.ns2")
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentNamespace === Array("ns1", "ns2"))
   }
 
   test("tableCreation: partition column case insensitive resolution") {
@@ -992,7 +1056,24 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("DeleteFrom: basic") {
+  test("REPLACE TABLE: v1 table") {
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
+    }
+    assert(e.message.contains("REPLACE TABLE is only supported with v2 tables"))
+  }
+
+  test("DeleteFrom: basic - delete all") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t")
+      checkAnswer(spark.table(t), Seq())
+    }
+  }
+
+  test("DeleteFrom: basic - delete with where clause") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
@@ -1003,12 +1084,23 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("DeleteFrom: alias") {
+  test("DeleteFrom: delete from aliased target table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t tbl WHERE tbl.id = 2")
+      sql(s"DELETE FROM $t AS tbl WHERE tbl.id = 2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c", 3)))
+    }
+  }
+
+  test("DeleteFrom: normalize attribute names") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t AS tbl WHERE tbl.ID = 2")
       checkAnswer(spark.table(t), Seq(
         Row(3, "c", 3)))
     }
@@ -1026,6 +1118,31 @@ class DataSourceV2SQLSuite
       assert(spark.table(t).count === 3)
       assert(exc.getMessage.contains("Delete by condition with subquery is not supported"))
     }
+  }
+
+  test("Update: basic - update all") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, name string, age int, p int)
+           |USING foo
+           |PARTITIONED BY (id, p)
+         """.stripMargin)
+      sql(
+        s"""
+           |INSERT INTO $t
+           |VALUES (1L, 'Herry', 26, 1),
+           |(2L, 'Jack', 31, 2),
+           |(3L, 'Lisa', 28, 3),
+           |(4L, 'Frank', 33, 3)
+         """.stripMargin)
+    }
+    val errMsg = "UPDATE TABLE is not supported temporarily"
+    testCreateAnalysisError(
+      s"UPDATE $t SET name='Robert', age=32",
+      errMsg
+    )
   }
 
   private def testCreateAnalysisError(sqlStatement: String, expectedError: String): Unit = {

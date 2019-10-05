@@ -28,6 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -140,7 +141,11 @@ class QueryExecution(
     val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
     if (formatted) {
-      ExplainUtils.processPlan(executedPlan, concat.append)
+      try {
+        ExplainUtils.processPlan(executedPlan, concat.append)
+      } catch {
+        case e: AnalysisException => concat.append(e.toString)
+      }
     } else {
       QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
     }
@@ -179,8 +184,11 @@ class QueryExecution(
     val maxFields = SQLConf.get.maxToStringFields
 
     // trigger to compute stats for logical plans
-    optimizedPlan.stats
-
+    try {
+      optimizedPlan.stats
+    } catch {
+      case e: AnalysisException => concat.append(e.toString + "\n")
+    }
     // only show optimized logical plan and physical plan
     concat.append("== Optimized Logical Plan ==\n")
     QueryPlan.append(optimizedPlan, concat.append, verbose = true, addSuffix = true, maxFields)
@@ -217,7 +225,7 @@ class QueryExecution(
      *
      * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
      */
-    def codegenToSeq(): Seq[(String, String)] = {
+    def codegenToSeq(): Seq[(String, String, ByteCodeStats)] = {
       org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
     }
 

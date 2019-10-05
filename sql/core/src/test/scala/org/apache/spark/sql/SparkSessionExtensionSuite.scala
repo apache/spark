@@ -16,13 +16,15 @@
  */
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, UnresolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -119,6 +121,25 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     withSession(extensions) { session =>
       assert(session.sessionState.functionRegistry
         .lookupFunction(MyExtensions.myFunction._1).isDefined)
+    }
+  }
+
+  case class MyHintRule(spark: SparkSession) extends Rule[LogicalPlan] {
+    val MY_HINT_NAME = Set("CONVERT_TO_EMPTY")
+
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveOperators {
+      case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+        LocalRelation(h.output, data = Seq.empty, isStreaming = h.isStreaming)
+    }
+  }
+
+  test("inject custom hint rule") {
+    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
+      assert(
+        session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
+        "plan is expected to be a local relation"
+      )
     }
   }
 

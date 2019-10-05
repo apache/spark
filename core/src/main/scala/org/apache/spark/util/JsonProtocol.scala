@@ -391,6 +391,7 @@ private[spark] object JsonProtocol {
     ("Executor Deserialize CPU Time" -> taskMetrics.executorDeserializeCpuTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
     ("Executor CPU Time" -> taskMetrics.executorCpuTime) ~
+    ("Peak Execution Memory" -> taskMetrics.peakExecutionMemory) ~
     ("Result Size" -> taskMetrics.resultSize) ~
     ("JVM GC Time" -> taskMetrics.jvmGCTime) ~
     ("Result Serialization Time" -> taskMetrics.resultSerializationTime) ~
@@ -420,6 +421,7 @@ private[spark] object JsonProtocol {
         ("Block Manager Address" -> blockManagerAddress) ~
         ("Shuffle ID" -> fetchFailed.shuffleId) ~
         ("Map ID" -> fetchFailed.mapId) ~
+        ("Map Index" -> fetchFailed.mapIndex) ~
         ("Reduce ID" -> fetchFailed.reduceId) ~
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
@@ -893,6 +895,10 @@ private[spark] object JsonProtocol {
       case JNothing => 0
       case x => x.extract[Long]
     })
+    metrics.setPeakExecutionMemory((json \ "Peak Execution Memory") match {
+      case JNothing => 0
+      case x => x.extract[Long]
+    })
     metrics.setResultSize((json \ "Result Size").extract[Long])
     metrics.setJvmGCTime((json \ "JVM GC Time").extract[Long])
     metrics.setResultSerializationTime((json \ "Result Serialization Time").extract[Long])
@@ -974,10 +980,11 @@ private[spark] object JsonProtocol {
       case `fetchFailed` =>
         val blockManagerAddress = blockManagerIdFromJson(json \ "Block Manager Address")
         val shuffleId = (json \ "Shuffle ID").extract[Int]
-        val mapId = (json \ "Map ID").extract[Int]
+        val mapId = (json \ "Map ID").extract[Long]
+        val mapIndex = (json \ "Map Index").extract[Int]
         val reduceId = (json \ "Reduce ID").extract[Int]
         val message = jsonOption(json \ "Message").map(_.extract[String])
-        new FetchFailed(blockManagerAddress, shuffleId, mapId, reduceId,
+        new FetchFailed(blockManagerAddress, shuffleId, mapId, mapIndex, reduceId,
           message.getOrElse("Unknown reason"))
       case `exceptionFailure` =>
         val className = (json \ "Class Name").extract[String]

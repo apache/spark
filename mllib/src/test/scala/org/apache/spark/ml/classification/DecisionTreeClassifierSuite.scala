@@ -44,7 +44,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   private val seed = 42
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     categoricalDataPointsRDD =
       sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints()).map(_.asML)

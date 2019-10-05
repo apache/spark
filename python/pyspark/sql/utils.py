@@ -16,6 +16,10 @@
 #
 
 import py4j
+import sys
+
+if sys.version_info.major >= 3:
+    unicode = str
 
 
 class CapturedException(Exception):
@@ -25,7 +29,12 @@ class CapturedException(Exception):
         self.cause = convert_exception(cause) if cause is not None else None
 
     def __str__(self):
-        return repr(self.desc)
+        desc = self.desc
+        # encode unicode instance for python2 for human readable description
+        if sys.version_info.major < 3 and isinstance(desc, unicode):
+            return str(desc.encode('utf-8'))
+        else:
+            return str(desc)
 
 
 class AnalysisException(CapturedException):

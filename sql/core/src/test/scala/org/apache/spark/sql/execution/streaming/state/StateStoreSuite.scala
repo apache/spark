@@ -406,7 +406,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     var latestStoreVersion = 0
 
-    def generateStoreVersions() {
+    def generateStoreVersions(): Unit = {
       for (i <- 1 to 20) {
         val store = StateStore.get(storeProviderId, keySchema, valueSchema, None,
           latestStoreVersion, storeConf, hadoopConf)

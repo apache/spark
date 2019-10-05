@@ -69,6 +69,7 @@ import org.apache.spark.util.Utils
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
  * @groupname collection_funcs Collection functions
+ * @groupname partition_transforms Partition transform functions
  * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */
@@ -2634,8 +2635,8 @@ object functions {
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
-   *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
+   *                 can be cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   * @param format A pattern `dd.MM.uuuu` would return a string like `18.03.1993`
    * @return A string, or null if `dateExpr` was a string that could not be cast to a timestamp
    * @note Use specialized functions like [[year]] whenever possible as they benefit from a
    * specialized implementation.
@@ -3385,6 +3386,177 @@ object functions {
     ArrayExcept(col1.expr, col2.expr)
   }
 
+  private def createLambda(f: Column => Column) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val function = f(Column(x)).expr
+    LambdaFunction(function, Seq(x))
+  }
+
+  private def createLambda(f: (Column, Column) => Column) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val function = f(Column(x), Column(y)).expr
+    LambdaFunction(function, Seq(x, y))
+  }
+
+  private def createLambda(f: (Column, Column, Column) => Column) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val z = UnresolvedNamedLambdaVariable(Seq("z"))
+    val function = f(Column(x), Column(y), Column(z)).expr
+    LambdaFunction(function, Seq(x, y, z))
+  }
+
+  /**
+   * Returns an array of elements after applying a tranformation to each element
+   * in the input array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def transform(column: Column, f: Column => Column): Column = withExpr {
+    ArrayTransform(column.expr, createLambda(f))
+  }
+
+  /**
+   * Returns an array of elements after applying a tranformation to each element
+   * in the input array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def transform(column: Column, f: (Column, Column) => Column): Column = withExpr {
+    ArrayTransform(column.expr, createLambda(f))
+  }
+
+  /**
+   * Returns whether a predicate holds for one or more elements in the array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def exists(column: Column, f: Column => Column): Column = withExpr {
+    ArrayExists(column.expr, createLambda(f))
+  }
+
+  /**
+   * Returns whether a predicate holds for every element in the array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def forall(column: Column, f: Column => Column): Column = withExpr {
+    ArrayForAll(column.expr, createLambda(f))
+  }
+
+  /**
+   * Returns an array of elements for which a predicate holds in a given array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def filter(column: Column, f: Column => Column): Column = withExpr {
+    ArrayFilter(column.expr, createLambda(f))
+  }
+
+  /**
+   * Returns an array of elements for which a predicate holds in a given array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def filter(column: Column, f: (Column, Column) => Column): Column = withExpr {
+    ArrayFilter(column.expr, createLambda(f))
+  }
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state. The final state is converted into the final result
+   * by applying a finish function.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def aggregate(
+      expr: Column,
+      zero: Column,
+      merge: (Column, Column) => Column,
+      finish: Column => Column): Column = withExpr {
+    ArrayAggregate(
+      expr.expr,
+      zero.expr,
+      createLambda(merge),
+      createLambda(finish)
+    )
+  }
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column): Column =
+    aggregate(expr, zero, merge, c => c)
+
+  /**
+   * Merge two given arrays, element-wise, into a signle array using a function.
+   * If one array is shorter, nulls are appended at the end to match the length of the longer
+   * array, before applying the function.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def zip_with(left: Column, right: Column, f: (Column, Column) => Column): Column = withExpr {
+    ZipWith(left.expr, right.expr, createLambda(f))
+  }
+
+  /**
+   * Applies a function to every key-value pair in a map and returns
+   * a map with the results of those applications as the new keys for the pairs.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def transform_keys(expr: Column, f: (Column, Column) => Column): Column = withExpr {
+    TransformKeys(expr.expr, createLambda(f))
+  }
+
+  /**
+   * Applies a function to every key-value pair in a map and returns
+   * a map with the results of those applications as the new values for the pairs.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def transform_values(expr: Column, f: (Column, Column) => Column): Column = withExpr {
+    TransformValues(expr.expr, createLambda(f))
+  }
+
+  /**
+   * Returns a map whose key-value pairs satisfy a predicate.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def map_filter(expr: Column, f: (Column, Column) => Column): Column = withExpr {
+    MapFilter(expr.expr, createLambda(f))
+  }
+
+  /**
+   * Merge two given maps, key-wise into a single map using a function.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def map_zip_with(
+      left: Column,
+      right: Column,
+      f: (Column, Column, Column) => Column): Column = withExpr {
+    MapZipWith(left.expr, right.expr, createLambda(f))
+  }
+
   /**
    * Creates a new row for each element in the given array or map column.
    * Uses the default column name `col` for elements in the array and
@@ -3941,6 +4113,63 @@ object functions {
    * @since 3.0.0
    */
   def to_csv(e: Column): Column = to_csv(e, Map.empty[String, String].asJava)
+
+  /**
+   * A transform for timestamps and dates to partition data into years.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def years(e: Column): Column = withExpr { Years(e.expr) }
+
+  /**
+   * A transform for timestamps and dates to partition data into months.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def months(e: Column): Column = withExpr { Months(e.expr) }
+
+  /**
+   * A transform for timestamps and dates to partition data into days.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def days(e: Column): Column = withExpr { Days(e.expr) }
+
+  /**
+   * A transform for timestamps to partition data into hours.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+  /**
+   * A transform for any type that partitions by a hash of the input column.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def bucket(numBuckets: Column, e: Column): Column = withExpr {
+    numBuckets.expr match {
+      case lit @ Literal(_, IntegerType) =>
+        Bucket(lit, e.expr)
+      case _ =>
+        throw new AnalysisException(s"Invalid number of buckets: bucket($numBuckets, $e)")
+    }
+  }
+
+  /**
+   * A transform for any type that partitions by a hash of the input column.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def bucket(numBuckets: Int, e: Column): Column = withExpr {
+    Bucket(Literal(numBuckets), e.expr)
+  }
 
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number

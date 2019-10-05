@@ -21,7 +21,7 @@ import java.io.{Closeable, IOException, OutputStream}
 
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.api.ShufflePartitionWriter
-import org.apache.spark.storage.BlockId
+import org.apache.spark.storage.{BlockId, TimeTrackingOutputStream}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.PairsWriter
 
@@ -39,6 +39,7 @@ private[spark] class ShufflePartitionPairsWriter(
 
   private var isClosed = false
   private var partitionStream: OutputStream = _
+  private var timeTrackingStream: OutputStream = _
   private var wrappedStream: OutputStream = _
   private var objOut: SerializationStream = _
   private var numRecordsWritten = 0
@@ -59,7 +60,8 @@ private[spark] class ShufflePartitionPairsWriter(
   private def open(): Unit = {
     try {
       partitionStream = partitionWriter.openStream
-      wrappedStream = serializerManager.wrapStream(blockId, partitionStream)
+      timeTrackingStream = new TimeTrackingOutputStream(writeMetrics, partitionStream)
+      wrappedStream = serializerManager.wrapStream(blockId, timeTrackingStream)
       objOut = serializerInstance.serializeStream(wrappedStream)
     } catch {
       case e: Exception =>
@@ -78,6 +80,7 @@ private[spark] class ShufflePartitionPairsWriter(
           // Setting these to null will prevent the underlying streams from being closed twice
           // just in case any stream's close() implementation is not idempotent.
           wrappedStream = null
+          timeTrackingStream = null
           partitionStream = null
         } {
           // Normally closing objOut would close the inner streams as well, but just in case there
@@ -86,9 +89,15 @@ private[spark] class ShufflePartitionPairsWriter(
             wrappedStream = closeIfNonNull(wrappedStream)
             // Same as above - if wrappedStream closes then assume it closes underlying
             // partitionStream and don't close again in the finally
+            timeTrackingStream = null
             partitionStream = null
           } {
-            partitionStream = closeIfNonNull(partitionStream)
+            Utils.tryWithSafeFinally {
+              timeTrackingStream = closeIfNonNull(timeTrackingStream)
+              partitionStream = null
+            } {
+              partitionStream = closeIfNonNull(partitionStream)
+            }
           }
         }
         updateBytesWritten()

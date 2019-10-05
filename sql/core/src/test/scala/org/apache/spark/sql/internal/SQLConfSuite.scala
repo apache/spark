@@ -19,7 +19,6 @@ package org.apache.spark.sql.internal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
@@ -321,22 +320,4 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(e2.getMessage.contains("spark.sql.shuffle.partitions"))
   }
 
-  test("SPARK-29046: SQLConf.get shouldn't throw NPE when active SparkContext is stopping") {
-    // Logically, there's only one case SQLConf.get throws NPE: there's active SparkContext,
-    // but SparkContext is stopping - especially it sets dagScheduler as null.
-
-    val oldSparkContext = SparkContext.getActive
-    Utils.tryWithSafeFinally {
-      // this is necessary to set new SparkContext as active: it cleans up active SparkContext
-      oldSparkContext.foreach(_ => SparkContext.clearActiveContext())
-
-      val conf = new SparkConf().setAppName("test").setMaster("local")
-      LocalSparkContext.withSpark(new SparkContext(conf)) { sc =>
-        sc.dagScheduler = null
-        SQLConf.get
-      }
-    } {
-      oldSparkContext.orElse(Some(null)).foreach(SparkContext.setActiveContext)
-    }
-  }
 }

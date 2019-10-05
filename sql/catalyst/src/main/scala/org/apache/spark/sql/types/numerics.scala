@@ -114,13 +114,13 @@ object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
     if (x == x.toInt) {
       x.toInt
     } else {
-      throw new ArithmeticException(s"Casting $x to int causes overflow.")
+      throw new ArithmeticException(s"Casting $x to int causes overflow")
     }
 }
 
 object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
   private def overflowException(x: Float, dataType: String) =
-    throw new ArithmeticException(s"Casting $x to $dataType causes overflow.")
+    throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
   private val intUpperBound = Int.MaxValue.toFloat
   private val intLowerBound = Int.MinValue.toFloat
@@ -152,7 +152,7 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
 
 object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrdering {
   private def overflowException(x: Double, dataType: String) =
-    throw new ArithmeticException(s"Casting $x to $dataType causes overflow.")
+    throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
 
   private val intUpperBound = Int.MaxValue.toDouble
   private val intLowerBound = Int.MinValue.toDouble

@@ -677,8 +677,9 @@ object TypeCoercion {
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
       case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
+        val preferIntegralDivision = conf.usePostgreSQLDialect
         (left.dataType, right.dataType) match {
-          case (_: IntegralType, _: IntegralType) if conf.preferIntegralDivision =>
+          case (_: IntegralType, _: IntegralType) if preferIntegralDivision =>
             IntegralDivide(left, right)
           case _ =>
             Divide(Cast(left, DoubleType), Cast(right, DoubleType))
@@ -849,6 +850,7 @@ object TypeCoercion {
       case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
       case Subtract(l @ DateType(), r @ IntegerType()) => DateSub(l, r)
       case Subtract(l @ DateType(), r @ DateType()) => DateDiff(l, r)
+      case Subtract(l @ TimestampType(), r @ TimestampType()) => TimestampDiff(l, r)
     }
   }
 

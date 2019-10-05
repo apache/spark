@@ -21,8 +21,11 @@ import java.util
 import java.util.Collections
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.plans.logical.AlterTable
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 
@@ -220,4 +223,59 @@ private[sql] object CatalogV2Util {
       case _: NoSuchDatabaseException => None
       case _: NoSuchNamespaceException => None
     }
+
+  def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
+    catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
+  }
+
+  def convertTableProperties(
+      properties: Map[String, String],
+      options: Map[String, String],
+      location: Option[String],
+      comment: Option[String],
+      provider: String): Map[String, String] = {
+    if (options.contains("path") && location.isDefined) {
+      throw new AnalysisException(
+        "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
+          "you can only specify one of them.")
+    }
+
+    if ((options.contains("comment") || properties.contains("comment"))
+      && comment.isDefined) {
+      throw new AnalysisException(
+        "COMMENT and option/property 'comment' are both used to set the table comment, you can " +
+          "only specify one of them.")
+    }
+
+    if (options.contains("provider") || properties.contains("provider")) {
+      throw new AnalysisException(
+        "USING and option/property 'provider' are both used to set the provider implementation, " +
+          "you can only specify one of them.")
+    }
+
+    val filteredOptions = options.filterKeys(_ != "path")
+
+    // create table properties from TBLPROPERTIES and OPTIONS clauses
+    val tableProperties = new mutable.HashMap[String, String]()
+    tableProperties ++= properties
+    tableProperties ++= filteredOptions
+
+    // convert USING, LOCATION, and COMMENT clauses to table properties
+    tableProperties += ("provider" -> provider)
+    comment.map(text => tableProperties += ("comment" -> text))
+    location.orElse(options.get("path")).map(loc => tableProperties += ("location" -> loc))
+
+    tableProperties.toMap
+  }
+
+  def createAlterTable(
+      originalNameParts: Seq[String],
+      catalog: CatalogPlugin,
+      tableName: Seq[String],
+      changes: Seq[TableChange]): AlterTable = {
+    val tableCatalog = catalog.asTableCatalog
+    val ident = tableName.asIdentifier
+    val unresolved = UnresolvedV2Relation(originalNameParts, tableCatalog, ident)
+    AlterTable(tableCatalog, ident, unresolved, changes)
+  }
 }

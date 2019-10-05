@@ -218,6 +218,7 @@ javax.jdo:jdo-api
 joda-time:joda-time
 net.sf.opencsv:opencsv
 org.apache.derby:derby
+org.ehcache:ehcache
 org.objenesis:objenesis
 org.roaringbitmap:RoaringBitmap
 org.scalanlp:breeze-macros_2.12
@@ -259,6 +260,7 @@ net.sf.supercsv:super-csv
 org.apache.arrow:arrow-format
 org.apache.arrow:arrow-memory
 org.apache.arrow:arrow-vector
+org.apache.commons:commons-configuration2
 org.apache.commons:commons-crypto
 org.apache.commons:commons-lang3
 org.apache.hadoop:hadoop-annotations
@@ -266,6 +268,7 @@ org.apache.hadoop:hadoop-auth
 org.apache.hadoop:hadoop-client
 org.apache.hadoop:hadoop-common
 org.apache.hadoop:hadoop-hdfs
+org.apache.hadoop:hadoop-hdfs-client
 org.apache.hadoop:hadoop-mapreduce-client-app
 org.apache.hadoop:hadoop-mapreduce-client-common
 org.apache.hadoop:hadoop-mapreduce-client-core
@@ -278,6 +281,21 @@ org.apache.hadoop:hadoop-yarn-server-common
 org.apache.hadoop:hadoop-yarn-server-web-proxy
 org.apache.httpcomponents:httpclient
 org.apache.httpcomponents:httpcore
+org.apache.kerby:kerb-admin
+org.apache.kerby:kerb-client
+org.apache.kerby:kerb-common
+org.apache.kerby:kerb-core
+org.apache.kerby:kerb-crypto
+org.apache.kerby:kerb-identity
+org.apache.kerby:kerb-server
+org.apache.kerby:kerb-simplekdc
+org.apache.kerby:kerb-util
+org.apache.kerby:kerby-asn1
+org.apache.kerby:kerby-config
+org.apache.kerby:kerby-pkix
+org.apache.kerby:kerby-util
+org.apache.kerby:kerby-xdr
+org.apache.kerby:token-provider
 org.apache.orc:orc-core
 org.apache.orc:orc-mapreduce
 org.mortbay.jetty:jetty
@@ -292,14 +310,19 @@ com.fasterxml.jackson.core:jackson-annotations
 com.fasterxml.jackson.core:jackson-core
 com.fasterxml.jackson.core:jackson-databind
 com.fasterxml.jackson.dataformat:jackson-dataformat-yaml
+com.fasterxml.jackson.jaxrs:jackson-jaxrs-base
+com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider
 com.fasterxml.jackson.module:jackson-module-jaxb-annotations
 com.fasterxml.jackson.module:jackson-module-paranamer
 com.fasterxml.jackson.module:jackson-module-scala_2.12
+com.fasterxml.woodstox:woodstox-core
 com.github.mifmif:generex
+com.github.stephenc.jcip:jcip-annotations
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
 com.google.inject:guice
 com.google.inject.extensions:guice-servlet
+com.nimbusds:nimbus-jose-jwt
 com.twitter:parquet-hadoop-bundle
 commons-cli:commons-cli
 commons-dbcp:commons-dbcp
@@ -313,6 +336,8 @@ javax.inject:javax.inject
 javax.validation:validation-api
 log4j:apache-log4j-extras
 log4j:log4j
+net.minidev:accessors-smart
+net.minidev:json-smart
 net.sf.jpam:jpam
 org.apache.avro:avro
 org.apache.avro:avro-ipc
@@ -328,6 +353,7 @@ org.apache.directory.server:apacheds-i18n
 org.apache.directory.server:apacheds-kerberos-codec
 org.apache.htrace:htrace-core
 org.apache.ivy:ivy
+org.apache.geronimo.specs:geronimo-jcache_1.0_spec
 org.apache.mesos:mesos
 org.apache.parquet:parquet-column
 org.apache.parquet:parquet-common
@@ -369,6 +395,20 @@ org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
 org.scala-lang.modules:scala-xml_2.12
 org.opencypher:okapi-shade
+com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
+com.zaxxer.HikariCP
+org.apache.hive:hive-common
+org.apache.hive:hive-llap-common
+org.apache.hive:hive-serde
+org.apache.hive:hive-service-rpc
+org.apache.hive:hive-shims-0.23
+org.apache.hive:hive-shims
+org.apache.hive:hive-shims-scheduler
+org.apache.hive:hive-storage-api
+org.apache.hive:hive-vector-code-gen
+org.datanucleus:javax.jdo
+com.tdunning:json
+org.apache.velocity:velocity
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
@@ -387,6 +427,7 @@ BSD 2-Clause
 ------------
 
 com.github.luben:zstd-jni
+dnsjava:dnsjava
 javolution:javolution
 com.esotericsoftware:kryo-shaded
 com.esotericsoftware:minlog
@@ -394,8 +435,11 @@ com.esotericsoftware:reflectasm
 com.google.protobuf:protobuf-java
 org.codehaus.janino:commons-compiler
 org.codehaus.janino:janino
+org.codehaus.woodstox:stax2-api
 jline:jline
 org.jodd:jodd-core
+com.github.wendykierp:JTransforms
+pl.edu.icm:JLargeArrays
 
 
 BSD 3-Clause
@@ -408,6 +452,7 @@ org.antlr:stringtemplate
 org.antlr:antlr4-runtime
 antlr:antlr
 com.github.fommil.netlib:core
+com.google.re2j:re2j
 com.thoughtworks.paranamer:paranamer
 org.scala-lang:scala-compiler
 org.scala-lang:scala-library
@@ -433,8 +478,13 @@ is distributed under the 3-Clause BSD license.
 MIT License
 -----------
 
-org.spire-math:spire-macros_2.12
-org.spire-math:spire_2.12
+com.microsoft.sqlserver:mssql-jdbc
+org.typelevel:spire_2.12
+org.typelevel:spire-macros_2.12
+org.typelevel:spire-platform_2.12
+org.typelevel:spire-util_2.12
+org.typelevel:algebra_2.12:jar
+org.typelevel:cats-kernel_2.12
 org.typelevel:machinist_2.12
 net.razorvine:pyrolite
 org.slf4j:jcl-over-slf4j
@@ -458,6 +508,7 @@ Common Development and Distribution License (CDDL) 1.0
 
 javax.activation:activation  http://www.oracle.com/technetwork/java/javase/tech/index-jsp-138795.html
 javax.xml.stream:stax-api    https://jcp.org/en/jsr/detail?id=173
+javax.transaction:javax.transaction-api
 
 
 Common Development and Distribution License (CDDL) 1.1
@@ -495,11 +546,6 @@ Eclipse Public License (EPL) 2.0
 
 jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/ee4j.ca
 jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
-
-Mozilla Public License (MPL) 1.1
---------------------------------
-
-com.github.rwl:jtransforms https://sourceforge.net/projects/jtransforms/
 
 
 Python Software Foundation License

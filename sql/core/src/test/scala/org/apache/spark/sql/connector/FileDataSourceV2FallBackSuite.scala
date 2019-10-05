@@ -173,7 +173,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
           withTempPath { path =>
             val inputData = spark.range(10)
             inputData.write.format(format).save(path.getCanonicalPath)
-            sparkContext.listenerBus.waitUntilEmpty(1000)
+            sparkContext.listenerBus.waitUntilEmpty()
             assert(commands.length == 1)
             assert(commands.head._1 == "save")
             assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])

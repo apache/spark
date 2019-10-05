@@ -106,7 +106,7 @@ public class ExternalBlockHandler extends RpcHandler {
             numBlockIds += ids.length;
           }
           streamId = streamManager.registerStream(client.getClientId(),
-            new ManagedBufferIterator(msg, numBlockIds), client.getChannel());
+            new ShuffleManagedBufferIterator(msg), client.getChannel());
         } else {
           // For the compatibility with the old version, still keep the support for OpenBlocks.
           OpenBlocks msg = (OpenBlocks) msgObj;
@@ -299,21 +299,6 @@ public class ExternalBlockHandler extends RpcHandler {
       return mapIdAndReduceIds;
     }
 
-    ManagedBufferIterator(FetchShuffleBlocks msg, int numBlockIds) {
-      final int[] mapIdAndReduceIds = new int[2 * numBlockIds];
-      int idx = 0;
-      for (int i = 0; i < msg.mapIds.length; i++) {
-        for (int reduceId : msg.reduceIds[i]) {
-          mapIdAndReduceIds[idx++] = msg.mapIds[i];
-          mapIdAndReduceIds[idx++] = reduceId;
-        }
-      }
-      assert(idx == 2 * numBlockIds);
-      size = mapIdAndReduceIds.length;
-      blockDataForIndexFn = index -> blockManager.getBlockData(msg.appId, msg.execId,
-        msg.shuffleId, mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
-    }
-
     @Override
     public boolean hasNext() {
       return index < size;
@@ -323,6 +308,49 @@ public class ExternalBlockHandler extends RpcHandler {
     public ManagedBuffer next() {
       final ManagedBuffer block = blockDataForIndexFn.apply(index);
       index += 2;
+      metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
+      return block;
+    }
+  }
+
+  private class ShuffleManagedBufferIterator implements Iterator<ManagedBuffer> {
+
+    private int mapIdx = 0;
+    private int reduceIdx = 0;
+
+    private final String appId;
+    private final String execId;
+    private final int shuffleId;
+    private final long[] mapIds;
+    private final int[][] reduceIds;
+
+    ShuffleManagedBufferIterator(FetchShuffleBlocks msg) {
+      appId = msg.appId;
+      execId = msg.execId;
+      shuffleId = msg.shuffleId;
+      mapIds = msg.mapIds;
+      reduceIds = msg.reduceIds;
+    }
+
+    @Override
+    public boolean hasNext() {
+      // mapIds.length must equal to reduceIds.length, and the passed in FetchShuffleBlocks
+      // must have non-empty mapIds and reduceIds, see the checking logic in
+      // OneForOneBlockFetcher.
+      assert(mapIds.length != 0 && mapIds.length == reduceIds.length);
+      return mapIdx < mapIds.length && reduceIdx < reduceIds[mapIdx].length;
+    }
+
+    @Override
+    public ManagedBuffer next() {
+      final ManagedBuffer block = blockManager.getBlockData(
+        appId, execId, shuffleId, mapIds[mapIdx], reduceIds[mapIdx][reduceIdx]);
+      if (reduceIdx < reduceIds[mapIdx].length - 1) {
+        reduceIdx += 1;
+      } else {
+        reduceIdx = 0;
+        mapIdx += 1;
+      }
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;
     }

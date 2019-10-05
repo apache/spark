@@ -457,17 +457,25 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
           break;
        """)
 
+    val switchCode = if (caseBranches.size > 0) {
+      code"""
+        switch (${valueGen.value}) {
+          ${caseBranches.mkString("\n")}
+          default:
+            ${ev.isNull} = $hasNull;
+        }
+       """
+    } else {
+      s"${ev.isNull} = $hasNull;"
+    }
+
     ev.copy(code =
       code"""
         ${valueGen.code}
         ${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${valueGen.isNull};
         ${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
         if (!${valueGen.isNull}) {
-          switch (${valueGen.value}) {
-            ${caseBranches.mkString("\n")}
-            default:
-              ${ev.isNull} = $hasNull;
-          }
+          $switchCode
         }
        """)
   }

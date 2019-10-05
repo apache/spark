@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false) {
@@ -75,13 +76,15 @@ class DataSourceV2DataFrameSuite
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-      // Default saveMode is append, therefore this doesn't throw a table already exists exception
-      df.write.saveAsTable(t1)
-      checkAnswer(spark.table(t1), df)
+      // Default saveMode is ErrorIfExists
+      intercept[TableAlreadyExistsException] {
+        df.write.saveAsTable(t1)
+      }
+      assert(spark.table(t1).count() === 0)
 
-      // also appends are by name not by position
-      df.select('data, 'id).write.saveAsTable(t1)
-      checkAnswer(spark.table(t1), df.union(df))
+      // appends are by name not by position
+      df.select('data, 'id).write.mode("append").saveAsTable(t1)
+      checkAnswer(spark.table(t1), df)
     }
   }
 

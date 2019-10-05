@@ -55,7 +55,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   private val eps: Double = 1e-5
   private val absEps: Double = 1e-8
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100), 2)
       .map(_.asML)

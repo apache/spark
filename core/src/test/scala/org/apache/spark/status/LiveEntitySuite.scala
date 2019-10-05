@@ -18,7 +18,6 @@
 package org.apache.spark.status
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.status.api.v1.RDDPartitionInfo
 
 class LiveEntitySuite extends SparkFunSuite {
 

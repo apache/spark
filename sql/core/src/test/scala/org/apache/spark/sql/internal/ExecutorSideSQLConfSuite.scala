@@ -100,7 +100,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
           .queryExecution.executedPlan)
         assert(res.length == 2)
-        assert(res.forall { case (_, code) =>
+        assert(res.forall { case (_, code, _) =>
           (code.contains("* Codegend pipeline") == flag) &&
             (code.contains("// input[") == flag)
         })

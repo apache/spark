@@ -35,7 +35,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -56,7 +56,7 @@ import org.apache.spark.util.{LongAccumulator, UninterruptibleThread}
 class ExecutorSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     // Unset any latches after each test; each test that needs them initializes new ones.
     ExecutorSuiteHelper.latches = null
     super.afterEach()
@@ -528,7 +528,8 @@ class FetchFailureThrowingRDD(sc: SparkContext) extends RDD[Int](sc, Nil) {
         throw new FetchFailedException(
           bmAddress = BlockManagerId("1", "hostA", 1234),
           shuffleId = 0,
-          mapId = 0,
+          mapId = 0L,
+          mapIndex = 0,
           reduceId = 0,
           message = "fake fetch failure"
         )
