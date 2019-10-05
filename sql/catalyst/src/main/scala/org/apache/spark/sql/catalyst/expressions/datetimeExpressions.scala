@@ -1673,19 +1673,28 @@ case class TruncTimestamp(
 }
 
 /**
- * Returns the number of days from startDate to endDate.
+ * Returns the number of days from startDate to endDate or an interval between the dates.
  */
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage = "_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.",
+  usage = "_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`." +
+    "When `spark.sql.ansi.enabled` is set to `true` and `spark.sql.dialect` is `Spark`, it returns " +
+    "an interval between `startDate` (inclusive) and `endDate` (exclusive).",
   examples = """
     Examples:
       > SELECT _FUNC_('2009-07-31', '2009-07-30');
        1
-
       > SELECT _FUNC_('2009-07-30', '2009-07-31');
        -1
+      > SET spark.sql.ansi.enabled=true;
+      spark.sql.ansi.enabled	true
+      > SET spark.sql.dialect=Spark;
+      spark.sql.dialect	Spark
+      > select _FUNC_(date'tomorrow', date'yesterday');
+      interval 2 days
   """,
   since = "1.5.0")
+// scalastyle:on line.size.limit line.contains.tab
 case class DateDiff(endDate: Expression, startDate: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
