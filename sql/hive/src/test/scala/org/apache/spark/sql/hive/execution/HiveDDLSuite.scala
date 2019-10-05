@@ -1043,9 +1043,10 @@ class HiveDDLSuite
       assert(sql("DESC tbl").collect().containsSlice(
         Seq(
           Row("a", "int", null),
-          Row("b", "int", null),
+          Row("", "", ""),
           Row("# Partition Information", "", ""),
           Row("# col_name", "data_type", "comment"),
+          Row("", "", ""),
           Row("b", "int", null)
         )
       ))
