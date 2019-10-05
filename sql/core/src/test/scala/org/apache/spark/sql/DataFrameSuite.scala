@@ -28,6 +28,7 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
+import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Uuid
@@ -36,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, Source, StreamingExecutionRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -2201,6 +2203,40 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       assert(output.contains(
         """== Physical Plan ==
           |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
+    }
+  }
+
+  test("streaming DataFrame via DataSource V1") {
+    def createStreamingDataFrame(rdd: RDD[Row], schemaParam: StructType): DataFrame = {
+      val source = new Source() {
+        override def schema: StructType = schemaParam
+        override def getOffset: Option[Offset] = Some(LongOffset(0))
+        override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+          val dfStreaming = spark.createDataFrame(rdd, schemaParam, isStreaming = true)
+          assert(dfStreaming.isStreaming)
+          dfStreaming
+        }
+        override def stop(): Unit = {}
+      }
+      StreamingExecutionRelation(source, spark)
+    }
+
+    val data = (0 to 1000)
+    val rows = data.map(Row(_))
+    val rowRDD = sparkContext.parallelize(rows, 10)
+    val schema = StructType(Array(StructField("val1", IntegerType, false)))
+
+    val dfBatch = spark.createDataFrame(rowRDD, schema, isStreaming = false)
+    assert(!dfBatch.isStreaming)
+    assert(dfBatch.collect().map(_.getInt(0)).toSet === data.toSet)
+
+    val streamingQuery = createStreamingDataFrame(rowRDD, schema)
+      .writeStream.format("memory").queryName("test").start()
+    try {
+      streamingQuery.processAllAvailable()
+      assert(spark.table("test").collect().map(_.getInt(0)).toSet === data.toSet)
+    } finally {
+      streamingQuery.stop()
     }
   }
 }

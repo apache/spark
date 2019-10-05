@@ -344,11 +344,25 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
+    createDataFrame(rowRDD, schema, isStreaming = false)
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Creates a `DataFrame` from an `RDD` containing [[Row]]s using the given schema.
+   * Set `isStreaming` to true if you're creating DataFrame for streaming source.
+   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   *
+   * @since 3.0.0
+   */
+  @DeveloperApi
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType, isStreaming: Boolean): DataFrame = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val encoder = RowEncoder(schema)
     val catalystRows = rowRDD.map(encoder.toRow)
-    internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
+    internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema, isStreaming)
   }
 
   /**

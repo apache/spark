@@ -23,7 +23,7 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
@@ -310,6 +310,21 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Creates a `DataFrame` from an `RDD` containing [[Row]]s using the given schema.
+   * Set `isStreaming` to true if you're creating DataFrame for streaming source.
+   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   *
+   * @group dataframes
+   * @since 3.0.0
+   */
+  @DeveloperApi
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType, isStreaming: Boolean): DataFrame = {
+    sparkSession.createDataFrame(rowRDD, schema, isStreaming)
   }
 
   /**
