@@ -47,6 +47,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.security.GroupMappingServiceProvider
 import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.logging.DriverLogger
@@ -1250,6 +1251,36 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
         assert(log3_2.exists() == (num > 2))
       }
     }
+  }
+
+  test("read old format of LogInfo in Spark 2.4") {
+    case class LogInfoV24(
+         logPath: String,
+         lastProcessed: Long,
+         appId: Option[String],
+         attemptId: Option[String],
+         fileSize: Long)
+
+    val oldObj = LogInfoV24("dummy", System.currentTimeMillis(), Some("hello"),
+      Some("attempt1"), 100)
+
+    val serializer = new KVStoreScalaSerializer()
+    val serializedOldObj = serializer.serialize(oldObj)
+    val deserializedOldObj = serializer.deserialize(serializedOldObj, classOf[LogInfo])
+    assert(deserializedOldObj.logPath === oldObj.logPath)
+    assert(deserializedOldObj.lastProcessed === oldObj.lastProcessed)
+    assert(deserializedOldObj.appId === oldObj.appId)
+    assert(deserializedOldObj.attemptId === oldObj.attemptId)
+    assert(deserializedOldObj.fileSize === oldObj.fileSize)
+
+    // SPARK-25118: added logType: LogType.Value - expected 'null' on old format
+    assert(deserializedOldObj.logType === null)
+
+    // SPARK-28869: added lastIndex: Option[Long], isComplete: Boolean - expected 'None' and
+    // 'false' on old format. The default value for isComplete is wrong value for completed app,
+    // but the value will be corrected once checkForLogs is called.
+    assert(deserializedOldObj.lastIndex === None)
+    assert(deserializedOldObj.isComplete === false)
   }
 
   /**
