@@ -20,16 +20,43 @@ license: |
 ---
 
 ### Description
-`MSCK REPAIR TABLE` recovers all the partitions in the directory of a table and updates the catalog. `MSCK REPAIR TABLE` on a non-existent table or a table without partitions throws Exception. Another way to recover partitions is to use `ALTER TABLE RECOVER PARTITIONS`.
+`MSCK REPAIR TABLE` recovers all the partitions in the directory of a table and updates the Hive metastore. When creating a table using `partitoned by` clause, partitions are generated and registered in the Hive metastore. However, if the partitioned table is created from existing data, partitions are not registered automatically in the Hive metastore. User needs to run MSCK REPAIR TABLE to register the partitions. `MSCK REPAIR TABLE` on a non-existent table or a table without partitions throws an exception. Another way to recover partitions is to use `ALTER TABLE RECOVER PARTITIONS`.
 
 ### Syntax
 {% highlight sql %}
 MSCK REPAIR TABLE table_name
 {% endhighlight %}
 
+### Parameters
+<dl>
+  <dt><code><em>table_name</em></code></dt>
+  <dd>Specifies the name of the table to be repaired.</dd>
+</dl>
+
 ### Examples
 {% highlight sql %}
-MSCK REPAIR TABLE t1;
+ -- create a partitioned table from existing data /tmp/namesAndAges.parquet
+ CREATE TABLE t1 (name STRING, age INT) USING parquet PARTITIONED BY (age)
+     location "/tmp/namesAndAges.parquet";
+
+ -- SELECT * FROM t1 does not return results
+ SELECT * FROM t1;
+
+ -- run MSCK REPAIR TABLE to recovers all the partitions
+ MSCK REPAIR TABLE t1;
+
+ -- SELECT * FROM t1 returns results
+ SELECT * FROM t1;
+
+     + -------------- + ------+
+     | name           | age   |
+     + -------------- + ------+
+     | Michael        | 20    |
+     + -------------- + ------+
+     | Justin         | 19    |
+     + -------------- + ----- +
+     | Andy           | 30    |
+     + -------------- + ----- +
 
 {% endhighlight %}
 ### Related Statements
