@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{DIALECT, Dialect}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -1691,14 +1692,31 @@ case class DateDiff(endDate: Expression, startDate: Expression)
   override def left: Expression = endDate
   override def right: Expression = startDate
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
-  override def dataType: DataType = IntegerType
+  private val returnInterval: Boolean = {
+    val isSparkDialect = SQLConf.get.getConf(DIALECT) == Dialect.SPARK.toString()
+    SQLConf.get.ansiEnabled && isSparkDialect
+  }
+  override def dataType: DataType = if (returnInterval) CalendarIntervalType else IntegerType
 
   override def nullSafeEval(end: Any, start: Any): Any = {
-    end.asInstanceOf[Int] - start.asInstanceOf[Int]
+    val startDate = start.asInstanceOf[Int]
+    val endDate = end.asInstanceOf[Int]
+    if (returnInterval) {
+      dateDiff(startDate, endDate)
+    } else {
+      endDate - startDate
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (end, start) => s"$end - $start")
+    defineCodeGen(ctx, ev, (end, start) => {
+      if (returnInterval) {
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        s"$dtu.dateDiff($start, $end)"
+      } else {
+        s"$end - $start"
+      }
+    })
   }
 }
 
