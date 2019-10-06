@@ -64,12 +64,12 @@ DESCRIBE t
 -- !query 6 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 6 output
-a                   	string
+a                   	string              	                    
 b                   	int                 	                    
-
-# Partition Information
-# col_name          	data_type           	comment
-
+                    	                    	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+                    	                    	                    
 c                   	string              	                    
 d                   	string
 
@@ -81,11 +81,11 @@ struct<col_name:string,data_type:string,comment:string>
 -- !query 7 output
 a                   	string              	                    
 b                   	int                 	                    
-
-# Partition Information
+                    	                    	                    
+# Partition Information	                    	                    
 # col_name          	data_type           	comment             
-
-c                   	string
+                    	                    	                    
+c                   	string              	                    
 d                   	string
 
 
@@ -96,11 +96,11 @@ struct<col_name:string,data_type:string,comment:string>
 -- !query 8 output
 a                   	string              	                    
 b                   	int                 	                    
-
-# Partition Information
+                    	                    	                    
+# Partition Information	                    	                    
 # col_name          	data_type           	comment             
-
-c                   	string
+                    	                    	                    
+c                   	string              	                    
 d                   	string
 
 
@@ -109,15 +109,15 @@ DESC FORMATTED t
 -- !query 9 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 9 output
-# col_name          	data_type           	comment
-
-a                   	string
-b                   	int                 	                    
-
-# Partition Information
 # col_name          	data_type           	comment             
-
-c                   	string
+                    	                    	                    
+a                   	string              	                    
+b                   	int                 	                    
+                    	                    	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+                    	                    	                    
+c                   	string              	                    
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
@@ -143,15 +143,15 @@ DESC EXTENDED t
 -- !query 10 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 10 output
-# col_name          	data_type           	comment
-
-a                   	string
-b                   	int                 	                    
-
-# Partition Information
 # col_name          	data_type           	comment             
-
-c                   	string
+                    	                    	                    
+a                   	string              	                    
+b                   	int                 	                    
+                    	                    	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+                    	                    	                    
+c                   	string              	                    
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
@@ -185,15 +185,15 @@ DESC EXTENDED t
 -- !query 12 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 12 output
-# col_name          	data_type           	comment
-
-a                   	string
-b                   	int                 	                    
-
-# Partition Information
 # col_name          	data_type           	comment             
-
-c                   	string
+                    	                    	                    
+a                   	string              	                    
+b                   	int                 	                    
+                    	                    	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+                    	                    	                    
+c                   	string              	                    
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
@@ -227,15 +227,15 @@ DESC EXTENDED t
 -- !query 14 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 14 output
-# col_name          	data_type           	comment
-
-a                   	string
-b                   	int                 	                    
-
-# Partition Information
 # col_name          	data_type           	comment             
-
-c                   	string
+                    	                    	                    
+a                   	string              	                    
+b                   	int                 	                    
+                    	                    	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+                    	                    	                    
+c                   	string              	                    
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
@@ -262,11 +262,11 @@ struct<col_name:string,data_type:string,comment:string>
 -- !query 15 output
 a                   	string              	                    
 b                   	int                 	                    
-
-# Partition Information
+                    	                    	                    
+# Partition Information	                    	                    
 # col_name          	data_type           	comment             
-
-c                   	string
+                    	                    	                    
+c                   	string              	                    
 d                   	string
 
 
@@ -275,15 +275,15 @@ DESC EXTENDED t PARTITION (c='Us', d=1)
 -- !query 16 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 16 output
-# col_name          	data_type           	comment
-
-a                   	string
-b                   	int                 	                    
-
-# Partition Information
 # col_name          	data_type           	comment             
-
-c                   	string
+                    	                    	                    
+a                   	string              	                    
+b                   	int                 	                    
+                    	                    	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+                    	                    	                    
+c                   	string              	                    
 d                   	string              	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
@@ -308,15 +308,15 @@ DESC FORMATTED t PARTITION (c='Us', d=1)
 -- !query 17 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 17 output
-# col_name          	data_type           	comment
-
-a                   	string
-b                   	int                 	                    
-
-# Partition Information
 # col_name          	data_type           	comment             
-
-c                   	string
+                    	                    	                    
+a                   	string              	                    
+b                   	int                 	                    
+                    	                    	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+                    	                    	                    
+c                   	string              	                    
 d                   	string              	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
@@ -397,9 +397,9 @@ DESC FORMATTED temp_v
 -- !query 23 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 23 output
-# col_name          	data_type           	comment
-
-a                   	string
+# col_name          	data_type           	comment             
+                    	                    	                    
+a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
 d                   	string
@@ -410,9 +410,9 @@ DESC EXTENDED temp_v
 -- !query 24 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 24 output
-# col_name          	data_type           	comment
-
-a                   	string
+# col_name          	data_type           	comment             
+                    	                    	                    
+a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
 d                   	string
@@ -423,9 +423,7 @@ DESC temp_Data_Source_View
 -- !query 25 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 25 output
-# col_name          	data_type           	comment
-
-intType             	int                 	test comment test1
+intType             	int                 	test comment test1  
 stringType          	string              	                    
 dateType            	date                	                    
 timestampType       	timestamp           	                    
@@ -479,9 +477,9 @@ DESC FORMATTED v
 -- !query 29 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 29 output
-# col_name          	data_type           	comment
-
-a                   	string
+# col_name          	data_type           	comment             
+                    	                    	                    
+a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
 d                   	string              	                    
@@ -505,9 +503,9 @@ DESC EXTENDED v
 -- !query 30 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 30 output
-# col_name          	data_type           	comment
-
-a                   	string
+# col_name          	data_type           	comment             
+                    	                    	                    
+a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
 d                   	string              	                    
