@@ -450,7 +450,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         avgMetrics = java_stage.avgMetrics()
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
 
-        py_stage = cls(bestModel=bestModel,avgMetrics=avgMetrics).setEstimator(estimator)
+        py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics).setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
 
         if java_stage.hasSubModels():
