@@ -30,7 +30,7 @@ private object Triggers {
   }
 
   def convert(interval: String): Long = {
-    val cal = CalendarInterval.fromStringWithOptionalPrefix(interval)
+    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
     if (cal.months > 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }

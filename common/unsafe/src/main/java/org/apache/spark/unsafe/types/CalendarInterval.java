@@ -100,7 +100,7 @@ public final class CalendarInterval implements Serializable {
    *
    * @throws IllegalArgumentException if the string is not a valid internal.
    */
-  public static CalendarInterval fromStringWithOptionalPrefix(String s) {
+  public static CalendarInterval fromCaseInsensitiveString(String s) {
     if (s == null || s.trim().isEmpty()) {
       throw new IllegalArgumentException("Interval cannot be null or blank.");
     }
