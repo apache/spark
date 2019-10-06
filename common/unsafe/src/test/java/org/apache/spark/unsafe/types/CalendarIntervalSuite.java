@@ -294,5 +294,8 @@ public class CalendarIntervalSuite {
     input = "INTERVAL -5 YEARS 23 MONTHS";
     CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0);
     assertEquals(fromString(input), result);
+
+    input = "INTERVAL";
+    assertNull(fromString(input));
   }
 }

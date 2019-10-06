@@ -78,7 +78,7 @@ public final class CalendarInterval implements Serializable {
     }
     s = s.trim();
     Matcher m = p.matcher(s);
-    if (!m.matches() || s.equals("interval")) {
+    if (!m.matches() || s.compareToIgnoreCase("interval") == 0) {
       return null;
     } else {
       long months = toLong(m.group(1)) * 12 + toLong(m.group(2));
