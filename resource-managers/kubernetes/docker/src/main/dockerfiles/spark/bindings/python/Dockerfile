@@ -25,8 +25,8 @@ USER 0
 
 RUN mkdir ${SPARK_HOME}/python
 # TODO: Investigate running both pip and pip3 via virtualenvs
-RUN apk add --no-cache python && \
-    apk add --no-cache python3 && \
+RUN apt install -y python && \
+    apt install -y python3 && \
     python -m ensurepip && \
     python3 -m ensurepip && \
     # We remove ensurepip since it adds no functionality since pip is
@@ -35,7 +35,7 @@ RUN apk add --no-cache python && \
     pip install --upgrade pip setuptools && \
     # You may install with python3 packages by using pip3.6
     # Removed the .cache to save space
-    rm -r /root/.cache
+    rm -r /root/.cache && rm -rf /var/cache/apt/*
 
 COPY python/pyspark ${SPARK_HOME}/python/pyspark
 COPY python/lib ${SPARK_HOME}/python/lib
