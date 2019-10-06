@@ -295,7 +295,7 @@ public class CalendarIntervalSuite {
     CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0);
     assertEquals(fromString(input), result);
 
-    input = "INTERVAL";
-    assertNull(fromString(input));
+    assertNull(fromString("INTERVAL"));
+    assertNull(fromString("  Interval "));
   }
 }
