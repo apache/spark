@@ -447,9 +447,10 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         Used for ML persistence.
         """
         bestModel = JavaParams._from_java(java_stage.bestModel())
+        avgMetrics = java_stage.avgMetrics()
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
 
-        py_stage = cls(bestModel=bestModel).setEstimator(estimator)
+        py_stage = cls(bestModel=bestModel,avgMetrics=avgMetrics).setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
 
         if java_stage.hasSubModels():
@@ -468,11 +469,10 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         """
 
         sc = SparkContext._active_spark_context
-        # TODO: persist average metrics as well
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel",
                                              self.uid,
                                              self.bestModel._to_java(),
-                                             _py2java(sc, []))
+                                             self.avgMetrics)
         estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)
