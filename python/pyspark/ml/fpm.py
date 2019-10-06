@@ -16,6 +16,7 @@
 #
 
 from pyspark import keyword_only, since
+from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql import DataFrame
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
@@ -27,6 +28,7 @@ __all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan"]
 class _FPGrowthParams(HasPredictionCol):
     """
     Params for :py:class:`FPGrowth` and :py:class:`FPGrowthModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -123,6 +125,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
         return self._call_java("associationRules")
 
 
+@ignore_unicode_prefix
 class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     r"""
     A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
@@ -183,7 +186,7 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     ...
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().newPrediction)
-    ['x', 'y', 'z']
+    [u'x', u'y', u'z']
 
     .. versionadded:: 2.2.0
     """
