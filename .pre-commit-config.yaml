@@ -224,5 +224,3 @@ repos:
         entry: "./scripts/ci/pre_commit_flake8.sh"
         files: \.py$
         pass_filenames: true
-        args:
-          - --isort-show-traceback
