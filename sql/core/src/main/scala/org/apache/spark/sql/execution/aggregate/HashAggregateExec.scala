@@ -261,14 +261,6 @@ case class HashAggregateExec(
      """.stripMargin
   }
 
-  private def isValidParamLength(paramLength: Int): Boolean = {
-    // This config is only for testing
-    sqlContext.getConf("spark.sql.HashAggregateExec.validParamLength", null) match {
-      case null | "" => CodeGenerator.isValidParamLength(paramLength)
-      case validLength => paramLength <= validLength.toInt
-    }
-  }
-
   // Splits aggregate code into small functions because the most of JVM implementations
   // can not compile too long functions. Returns None if we are not able to split the given code.
   //
@@ -294,7 +286,7 @@ case class HashAggregateExec(
         val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVarsForOneFunc)
 
         // Checks if a parameter length for the `aggExprsForOneFunc` does not go over the JVM limit
-        if (isValidParamLength(paramLength)) {
+        if (CodeGenerator.isValidParamLength(paramLength)) {
           Some(inputVarsForOneFunc)
         } else {
           None
@@ -307,7 +299,9 @@ case class HashAggregateExec(
       if (inputVars.forall(_.isDefined)) {
         val splitCodes = inputVars.flatten.zipWithIndex.map { case (args, i) =>
           val doAggFunc = ctx.freshName(s"doAggregate_${aggNames(i)}")
-          val argList = args.map(v => s"${v.javaType.getName} ${v.variableName}").mkString(", ")
+          val argList = args.map { v =>
+            s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
+          }.mkString(", ")
           val doAggFuncName = ctx.addNewFunction(doAggFunc,
             s"""
                |private void $doAggFunc($argList) throws java.io.IOException {

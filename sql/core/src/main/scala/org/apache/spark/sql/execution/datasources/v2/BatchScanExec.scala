@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan}
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.

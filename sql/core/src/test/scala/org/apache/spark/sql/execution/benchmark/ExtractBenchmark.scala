@@ -19,6 +19,10 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.time.Instant
 
+import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.SaveMode.Overwrite
+import org.apache.spark.sql.internal.SQLConf
+
 /**
  * Synthetic benchmark for the extract function.
  * To run this benchmark:
@@ -32,51 +36,72 @@ import java.time.Instant
  * }}}
  */
 object ExtractBenchmark extends SqlBasedBenchmark {
+
   private def doBenchmark(cardinality: Long, exprs: String*): Unit = {
     val sinceSecond = Instant.parse("2010-01-01T00:00:00Z").getEpochSecond
-    spark
-      .range(sinceSecond, sinceSecond + cardinality, 1, 1)
-      .selectExpr(exprs: _*)
-      .write
-      .format("noop")
-      .save()
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      spark
+        .range(sinceSecond, sinceSecond + cardinality, 1, 1)
+        .selectExpr(exprs: _*)
+        .write
+        .format("noop")
+        .mode(Overwrite)
+        .save()
+    }
   }
 
-  private def run(cardinality: Long, name: String, exprs: String*): Unit = {
-    codegenBenchmark(name, cardinality) {
+  private def run(
+      benchmark: Benchmark,
+      cardinality: Long,
+      name: String,
+      exprs: String*): Unit = {
+    benchmark.addCase(name, numIters = 3) { _ =>
       doBenchmark(cardinality, exprs: _*)
     }
   }
 
-  private def run(cardinality: Long, field: String): Unit = {
-    codegenBenchmark(s"$field of timestamp", cardinality) {
-      doBenchmark(cardinality, s"EXTRACT($field FROM (cast(id as timestamp)))")
+  private def castExpr(from: String): String = from match {
+    case "timestamp" => s"cast(id as timestamp)"
+    case "date" => s"cast(cast(id as timestamp) as date)"
+    case other => throw new IllegalArgumentException(
+      s"Unsupported column type $other. Valid column types are 'timestamp' and 'date'")
+  }
+
+  private def run(
+      benchmark: Benchmark,
+      func: String,
+      cardinality: Long,
+      field: String,
+      from: String): Unit = {
+    val expr = func match {
+      case "extract" => s"EXTRACT($field FROM ${castExpr(from)})"
+      case "date_part" => s"DATE_PART('$field', ${castExpr(from)})"
+      case other => throw new IllegalArgumentException(
+        s"Unsupported function '$other'. Valid functions are 'extract' and 'date_part'.")
+    }
+    benchmark.addCase(s"$field of $from", numIters = 3) { _ =>
+      doBenchmark(cardinality, expr)
     }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 10000000L
-    runBenchmark("Extract") {
-      run(N, "cast to timestamp", "cast(id as timestamp)")
-      run(N, "MILLENNIUM")
-      run(N, "CENTURY")
-      run(N, "DECADE")
-      run(N, "YEAR")
-      run(N, "ISOYEAR")
-      run(N, "QUARTER")
-      run(N, "MONTH")
-      run(N, "WEEK")
-      run(N, "DAY")
-      run(N, "DAYOFWEEK")
-      run(N, "DOW")
-      run(N, "ISODOW")
-      run(N, "DOY")
-      run(N, "HOUR")
-      run(N, "MINUTE")
-      run(N, "SECOND")
-      run(N, "MILLISECONDS")
-      run(N, "MICROSECONDS")
-      run(N, "EPOCH")
+    val fields = Seq(
+      "MILLENNIUM", "CENTURY", "DECADE", "YEAR",
+      "ISOYEAR", "QUARTER", "MONTH", "WEEK",
+      "DAY", "DAYOFWEEK", "DOW", "ISODOW",
+      "DOY", "HOUR", "MINUTE", "SECOND",
+      "MILLISECONDS", "MICROSECONDS", "EPOCH")
+
+    Seq("extract", "date_part").foreach { func =>
+      Seq("timestamp", "date").foreach { dateType =>
+        val benchmark = new Benchmark(s"Invoke $func for $dateType", N, output = output)
+
+        run(benchmark, N, s"cast to $dateType", castExpr(dateType))
+        fields.foreach(run(benchmark, func, N, _, dateType))
+
+        benchmark.run()
+      }
     }
   }
 }

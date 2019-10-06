@@ -18,7 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
-import java.nio.channels.FileChannel
+import java.nio.channels.{ClosedByInterruptException, FileChannel}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
@@ -150,7 +150,7 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Commits any remaining partial writes and closes resources.
    */
-  override def close() {
+  override def close(): Unit = {
     if (initialized) {
       Utils.tryWithSafeFinally {
         commitAndGet()
@@ -219,6 +219,12 @@ private[spark] class DiskBlockObjectWriter(
         truncateStream = new FileOutputStream(file, true)
         truncateStream.getChannel.truncate(committedPosition)
       } catch {
+        // ClosedByInterruptException is an excepted exception when kill task,
+        // don't log the exception stack trace to avoid confusing users.
+        // See: SPARK-28340
+        case ce: ClosedByInterruptException =>
+          logError("Exception occurred while reverting partial writes to file "
+            + file + ", " + ce.getMessage)
         case e: Exception =>
           logError("Uncaught exception while reverting partial writes to file " + file, e)
       } finally {
@@ -234,7 +240,7 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Writes a key-value pair.
    */
-  override def write(key: Any, value: Any) {
+  override def write(key: Any, value: Any): Unit = {
     if (!streamOpen) {
       open()
     }
@@ -270,14 +276,14 @@ private[spark] class DiskBlockObjectWriter(
    * Report the number of bytes written in this writer's shuffle write metrics.
    * Note that this is only valid before the underlying streams are closed.
    */
-  private def updateBytesWritten() {
+  private def updateBytesWritten(): Unit = {
     val pos = channel.position()
     writeMetrics.incBytesWritten(pos - reportedPosition)
     reportedPosition = pos
   }
 
   // For testing
-  private[spark] override def flush() {
+  private[spark] override def flush(): Unit = {
     objOut.flush()
     bs.flush()
   }

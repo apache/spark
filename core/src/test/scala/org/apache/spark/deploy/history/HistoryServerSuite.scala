@@ -26,7 +26,6 @@ import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpSe
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
-import com.gargoylesoftware.htmlunit.BrowserVersion
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -40,8 +39,8 @@ import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
-import org.scalatest.selenium.WebBrowser
+import org.scalatestplus.mockito.MockitoSugar
+import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
@@ -94,6 +93,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server = new HistoryServer(conf, provider, securityManager, 18080)
     server.initialize()
     server.bind()
+    provider.start()
     port = server.boundPort
   }
 
@@ -364,8 +364,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     contextHandler.addServlet(holder, "/")
     server.attachHandler(contextHandler)
 
-    implicit val webDriver: WebDriver =
-      new HtmlUnitDriver(BrowserVersion.INTERNET_EXPLORER_11, true)
+    implicit val webDriver: WebDriver = new HtmlUnitDriver(true)
 
     try {
       val url = s"http://localhost:$port"
@@ -451,6 +450,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server = new HistoryServer(myConf, provider, securityManager, 0)
     server.initialize()
     server.bind()
+    provider.start()
     val port = server.boundPort
     val metrics = server.cacheMetrics
 

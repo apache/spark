@@ -26,10 +26,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchStream
-import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.UninterruptibleThread
 
@@ -63,6 +63,8 @@ private[kafka010] class KafkaMicroBatchStream(
 
   private[kafka010] val maxOffsetsPerTrigger = Option(options.get(
     KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER)).map(_.toLong)
+
+  private val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
 
   private val rangeCalculator = KafkaOffsetRangeCalculator(options)
 
@@ -112,7 +114,7 @@ private[kafka010] class KafkaMicroBatchStream(
     if (deletedPartitions.nonEmpty) {
       val message =
         if (kafkaOffsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-          s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
+          s"$deletedPartitions are gone. ${CUSTOM_GROUP_ID_ERROR_MESSAGE}"
         } else {
           s"$deletedPartitions are gone. Some data may have been missed."
         }
@@ -146,7 +148,8 @@ private[kafka010] class KafkaMicroBatchStream(
 
     // Generate factories based on the offset ranges
     offsetRanges.map { range =>
-      KafkaBatchInputPartition(range, executorKafkaParams, pollTimeoutMs, failOnDataLoss)
+      KafkaBatchInputPartition(range, executorKafkaParams, pollTimeoutMs,
+        failOnDataLoss, includeHeaders)
     }.toArray
   }
 
@@ -189,6 +192,8 @@ private[kafka010] class KafkaMicroBatchStream(
           KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets(None))
         case SpecificOffsetRangeLimit(p) =>
           kafkaOffsetReader.fetchSpecificOffsets(p, reportDataLoss)
+        case SpecificTimestampRangeLimit(p) =>
+          kafkaOffsetReader.fetchSpecificTimestampBasedOffsets(p, failsOnNoMatchingOffset = true)
       }
       metadataLog.add(0, offsets)
       logInfo(s"Initial offsets: $offsets")

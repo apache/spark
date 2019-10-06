@@ -22,19 +22,14 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalog.v2.{Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange}
-import org.apache.spark.sql.catalog.v2.expressions.Transform
-import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.sources.v2.Table
+import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class InMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
-
-  protected val namespaces: util.Map[List[String], Map[String, String]] =
-    new ConcurrentHashMap[List[String], Map[String, String]]()
+class BasicInMemoryTableCatalog extends TableCatalog {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   protected val tables: util.Map[Identifier, InMemoryTable] =
     new ConcurrentHashMap[Identifier, InMemoryTable]()
@@ -112,6 +107,13 @@ class InMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
   def clearTables(): Unit = {
     tables.clear()
   }
+}
+
+class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  protected val namespaces: util.Map[List[String], Map[String, String]] =
+    new ConcurrentHashMap[List[String], Map[String, String]]()
 
   private def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct

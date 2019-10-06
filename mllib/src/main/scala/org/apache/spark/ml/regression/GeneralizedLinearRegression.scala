@@ -1036,31 +1036,33 @@ class GeneralizedLinearRegressionModel private[ml] (
   }
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    var predictionColNames = Seq.empty[String]
-    var predictionColumns = Seq.empty[Column]
-
     val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)
-
-    if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { (features: Vector, offset: Double) => predict(features, offset) }
-      predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)), offset)
-    }
+    var outputData = dataset
+    var numColsOutput = 0
 
     if (hasLinkPredictionCol) {
-      val predictLinkUDF =
-        udf { (features: Vector, offset: Double) => predictLink(features, offset) }
-      predictionColNames :+= $(linkPredictionCol)
-      predictionColumns :+= predictLinkUDF(col($(featuresCol)), offset)
+      val predLinkUDF = udf((features: Vector, offset: Double) => predictLink(features, offset))
+      outputData = outputData
+        .withColumn($(linkPredictionCol), predLinkUDF(col($(featuresCol)), offset))
+      numColsOutput += 1
     }
 
-    if (predictionColNames.nonEmpty) {
-      dataset.withColumns(predictionColNames, predictionColumns)
-    } else {
+    if ($(predictionCol).nonEmpty) {
+      if (hasLinkPredictionCol) {
+        val predUDF = udf((eta: Double) => familyAndLink.fitted(eta))
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(linkPredictionCol))))
+      } else {
+        val predUDF = udf((features: Vector, offset: Double) => predict(features, offset))
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(featuresCol)), offset))
+      }
+      numColsOutput += 1
+    }
+
+    if (numColsOutput == 0) {
       this.logWarning(s"$uid: GeneralizedLinearRegressionModel.transform() does nothing" +
         " because no output columns were set.")
-      dataset.toDF()
     }
+    outputData.toDF
   }
 
   /**

@@ -82,16 +82,20 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE db=errorCapturingIdentifier                                  #use
+    | USE NAMESPACE? multipartIdentifier                               #use
     | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
          (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
     | ALTER database db=errorCapturingIdentifier
         SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
+    | ALTER database db=errorCapturingIdentifier
+        SET locationSpec                                               #setDatabaseLocation
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
     | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
+    | SHOW NAMESPACES ((FROM | IN) multipartIdentifier)?
+        (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitioning=transformList) |
@@ -214,7 +218,8 @@ statement
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
-    | DELETE FROM multipartIdentifier tableAlias whereClause           #deleteFromTable
+    | DELETE FROM multipartIdentifier tableAlias whereClause?          #deleteFromTable
+    | UPDATE multipartIdentifier tableAlias setClause whereClause?     #updateTable
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -472,6 +477,14 @@ transformClause
 
 selectClause
     : SELECT (hints+=hint)* setQuantifier? namedExpressionSeq
+    ;
+
+setClause
+    : SET assign (',' assign)*
+    ;
+
+assign
+    : key=multipartIdentifier EQ value=expression
     ;
 
 whereClause
@@ -1006,6 +1019,8 @@ ansiNonReserved
     | MINUTES
     | MONTHS
     | MSCK
+    | NAMESPACE
+    | NAMESPACES
     | NO
     | NULLS
     | OF
@@ -1082,6 +1097,7 @@ ansiNonReserved
     | UNCACHE
     | UNLOCK
     | UNSET
+    | UPDATE
     | USE
     | VALUES
     | VIEW
@@ -1255,6 +1271,8 @@ nonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAMESPACE
+    | NAMESPACES
     | NO
     | NOT
     | NULL
@@ -1351,6 +1369,7 @@ nonReserved
     | UNKNOWN
     | UNLOCK
     | UNSET
+    | UPDATE
     | USE
     | USER
     | VALUES
@@ -1515,6 +1534,8 @@ MINUTES: 'MINUTES';
 MONTH: 'MONTH';
 MONTHS: 'MONTHS';
 MSCK: 'MSCK';
+NAMESPACE: 'NAMESPACE';
+NAMESPACES: 'NAMESPACES';
 NATURAL: 'NATURAL';
 NO: 'NO';
 NOT: 'NOT' | '!';
@@ -1617,6 +1638,7 @@ UNIQUE: 'UNIQUE';
 UNKNOWN: 'UNKNOWN';
 UNLOCK: 'UNLOCK';
 UNSET: 'UNSET';
+UPDATE: 'UPDATE';
 USE: 'USE';
 USER: 'USER';
 USING: 'USING';

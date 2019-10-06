@@ -23,5 +23,5 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 case class DeleteFromStatement(
     tableName: Seq[String],
     tableAlias: Option[String],
-    condition: Expression)
+    condition: Option[Expression])
     extends ParsedStatement

@@ -33,9 +33,9 @@ class QueueInputDStream[T: ClassTag](
     defaultRDD: RDD[T]
   ) extends InputDStream[T](ssc) {
 
-  override def start() { }
+  override def start(): Unit = { }
 
-  override def stop() { }
+  override def stop(): Unit = { }
 
   private def readObject(in: ObjectInputStream): Unit = {
     throw new NotSerializableException("queueStream doesn't support checkpointing. " +

@@ -21,6 +21,7 @@ import java.io.{ByteArrayOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.Random
 
@@ -161,10 +162,10 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
         DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
 
-    Seq(true, false).foreach { nullOnOverflow =>
-      withSQLConf((SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key, nullOnOverflow.toString)) {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
-        if (nullOnOverflow) {
+        if (!ansiEnabled) {
           checkAnswer(structDf, Row(null))
         } else {
           val e = intercept[SparkException] {
@@ -2105,17 +2106,17 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         // partitions.
         .write.partitionBy("p").option("compression", "gzip").json(path.getCanonicalPath)
 
-      var numJobs = 0
+      val numJobs = new AtomicLong(0)
       sparkContext.addSparkListener(new SparkListener {
         override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-          numJobs += 1
+          numJobs.incrementAndGet()
         }
       })
 
       val df = spark.read.json(path.getCanonicalPath)
       assert(df.columns === Array("i", "p"))
-      spark.sparkContext.listenerBus.waitUntilEmpty(10000)
-      assert(numJobs == 1)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(numJobs.get() == 1L)
     }
   }
 

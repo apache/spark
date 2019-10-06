@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
   """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
-  private val checkOverflow = SQLConf.get.failOnIntegralTypeOverflow
+  private val checkOverflow = SQLConf.get.ansiEnabled
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -136,7 +136,7 @@ case class Abs(child: Expression)
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
-  protected val checkOverflow = SQLConf.get.failOnIntegralTypeOverflow
+  protected val checkOverflow = SQLConf.get.ansiEnabled
 
   override def dataType: DataType = left.dataType
 
@@ -150,9 +150,10 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
   def calendarIntervalMethod: String =
     sys.error("BinaryArithmetics must override either calendarIntervalMethod or genCode")
 
-  /** Name of the function for the exact version of this expression in [[Math]]. */
-  def exactMathMethod: String =
-    sys.error("BinaryArithmetics must override either exactMathMethod or genCode")
+  // Name of the function for the exact version of this expression in [[Math]].
+  // If the option "spark.sql.failOnIntegralTypeOverflow" is enabled and there is corresponding
+  // function in [[Math]], the exact function will be called instead of evaluation with [[symbol]].
+  def exactMathMethod: Option[String] = None
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
@@ -182,9 +183,9 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
       })
     case IntegerType | LongType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val operation = if (checkOverflow) {
+        val operation = if (checkOverflow && exactMathMethod.isDefined) {
           val mathClass = classOf[Math].getName
-          s"$mathClass.$exactMathMethod($eval1, $eval2)"
+          s"$mathClass.${exactMathMethod.get}($eval1, $eval2)"
         } else {
           s"$eval1 $symbol $eval2"
         }
@@ -235,7 +236,7 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
     }
   }
 
-  override def exactMathMethod: String = "addExact"
+  override def exactMathMethod: Option[String] = Some("addExact")
 }
 
 @ExpressionDescription(
@@ -265,7 +266,7 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
     }
   }
 
-  override def exactMathMethod: String = "subtractExact"
+  override def exactMathMethod: Option[String] = Some("subtractExact")
 }
 
 @ExpressionDescription(
@@ -286,7 +287,7 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 
-  override def exactMathMethod: String = "multiplyExact"
+  override def exactMathMethod: Option[String] = Some("multiplyExact")
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
@@ -447,7 +448,7 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
   usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
   examples = """
     Examples:
-      > SELECT 2 _FUNC_ 1.8;
+      > SELECT 2 % 1.8;
        0.2
       > SELECT MOD(2, 1.8);
        0.2

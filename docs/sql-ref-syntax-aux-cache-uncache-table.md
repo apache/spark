@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-`UNCACHE TABLE` removes the entries and associated data from the in-memory and/or on-disk cache for a given table. The
+`UNCACHE TABLE` removes the entries and associated data from the in-memory and/or on-disk cache for a given table or view. The
 underlying entries should already have been brought to cache by previous `CACHE TABLE` operation. `UNCACHE TABLE` on a non-existent table throws Exception if `IF EXISTS` is not specified.
 ### Syntax
 {% highlight sql %}
@@ -29,7 +29,7 @@ UNCACHE TABLE [ IF EXISTS ] table_name
 ### Parameters
 <dl>
  <dt><code><em>table_name</em></code></dt>
- <dd>The name of the table to be uncached.</dd>
+ <dd>The name of the table or view to be uncached.</dd>
 </dl>
 ### Examples
 {% highlight sql %}

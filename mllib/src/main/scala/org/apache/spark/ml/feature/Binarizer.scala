@@ -75,30 +75,40 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val schema = dataset.schema
     val inputType = schema($(inputCol)).dataType
     val td = $(threshold)
-
-    val binarizerDouble = udf { in: Double => if (in > td) 1.0 else 0.0 }
-    val binarizerVector = udf { (data: Vector) =>
-      val indices = ArrayBuilder.make[Int]
-      val values = ArrayBuilder.make[Double]
-
-      data.foreachActive { (index, value) =>
-        if (value > td) {
-          indices += index
-          values +=  1.0
-        }
-      }
-
-      Vectors.sparse(data.size, indices.result(), values.result()).compressed
-    }
-
     val metadata = outputSchema($(outputCol)).metadata
 
-    inputType match {
+    val binarizerUDF = inputType match {
       case DoubleType =>
-        dataset.select(col("*"), binarizerDouble(col($(inputCol))).as($(outputCol), metadata))
-      case _: VectorUDT =>
-        dataset.select(col("*"), binarizerVector(col($(inputCol))).as($(outputCol), metadata))
+        udf { in: Double => if (in > td) 1.0 else 0.0 }
+
+      case _: VectorUDT if td >= 0 =>
+        udf { vector: Vector =>
+          val indices = ArrayBuilder.make[Int]
+          val values = ArrayBuilder.make[Double]
+          vector.foreachActive { (index, value) =>
+            if (value > td) {
+              indices += index
+              values +=  1.0
+            }
+          }
+          Vectors.sparse(vector.size, indices.result(), values.result()).compressed
+        }
+
+      case _: VectorUDT if td < 0 =>
+        this.logWarning(s"Binarization operations on sparse dataset with negative threshold " +
+          s"$td will build a dense output, so take care when applying to sparse input.")
+        udf { vector: Vector =>
+          val values = Array.fill(vector.size)(1.0)
+          vector.foreachActive { (index, value) =>
+            if (value <= td) {
+              values(index) = 0.0
+            }
+          }
+          Vectors.dense(values).compressed
+        }
     }
+
+    dataset.withColumn($(outputCol), binarizerUDF(col($(inputCol))), metadata)
   }
 
   @Since("1.4.0")

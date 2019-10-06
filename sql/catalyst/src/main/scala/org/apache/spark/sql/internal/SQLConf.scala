@@ -115,7 +115,9 @@ object SQLConf {
    * Returns the active config object within the current scope. If there is an active SparkSession,
    * the proper SQLConf associated with the thread's active session is used. If it's called from
    * tasks in the executor side, a SQLConf will be created from job local properties, which are set
-   * and propagated from the driver side.
+   * and propagated from the driver side, unless a `SQLConf` has been set in the scope by
+   * `withExistingConf` as done for propagating SQLConf for operations performed on RDDs created
+   * from DataFrames.
    *
    * The way this works is a little bit convoluted, due to the fact that config was added initially
    * only for physical plans (and as a result not in sql/catalyst module).
@@ -129,10 +131,16 @@ object SQLConf {
    */
   def get: SQLConf = {
     if (TaskContext.get != null) {
-      new ReadOnlySQLConf(TaskContext.get())
+      val conf = existingConf.get()
+      if (conf != null) {
+        conf
+      } else {
+        new ReadOnlySQLConf(TaskContext.get())
+      }
     } else {
       val isSchedulerEventLoopThread = SparkContext.getActive
-        .map(_.dagScheduler.eventProcessLoop.eventThread)
+        .flatMap { sc => Option(sc.dagScheduler) }
+        .map(_.eventProcessLoop.eventThread)
         .exists(_.getId == Thread.currentThread().getId)
       if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
@@ -402,12 +410,6 @@ object SQLConf {
       "aliases) which might negatively impact overall runtime.")
     .booleanConf
     .createWithDefault(true)
-
-  val ANSI_SQL_PARSER =
-    buildConf("spark.sql.parser.ansi.enabled")
-      .doc("When true, tries to conform to ANSI SQL syntax.")
-      .booleanConf
-      .createWithDefault(false)
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
@@ -1549,16 +1551,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DECIMAL_OPERATIONS_NULL_ON_OVERFLOW =
-    buildConf("spark.sql.decimalOperations.nullOnOverflow")
-      .internal()
-      .doc("When true (default), if an overflow on a decimal occurs, then NULL is returned. " +
-        "Spark's older versions and Hive behave in this way. If turned to false, SQL ANSI 2011 " +
-        "specification will be followed instead: an arithmetic exception is thrown, as most " +
-        "of the SQL databases do.")
-      .booleanConf
-      .createWithDefault(true)
-
   val LITERAL_PICK_MINIMUM_PRECISION =
     buildConf("spark.sql.legacy.literal.pickMinimumPrecision")
       .internal()
@@ -1597,12 +1589,22 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
-    .internal()
-    .doc("When true, will perform integral division with the / operator " +
-      "if both sides are integral types. This is for PostgreSQL test cases only.")
-    .booleanConf
-    .createWithDefault(false)
+  object Dialect extends Enumeration {
+    val SPARK, POSTGRESQL = Value
+  }
+
+  val DIALECT =
+    buildConf("spark.sql.dialect")
+      .doc("The specific features of the SQL language to be adopted, which are available when " +
+        "accessing the given database. Currently, Spark supports two database dialects, `Spark` " +
+        "and `PostgreSQL`. With `PostgreSQL` dialect, Spark will: " +
+        "1. perform integral division with the / operator if both sides are integral types; " +
+        "2. accept \"true\", \"yes\", \"1\", \"false\", \"no\", \"0\", and unique prefixes as " +
+        "input and trim input for the boolean data type.")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(Dialect.values.map(_.toString))
+      .createWithDefault(Dialect.SPARK.toString)
 
   val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
     buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
@@ -1651,7 +1653,7 @@ object SQLConf {
       "implementation class names for which Data Source V2 code path is disabled. These data " +
       "sources will fallback to Data Source V1 code path.")
     .stringConf
-    .createWithDefault("")
+    .createWithDefault("kafka")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -1714,6 +1716,14 @@ object SQLConf {
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createOptional
+
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
+      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
+      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser.")
+    .booleanConf
+    .createWithDefault(false)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -1878,15 +1888,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val FAIL_ON_INTEGRAL_TYPE_OVERFLOW =
-    buildConf("spark.sql.failOnIntegralTypeOverflow")
-      .doc("If it is set to true, all operations on integral fields throw an " +
-        "exception if an overflow occurs. If it is false (default), in case of overflow a wrong " +
-        "result is returned.")
-      .internal()
-      .booleanConf
-      .createWithDefault(false)
-
   val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
     buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
       .internal()
@@ -1965,9 +1966,12 @@ object SQLConf {
     .createOptional
 
   val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
-      .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+      .doc("A catalog implementation that will be used in place of the Spark built-in session " +
+        "catalog for v2 operations. The implementation may extend `CatalogExtension` to be " +
+        "passed the Spark built-in session catalog, so that it may delegate calls to the " +
+        "built-in session catalog.")
       .stringConf
-      .createWithDefault("org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog")
+      .createOptional
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
     .doc("When true, the upcast will be loose and allows string to atomic types.")
@@ -1985,6 +1989,15 @@ object SQLConf {
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
       .createWithDefault(true)
+
+  val ADDITIONAL_REMOTE_REPOSITORIES =
+    buildConf("spark.sql.additionalRemoteRepositories")
+      .doc("A comma-delimited string config of the optional additional remote Maven mirror " +
+        "repositories. This is only used for downloading Hive jars in IsolatedClientLoader " +
+        "if the default Maven Central repo is unreachable.")
+      .stringConf
+      .createWithDefault(
+        "https://maven-central.storage-download.googleapis.com/repos/central/data/")
 }
 
 /**
@@ -2183,8 +2196,6 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
-
-  def ansiParserEnabled: Boolean = getConf(ANSI_SQL_PARSER)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
@@ -2407,10 +2418,6 @@ class SQLConf extends Serializable with Logging {
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 
-  def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
-
-  def failOnIntegralTypeOverflow: Boolean = getConf(FAIL_ON_INTEGRAL_TYPE_OVERFLOW)
-
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
   def continuousStreamingEpochBacklogQueueSize: Int =
@@ -2430,8 +2437,6 @@ class SQLConf extends Serializable with Logging {
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
-  def preferIntegralDivision: Boolean = getConf(PREFER_INTEGRAL_DIVISION)
-
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
@@ -2442,6 +2447,10 @@ class SQLConf extends Serializable with Logging {
 
   def storeAssignmentPolicy: Option[StoreAssignmentPolicy.Value] =
     getConf(STORE_ASSIGNMENT_POLICY).map(StoreAssignmentPolicy.withName)
+
+  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
+
+  def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString()
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
