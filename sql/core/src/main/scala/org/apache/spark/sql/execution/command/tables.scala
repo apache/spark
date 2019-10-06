@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, Resolver, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -548,10 +548,12 @@ case class DescribeTableCommand(
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
         val allCols = sparkSession.table(metadata.identifier).schema
-        val normalCols = schemaWithoutPartCols(allCols, metadata.partitionColumnNames)
+        val normalCols =
+          schemaWithoutPartCols(allCols, metadata.partitionColumnNames, conf.resolver)
         describeSchema(normalCols, result, header = isExtended)
       } else {
-        val normalCols = schemaWithoutPartCols(metadata.schema, metadata.partitionColumnNames)
+        val normalCols =
+          schemaWithoutPartCols(metadata.schema, metadata.partitionColumnNames, conf.resolver)
         describeSchema(normalCols, result, header = isExtended)
       }
 
@@ -569,11 +571,14 @@ case class DescribeTableCommand(
     result
   }
 
-  private def schemaWithoutPartCols(schema: StructType, partColNames: Seq[String]): StructType = {
+  private def schemaWithoutPartCols(
+      schema: StructType,
+      partColNames: Seq[String],
+      resolver: Resolver): StructType = {
     if (partColNames.isEmpty) {
       schema
     } else {
-      StructType(schema.filter(col => !partColNames.contains(col.name)))
+      StructType(schema.filter(col => !partColNames.exists(resolver(_, col.name))))
     }
   }
 
