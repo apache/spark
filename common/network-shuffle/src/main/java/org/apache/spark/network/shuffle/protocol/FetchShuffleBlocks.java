@@ -36,19 +36,24 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
   // it corresponds to the i-th int[] in reduceIds, which contains all reduce id for this map id.
   public final long[] mapIds;
   public final int[][] reduceIds;
+  // Indicates whether read continuous shuffle blocks in batch for IO reducing. When it is true,
+  // the reduceIds contains the range [startReduceId, endReduceId) for each ShuffleBlockBatchId.
+  public final boolean batchFetchEnabled;
 
   public FetchShuffleBlocks(
       String appId,
       String execId,
       int shuffleId,
       long[] mapIds,
-      int[][] reduceIds) {
+      int[][] reduceIds,
+      boolean batchFetchEnabled) {
     this.appId = appId;
     this.execId = execId;
     this.shuffleId = shuffleId;
     this.mapIds = mapIds;
     this.reduceIds = reduceIds;
     assert(mapIds.length == reduceIds.length);
+    this.batchFetchEnabled = batchFetchEnabled;
   }
 
   @Override
@@ -73,6 +78,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     FetchShuffleBlocks that = (FetchShuffleBlocks) o;
 
     if (shuffleId != that.shuffleId) return false;
+    if (batchFetchEnabled != that.batchFetchEnabled) return false;
     if (!appId.equals(that.appId)) return false;
     if (!execId.equals(that.execId)) return false;
     if (!Arrays.equals(mapIds, that.mapIds)) return false;
@@ -86,6 +92,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     result = 31 * result + shuffleId;
     result = 31 * result + Arrays.hashCode(mapIds);
     result = 31 * result + Arrays.deepHashCode(reduceIds);
+    result = 31 * result + (batchFetchEnabled ? 1 : 0);
     return result;
   }
 
@@ -100,7 +107,8 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
       + 4 /* encoded length of shuffleId */
       + Encoders.LongArrays.encodedLength(mapIds)
       + 4 /* encoded length of reduceIds.size() */
-      + encodedLengthOfReduceIds;
+      + encodedLengthOfReduceIds
+      + 1; /* encoded length of batchFetchEnabled */
   }
 
   @Override
@@ -113,6 +121,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     for (int[] ids: reduceIds) {
       Encoders.IntArrays.encode(buf, ids);
     }
+    buf.writeBoolean(batchFetchEnabled);
   }
 
   public static FetchShuffleBlocks decode(ByteBuf buf) {
@@ -125,6 +134,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     for (int i = 0; i < reduceIdsSize; i++) {
       reduceIds[i] = Encoders.IntArrays.decode(buf);
     }
-    return new FetchShuffleBlocks(appId, execId, shuffleId, mapIds, reduceIds);
+    boolean batchFetchEnabled = buf.readBoolean();
+    return new FetchShuffleBlocks(appId, execId, shuffleId, mapIds, reduceIds, batchFetchEnabled);
   }
 }

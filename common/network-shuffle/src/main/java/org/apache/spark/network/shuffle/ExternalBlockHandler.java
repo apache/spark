@@ -105,6 +105,11 @@ public class ExternalBlockHandler extends RpcHandler {
           for (int[] ids: msg.reduceIds) {
             numBlockIds += ids.length;
           }
+          // For fetching continuous shuffle blocks in batch, we store both start and end reduce
+          // id in reduceIds, so the real number of ShuffleBlockBatchId is total length / 2.
+          if (msg.batchFetchEnabled) {
+            numBlockIds = numBlockIds / 2;
+          }
           streamId = streamManager.registerStream(client.getClientId(),
             new ShuffleManagedBufferIterator(msg), client.getChannel());
         } else {
@@ -323,6 +328,7 @@ public class ExternalBlockHandler extends RpcHandler {
     private final int shuffleId;
     private final long[] mapIds;
     private final int[][] reduceIds;
+    private final boolean batchFetchEnabled;
 
     ShuffleManagedBufferIterator(FetchShuffleBlocks msg) {
       appId = msg.appId;
@@ -330,6 +336,7 @@ public class ExternalBlockHandler extends RpcHandler {
       shuffleId = msg.shuffleId;
       mapIds = msg.mapIds;
       reduceIds = msg.reduceIds;
+      batchFetchEnabled = msg.batchFetchEnabled;
     }
 
     @Override
@@ -343,8 +350,15 @@ public class ExternalBlockHandler extends RpcHandler {
 
     @Override
     public ManagedBuffer next() {
-      final ManagedBuffer block = blockManager.getBlockData(
-        appId, execId, shuffleId, mapIds[mapIdx], reduceIds[mapIdx][reduceIdx]);
+      ManagedBuffer block;
+      if (!batchFetchEnabled) {
+        block = blockManager.getBlockData(
+          appId, execId, shuffleId, mapIds[mapIdx], reduceIds[mapIdx][reduceIdx]);
+      } else {
+        block = blockManager.getBlocksData(
+          appId, execId, shuffleId, mapIds[mapIdx],
+          reduceIds[mapIdx][reduceIdx], reduceIds[mapIdx][++reduceIdx]);
+      }
       if (reduceIdx < reduceIds[mapIdx].length - 1) {
         reduceIdx += 1;
       } else {

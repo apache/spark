@@ -30,7 +30,10 @@ public class BlockTransferMessagesSuite {
     checkSerializeDeserialize(new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }));
     checkSerializeDeserialize(new FetchShuffleBlocks(
       "app-1", "exec-2", 0, new long[] {0, 1},
-      new int[][] {{ 0, 1 }, { 0, 1, 2 }}));
+      new int[][] {{ 0, 1 }, { 0, 1, 2 }}, false));
+    checkSerializeDeserialize(new FetchShuffleBlocks(
+      "app-1", "exec-2", 0, new long[] {0, 1},
+      new int[][] {{ 0, 1 }, { 0, 1, 2 }}, true));
     checkSerializeDeserialize(new RegisterExecutor("app-1", "exec-2", new ExecutorShuffleInfo(
       new String[] { "/local1", "/local2" }, 32, "MyShuffleManager")));
     checkSerializeDeserialize(new UploadBlock("app-1", "exec-2", "block-3", new byte[] { 1, 2 },

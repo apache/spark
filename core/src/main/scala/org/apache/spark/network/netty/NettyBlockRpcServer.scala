@@ -29,7 +29,7 @@ import org.apache.spark.network.client.{RpcResponseCallback, StreamCallbackWithI
 import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.protocol._
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, ShuffleBlockBatchId, ShuffleBlockId, StorageLevel}
 
 /**
  * Serves requests to open blocks by simply registering one chunk per block requested.
@@ -65,12 +65,33 @@ class NettyBlockRpcServer(
 
       case fetchShuffleBlocks: FetchShuffleBlocks =>
         val blocks = fetchShuffleBlocks.mapIds.zipWithIndex.flatMap { case (mapId, index) =>
-          fetchShuffleBlocks.reduceIds.apply(index).map { reduceId =>
-            blockManager.getBlockData(
-              ShuffleBlockId(fetchShuffleBlocks.shuffleId, mapId, reduceId))
+          if (!fetchShuffleBlocks.batchFetchEnabled) {
+            fetchShuffleBlocks.reduceIds.apply(index).map { reduceId =>
+              blockManager.getBlockData(
+                ShuffleBlockId(fetchShuffleBlocks.shuffleId, mapId, reduceId))
+            }
+          } else {
+            fetchShuffleBlocks.reduceIds.apply(index).sliding(2, 2).map {
+              case Array(startReduceId: Int, endReduceId: Int) =>
+                blockManager.getBlockData(
+                  ShuffleBlockBatchId(
+                    fetchShuffleBlocks.shuffleId, mapId, startReduceId, endReduceId))
+              case _ =>
+                throw new RuntimeException("Invalid reduceIds for batch fetch mode, " +
+                  "the reduceIds in ShuffleBlockBatchId should contains both start and end " +
+                  s"reduce id. ShuffleId: ${fetchShuffleBlocks.shuffleId}, mapId: ${mapId}, " +
+                  s"current reduceIds: ${fetchShuffleBlocks.reduceIds.apply(index)}")
+            }
           }
         }
-        val numBlockIds = fetchShuffleBlocks.reduceIds.map(_.length).sum
+
+        val reduceIdsNum = fetchShuffleBlocks.reduceIds.map(_.length).sum
+        val numBlockIds = if (!fetchShuffleBlocks.batchFetchEnabled) {
+          reduceIdsNum
+        } else {
+          reduceIdsNum / 2
+        }
+
         val streamId = streamManager.registerStream(appId, blocks.iterator.asJava,
           client.getChannel)
         logTrace(s"Registered streamId $streamId with $numBlockIds buffers")
