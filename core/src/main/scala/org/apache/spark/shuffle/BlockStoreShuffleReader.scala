@@ -19,6 +19,7 @@ package org.apache.spark.shuffle
 
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
@@ -40,6 +41,17 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   private val dep = handle.dependency
 
+  private def fetchContinuousBlocksInBatch: Boolean = {
+    val conf = SparkEnv.get.conf
+    val compressed = conf.get(config.SHUFFLE_COMPRESS)
+    val featureEnabled = conf.get(config.SHUFFLE_FETCH_CONTINUOUS_BLOCKS_IN_BATCH)
+    val serializerRelocatable = dep.serializer.supportsRelocationOfSerializedObjects
+
+    featureEnabled && endPartition - startPartition > 1 && serializerRelocatable &&
+      (!compressed || CompressionCodec.supportsConcatenationOfSerializedStreams(
+        CompressionCodec.createCodec(conf)))
+  }
+
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
     val wrappedStreams = new ShuffleBlockFetcherIterator(
@@ -55,7 +67,8 @@ private[spark] class BlockStoreShuffleReader[K, C](
       SparkEnv.get.conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM),
       SparkEnv.get.conf.get(config.SHUFFLE_DETECT_CORRUPT),
       SparkEnv.get.conf.get(config.SHUFFLE_DETECT_CORRUPT_MEMORY),
-      readMetrics).toCompletionIterator
+      readMetrics,
+      fetchContinuousBlocksInBatch).toCompletionIterator
 
     val serializerInstance = dep.serializer.newInstance()
 
