@@ -199,8 +199,8 @@ object ExplainUtils {
               case s: BaseSubqueryExec =>
                 subqueries += ((p, e, s))
                 getSubqueries(s, subqueries)
+              case _ =>
             }
-          case other =>
         })
     }
   }
