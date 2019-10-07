@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-`ADD JAR` adds a jar file to the list of resources. The added jar file can be listed using [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html).
+`ADD JAR` adds a file, JAR or archive to the list of resources. The added file can be listed using [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html).
 
 ### Syntax
 {% highlight sql %}
@@ -30,15 +30,20 @@ ADD JAR file_name
 ### Parameters
 <dl>
  <dt><code><em>file_name</em></code></dt>
- <dd>The name of the jar file to be added. It could be either on a local file system or a HDFS.</dd>
+ <dd>The name of the file, JAR or archive to be added. It could be either on a local file system or a distributed file system.</dd>
 </dl>
 
 ### Examples
 {% highlight sql %}
-ADD JAR t1;
+ add JAR /tmp/test1.jar;
+
+ add JAR /tmp/test2.zip;
+
+ ADD JAR /tmp/test3.txt;
 {% endhighlight %}
 
 ### Related Statements
  * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
  * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
  * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
+

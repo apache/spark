@@ -19,4 +19,32 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+`LIST JAR` lists the files, JARs or archives added by [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html).
+
+### Syntax
+{% highlight sql %}
+LIST JAR
+{% endhighlight %}
+
+### Examples
+{% highlight sql %}
+ add JAR /tmp/test1.jar;
+
+ add JAR /tmp/test2.zip;
+
+ ADD JAR /tmp/test3.txt;
+
+ LIST JAR;
+
+ -- output for LIST JAR
+ spark://192.168.1.112:62859/jars/test3.txt
+ spark://192.168.1.112:62859/jars/test2.zip
+ spark://192.168.1.112:62859/jars/test1.jar
+{% endhighlight %}
+
+### Related Statements
+ * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
+ * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
+ * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
+

@@ -19,4 +19,32 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+`LIST FILE` lists the files, JARs or archives added by [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html).
+
+### Syntax
+{% highlight sql %}
+LIST FILE
+{% endhighlight %}
+
+### Examples
+{% highlight sql %}
+ add FILE /tmp/test1.jar;
+
+ add FILE /tmp/test2.zip;
+
+ add FILE /tmp/test3.txt;
+
+ LIST FILE;
+
+ -- output for LIST FILE
+ file:/private/tmp/test2.zip
+ file:/private/tmp/test3.txt
+ file:/private/tmp/test1.jar
+{% endhighlight %}
+
+### Related Statements
+ * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
+ * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
+ * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
+
