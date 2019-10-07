@@ -65,6 +65,22 @@ trait DataSourceScanExec extends LeafExecNode {
       s"$nodeNamePrefix$nodeName${truncatedString(output, "[", ",", "]", maxFields)}$metadataStr")
   }
 
+  override def verboseStringWithOperatorId(): String = {
+     val metadataStr = metadata.toSeq.sorted.map {
+       case (_, value) if (value.isEmpty || value.equals("[]")) => ""
+       case (key, value) if (key.equalsIgnoreCase("location")) =>
+         val abbreviatedLoaction = StringUtils.abbreviate(redact(value), 100)
+         s"$key: $abbreviatedLoaction"
+       case (key, value) => s"$key: ${redact(value)}"
+    }.filter(_.nonEmpty)
+
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+       |${metadataStr.mkString("\n")}
+     """.stripMargin
+  }
+
   /**
    * Shorthand for calling redactString() without specifying redacting rules
    */
