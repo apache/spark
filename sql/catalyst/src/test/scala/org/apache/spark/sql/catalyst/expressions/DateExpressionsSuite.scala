@@ -837,17 +837,28 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("datediff returns an integer") {
-    checkEvaluation(
-      DateDiff(Literal(Date.valueOf("2015-07-24")), Literal(Date.valueOf("2015-07-21"))), 3)
-    checkEvaluation(
-      DateDiff(Literal(Date.valueOf("2015-07-21")), Literal(Date.valueOf("2015-07-24"))), -3)
-    checkEvaluation(DateDiff(Literal.create(null, DateType), Literal(Date.valueOf("2015-07-24"))),
-      null)
-    checkEvaluation(DateDiff(Literal(Date.valueOf("2015-07-24")), Literal.create(null, DateType)),
-      null)
-    checkEvaluation(
-      DateDiff(Literal.create(null, DateType), Literal.create(null, DateType)),
-      null)
+    Seq(
+      (true, "PostgreSQL"),
+      (false, "PostgreSQL"),
+      (false, "Spark")).foreach { case (ansi, dialect) =>
+      withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> ansi.toString,
+        SQLConf.DIALECT.key -> dialect.toString) {
+        checkEvaluation(
+          DateDiff(Literal(Date.valueOf("2015-07-24")), Literal(Date.valueOf("2015-07-21"))), 3)
+        checkEvaluation(
+          DateDiff(Literal(Date.valueOf("2015-07-21")), Literal(Date.valueOf("2015-07-24"))), -3)
+        checkEvaluation(
+          DateDiff(Literal.create(null, DateType), Literal(Date.valueOf("2015-07-24"))),
+          null)
+        checkEvaluation(
+          DateDiff(Literal(Date.valueOf("2015-07-24")), Literal.create(null, DateType)),
+          null)
+        checkEvaluation(
+          DateDiff(Literal.create(null, DateType), Literal.create(null, DateType)),
+          null)
+      }
+    }
   }
 
   test("datediff returns an interval") {
