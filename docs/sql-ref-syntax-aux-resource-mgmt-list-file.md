@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-`LIST FILE` lists the files, JARs or archives added by [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html).
+`LIST FILE` lists the files added by [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html).
 
 ### Syntax
 {% highlight sql %}
@@ -29,18 +29,11 @@ LIST FILE
 
 ### Examples
 {% highlight sql %}
- add FILE /tmp/test1.jar;
-
- add FILE /tmp/test2.zip;
-
- add FILE /tmp/test3.txt;
+ add FILE /tmp/test;
 
  LIST FILE;
-
  -- output for LIST FILE
- file:/private/tmp/test2.zip
- file:/private/tmp/test3.txt
- file:/private/tmp/test1.jar
+ file:/private/tmp/test
 {% endhighlight %}
 
 ### Related Statements

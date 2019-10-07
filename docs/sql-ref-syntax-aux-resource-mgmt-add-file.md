@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-`ADD FILE` adds a file, JAR or archive to the list of resources. The added file can be listed using [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html).
+`ADD FILE` adds a file to the list of resources. The added file can be listed using [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html).
 
 ### Syntax
 {% highlight sql %}
@@ -30,16 +30,12 @@ ADD FILE file_name
 ### Parameters
 <dl>
  <dt><code><em>file_name</em></code></dt>
- <dd>The name of the file, JAR or archive to be added.</dd>
+ <dd>The name of the file to be added.</dd>
 </dl>
 
 ### Examples
 {% highlight sql %}
- add FILE /tmp/test1.jar;
-
- add FILE /tmp/test2.zip;
-
- add FILE /tmp/test3.txt;
+ add FILE /tmp/test;
 
 {% endhighlight %}
 
