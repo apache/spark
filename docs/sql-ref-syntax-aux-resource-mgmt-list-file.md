@@ -1,7 +1,7 @@
 ---
 layout: global
-title: ADD JAR
-displayTitle: ADD JAR
+title: LIST FILE
+displayTitle: LIST FILE
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -20,25 +20,23 @@ license: |
 ---
 
 ### Description
-`ADD JAR` adds a JAR file to the list of resources. The added JAR file can be listed using [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html).
+`LIST FILE` lists the files added by [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html).
 
 ### Syntax
 {% highlight sql %}
-ADD JAR file_name
+LIST FILE
 {% endhighlight %}
-
-### Parameters
-<dl>
- <dt><code><em>file_name</em></code></dt>
- <dd>The name of the JAR file to be added. It could be either on a local file system or a distributed file system.</dd>
-</dl>
 
 ### Examples
 {% highlight sql %}
-ADD JAR /tmp/test.jar;
+ADD FILE /tmp/test;
+LIST FILE;
+-- output for LIST FILE
+file:/private/tmp/test
 {% endhighlight %}
 
 ### Related Statements
- * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
  * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
- * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
+ * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
+ * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
+
