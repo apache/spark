@@ -2694,7 +2694,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     sparkContext.addSparkListener(listener)
     try {
       // Execute the command.
-      sql("show databases").head()
+      sql("USE NAMESPACE default")
 
       // Make sure we have seen all events triggered by DataFrame.show()
       sparkContext.listenerBus.waitUntilEmpty()
