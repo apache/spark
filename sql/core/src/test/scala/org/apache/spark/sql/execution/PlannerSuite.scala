@@ -470,7 +470,7 @@ class PlannerSuite extends SharedSparkSession {
       Inner,
       None,
       shuffle,
-      shuffle)
+      shuffle.copy())
 
     val outputPlan = ReuseExchange(spark.sessionState.conf).apply(inputPlan)
     if (outputPlan.collect { case e: ReusedExchangeExec => true }.size != 1) {
