@@ -29,11 +29,10 @@ LIST FILE
 
 ### Examples
 {% highlight sql %}
- add FILE /tmp/test;
-
- LIST FILE;
- -- output for LIST FILE
- file:/private/tmp/test
+ADD FILE /tmp/test;
+LIST FILE;
+-- output for LIST FILE
+file:/private/tmp/test
 {% endhighlight %}
 
 ### Related Statements

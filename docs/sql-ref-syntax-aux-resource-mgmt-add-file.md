@@ -35,8 +35,7 @@ ADD FILE file_name
 
 ### Examples
 {% highlight sql %}
- add FILE /tmp/test;
-
+ADD FILE /tmp/test;
 {% endhighlight %}
 
 ### Related Statements

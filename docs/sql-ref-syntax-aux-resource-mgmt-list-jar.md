@@ -29,11 +29,10 @@ LIST JAR
 
 ### Examples
 {% highlight sql %}
- add JAR /tmp/test.jar;
-
- LIST JAR;
- -- output for LIST JAR
- spark://192.168.1.112:62859/jars/test.jar
+ADD JAR /tmp/test.jar;
+LIST JAR;
+-- output for LIST JAR
+spark://192.168.1.112:62859/jars/test.jar
 {% endhighlight %}
 
 ### Related Statements
