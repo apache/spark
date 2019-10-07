@@ -210,18 +210,16 @@ case class ReuseSubquery(
       return plan
     }
 
-    def reuse: PartialFunction[Expression, Expression] = {
+    def reuse[T <: SparkPlan](plan: T): T = plan.transformAllExpressions {
       case sub: ExecSubqueryExpression =>
-        val newPlan = subqueryMap.getOrElseUpdate(sub.plan.canonicalized, sub.plan)
-        if (newPlan.ne(sub.plan)) {
-          sub.withNewPlan(ReusedSubqueryExec(newPlan))
+        val newSub = subqueryMap.getOrElseUpdate(sub.plan.canonicalized, sub.plan)
+        if (newSub.ne(sub.plan)) {
+          sub.withNewPlan(ReusedSubqueryExec(newSub))
         } else {
-          sub.withNewPlan(sub.plan.transformAllExpressions(reuse))
+          sub.withNewPlan(reuse(sub.plan))
         }
     }
 
-    plan.transformAllExpressions {
-      reuse
-    }
+    reuse(plan)
   }
 }
