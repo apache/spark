@@ -20,7 +20,7 @@ license: |
 ---
 ### Description
 
-The `SHOW TABLES` statement returns all the tables for an optionally specified `database`.
+The `SHOW TABLES` statement returns all the tables for an optionally specified database.
 Additionally, the output of this statement may be filtered by an optional matching
 pattern. If no database is specified then the tables are returned from the 
 current database.
@@ -39,7 +39,7 @@ SHOW TABLES [{FROM|IN} database_name] [LIKE 'regex_pattern']
   <dt><code><em>LIKE 'regex_pattern'</em></code></dt>
   <dd>
      Specifies the regex pattern that is used to filter out unwanted tables.
-       <br> - The pattern is a regex except that `*` and `|`characters
+       <br> - The pattern is a regex except `*` and `|`characters
        <br> - `*` matches 0 or more characters and `|` used to provide more than one regex with OR condition
        <br> - The leading and trailing blanks are trimmed in the input pattern before processing.  
   </dd>
