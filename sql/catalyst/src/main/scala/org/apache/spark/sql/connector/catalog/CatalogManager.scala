@@ -24,6 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * A thread-safe manager for [[CatalogPlugin]]s. It tracks all the registered catalogs, and allow
@@ -65,27 +66,28 @@ class CatalogManager(
     }
   }
 
-  private def loadV2SessionCatalog(): CatalogPlugin = {
-    Catalogs.load(SESSION_CATALOG_NAME, conf) match {
-      case extension: CatalogExtension =>
-        extension.setDelegateCatalog(defaultSessionCatalog)
-        extension
-      case other => other
-    }
-  }
-
-  // If the V2_SESSION_CATALOG config is specified, we try to instantiate the user-specified v2
-  // session catalog. Otherwise, return the default session catalog.
   def v2SessionCatalog: CatalogPlugin = {
-    conf.getConf(SQLConf.V2_SESSION_CATALOG).map { customV2SessionCatalog =>
-      try {
-        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
-      } catch {
-        case NonFatal(_) =>
-          logError(
-            "Fail to instantiate the custom v2 session catalog: " + customV2SessionCatalog)
-          defaultSessionCatalog
-      }
+    // If the SPARK_CATALOG_EXTENSION config is specified, we try to instantiate the catalog
+    // extension and pass the default session catalog to it. Otherwise, return the default
+    // session catalog.
+    conf.getConf(SQLConf.SPARK_CATALOG_EXTENSION).map { extensionCls =>
+      catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, {
+        val loader = Utils.getContextOrSparkClassLoader
+        try {
+          loader.loadClass(extensionCls).newInstance() match {
+            case extension: CatalogExtension =>
+              extension.setDelegateCatalog(defaultSessionCatalog)
+              extension
+            case _ =>
+              throw new IllegalArgumentException(s"${SQLConf.SPARK_CATALOG_EXTENSION.key} must " +
+                "be an implementation of `CatalogExtension`, but we got: " + extensionCls)
+          }
+        } catch {
+          case NonFatal(e) =>
+            logError(s"Cannot instantiate the Spark Catalog extension: $extensionCls", e)
+            defaultSessionCatalog
+        }
+      })
     }.getOrElse(defaultSessionCatalog)
   }
 
@@ -146,5 +148,5 @@ class CatalogManager(
 }
 
 private[sql] object CatalogManager {
-  val SESSION_CATALOG_NAME: String = "session"
+  val SESSION_CATALOG_NAME: String = "spark_catalog"
 }

@@ -1965,13 +1965,12 @@ object SQLConf {
     .stringConf
     .createOptional
 
-  val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
-      .doc("A catalog implementation that will be used in place of the Spark built-in session " +
-        "catalog for v2 operations. The implementation may extend `CatalogExtension` to be " +
-        "passed the Spark built-in session catalog, so that it may delegate calls to the " +
-        "built-in session catalog.")
-      .stringConf
-      .createOptional
+  val SPARK_CATALOG_EXTENSION = buildConf("spark.sql.sparkCatalogExtension")
+    .doc("A `CatalogExtension` implementation that will be used to extend the Spark Catalog " +
+      "and inject custom logic during operations for the Spark Catalog. Spark Catalog is the " +
+      "current catalog by default.")
+    .stringConf
+    .createOptional
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
     .doc("When true, the upcast will be loose and allows string to atomic types.")
