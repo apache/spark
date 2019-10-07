@@ -130,4 +130,4 @@ case "$SPARK_K8S_CMD" in
 esac
 
 # Execute the container CMD under tini for better hygiene
-exec /sbin/tini -s -- "${CMD[@]}"
+exec /usr/bin/tini -s -- "${CMD[@]}"
