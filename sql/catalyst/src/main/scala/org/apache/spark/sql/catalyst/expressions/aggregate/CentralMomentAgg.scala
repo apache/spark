@@ -43,7 +43,7 @@ import org.apache.spark.sql.types._
  * @param child to compute central moments of.
  */
 abstract class CentralMomentAgg(child: Expression)
-  extends DeclarativeAggregate with ImplicitCastInputTypes {
+  extends DeclarativeAggregate with ImplicitCastInputTypes with OrderIrrelevantAggs {
 
   /**
    * The central moment order to be computed.
