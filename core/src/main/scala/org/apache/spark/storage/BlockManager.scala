@@ -45,7 +45,7 @@ import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.client.StreamCallbackWithID
+import org.apache.spark.network.client.{AsyncResponseCallback, StreamCallbackWithID}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -112,6 +112,43 @@ private[spark] class ByteBufferBlockData(
     }
   }
 
+}
+
+private[spark] class HostLocalDirManager(
+    cacheSize: Int,
+    externalBlockStoreClient: ExternalBlockStoreClient,
+    host: String,
+    externalShuffleServicePort: Int) extends Logging {
+
+  private val executorIdToLocalDirsCache =
+    CacheBuilder
+      .newBuilder()
+      .maximumSize(cacheSize)
+      .build[String, Array[String]]()
+
+  private[spark] def getCachedHostLocalDirs()
+    : scala.collection.Map[String, Array[String]] = synchronized {
+    import scala.collection.JavaConverters._
+    return executorIdToLocalDirsCache.asMap().asScala
+  }
+
+  private[spark] def getHostLocalDirs(
+      executorIds: Array[String],
+      callback: AsyncResponseCallback[java.util.Map[String, Array[String]]]): Unit = synchronized {
+    externalBlockStoreClient.getHostLocalDirs(
+      host,
+      externalShuffleServicePort,
+      executorIds,
+      new AsyncResponseCallback[java.util.Map[String, Array[String]]] {
+
+        override def onSuccess(result: java.util.Map[String, Array[String]]): Unit = {
+          executorIdToLocalDirsCache.putAll(result)
+          callback.onSuccess(result)
+        }
+
+        override def onFailure(t: Throwable): Unit = callback.onFailure(t)
+      })
+  }
 }
 
 /**
@@ -207,11 +244,7 @@ private[spark] class BlockManager(
     new BlockManager.RemoteBlockDownloadFileManager(this)
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
-  private val executorIdToLocalDirsCache =
-    CacheBuilder
-      .newBuilder()
-      .maximumSize(conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE))
-      .build[String, Array[String]]()
+  var hostLocalDirManager: Option[HostLocalDirManager] = None
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
@@ -440,6 +473,19 @@ private[spark] class BlockManager(
       registerWithExternalShuffleServer()
     }
 
+    hostLocalDirManager =
+      if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED)) {
+        externalBlockStoreClient.map { blockStoreClient =>
+          new HostLocalDirManager(
+            conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
+            blockStoreClient,
+            blockManagerId.host,
+            externalShuffleServicePort)
+        }
+      } else {
+        None
+      }
+
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
 
@@ -550,7 +596,7 @@ private[spark] class BlockManager(
   }
 
   override def getHostLocalShuffleData(
-      blockId: ShuffleBlockId,
+      blockId: BlockId,
       dirs: Array[String]): ManagedBuffer = {
     shuffleManager.shuffleBlockResolver.getBlockData(blockId, Some(dirs))
   }
@@ -561,7 +607,7 @@ private[spark] class BlockManager(
    */
   override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
@@ -1005,20 +1051,6 @@ private[spark] class BlockManager(
     }
     logDebug(s"Block $blockId not found")
     None
-  }
-
-  private[spark] def getHostLocalDirs(executorIds: Array[String])
-      : scala.collection.Map[String, Array[String]] = synchronized {
-    import scala.collection.JavaConverters._
-    val cachedItems = executorIdToLocalDirsCache.getAllPresent(executorIds.toIterable.asJava)
-    if (cachedItems.size < executorIds.length) {
-      val notCachedItems = master
-        .getHostLocalDirs(executorIds.filterNot(cachedItems.containsKey))
-      executorIdToLocalDirsCache.putAll(notCachedItems.asJava)
-      notCachedItems ++ cachedItems.asScala
-    } else {
-      cachedItems.asScala
-    }
   }
 
   /**

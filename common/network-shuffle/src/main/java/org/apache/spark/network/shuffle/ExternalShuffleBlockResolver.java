@@ -25,7 +25,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.tuple.Pair;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -367,6 +369,12 @@ public class ExternalShuffleBlockResolver {
       }
     }
     return numRemovedBlocks;
+  }
+
+  public Map<String, String[]> getLocalDirs(String appId, String[] execIds) {
+    return Arrays.stream(execIds)
+      .map(exec -> Pair.of(exec, executors.get(new AppExecId(appId, exec)).localDirs))
+      .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */

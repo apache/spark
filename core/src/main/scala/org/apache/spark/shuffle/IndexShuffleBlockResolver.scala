@@ -218,7 +218,8 @@ private[spark] class IndexShuffleBlockResolver(
     }
   }
 
-  override def getBlockData(blockId: ShuffleBlockId, dirs: Option[Array[String]]): ManagedBuffer = {
+  override def getBlockData(blockId: BlockId, dirs: Option[Array[String]])
+    : ManagedBuffer = {
     val (shuffleId, mapId, startReduceId, endReduceId) = blockId match {
       case id: ShuffleBlockId =>
         (id.shuffleId, id.mapId, id.reduceId, id.reduceId + 1)
@@ -229,7 +230,7 @@ private[spark] class IndexShuffleBlockResolver(
     }
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
-    val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
+    val indexFile = getIndexFile(shuffleId, mapId, dirs)
 
     // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
     // which is incorrectly using our file descriptor then this code will fetch the wrong offsets

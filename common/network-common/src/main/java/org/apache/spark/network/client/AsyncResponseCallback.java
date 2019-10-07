@@ -17,21 +17,16 @@
 
 package org.apache.spark.network.client;
 
-import java.nio.ByteBuffer;
-
 /**
- * Callback for the result of a single RPC. This will be invoked once with either success or
- * failure.
+ * Callback for the result of a single call.
+ * This will be invoked once with either success or failure.
  */
-public interface RpcResponseCallback extends AsyncResponseCallback<ByteBuffer> {
+public interface AsyncResponseCallback<T> {
   /**
-   * Successful serialized result from server.
-   *
-   * After `onSuccess` returns, `response` will be recycled and its content will become invalid.
-   * Please copy the content of `response` if you want to use it after `onSuccess` returns.
+   * Called to handle successful response.
    */
-  void onSuccess(ByteBuffer response);
+  void onSuccess(T response);
 
-  /** Exception either propagated from server or raised on client side. */
+  /** Called to handle the failure case. */
   void onFailure(Throwable e);
 }

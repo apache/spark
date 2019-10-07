@@ -31,7 +31,7 @@ trait BlockDataManager {
    * Interface to get host-local shuffle block data. Throws an exception if the block cannot be
    * found or cannot be read successfully.
    */
-  def getHostLocalShuffleData(blockId: ShuffleBlockId, dirs: Array[String]): ManagedBuffer
+  def getHostLocalShuffleData(blockId: BlockId, dirs: Array[String]): ManagedBuffer
 
   /**
    * Interface to get local block data. Throws an exception if the block cannot be found or

@@ -94,10 +94,6 @@ class BlockManagerMaster(
       GetLocationsAndStatus(blockId, requesterHost))
   }
 
-  def getHostLocalDirs(executorIds: Array[String]): Map[String, Array[String]] = {
-    driverEndpoint.askSync[Map[String, Array[String]]](GetLocalDirs(executorIds))
-  }
-
   /** Get locations of multiple blockIds from the driver */
   def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
     driverEndpoint.askSync[IndexedSeq[Seq[BlockManagerId]]](
