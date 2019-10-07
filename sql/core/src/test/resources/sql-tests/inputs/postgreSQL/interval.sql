@@ -2,8 +2,8 @@
 -- INTERVAL
 --
 
-SET DATESTYLE = 'ISO';
-SET IntervalStyle to postgres;
+-- SET DATESTYLE = 'ISO';
+-- SET IntervalStyle to postgres;
 
 -- check acceptance of "time zone style"
 SELECT INTERVAL '01:00' AS "One hour";
