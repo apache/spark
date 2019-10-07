@@ -219,3 +219,14 @@ Note that a standard UDF (non-Pandas) will load timestamp data as Python datetim
 different than a Pandas timestamp. It is recommended to use Pandas time series functionality when
 working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
+
+### Compatibiliy Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
+
+Since Arrow 0.15.0, a change in the binary IPC format requires an environment variable to be set in
+Spark so that PySpark maintain compatibility with versions on PyArrow 0.15.0 and above. The following can be added to `conf/spark-env.sh` to use the legacy IPC format:
+
+```
+ARROW_PRE_0_15_IPC_FORMAT=1
+```
+
+This will instruct PyArrow >= 0.15.0 to use the legacy IPC format with the older Arrow Java that is in Spark 2.3.x and 2.4.x.
