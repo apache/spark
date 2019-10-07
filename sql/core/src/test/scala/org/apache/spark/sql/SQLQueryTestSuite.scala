@@ -390,6 +390,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  /**
+   * This method handles exceptions occurred during query execution as they may need special care
+   * to become comparable to the expected output.
+   *
+   * @param result a function that returns a pair of schema and output
+   */
   protected def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
     try {
       result

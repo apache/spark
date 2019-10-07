@@ -255,6 +255,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
+  /** ThriftServer wraps the root exception, so it needs to be extracted. */
   override def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
     super.handleExceptions {
       try {
