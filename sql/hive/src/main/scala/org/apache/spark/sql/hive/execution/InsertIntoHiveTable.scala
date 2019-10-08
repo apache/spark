@@ -199,7 +199,7 @@ case class InsertIntoHiveTable(
       attr.withName(name.toLowerCase(Locale.ROOT))
     }
 
-    saveAsHiveFile(
+    val writtenParts = saveAsHiveFile(
       sparkSession = sparkSession,
       plan = child,
       hadoopConf = hadoopConf,
@@ -209,6 +209,31 @@ case class InsertIntoHiveTable(
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
+        if (overwrite && table.tableType == CatalogTableType.EXTERNAL) {
+          // SPARK-29295: When insert overwrite to a Hive external table partition, if the
+          // partition does not exist, Hive will not check if the external partition directory
+          // exists or not before copying files. So if users drop the partition, and then do
+          // insert overwrite to the same partition, the partition will have both old and new
+          // data.
+          val dpMap = writtenParts.map { part =>
+            val splitPart = part.split("=")
+            assert(splitPart.size == 2, s"Invalid written partition path: $part")
+            splitPart(0) -> splitPart(1)
+          }.toMap
+
+          val updatedPartitionSpec = partition.map {
+            case (key, Some(value)) => key -> value
+            case (key, None) if dpMap.contains(key) => key -> dpMap(key)
+            case (key, _) =>
+              throw new SparkException(s"Dynamic partition key $key is not among " +
+                "written partition paths.")
+          }
+
+          AlterTableAddPartitionCommand(
+            table.identifier, Seq((updatedPartitionSpec, None)), ifNotExists = true)
+            .run(sparkSession)
+        }
+
         externalCatalog.loadDynamicPartitions(
           db = table.database,
           table = table.identifier.table,

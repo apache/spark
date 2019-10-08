@@ -2414,25 +2414,39 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-29295: insert overwrite external partition should not have old data") {
-    withTable("test") {
-      withTempDir { f =>
-        sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (name string) STORED AS " +
-          s"PARQUET LOCATION '${f.getAbsolutePath}'")
+    Seq("true", "false").foreach { convertParquet =>
+      withTable("test") {
+        withTempDir { f =>
+          sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (name string) STORED AS " +
+            s"PARQUET LOCATION '${f.getAbsolutePath}'")
 
-        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-          sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 1")
-          sql("ALTER TABLE test DROP PARTITION(name='n1')")
-          sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 2")
-          checkAnswer( sql("SELECT id FROM test WHERE name = 'n1' ORDER BY id"),
-            Array(Row(2)))
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet) {
+            sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 1")
+            sql("ALTER TABLE test DROP PARTITION(name='n1')")
+            sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 2")
+            checkAnswer(sql("SELECT id FROM test WHERE name = 'n1' ORDER BY id"),
+              Array(Row(2)))
+          }
         }
+      }
+    }
+  }
 
-        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
-          sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 1")
-          sql("ALTER TABLE test DROP PARTITION(name='n1')")
-          sql("INSERT OVERWRITE TABLE test PARTITION(name='n1') SELECT 2")
-          checkAnswer( sql("SELECT id FROM test WHERE name = 'n1' ORDER BY id"),
-            Array(Row(2)))
+  test("SPARK-29295: dynamic insert overwrite external partition should not have old data") {
+    Seq("true", "false").foreach { convertParquet =>
+      withTable("test") {
+        withTempDir { f =>
+          sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (p1 string, p2 string) " +
+            s"STORED AS PARQUET LOCATION '${f.getAbsolutePath}'")
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet,
+            "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+            sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 1, 'n2'")
+            sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='n2')")
+            sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 2, 'n2'")
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n2' ORDER BY id"),
+              Array(Row(2)))
+          }
         }
       }
     }
