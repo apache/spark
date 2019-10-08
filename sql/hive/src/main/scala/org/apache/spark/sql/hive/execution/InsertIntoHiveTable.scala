@@ -260,7 +260,8 @@ case class InsertIntoHiveTable(
           // exists or not before copying files. So if users drop the partition, and then do
           // insert overwrite to the same partition, the partition will have both old and new
           // data.
-          val updatedPart = if (overwrite && table.tableType == CatalogTableType.EXTERNAL) {
+          val updatedPart = if (oldPart.isEmpty && overwrite
+              && table.tableType == CatalogTableType.EXTERNAL) {
             AlterTableAddPartitionCommand(
               table.identifier, Seq((partitionSpec, None)), ifNotExists = true).run(sparkSession)
             externalCatalog.getPartitionOption(
