@@ -35,7 +35,7 @@ case class SetCatalogAndNamespaceExec(
     catalogName.map(catalogManager.setCurrentCatalog)
     namespace.map(ns => catalogManager.setCurrentNamespace(ns.toArray))
 
-    Seq.empty[InternalRow]
+    Seq.empty
   }
 
   override def output: Seq[Attribute] = Seq.empty
