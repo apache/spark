@@ -215,7 +215,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       col
     }
 
-    val terms = resolvedFormula.terms.flatten.distinct
+    val terms = resolvedFormula.terms.flatten.distinct.sorted
     lazy val firstRow = dataset.select(terms.map(col): _*).first()
 
     // First we index each string column referenced by the input terms.
