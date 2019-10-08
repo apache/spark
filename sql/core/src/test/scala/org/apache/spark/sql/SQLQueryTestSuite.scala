@@ -437,7 +437,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         s"Location.*/sql/core/spark-warehouse/$clsName/",
         s"Location ${notIncludedMsg}sql/core/spark-warehouse/")
       .replaceAll(
-        s"Location.*/sql/core/spark-warehouse.*\\.\\.\\.\\.",
+        s"Location.*/sql/core/spark-warehouse.*\\.\\.\\.",
         s"Location ${notIncludedMsg}sql/core/spark-warehouse/${notIncludedMsg}")
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
