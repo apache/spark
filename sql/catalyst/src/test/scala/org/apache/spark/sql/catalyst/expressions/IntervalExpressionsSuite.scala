@@ -178,9 +178,9 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("epoch") {
     checkEvaluation(IntervalEpoch("0 months"), Decimal(0.0, 18, 6))
-    checkEvaluation(IntervalEpoch("10000 years"), Decimal(315576000000.0, 18, 6))
-    checkEvaluation(IntervalEpoch("1 year"), Decimal(31557600.0, 18, 6))
-    checkEvaluation(IntervalEpoch("-1 year"), Decimal(-31557600.0, 18, 6))
+    checkEvaluation(IntervalEpoch("10000 years"), Decimal(315569520000.0, 18, 6))
+    checkEvaluation(IntervalEpoch("1 year"), Decimal(31556952.0, 18, 6))
+    checkEvaluation(IntervalEpoch("-1 year"), Decimal(-31556952.0, 18, 6))
     checkEvaluation(
       IntervalEpoch("1 second 1 millisecond 1 microsecond"),
       Decimal(1.001001, 18, 6))
