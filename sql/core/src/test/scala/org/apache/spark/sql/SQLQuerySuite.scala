@@ -80,7 +80,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
 
     createFunction(functions)
 
-    checkAnswer(sql("SHOW functions"), getFunctions("*"))
+    checkAnswer(sql("SHOW functions"), (getFunctions("*") ++
+      Seq(Row("!="), Row("<>"), Row("between"), Row("case"))))
     assert(sql("SHOW functions").collect().size > 200)
 
     Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>

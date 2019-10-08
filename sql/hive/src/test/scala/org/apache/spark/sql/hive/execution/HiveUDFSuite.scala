@@ -563,8 +563,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         checkAnswer(
           sql("SELECT testUDFToListInt(s) FROM inputTable"),
           Seq(Row(Seq(1, 2, 3))))
-        assert(sql("show functions").count() == numFunc + 1)
-        assert(spark.catalog.listFunctions().count() == numFunc + 1)
+        assert(sql("show functions").count() == numFunc + 5)
+        assert(spark.catalog.listFunctions().count() == numFunc + 5)
       }
     }
   }

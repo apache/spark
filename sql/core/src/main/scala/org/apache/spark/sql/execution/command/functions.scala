@@ -222,6 +222,6 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    functionNames.sorted.map(Row(_))
+    (functionNames ++ Seq("!=", "<>", "between", "case")).sorted.map(Row(_))
   }
 }

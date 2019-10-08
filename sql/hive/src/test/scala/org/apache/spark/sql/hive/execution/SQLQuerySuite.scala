@@ -192,6 +192,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     allBuiltinFunctions.foreach { f =>
       assert(allFunctions.contains(f))
     }
+
+    Seq("!=", "<>", "between", "case").foreach { f =>
+      assert(allFunctions.contains(f))
+    }
+
     withTempDatabase { db =>
       def createFunction(names: Seq[String]): Unit = {
         names.foreach { name =>
