@@ -1982,8 +1982,7 @@ object SQLConf {
         "passed the Spark built-in session catalog, so that it may delegate calls to the " +
         "built-in session catalog.")
       .stringConf
-      .createWithDefault(
-        "org.apache.spark.sql.execution.datasources.v2.CatalogExtensionForTableProvider")
+      .createOptional
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
     .doc("When true, the upcast will be loose and allows string to atomic types.")

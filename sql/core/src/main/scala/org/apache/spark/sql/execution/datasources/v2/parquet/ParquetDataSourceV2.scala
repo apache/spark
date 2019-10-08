@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2.parquet
 import java.util
 
 import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2._
@@ -38,10 +37,7 @@ class ParquetDataSourceV2 extends FileDataSourceV2 {
     ParquetTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
   }
 
-  override def getTable(
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
     val paths = getPaths(properties)
     val tableName = getTableName(paths)
     ParquetTable(tableName, sparkSession, properties, paths, Some(schema), fallbackFileFormat)

@@ -24,7 +24,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.connector.write.WriteBuilder
 import org.apache.spark.sql.execution.{FileSourceScanExec, QueryExecution}
@@ -47,10 +46,7 @@ class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
     new DummyReadOnlyFileTable
   }
 
-  override def getTable(
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
     throw new UnsupportedOperationException
   }
 }
@@ -78,10 +74,7 @@ class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
     new DummyWriteOnlyFileTable
   }
 
-  override def getTable(
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
     throw new UnsupportedOperationException
   }
 }

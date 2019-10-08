@@ -30,8 +30,8 @@ import org.apache.spark.sql.types.StructType
 /**
  * An implementation of catalog v2 `Table` to expose v1 table metadata.
  */
-private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
-  assert(v1Table.provider.isDefined)
+private[sql] case class V1Table(catalogTable: CatalogTable) extends Table {
+  assert(catalogTable.provider.isDefined)
 
   implicit class IdentifierHelper(identifier: TableIdentifier) {
     def quoted: String = {
@@ -52,34 +52,34 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
     }
   }
 
-  override lazy val properties: util.Map[String, String] = {
-    val pathOption = v1Table.storage.locationUri match {
+  lazy val options: Map[String, String] = {
+    catalogTable.storage.locationUri match {
       case Some(uri) =>
-        Some("path" -> uri.toString)
+        catalogTable.storage.properties + ("path" -> uri.toString)
       case _ =>
-        None
+        catalogTable.storage.properties
     }
-    val providerOption = "provider" -> v1Table.provider.get
-    (v1Table.storage.properties ++ v1Table.properties ++ pathOption + providerOption).asJava
   }
 
-  override def schema: StructType = v1Table.schema
+  override lazy val properties: util.Map[String, String] = catalogTable.properties.asJava
+
+  override lazy val schema: StructType = catalogTable.schema
 
   override lazy val partitioning: Array[Transform] = {
     val partitions = new mutable.ArrayBuffer[Transform]()
 
-    v1Table.partitionColumnNames.foreach { col =>
+    catalogTable.partitionColumnNames.foreach { col =>
       partitions += LogicalExpressions.identity(col)
     }
 
-    v1Table.bucketSpec.foreach { spec =>
+    catalogTable.bucketSpec.foreach { spec =>
       partitions += LogicalExpressions.bucket(spec.numBuckets, spec.bucketColumnNames: _*)
     }
 
     partitions.toArray
   }
 
-  override def name: String = v1Table.identifier.quoted
+  override def name: String = catalogTable.identifier.quoted
 
   override def capabilities: util.Set[TableCapability] = new util.HashSet[TableCapability]()
 

@@ -42,7 +42,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import V2SessionCatalog._
 
-  override def defaultNamespace: Array[String] = Array("default")
+  override val defaultNamespace: Array[String] = Array("default")
 
   override def name: String = CatalogManager.SESSION_CATALOG_NAME
 
@@ -69,6 +69,20 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
     }
   }
 
+  private def tryResolveTableProvider(v1Table: V1Table): Table = {
+    val providerName = v1Table.catalogTable.provider.get
+    DataSource.lookupDataSourceV2(providerName, conf).map {
+      // TODO: support file source v2 in CREATE TABLE USING.
+      case _: FileDataSourceV2 => v1Table
+
+      case provider =>
+        val table = provider.getTable(v1Table.schema, v1Table.partitioning, v1Table.properties)
+        DataSourceV2Utils.validateTableSchemaAndPartitioning(
+          providerName, table, v1Table.schema, v1Table.partitioning)
+        table
+    }.getOrElse(v1Table)
+  }
+
   override def loadTable(ident: Identifier): Table = {
     val catalogTable = try {
       catalog.getTableMetadata(ident.asTableIdentifier)
@@ -81,7 +95,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       throw new NoSuchTableException(ident)
     }
 
-    V1Table(catalogTable)
+    tryResolveTableProvider(V1Table(catalogTable))
   }
 
   override def invalidateTable(ident: Identifier): Unit = {
@@ -94,8 +108,25 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
 
-    val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(partitions)
-    val provider = properties.getOrDefault("provider", conf.defaultDataSourceName)
+    val providerName = properties.getOrDefault("provider", conf.defaultDataSourceName)
+    // It's guaranteed that we only call `V2SessionCatalog.createTable` if the table provider is v2.
+    val provider = DataSource.lookupDataSourceV2(providerName, conf).get
+    val (actualSchema, actualPartitioning) = if (schema.isEmpty) {
+      // A sanity check. The parser should guarantee it.
+      assert(partitions.isEmpty)
+      // If `CREATE TABLE ... USING` does not specify table metadata, get the table metadata from
+      // data source first.
+      val table = provider.getTable(new CaseInsensitiveStringMap(properties))
+      table.schema() -> table.partitioning()
+    } else {
+      // The schema/partitioning is specified in `CREATE TABLE ... USING`, validate it.
+      val table = provider.getTable(schema, partitions, properties)
+      DataSourceV2Utils.validateTableSchemaAndPartitioning(
+        providerName, table, schema, partitions)
+      schema -> partitions
+    }
+
+    val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(actualPartitioning)
     val tableProperties = properties.asScala
     val location = Option(properties.get(LOCATION_TABLE_PROP))
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
@@ -106,8 +137,8 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
       identifier = ident.asTableIdentifier,
       tableType = tableType,
       storage = storage,
-      schema = schema,
-      provider = Some(provider),
+      schema = actualSchema,
+      provider = Some(providerName),
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
       properties = tableProperties.toMap,
@@ -121,7 +152,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
         throw new TableAlreadyExistsException(ident)
     }
 
-    V1Table(tableDesc)
+    loadTable(ident)
   }
 
   override def alterTable(
@@ -136,16 +167,15 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
-    val updatedTable = catalogTable.copy(properties = properties, schema = schema)
 
     try {
-      catalog.alterTable(updatedTable)
+      catalog.alterTable(catalogTable.copy(properties = properties, schema = schema))
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)
     }
 
-    V1Table(updatedTable)
+    loadTable(ident)
   }
 
   override def dropTable(ident: Identifier): Boolean = {

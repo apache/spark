@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Map;
+
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -35,12 +39,45 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 public interface TableProvider {
 
   /**
-   * Return a {@link Table} instance with the given table options to do read/write.
+   * Return a {@link Table} instance with the user-specified table properties to do read/write.
    * Implementations should infer the table schema and partitioning.
    *
-   * @param options the user-specified options that can identify a table, e.g. file path, Kafka
-   *                topic name, etc. It's an immutable case-insensitive string-to-string map.
+   * @param options The user-specified table properties that can identify a table, e.g. file path,
+   *                Kafka topic name, etc. It's an immutable case-insensitive string-to-string map.
    */
   // TODO: this should take a Map<String, String> as table properties.
   Table getTable(CaseInsensitiveStringMap options);
+
+  /**
+   * Return a {@link Table} instance with the user-specified table schema and properties to do
+   * read/write. Implementations should infer the table partitioning. The returned table must report
+   * the same schema with the user-specified one, or Spark will fail the operation.
+   *
+   * @param schema The user-specified table schema.
+   * @param properties The user-specified table properties that can identify a table, e.g. file
+   *                   path, Kafka topic name, etc. The properties map may be
+   *                   {@link CaseInsensitiveStringMap}.
+   *
+   * @throws IllegalArgumentException if the user-specified schema does not match the actual table
+   *                                  schema.
+   */
+  Table getTable(StructType schema, Map<String, String> properties);
+
+  /**
+   * Return a {@link Table} instance with the user-specified table schema, partitioning and
+   * properties to do read/write. The returned table must report the same schema and partitioning
+   * with the user-specified ones, or Spark will fail the operation.
+   *
+   * @param schema The user-specified table schema.
+   * @param partitioning The user-specified table partitioning.
+   * @param properties The properties of the table to load. It should be sufficient to define and
+   *                   access a table. The properties map may be {@link CaseInsensitiveStringMap}.
+   *
+   * @throws IllegalArgumentException if the user-specified schema/partitioning does not match the
+   *                                  actual table schema/partitioning.
+   */
+  Table getTable(
+      StructType schema,
+      Transform[] partitioning,
+      Map<String, String> properties);
 }

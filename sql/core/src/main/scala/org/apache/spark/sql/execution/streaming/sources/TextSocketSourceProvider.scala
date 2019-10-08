@@ -27,6 +27,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousStream
@@ -61,6 +62,19 @@ class TextSocketSourceProvider extends TableProvider with DataSourceRegister wit
       options.getInt("port", -1),
       options.getInt("numPartitions", SparkSession.active.sparkContext.defaultParallelism),
       options.getBoolean("includeTimestamp", false))
+  }
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException(
+      "socket source does not support user-specified schema/partitioning.")
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException(
+      "socket source does not support user-specified schema/partitioning.")
   }
 
   /** String that represents the format that this data source provider uses. */

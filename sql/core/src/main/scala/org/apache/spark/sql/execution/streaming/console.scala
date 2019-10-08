@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.{SupportsTruncate, WriteBuilder}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
@@ -41,6 +42,19 @@ class ConsoleSinkProvider extends TableProvider
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     ConsoleTable
+  }
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException(
+      "Cannot read console sink with user-specified schema/partitioning.")
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException(
+      "Cannot read console sink with user-specified schema/partitioning.")
   }
 
   def createRelation(

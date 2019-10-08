@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{SupportsSpecifiedSchemaPartitioning, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -173,8 +173,7 @@ class DataSourceV2SQLUsingSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  // TODO: enable it when DELETE FROM supports v2 session catalog.
-  ignore("DELETE FROM") {
+  test("DELETE FROM") {
     withTable("t") {
       sql(s"CREATE TABLE t USING ${classOf[PartitionedV2Source].getName}")
       sql("INSERT INTO t SELECT 1, 1")
@@ -193,8 +192,7 @@ class DataSourceV2SQLUsingSuite extends QueryTest with SharedSparkSession {
       sql("INSERT INTO t SELECT 1, -1")
       checkAnswer(spark.table("t"), Row(1, -1))
 
-      sql("ALTER TABLE t DROP COLUMN i")
-      val e = intercept[AnalysisException](sql("SELECT * FROM t"))
+      val e = intercept[AnalysisException](sql("ALTER TABLE t DROP COLUMN i"))
       assert(e.message.contains("returns a table which has inappropriate schema"))
     }
   }
@@ -225,6 +223,17 @@ class ReadWriteV2Source extends TableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     ReadWriteV2Source.table
   }
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    getTable(CaseInsensitiveStringMap.empty())
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    getTable(CaseInsensitiveStringMap.empty())
+  }
 }
 
 object PartitionedV2Source {
@@ -242,6 +251,17 @@ class PartitionedV2Source extends TableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     PartitionedV2Source.table
   }
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    getTable(CaseInsensitiveStringMap.empty())
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    getTable(CaseInsensitiveStringMap.empty())
+  }
 }
 
 class ReadOnlyV2Source extends TableProvider {
@@ -258,6 +278,17 @@ class ReadOnlyV2Source extends TableProvider {
     rows.withRow(InternalRow(1)).withRow(InternalRow(-1))
     table.withData(Array(rows))
   }
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    getTable(CaseInsensitiveStringMap.empty())
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    getTable(CaseInsensitiveStringMap.empty())
+  }
 }
 
 class WriteOnlyV2Source extends TableProvider {
@@ -271,11 +302,26 @@ class WriteOnlyV2Source extends TableProvider {
       }
     }
   }
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    getTable(CaseInsensitiveStringMap.empty())
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    getTable(CaseInsensitiveStringMap.empty())
+  }
 }
 
-class DynamicSchemaV2Source extends TableProvider with SupportsSpecifiedSchemaPartitioning {
+class DynamicSchemaV2Source extends TableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new InMemoryTable("dynamic-schema", new StructType(), Array.empty, options) {}
+  }
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    new InMemoryTable("dynamic-schema", schema, Array.empty, properties) {}
   }
 
   override def getTable(

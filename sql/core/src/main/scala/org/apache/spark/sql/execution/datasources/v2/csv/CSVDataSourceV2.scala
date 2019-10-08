@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2.csv
 import java.util
 
 import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
@@ -38,10 +37,7 @@ class CSVDataSourceV2 extends FileDataSourceV2 {
     CSVTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
   }
 
-  override def getTable(
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
     val paths = getPaths(properties)
     val tableName = getTableName(paths)
     CSVTable(tableName, sparkSession, properties, paths, Some(schema), fallbackFileFormat)

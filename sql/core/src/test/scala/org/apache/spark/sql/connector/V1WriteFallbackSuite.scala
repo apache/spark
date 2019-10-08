@@ -176,6 +176,7 @@ class InMemoryV1Provider
   extends TableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
+
   override def getTable(options: CaseInsensitiveStringMap): Table = {
 
     InMemoryV1Provider.tables.getOrElse(options.get("name"), {
@@ -186,6 +187,17 @@ class InMemoryV1Provider
         options.asCaseSensitiveMap()
       )
     })
+  }
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    getTable(new CaseInsensitiveStringMap(properties))
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    getTable(new CaseInsensitiveStringMap(properties))
   }
 
   override def shortName(): String = "in-memory"

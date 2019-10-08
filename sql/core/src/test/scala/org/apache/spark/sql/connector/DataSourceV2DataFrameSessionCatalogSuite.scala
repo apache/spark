@@ -91,12 +91,6 @@ class DataSourceV2DataFrameSessionCatalogSuite
   }
 }
 
-class InMemoryTableProvider extends TableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw new UnsupportedOperationException("D'oh!")
-  }
-}
-
 class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable] {
   override def newTable(
       name: String,
@@ -130,7 +124,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
   }
 }
 
-private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalogBase[T]]
+private[connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalogBase[T]]
   extends QueryTest
   with SharedSparkSession
   with BeforeAndAfter {
@@ -139,7 +133,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     spark.sessionState.catalogManager.catalog(name)
   }
 
-  protected val v2Format: String = classOf[InMemoryTableProvider].getName
+  protected val v2Format: String = classOf[FakeV2Provider].getName
 
   protected val catalogClassName: String = classOf[InMemoryTableSessionCatalog].getName
 

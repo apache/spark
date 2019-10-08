@@ -16,20 +16,23 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util
+
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.catalog.{SupportsSpecifiedSchemaPartitioning, TableProvider}
+import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 /**
  * A base interface for data source v2 implementations of the built-in file-based data sources.
  */
-trait FileDataSourceV2 extends TableProvider
-  with SupportsSpecifiedSchemaPartitioning with DataSourceRegister {
+trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
 
   /**
    * Returns a V1 [[FileFormat]] class of the same file data source.
@@ -59,5 +62,13 @@ trait FileDataSourceV2 extends TableProvider
     val hdfsPath = new Path(path)
     val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
     hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException(
+      "file source v2 does not support user-specified partitioning yet.")
   }
 }

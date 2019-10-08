@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.sources.DataSourceRegister
@@ -36,6 +37,19 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class NoopDataSource extends TableProvider with DataSourceRegister {
   override def shortName(): String = "noop"
   override def getTable(options: CaseInsensitiveStringMap): Table = NoopTable
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException(
+      "Cannot read noop source with user-specified schema/partitioning.")
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException(
+      "Cannot read noop source with user-specified schema/partitioning.")
+  }
 }
 
 private[noop] object NoopTable extends Table with SupportsWrite {

@@ -193,6 +193,18 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
     }
   }
 
+  test("user-specified schema given") {
+    val provider = new TextSocketSourceProvider
+    val userSpecifiedSchema = StructType(
+      StructField("name", StringType) ::
+      StructField("area", StringType) :: Nil)
+    val params = Map("host" -> "localhost", "port" -> "1234")
+    val exception = intercept[UnsupportedOperationException] {
+      provider.getTable(userSpecifiedSchema, params.asJava)
+    }
+    assert(exception.getMessage.contains("socket source does not support user-specified schema"))
+  }
+
   test("input row metrics") {
     serverThread = new ServerThread()
     serverThread.start()

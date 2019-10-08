@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
 import org.apache.spark.sql.connector.write.{WriteBuilder, WriterCommitMessage}
@@ -90,9 +91,22 @@ trait FakeStreamingWriteTable extends Table with SupportsWrite {
   }
 }
 
+trait FakeTableProvider extends TableProvider {
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    getTable(new CaseInsensitiveStringMap(properties))
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    getTable(new CaseInsensitiveStringMap(properties))
+  }
+}
+
 class FakeReadMicroBatchOnly
     extends DataSourceRegister
-    with TableProvider
+    with FakeTableProvider
     with SessionConfigSupport {
   override def shortName(): String = "fake-read-microbatch-only"
 
@@ -115,7 +129,7 @@ class FakeReadMicroBatchOnly
 
 class FakeReadContinuousOnly
     extends DataSourceRegister
-    with TableProvider
+    with FakeTableProvider
     with SessionConfigSupport {
   override def shortName(): String = "fake-read-continuous-only"
 
@@ -136,7 +150,7 @@ class FakeReadContinuousOnly
   }
 }
 
-class FakeReadBothModes extends DataSourceRegister with TableProvider {
+class FakeReadBothModes extends DataSourceRegister with FakeTableProvider {
   override def shortName(): String = "fake-read-microbatch-continuous"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
@@ -153,7 +167,7 @@ class FakeReadBothModes extends DataSourceRegister with TableProvider {
   }
 }
 
-class FakeReadNeitherMode extends DataSourceRegister with TableProvider {
+class FakeReadNeitherMode extends DataSourceRegister with FakeTableProvider {
   override def shortName(): String = "fake-read-neither-mode"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
@@ -167,7 +181,7 @@ class FakeReadNeitherMode extends DataSourceRegister with TableProvider {
 
 class FakeWriteOnly
     extends DataSourceRegister
-    with TableProvider
+    with FakeTableProvider
     with SessionConfigSupport {
   override def shortName(): String = "fake-write-microbatch-continuous"
 
@@ -182,7 +196,7 @@ class FakeWriteOnly
   }
 }
 
-class FakeNoWrite extends DataSourceRegister with TableProvider {
+class FakeNoWrite extends DataSourceRegister with FakeTableProvider {
   override def shortName(): String = "fake-write-neither-mode"
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new Table {
@@ -200,7 +214,7 @@ class FakeSink extends Sink {
 }
 
 class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
-  with TableProvider with StreamSinkProvider {
+  with FakeTableProvider with StreamSinkProvider {
 
   override def createSink(
       sqlContext: SQLContext,

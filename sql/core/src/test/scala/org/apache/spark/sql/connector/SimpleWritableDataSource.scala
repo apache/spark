@@ -40,7 +40,7 @@ import org.apache.spark.util.SerializableConfiguration
  * Each task writes data to `target/_temporary/uniqueId/$jobId-$partitionId-$attemptNumber`.
  * Each job moves files from `target/_temporary/uniqueId/` to `target`.
  */
-class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
+class SimpleWritableDataSource extends TestingV2Source with SessionConfigSupport {
 
   private val tableSchema = new StructType().add("i", "long").add("j", "long")
 

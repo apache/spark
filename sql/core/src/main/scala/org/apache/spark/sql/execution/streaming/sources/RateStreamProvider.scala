@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousStream
@@ -70,6 +71,19 @@ class RateStreamProvider extends TableProvider with DataSourceRegister {
         s"Invalid value '$numPartitions'. The option 'numPartitions' must be positive")
     }
     new RateStreamTable(rowsPerSecond, rampUpTimeSeconds, numPartitions)
+  }
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException(
+      "Rate stream source does not support user-specified schema/partitioning.")
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException(
+      "Rate stream source does not support user-specified schema/partitioning.")
   }
 
   override def shortName(): String = "rate"

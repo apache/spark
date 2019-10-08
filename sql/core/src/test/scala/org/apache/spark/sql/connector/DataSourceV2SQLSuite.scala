@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.connector
 
+import java.util
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -1163,6 +1166,17 @@ class DataSourceV2SQLSuite
 /** Used as a V2 DataSource for V2SessionCatalog DDL */
 class FakeV2Provider extends TableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw new UnsupportedOperationException("Unnecessary for DDL tests")
+    throw new UnsupportedOperationException()
+  }
+
+  override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException()
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    throw new UnsupportedOperationException()
   }
 }
