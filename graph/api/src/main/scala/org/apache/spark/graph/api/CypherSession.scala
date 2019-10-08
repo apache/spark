@@ -236,20 +236,10 @@ trait CypherSession extends Logging {
   }
 
   /**
-   * Loads a [[PropertyGraph]] from the given location.
+   * Returns a [[PropertyGraphReader]] that can be used to read data in as a `PropertyGraph`.
    *
-   * @param path directory in which the graph is stored
    * @since 3.0.0
    */
-  def load(path: String): PropertyGraph
+  def read: PropertyGraphReader
 
-  /**
-   * Saves a [[PropertyGraph]] to the given location.
-   *
-   * @param graph     [[PropertyGraph]] to be stored
-   * @param path      directory in which the graph should be stored
-   * @param saveMode  specifies what happens when the destination already exists
-   * @since 3.0.0
-   */
-  def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.graph.api
 
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.DataFrame
 
 /**
  * A Property Graph as defined by the openCypher Property Graph Data Model.
@@ -130,12 +130,9 @@ abstract class PropertyGraph {
   def relationships: DataFrame
 
   /**
-   * Saves this graph to the given location.
+   * Interface for saving this `PropertyGraph` out into external storage.
    *
-   * @param path      directory in which the graph should be stored
-   * @param saveMode  specifies what happens when the destination already exists
    * @since 3.0.0
    */
-  def save(path: String, saveMode: SaveMode = SaveMode.ErrorIfExists): Unit =
-    cypherSession.save(this, path, saveMode)
+  def write: PropertyGraphWriter
 }

@@ -39,8 +39,8 @@ abstract class CypherSessionSuite extends QueryTest with SharedSparkSession with
     val writeGraph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
 
     withTempDir(file => {
-      cypherSession.save(writeGraph, file.getAbsolutePath, SaveMode.Overwrite)
-      val readGraph = cypherSession.load(file.getAbsolutePath)
+      writeGraph.write.mode(SaveMode.Overwrite).save(file.getAbsolutePath)
+      val readGraph = cypherSession.read.load(file.getAbsolutePath)
 
       checkAnswer(readGraph.nodes, writeGraph.nodes)
       checkAnswer(readGraph.relationships, writeGraph.relationships)
