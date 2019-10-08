@@ -36,7 +36,7 @@ case class ShowNamespacesExec(
     pattern: Option[String])
     extends V2CommandExec {
 
-  protected override def run(): Seq[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     val namespaces = namespace.map { ns =>
         if (ns.nonEmpty) {
           catalog.listNamespaces(ns.toArray)

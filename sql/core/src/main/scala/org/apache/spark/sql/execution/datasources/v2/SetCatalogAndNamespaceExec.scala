@@ -29,7 +29,7 @@ case class SetCatalogAndNamespaceExec(
     catalogName: Option[String],
     namespace: Option[Seq[String]])
     extends V2CommandExec {
-  protected override def run(): Seq[InternalRow] = {
+  override protected def run(): Seq[InternalRow] = {
     // The catalog is updated first because CatalogManager resets the current namespace
     // when the current catalog is set.
     catalogName.map(catalogManager.setCurrentCatalog)
