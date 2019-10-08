@@ -21,7 +21,7 @@ import com.github.fommil.netlib.BLAS
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.classification.LinearSVCSuite.generateSVMInput
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
@@ -401,8 +401,10 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures, model3.numClasses)
 
     val evalArr = model3.evaluateEachIteration(validationData.toDF)
-    val remappedValidationData = validationData.map(
-      x => LabeledPoint((x.label * 2) - 1, x.features).toInstance)
+    val remappedValidationData = validationData.map {
+      case LabeledPoint(label, features) =>
+        Instance(label * 2 - 1, 1.0, features)
+    }
     val lossErr1 = GradientBoostedTrees.computeError(remappedValidationData,
       model1.trees, model1.treeWeights, model1.getOldLossType)
     val lossErr2 = GradientBoostedTrees.computeError(remappedValidationData,
@@ -437,8 +439,10 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       assert(modelWithValidation.numTrees < numIter)
 
       val (errorWithoutValidation, errorWithValidation) = {
-        val remappedRdd = validationData.map(x =>
-          LabeledPoint(2 * x.label - 1, x.features).toInstance)
+        val remappedRdd = validationData.map {
+          case LabeledPoint(label, features) =>
+            Instance(label * 2 - 1, 1.0, features)
+        }
         (GradientBoostedTrees.computeError(remappedRdd, modelWithoutValidation.trees,
           modelWithoutValidation.treeWeights, modelWithoutValidation.getOldLossType),
           GradientBoostedTrees.computeError(remappedRdd, modelWithValidation.trees,
