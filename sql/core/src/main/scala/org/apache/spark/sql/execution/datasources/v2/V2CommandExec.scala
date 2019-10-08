@@ -27,18 +27,19 @@ import org.apache.spark.sql.execution.LeafExecNode
  */
 abstract class V2CommandExec extends LeafExecNode {
 
+  /**
+   * Abstract method that each concrete command needs to implement to compute the result.
+   */
   protected def run(): Seq[InternalRow]
 
   /**
-   * A concrete command should override this lazy field to wrap up any side effects caused by the
-   * command or any other computation that should be evaluated exactly once. The value of this field
-   * can be used as the contents of the corresponding RDD generated from the physical plan of this
-   * command.
+   * The value of this field can be used as the contents of the corresponding RDD generated from
+   * the physical plan of this command.
    */
   private lazy val result: Seq[InternalRow] = run()
 
   /**
-   * The `execute()` method of all the physical command classes should reference `sideEffectResult`
+   * The `execute()` method of all the physical command classes should reference `result`
    * so that the command can be executed eagerly right after the command query is created.
    */
   override def executeCollect(): Array[InternalRow] = result.toArray
