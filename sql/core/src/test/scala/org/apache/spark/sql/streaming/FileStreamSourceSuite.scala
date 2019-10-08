@@ -49,7 +49,7 @@ abstract class FileStreamSourceTest
    * `FileStreamSource` actually being used in the execution.
    */
   abstract class AddFileData extends AddData {
-    private val _qualifiedBasePath = PrivateMethod[Path]('qualifiedBasePath)
+    private val _qualifiedBasePath = PrivateMethod[Path](Symbol("qualifiedBasePath"))
 
     private def isSamePath(fileSource: FileStreamSource, srcPath: File): Boolean = {
       val path = (fileSource invokePrivate _qualifiedBasePath()).toString.stripPrefix("file:")
@@ -1218,8 +1218,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("compact interval metadata log") {
-    val _sources = PrivateMethod[Seq[Source]]('sources)
-    val _metadataLog = PrivateMethod[FileStreamSourceLog]('metadataLog)
+    val _sources = PrivateMethod[Seq[Source]](Symbol("sources"))
+    val _metadataLog = PrivateMethod[FileStreamSourceLog](Symbol("metadataLog"))
 
     def verify(
         execution: StreamExecution,
@@ -1303,7 +1303,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           AddTextFileData("keep3", src, tmp),
           CheckAnswer("keep1", "keep2", "keep3"),
           AssertOnQuery("check getBatch") { execution: StreamExecution =>
-            val _sources = PrivateMethod[Seq[Source]]('sources)
+            val _sources = PrivateMethod[Seq[Source]](Symbol("sources"))
             val fileSource = getSourcesFromStreamingQuery(execution).head
 
             def verify(startId: Option[Int], endId: Int, expected: String*): Unit = {
