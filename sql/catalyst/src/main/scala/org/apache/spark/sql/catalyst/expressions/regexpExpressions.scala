@@ -103,7 +103,7 @@ abstract class StringRegexExpression extends BinaryExpression
       spark.sql.parser.escapedStringLiterals	false
       > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '\%SystemDrive\%\\\\Users%';
       true
-      > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/'
+      > SELECT '%SystemDrive%/Users/John' _FUNC_ '/%SystemDrive/%//Users%' ESCAPE '/';
       true
   """,
   note = """
