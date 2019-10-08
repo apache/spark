@@ -2287,13 +2287,13 @@ case class FormatNumber(x: Expression, d: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('4540', '999');
-       '454'
+       454
       > SELECT _FUNC_('454.00', '000D00');
-       '454'
+       454
       > SELECT _FUNC_('12,454.8-', '99G999D9S');
-       '-12454.8'
+       -12454.8
       > SELECT _FUNC_('CNY234234.4350', 'L999999.0000');
-       '-234234.435'
+       234234.435
   """)
 // scalastyle:on line.size.limit
 case class ToNumber(strExpr: Expression, patternExpr: Expression)
