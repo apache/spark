@@ -201,7 +201,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     })
   }
 
-  test("supports spark.mesos.driver.memoryOverhead") {
+  test("supports spark.mesos.driver.memoryOverhead with 384mb default") {
     setScheduler()
 
     val mem = 1000
@@ -226,6 +226,33 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       .map(_.getScalar.getValue)
       .head
     assert(1384.0 === taskMem)
+  }
+
+  test("supports spark.mesos.driver.memoryOverhead with 10% default") {
+    setScheduler()
+
+    val mem = 10000
+    val cpu = 1
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", mem, cpu, true,
+        command,
+        Map("spark.mesos.executor.home" -> "test",
+          "spark.app.name" -> "test"),
+        "s1",
+        new Date()))
+    assert(response.success)
+
+    val offer = Utils.createOffer("o1", "s1", mem*2, cpu)
+    scheduler.resourceOffers(driver, List(offer).asJava)
+    val tasks = Utils.verifyTaskLaunched(driver, "o1")
+    // 11000.0
+    val taskMem = tasks.head.getResourcesList
+      .asScala
+      .filter(_.getName.equals("mem"))
+      .map(_.getScalar.getValue)
+      .head
+    assert(11000.0 === taskMem)
   }
 
   test("supports spark.mesos.driverEnv.*") {
