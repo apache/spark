@@ -223,8 +223,13 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    (functionNames ++
-      StringUtils.filterPattern(Seq("!=", "<>", "between", "case"), pattern.getOrElse("*")))
-      .sorted.map(Row(_))
+    if (showSystemFunctions) {
+      (functionNames ++
+        StringUtils.filterPattern(Seq("!=", "<>", "between", "case"), pattern.getOrElse("*")))
+        .sorted.map(Row(_))
+    } else {
+      functionNames.sorted.map(Row(_))
+    }
+
   }
 }

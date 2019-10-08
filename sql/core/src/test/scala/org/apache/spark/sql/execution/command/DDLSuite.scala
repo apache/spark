@@ -2066,13 +2066,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withUserDefinedFunction("add_one" -> true) {
       val numFunctions = FunctionRegistry.functionSet.size.toLong
       assert(sql("show functions").count() === numFunctions + 4L)
-      assert(sql("show system functions").count() === numFunctions)
-      assert(sql("show all functions").count() === numFunctions)
+      assert(sql("show system functions").count() === numFunctions + 4L)
+      assert(sql("show all functions").count() === numFunctions + 4L)
       assert(sql("show user functions").count() === 0L)
       spark.udf.register("add_one", (x: Long) => x + 1)
       assert(sql("show functions").count() === numFunctions + 5L)
-      assert(sql("show system functions").count() === numFunctions)
-      assert(sql("show all functions").count() === numFunctions + 1L)
+      assert(sql("show system functions").count() === numFunctions + 4L)
+      assert(sql("show all functions").count() === numFunctions + 5L)
       assert(sql("show user functions").count() === 1L)
     }
   }
