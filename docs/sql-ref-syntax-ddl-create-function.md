@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-`CREATE FUNCTION` statement is used to create a temporary or permanent function
+The `CREATE FUNCTION` statement is used to create a temporary or permanent function
 in Spark. Temporary functions are scoped at a session level where as permanent
 functions are created in the persistent catalog and are made available to
 all sessions. The resources specified in the `USING` clause are made available
@@ -70,10 +70,12 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
   <dt><code><em>class_name</em></code></dt>
   <dd>
     Specifies the name of the class that provides the implementation for function to be created.
-    The implementing class should extend from one of the base classes in `Hive` as follows:
+    The implementing class should extend from one of the base classes as follows:
     <ul>
-      <li>Should extend UDF or UDAF in org.apache.hadoop.hive.ql.exec</li>
-      <li>Should extend AbstractGenericUDAFResolver, GenericUDF, or GenericUDTF in org.apache.hadoop.hive.ql.udf.generic.</li>
+      <li>Should extend <code>UDF</code> or <code>UDAF</code> in <code>org.apache.hadoop.hive.ql.exec</code> package.</li>
+      <li>Should extend <code>AbstractGenericUDAFResolver</code>, <code>GenericUDF</code>, or
+          <code>GenericUDTF</code> in <code>org.apache.hadoop.hive.ql.udf.generic</code> package.</li>
+      <li>Should extend <code>UserDefinedAggregateFunction</code> in <code>org.apache.spark.sql.expressions</code> package.</li>
     </ul>
   </dd>
   <dt><code><em>resource_locations</em></code></dt>
