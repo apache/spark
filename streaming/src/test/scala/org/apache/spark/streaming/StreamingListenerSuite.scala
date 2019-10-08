@@ -279,15 +279,15 @@ class BatchInfoCollector extends StreamingListener {
   val batchInfosStarted = new ConcurrentLinkedQueue[BatchInfo]
   val batchInfosSubmitted = new ConcurrentLinkedQueue[BatchInfo]
 
-  override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted) {
+  override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted): Unit = {
     batchInfosSubmitted.add(batchSubmitted.batchInfo)
   }
 
-  override def onBatchStarted(batchStarted: StreamingListenerBatchStarted) {
+  override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit = {
     batchInfosStarted.add(batchStarted.batchInfo)
   }
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     batchInfosCompleted.add(batchCompleted.batchInfo)
   }
 }
@@ -298,15 +298,15 @@ class ReceiverInfoCollector extends StreamingListener {
   val stoppedReceiverStreamIds = new ConcurrentLinkedQueue[Int]
   val receiverErrors = new ConcurrentLinkedQueue[(Int, String, String)]
 
-  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
+  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
     startedReceiverStreamIds.add(receiverStarted.receiverInfo.streamId)
   }
 
-  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
+  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped): Unit = {
     stoppedReceiverStreamIds.add(receiverStopped.receiverInfo.streamId)
   }
 
-  override def onReceiverError(receiverError: StreamingListenerReceiverError) {
+  override def onReceiverError(receiverError: StreamingListenerReceiverError): Unit = {
     receiverErrors.add(((receiverError.receiverInfo.streamId,
       receiverError.receiverInfo.lastErrorMessage, receiverError.receiverInfo.lastError)))
   }
@@ -329,7 +329,7 @@ class OutputOperationInfoCollector extends StreamingListener {
 }
 
 class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_ONLY) with Logging {
-  def onStart() {
+  def onStart(): Unit = {
     Future {
       logInfo("Started receiver and sleeping")
       Thread.sleep(10)
@@ -340,7 +340,7 @@ class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_O
       stop("test stop error")
     }
   }
-  def onStop() { }
+  def onStop(): Unit = { }
 }
 
 /**
@@ -368,7 +368,7 @@ class StreamingContextStoppingCollector(val ssc: StreamingContext) extends Strea
 
   private var isFirstBatch = true
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     if (isFirstBatch) {
       // We should only call `ssc.stop()` in the first batch. Otherwise, it's possible that the main
       // thread is calling `ssc.stop()`, while StreamingContextStoppingCollector is also calling

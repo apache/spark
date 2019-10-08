@@ -37,7 +37,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
 
   test("nanoseconds truncation") {
     val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
-    def checkStringToTimestamp(originalTime: String, expectedParsedTime: String) {
+    def checkStringToTimestamp(originalTime: String, expectedParsedTime: String): Unit = {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(originalTime), defaultZoneId)
       assert(parsedTimestampOp.isDefined, "timestamp with nanoseconds was not parsed correctly")

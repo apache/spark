@@ -178,7 +178,7 @@ abstract class FileStreamSourceTest
   }
 
 
-  protected def withTempDirs(body: (File, File) => Unit) {
+  protected def withTempDirs(body: (File, File) => Unit): Unit = {
     val src = Utils.createTempDir(namePrefix = "streaming.src")
     val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
     try {

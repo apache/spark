@@ -465,8 +465,38 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
         return self._call_java("totalIterations")
 
 
+class _IsotonicRegressionBase(HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol):
+    """
+    Params for :py:class:`IsotonicRegression` and :py:class:`IsotonicRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    isotonic = Param(
+        Params._dummy(), "isotonic",
+        "whether the output sequence should be isotonic/increasing (true) or" +
+        "antitonic/decreasing (false).", typeConverter=TypeConverters.toBoolean)
+    featureIndex = Param(
+        Params._dummy(), "featureIndex",
+        "The index of the feature if featuresCol is a vector column, no effect otherwise.",
+        typeConverter=TypeConverters.toInt)
+
+    def getIsotonic(self):
+        """
+        Gets the value of isotonic or its default value.
+        """
+        return self.getOrDefault(self.isotonic)
+
+    def getFeatureIndex(self):
+        """
+        Gets the value of featureIndex or its default value.
+        """
+        return self.getOrDefault(self.featureIndex)
+
+
 @inherit_doc
-class IsotonicRegression(JavaPredictor, HasWeightCol, JavaMLWritable, JavaMLReadable):
+class IsotonicRegression(JavaEstimator, _IsotonicRegressionBase, HasWeightCol,
+                         JavaMLWritable, JavaMLReadable):
     """
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
@@ -503,16 +533,6 @@ class IsotonicRegression(JavaPredictor, HasWeightCol, JavaMLWritable, JavaMLRead
 
     .. versionadded:: 1.6.0
     """
-
-    isotonic = \
-        Param(Params._dummy(), "isotonic",
-              "whether the output sequence should be isotonic/increasing (true) or" +
-              "antitonic/decreasing (false).", typeConverter=TypeConverters.toBoolean)
-    featureIndex = \
-        Param(Params._dummy(), "featureIndex",
-              "The index of the feature if featuresCol is a vector column, no effect otherwise.",
-              typeConverter=TypeConverters.toInt)
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  weightCol=None, isotonic=True, featureIndex=0):
@@ -547,26 +567,15 @@ class IsotonicRegression(JavaPredictor, HasWeightCol, JavaMLWritable, JavaMLRead
         """
         return self._set(isotonic=value)
 
-    def getIsotonic(self):
-        """
-        Gets the value of isotonic or its default value.
-        """
-        return self.getOrDefault(self.isotonic)
-
     def setFeatureIndex(self, value):
         """
         Sets the value of :py:attr:`featureIndex`.
         """
         return self._set(featureIndex=value)
 
-    def getFeatureIndex(self):
-        """
-        Gets the value of featureIndex or its default value.
-        """
-        return self.getOrDefault(self.featureIndex)
 
-
-class IsotonicRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class IsotonicRegressionModel(JavaModel, _IsotonicRegressionBase,
+                              JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`IsotonicRegression`.
 
@@ -1480,9 +1489,56 @@ class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
         return self._call_java("evaluateEachIteration", dataset, loss)
 
 
+class _AFTSurvivalRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                                   HasMaxIter, HasTol, HasFitIntercept,
+                                   HasAggregationDepth):
+    """
+    Params for :py:class:`AFTSurvivalRegression` and :py:class:`AFTSurvivalRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    censorCol = Param(
+        Params._dummy(), "censorCol",
+        "censor column name. The value of this column could be 0 or 1. " +
+        "If the value is 1, it means the event has occurred i.e. " +
+        "uncensored; otherwise censored.", typeConverter=TypeConverters.toString)
+    quantileProbabilities = Param(
+        Params._dummy(), "quantileProbabilities",
+        "quantile probabilities array. Values of the quantile probabilities array " +
+        "should be in the range (0, 1) and the array should be non-empty.",
+        typeConverter=TypeConverters.toListFloat)
+    quantilesCol = Param(
+        Params._dummy(), "quantilesCol",
+        "quantiles column name. This column will output quantiles of " +
+        "corresponding quantileProbabilities if it is set.",
+        typeConverter=TypeConverters.toString)
+
+    @since("1.6.0")
+    def getCensorCol(self):
+        """
+        Gets the value of censorCol or its default value.
+        """
+        return self.getOrDefault(self.censorCol)
+
+    @since("1.6.0")
+    def getQuantileProbabilities(self):
+        """
+        Gets the value of quantileProbabilities or its default value.
+        """
+        return self.getOrDefault(self.quantileProbabilities)
+
+    @since("1.6.0")
+    def getQuantilesCol(self):
+        """
+        Gets the value of quantilesCol or its default value.
+        """
+        return self.getOrDefault(self.quantilesCol)
+
+
 @inherit_doc
-class AFTSurvivalRegression(JavaPredictor, HasFitIntercept, HasMaxIter, HasTol,
-                            HasAggregationDepth, JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegression(JavaEstimator, _AFTSurvivalRegressionParams,
+                            JavaMLWritable, JavaMLReadable):
     """
     Accelerated Failure Time (AFT) Model Survival Regression
 
@@ -1528,20 +1584,6 @@ class AFTSurvivalRegression(JavaPredictor, HasFitIntercept, HasMaxIter, HasTol,
 
     .. versionadded:: 1.6.0
     """
-
-    censorCol = Param(Params._dummy(), "censorCol",
-                      "censor column name. The value of this column could be 0 or 1. " +
-                      "If the value is 1, it means the event has occurred i.e. " +
-                      "uncensored; otherwise censored.", typeConverter=TypeConverters.toString)
-    quantileProbabilities = \
-        Param(Params._dummy(), "quantileProbabilities",
-              "quantile probabilities array. Values of the quantile probabilities array " +
-              "should be in the range (0, 1) and the array should be non-empty.",
-              typeConverter=TypeConverters.toListFloat)
-    quantilesCol = Param(Params._dummy(), "quantilesCol",
-                         "quantiles column name. This column will output quantiles of " +
-                         "corresponding quantileProbabilities if it is set.",
-                         typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -1589,25 +1631,11 @@ class AFTSurvivalRegression(JavaPredictor, HasFitIntercept, HasMaxIter, HasTol,
         return self._set(censorCol=value)
 
     @since("1.6.0")
-    def getCensorCol(self):
-        """
-        Gets the value of censorCol or its default value.
-        """
-        return self.getOrDefault(self.censorCol)
-
-    @since("1.6.0")
     def setQuantileProbabilities(self, value):
         """
         Sets the value of :py:attr:`quantileProbabilities`.
         """
         return self._set(quantileProbabilities=value)
-
-    @since("1.6.0")
-    def getQuantileProbabilities(self):
-        """
-        Gets the value of quantileProbabilities or its default value.
-        """
-        return self.getOrDefault(self.quantileProbabilities)
 
     @since("1.6.0")
     def setQuantilesCol(self, value):
@@ -1616,15 +1644,9 @@ class AFTSurvivalRegression(JavaPredictor, HasFitIntercept, HasMaxIter, HasTol,
         """
         return self._set(quantilesCol=value)
 
-    @since("1.6.0")
-    def getQuantilesCol(self):
-        """
-        Gets the value of quantilesCol or its default value.
-        """
-        return self.getOrDefault(self.quantilesCol)
 
-
-class AFTSurvivalRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegressionModel(JavaModel, _AFTSurvivalRegressionParams,
+                                 JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`AFTSurvivalRegression`.
 

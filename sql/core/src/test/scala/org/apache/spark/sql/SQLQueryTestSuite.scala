@@ -135,7 +135,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
 
-  override def sparkConf: SparkConf = super.sparkConf
+  protected override def sparkConf: SparkConf = super.sparkConf
     // Fewer shuffle partitions to speed up testing.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 

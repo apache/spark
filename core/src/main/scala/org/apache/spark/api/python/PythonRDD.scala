@@ -258,7 +258,7 @@ private[spark] object PythonRDD extends Logging {
     new PythonBroadcast(path)
   }
 
-  def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
+  def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream): Unit = {
 
     def write(obj: Any): Unit = obj match {
       case null =>
@@ -444,7 +444,7 @@ private[spark] object PythonRDD extends Logging {
     }
   }
 
-  def writeUTF(str: String, dataOut: DataOutputStream) {
+  def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
     val bytes = str.getBytes(StandardCharsets.UTF_8)
     dataOut.writeInt(bytes.length)
     dataOut.write(bytes)

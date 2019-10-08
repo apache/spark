@@ -24,7 +24,7 @@ object SQLDataSourceExample {
 
   case class Person(name: String, age: Long)
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
       .appName("Spark SQL data sources example")

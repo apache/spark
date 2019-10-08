@@ -391,6 +391,7 @@ private[spark] object JsonProtocol {
     ("Executor Deserialize CPU Time" -> taskMetrics.executorDeserializeCpuTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
     ("Executor CPU Time" -> taskMetrics.executorCpuTime) ~
+    ("Peak Execution Memory" -> taskMetrics.peakExecutionMemory) ~
     ("Result Size" -> taskMetrics.resultSize) ~
     ("JVM GC Time" -> taskMetrics.jvmGCTime) ~
     ("Result Serialization Time" -> taskMetrics.resultSerializationTime) ~
@@ -891,6 +892,10 @@ private[spark] object JsonProtocol {
     })
     metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
     metrics.setExecutorCpuTime((json \ "Executor CPU Time") match {
+      case JNothing => 0
+      case x => x.extract[Long]
+    })
+    metrics.setPeakExecutionMemory((json \ "Peak Execution Memory") match {
       case JNothing => 0
       case x => x.extract[Long]
     })

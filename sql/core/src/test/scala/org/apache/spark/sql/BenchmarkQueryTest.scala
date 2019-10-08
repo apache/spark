@@ -43,7 +43,7 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
     }
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     RuleExecutor.resetMetrics()
   }

@@ -52,7 +52,7 @@ class HiveSparkSubmitSuite
 
   override protected val enableAutoThreadAudit = false
 
-  override def beforeEach() {
+  override def beforeEach(): Unit = {
     super.beforeEach()
   }
 
@@ -454,7 +454,7 @@ object SetWarehouseLocationTest extends Logging {
 // and use this UDF. We need to run this test in separate JVM to make sure we
 // can load the jar defined with the function.
 object TemporaryHiveUDFTest extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     conf.set(UI_ENABLED, false)
@@ -492,7 +492,7 @@ object TemporaryHiveUDFTest extends Logging {
 // and use this UDF. We need to run this test in separate JVM to make sure we
 // can load the jar defined with the function.
 object PermanentHiveUDFTest1 extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     conf.set(UI_ENABLED, false)
@@ -530,7 +530,7 @@ object PermanentHiveUDFTest1 extends Logging {
 // resources can be used. We need to run this test in separate JVM to make sure we
 // can load the jar defined with the function.
 object PermanentHiveUDFTest2 extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     conf.set(UI_ENABLED, false)
@@ -565,7 +565,7 @@ object PermanentHiveUDFTest2 extends Logging {
 // This object is used for testing SPARK-8368: https://issues.apache.org/jira/browse/SPARK-8368.
 // We test if we can load user jars in both driver and executors when HiveContext is used.
 object SparkSubmitClassLoaderTest extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val hiveWarehouseLocation = Utils.createTempDir()
@@ -635,7 +635,7 @@ object SparkSubmitClassLoaderTest extends Logging {
 // This object is used for testing SPARK-8020: https://issues.apache.org/jira/browse/SPARK-8020.
 // We test if we can correctly set spark sql configurations when HiveContext is used.
 object SparkSQLConfTest extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j("INFO")
     // We override the SparkConf to add spark.sql.hive.metastore.version and
     // spark.sql.hive.metastore.jars to the beginning of the conf entry array.

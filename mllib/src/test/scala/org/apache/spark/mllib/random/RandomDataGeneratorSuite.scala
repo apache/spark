@@ -25,7 +25,7 @@ import org.apache.spark.util.StatCounter
 
 class RandomDataGeneratorSuite extends SparkFunSuite {
 
-  def apiChecks(gen: RandomDataGenerator[Double]) {
+  def apiChecks(gen: RandomDataGenerator[Double]): Unit = {
     // resetting seed should generate the same sequence of random numbers
     gen.setSeed(42L)
     val array1 = (0 until 1000).map(_ => gen.nextValue())
@@ -56,7 +56,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
   def distributionChecks(gen: RandomDataGenerator[Double],
       mean: Double = 0.0,
       stddev: Double = 1.0,
-      epsilon: Double = 0.01) {
+      epsilon: Double = 0.01): Unit = {
     for (seed <- 0 until 5) {
       gen.setSeed(seed.toLong)
       val sample = (0 until 100000).map { _ => gen.nextValue()}

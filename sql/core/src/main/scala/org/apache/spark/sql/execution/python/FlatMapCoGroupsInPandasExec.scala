@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
+import org.apache.spark.sql.execution.python.PandasGroupUtils._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
 
 
 /**
@@ -52,7 +54,14 @@ case class FlatMapCoGroupsInPandasExec(
     output: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan)
-  extends BasePandasGroupExec(func, output) with BinaryExecNode {
+  extends SparkPlan with BinaryExecNode {
+
+  private val sessionLocalTimeZone = conf.sessionLocalTimeZone
+  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private val pandasFunction = func.asInstanceOf[PythonUDF].func
+  private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
+
+  override def producedAttributes: AttributeSet = AttributeSet(output)
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
@@ -81,7 +90,7 @@ case class FlatMapCoGroupsInPandasExec(
         val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
           .map { case (_, l, r) => (l, r) }
 
-        val runner = new CogroupedArrowPythonRunner(
+        val runner = new CoGroupedArrowPythonRunner(
           chainedFunc,
           PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
           Array(leftArgOffsets ++ rightArgOffsets),
@@ -90,7 +99,7 @@ case class FlatMapCoGroupsInPandasExec(
           sessionLocalTimeZone,
           pythonRunnerConf)
 
-        executePython(data, runner)
+        executePython(data, output, runner)
       }
     }
   }

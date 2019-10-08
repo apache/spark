@@ -76,7 +76,7 @@ import org.apache.spark.streaming.kafka010._
  * using SASL_SSL in production.
  */
 object DirectKerberizedKafkaWordCount {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 3) {
       System.err.println(s"""
         |Usage: DirectKerberizedKafkaWordCount <brokers> <groupId> <topics>

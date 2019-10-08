@@ -21,6 +21,7 @@ import java.io.{ByteArrayOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.Random
 
@@ -2105,17 +2106,17 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         // partitions.
         .write.partitionBy("p").option("compression", "gzip").json(path.getCanonicalPath)
 
-      var numJobs = 0
+      val numJobs = new AtomicLong(0)
       sparkContext.addSparkListener(new SparkListener {
         override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-          numJobs += 1
+          numJobs.incrementAndGet()
         }
       })
 
       val df = spark.read.json(path.getCanonicalPath)
       assert(df.columns === Array("i", "p"))
       spark.sparkContext.listenerBus.waitUntilEmpty()
-      assert(numJobs == 1)
+      assert(numJobs.get() == 1L)
     }
   }
 

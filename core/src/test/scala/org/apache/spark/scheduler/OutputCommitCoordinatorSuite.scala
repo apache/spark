@@ -288,7 +288,7 @@ private case class OutputCommitFunctions(tempDirPath: String) {
 
   // Mock output committer that simulates a failed commit (after commit is authorized)
   private def failingOutputCommitter = new FakeOutputCommitter {
-    override def commitTask(taskAttemptContext: TaskAttemptContext) {
+    override def commitTask(taskAttemptContext: TaskAttemptContext): Unit = {
       throw new RuntimeException
     }
   }

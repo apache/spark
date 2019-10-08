@@ -39,8 +39,8 @@ import org.apache.spark.sql.internal.SQLConf
 private[sql]
 class CatalogManager(
     conf: SQLConf,
-    defaultSessionCatalog: TableCatalog,
-    v1SessionCatalog: SessionCatalog) extends Logging {
+    defaultSessionCatalog: CatalogPlugin,
+    val v1SessionCatalog: SessionCatalog) extends Logging {
   import CatalogManager.SESSION_CATALOG_NAME
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]

@@ -392,7 +392,7 @@ class RFormulaModel private[feature](
     }
   }
 
-  private def checkCanTransform(schema: StructType) {
+  private def checkCanTransform(schema: StructType): Unit = {
     val columnNames = schema.map(_.name)
     require(!columnNames.contains($(featuresCol)), "Features column already exists.")
     require(

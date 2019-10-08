@@ -620,7 +620,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.4.2-1</version>
+        <version>1.4.3-1</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -2991,6 +2991,19 @@
     <!-- Exists for backwards compatibility; profile doesn't do anything -->
     <profile>
       <id>scala-2.12</id>
+    </profile>
+    
+    <profile>
+      <id>scala-2.13</id>
+      <dependencyManagement>
+        <dependencies>
+          <dependency>
+            <groupId>org.scala-lang.modules</groupId>
+            <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+            <version>0.2.0</version>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
     </profile>
 
     <!--

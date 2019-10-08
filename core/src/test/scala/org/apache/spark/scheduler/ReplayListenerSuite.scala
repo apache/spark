@@ -89,7 +89,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   test("Replay compressed inprogress log file succeeding on partial read") {
     val buffered = new ByteArrayOutputStream
     val codec = new LZ4CompressionCodec(new SparkConf())
-    val compstream = codec.compressedOutputStream(buffered)
+    val compstream = codec.compressedContinuousOutputStream(buffered)
     val cwriter = new OutputStreamWriter(compstream, StandardCharsets.UTF_8)
     Utils.tryWithResource(new PrintWriter(cwriter)) { writer =>
 
@@ -188,7 +188,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
    * event to the corresponding event replayed from the event logs. This test makes the
    * assumption that the event logging behavior is correct (tested in a separate suite).
    */
-  private def testApplicationReplay(codecName: Option[String] = None) {
+  private def testApplicationReplay(codecName: Option[String] = None): Unit = {
     val logDir = new File(testDir.getAbsolutePath, "test-replay")
     // Here, it creates `Path` from the URI instead of the absolute path for the explicit file
     // scheme so that the string representation of this `Path` has leading file scheme correctly.
@@ -246,7 +246,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
-    override def onEvent(event: SparkListenerEvent) {
+    override def onEvent(event: SparkListenerEvent): Unit = {
       val eventJson = JsonProtocol.sparkEventToJson(event)
       loggedEvents += eventJson
     }
