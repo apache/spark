@@ -2449,6 +2449,22 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           }
         }
       }
+
+      withTable("test") {
+        withTempDir { f =>
+          sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (p1 string, p2 string) " +
+            s"STORED AS PARQUET LOCATION '${f.getAbsolutePath}'")
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet,
+            "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+            sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 1, '/'")
+            sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='/')")
+            sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 2, '/'")
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = '/' ORDER BY id"),
+              Array(Row(2)))
+          }
+        }
+      }
     }
   }
 }

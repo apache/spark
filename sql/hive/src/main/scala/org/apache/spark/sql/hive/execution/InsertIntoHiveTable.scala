@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalog, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
@@ -218,7 +218,8 @@ case class InsertIntoHiveTable(
           val dpMap = writtenParts.flatMap(_.split("/")).map { part =>
             val splitPart = part.split("=")
             assert(splitPart.size == 2, s"Invalid written partition path: $part")
-            splitPart(0) -> splitPart(1)
+            ExternalCatalogUtils.unescapePathName(splitPart(0)) ->
+              ExternalCatalogUtils.unescapePathName(splitPart(1))
           }.toMap
 
           val updatedPartitionSpec = partition.map {
