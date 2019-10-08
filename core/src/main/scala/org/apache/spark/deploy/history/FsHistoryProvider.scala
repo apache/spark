@@ -694,11 +694,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     logInfo(s"Parsing $logPath for listing data...")
     val logFiles = reader.listEventLogFiles
-    logFiles.foreach { file =>
-      Utils.tryWithResource(EventLogFileReader.openEventLog(file.getPath, fs)) { in =>
-        bus.replay(in, file.getPath.toString, !appCompleted, eventsFilter)
-      }
-    }
+    parseAppEventLogs(logFiles, bus, !appCompleted, eventsFilter)
 
     // If enabled above, the listing listener will halt parsing when there's enough information to
     // create a listing entry. When the app is completed, or fast parsing is disabled, we still need
@@ -969,12 +965,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     try {
       logInfo(s"Parsing ${reader.rootPath} to re-build UI...")
-      val logFiles = reader.listEventLogFiles
-      logFiles.foreach { file =>
-        Utils.tryWithResource(EventLogFileReader.openEventLog(file.getPath, fs)) { in =>
-          replayBus.replay(in, file.getPath.toString, maybeTruncated = !reader.completed)
-        }
-      }
+      parseAppEventLogs(reader.listEventLogFiles, replayBus, !reader.completed)
       trackingStore.close(false)
       logInfo(s"Finished parsing ${reader.rootPath}")
     } catch {
@@ -983,6 +974,23 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           trackingStore.close()
         }
         throw e
+    }
+  }
+
+  private def parseAppEventLogs(
+      logFiles: Seq[FileStatus],
+      replayBus: ReplayListenerBus,
+      maybeTruncated: Boolean,
+      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
+    // stop replaying next log files if ReplayListenerBus indicates some error or halt
+    var continueReplay = true
+    logFiles.foreach { file =>
+      if (continueReplay) {
+        Utils.tryWithResource(EventLogFileReader.openEventLog(file.getPath, fs)) { in =>
+          continueReplay = replayBus.replay(in, file.getPath.toString,
+            maybeTruncated = maybeTruncated, eventsFilter = eventsFilter)
+        }
+      }
     }
   }
 

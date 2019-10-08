@@ -241,12 +241,7 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
 
       writer.start()
 
-      val dummyString = "dummy"
-      val dummyStringBytesLen = dummyString.getBytes(StandardCharsets.UTF_8).length
-
-      // write log more than 2k (intended to roll over to 3 files)
-      val repeatCount = Math.floor((1024 * 2) / dummyStringBytesLen).toInt
-      writeTestEvents(writer, dummyString, repeatCount)
+      writeTestEvents(writer, "dummy", 1024 * 2)
 
       val logPathIncompleted = getCurrentLogPath(writer.logPath, isCompleted = false)
       val readerOpt = EventLogFileReader(fileSystem,

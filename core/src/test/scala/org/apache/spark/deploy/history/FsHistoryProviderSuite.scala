@@ -1253,7 +1253,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
   }
 
-  test("read old format of LogInfo in Spark 2.4") {
+  test("backwards compatibility with LogInfo from Spark 2.4") {
     case class LogInfoV24(
          logPath: String,
          lastProcessed: Long,

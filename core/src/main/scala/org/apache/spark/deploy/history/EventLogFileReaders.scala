@@ -68,12 +68,15 @@ abstract class EventLogFileReader(
   def completed: Boolean
 
   /**
-   * Returns the size of file for the last index of event log files, only when
-   * underlying input stream is DFSInputStream. Otherwise returns None.
+   * Returns the size of file for the last index (itself for single event log file) of event log
+   * files, only when underlying input stream is DFSInputStream. Otherwise returns None.
    */
   def fileSizeForLastIndexForDFS: Option[Long]
 
-  /** Returns the modification time for the last index of event log files. */
+  /**
+   * Returns the modification time for the last index (itself for single event log file)
+   * of event log files.
+   */
   def modificationTime: Long
 
   /**
@@ -149,7 +152,7 @@ object EventLogFileReader {
   }
 
   private def isRollingEventLogs(status: FileStatus): Boolean = {
-    status.isDirectory && RollingEventLogFilesWriter.isEventLogDir(status)
+    RollingEventLogFilesWriter.isEventLogDir(status)
   }
 }
 
@@ -213,12 +216,17 @@ class RollingEventLogFilesFileReader(
 
   private lazy val appStatusFile = files.find(isAppStatusFile).get
 
-  override def lastIndex: Option[Long] = {
-    val maxSeq = files.filter(isEventLogFile)
-      .map { status => getIndex(status.getPath.getName) }
-      .max
-    Some(maxSeq)
+  private lazy val eventLogFiles: Seq[FileStatus] = {
+    val eventLogFiles = files.filter(isEventLogFile).sortBy { status =>
+      getIndex(status.getPath.getName)
+    }
+    val indices = eventLogFiles.map { file => getIndex(file.getPath.getName) }.sorted
+    require((indices.head to indices.last) == indices, "Found missing event log file, expected" +
+      s" indices: ${(indices.head to indices.last)}, actual: ${indices}")
+    eventLogFiles
   }
+
+  override def lastIndex: Option[Long] = Some(getIndex(lastEventLogFile.getPath.getName))
 
   override def fileSizeForLastIndex: Long = lastEventLogFile.getLen
 
@@ -251,10 +259,6 @@ class RollingEventLogFilesFileReader(
   }
 
   override def totalSize: Long = eventLogFiles.map(_.getLen).sum
-
-  private def eventLogFiles: Seq[FileStatus] = {
-    files.filter(isEventLogFile).sortBy { status => getIndex(status.getPath.getName) }
-  }
 
   private def lastEventLogFile: FileStatus = eventLogFiles.last
 }

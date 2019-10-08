@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.history
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
@@ -46,8 +48,10 @@ object EventLogTestHelper {
   def writeTestEvents(
       writer: EventLogFileWriter,
       eventStr: String,
-      eventCount: Int): Seq[String] = {
-    (0 until eventCount).map { _ =>
+      desiredSize: Long): Seq[String] = {
+    val stringLen = eventStr.getBytes(StandardCharsets.UTF_8).length
+    val repeatCount = Math.floor(desiredSize / stringLen).toInt
+    (0 until repeatCount).map { _ =>
       writer.writeEvent(eventStr, flushLogger = true)
       eventStr
     }
