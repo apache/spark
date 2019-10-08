@@ -73,7 +73,7 @@ class SizeEstimatorSuite
   with PrivateMethodTester
   with ResetSystemProperties {
 
-  override def beforeEach() {
+  override def beforeEach(): Unit = {
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     super.beforeEach()
     System.setProperty("os.arch", "amd64")

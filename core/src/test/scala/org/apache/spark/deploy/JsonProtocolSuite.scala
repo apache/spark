@@ -89,7 +89,7 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.workerStateJsonStr))
   }
 
-  def assertValidJson(json: JValue) {
+  def assertValidJson(json: JValue): Unit = {
     try {
       JsonMethods.parse(JsonMethods.compact(json))
     } catch {

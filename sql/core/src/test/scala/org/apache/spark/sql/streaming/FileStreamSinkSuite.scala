@@ -392,7 +392,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           var bytesWritten: Long = 0L
           try {
             spark.sparkContext.addSparkListener(new SparkListener() {
-              override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+              override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
                 val outputMetrics = taskEnd.taskMetrics.outputMetrics
                 recordsWritten += outputMetrics.recordsWritten
                 bytesWritten += outputMetrics.bytesWritten

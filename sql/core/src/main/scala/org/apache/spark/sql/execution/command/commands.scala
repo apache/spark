@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.UUID
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
@@ -156,7 +157,11 @@ case class ExplainCommand(
       sparkSession.sessionState.executePlan(logicalPlan))
     val outputString =
       if (codegen) {
-        codegenString(queryExecution.executedPlan)
+        try {
+          codegenString(queryExecution.executedPlan)
+        } catch {
+          case e: AnalysisException => e.toString
+        }
       } else if (extended) {
         queryExecution.toString
       } else if (cost) {

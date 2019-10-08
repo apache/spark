@@ -34,13 +34,13 @@ import org.apache.spark.internal.Logging
 class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   private var sc: SparkContext = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     val conf = new SparkConf()
     sc = new SparkContext("local", "test", conf)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       sc.stop()
     } finally {

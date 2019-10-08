@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.BeforeAndAfter
-import org.scalatest.mockito.MockitoSugar._
+import org.scalatestplus.mockito.MockitoSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s._

@@ -43,7 +43,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -492,7 +492,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withMultipleConnectionJdbcStatement("smallKV", "addJar")(
       {
         statement =>
-          val jarFile = HiveTestUtils.getHiveHcatalogCoreJar.getCanonicalPath
+          val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
 
           statement.executeQuery(s"ADD JAR $jarFile")
       },
@@ -842,7 +842,7 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
   }
 
-  def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*) {
+  def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*): Unit = {
     val user = System.getProperty("user.name")
     val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
     val statements = connections.map(_.createStatement())
@@ -863,7 +863,7 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     }
   }
 
-  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*) {
+  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*): Unit = {
     val user = System.getProperty("user.name")
     val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
     val statements = connections.map(_.createStatement())
@@ -879,7 +879,7 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     }
   }
 
-  def withJdbcStatement(tableNames: String*)(f: Statement => Unit) {
+  def withJdbcStatement(tableNames: String*)(f: Statement => Unit): Unit = {
     withMultipleConnectionJdbcStatement(tableNames: _*)(f)
   }
 }

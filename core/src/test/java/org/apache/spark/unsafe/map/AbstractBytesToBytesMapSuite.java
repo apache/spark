@@ -34,6 +34,7 @@ import org.mockito.MockitoAnnotations;
 import org.apache.spark.SparkConf;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TestMemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
@@ -691,13 +692,11 @@ public abstract class AbstractBytesToBytesMapSuite {
 
     Thread thread = new Thread(() -> {
       int i = 0;
-      long used = 0;
       while (i < 10) {
         c1.use(10000000);
-        used += 10000000;
         i++;
       }
-      c1.free(used);
+      c1.free(c1.getUsed());
     });
 
     try {
@@ -723,6 +722,24 @@ public abstract class AbstractBytesToBytesMapSuite {
         assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
           spillFile.exists());
       }
+    }
+  }
+
+  @Test
+  public void freeAfterFailedReset() {
+    // SPARK-29244: BytesToBytesMap.free after a OOM reset operation should not cause failure.
+    memoryManager.limit(5000);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    // Force OOM on next memory allocation.
+    memoryManager.markExecutionAsOutOfMemoryOnce();
+    try {
+      map.reset();
+      Assert.fail("Expected SparkOutOfMemoryError to be thrown");
+    } catch (SparkOutOfMemoryError e) {
+      // Expected exception; do nothing.
+    } finally {
+      map.free();
     }
   }
 

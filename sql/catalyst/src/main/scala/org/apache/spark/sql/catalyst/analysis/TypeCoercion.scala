@@ -850,6 +850,11 @@ object TypeCoercion {
       case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
       case Subtract(l @ DateType(), r @ IntegerType()) => DateSub(l, r)
       case Subtract(l @ DateType(), r @ DateType()) => DateDiff(l, r)
+      case Subtract(l @ TimestampType(), r @ TimestampType()) => TimestampDiff(l, r)
+      case Subtract(l @ TimestampType(), r @ DateType()) =>
+        TimestampDiff(l, Cast(r, TimestampType))
+      case Subtract(l @ DateType(), r @ TimestampType()) =>
+        TimestampDiff(Cast(l, TimestampType), r)
     }
   }
 

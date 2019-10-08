@@ -480,7 +480,8 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     })
   }
 
-  private def testGroupId(groupIdKey: String, validateGroupId: (String, Iterable[String]) => Unit) {
+  private def testGroupId(groupIdKey: String,
+      validateGroupId: (String, Iterable[String]) => Unit): Unit = {
     // Tests code path KafkaSourceProvider.createRelation(.)
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)

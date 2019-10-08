@@ -15,18 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.test
+package org.apache.spark.sql.hive.thriftserver.ui
 
-import java.io.File
+private[ui] object ToolTips {
+  val THRIFT_SERVER_FINISH_TIME =
+    "Execution finish time, before fetching the results"
 
-import org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax
-import org.apache.hive.hcatalog.data.JsonSerDe
+  val THRIFT_SERVER_CLOSE_TIME =
+    "Operation close time after fetching the results"
 
-object HiveTestUtils {
+  val THRIFT_SERVER_EXECUTION =
+    "Difference between start time and finish time"
 
-  val getHiveContribJar: File =
-    new File(classOf[UDAFExampleMax].getProtectionDomain.getCodeSource.getLocation.getPath)
-
-  val getHiveHcatalogCoreJar: File =
-    new File(classOf[JsonSerDe].getProtectionDomain.getCodeSource.getLocation.getPath)
+  val THRIFT_SERVER_DURATION =
+    "Difference between start time and close time"
 }

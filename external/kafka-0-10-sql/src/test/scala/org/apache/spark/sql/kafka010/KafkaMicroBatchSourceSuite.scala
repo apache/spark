@@ -679,7 +679,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     })
   }
 
-  private def testGroupId(groupIdKey: String, validateGroupId: (String, Iterable[String]) => Unit) {
+  private def testGroupId(groupIdKey: String,
+      validateGroupId: (String, Iterable[String]) => Unit): Unit = {
     // Tests code path KafkaSourceProvider.{sourceSchema(.), createSource(.)}
     // as well as KafkaOffsetReader.createConsumer(.)
     val topic = newTopic()

@@ -46,7 +46,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
   var blockHandler: ExternalBlockHandler = _
   var blockResolver: ExternalShuffleBlockResolver = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     sparkConf = new SparkConf()
     sparkConf.set("spark.shuffle.service.enabled", "true")
@@ -63,7 +63,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
     registerExecutor()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       dataContext.cleanup()
     } finally {
