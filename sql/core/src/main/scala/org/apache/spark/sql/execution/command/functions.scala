@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -222,6 +223,8 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    (functionNames ++ Seq("!=", "<>", "between", "case")).sorted.map(Row(_))
+    (functionNames ++
+      StringUtils.filterPattern(Seq("!=", "<>", "between", "case"), pattern.getOrElse("*")))
+      .sorted.map(Row(_))
   }
 }
