@@ -68,6 +68,9 @@ Copyright 2006-2013 Joe Walnes, Henri Tremblay, Leonardo Mesquita
 Apache XBean :: ASM 5 shaded (repackaged)
 Copyright 2005-2015 The Apache Software Foundation
 
+Apache XBean :: ASM shaded (repackaged)
+Copyright 2005-2019 The Apache Software Foundation
+
 --------------------------------------
 
 This product includes software developed at
@@ -660,6 +663,9 @@ Copyright 2017 The Apache Software Foundation
 
 Apache Commons CLI
 Copyright 2001-2009 The Apache Software Foundation
+
+Apache Commons Daemon
+Copyright 1999-2019 The Apache Software Foundation
 
 Google Guice - Extensions - Servlet
 Copyright 2006-2011 Google, Inc.
