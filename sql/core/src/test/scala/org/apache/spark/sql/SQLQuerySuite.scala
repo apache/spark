@@ -87,7 +87,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
       // For the pattern part, only '*' and '|' are allowed as wildcards.
       // For '*', we need to replace it to '.*'.
-      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
+      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"),
+        getFunctions(pattern) ++
+          StringUtils.filterPattern(Seq("!=", "<>", "between", "case"), pattern).map(Row(_)))
     }
     dropFunction(functions)
   }
