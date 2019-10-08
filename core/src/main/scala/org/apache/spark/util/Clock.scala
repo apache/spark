@@ -21,7 +21,14 @@ package org.apache.spark.util
  * An interface to represent clocks, so that they can be mocked out in unit tests.
  */
 private[spark] trait Clock {
+  /** @return Current system time, in ms. */
   def getTimeMillis(): Long
+  /** @return Current value of monotonic time source, in ns. */
+  def nanoTime(): Long
+  /**
+   * Wait until the wall clock reaches at least the given time. Note this may not actually wait for
+   * the actual difference between the current and target times, since the wall clock may drift.
+   */
   def waitTillTime(targetTime: Long): Long
 }
 
@@ -36,19 +43,23 @@ private[spark] class SystemClock extends Clock {
    * @return the same time (milliseconds since the epoch)
    *         as is reported by `System.currentTimeMillis()`
    */
-  def getTimeMillis(): Long = System.currentTimeMillis()
+  override def getTimeMillis(): Long = System.currentTimeMillis()
+
+  /**
+   * @return value reported by `System.nanoTime()`.
+   */
+  override def nanoTime(): Long = System.nanoTime()
 
   /**
    * @param targetTime block until the current time is at least this value
    * @return current system time when wait has completed
    */
-  def waitTillTime(targetTime: Long): Long = {
-    var currentTime = 0L
-    currentTime = System.currentTimeMillis()
+  override def waitTillTime(targetTime: Long): Long = {
+    var currentTime = System.currentTimeMillis()
 
     var waitTime = targetTime - currentTime
     if (waitTime <= 0) {
-      return currentTime
+      return getTimeMillis()
     }
 
     val pollTime = math.max(waitTime / 10.0, minPollTime).toLong
