@@ -146,3 +146,13 @@ private[spark] trait RpcEndpoint {
  * [[ThreadSafeRpcEndpoint]] for different messages.
  */
 private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
+
+/**
+ * An endpoint that uses a dedicated thread pool for delivering messages.
+ */
+private[spark] trait IsolatedRpcEndpoint extends RpcEndpoint {
+
+  /** How many threads to use for delivering messages. By default, use a single thread. */
+  def threadCount(): Int = 1
+
+}
