@@ -82,6 +82,12 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' statsS <- summary(modelS)
 #' }
 #' @note spark.als since 2.1.0
+#' @note the input rating dataframe to the ALS implementation should be deterministic.
+#'       Nondeterministic data can cause failure during fitting ALS model. For example,
+#'       an order-sensitive operation like sampling after a repartition makes dataframe output
+#'       nondeterministic, like \code{sample(repartition(df, 2L), FALSE, 0.5, 1618L)}.
+#'       Checkpointing sampled dataframe or adding a sort before sampling can help make the
+#'       dataframe deterministic.
 setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
                    rank = 10, regParam = 0.1, maxIter = 10, nonnegative = FALSE,

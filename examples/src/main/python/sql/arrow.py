@@ -236,6 +236,28 @@ def grouped_agg_pandas_udf_example(spark):
     # $example off:grouped_agg_pandas_udf$
 
 
+def map_iter_pandas_udf_example(spark):
+    # $example on:map_iter_pandas_udf$
+    import pandas as pd
+
+    from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+    df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
+
+    @pandas_udf(df.schema, PandasUDFType.MAP_ITER)
+    def filter_func(batch_iter):
+        for pdf in batch_iter:
+            yield pdf[pdf.id == 1]
+
+    df.mapInPandas(filter_func).show()
+    # +---+---+
+    # | id|age|
+    # +---+---+
+    # |  1| 21|
+    # +---+---+
+    # $example off:map_iter_pandas_udf$
+
+
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
@@ -246,7 +268,13 @@ if __name__ == "__main__":
     dataframe_with_arrow_example(spark)
     print("Running pandas_udf scalar example")
     scalar_pandas_udf_example(spark)
+    print("Running pandas_udf scalar iterator example")
+    scalar_iter_pandas_udf_example(spark)
     print("Running pandas_udf grouped map example")
     grouped_map_pandas_udf_example(spark)
+    print("Running pandas_udf grouped agg example")
+    grouped_agg_pandas_udf_example(spark)
+    print("Running pandas_udf map iterator example")
+    map_iter_pandas_udf_example(spark)
 
     spark.stop()

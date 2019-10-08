@@ -19,9 +19,13 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord, RecordMetadata}
+import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord, RecordMetadata}
+import org.apache.kafka.common.header.Header
+import org.apache.kafka.common.header.internals.RecordHeader
+
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
 import org.apache.spark.sql.types.{BinaryType, StringType}
 
@@ -88,7 +92,17 @@ private[kafka010] abstract class KafkaRowWriter(
       throw new NullPointerException(s"null topic present in the data. Use the " +
         s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
     }
-    val record = new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, key, value)
+    val record = if (projectedRow.isNullAt(3)) {
+      new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, null, key, value)
+    } else {
+      val headerArray = projectedRow.getArray(3)
+      val headers = (0 until headerArray.numElements()).map { i =>
+        val struct = headerArray.getStruct(i, 2)
+        new RecordHeader(struct.getUTF8String(0).toString, struct.getBinary(1))
+          .asInstanceOf[Header]
+      }
+      new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, null, key, value, headers.asJava)
+    }
     producer.send(record, callback)
   }
 
@@ -131,9 +145,26 @@ private[kafka010] abstract class KafkaRowWriter(
         throw new IllegalStateException(s"${KafkaWriter.VALUE_ATTRIBUTE_NAME} " +
           s"attribute unsupported type ${t.catalogString}")
     }
+    val headersExpression = inputSchema
+      .find(_.name == KafkaWriter.HEADERS_ATTRIBUTE_NAME).getOrElse(
+      Literal(CatalystTypeConverters.convertToCatalyst(null),
+        KafkaRecordToRowConverter.headersType)
+    )
+    headersExpression.dataType match {
+      case KafkaRecordToRowConverter.headersType => // good
+      case t =>
+        throw new IllegalStateException(s"${KafkaWriter.HEADERS_ATTRIBUTE_NAME} " +
+          s"attribute unsupported type ${t.catalogString}")
+    }
     UnsafeProjection.create(
-      Seq(topicExpression, Cast(keyExpression, BinaryType),
-        Cast(valueExpression, BinaryType)), inputSchema)
+      Seq(
+        topicExpression,
+        Cast(keyExpression, BinaryType),
+        Cast(valueExpression, BinaryType),
+        headersExpression
+      ),
+      inputSchema
+    )
   }
 }
 

@@ -44,11 +44,11 @@ You can install using pip or conda from the conda-forge channel. See PyArrow
 Arrow is available as an optimization when converting a Spark DataFrame to a Pandas DataFrame
 using the call `toPandas()` and when creating a Spark DataFrame from a Pandas DataFrame with
 `createDataFrame(pandas_df)`. To use Arrow when executing these calls, users need to first set
-the Spark configuration 'spark.sql.execution.arrow.pyspark.enabled' to 'true'. This is disabled by default.
+the Spark configuration `spark.sql.execution.arrow.pyspark.enabled` to `true`. This is disabled by default.
 
-In addition, optimizations enabled by 'spark.sql.execution.arrow.pyspark.enabled' could fallback automatically
+In addition, optimizations enabled by `spark.sql.execution.arrow.pyspark.enabled` could fallback automatically
 to non-Arrow optimization implementation if an error occurs before the actual computation within Spark.
-This can be controlled by 'spark.sql.execution.arrow.pyspark.fallback.enabled'.
+This can be controlled by `spark.sql.execution.arrow.pyspark.fallback.enabled`.
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
@@ -154,6 +154,29 @@ The following example shows how to use this type of UDF to compute mean with gro
 </div>
 
 For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf)
+
+
+### Map Iterator
+
+Map iterator Pandas UDFs are used to transform data with an iterator of batches. Map iterator
+Pandas UDFs can be used with 
+[`pyspark.sql.DataFrame.mapInPandas`](api/python/pyspark.sql.html#pyspark.sql.DataFrame.mapInPandas).
+It defines a map function that transforms an iterator of `pandas.DataFrame` to another.
+
+It can return the output of arbitrary length in contrast to the scalar Pandas UDF. It maps an iterator of `pandas.DataFrame`s,
+that represents the current `DataFrame`, using the map iterator UDF and returns the result as a `DataFrame`.
+
+The following example shows how to create map iterator Pandas UDFs:
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example map_iter_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+
+For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf) and
+[`pyspark.sql.DataFrame.mapsInPandas`](api/python/pyspark.sql.html#pyspark.sql.DataFrame.mapInPandas).
+
 
 ## Usage Notes
 

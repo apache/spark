@@ -36,17 +36,17 @@ class RateLimitedOutputStream(out: OutputStream, desiredBytesPerSec: Int)
   private var lastSyncTime = System.nanoTime
   private var bytesWrittenSinceSync = 0L
 
-  override def write(b: Int) {
+  override def write(b: Int): Unit = {
     waitToWrite(1)
     out.write(b)
   }
 
-  override def write(bytes: Array[Byte]) {
+  override def write(bytes: Array[Byte]): Unit = {
     write(bytes, 0, bytes.length)
   }
 
   @tailrec
-  override final def write(bytes: Array[Byte], offset: Int, length: Int) {
+  override final def write(bytes: Array[Byte], offset: Int, length: Int): Unit = {
     val writeSize = math.min(length - offset, CHUNK_SIZE)
     if (writeSize > 0) {
       waitToWrite(writeSize)
@@ -55,16 +55,16 @@ class RateLimitedOutputStream(out: OutputStream, desiredBytesPerSec: Int)
     }
   }
 
-  override def flush() {
+  override def flush(): Unit = {
     out.flush()
   }
 
-  override def close() {
+  override def close(): Unit = {
     out.close()
   }
 
   @tailrec
-  private def waitToWrite(numBytes: Int) {
+  private def waitToWrite(numBytes: Int): Unit = {
     val now = System.nanoTime
     val elapsedNanosecs = math.max(now - lastSyncTime, 1)
     val rate = bytesWrittenSinceSync.toDouble * 1000000000 / elapsedNanosecs

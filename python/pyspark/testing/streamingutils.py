@@ -137,9 +137,9 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
     def _test_func(self, input, func, expected, sort=False, input2=None):
         """
-        @param input: dataset for the test. This should be list of lists.
-        @param func: wrapped function. This function should return PythonDStream object.
-        @param expected: expected output for this testcase.
+        :param input: dataset for the test. This should be list of lists.
+        :param func: wrapped function. This function should return PythonDStream object.
+        :param expected: expected output for this testcase.
         """
         if not isinstance(input[0], RDD):
             input = [self.sc.parallelize(d, 1) for d in input]

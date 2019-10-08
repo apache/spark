@@ -60,7 +60,7 @@ case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   @JsonIgnore private[sql] var qe: QueryExecution = null
 
   // The exception object that caused this execution to fail. None if the execution doesn't fail.
-  @JsonIgnore private[sql] var executionFailure: Option[Exception] = None
+  @JsonIgnore private[sql] var executionFailure: Option[Throwable] = None
 }
 
 /**

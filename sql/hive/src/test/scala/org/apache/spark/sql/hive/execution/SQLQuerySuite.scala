@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
-import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveSingleton}
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveSingleton}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
@@ -1103,10 +1103,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("Call add jar in a different thread (SPARK-8306)") {
     @volatile var error: Option[Throwable] = None
     val thread = new Thread {
-      override def run() {
+      override def run(): Unit = {
         // To make sure this test works, this jar should not be loaded in another place.
         sql(
-          s"ADD JAR ${HiveTestUtils.getHiveContribJar.getCanonicalPath}")
+          s"ADD JAR ${HiveTestJars.getHiveContribJar().getCanonicalPath}")
         try {
           sql(
             """
@@ -1179,14 +1179,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("Convert hive interval term into Literal of CalendarIntervalType") {
+    checkAnswer(sql("select interval '0 0:0:0.1' day to second"),
+      Row(CalendarInterval.fromString("interval 100 milliseconds")))
     checkAnswer(sql("select interval '10-9' year to month"),
       Row(CalendarInterval.fromString("interval 10 years 9 months")))
+    checkAnswer(sql("select interval '20 15:40:32.99899999' day to hour"),
+      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours")))
+    checkAnswer(sql("select interval '20 15:40:32.99899999' day to minute"),
+      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes")))
     checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
       Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
-        "32 seconds 99 milliseconds 899 microseconds")))
+        "32 seconds 998 milliseconds 999 microseconds")))
+    checkAnswer(sql("select interval '15:40:32.99899999' hour to minute"),
+      Row(CalendarInterval.fromString("interval 15 hours 40 minutes")))
+    checkAnswer(sql("select interval '15:40.99899999' hour to second"),
+      Row(CalendarInterval.fromString("interval 15 minutes 40 seconds 998 milliseconds " +
+        "999 microseconds")))
+    checkAnswer(sql("select interval '15:40' hour to second"),
+      Row(CalendarInterval.fromString("interval 15 hours 40 minutes")))
     checkAnswer(sql("select interval '15:40:32.99899999' hour to second"),
-      Row(CalendarInterval.fromString("interval 15 hours 40 minutes 32 seconds 99 milliseconds " +
-        "899 microseconds")))
+      Row(CalendarInterval.fromString("interval 15 hours 40 minutes 32 seconds 998 milliseconds " +
+        "999 microseconds")))
+    checkAnswer(sql("select interval '20 40:32.99899999' minute to second"),
+      Row(CalendarInterval.fromString("interval 2 weeks 6 days 40 minutes 32 seconds " +
+        "998 milliseconds 999 microseconds")))
+    checkAnswer(sql("select interval '40:32.99899999' minute to second"),
+      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds 998 milliseconds " +
+        "999 microseconds")))
+    checkAnswer(sql("select interval '40:32' minute to second"),
+      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds")))
     checkAnswer(sql("select interval '30' year"),
       Row(CalendarInterval.fromString("interval 30 years")))
     checkAnswer(sql("select interval '25' month"),
@@ -1991,6 +2012,26 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-28084 check for case insensitive property of partition column name in load command") {
+    withTempDir { dir =>
+      val path = dir.toURI.toString.stripSuffix("/")
+      val dirPath = dir.getAbsoluteFile
+      Files.append("1", new File(dirPath, "part-r-000011"), StandardCharsets.UTF_8)
+      withTable("part_table") {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+          sql(
+            """
+              |CREATE TABLE part_table (c STRING)
+              |PARTITIONED BY (d STRING)
+            """.stripMargin)
+          sql(s"LOAD DATA LOCAL INPATH '$path/part-r-000011' " +
+            "INTO TABLE part_table PARTITION(D ='1')")
+          checkAnswer(sql("SELECT * FROM part_table"), Seq(Row("1", "1")))
+        }
+      }
+    }
+  }
+
   test("SPARK-25738: defaultFs can have a port") {
     val defaultURI = new URI("hdfs://fizz.buzz.com:8020")
     val r = LoadDataCommand.makeQualified(defaultURI, new Path("/foo/bar"), new Path("/flim/flam"))
@@ -2344,7 +2385,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       // This test case is only for file source V1. As the rule OptimizeMetadataOnlyQuery is
       // disabled by default, we can skip testing file source v2 in current stage.
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString,
-        SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
         withTable("t") {
           sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
           sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")

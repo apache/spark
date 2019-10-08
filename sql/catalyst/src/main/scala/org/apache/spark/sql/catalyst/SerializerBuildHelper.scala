@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, IsNull, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{CheckOverflow, CreateNamedStruct, Expression, IsNull, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 object SerializerBuildHelper {
+
+  private def nullOnOverflow: Boolean = !SQLConf.get.ansiEnabled
 
   def createSerializerForBoolean(inputObject: Expression): Expression = {
     Invoke(inputObject, "booleanValue", BooleanType)
@@ -99,12 +102,12 @@ object SerializerBuildHelper {
   }
 
   def createSerializerForJavaBigDecimal(inputObject: Expression): Expression = {
-    StaticInvoke(
+    CheckOverflow(StaticInvoke(
       Decimal.getClass,
       DecimalType.SYSTEM_DEFAULT,
       "apply",
       inputObject :: Nil,
-      returnNullable = false)
+      returnNullable = false), DecimalType.SYSTEM_DEFAULT, nullOnOverflow)
   }
 
   def createSerializerForScalaBigDecimal(inputObject: Expression): Expression = {
@@ -112,12 +115,12 @@ object SerializerBuildHelper {
   }
 
   def createSerializerForJavaBigInteger(inputObject: Expression): Expression = {
-    StaticInvoke(
+    CheckOverflow(StaticInvoke(
       Decimal.getClass,
       DecimalType.BigIntDecimal,
       "apply",
       inputObject :: Nil,
-      returnNullable = false)
+      returnNullable = false), DecimalType.BigIntDecimal, nullOnOverflow)
   }
 
   def createSerializerForScalaBigInt(inputObject: Expression): Expression = {

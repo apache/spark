@@ -353,9 +353,20 @@ class SessionCatalog(
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
-    val newTableDefinition = tableDefinition.copy(identifier = tableIdentifier)
     requireDbExists(db)
     requireTableExists(tableIdentifier)
+    val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
+      && !tableDefinition.storage.locationUri.get.isAbsolute) {
+      // make the location of the table qualified.
+      val qualifiedTableLocation =
+        makeQualifiedPath(tableDefinition.storage.locationUri.get)
+      tableDefinition.copy(
+        storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
+        identifier = tableIdentifier)
+    } else {
+      tableDefinition.copy(identifier = tableIdentifier)
+    }
+
     externalCatalog.alterTable(newTableDefinition)
   }
 
@@ -770,6 +781,18 @@ class SessionCatalog(
     }
   }
 
+  def isView(nameParts: Seq[String]): Boolean = {
+    nameParts.length <= 2 && {
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      val ident = nameParts.asTableIdentifier
+      try {
+        getTempViewOrPermanentTableMetadata(ident).tableType == CatalogTableType.VIEW
+      } catch {
+        case _: NoSuchTableException => false
+      }
+    }
+  }
+
   /**
    * List all tables in the specified database, including local temporary views.
    *
@@ -784,7 +807,19 @@ class SessionCatalog(
    * Note that, if the specified database is global temporary view database, we will list global
    * temporary views.
    */
-  def listTables(db: String, pattern: String): Seq[TableIdentifier] = {
+  def listTables(db: String, pattern: String): Seq[TableIdentifier] = listTables(db, pattern, true)
+
+  /**
+   * List all matching tables in the specified database, including local temporary views
+   * if includeLocalTempViews is enabled.
+   *
+   * Note that, if the specified database is global temporary view database, we will list global
+   * temporary views.
+   */
+  def listTables(
+      db: String,
+      pattern: String,
+      includeLocalTempViews: Boolean): Seq[TableIdentifier] = {
     val dbName = formatDatabaseName(db)
     val dbTables = if (dbName == globalTempViewManager.database) {
       globalTempViewManager.listViewNames(pattern).map { name =>
@@ -796,12 +831,23 @@ class SessionCatalog(
         TableIdentifier(name, Some(dbName))
       }
     }
-    val localTempViews = synchronized {
+
+    if (includeLocalTempViews) {
+      dbTables ++ listLocalTempViews(pattern)
+    } else {
+      dbTables
+    }
+  }
+
+  /**
+   * List all matching local temporary views.
+   */
+  def listLocalTempViews(pattern: String): Seq[TableIdentifier] = {
+    synchronized {
       StringUtils.filterPattern(tempViews.keys.toSeq, pattern).map { name =>
         TableIdentifier(name)
       }
     }
-    dbTables ++ localTempViews
   }
 
   /**
@@ -859,7 +905,8 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Option(db)))
     requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     requireNonEmptyValueInPartitionSpec(parts.map(_.spec))
-    externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
+    externalCatalog.createPartitions(
+      db, table, partitionWithQualifiedPath(tableName, parts), ignoreIfExists)
   }
 
   /**
@@ -919,7 +966,7 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Option(db)))
     requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     requireNonEmptyValueInPartitionSpec(parts.map(_.spec))
-    externalCatalog.alterPartitions(db, table, parts)
+    externalCatalog.alterPartitions(db, table, partitionWithQualifiedPath(tableName, parts))
   }
 
   /**
@@ -1041,6 +1088,23 @@ class SessionCatalog(
     }
   }
 
+  /**
+   * Make the partition path qualified.
+   * If the partition path is relative, e.g. 'paris', it will be qualified with
+   * parent path using table location, e.g. 'file:/warehouse/table/paris'
+   */
+  private def partitionWithQualifiedPath(
+      tableIdentifier: TableIdentifier,
+      parts: Seq[CatalogTablePartition]): Seq[CatalogTablePartition] = {
+    lazy val tbl = getTableMetadata(tableIdentifier)
+    parts.map { part =>
+      if (part.storage.locationUri.isDefined && !part.storage.locationUri.get.isAbsolute) {
+        val partPath = new Path(new Path(tbl.location), new Path(part.storage.locationUri.get))
+        val qualifiedPartPath = makeQualifiedPath(CatalogUtils.stringToURI(partPath.toString))
+        part.copy(storage = part.storage.copy(locationUri = Some(qualifiedPartPath)))
+      } else part
+    }
+  }
   // ----------------------------------------------------------------------------
   // Functions
   // ----------------------------------------------------------------------------
@@ -1091,7 +1155,7 @@ class SessionCatalog(
       }
       externalCatalog.dropFunction(db, name.funcName)
     } else if (!ignoreIfNotExists) {
-      throw new NoSuchFunctionException(db = db, func = identifier.toString)
+      throw new NoSuchPermanentFunctionException(db = db, func = identifier.toString)
     }
   }
 
@@ -1114,7 +1178,7 @@ class SessionCatalog(
       }
       externalCatalog.alterFunction(db, newFuncDefinition)
     } else {
-      throw new NoSuchFunctionException(db = db, func = identifier.toString)
+      throw new NoSuchPermanentFunctionException(db = db, func = identifier.toString)
     }
   }
 

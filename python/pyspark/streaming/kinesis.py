@@ -80,7 +80,6 @@ class KinesisUtils(object):
         jduration = ssc._jduration(checkpointInterval)
 
         try:
-            # Use KinesisUtilsPythonHelper to access Scala's KinesisUtils
             helper = ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":

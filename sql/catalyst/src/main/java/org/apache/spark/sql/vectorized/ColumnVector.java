@@ -287,7 +287,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * @return child [[ColumnVector]] at the given ordinal.
    */
-  protected abstract ColumnVector getChild(int ordinal);
+  public abstract ColumnVector getChild(int ordinal);
 
   /**
    * Data type for this column.

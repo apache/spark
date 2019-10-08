@@ -315,7 +315,7 @@ class ParquetFileFormat
         val vectorizedReader = new VectorizedParquetRecordReader(
           convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
-        // SPARK-23457 Register a task completion lister before `initialization`.
+        // SPARK-23457 Register a task completion listener before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
@@ -337,7 +337,7 @@ class ParquetFileFormat
           new ParquetRecordReader[UnsafeRow](readSupport)
         }
         val iter = new RecordReaderIterator(reader)
-        // SPARK-23457 Register a task completion lister before `initialization`.
+        // SPARK-23457 Register a task completion listener before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
         reader.initialize(split, hadoopAttemptContext)
 
@@ -476,79 +476,18 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
-    val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
-    // !! HACK ALERT !!
-    //
-    // Parquet requires `FileStatus`es to read footers.  Here we try to send cached `FileStatus`es
-    // to executor side to avoid fetching them again.  However, `FileStatus` is not `Serializable`
-    // but only `Writable`.  What makes it worse, for some reason, `FileStatus` doesn't play well
-    // with `SerializableWritable[T]` and always causes a weird `IllegalStateException`.  These
-    // facts virtually prevents us to serialize `FileStatus`es.
-    //
-    // Since Parquet only relies on path and length information of those `FileStatus`es to read
-    // footers, here we just extract them (which can be easily serialized), send them to executor
-    // side, and resemble fake `FileStatus`es there.
-    val partialFileStatusInfo = filesToTouch.map(f => (f.getPath.toString, f.getLen))
+    val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean) => {
+      // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
+      val converter = new ParquetToSparkSchemaConverter(
+        assumeBinaryIsString = assumeBinaryIsString,
+        assumeInt96IsTimestamp = assumeInt96IsTimestamp)
 
-    // Set the number of partitions to prevent following schema reads from generating many tasks
-    // in case of a small number of parquet files.
-    val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1),
-      sparkSession.sparkContext.defaultParallelism)
-
-    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
-
-    // Issues a Spark job to read Parquet schema in parallel.
-    val partiallyMergedSchemas =
-      sparkSession
-        .sparkContext
-        .parallelize(partialFileStatusInfo, numParallelism)
-        .mapPartitions { iterator =>
-          // Resembles fake `FileStatus`es with serialized path and length information.
-          val fakeFileStatuses = iterator.map { case (path, length) =>
-            new FileStatus(length, false, 0, 0, 0, 0, null, null, null, new Path(path))
-          }.toSeq
-
-          // Reads footers in multi-threaded manner within each task
-          val footers =
-            ParquetFileFormat.readParquetFootersInParallel(
-              serializedConf.value, fakeFileStatuses, ignoreCorruptFiles)
-
-          // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
-          val converter = new ParquetToSparkSchemaConverter(
-            assumeBinaryIsString = assumeBinaryIsString,
-            assumeInt96IsTimestamp = assumeInt96IsTimestamp)
-          if (footers.isEmpty) {
-            Iterator.empty
-          } else {
-            var mergedSchema = ParquetFileFormat.readSchemaFromFooter(footers.head, converter)
-            footers.tail.foreach { footer =>
-              val schema = ParquetFileFormat.readSchemaFromFooter(footer, converter)
-              try {
-                mergedSchema = mergedSchema.merge(schema)
-              } catch { case cause: SparkException =>
-                throw new SparkException(
-                  s"Failed merging schema of file ${footer.getFile}:\n${schema.treeString}", cause)
-              }
-            }
-            Iterator.single(mergedSchema)
-          }
-        }.collect()
-
-    if (partiallyMergedSchemas.isEmpty) {
-      None
-    } else {
-      var finalSchema = partiallyMergedSchemas.head
-      partiallyMergedSchemas.tail.foreach { schema =>
-        try {
-          finalSchema = finalSchema.merge(schema)
-        } catch { case cause: SparkException =>
-          throw new SparkException(
-            s"Failed merging schema:\n${schema.treeString}", cause)
-        }
-      }
-      Some(finalSchema)
+      readParquetFootersInParallel(conf, files, ignoreCorruptFiles)
+        .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
     }
+
+    SchemaMergeUtils.mergeSchemasInParallel(sparkSession, filesToTouch, reader)
   }
 
   /**

@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import java.net.URLDecoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
@@ -177,7 +178,6 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
-    <script src={prependBaseUri(request, "/static/additional-metrics.js")}></script>
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
@@ -309,9 +309,13 @@ private[spark] object UIUtils extends Logging {
       data: Iterable[T],
       fixedWidth: Boolean = false,
       id: Option[String] = None,
+      // When headerClasses is not empty, it should have the same length as headers parameter
       headerClasses: Seq[String] = Seq.empty,
       stripeRowsWithCss: Boolean = true,
-      sortable: Boolean = true): Seq[Node] = {
+      sortable: Boolean = true,
+      // The tooltip information could be None, which indicates header does not have a tooltip.
+      // When tooltipHeaders is not empty, it should have the same length as headers parameter
+      tooltipHeaders: Seq[Option[String]] = Seq.empty): Seq[Node] = {
 
     val listingTableClass = {
       val _tableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
@@ -332,6 +336,14 @@ private[spark] object UIUtils extends Logging {
       }
     }
 
+    def getTooltip(index: Int): Option[String] = {
+      if (index < tooltipHeaders.size) {
+        tooltipHeaders(index)
+      } else {
+        None
+      }
+    }
+
     val newlinesInHeader = headers.exists(_.contains("\n"))
     def getHeaderContent(header: String): Seq[Node] = {
       if (newlinesInHeader) {
@@ -345,7 +357,15 @@ private[spark] object UIUtils extends Logging {
 
     val headerRow: Seq[Node] = {
       headers.view.zipWithIndex.map { x =>
-        <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        getTooltip(x._2) match {
+          case Some(tooltip) =>
+            <th width={colWidthAttr} class={getClass(x._2)}>
+              <span data-toggle="tooltip" title={tooltip}>
+                {getHeaderContent(x._1)}
+              </span>
+            </th>
+          case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        }
       }
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
@@ -425,6 +445,9 @@ private[spark] object UIUtils extends Logging {
               {
                 g.rootCluster.getCachedNodes.map { n =>
                   <div class="cached-rdd">{n.id}</div>
+                } ++
+                g.rootCluster.getBarrierClusters.map { c =>
+                  <div class="barrier-rdd">{c.id}</div>
                 }
               }
             </div>
@@ -523,10 +546,10 @@ private[spark] object UIUtils extends Logging {
    */
   def decodeURLParameter(urlParam: String): String = {
     var param = urlParam
-    var decodedParam = URLDecoder.decode(param, "UTF-8")
+    var decodedParam = URLDecoder.decode(param, UTF_8.name())
     while (param != decodedParam) {
       param = decodedParam
-      decodedParam = URLDecoder.decode(param, "UTF-8")
+      decodedParam = URLDecoder.decode(param, UTF_8.name())
     }
     param
   }

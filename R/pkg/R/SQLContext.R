@@ -148,19 +148,7 @@ getDefaultSqlSource <- function() {
 }
 
 writeToFileInArrow <- function(fileName, rdf, numPartitions) {
-  requireNamespace1 <- requireNamespace
-
-  # R API in Arrow is not yet released in CRAN. CRAN requires to add the
-  # package in requireNamespace at DESCRIPTION. Later, CRAN checks if the package is available
-  # or not. Therefore, it works around by avoiding direct requireNamespace.
-  # Currently, as of Arrow 0.12.0, it can be installed by install_github. See ARROW-3204.
-  if (requireNamespace1("arrow", quietly = TRUE)) {
-    record_batch <- get("record_batch", envir = asNamespace("arrow"), inherits = FALSE)
-    RecordBatchStreamWriter <- get(
-      "RecordBatchStreamWriter", envir = asNamespace("arrow"), inherits = FALSE)
-    FileOutputStream <- get(
-      "FileOutputStream", envir = asNamespace("arrow"), inherits = FALSE)
-
+  if (requireNamespace("arrow", quietly = TRUE)) {
     numPartitions <- if (!is.null(numPartitions)) {
       numToInt(numPartitions)
     } else {
@@ -176,11 +164,11 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
     stream_writer <- NULL
     tryCatch({
       for (rdf_slice in rdf_slices) {
-        batch <- record_batch(rdf_slice)
+        batch <- arrow::record_batch(rdf_slice)
         if (is.null(stream_writer)) {
-          stream <- FileOutputStream(fileName)
+          stream <- arrow::FileOutputStream(fileName)
           schema <- batch$schema
-          stream_writer <- RecordBatchStreamWriter(stream, schema)
+          stream_writer <- arrow::RecordBatchStreamWriter(stream, schema)
         }
 
         stream_writer$write_batch(batch)
@@ -624,7 +612,8 @@ loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
 #'
 #' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}
 #' @param tableName the name of the table in the external database
-#' @param partitionColumn the name of a column of integral type that will be used for partitioning
+#' @param partitionColumn the name of a column of numeric, date, or timestamp type
+#'                        that will be used for partitioning.
 #' @param lowerBound the minimum value of \code{partitionColumn} used to decide partition stride
 #' @param upperBound the maximum value of \code{partitionColumn} used to decide partition stride
 #' @param numPartitions the number of partitions, This, along with \code{lowerBound} (inclusive),

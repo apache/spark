@@ -145,7 +145,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
-    val version = parseVersion(lines.next(), metadataLogVersion)
+    validateVersion(lines.next(), metadataLogVersion)
     lines.map(Serialization.read[T]).toArray
   }
 

@@ -21,7 +21,6 @@ import scala.collection.Map
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.Evolving
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
@@ -30,7 +29,6 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  *
  * @since 1.6.0
  */
-@Evolving
 abstract class SQLImplicits extends LowPrioritySQLImplicits {
 
   protected def _sqlContext: SQLContext

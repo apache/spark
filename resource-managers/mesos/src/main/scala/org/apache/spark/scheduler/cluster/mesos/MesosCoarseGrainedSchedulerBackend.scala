@@ -37,7 +37,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
+import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
 import org.apache.spark.rpc.{RpcEndpointAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -158,7 +158,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     getRejectOfferDurationForReachedMaxCores(sc.conf)
 
   // A client for talking to the external shuffle service
-  private val mesosExternalShuffleClient: Option[MesosExternalShuffleClient] = {
+  private val mesosExternalShuffleClient: Option[MesosExternalBlockStoreClient] = {
     if (shuffleServiceEnabled) {
       Some(getShuffleClient())
     } else {
@@ -167,8 +167,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   // This method is factored out for testability
-  protected def getShuffleClient(): MesosExternalShuffleClient = {
-    new MesosExternalShuffleClient(
+  protected def getShuffleClient(): MesosExternalBlockStoreClient = {
+    new MesosExternalBlockStoreClient(
       SparkTransportConf.fromSparkConf(conf, "shuffle"),
       securityManager,
       securityManager.isAuthenticationEnabled(),
@@ -187,7 +187,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     id.toString
   }
 
-  override def start() {
+  override def start(): Unit = {
     super.start()
 
     if (sc.deployMode == "client") {
@@ -268,33 +268,47 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         .getOrElse {
           throw new SparkException(s"Executor Spark home `$EXECUTOR_HOME` is not set!")
         }
-      val runScript = new File(executorSparkHome, "./bin/spark-class").getPath
-      command.setValue(
-        "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend"
-          .format(prefixEnv, runScript) +
-        s" --driver-url $driverURL" +
-        s" --executor-id $taskId" +
-        s" --hostname ${executorHostname(offer)}" +
-        s" --cores $numCores" +
-        s" --app-id $appId")
+      val executable = new File(executorSparkHome, "./bin/spark-class").getPath
+      val runScript = "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend"
+        .format(prefixEnv, executable)
+
+      command.setValue(buildExecutorCommand(runScript, taskId, numCores, offer))
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.get.split('/').last.split('.').head
-      command.setValue(
-        s"cd $basename*; $prefixEnv " +
-        "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
-        s" --driver-url $driverURL" +
-        s" --executor-id $taskId" +
-        s" --hostname ${executorHostname(offer)}" +
-        s" --cores $numCores" +
-        s" --app-id $appId")
+      val runScript = s"cd $basename*; $prefixEnv " +
+        "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend"
+
+      command.setValue(buildExecutorCommand(runScript, taskId, numCores, offer))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get).setCache(useFetcherCache))
     }
 
     setupUris(conf.get(URIS_TO_DOWNLOAD), command, useFetcherCache)
 
     command.build()
+  }
+
+  private def buildExecutorCommand(
+      runScript: String, taskId: String, numCores: Int, offer: Offer): String = {
+
+    val sb = new StringBuilder()
+      .append(runScript)
+      .append(" --driver-url ")
+      .append(driverURL)
+      .append(" --executor-id ")
+      .append(taskId)
+      .append(" --cores ")
+      .append(numCores)
+      .append(" --app-id ")
+      .append(appId)
+
+    if (sc.conf.get(NETWORK_NAME).isEmpty) {
+      sb.append(" --hostname ")
+      sb.append(offer.getHostname)
+    }
+
+    sb.toString()
   }
 
   protected def driverURL: String = {
@@ -308,12 +322,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID) {}
+  override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID): Unit = {}
 
   override def registered(
       driver: org.apache.mesos.SchedulerDriver,
       frameworkId: FrameworkID,
-      masterInfo: MasterInfo) {
+      masterInfo: MasterInfo): Unit = {
 
     this.appId = frameworkId.getValue
     this.mesosExternalShuffleClient.foreach(_.init(appId))
@@ -327,11 +341,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     totalCoreCount.get >= maxCoresOption.getOrElse(0) * minRegisteredRatio
   }
 
-  override def disconnected(d: org.apache.mesos.SchedulerDriver) {
+  override def disconnected(d: org.apache.mesos.SchedulerDriver): Unit = {
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
   }
 
-  override def reregistered(d: org.apache.mesos.SchedulerDriver, masterInfo: MasterInfo) {
+  override def reregistered(d: org.apache.mesos.SchedulerDriver, masterInfo: MasterInfo): Unit = {
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
 
@@ -339,7 +353,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
    * Method called by Mesos to offer resources on slaves. We respond by launching an executor,
    * unless we've already launched more than we wanted to.
    */
-  override def resourceOffers(d: org.apache.mesos.SchedulerDriver, offers: JList[Offer]) {
+  override def resourceOffers(d: org.apache.mesos.SchedulerDriver, offers: JList[Offer]): Unit = {
     stateLock.synchronized {
       if (stopCalled) {
         logDebug("Ignoring offers during shutdown")
@@ -599,7 +613,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     return true
   }
 
-  override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
+  override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus): Unit = {
     val taskId = status.getTaskId.getValue
     val slaveId = status.getSlaveId.getValue
     val state = mesosToTaskState(status.getState)
@@ -661,12 +675,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
   }
 
-  override def error(d: org.apache.mesos.SchedulerDriver, message: String) {
+  override def error(d: org.apache.mesos.SchedulerDriver, message: String): Unit = {
     logError(s"Mesos error: $message")
     scheduler.error(message)
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     stopSchedulerBackend()
     launcherBackend.setState(SparkAppHandle.State.FINISHED)
     launcherBackend.close()
@@ -708,7 +722,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def frameworkMessage(
-      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]): Unit = {}
 
   /**
    * Called when a slave is lost or a Mesos task finished. Updates local view on
@@ -777,15 +791,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private def numExecutors(): Int = {
     slaves.values.map(_.taskIDs.size).sum
-  }
-
-  private def executorHostname(offer: Offer): String = {
-    if (sc.conf.get(NETWORK_NAME).isDefined) {
-      // The agent's IP is not visible in a CNI container, so we bind to 0.0.0.0
-      "0.0.0.0"
-    } else {
-      offer.getHostname
-    }
   }
 }
 

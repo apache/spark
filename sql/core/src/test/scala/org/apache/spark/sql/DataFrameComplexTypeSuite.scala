@@ -19,12 +19,12 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * A test suite to test DataFrame/SQL functionalities with complex types (i.e. array, struct, map).
  */
-class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
+class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("UDF on struct") {

@@ -27,7 +27,7 @@ class DistributionSuite extends SparkFunSuite {
   protected def checkSatisfied(
       inputPartitioning: Partitioning,
       requiredDistribution: Distribution,
-      satisfied: Boolean) {
+      satisfied: Boolean): Unit = {
     if (inputPartitioning.satisfies(requiredDistribution) != satisfied) {
       fail(
         s"""

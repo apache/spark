@@ -89,6 +89,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     ArrayFilter(expr, createLambda(et, cn, f)).bind(validateBinding)
   }
 
+  def filter(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+    val ArrayType(et, cn) = expr.dataType
+    ArrayFilter(expr, createLambda(et, cn, IntegerType, false, f)).bind(validateBinding)
+  }
+
   def transformKeys(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
     val MapType(kt, vt, vcn) = expr.dataType
     TransformKeys(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
@@ -218,9 +223,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     val isEven: Expression => Expression = x => x % 2 === 0
     val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
+    val indexIsEven: (Expression, Expression) => Expression = { case (_, idx) => idx % 2 === 0 }
 
     checkEvaluation(filter(ai0, isEven), Seq(2))
     checkEvaluation(filter(ai0, isNullOrOdd), Seq(1, 3))
+    checkEvaluation(filter(ai0, indexIsEven), Seq(1, 3))
     checkEvaluation(filter(ai1, isEven), Seq.empty)
     checkEvaluation(filter(ai1, isNullOrOdd), Seq(1, null, 3))
     checkEvaluation(filter(ain, isEven), null)
@@ -234,13 +241,17 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val startsWithA: Expression => Expression = x => x.startsWith("a")
 
     checkEvaluation(filter(as0, startsWithA), Seq("a0", "a2"))
+    checkEvaluation(filter(as0, indexIsEven), Seq("a0", "a2"))
     checkEvaluation(filter(as1, startsWithA), Seq("a"))
+    checkEvaluation(filter(as1, indexIsEven), Seq("a", "c"))
     checkEvaluation(filter(asn, startsWithA), null)
 
     val aai = Literal.create(Seq(Seq(1, 2, 3), null, Seq(4, 5)),
       ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
     checkEvaluation(transform(aai, ix => filter(ix, isNullOrOdd)),
       Seq(Seq(1, 3), null, Seq(5)))
+    checkEvaluation(transform(aai, ix => filter(ix, indexIsEven)),
+      Seq(Seq(1, 3), null, Seq(4)))
   }
 
   test("ArrayExists") {
@@ -302,6 +313,56 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
     checkEvaluation(transform(aai, ix => exists(ix, isNullOrOdd)),
       Seq(true, null, true))
+  }
+
+  test("ArrayForAll") {
+    def forall(expr: Expression, f: Expression => Expression): Expression = {
+      val ArrayType(et, cn) = expr.dataType
+      ArrayForAll(expr, createLambda(et, cn, f)).bind(validateBinding)
+    }
+
+    val ai0 = Literal.create(Seq(2, 4, 8), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ai2 = Literal.create(Seq[Integer](2, null, 8), ArrayType(IntegerType, containsNull = true))
+    val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
+
+    val isEven: Expression => Expression = x => x % 2 === 0
+    val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
+    val alwaysFalse: Expression => Expression = _ => Literal.FalseLiteral
+    val alwaysNull: Expression => Expression = _ => Literal(null, BooleanType)
+
+    checkEvaluation(forall(ai0, isEven), true)
+    checkEvaluation(forall(ai0, isNullOrOdd), false)
+    checkEvaluation(forall(ai0, alwaysFalse), false)
+    checkEvaluation(forall(ai0, alwaysNull), null)
+    checkEvaluation(forall(ai1, isEven), false)
+    checkEvaluation(forall(ai1, isNullOrOdd), true)
+    checkEvaluation(forall(ai1, alwaysFalse), false)
+    checkEvaluation(forall(ai1, alwaysNull), null)
+    checkEvaluation(forall(ai2, isEven), null)
+    checkEvaluation(forall(ai2, isNullOrOdd), false)
+    checkEvaluation(forall(ai2, alwaysFalse), false)
+    checkEvaluation(forall(ai2, alwaysNull), null)
+    checkEvaluation(forall(ain, isEven), null)
+    checkEvaluation(forall(ain, isNullOrOdd), null)
+    checkEvaluation(forall(ain, alwaysFalse), null)
+    checkEvaluation(forall(ain, alwaysNull), null)
+
+    val as0 =
+      Literal.create(Seq("a0", "a1", "a2", "a3"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq(null, "b", "c"), ArrayType(StringType, containsNull = true))
+    val asn = Literal.create(null, ArrayType(StringType, containsNull = false))
+
+    val startsWithA: Expression => Expression = x => x.startsWith("a")
+
+    checkEvaluation(forall(as0, startsWithA), true)
+    checkEvaluation(forall(as1, startsWithA), false)
+    checkEvaluation(forall(asn, startsWithA), null)
+
+    val aai = Literal.create(Seq(Seq(1, 3, null), null, Seq(4, 5)),
+      ArrayType(ArrayType(IntegerType, containsNull = true), containsNull = true))
+    checkEvaluation(transform(aai, ix => forall(ix, isNullOrOdd)),
+      Seq(true, null, false))
   }
 
   test("ArrayAggregate") {

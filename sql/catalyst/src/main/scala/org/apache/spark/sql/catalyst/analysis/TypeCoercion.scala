@@ -59,7 +59,7 @@ object TypeCoercion {
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
-      Division ::
+      Division(conf) ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
@@ -666,7 +666,7 @@ object TypeCoercion {
    * Hive only performs integral division with the DIV operator. The arguments to / are always
    * converted to fractional types.
    */
-  object Division extends TypeCoercionRule {
+  case class Division(conf: SQLConf)  extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
@@ -677,7 +677,13 @@ object TypeCoercion {
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
       case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
-        Divide(Cast(left, DoubleType), Cast(right, DoubleType))
+        val preferIntegralDivision = conf.usePostgreSQLDialect
+        (left.dataType, right.dataType) match {
+          case (_: IntegralType, _: IntegralType) if preferIntegralDivision =>
+            IntegralDivide(left, right)
+          case _ =>
+            Divide(Cast(left, DoubleType), Cast(right, DoubleType))
+        }
     }
 
     private def isNumericOrNull(ex: Expression): Boolean = {
@@ -820,8 +826,10 @@ object TypeCoercion {
   }
 
   /**
-   * Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
-   * to TimeAdd/TimeSub
+   * 1. Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
+   *    to TimeAdd/TimeSub.
+   * 2. Turns Add/Subtract of DateType/IntegerType and IntegerType/DateType
+   *    to DateAdd/DateSub/DateDiff.
    */
   object DateTimeOperations extends Rule[LogicalPlan] {
 
@@ -837,6 +845,16 @@ object TypeCoercion {
         Cast(TimeAdd(l, r), l.dataType)
       case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
         Cast(TimeSub(l, r), l.dataType)
+
+      case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
+      case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
+      case Subtract(l @ DateType(), r @ IntegerType()) => DateSub(l, r)
+      case Subtract(l @ DateType(), r @ DateType()) => DateDiff(l, r)
+      case Subtract(l @ TimestampType(), r @ TimestampType()) => TimestampDiff(l, r)
+      case Subtract(l @ TimestampType(), r @ DateType()) =>
+        TimestampDiff(l, Cast(r, TimestampType))
+      case Subtract(l @ DateType(), r @ TimestampType()) =>
+        TimestampDiff(Cast(l, TimestampType), r)
     }
   }
 
@@ -849,7 +867,9 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
+      // If DecimalType operands are involved, DecimalPrecision will handle it
+      case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
+          !right.dataType.isInstanceOf[DecimalType] && left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.

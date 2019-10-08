@@ -87,7 +87,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  def testInvalidName(func: (String) => Unit) {
+  def testInvalidName(func: (String) => Unit): Unit = {
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
     val name = "砖"
@@ -714,6 +714,71 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       intercept[NoSuchDatabaseException] {
         catalog.listTables("unknown_db", "*")
       }
+    }
+  }
+
+  test("list tables with pattern and includeLocalTempViews") {
+    withEmptyCatalog { catalog =>
+      catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
+      catalog.createTable(newTable("tbl1", "mydb"), ignoreIfExists = false)
+      catalog.createTable(newTable("tbl2", "mydb"), ignoreIfExists = false)
+      val tempTable = Range(1, 10, 2, 10)
+      catalog.createTempView("temp_view1", tempTable, overrideIfExists = false)
+      catalog.createTempView("temp_view4", tempTable, overrideIfExists = false)
+
+      assert(catalog.listTables("mydb").toSet == catalog.listTables("mydb", "*").toSet)
+      assert(catalog.listTables("mydb").toSet == catalog.listTables("mydb", "*", true).toSet)
+      assert(catalog.listTables("mydb").toSet ==
+        catalog.listTables("mydb", "*", false).toSet ++ catalog.listLocalTempViews("*"))
+      assert(catalog.listTables("mydb", "*", true).toSet ==
+        Set(TableIdentifier("tbl1", Some("mydb")),
+          TableIdentifier("tbl2", Some("mydb")),
+          TableIdentifier("temp_view1"),
+          TableIdentifier("temp_view4")))
+      assert(catalog.listTables("mydb", "*", false).toSet ==
+        Set(TableIdentifier("tbl1", Some("mydb")), TableIdentifier("tbl2", Some("mydb"))))
+      assert(catalog.listTables("mydb", "tbl*", true).toSet ==
+        Set(TableIdentifier("tbl1", Some("mydb")), TableIdentifier("tbl2", Some("mydb"))))
+      assert(catalog.listTables("mydb", "tbl*", false).toSet ==
+        Set(TableIdentifier("tbl1", Some("mydb")), TableIdentifier("tbl2", Some("mydb"))))
+      assert(catalog.listTables("mydb", "temp_view*", true).toSet ==
+        Set(TableIdentifier("temp_view1"), TableIdentifier("temp_view4")))
+      assert(catalog.listTables("mydb", "temp_view*", false).toSet == Set.empty)
+    }
+  }
+
+  test("list temporary view with pattern") {
+    withBasicCatalog { catalog =>
+      val tempTable = Range(1, 10, 2, 10)
+      catalog.createTempView("temp_view1", tempTable, overrideIfExists = false)
+      catalog.createTempView("temp_view4", tempTable, overrideIfExists = false)
+      assert(catalog.listLocalTempViews("*").toSet ==
+        Set(TableIdentifier("temp_view1"), TableIdentifier("temp_view4")))
+      assert(catalog.listLocalTempViews("temp_view*").toSet ==
+        Set(TableIdentifier("temp_view1"), TableIdentifier("temp_view4")))
+      assert(catalog.listLocalTempViews("*1").toSet == Set(TableIdentifier("temp_view1")))
+      assert(catalog.listLocalTempViews("does_not_exist").toSet == Set.empty)
+    }
+  }
+
+  test("list global temporary view and local temporary view with pattern") {
+    withBasicCatalog { catalog =>
+      val tempTable = Range(1, 10, 2, 10)
+      catalog.createTempView("temp_view1", tempTable, overrideIfExists = false)
+      catalog.createTempView("temp_view4", tempTable, overrideIfExists = false)
+      catalog.globalTempViewManager.create("global_temp_view1", tempTable, overrideIfExists = false)
+      catalog.globalTempViewManager.create("global_temp_view2", tempTable, overrideIfExists = false)
+      assert(catalog.listTables(catalog.globalTempViewManager.database, "*").toSet ==
+        Set(TableIdentifier("temp_view1"),
+          TableIdentifier("temp_view4"),
+          TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
+          TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
+      assert(catalog.listTables(catalog.globalTempViewManager.database, "*temp_view1").toSet ==
+        Set(TableIdentifier("temp_view1"),
+          TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database))))
+      assert(catalog.listTables(catalog.globalTempViewManager.database, "global*").toSet ==
+        Set(TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
+          TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
     }
   }
 
@@ -1364,7 +1429,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
         catalog.dropFunction(
           FunctionIdentifier("something", Some("unknown_db")), ignoreIfNotExists = false)
       }
-      intercept[NoSuchFunctionException] {
+      intercept[NoSuchPermanentFunctionException] {
         catalog.dropFunction(FunctionIdentifier("does_not_exist"), ignoreIfNotExists = false)
       }
       catalog.dropFunction(FunctionIdentifier("does_not_exist"), ignoreIfNotExists = true)

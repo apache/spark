@@ -20,8 +20,11 @@ package org.apache.spark.shuffle.sort
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.shuffle._
+import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleExecutorComponents}
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * In sort-based shuffle, incoming records are sorted according to their target partition ids, then
@@ -68,6 +71,8 @@ import org.apache.spark.shuffle._
  */
 private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
 
+  import SortShuffleManager._
+
   if (!conf.getBoolean("spark.shuffle.spill", true)) {
     logWarning(
       "spark.shuffle.spill was set to false, but this configuration is ignored as of Spark 1.6+." +
@@ -75,9 +80,11 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   }
 
   /**
-   * A mapping from shuffle ids to the number of mappers producing output for those shuffles.
+   * A mapping from shuffle ids to the task ids of mappers producing output for those shuffles.
    */
-  private[this] val numMapsForShuffle = new ConcurrentHashMap[Int, Int]()
+  private[this] val taskIdMapsForShuffle = new ConcurrentHashMap[Int, OpenHashSet[Long]]()
+
+  private lazy val shuffleExecutorComponents = loadShuffleExecutorComponents(conf)
 
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
 
@@ -86,7 +93,6 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
    */
   override def registerShuffle[K, V, C](
       shuffleId: Int,
-      numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
     if (SortShuffleWriter.shouldBypassMergeSort(conf, dependency)) {
       // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
@@ -95,14 +101,14 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       // together the spilled files, which would happen with the normal code path. The downside is
       // having multiple files open at a time and thus more memory allocated to buffers.
       new BypassMergeSortShuffleHandle[K, V](
-        shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
+        shuffleId, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
     } else if (SortShuffleManager.canUseSerializedShuffle(dependency)) {
       // Otherwise, try to buffer map outputs in a serialized form, since this is more efficient:
       new SerializedShuffleHandle[K, V](
-        shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
+        shuffleId, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
     } else {
       // Otherwise, buffer map outputs in a deserialized form:
-      new BaseShuffleHandle(shuffleId, numMaps, dependency)
+      new BaseShuffleHandle(shuffleId, dependency)
     }
   }
 
@@ -124,41 +130,43 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Get a writer for a given partition. Called on executors by map tasks. */
   override def getWriter[K, V](
       handle: ShuffleHandle,
-      mapId: Int,
+      mapId: Long,
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
-    numMapsForShuffle.putIfAbsent(
-      handle.shuffleId, handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
+    val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
+      handle.shuffleId, _ => new OpenHashSet[Long](16))
+    mapTaskIds.synchronized { mapTaskIds.add(context.taskAttemptId()) }
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
         new UnsafeShuffleWriter(
           env.blockManager,
-          shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
           context.taskMemoryManager(),
           unsafeShuffleHandle,
           mapId,
           context,
           env.conf,
-          metrics)
+          metrics,
+          shuffleExecutorComponents)
       case bypassMergeSortHandle: BypassMergeSortShuffleHandle[K @unchecked, V @unchecked] =>
         new BypassMergeSortShuffleWriter(
           env.blockManager,
-          shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
           bypassMergeSortHandle,
           mapId,
           env.conf,
-          metrics)
+          metrics,
+          shuffleExecutorComponents)
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
-        new SortShuffleWriter(shuffleBlockResolver, other, mapId, context)
+        new SortShuffleWriter(
+          shuffleBlockResolver, other, mapId, context, shuffleExecutorComponents)
     }
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
-    Option(numMapsForShuffle.remove(shuffleId)).foreach { numMaps =>
-      (0 until numMaps).foreach { mapId =>
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId)
+    Option(taskIdMapsForShuffle.remove(shuffleId)).foreach { mapTaskIds =>
+      mapTaskIds.iterator.foreach { mapTaskId =>
+        shuffleBlockResolver.removeDataByMap(shuffleId, mapTaskId)
       }
     }
     true
@@ -205,6 +213,16 @@ private[spark] object SortShuffleManager extends Logging {
       true
     }
   }
+
+  private def loadShuffleExecutorComponents(conf: SparkConf): ShuffleExecutorComponents = {
+    val configuredPluginClasses = conf.get(config.SHUFFLE_IO_PLUGIN_CLASS)
+    val maybeIO = Utils.loadExtensions(
+      classOf[ShuffleDataIO], Seq(configuredPluginClasses), conf)
+    require(maybeIO.size == 1, s"Failed to load plugins of type $configuredPluginClasses")
+    val executorComponents = maybeIO.head.executor()
+    executorComponents.initializeExecutor(conf.getAppId, SparkEnv.get.executorId)
+    executorComponents
+  }
 }
 
 /**
@@ -213,9 +231,8 @@ private[spark] object SortShuffleManager extends Logging {
  */
 private[spark] class SerializedShuffleHandle[K, V](
   shuffleId: Int,
-  numMaps: Int,
   dependency: ShuffleDependency[K, V, V])
-  extends BaseShuffleHandle(shuffleId, numMaps, dependency) {
+  extends BaseShuffleHandle(shuffleId, dependency) {
 }
 
 /**
@@ -224,7 +241,6 @@ private[spark] class SerializedShuffleHandle[K, V](
  */
 private[spark] class BypassMergeSortShuffleHandle[K, V](
   shuffleId: Int,
-  numMaps: Int,
   dependency: ShuffleDependency[K, V, V])
-  extends BaseShuffleHandle(shuffleId, numMaps, dependency) {
+  extends BaseShuffleHandle(shuffleId, dependency) {
 }

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 private[sql] object Column {
@@ -47,6 +48,15 @@ private[sql] object Column {
         a.aggregateFunction.toString
       case expr => toPrettySQL(expr)
     }
+  }
+
+  private[sql] def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
+    val metadataWithoutId = new MetadataBuilder()
+      .withMetadata(a.metadata)
+      .remove(Dataset.DATASET_ID_KEY)
+      .remove(Dataset.COL_POS_KEY)
+      .build()
+    a.withMetadata(metadataWithoutId)
   }
 }
 
@@ -144,11 +154,15 @@ class Column(val expr: Expression) extends Logging {
   override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
-    case that: Column => that.expr.equals(this.expr)
+    case that: Column => that.normalizedExpr() == this.normalizedExpr()
     case _ => false
   }
 
-  override def hashCode: Int = this.expr.hashCode()
+  override def hashCode: Int = this.normalizedExpr().hashCode()
+
+  private def normalizedExpr(): Expression = expr transform {
+    case a: AttributeReference => Column.stripColumnReferenceMetadata(a)
+  }
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
@@ -795,7 +809,14 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.4.0
    */
-  def isInCollection(values: scala.collection.Iterable[_]): Column = isin(values.toSeq: _*)
+  def isInCollection(values: scala.collection.Iterable[_]): Column = withExpr {
+    val hSet = values.toSet[Any]
+    if (hSet.size > SQLConf.get.optimizerInSetConversionThreshold) {
+      InSet(expr, hSet)
+    } else {
+      In(expr, values.toSeq.map(lit(_).expr))
+    }
+  }
 
   /**
    * A boolean expression that is evaluated to true if the value of this expression is contained
@@ -1008,7 +1029,7 @@ class Column(val expr: Expression) extends Logging {
    * @since 2.0.0
    */
   def name(alias: String): Column = withExpr {
-    expr match {
+    normalizedExpr() match {
       case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
       case other => Alias(other, alias)()
     }

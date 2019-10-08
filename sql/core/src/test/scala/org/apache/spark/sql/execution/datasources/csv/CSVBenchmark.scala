@@ -21,6 +21,7 @@ import java.time.{Instant, LocalDate}
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, Dataset, Row}
+import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -42,7 +43,9 @@ import org.apache.spark.sql.types._
 object CSVBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
-  private def toNoop(ds: Dataset[_]): Unit = ds.write.format("noop").save()
+  private def toNoop(ds: Dataset[_]): Unit = {
+    ds.write.format("noop").mode(Overwrite).save()
+  }
 
   private def quotedValuesBenchmark(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark(s"Parsing quoted values", rowsNum, output = output)

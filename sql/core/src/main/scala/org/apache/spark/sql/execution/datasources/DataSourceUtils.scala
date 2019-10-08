@@ -60,8 +60,8 @@ object DataSourceUtils {
   // SPARK-24626: Metadata files and temporary files should not be
   // counted as data files, so that they shouldn't participate in tasks like
   // location size calculation.
-  private[sql] def isDataPath(path: Path): Boolean = {
-    val name = path.getName
-    !(name.startsWith("_") || name.startsWith("."))
-  }
+  private[sql] def isDataPath(path: Path): Boolean = isDataFile(path.getName)
+
+  private[sql] def isDataFile(fileName: String) =
+    !(fileName.startsWith("_") || fileName.startsWith("."))
 }

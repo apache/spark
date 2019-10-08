@@ -35,12 +35,12 @@ import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ExistsThrowsExceptionFileSystem._
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSourceTest
-  extends StreamTest with SharedSQLContext with PrivateMethodTester {
+  extends StreamTest with SharedSparkSession with PrivateMethodTester {
 
   import testImplicits._
 
@@ -178,7 +178,7 @@ abstract class FileStreamSourceTest
   }
 
 
-  protected def withTempDirs(body: (File, File) => Unit) {
+  protected def withTempDirs(body: (File, File) => Unit): Unit = {
     val src = Utils.createTempDir(namePrefix = "streaming.src")
     val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
     try {
@@ -1310,7 +1310,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
               val start = startId.map(new FileStreamSourceOffset(_))
               val end = FileStreamSourceOffset(endId)
 
-              withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+              withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
                 assert(fileSource.getBatch(start, end).as[String].collect().toSeq === expected)
               }
             }
@@ -1575,6 +1575,25 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         CheckNewAnswer("source1_3", "source2_3"),
         StopStream
       )
+    }
+  }
+
+  test("SPARK-28651: force streaming file source to be nullable") {
+    withTempDir { temp =>
+      val schema = StructType(Seq(StructField("foo", LongType, false)))
+      val nullableSchema = StructType(Seq(StructField("foo", LongType, true)))
+      val streamingSchema = spark.readStream.schema(schema).json(temp.getCanonicalPath).schema
+      assert(nullableSchema === streamingSchema)
+
+      // Verify we have the same behavior as batch DataFrame.
+      val batchSchema = spark.read.schema(schema).json(temp.getCanonicalPath).schema
+      assert(batchSchema === streamingSchema)
+
+      // Verify the flag works
+      withSQLConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE.key -> "false") {
+        val streamingSchema = spark.readStream.schema(schema).json(temp.getCanonicalPath).schema
+        assert(schema === streamingSchema)
+      }
     }
   }
 }

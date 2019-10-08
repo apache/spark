@@ -67,7 +67,6 @@ private[spark] class EventLoggingListener(
   private val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS)
   private val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
   private val shouldLogBlockUpdates = sparkConf.get(EVENT_LOG_BLOCK_UPDATES)
-  private val shouldAllowECLogs = sparkConf.get(EVENT_LOG_ALLOW_EC)
   private val shouldLogStageExecutorMetrics = sparkConf.get(EVENT_LOG_STAGE_EXECUTOR_METRICS)
   private val testing = sparkConf.get(EVENT_LOG_TESTING)
   private val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
@@ -94,13 +93,13 @@ private[spark] class EventLoggingListener(
   // Visible for tests only.
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
-  // map of (stageId, stageAttempt), to peak executor metrics for the stage
+  // map of (stageId, stageAttempt) to executor metric peaks per executor/driver for the stage
   private val liveStageExecutorMetrics = Map.empty[(Int, Int), Map[String, ExecutorMetrics]]
 
   /**
    * Creates the log file in the configured log directory.
    */
-  def start() {
+  def start(): Unit = {
     if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
       throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
     }
@@ -121,21 +120,19 @@ private[spark] class EventLoggingListener(
       if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
         new FileOutputStream(uri.getPath)
       } else {
-        hadoopDataStream = Some(if (shouldAllowECLogs) {
-          fileSystem.create(path)
-        } else {
-          SparkHadoopUtil.createNonECFile(fileSystem, path)
-        })
+        hadoopDataStream = Some(
+          SparkHadoopUtil.createFile(fileSystem, path, sparkConf.get(EVENT_LOG_ALLOW_EC)))
         hadoopDataStream.get
       }
 
     try {
-      val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
+      val cstream = compressionCodec.map(_.compressedContinuousOutputStream(dstream))
+        .getOrElse(dstream)
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
 
       EventLoggingListener.initEventLog(bstream, testing, loggedEvents)
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
-      writer = Some(new PrintWriter(bstream))
+      writer = Some(new PrintWriter(new OutputStreamWriter(bstream, StandardCharsets.UTF_8)))
       logInfo("Logging events to %s".format(logPath))
     } catch {
       case e: Exception =>
@@ -145,7 +142,7 @@ private[spark] class EventLoggingListener(
   }
 
   /** Log the event as JSON. */
-  private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
+  private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false): Unit = {
     val eventJson = JsonProtocol.sparkEventToJson(event)
     // scalastyle:off println
     writer.foreach(_.println(compact(render(eventJson))))
@@ -173,7 +170,17 @@ private[spark] class EventLoggingListener(
 
   override def onTaskGettingResult(event: SparkListenerTaskGettingResult): Unit = logEvent(event)
 
-  override def onTaskEnd(event: SparkListenerTaskEnd): Unit = logEvent(event)
+  override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+    logEvent(event)
+    if (shouldLogStageExecutorMetrics) {
+      val stageKey = (event.stageId, event.stageAttemptId)
+      liveStageExecutorMetrics.get(stageKey).map { metricsPerExecutor =>
+        val metrics = metricsPerExecutor.getOrElseUpdate(
+          event.taskInfo.executorId, new ExecutorMetrics())
+        metrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
+      }
+    }
+  }
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
     logEvent(redactEvent(event))
@@ -268,12 +275,16 @@ private[spark] class EventLoggingListener(
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     if (shouldLogStageExecutorMetrics) {
-      // For the active stages, record any new peak values for the memory metrics for the executor
-      event.executorUpdates.foreach { executorUpdates =>
-        liveStageExecutorMetrics.values.foreach { peakExecutorMetrics =>
-          val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
-            event.execId, new ExecutorMetrics())
-          peakMetrics.compareAndUpdatePeakValues(executorUpdates)
+      event.executorUpdates.foreach { case (stageKey1, newPeaks) =>
+        liveStageExecutorMetrics.foreach { case (stageKey2, metricsPerExecutor) =>
+          // If the update came from the driver, stageKey1 will be the dummy key (-1, -1),
+          // so record those peaks for all active stages.
+          // Otherwise, record the peaks for the matching stage.
+          if (stageKey1 == DRIVER_STAGE_KEY || stageKey1 == stageKey2) {
+            val metrics = metricsPerExecutor.getOrElseUpdate(
+              event.execId, new ExecutorMetrics())
+            metrics.compareAndUpdatePeakValues(newPeaks)
+          }
         }
       }
     }
@@ -334,6 +345,8 @@ private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
+  // Dummy stage key used by driver in executor metrics updates
+  val DRIVER_STAGE_KEY = (-1, -1)
 
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 

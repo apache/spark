@@ -242,7 +242,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("deprecated configs") {
-    val conf = new SparkConf()
+    val conf = new SparkConf(false)
     val newName = UPDATE_INTERVAL_S.key
 
     assert(!conf.contains(newName))
@@ -389,6 +389,19 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       """.stripMargin.trim)
   }
 
+  test("SPARK-28355: Use Spark conf for threshold at which UDFs are compressed by broadcast") {
+    val conf = new SparkConf()
+
+    // Check the default value
+    assert(conf.get(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD) === 1L * 1024 * 1024)
+
+    // Set the conf
+    conf.set(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD, 1L * 1024)
+
+    // Verify that it has been set properly
+    assert(conf.get(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD) === 1L * 1024)
+  }
+
   val defaultIllegalValue = "SomeIllegalValue"
   val illegalValueTests : Map[String, (SparkConf, String) => Any] = Map(
     "getTimeAsSeconds" -> (_.getTimeAsSeconds(_)),
@@ -427,7 +440,8 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(TASK_FPGA_ID.amountConf, "1")
     var taskResourceRequirement =
-      parseTaskResourceRequirements(conf).map(req => (req.resourceName, req.amount)).toMap
+      parseResourceRequirements(conf, SPARK_TASK_PREFIX)
+        .map(req => (req.resourceName, req.amount)).toMap
 
     assert(taskResourceRequirement.size == 2)
     assert(taskResourceRequirement(GPU) == 2)
@@ -437,7 +451,8 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     // Ignore invalid prefix
     conf.set(ResourceID("spark.invalid.prefix", FPGA).amountConf, "1")
     taskResourceRequirement =
-      parseTaskResourceRequirements(conf).map(req => (req.resourceName, req.amount)).toMap
+      parseResourceRequirements(conf, SPARK_TASK_PREFIX)
+        .map(req => (req.resourceName, req.amount)).toMap
     assert(taskResourceRequirement.size == 1)
     assert(taskResourceRequirement.get(FPGA).isEmpty)
   }
@@ -448,7 +463,7 @@ class Class2 {}
 class Class3 {}
 
 class CustomRegistrator extends KryoRegistrator {
-  def registerClasses(kryo: Kryo) {
+  def registerClasses(kryo: Kryo): Unit = {
     kryo.register(classOf[Class2])
   }
 }

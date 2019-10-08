@@ -230,7 +230,7 @@ private[spark] class BufferedStreamThread(
     errBufferSize: Int) extends Thread(name) with Logging {
   val lines = new Array[String](errBufferSize)
   var lineIdx = 0
-  override def run() {
+  override def run(): Unit = {
     for (line <- Source.fromInputStream(in).getLines) {
       synchronized {
         lines(lineIdx) = line

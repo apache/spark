@@ -22,21 +22,26 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.parallel.immutable.ParVector
+
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 
-class SQLQuerySuite extends QueryTest with SharedSQLContext {
+class SQLQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   setupTestData()
@@ -110,6 +115,83 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function `$f`"), "N/A.")
+      }
+    }
+  }
+
+  test("using _FUNC_ instead of function names in examples") {
+    val exampleRe = "(>.*;)".r
+    val setStmtRe = "(?i)^(>\\s+set\\s+).+".r
+    val ignoreSet = Set(
+      // Examples for CaseWhen show simpler syntax:
+      // `CASE WHEN ... THEN ... WHEN ... THEN ... END`
+      "org.apache.spark.sql.catalyst.expressions.CaseWhen",
+      // _FUNC_ is replaced by `locate` but `locate(... IN ...)` is not supported
+      "org.apache.spark.sql.catalyst.expressions.StringLocate",
+      // _FUNC_ is replaced by `%` which causes a parsing error on `SELECT %(2, 1.8)`
+      "org.apache.spark.sql.catalyst.expressions.Remainder",
+      // Examples demonstrate alternative names, see SPARK-20749
+      "org.apache.spark.sql.catalyst.expressions.Length")
+    spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
+      val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
+      val className = info.getClassName
+      withClue(s"Expression class '$className'") {
+        val exprExamples = info.getOriginalExamples
+        if (!exprExamples.isEmpty && !ignoreSet.contains(className)) {
+          assert(exampleRe.findAllIn(exprExamples).toIterable
+            .filter(setStmtRe.findFirstIn(_).isEmpty) // Ignore SET commands
+            .forall(_.contains("_FUNC_")))
+        }
+      }
+    }
+  }
+
+  test("check outputs of expression examples") {
+    def unindentAndTrim(s: String): String = {
+      s.replaceAll("\n\\s+", "\n").trim
+    }
+    val beginSqlStmtRe = "  > ".r
+    val endSqlStmtRe = ";\n".r
+    def checkExampleSyntax(example: String): Unit = {
+      val beginStmtNum = beginSqlStmtRe.findAllIn(example).length
+      val endStmtNum = endSqlStmtRe.findAllIn(example).length
+      assert(beginStmtNum === endStmtNum,
+        "The number of ` > ` does not match to the number of `;`")
+    }
+    val exampleRe = """^(.+);\n(?s)(.+)$""".r
+    val ignoreSet = Set(
+      // One of examples shows getting the current timestamp
+      "org.apache.spark.sql.catalyst.expressions.UnixTimestamp",
+      // Random output without a seed
+      "org.apache.spark.sql.catalyst.expressions.Rand",
+      "org.apache.spark.sql.catalyst.expressions.Randn",
+      "org.apache.spark.sql.catalyst.expressions.Shuffle",
+      "org.apache.spark.sql.catalyst.expressions.Uuid",
+      // The example calls methods that return unstable results.
+      "org.apache.spark.sql.catalyst.expressions.CallMethodViaReflection")
+
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
+      parFuncs.foreach { funcId =>
+        // Examples can change settings. We clone the session to prevent tests clashing.
+        val clonedSpark = spark.cloneSession()
+        val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
+        val className = info.getClassName
+        if (!ignoreSet.contains(className)) {
+          withClue(s"Function '${info.getName}', Expression class '$className'") {
+            val example = info.getExamples
+            checkExampleSyntax(example)
+            example.split("  > ").toList.foreach(_ match {
+              case exampleRe(sql, output) =>
+                val df = clonedSpark.sql(sql)
+                val actual = unindentAndTrim(
+                  hiveResultString(df.queryExecution.executedPlan).mkString("\n"))
+                val expected = unindentAndTrim(output)
+                assert(actual === expected)
+              case _ =>
+            })
+          }
+        }
       }
     }
   }
@@ -1895,7 +1977,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Star Expansion - group by") {
-    withSQLConf("spark.sql.retainGroupColumns" -> "false") {
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
       checkAnswer(
         testData2.groupBy($"a", $"b").agg($"*"),
         sql("SELECT * FROM testData2 group by a, b"))
@@ -1935,7 +2017,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Common subexpression elimination") {
     // TODO: support subexpression elimination in whole stage codegen
-    withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       // select from a table to prevent constant folding.
       val df = sql("SELECT a, b from testData2 limit 1")
       checkAnswer(df, Row(1, 1))
@@ -1984,9 +2066,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 1)
 
       // Try disabling it via configuration.
-      spark.conf.set("spark.sql.subexpressionElimination.enabled", "false")
+      spark.conf.set(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key, "false")
       verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
-      spark.conf.set("spark.sql.subexpressionElimination.enabled", "true")
+      spark.conf.set(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key, "true")
       verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
     }
   }
@@ -2608,14 +2690,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
 
     // Make sure no spurious job starts are pending in the listener bus.
-    sparkContext.listenerBus.waitUntilEmpty(500)
+    sparkContext.listenerBus.waitUntilEmpty()
     sparkContext.addSparkListener(listener)
     try {
       // Execute the command.
       sql("show databases").head()
 
       // Make sure we have seen all events triggered by DataFrame.show()
-      sparkContext.listenerBus.waitUntilEmpty(500)
+      sparkContext.listenerBus.waitUntilEmpty()
     } finally {
       sparkContext.removeSparkListener(listener)
     }
@@ -2998,7 +3080,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
 
     Seq("orc", "parquet").foreach { format =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         withTempPath { dir =>
           spark.range(10).map(i => (i, i.toString)).toDF("id", "s")
             .write
@@ -3023,7 +3105,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
         withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key ->
           enableOptimizeMetadataOnlyQuery.toString) {
@@ -3147,6 +3229,90 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql("select * from t1 where d >= '2000'"), Row(result))
       checkAnswer(sql("select * from t1 where d > '1999-13'"), Row(result))
       checkAnswer(sql("select to_timestamp('2000-01-01 01:10:00') > '1'"), Row(true))
+    }
+    sql("DROP VIEW t1")
+  }
+
+  test("SPARK-28156: self-join should not miss cached view") {
+    withTable("table1") {
+      withView("table1_vw") {
+        val df = Seq.tabulate(5) { x => (x, x + 1, x + 2, x + 3) }.toDF("a", "b", "c", "d")
+        df.write.mode("overwrite").format("orc").saveAsTable("table1")
+        sql("drop view if exists table1_vw")
+        sql("create view table1_vw as select * from table1")
+
+        val cachedView = sql("select a, b, c, d from table1_vw")
+
+        cachedView.createOrReplaceTempView("cachedview")
+        cachedView.persist()
+
+        val queryDf = sql(
+          s"""select leftside.a, leftside.b
+             |from cachedview leftside
+             |join cachedview rightside
+             |on leftside.a = rightside.a
+           """.stripMargin)
+
+        val inMemoryTableScan = queryDf.queryExecution.executedPlan.collect {
+          case i: InMemoryTableScanExec => i
+        }
+        assert(inMemoryTableScan.size == 2)
+        checkAnswer(queryDf, Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Row(3, 4) :: Row(4, 5) :: Nil)
+      }
+    }
+
+  }
+
+  test("SPARK-29000: arithmetic computation overflow when don't allow decimal precision loss ") {
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "false") {
+      val df1 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * 1")
+      checkAnswer(df1, Array(Row(100)))
+      val df2 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * " +
+        "case when 1=2 then 2 else 1 end")
+      checkAnswer(df2, Array(Row(100)))
+      val df3 = sql("select case when 1=2 then 1 else 1.000000000000000000000001 end / 10")
+      checkAnswer(df3, Array(Row(new java.math.BigDecimal("0.100000000000000000000000100"))))
+    }
+  }
+
+  test("SPARK-29239: Subquery should not cause NPE when eliminating subexpression") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
+      withTempView("t1", "t2") {
+        sql("create temporary view t1 as select * from values ('val1a', 10L) as t1(t1a, t1b)")
+        sql("create temporary view t2 as select * from values ('val3a', 110L) as t2(t2a, t2b)")
+        val df = sql("SELECT min, min from (SELECT (SELECT min(t2b) FROM t2) min " +
+          "FROM t1 WHERE t1a = 'val1c')")
+        assert(df.collect().size == 0)
+      }
+    }
+  }
+
+  test("SPARK-29213: FilterExec should not throw NPE") {
+    withTempView("t1", "t2", "t3") {
+      sql("SELECT ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t1")
+      sql("SELECT * FROM VALUES 0, CAST(NULL AS BIGINT)")
+        .as[java.lang.Long]
+        .map(identity)
+        .toDF("x")
+        .createOrReplaceTempView("t2")
+      sql("SELECT ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t3")
+      sql(
+        """
+          |SELECT t1.x
+          |FROM t1
+          |LEFT JOIN (
+          |    SELECT x FROM (
+          |        SELECT x FROM t2
+          |        UNION ALL
+          |        SELECT SUBSTR(x,5) x FROM t3
+          |    ) a
+          |    WHERE LENGTH(x)>0
+          |) t3
+          |ON t1.x=t3.x
+        """.stripMargin).collect()
     }
   }
 }

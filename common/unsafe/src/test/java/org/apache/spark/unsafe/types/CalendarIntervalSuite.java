@@ -162,7 +162,8 @@ public class CalendarIntervalSuite {
     assertEquals(fromDayTimeString(input), i);
 
     input = "10 0:12:0.888";
-    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE);
+    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE +
+      888 * MICROS_PER_MILLI);
     assertEquals(fromDayTimeString(input), i);
 
     input = "-3 0:0:0";
@@ -183,6 +184,14 @@ public class CalendarIntervalSuite {
       fail("Expected to throw an exception for the invalid input");
     } catch (IllegalArgumentException e) {
       assertTrue(e.getMessage().contains("not match day-time format"));
+    }
+
+    try {
+      input = "5 1:12:20";
+      fromDayTimeString(input, "hour", "microsecond");
+      fail("Expected to throw an exception for the invalid convention type");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("Cannot support (interval"));
     }
   }
 
@@ -264,5 +273,27 @@ public class CalendarIntervalSuite {
     CalendarInterval result = new CalendarInterval(months, microseconds);
     assertEquals(fromString(input1), result);
     assertEquals(fromString(input2), result);
+  }
+
+  @Test
+  public void fromStringCaseSensitivityTest() {
+    testSingleUnit("YEAR", 3, 36, 0);
+    testSingleUnit("Month", 3, 3, 0);
+    testSingleUnit("Week", 3, 0, 3 * MICROS_PER_WEEK);
+    testSingleUnit("DAY", 3, 0, 3 * MICROS_PER_DAY);
+    testSingleUnit("HouR", 3, 0, 3 * MICROS_PER_HOUR);
+    testSingleUnit("MiNuTe", 3, 0, 3 * MICROS_PER_MINUTE);
+    testSingleUnit("Second", 3, 0, 3 * MICROS_PER_SECOND);
+    testSingleUnit("MilliSecond", 3, 0, 3 * MICROS_PER_MILLI);
+    testSingleUnit("MicroSecond", 3, 0, 3);
+
+    String input;
+
+    input = "INTERVAL -5 YEARS 23 MONTHS";
+    CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0);
+    assertEquals(fromString(input), result);
+
+    assertNull(fromString("INTERVAL"));
+    assertNull(fromString("  Interval "));
   }
 }

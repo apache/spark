@@ -305,7 +305,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   test("update mode") {
     val inputData = MemoryStream[Int]
-    spark.conf.set("spark.sql.shuffle.partitions", "10")
+    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "10")
 
     val windowedAggregation = inputData.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))
