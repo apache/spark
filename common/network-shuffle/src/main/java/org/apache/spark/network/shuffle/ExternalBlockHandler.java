@@ -103,12 +103,11 @@ public class ExternalBlockHandler extends RpcHandler {
           checkAuth(client, msg.appId);
           numBlockIds = 0;
           for (int[] ids: msg.reduceIds) {
-            numBlockIds += ids.length;
-          }
-          // For fetching continuous shuffle blocks in batch, we store both start and end reduce
-          // id in reduceIds, so the real number of ShuffleBlockBatchId is total length / 2.
-          if (msg.batchFetchEnabled) {
-            numBlockIds = numBlockIds / 2;
+            if (msg.batchFetchEnabled) {
+              numBlockIds += ids.length / 2;
+            } else {
+              numBlockIds += ids.length;
+            }
           }
           streamId = streamManager.registerStream(client.getClientId(),
             new ShuffleManagedBufferIterator(msg), client.getChannel());
@@ -355,7 +354,7 @@ public class ExternalBlockHandler extends RpcHandler {
         block = blockManager.getBlockData(
           appId, execId, shuffleId, mapIds[mapIdx], reduceIds[mapIdx][reduceIdx]);
       } else {
-        block = blockManager.getBlocksData(
+        block = blockManager.getContinuousBlocksData(
           appId, execId, shuffleId, mapIds[mapIdx],
           reduceIds[mapIdx][reduceIdx], reduceIds[mapIdx][++reduceIdx]);
       }

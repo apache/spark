@@ -48,7 +48,7 @@ public class ShuffleIndexInformation {
    */
   public int getSize() {
     return size;
-  }
+  }core/src/main/scala/org/apache/spark/shuffle/BlockStoreShuffleReader.scala
 
   /**
    * Get index offset for a particular reducer.

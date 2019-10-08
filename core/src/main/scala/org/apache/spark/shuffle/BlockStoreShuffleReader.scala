@@ -46,10 +46,13 @@ private[spark] class BlockStoreShuffleReader[K, C](
     val compressed = conf.get(config.SHUFFLE_COMPRESS)
     val featureEnabled = conf.get(config.SHUFFLE_FETCH_CONTINUOUS_BLOCKS_IN_BATCH)
     val serializerRelocatable = dep.serializer.supportsRelocationOfSerializedObjects
+    // The batch fetching feature only works for reading consolidate file written by
+    // SortShuffleWriter or UnsafeShuffleWriter.
+    val readConsolidateFile = !handle.isInstanceOf[BypassMergeSortShuffleHandle[_, _]]
 
-    featureEnabled && endPartition - startPartition > 1 && serializerRelocatable &&
-      (!compressed || CompressionCodec.supportsConcatenationOfSerializedStreams(
-        CompressionCodec.createCodec(conf)))
+    readConsolidateFile && featureEnabled && endPartition - startPartition > 1 &&
+      serializerRelocatable && (!compressed || CompressionCodec
+        .supportsConcatenationOfSerializedStreams(CompressionCodec.createCodec(conf)))
   }
 
   /** Read the combined key-values for this reduce task */

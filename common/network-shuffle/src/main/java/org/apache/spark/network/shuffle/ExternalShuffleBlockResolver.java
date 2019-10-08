@@ -173,14 +173,14 @@ public class ExternalShuffleBlockResolver {
       int shuffleId,
       long mapId,
       int reduceId) {
-    return getBlocksData(appId, execId, shuffleId, mapId, reduceId, reduceId + 1);
+    return getContinuousBlocksData(appId, execId, shuffleId, mapId, reduceId, reduceId + 1);
   }
 
   /**
    * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, [startReduceId, endReduceId)).
    * We make assumptions about how the hash and sort based shuffles store their data.
    */
-  public ManagedBuffer getBlocksData(
+  public ManagedBuffer getContinuousBlocksData(
       String appId,
       String execId,
       int shuffleId,

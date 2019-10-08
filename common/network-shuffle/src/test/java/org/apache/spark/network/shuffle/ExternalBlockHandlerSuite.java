@@ -114,14 +114,14 @@ public class ExternalBlockHandlerSuite {
     ManagedBuffer[] batchBlockMarkers = {
       new NioManagedBuffer(ByteBuffer.wrap(new byte[10]))
     };
-    when(blockResolver.getBlocksData(
+    when(blockResolver.getContinuousBlocksData(
       "app0", "exec1", 0, 0, 0, 1)).thenReturn(batchBlockMarkers[0]);
 
     FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
       "app0", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 1 }}, true);
     checkOpenBlocksReceive(fetchShuffleBlocks, batchBlockMarkers);
 
-    verify(blockResolver, times(1)).getBlocksData("app0", "exec1", 0, 0, 0, 1);
+    verify(blockResolver, times(1)).getContinuousBlocksData("app0", "exec1", 0, 0, 0, 1);
     verifyOpenBlockLatencyMetrics();
   }
 

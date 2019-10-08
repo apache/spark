@@ -35,9 +35,11 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
   // The length of mapIds must equal to reduceIds.size(), for the i-th mapId in mapIds,
   // it corresponds to the i-th int[] in reduceIds, which contains all reduce id for this map id.
   public final long[] mapIds;
+  // When batchFetchEnabled=true, reduceIds[i] contains 2 elements: startReduceId (inclusive) and
+  // endReduceId (exclusive) for the mapper mapIds[i].
+  // When batchFetchEnabled=false, reduceIds[i] contains all the reduce IDs that mapper mapIds[i]
+  // needs to fetch.
   public final int[][] reduceIds;
-  // Indicates whether read continuous shuffle blocks in batch for IO reducing. When it is true,
-  // the reduceIds contains the range [startReduceId, endReduceId) for each ShuffleBlockBatchId.
   public final boolean batchFetchEnabled;
 
   public FetchShuffleBlocks(

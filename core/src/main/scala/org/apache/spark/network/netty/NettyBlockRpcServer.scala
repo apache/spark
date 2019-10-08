@@ -66,12 +66,12 @@ class NettyBlockRpcServer(
       case fetchShuffleBlocks: FetchShuffleBlocks =>
         val blocks = fetchShuffleBlocks.mapIds.zipWithIndex.flatMap { case (mapId, index) =>
           if (!fetchShuffleBlocks.batchFetchEnabled) {
-            fetchShuffleBlocks.reduceIds.apply(index).map { reduceId =>
+            fetchShuffleBlocks.reduceIds(index).map { reduceId =>
               blockManager.getBlockData(
                 ShuffleBlockId(fetchShuffleBlocks.shuffleId, mapId, reduceId))
             }
           } else {
-            fetchShuffleBlocks.reduceIds.apply(index).sliding(2, 2).map {
+            fetchShuffleBlocks.reduceIds(index).sliding(2, 2).map {
               case Array(startReduceId: Int, endReduceId: Int) =>
                 blockManager.getBlockData(
                   ShuffleBlockBatchId(

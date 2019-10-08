@@ -112,7 +112,7 @@ public class ExternalShuffleBlockResolverSuite {
       assertEquals(sortBlock1, block1);
     }
 
-    try (InputStream blocksStream = resolver.getBlocksData(
+    try (InputStream blocksStream = resolver.getContinuousBlocksData(
         "app0", "exec0", 0, 0, 0, 2).createInputStream()) {
       String blocks =
         CharStreams.toString(new InputStreamReader(blocksStream, StandardCharsets.UTF_8));
