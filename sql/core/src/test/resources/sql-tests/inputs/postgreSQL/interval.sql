@@ -1,91 +1,101 @@
 --
--- INTERVAL
+-- Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
 --
+--
+-- INTERVAL
+-- https://github.com/postgres/postgres/blob/REL_12_STABLE/src/test/regress/sql/interval.sql
 
 -- SET DATESTYLE = 'ISO';
 -- SET IntervalStyle to postgres;
 
 -- check acceptance of "time zone style"
-SELECT INTERVAL '01:00' AS `One hour`;
-SELECT INTERVAL '+02:00' AS `Two hours`;
-SELECT INTERVAL '-08:00' AS `Eight hours`;
-SELECT INTERVAL '-1 +02:03' AS `22 hours ago...`;
-SELECT INTERVAL '-1 days +02:03' AS `22 hours ago...`;
-SELECT INTERVAL '1.5 weeks' AS `Ten days twelve hours`;
-SELECT INTERVAL '1.5 months' AS `One month 15 days`;
-SELECT INTERVAL '10 years -11 month -12 days +13:14' AS `9 years...`;
+-- [SPARK-29369] Accept strings without `interval` prefix in casting to intervals
+-- [SPARK-29370] Interval strings without explicit unit markings
+-- SELECT INTERVAL '01:00' AS `One hour`;
+-- SELECT INTERVAL '+02:00' AS `Two hours`;
+-- SELECT INTERVAL '-08:00' AS `Eight hours`;
+-- SELECT INTERVAL '-1 +02:03' AS `22 hours ago...`;
+-- SELECT INTERVAL '-1 days +02:03' AS `22 hours ago...`;
+-- [SPARK-29371] Support interval field values with fractional parts
+-- SELECT INTERVAL '1.5 weeks' AS `Ten days twelve hours`;
+-- SELECT INTERVAL '1.5 months' AS `One month 15 days`;
+-- SELECT INTERVAL '10 years -11 month -12 days +13:14' AS `9 years...`;
 
-CREATE TABLE INTERVAL_TBL (f1 interval);
+-- [SPARK-29382] Support the `INTERVAL` type by Parquet datasource
+-- CREATE TABLE INTERVAL_TBL (f1 interval) USING parquet;
 
-INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 1 minute');
-INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 5 hour');
-INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 10 day');
-INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 34 year');
-INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 3 months');
-INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 14 seconds ago');
-INSERT INTO INTERVAL_TBL (f1) VALUES ('1 day 2 hours 3 minutes 4 seconds');
-INSERT INTO INTERVAL_TBL (f1) VALUES ('6 years');
-INSERT INTO INTERVAL_TBL (f1) VALUES ('5 months');
-INSERT INTO INTERVAL_TBL (f1) VALUES ('5 months 12 hours');
+-- [SPARK-29383] Support the optional prefix `@` in interval strings
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 1 minute');
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 5 hour');
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 10 day');
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 34 year');
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 3 months');
+-- [SPARK-29384] Support `ago` in interval strings
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 14 seconds ago');
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('1 day 2 hours 3 minutes 4 seconds');
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('6 years');
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('5 months');
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('5 months 12 hours');
 
 -- badly formatted interval
-INSERT INTO INTERVAL_TBL (f1) VALUES ('badly formatted interval');
-INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 30 eons ago');
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('badly formatted interval');
+-- INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 30 eons ago');
 
 -- test interval operators
 
-SELECT '' AS ten, * FROM INTERVAL_TBL;
+-- SELECT '' AS ten, * FROM INTERVAL_TBL;
+-- [SPARK-29385] Make `INTERVAL` values comparable
+-- SELECT '' AS nine, * FROM INTERVAL_TBL
+--   WHERE INTERVAL_TBL.f1 <> interval '@ 10 days';
 
-SELECT '' AS nine, * FROM INTERVAL_TBL
-   WHERE INTERVAL_TBL.f1 <> interval '@ 10 days';
+-- SELECT '' AS three, * FROM INTERVAL_TBL
+--   WHERE INTERVAL_TBL.f1 <= interval '@ 5 hours';
 
-SELECT '' AS three, * FROM INTERVAL_TBL
-   WHERE INTERVAL_TBL.f1 <= interval '@ 5 hours';
+-- SELECT '' AS three, * FROM INTERVAL_TBL
+--   WHERE INTERVAL_TBL.f1 < interval '@ 1 day';
 
-SELECT '' AS three, * FROM INTERVAL_TBL
-   WHERE INTERVAL_TBL.f1 < interval '@ 1 day';
+-- SELECT '' AS one, * FROM INTERVAL_TBL
+--   WHERE INTERVAL_TBL.f1 = interval '@ 34 years';
 
-SELECT '' AS one, * FROM INTERVAL_TBL
-   WHERE INTERVAL_TBL.f1 = interval '@ 34 years';
+-- SELECT '' AS five, * FROM INTERVAL_TBL
+--   WHERE INTERVAL_TBL.f1 >= interval '@ 1 month';
 
-SELECT '' AS five, * FROM INTERVAL_TBL
-   WHERE INTERVAL_TBL.f1 >= interval '@ 1 month';
+-- SELECT '' AS nine, * FROM INTERVAL_TBL
+--   WHERE INTERVAL_TBL.f1 > interval '@ 3 seconds ago';
 
-SELECT '' AS nine, * FROM INTERVAL_TBL
-   WHERE INTERVAL_TBL.f1 > interval '@ 3 seconds ago';
-
-SELECT '' AS fortyfive, r1.*, r2.*
-   FROM INTERVAL_TBL r1, INTERVAL_TBL r2
-   WHERE r1.f1 > r2.f1
-   ORDER BY r1.f1, r2.f1;
+-- SELECT '' AS fortyfive, r1.*, r2.*
+--   FROM INTERVAL_TBL r1, INTERVAL_TBL r2
+--   WHERE r1.f1 > r2.f1
+--   ORDER BY r1.f1, r2.f1;
 
 -- Test intervals that are large enough to overflow 64 bits in comparisons
-CREATE TEMP TABLE INTERVAL_TBL_OF (f1 interval);
-INSERT INTO INTERVAL_TBL_OF (f1) VALUES
-  ('2147483647 days 2147483647 months'),
-  ('2147483647 days -2147483648 months'),
-  ('1 year'),
-  ('-2147483648 days 2147483647 months'),
-  ('-2147483648 days -2147483648 months');
+-- [SPARK-29369] Accept strings without `interval` prefix in casting to intervals
+-- CREATE TEMP TABLE INTERVAL_TBL_OF (f1 interval);
+-- INSERT INTO INTERVAL_TBL_OF (f1) VALUES
+--  ('2147483647 days 2147483647 months'),
+--  ('2147483647 days -2147483648 months'),
+--  ('1 year'),
+--  ('-2147483648 days 2147483647 months'),
+--  ('-2147483648 days -2147483648 months');
 -- these should fail as out-of-range
-INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('2147483648 days');
-INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('-2147483649 days');
-INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('2147483647 years');
-INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('-2147483648 years');
+-- INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('2147483648 days');
+-- INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('-2147483649 days');
+-- INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('2147483647 years');
+-- INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('-2147483648 years');
 
-SELECT r1.*, r2.*
-   FROM INTERVAL_TBL_OF r1, INTERVAL_TBL_OF r2
-   WHERE r1.f1 > r2.f1
-   ORDER BY r1.f1, r2.f1;
+-- SELECT r1.*, r2.*
+--   FROM INTERVAL_TBL_OF r1, INTERVAL_TBL_OF r2
+--   WHERE r1.f1 > r2.f1
+--   ORDER BY r1.f1, r2.f1;
 
-CREATE INDEX ON INTERVAL_TBL_OF USING btree (f1);
-SET enable_seqscan TO false;
-EXPLAIN (COSTS OFF)
-SELECT f1 FROM INTERVAL_TBL_OF r1 ORDER BY f1;
-SELECT f1 FROM INTERVAL_TBL_OF r1 ORDER BY f1;
-RESET enable_seqscan;
+-- CREATE INDEX ON INTERVAL_TBL_OF USING btree (f1);
+-- SET enable_seqscan TO false;
+-- EXPLAIN (COSTS OFF)
+-- SELECT f1 FROM INTERVAL_TBL_OF r1 ORDER BY f1;
+-- SELECT f1 FROM INTERVAL_TBL_OF r1 ORDER BY f1;
+-- RESET enable_seqscan;
 
-DROP TABLE INTERVAL_TBL_OF;
+-- DROP TABLE INTERVAL_TBL_OF;
 
 -- Test multiplication and division with intervals.
 -- Floating point arithmetic rounding errors can lead to unexpected results,
@@ -94,75 +104,77 @@ DROP TABLE INTERVAL_TBL_OF;
 -- Note that it is expected for some day components to be greater than 29 and
 -- some time components be greater than 23:59:59 due to how intervals are
 -- stored internally.
+-- [SPARK-29386] Copy data between a file and a table
+-- CREATE TABLE INTERVAL_MULDIV_TBL (span interval);
+-- COPY INTERVAL_MULDIV_TBL FROM STDIN;
+-- 41 mon 12 days 360:00
+-- -41 mon -12 days +360:00
+-- -12 days
+-- 9 mon -27 days 12:34:56
+-- -3 years 482 days 76:54:32.189
+-- 4 mon
+-- 14 mon
+-- 999 mon 999 days
+-- \.
+-- [SPARK-29387] Support `*` and `\` operators for intervals
+-- SELECT span * 0.3 AS product
+-- FROM INTERVAL_MULDIV_TBL;
 
-CREATE TABLE INTERVAL_MULDIV_TBL (span interval);
-COPY INTERVAL_MULDIV_TBL FROM STDIN;
-41 mon 12 days 360:00
--41 mon -12 days +360:00
--12 days
-9 mon -27 days 12:34:56
--3 years 482 days 76:54:32.189
-4 mon
-14 mon
-999 mon 999 days
-\.
+-- SELECT span * 8.2 AS product
+-- FROM INTERVAL_MULDIV_TBL;
 
-SELECT span * 0.3 AS product
-FROM INTERVAL_MULDIV_TBL;
+-- SELECT span / 10 AS quotient
+-- FROM INTERVAL_MULDIV_TBL;
 
-SELECT span * 8.2 AS product
-FROM INTERVAL_MULDIV_TBL;
+-- SELECT span / 100 AS quotient
+-- FROM INTERVAL_MULDIV_TBL;
 
-SELECT span / 10 AS quotient
-FROM INTERVAL_MULDIV_TBL;
+-- DROP TABLE INTERVAL_MULDIV_TBL;
 
-SELECT span / 100 AS quotient
-FROM INTERVAL_MULDIV_TBL;
+-- SET DATESTYLE = 'postgres';
+-- SET IntervalStyle to postgres_verbose;
 
-DROP TABLE INTERVAL_MULDIV_TBL;
-
-SET DATESTYLE = 'postgres';
-SET IntervalStyle to postgres_verbose;
-
-SELECT '' AS ten, * FROM INTERVAL_TBL;
+-- SELECT '' AS ten, * FROM INTERVAL_TBL;
 
 -- test avg(interval), which is somewhat fragile since people have been
 -- known to change the allowed input syntax for type interval without
 -- updating pg_aggregate.agginitval
 
-select avg(f1) from interval_tbl;
+-- select avg(f1) from interval_tbl;
 
 -- test long interval input
-select '4 millenniums 5 centuries 4 decades 1 year 4 months 4 days 17 minutes 31 seconds'::interval;
+-- [SPARK-29388] Construct intervals from the `millenniums`, `centuries` or `decades` units
+-- select '4 millenniums 5 centuries 4 decades 1 year 4 months 4 days 17 minutes 31 seconds'::interval;
 
 -- test long interval output
 -- Note: the actual maximum length of the interval output is longer,
 -- but we need the test to work for both integer and floating-point
 -- timestamps.
-select '100000000y 10mon -1000000000d -100000h -10min -10.000001s ago'::interval;
+-- [SPARK-29389] Support synonyms for interval units
+-- select '100000000y 10mon -1000000000d -100000h -10min -10.000001s ago'::interval;
 
 -- test justify_hours() and justify_days()
-
-SELECT justify_hours(interval '6 months 3 days 52 hours 3 minutes 2 seconds') as `6 mons 5 days 4 hours 3 mins 2 seconds`;
-SELECT justify_days(interval '6 months 36 days 5 hours 4 minutes 3 seconds') as `7 mons 6 days 5 hours 4 mins 3 seconds`;
+-- [SPARK-29390] Add the justify_days(), justify_hours() and justify_interval() functions
+-- SELECT justify_hours(interval '6 months 3 days 52 hours 3 minutes 2 seconds') as `6 mons 5 days 4 hours 3 mins 2 seconds`;
+-- SELECT justify_days(interval '6 months 36 days 5 hours 4 minutes 3 seconds') as `7 mons 6 days 5 hours 4 mins 3 seconds`;
 
 -- test justify_interval()
 
-SELECT justify_interval(interval '1 month -1 hour') as `1 month -1 hour`;
+-- SELECT justify_interval(interval '1 month -1 hour') as `1 month -1 hour`;
 
 -- test fractional second input, and detection of duplicate units
-SET DATESTYLE = 'ISO';
-SET IntervalStyle TO postgres;
+-- SET DATESTYLE = 'ISO';
+-- SET IntervalStyle TO postgres;
+-- [SPARK-29369] Accept strings without `interval` prefix in casting to intervals
+-- SELECT '1 millisecond'::interval, '1 microsecond'::interval,
+--       '500 seconds 99 milliseconds 51 microseconds'::interval;
+-- SELECT '3 days 5 milliseconds'::interval;
 
-SELECT '1 millisecond'::interval, '1 microsecond'::interval,
-       '500 seconds 99 milliseconds 51 microseconds'::interval;
-SELECT '3 days 5 milliseconds'::interval;
-
-SELECT '1 second 2 seconds'::interval;              -- error
-SELECT '10 milliseconds 20 milliseconds'::interval; -- error
-SELECT '5.5 seconds 3 milliseconds'::interval;      -- error
-SELECT '1:20:05 5 microseconds'::interval;          -- error
-SELECT '1 day 1 day'::interval;                     -- error
+-- SELECT '1 second 2 seconds'::interval;              -- error
+-- SELECT '10 milliseconds 20 milliseconds'::interval; -- error
+-- SELECT '5.5 seconds 3 milliseconds'::interval;      -- error
+-- SELECT '1:20:05 5 microseconds'::interval;          -- error
+-- SELECT '1 day 1 day'::interval;                     -- error
 SELECT interval '1-2';  -- SQL year-month literal
 SELECT interval '999' second;  -- oversize leading field is ok
 SELECT interval '999' minute;
