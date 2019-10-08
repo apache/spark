@@ -89,11 +89,11 @@ SHOW USER FUNCTIONS;
   +-----------+
   | function  |
   +-----------+
-  | temp_avg  |
+  | test_avg  |
   +-----------+
   
 -- Drop Temporary function
-DROP TEMPORARY FUNCTION IF EXISTS temp_avg;
+DROP TEMPORARY FUNCTION IF EXISTS test_avg;
   +---------+
   | Result  |
   +---------+
