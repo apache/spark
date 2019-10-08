@@ -21,6 +21,8 @@ package org.apache.spark.examples.graph
 import org.apache.spark.cypher.SparkCypherSession
 import org.apache.spark.graph.api.{NodeFrame, PropertyGraph, RelationshipFrame}
 import org.apache.spark.sql.{SaveMode, SparkSession}
+
+import scala.io.StdIn
 // $example off$
 
 object CompleteGraphAPIExample {
@@ -56,9 +58,11 @@ object CompleteGraphAPIExample {
     val labelSet = graph.schema.labels
     println(s"The graph contains nodes with the following labels: ${labelSet.mkString(",")}")
     println()
+    StdIn.readLine("Press Enter to continue: ")
 
     val businessNodes = graph.nodeFrame(Array("Business"))
     businessNodes.df.show()
+    StdIn.readLine("Press Enter to continue: ")
 
     // Run parameterized cypher query
     val result = graph.cypher(
