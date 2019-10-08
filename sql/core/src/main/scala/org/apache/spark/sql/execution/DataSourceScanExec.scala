@@ -68,7 +68,8 @@ trait DataSourceScanExec extends LeafExecNode {
   override def verboseStringWithOperatorId(): String = {
      val metadataStr = metadata.toSeq.sorted.map {
        case (_, value) if (value.isEmpty || value.equals("[]")) => ""
-       case (key, value) if (key.equalsIgnoreCase("location")) =>
+       case (key, _) if (key.equals("DataFilters")) => ""
+       case (key, value) if (key.equals("Location")) =>
          val abbreviatedLoaction = StringUtils.abbreviate(redact(value), 100)
          s"$key: $abbreviatedLoaction"
        case (key, value) => s"$key: ${redact(value)}"

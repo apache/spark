@@ -59,7 +59,6 @@ struct<plan:string>
 (1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x), (key#x > 0)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
@@ -117,7 +116,6 @@ struct<plan:string>
 (1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x), (key#x > 0)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
@@ -178,7 +176,6 @@ struct<plan:string>
 (1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x), (key#x > 0)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
@@ -198,7 +195,6 @@ Input     : [key#x, val#x]
 (5) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x), (key#x > 0)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
@@ -252,7 +248,6 @@ struct<plan:string>
 (1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key)]
@@ -272,7 +267,6 @@ Input     : [key#x, val#x]
 (5) Scan parquet default.explain_temp2 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key)]
@@ -331,7 +325,6 @@ Input: [key#x, val#x]
 (3) Scan parquet default.explain_temp2 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key)]
@@ -381,7 +374,6 @@ struct<plan:string>
 (1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x), isnotnull(val#x), (val#x > 3)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key), IsNotNull(val), GreaterThan(val,3)]
@@ -413,7 +405,6 @@ Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery
 (5) Scan parquet default.explain_temp2 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x), isnotnull(val#x), (val#x = 2)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key), IsNotNull(val), EqualTo(val,2)]
@@ -452,7 +443,6 @@ Subquery:2 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery
 (12) Scan parquet default.explain_temp3 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(val#x), (val#x > 0)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(val), GreaterThan(val,0)]
@@ -528,7 +518,6 @@ Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery
 (4) Scan parquet default.explain_temp2 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(val#x), (val#x > 0)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(val), GreaterThan(val,0)]
@@ -567,7 +556,6 @@ Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery
 (11) Scan parquet default.explain_temp3 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(val#x), (val#x > 0)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(val), GreaterThan(val,0)]
@@ -680,7 +668,6 @@ struct<plan:string>
 (1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x), (key#x > 10)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,10)]
@@ -700,7 +687,6 @@ Input     : [key#x, val#x]
 (5) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x), (key#x > 10)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,10)]
@@ -755,7 +741,6 @@ struct<plan:string>
 (1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
 Batched: true
-DataFilters: [isnotnull(key#x), (key#x > 10)]
 Format: Parquet
 Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,10)]
