@@ -369,11 +369,6 @@ org.datanucleus:datanucleus-api-jdo
 org.datanucleus:datanucleus-core
 org.datanucleus:datanucleus-rdbms
 org.lz4:lz4-java
-org.spark-project.hive:hive-beeline
-org.spark-project.hive:hive-cli
-org.spark-project.hive:hive-exec
-org.spark-project.hive:hive-jdbc
-org.spark-project.hive:hive-metastore
 org.xerial.snappy:snappy-java
 stax:stax-api
 xerces:xercesImpl
