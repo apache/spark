@@ -36,23 +36,25 @@ object CompleteGraphAPIExample {
     val sc = spark.sparkContext
     sc.setLogLevel("ERROR")
 
-    val csvConfig = Map("header" -> "true", "delimiter" -> ";")
+    val csvConfig = Map("header" -> "true", "delimiter" -> ",", "inferSchema" -> "true")
+    val resourcePath = "examples/src/main/resources/movies"
     // Load node dfs and edge df
-    val userData = spark.read.options(csvConfig).csv("examples/src/main/resources/mini_yelp/user.csv")
-    val businessData = spark.read.options(csvConfig).csv("examples/src/main/resources/mini_yelp/business.csv")
-    val reviewData = spark.read.options(csvConfig).csv("examples/src/main/resources/mini_yelp/reviews.csv")
+    val moviesData = spark.read.options(csvConfig).csv(s"$resourcePath/movies.csv")
+    val personsData = spark.read.options(csvConfig).csv(s"$resourcePath/persons.csv")
+    // TODO: get persons.roles as array type (is not infered correctly)
+    val actedInData = spark.read.options(csvConfig).csv(s"$resourcePath/acted_in.csv")
 
     // Initialise a GraphSession
     val cypherSession = SparkCypherSession.create(spark)
 
     // Create Node- and RelationshipFrames
-    val userNodeFrame = NodeFrame.create(userData, "id", Set("User"))
-    val businessNodeFrame = NodeFrame.create(businessData, "id", Set("Business"))
-    val reviewRelationshipFrame = RelationshipFrame.create(reviewData, "id", "user", "business", "REVIEWS")
+    val moviesNodeFrame = NodeFrame.create(moviesData, "id", Set("Movie"))
+    val personsNodeFrame = NodeFrame.create(personsData, "id", Set("Person"))
+    val actedInRelationshipFrame = RelationshipFrame.create(actedInData, "id", "source", "target", "ACTED_IN")
 
 
     // Create a PropertyGraph
-    val graph: PropertyGraph = cypherSession.createGraph(Array(userNodeFrame, businessNodeFrame), Array(reviewRelationshipFrame))
+    val graph: PropertyGraph = cypherSession.createGraph(Array(moviesNodeFrame, personsNodeFrame), Array(actedInRelationshipFrame))
 
     // Get existing node labels
     val labelSet = graph.schema.labels
@@ -60,18 +62,17 @@ object CompleteGraphAPIExample {
     println()
     StdIn.readLine("Press Enter to continue: ")
 
-    val businessNodes = graph.nodeFrame(Array("Business"))
+    val businessNodes = graph.nodeFrame(Array("Movie"))
     businessNodes.df.show()
     StdIn.readLine("Press Enter to continue: ")
 
-    // Run parameterized cypher query
+    // Run parameterised cypher query
+    val parameters = Map("name" -> "Tom Hanks")
     val result = graph.cypher(
       """
-        |MATCH (a:User)-[r:REVIEWS]->(b:Business)
-        |WHERE a.name = $name
-        |RETURN a, r.rating, b.name""".stripMargin, Map("name" -> "Bob"))
-
-    println("Reviews from Bob")
+        |MATCH (p:Person {name: $name})-[:ACTED_IN]->(movie)
+        |RETURN p.name, movie.title""".stripMargin, parameters)
+    println(s"Movies with ${parameters.get("name")}")
     result.df.show()
 
     // Store the PropertyGraph
