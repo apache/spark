@@ -193,14 +193,14 @@ object ExplainUtils {
       subqueries: ArrayBuffer[(SparkPlan, Expression, BaseSubqueryExec)]): Unit = {
     plan.foreach {
       case p: SparkPlan =>
-        p.expressions.flatMap(_.collect {
+        p.expressions.foreach (_.collect {
           case e: PlanExpression[_] =>
             e.plan match {
               case s: BaseSubqueryExec =>
                 subqueries += ((p, e, s))
                 getSubqueries(s, subqueries)
+              case _ =>
             }
-          case other =>
         })
     }
   }
