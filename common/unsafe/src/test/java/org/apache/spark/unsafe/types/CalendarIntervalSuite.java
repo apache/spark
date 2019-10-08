@@ -274,4 +274,26 @@ public class CalendarIntervalSuite {
     assertEquals(fromString(input1), result);
     assertEquals(fromString(input2), result);
   }
+
+  @Test
+  public void fromStringCaseSensitivityTest() {
+    testSingleUnit("YEAR", 3, 36, 0);
+    testSingleUnit("Month", 3, 3, 0);
+    testSingleUnit("Week", 3, 0, 3 * MICROS_PER_WEEK);
+    testSingleUnit("DAY", 3, 0, 3 * MICROS_PER_DAY);
+    testSingleUnit("HouR", 3, 0, 3 * MICROS_PER_HOUR);
+    testSingleUnit("MiNuTe", 3, 0, 3 * MICROS_PER_MINUTE);
+    testSingleUnit("Second", 3, 0, 3 * MICROS_PER_SECOND);
+    testSingleUnit("MilliSecond", 3, 0, 3 * MICROS_PER_MILLI);
+    testSingleUnit("MicroSecond", 3, 0, 3);
+
+    String input;
+
+    input = "INTERVAL -5 YEARS 23 MONTHS";
+    CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0);
+    assertEquals(fromString(input), result);
+
+    assertNull(fromString("INTERVAL"));
+    assertNull(fromString("  Interval "));
+  }
 }

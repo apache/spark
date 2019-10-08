@@ -52,11 +52,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private val (catalog, identifier) = {
     val CatalogObjectIdentifier(maybeCatalog, identifier) = tableName
-    val catalog = maybeCatalog.orElse(catalogManager.currentCatalog.map(catalogManager.catalog))
-        .getOrElse(throw new AnalysisException(
-          s"No catalog specified for table ${identifier.quoted} and no default v2 catalog is set"))
-        .asTableCatalog
-
+    val catalog = maybeCatalog.getOrElse(catalogManager.currentCatalog).asTableCatalog
     (catalog, identifier)
   }
 
@@ -93,7 +89,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     this
   }
 
-  override def tableProperty(property: String, value: String): DataFrameWriterV2[T] = {
+  override def tableProperty(property: String, value: String): CreateTableWriter[T] = {
     this.properties.put(property, value)
     this
   }

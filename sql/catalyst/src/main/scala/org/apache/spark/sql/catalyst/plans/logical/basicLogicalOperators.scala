@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types._
@@ -599,10 +599,17 @@ case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Comm
 }
 
 case class DeleteFromTable(
-    child: LogicalPlan,
-    condition: Option[Expression]) extends Command {
+    table: LogicalPlan,
+    condition: Option[Expression]) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
 
-  override def children: Seq[LogicalPlan] = child :: Nil
+case class UpdateTable(
+    table: LogicalPlan,
+    columns: Seq[Expression],
+    values: Seq[Expression],
+    condition: Option[Expression]) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
@@ -658,6 +665,14 @@ case class ShowTables(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
 }
+
+/**
+ * The logical plan of the USE/USE NAMESPACE command that works for v2 catalogs.
+ */
+case class SetCatalogAndNamespace(
+    catalogManager: CatalogManager,
+    catalogName: Option[String],
+    namespace: Option[Seq[String]]) extends Command
 
 /**
  * Insert query result into a directory.
@@ -1232,6 +1247,12 @@ case class Deduplicate(
 
   override def output: Seq[Attribute] = child.output
 }
+
+/**
+ * A trait to represent the commands that support subqueries.
+ * This is used to whitelist such commands in the subquery-related checks.
+ */
+trait SupportsSubquery extends LogicalPlan
 
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {

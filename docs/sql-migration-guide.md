@@ -201,6 +201,20 @@ license: |
         </tr>
     </table>
 
+  - Since Spark 3.0, special values are supported in conversion from strings to dates and timestamps. Those values are simply notational shorthands that will be converted to ordinary date or timestamp values when read. The following string values are supported for dates:
+    - `epoch [zoneId]` - 1970-01-01
+    - `today [zoneId]` - the current date in the time zone specified by `spark.sql.session.timeZone`
+    - `yesterday [zoneId]` - the current date - 1
+    - `tomorrow [zoneId]` - the current date + 1
+    - `now` - the date of running the current query. It has the same notion as today
+  For example `SELECT date 'tomorrow' - date 'yesterday';` should output `2`. Here are special timestamp values:
+    - `epoch [zoneId]` - 1970-01-01 00:00:00+00 (Unix system time zero)
+    - `today [zoneId]` - midnight today
+    - `yesterday [zoneId]` - midnight yesterday
+    - `tomorrow [zoneId]` - midnight tomorrow
+    - `now` - current query start time
+  For example `SELECT timestamp 'tomorrow';`. 
+
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was

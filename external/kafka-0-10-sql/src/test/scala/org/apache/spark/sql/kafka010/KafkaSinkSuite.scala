@@ -400,6 +400,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", topic)
+      .mode("append")
       .save()
     checkAnswer(
       createKafkaReader(topic, includeHeaders = true).selectExpr(
@@ -423,12 +424,13 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
       df.write
         .format("kafka")
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .mode("append")
         .save()
     }
     TestUtils.assertExceptionMsg(ex, "null topic present in the data")
   }
 
-  protected def testUnsupportedSaveModes(msg: (SaveMode) => String) {
+  protected def testUnsupportedSaveModes(msg: (SaveMode) => String): Unit = {
     val topic = newTopic()
     testUtils.createTopic(topic)
     val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
@@ -457,6 +459,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", topic)
+      .mode("append")
       .save()
   }
 }

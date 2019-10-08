@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.io._
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 import java.util.concurrent.locks.{ReadWriteLock, ReentrantReadWriteLock}
 
 import com.github.luben.zstd.ZstdInputStream
@@ -309,9 +311,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   /** Send a one-way message to the trackerEndpoint, to which we expect it to reply with true. */
-  protected def sendTracker(message: Any) {
+  protected def sendTracker(message: Any): Unit = {
     val response = askTracker[Boolean](message)
-    if (!response) {
+    if (response != true) {
       throw new SparkException(
         "Error reply received from MapOutputTracker. Expecting true, got " + response.toString)
     }
@@ -344,7 +346,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    */
   def unregisterShuffle(shuffleId: Int): Unit
 
-  def stop() {}
+  def stop(): Unit = {}
 }
 
 /**
@@ -358,8 +360,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
  */
 private[spark] class MapOutputTrackerMaster(
     conf: SparkConf,
-    private[spark] val broadcastManager: BroadcastManager,
-    private[spark] val isLocal: Boolean)
+    broadcastManager: BroadcastManager,
+    isLocal: Boolean)
   extends MapOutputTracker(conf) {
 
   // The size at which we use Broadcast to send the map output statuses to the executors
@@ -453,18 +455,18 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.valuesIterator.count(_.hasCachedSerializedBroadcast)
   }
 
-  def registerShuffle(shuffleId: Int, numMaps: Int) {
+  def registerShuffle(shuffleId: Int, numMaps: Int): Unit = {
     if (shuffleStatuses.put(shuffleId, new ShuffleStatus(numMaps)).isDefined) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
   }
 
-  def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus) {
+  def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Unit = {
     shuffleStatuses(shuffleId).addMapOutput(mapIndex, status)
   }
 
   /** Unregister map output information of the given shuffle, mapper and block manager */
-  def unregisterMapOutput(shuffleId: Int, mapIndex: Int, bmAddress: BlockManagerId) {
+  def unregisterMapOutput(shuffleId: Int, mapIndex: Int, bmAddress: BlockManagerId): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.removeMapOutput(mapIndex, bmAddress)
@@ -475,7 +477,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** Unregister all map output information of the given shuffle. */
-  def unregisterAllMapOutput(shuffleId: Int) {
+  def unregisterAllMapOutput(shuffleId: Int): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.removeOutputsByFilter(x => true)
@@ -487,7 +489,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** Unregister shuffle data */
-  def unregisterShuffle(shuffleId: Int) {
+  def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
     }
@@ -670,7 +672,7 @@ private[spark] class MapOutputTrackerMaster(
     None
   }
 
-  def incrementEpoch() {
+  def incrementEpoch(): Unit = {
     epochLock.synchronized {
       epoch += 1
       logDebug("Increasing epoch to " + epoch)
@@ -704,7 +706,7 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     mapOutputRequests.offer(PoisonPill)
     threadpool.shutdown()
     sendTracker(StopMapOutputTracker)

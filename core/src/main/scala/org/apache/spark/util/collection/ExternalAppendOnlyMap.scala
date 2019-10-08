@@ -549,7 +549,7 @@ class ExternalAppendOnlyMap[K, V, C](
       item
     }
 
-    private def cleanup() {
+    private def cleanup(): Unit = {
       batchIndex = batchOffsets.length  // Prevent reading any other batch
       if (deserializeStream != null) {
         deserializeStream.close()

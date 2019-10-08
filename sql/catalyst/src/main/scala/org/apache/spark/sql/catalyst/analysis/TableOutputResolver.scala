@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, Attribute, Cast, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -99,9 +99,16 @@ object TableOutputResolver {
       // Renaming is needed for handling the following cases like
       // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
       // 2) Target tables have column metadata
-      Some(Alias(
-        Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
-        tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
+      storeAssignmentPolicy match {
+        case StoreAssignmentPolicy.ANSI =>
+          Some(Alias(
+            AnsiCast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
+            tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
+        case _ =>
+          Some(Alias(
+            Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
+            tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
+      }
     }
 
     storeAssignmentPolicy match {

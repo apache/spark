@@ -135,7 +135,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
 
-  override def sparkConf: SparkConf = super.sparkConf
+  protected override def sparkConf: SparkConf = super.sparkConf
     // Fewer shuffle partitions to speed up testing.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
@@ -311,8 +311,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         // PostgreSQL enabled cartesian product by default.
         localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
-        localSparkSession.conf.set(SQLConf.PREFER_INTEGRAL_DIVISION.key, true)
-        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
+        localSparkSession.conf.set(SQLConf.DIALECT.key, SQLConf.Dialect.POSTGRESQL.toString)
       case _ =>
     }
 
@@ -451,7 +450,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
       if (file.getAbsolutePath.startsWith(
-        s"$inputFilePath${File.separator}udf${File.separator}pgSQL")) {
+        s"$inputFilePath${File.separator}udf${File.separator}postgreSQL")) {
         Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
           UDFPgSQLTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
@@ -461,7 +460,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
           UDFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil

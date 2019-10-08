@@ -131,7 +131,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   }
 
   def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
-    serializedData: ByteBuffer) {
+    serializedData: ByteBuffer): Unit = {
     var reason : TaskFailedReason = UnknownReason
     try {
       getTaskResultExecutor.execute(() => Utils.logUncaughtExceptions {
@@ -170,7 +170,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     })
   }
 
-  def stop() {
+  def stop(): Unit = {
     getTaskResultExecutor.shutdownNow()
   }
 }

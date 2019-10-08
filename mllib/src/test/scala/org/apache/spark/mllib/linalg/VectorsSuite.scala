@@ -42,7 +42,7 @@ class VectorsSuite extends SparkFunSuite with Logging {
     conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
-    def check[T: ClassTag](t: T) {
+    def check[T: ClassTag](t: T): Unit = {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
 

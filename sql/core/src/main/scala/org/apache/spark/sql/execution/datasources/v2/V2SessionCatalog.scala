@@ -52,7 +52,10 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     namespace match {
       case Array(db) =>
-        catalog.listTables(db).map(ident => Identifier.of(Array(db), ident.table)).toArray
+        catalog
+          .listTables(db)
+          .map(ident => Identifier.of(Array(ident.database.getOrElse("")), ident.table))
+          .toArray
       case _ =>
         throw new NoSuchNamespaceException(namespace)
     }

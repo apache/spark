@@ -60,7 +60,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       .createOrReplaceTempView("orc_temp_table")
   }
 
-  protected def testBloomFilterCreation(bloomFilterKind: Kind) {
+  protected def testBloomFilterCreation(bloomFilterKind: Kind): Unit = {
     val tableName = "bloomFilter"
 
     withTempDir { dir =>
@@ -120,7 +120,8 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  protected def testSelectiveDictionaryEncoding(isSelective: Boolean, isHive23: Boolean = false) {
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean,
+      isHive23: Boolean = false): Unit = {
     val tableName = "orcTable"
 
     withTempDir { dir =>
