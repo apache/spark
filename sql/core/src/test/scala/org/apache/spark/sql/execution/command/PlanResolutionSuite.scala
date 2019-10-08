@@ -25,11 +25,12 @@ import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, IntegerLiteral, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelect, CreateV2Table, DescribeTable, DropTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelect, CreateV2Table, DescribeTable, DropTable, LogicalPlan, SubqueryAlias, UpdateTable}
 import org.apache.spark.sql.connector.InMemoryTableProvider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.execution.datasources.CreateTable
@@ -67,7 +68,9 @@ class PlanResolutionSuite extends AnalysisTest {
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
       invocation.getArgument[Identifier](0).name match {
         case "v1Table" =>
-          mock(classOf[V1Table])
+          val v1Table = mock(classOf[V1Table])
+          when(v1Table.schema).thenReturn(new StructType().add("i", "int"))
+          v1Table
         case "v2Table" =>
           table
         case name =>
@@ -736,11 +739,11 @@ class PlanResolutionSuite extends AnalysisTest {
     // For non-existing tables, we convert it to v2 command with `UnresolvedV2Table`
     parsed4 match {
       case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
-      case _ => fail("unexpected plan:\n" + parsed4.treeString)
+      case _ => fail("Expect AlterTable, but got:\n" + parsed4.treeString)
     }
     parsed5 match {
       case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
-      case _ => fail("unexpected plan:\n" + parsed5.treeString)
+      case _ => fail("Expect AlterTable, but got:\n" + parsed5.treeString)
     }
   }
 
@@ -767,7 +770,7 @@ class PlanResolutionSuite extends AnalysisTest {
                 TableChange.setProperty("a", "1"),
                 TableChange.setProperty("b", "0.1"),
                 TableChange.setProperty("c", "true")))
-            case _ => fail("expect AlterTable")
+            case _ => fail("Expect AlterTable, but got:\n" + parsed.treeString)
           }
         }
     }
@@ -788,13 +791,13 @@ class PlanResolutionSuite extends AnalysisTest {
           parsed match {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
               assert(changes == Seq(TableChange.setProperty("location", "new location")))
-            case _ => fail("expect AlterTable")
+            case _ => fail("Expect AlterTable, but got:\n" + parsed.treeString)
           }
         }
     }
   }
 
-  test("describe table") {
+  test("DESCRIBE TABLE") {
     Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
       case (tblName, useV1Command) =>
         val sql1 = s"DESC TABLE $tblName"
@@ -811,13 +814,13 @@ class PlanResolutionSuite extends AnalysisTest {
           parsed1 match {
             case DescribeTable(_: DataSourceV2Relation, isExtended) =>
               assert(!isExtended)
-            case _ => fail("expect DescribeTable")
+            case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
             case DescribeTable(_: DataSourceV2Relation, isExtended) =>
               assert(isExtended)
-            case _ => fail("expect DescribeTable")
+            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
         }
 
@@ -837,6 +840,63 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql4 = "DESC TABLE v"
     val parsed4 = parseAndResolve(sql4)
     assert(parsed4.isInstanceOf[DescribeTableCommand])
+  }
+
+  test("UPDATE TABLE") {
+    Seq("v1Table", "v2Table", "testcat.tab").foreach { tblName =>
+      val sql1 = s"UPDATE $tblName SET name='Robert', age=32"
+      val sql2 = s"UPDATE $tblName AS t SET name='Robert', age=32"
+      val sql3 = s"UPDATE $tblName AS t SET name='Robert', age=32 WHERE p=1"
+
+      val parsed1 = parseAndResolve(sql1)
+      val parsed2 = parseAndResolve(sql2)
+      val parsed3 = parseAndResolve(sql3)
+
+      parsed1 match {
+        case u @ UpdateTable(
+            _: DataSourceV2Relation,
+            Seq(name: UnresolvedAttribute, age: UnresolvedAttribute),
+            Seq(StringLiteral("Robert"), IntegerLiteral(32)),
+            None) =>
+          assert(name.name == "name")
+          assert(age.name == "age")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
+      }
+
+      parsed2 match {
+        case UpdateTable(
+            SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
+            Seq(name: UnresolvedAttribute, age: UnresolvedAttribute),
+            Seq(StringLiteral("Robert"), IntegerLiteral(32)),
+            None) =>
+          assert(name.name == "name")
+          assert(age.name == "age")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
+      }
+
+      parsed3 match {
+        case UpdateTable(
+            SubqueryAlias(AliasIdentifier("t", None), _: DataSourceV2Relation),
+            Seq(name: UnresolvedAttribute, age: UnresolvedAttribute),
+            Seq(StringLiteral("Robert"), IntegerLiteral(32)),
+            Some(EqualTo(p: UnresolvedAttribute, IntegerLiteral(1)))) =>
+          assert(name.name == "name")
+          assert(age.name == "age")
+          assert(p.name == "p")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed3.treeString)
+      }
+    }
+
+    val sql = "UPDATE non_existing SET id=1"
+    val parsed = parseAndResolve(sql)
+    parsed match {
+      case u: UpdateTable =>
+        assert(u.table.isInstanceOf[UnresolvedV2Relation])
+      case _ => fail("Expect UpdateTable, but got:\n" + parsed.treeString)
+    }
   }
 
   // TODO: add tests for more commands.
