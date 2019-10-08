@@ -190,10 +190,10 @@ SELECT interval '3' day;
 SELECT interval '4' hour;
 SELECT interval '5' minute;
 SELECT interval '6' second;
--- TODO: create JIRA ticket
+-- [SPARK-29391] Default year-month units
 -- SELECT interval '1' year to month;
 SELECT interval '1-2' year to month;
--- TODO: create JIRA ticket
+-- [SPARK-29391] Default year-month units
 -- SELECT interval '1 2' day to hour;
 SELECT interval '1 2:03' day to hour;
 SELECT interval '1 2:03:04' day to hour;
@@ -212,7 +212,7 @@ SELECT interval '1 2:03:04' hour to second;
 -- SELECT interval '1 2' minute to second;
 SELECT interval '1 2:03' minute to second;
 SELECT interval '1 2:03:04' minute to second;
--- TODO: create JIRA ticket
+-- [SPARK-29370] Interval strings without explicit unit markings
 -- SELECT interval '1 +2:03' minute to second;
 -- SELECT interval '1 +2:03:04' minute to second;
 -- SELECT interval '1 -2:03' minute to second;
@@ -223,7 +223,7 @@ SELECT interval '1 2:03:04' minute to second;
 -- SELECT interval '123 2:03 -2:04'; -- not ok, redundant hh:mm fields
 
 -- test syntaxes for restricted precision
--- TODO: create JIRA ticket
+-- [SPARK-29395] Precision of the interval type
 -- SELECT interval(0) '1 day 01:23:45.6789';
 -- SELECT interval(2) '1 day 01:23:45.6789';
 -- SELECT interval '12:34.5678' minute to second(2);  -- per SQL spec
@@ -279,7 +279,7 @@ SELECT  interval '0'                       AS zero,
 
 -- test inputting ISO 8601 4.4.2.1 "Format With Time Unit Designators"
 -- SET IntervalStyle to sql_standard;
--- TODO: create JIRA ticket
+-- [SPARK-29394] Support ISO 8601 format for intervals
 -- select  interval 'P0Y'                    AS zero,
 --         interval 'P1Y2M'                  AS `a year 2 months`,
 --         interval 'P1W'                    AS `a week`,
@@ -310,12 +310,12 @@ SELECT  interval '0'                       AS zero,
 -- select interval '0:0:0.7', interval '@ 0.70 secs', interval '0.7 seconds';
 
 -- check that '30 days' equals '1 month' according to the hash function
--- TODO: create JIRA ticket
+-- [SPARK-29385] Make `INTERVAL` values comparable
 -- select '30 days'::interval = '1 month'::interval as t;
 -- select interval_hash('30 days'::interval) = interval_hash('1 month'::interval) as t;
 
 -- numeric constructor
--- TODO: create JIRA ticket
+-- [SPARK-29393] Add the make_interval() function
 -- select make_interval(years := 2);
 -- select make_interval(years := 1, months := 6);
 -- select make_interval(years := 1, months := -1, weeks := 5, days := -7, hours := 25, mins := -180);
