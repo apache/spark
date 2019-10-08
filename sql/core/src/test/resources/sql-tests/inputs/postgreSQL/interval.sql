@@ -175,7 +175,8 @@
 -- SELECT '5.5 seconds 3 milliseconds'::interval;      -- error
 -- SELECT '1:20:05 5 microseconds'::interval;          -- error
 -- SELECT '1 day 1 day'::interval;                     -- error
-SELECT interval '1-2';  -- SQL year-month literal
+-- [SPARK-29391] Default year-month units
+-- SELECT interval '1-2';  -- SQL year-month literal
 SELECT interval '999' second;  -- oversize leading field is ok
 SELECT interval '999' minute;
 SELECT interval '999' hour;
@@ -189,59 +190,63 @@ SELECT interval '3' day;
 SELECT interval '4' hour;
 SELECT interval '5' minute;
 SELECT interval '6' second;
-SELECT interval '1' year to month;
+-- TODO: create JIRA ticket
+-- SELECT interval '1' year to month;
 SELECT interval '1-2' year to month;
-SELECT interval '1 2' day to hour;
+-- TODO: create JIRA ticket
+-- SELECT interval '1 2' day to hour;
 SELECT interval '1 2:03' day to hour;
 SELECT interval '1 2:03:04' day to hour;
-SELECT interval '1 2' day to minute;
+-- SELECT interval '1 2' day to minute;
 SELECT interval '1 2:03' day to minute;
 SELECT interval '1 2:03:04' day to minute;
-SELECT interval '1 2' day to second;
+-- SELECT interval '1 2' day to second;
 SELECT interval '1 2:03' day to second;
 SELECT interval '1 2:03:04' day to second;
-SELECT interval '1 2' hour to minute;
+-- SELECT interval '1 2' hour to minute;
 SELECT interval '1 2:03' hour to minute;
 SELECT interval '1 2:03:04' hour to minute;
-SELECT interval '1 2' hour to second;
+-- SELECT interval '1 2' hour to second;
 SELECT interval '1 2:03' hour to second;
 SELECT interval '1 2:03:04' hour to second;
-SELECT interval '1 2' minute to second;
+-- SELECT interval '1 2' minute to second;
 SELECT interval '1 2:03' minute to second;
 SELECT interval '1 2:03:04' minute to second;
-SELECT interval '1 +2:03' minute to second;
-SELECT interval '1 +2:03:04' minute to second;
-SELECT interval '1 -2:03' minute to second;
-SELECT interval '1 -2:03:04' minute to second;
-SELECT interval '123 11' day to hour; -- ok
-SELECT interval '123 11' day; -- not ok
-SELECT interval '123 11'; -- not ok, too ambiguous
-SELECT interval '123 2:03 -2:04'; -- not ok, redundant hh:mm fields
+-- TODO: create JIRA ticket
+-- SELECT interval '1 +2:03' minute to second;
+-- SELECT interval '1 +2:03:04' minute to second;
+-- SELECT interval '1 -2:03' minute to second;
+-- SELECT interval '1 -2:03:04' minute to second;
+-- SELECT interval '123 11' day to hour; -- ok
+-- SELECT interval '123 11' day; -- not ok
+-- SELECT interval '123 11'; -- not ok, too ambiguous
+-- SELECT interval '123 2:03 -2:04'; -- not ok, redundant hh:mm fields
 
 -- test syntaxes for restricted precision
-SELECT interval(0) '1 day 01:23:45.6789';
-SELECT interval(2) '1 day 01:23:45.6789';
-SELECT interval '12:34.5678' minute to second(2);  -- per SQL spec
-SELECT interval '1.234' second;
-SELECT interval '1.234' second(2);
-SELECT interval '1 2.345' day to second(2);
-SELECT interval '1 2:03' day to second(2);
-SELECT interval '1 2:03.4567' day to second(2);
-SELECT interval '1 2:03:04.5678' day to second(2);
-SELECT interval '1 2.345' hour to second(2);
-SELECT interval '1 2:03.45678' hour to second(2);
-SELECT interval '1 2:03:04.5678' hour to second(2);
-SELECT interval '1 2.3456' minute to second(2);
-SELECT interval '1 2:03.5678' minute to second(2);
-SELECT interval '1 2:03:04.5678' minute to second(2);
+-- TODO: create JIRA ticket
+-- SELECT interval(0) '1 day 01:23:45.6789';
+-- SELECT interval(2) '1 day 01:23:45.6789';
+-- SELECT interval '12:34.5678' minute to second(2);  -- per SQL spec
+-- SELECT interval '1.234' second;
+-- SELECT interval '1.234' second(2);
+-- SELECT interval '1 2.345' day to second(2);
+-- SELECT interval '1 2:03' day to second(2);
+-- SELECT interval '1 2:03.4567' day to second(2);
+-- SELECT interval '1 2:03:04.5678' day to second(2);
+-- SELECT interval '1 2.345' hour to second(2);
+-- SELECT interval '1 2:03.45678' hour to second(2);
+-- SELECT interval '1 2:03:04.5678' hour to second(2);
+-- SELECT interval '1 2.3456' minute to second(2);
+-- SELECT interval '1 2:03.5678' minute to second(2);
+-- SELECT interval '1 2:03:04.5678' minute to second(2);
 
 -- test casting to restricted precision (bug #14479)
-SELECT f1, f1::INTERVAL DAY TO MINUTE AS `minutes`,
-  (f1 + INTERVAL '1 month')::INTERVAL MONTH::INTERVAL YEAR AS `years`
-  FROM interval_tbl;
+-- SELECT f1, f1::INTERVAL DAY TO MINUTE AS `minutes`,
+--  (f1 + INTERVAL '1 month')::INTERVAL MONTH::INTERVAL YEAR AS `years`
+--  FROM interval_tbl;
 
 -- test inputting and outputting SQL standard interval literals
-SET IntervalStyle TO sql_standard;
+-- SET IntervalStyle TO sql_standard;
 SELECT  interval '0'                       AS zero,
         interval '1-2' year to month       AS `year-month`,
         interval '1 2:03:04' day to second AS `day-time`,
@@ -249,74 +254,77 @@ SELECT  interval '0'                       AS zero,
         - interval '1 2:03:04'             AS `negative day-time`;
 
 -- test input of some not-quite-standard interval values in the sql style
-SET IntervalStyle TO postgres;
-SELECT  interval '+1 -1:00:00',
-        interval '-1 +1:00:00',
-        interval '+1-2 -3 +4:05:06.789',
-        interval '-1-2 +3 -4:05:06.789';
+-- SET IntervalStyle TO postgres;
+-- SELECT  interval '+1 -1:00:00',
+--         interval '-1 +1:00:00',
+--         interval '+1-2 -3 +4:05:06.789',
+--         interval '-1-2 +3 -4:05:06.789';
 
 -- test output of couple non-standard interval values in the sql style
-SET IntervalStyle TO sql_standard;
-SELECT  interval '1 day -1 hours',
-        interval '-1 days +1 hours',
-        interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds',
-        - interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds';
+-- SET IntervalStyle TO sql_standard;
+-- SELECT  interval '1 day -1 hours',
+--         interval '-1 days +1 hours',
+--         interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds',
+--         - interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds';
 
 -- test outputting iso8601 intervals
-SET IntervalStyle to iso_8601;
-select  interval '0'                                AS zero,
-        interval '1-2'                              AS `a year 2 months`,
-        interval '1 2:03:04'                        AS `a bit over a day`,
-        interval '2:03:04.45679'                    AS `a bit over 2 hours`,
-        (interval '1-2' + interval '3 4:05:06.7')   AS `all fields`,
-        (interval '1-2' - interval '3 4:05:06.7')   AS `mixed sign`,
-        (- interval '1-2' + interval '3 4:05:06.7') AS negative;
+-- SET IntervalStyle to iso_8601;
+-- select  interval '0'                                AS zero,
+--         interval '1-2'                              AS `a year 2 months`,
+--         interval '1 2:03:04'                        AS `a bit over a day`,
+--         interval '2:03:04.45679'                    AS `a bit over 2 hours`,
+--         (interval '1-2' + interval '3 4:05:06.7')   AS `all fields`,
+--         (interval '1-2' - interval '3 4:05:06.7')   AS `mixed sign`,
+--         (- interval '1-2' + interval '3 4:05:06.7') AS negative;
 
 -- test inputting ISO 8601 4.4.2.1 "Format With Time Unit Designators"
-SET IntervalStyle to sql_standard;
-select  interval 'P0Y'                    AS zero,
-        interval 'P1Y2M'                  AS `a year 2 months`,
-        interval 'P1W'                    AS `a week`,
-        interval 'P1DT2H3M4S'             AS `a bit over a day`,
-        interval 'P1Y2M3DT4H5M6.7S'       AS `all fields`,
-        interval 'P-1Y-2M-3DT-4H-5M-6.7S' AS negative,
-        interval 'PT-0.1S'                AS `fractional second`;
+-- SET IntervalStyle to sql_standard;
+-- TODO: create JIRA ticket
+-- select  interval 'P0Y'                    AS zero,
+--         interval 'P1Y2M'                  AS `a year 2 months`,
+--         interval 'P1W'                    AS `a week`,
+--         interval 'P1DT2H3M4S'             AS `a bit over a day`,
+--         interval 'P1Y2M3DT4H5M6.7S'       AS `all fields`,
+--         interval 'P-1Y-2M-3DT-4H-5M-6.7S' AS negative,
+--         interval 'PT-0.1S'                AS `fractional second`;
 
 -- test inputting ISO 8601 4.4.2.2 "Alternative Format"
-SET IntervalStyle to postgres;
-select  interval 'P00021015T103020'       AS `ISO8601 Basic Format`,
-        interval 'P0002-10-15T10:30:20'   AS `ISO8601 Extended Format`;
+-- SET IntervalStyle to postgres;
+-- select  interval 'P00021015T103020'       AS `ISO8601 Basic Format`,
+--         interval 'P0002-10-15T10:30:20'   AS `ISO8601 Extended Format`;
 
 -- Make sure optional ISO8601 alternative format fields are optional.
-select  interval 'P0002'                  AS `year only`,
-        interval 'P0002-10'               AS `year month`,
-        interval 'P0002-10-15'            AS `year month day`,
-        interval 'P0002T1S'               AS `year only plus time`,
-        interval 'P0002-10T1S'            AS `year month plus time`,
-        interval 'P0002-10-15T1S'         AS `year month day plus time`,
-        interval 'PT10'                   AS `hour only`,
-        interval 'PT10:30'                AS `hour minute`;
+-- select  interval 'P0002'                  AS `year only`,
+--         interval 'P0002-10'               AS `year month`,
+--         interval 'P0002-10-15'            AS `year month day`,
+--         interval 'P0002T1S'               AS `year only plus time`,
+--         interval 'P0002-10T1S'            AS `year month plus time`,
+--         interval 'P0002-10-15T1S'         AS `year month day plus time`,
+--         interval 'PT10'                   AS `hour only`,
+--         interval 'PT10:30'                AS `hour minute`;
 
 -- test a couple rounding cases that changed since 8.3 w/ HAVE_INT64_TIMESTAMP.
-SET IntervalStyle to postgres_verbose;
-select interval '-10 mons -3 days +03:55:06.70';
-select interval '1 year 2 mons 3 days 04:05:06.699999';
-select interval '0:0:0.7', interval '@ 0.70 secs', interval '0.7 seconds';
+-- SET IntervalStyle to postgres_verbose;
+-- select interval '-10 mons -3 days +03:55:06.70';
+-- select interval '1 year 2 mons 3 days 04:05:06.699999';
+-- select interval '0:0:0.7', interval '@ 0.70 secs', interval '0.7 seconds';
 
 -- check that '30 days' equals '1 month' according to the hash function
-select '30 days'::interval = '1 month'::interval as t;
-select interval_hash('30 days'::interval) = interval_hash('1 month'::interval) as t;
+-- TODO: create JIRA ticket
+-- select '30 days'::interval = '1 month'::interval as t;
+-- select interval_hash('30 days'::interval) = interval_hash('1 month'::interval) as t;
 
 -- numeric constructor
-select make_interval(years := 2);
-select make_interval(years := 1, months := 6);
-select make_interval(years := 1, months := -1, weeks := 5, days := -7, hours := 25, mins := -180);
+-- TODO: create JIRA ticket
+-- select make_interval(years := 2);
+-- select make_interval(years := 1, months := 6);
+-- select make_interval(years := 1, months := -1, weeks := 5, days := -7, hours := 25, mins := -180);
 
-select make_interval() = make_interval(years := 0, months := 0, weeks := 0, days := 0, mins := 0, secs := 0.0);
-select make_interval(hours := -2, mins := -10, secs := -25.3);
+-- select make_interval() = make_interval(years := 0, months := 0, weeks := 0, days := 0, mins := 0, secs := 0.0);
+-- select make_interval(hours := -2, mins := -10, secs := -25.3);
 
-select make_interval(years := 'inf'::float::int);
-select make_interval(months := 'NaN'::float::int);
-select make_interval(secs := 'inf');
-select make_interval(secs := 'NaN');
-select make_interval(secs := 7e12);
+-- select make_interval(years := 'inf'::float::int);
+-- select make_interval(months := 'NaN'::float::int);
+-- select make_interval(secs := 'inf');
+-- select make_interval(secs := 'NaN');
+-- select make_interval(secs := 7e12);
