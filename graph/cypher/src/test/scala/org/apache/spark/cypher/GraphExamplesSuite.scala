@@ -101,8 +101,8 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
   test("save and load PropertyGraph") {
     val graph1: PropertyGraph = cypherSession.createGraph(nodes, relationships)
     graph1.nodes.show()
-    graph1.save("/tmp/my-storage", SaveMode.Overwrite)
-    val graph2: PropertyGraph = cypherSession.load("/tmp/my-storage")
+    graph1.write.mode(SaveMode.Overwrite).save("/tmp/my-storage")
+    val graph2: PropertyGraph = cypherSession.read.load("/tmp/my-storage")
     graph2.nodes.show()
   }
 

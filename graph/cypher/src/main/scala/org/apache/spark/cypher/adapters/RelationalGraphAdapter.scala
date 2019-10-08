@@ -20,6 +20,7 @@ package org.apache.spark.cypher.adapters
 
 import org.apache.spark.cypher.SparkTable.DataFrameTable
 import org.apache.spark.cypher.adapters.MappingAdapter._
+import org.apache.spark.cypher.io.SparkCypherPropertyGraphWriter
 import org.apache.spark.cypher.{SparkCypherSession, SparkEntityTable}
 import org.apache.spark.graph.api.{NodeFrame, PropertyGraph, PropertyGraphType, RelationshipFrame}
 import org.apache.spark.sql.DataFrame
@@ -87,4 +88,7 @@ case class RelationalGraphAdapter(
 
   override def relationshipFrame(relationshipType: String): RelationshipFrame = _relationshipFrame(relationshipType)
 
+  override def write(): SparkCypherPropertyGraphWriter =
+
+    new SparkCypherPropertyGraphWriter(this)
 }

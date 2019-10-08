@@ -57,9 +57,9 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
 
   test("save and load a graph") {
     val graph = cypherSession.createGraph(Array(nodeDataFrame), Array(relationshipFrame))
-    graph.save(basePath)
+    graph.write.save(basePath)
 
-    val readGraph = cypherSession.load(basePath)
+    val readGraph = cypherSession.read.load(basePath)
     readGraph.cypher(
       "MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2"
     ).df.show()
@@ -78,8 +78,8 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
     val writeGraph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
 
     withTempDir(file => {
-      cypherSession.save(writeGraph, file.getAbsolutePath, SaveMode.Overwrite)
-      val readGraph = cypherSession.load(file.getAbsolutePath)
+      writeGraph.write.mode(SaveMode.Overwrite).save(file.getAbsolutePath)
+      val readGraph = cypherSession.read.load(file.getAbsolutePath)
 
       checkAnswer(readGraph.nodes, writeGraph.nodes)
       checkAnswer(readGraph.relationships, writeGraph.relationships)
