@@ -2084,7 +2084,7 @@ object DatePart {
        1.000001
       > SELECT _FUNC_('days', interval 1 year 10 months 5 days);
        5
-      > SELECT _FUNC_('seconds', interval 30 seconds 1 milliseconds 1 microseconds);
+      > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
   """,
   since = "3.0.0")
