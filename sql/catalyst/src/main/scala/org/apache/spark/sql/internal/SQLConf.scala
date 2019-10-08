@@ -833,7 +833,7 @@ object SQLConf {
       .createWithDefault(10000)
 
   val IGNORE_DATA_LOCALITY =
-    buildConf("spark.sql.sources.ignore.datalocality")
+    buildConf("spark.sql.sources.ignoreDataLocality.enabled")
       .doc("If true, Spark will not fetch the block locations for each file on " +
         "listing files. This speeds up file listing, but the scheduler cannot " +
         "schedule tasks to take advantage of data locality. It can be particularly " +
