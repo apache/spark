@@ -157,7 +157,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   /**
    * Sets the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
-   * Default is not set, so all instances have weight one.
+   * By default the weightCol is not set, so all instances have weight 1.0.
    *
    * @group setParam
    */
@@ -165,8 +165,6 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   override protected def train(dataset: Dataset[_]): GBTRegressionModel = instrumented { instr =>
-    val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
 
     val (trainDataset, validationDataset) = if (withValidation) {
@@ -175,7 +173,6 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     } else {
       (extractInstances(dataset), null)
     }
-    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
@@ -184,6 +181,8 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval,
       featureSubsetStrategy, validationIndicatorCol, validationTol)
 
+    val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
         $(seed), $(featureSubsetStrategy))

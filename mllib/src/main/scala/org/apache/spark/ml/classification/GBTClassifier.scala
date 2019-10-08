@@ -23,6 +23,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
@@ -158,7 +159,7 @@ class GBTClassifier @Since("1.4.0") (
   /**
    * Sets the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
-   * Default is not set, so all instances have weight one.
+   * By default the weightCol is not set, so all instances have weight 1.0.
    *
    * @group setParam
    */
@@ -167,18 +168,21 @@ class GBTClassifier @Since("1.4.0") (
 
   override protected def train(
       dataset: Dataset[_]): GBTClassificationModel = instrumented { instr =>
-    val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
 
-    val (trainDataset, validationDataset) = if (withValidation) {
-      (extractInstances(dataset.filter(not(col($(validationIndicatorCol)))), 2),
-        extractInstances(dataset.filter(col($(validationIndicatorCol))), 2))
-    } else {
-      (extractInstances(dataset, 2), null)
+    val validateInstance = (instance: Instance) => {
+      val label = instance.label
+      require(label == 0 || label == 1, s"GBTClassifier was given" +
+        s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
+        s" GBTClassifier currently only supports binary classification.")
     }
 
-    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+    val (trainDataset, validationDataset) = if (withValidation) {
+      (extractInstances(dataset.filter(not(col($(validationIndicatorCol)))), validateInstance),
+        extractInstances(dataset.filter(col($(validationIndicatorCol))), validateInstance))
+    } else {
+      (extractInstances(dataset, validateInstance), null)
+    }
 
     val numClasses = 2
     if (isDefined(thresholds)) {
@@ -195,6 +199,8 @@ class GBTClassifier @Since("1.4.0") (
       checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol)
     instr.logNumClasses(numClasses)
 
+    val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
         $(seed), $(featureSubsetStrategy))
