@@ -379,8 +379,7 @@ object  HadoopMapReduceCommitProtocol extends Logging {
        insertStagingDir: Path,
        stagingOutputDir: Path,
        escapedStaticPartitionKVs: Seq[(String, String)]): Unit = {
-     if (insertStagingDir == null || stagingOutputDir ==null || !fs.exists(stagingOutputDir) ||
-       !fs.isDirectory(stagingOutputDir)) {
+     if (insertStagingDir == null || stagingOutputDir ==null || !fs.isDirectory(stagingOutputDir)) {
        return
      }
 
