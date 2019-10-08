@@ -2268,7 +2268,7 @@ case class FormatNumber(x: Expression, d: Expression)
 }
 
 /**
- * A function that convert string to numeric.
+ * A function that converts string to numeric.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
