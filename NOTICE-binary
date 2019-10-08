@@ -1140,16 +1140,34 @@ limitations under the License.
 dropwizard-metrics-hadoop-metrics2-reporter
 Copyright 2016 Josh Elser
 
+Hive Beeline
+Copyright 2019 The Apache Software Foundation
+
+Hive CLI
+Copyright 2019 The Apache Software Foundation
+
 Hive Common
 Copyright 2019 The Apache Software Foundation
 
+Hive JDBC
+Copyright 2019 The Apache Software Foundation
+
+Hive Query Language
+Copyright 2019 The Apache Software Foundation
+
 Hive Llap Common
+Copyright 2019 The Apache Software Foundation
+
+Hive Metastore
 Copyright 2019 The Apache Software Foundation
 
 Hive Serde
 Copyright 2019 The Apache Software Foundation
 
 Hive Service RPC
+Copyright 2019 The Apache Software Foundation
+
+Hive Shims
 Copyright 2019 The Apache Software Foundation
 
 Hive Shims 0.23
