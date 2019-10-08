@@ -64,7 +64,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   private def post(event: SparkListenerEvent): Unit = {
     listenerBus.post(event)
-    listenerBus.waitUntilEmpty(1000)
+    listenerBus.waitUntilEmpty()
   }
 
   test("initialize dynamic allocation in SparkContext") {

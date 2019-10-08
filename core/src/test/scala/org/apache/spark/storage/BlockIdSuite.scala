@@ -22,13 +22,13 @@ import java.util.UUID
 import org.apache.spark.SparkFunSuite
 
 class BlockIdSuite extends SparkFunSuite {
-  def assertSame(id1: BlockId, id2: BlockId) {
+  def assertSame(id1: BlockId, id2: BlockId): Unit = {
     assert(id1.name === id2.name)
     assert(id1.hashCode === id2.hashCode)
     assert(id1 === id2)
   }
 
-  def assertDifferent(id1: BlockId, id2: BlockId) {
+  def assertDifferent(id1: BlockId, id2: BlockId): Unit = {
     assert(id1.name != id2.name)
     assert(id1.hashCode != id2.hashCode)
     assert(id1 != id2)

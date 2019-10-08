@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -21,9 +21,17 @@ from __future__ import print_function
 import os
 import sys
 import json
-import urllib2
 import functools
 import subprocess
+if sys.version < '3':
+    from urllib2 import urlopen
+    from urllib2 import Request
+    from urllib2 import HTTPError, URLError
+else:
+    from urllib.request import urlopen
+    from urllib.request import Request
+    from urllib.error import HTTPError, URLError
+
 
 from sparktestsupport import SPARK_HOME, ERROR_CODES
 from sparktestsupport.shellutils import run_cmd
@@ -44,25 +52,25 @@ def post_message_to_github(msg, ghprb_pull_id):
     github_oauth_key = os.environ["GITHUB_OAUTH_KEY"]
 
     posted_message = json.dumps({"body": msg})
-    request = urllib2.Request(url,
-                              headers={
-                                  "Authorization": "token %s" % github_oauth_key,
-                                  "Content-Type": "application/json"
-                              },
-                              data=posted_message)
+    request = Request(url,
+                      headers={
+                          "Authorization": "token %s" % github_oauth_key,
+                          "Content-Type": "application/json"
+                      },
+                      data=posted_message.encode('utf-8'))
     try:
-        response = urllib2.urlopen(request)
+        response = urlopen(request)
 
         if response.getcode() == 201:
             print(" > Post successful.")
-    except urllib2.HTTPError as http_e:
+    except HTTPError as http_e:
         print_err("Failed to post message to Github.")
         print_err(" > http_code: %s" % http_e.code)
         print_err(" > api_response: %s" % http_e.read())
         print_err(" > data: %s" % posted_message)
-    except urllib2.URLError as url_e:
+    except URLError as url_e:
         print_err("Failed to post message to Github.")
-        print_err(" > urllib2_status: %s" % url_e.reason[1])
+        print_err(" > urllib_status: %s" % url_e.reason[1])
         print_err(" > data: %s" % posted_message)
 
 
@@ -160,7 +168,7 @@ def main():
     #     against master.
     ghprb_pull_id = os.environ["ghprbPullId"]
     ghprb_actual_commit = os.environ["ghprbActualCommit"]
-    ghprb_pull_title = os.environ["ghprbPullTitle"]
+    ghprb_pull_title = os.environ["ghprbPullTitle"].lower()
     sha1 = os.environ["sha1"]
 
     # Marks this build as a pull request build.

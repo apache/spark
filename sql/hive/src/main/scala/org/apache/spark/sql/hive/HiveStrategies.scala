@@ -26,11 +26,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan,
-    ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, LogicalPlan, ScriptTransformation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{CommandUtils, CreateTableCommand, DDLUtils}
+import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -113,19 +113,41 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 }
 
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
+  private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
+    val table = relation.tableMeta
+    val partitionCols = relation.partitionCols
+    val conf = session.sessionState.conf
+    // For partitioned tables, the partition directory may be outside of the table directory.
+    // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
+    val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
+      try {
+        val hadoopConf = session.sessionState.newHadoopConf()
+        val tablePath = new Path(table.location)
+        val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+        fs.getContentSummary(tablePath).getLength
+      } catch {
+        case e: IOException =>
+          logWarning("Failed to get table size from HDFS.", e)
+          conf.defaultSizeInBytes
+      }
+    } else {
+      conf.defaultSizeInBytes
+    }
+
+    val stats = Some(Statistics(sizeInBytes = BigInt(sizeInBytes)))
+    relation.copy(tableStats = stats)
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case relation: HiveTableRelation
-        if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
-      val table = relation.tableMeta
-      val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
-        CommandUtils.getSizeInBytesFallBackToHdfs(session, new Path(table.location),
-          session.sessionState.conf.defaultSizeInBytes)
-      } else {
-        session.sessionState.conf.defaultSizeInBytes
-      }
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      hiveTableWithStats(relation)
 
-      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-      relation.copy(tableMeta = withStats)
+    // handles InsertIntoStatement specially as the table in InsertIntoStatement is not added in its
+    // children, hence not matched directly by previous HiveTableRelation case.
+    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _)
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      i.copy(table = hiveTableWithStats(relation))
   }
 }
 
@@ -137,7 +159,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case InsertIntoTable(r: HiveTableRelation, partSpec, query, overwrite, ifPartitionNotExists)
+    case InsertIntoStatement(r: HiveTableRelation, partSpec, query, overwrite, ifPartitionNotExists)
         if DDLUtils.isHiveTable(r.tableMeta) =>
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
         ifPartitionNotExists, query.output.map(_.name))
@@ -185,11 +207,12 @@ case class RelationConversions(
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperators {
       // Write path
-      case InsertIntoTable(r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
-        // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).
+      case InsertIntoStatement(
+           r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
-            !r.isPartitioned && isConvertible(r) =>
-        InsertIntoTable(metastoreCatalog.convert(r), partition,
+            (!r.isPartitioned || SQLConf.get.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE))
+            && isConvertible(r) =>
+        InsertIntoStatement(metastoreCatalog.convert(r), partition,
           query, overwrite, ifPartitionNotExists)
 
       // Read path

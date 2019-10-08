@@ -21,6 +21,7 @@ import java.io.{ByteArrayOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.Random
 
@@ -37,13 +38,13 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
-import org.apache.spark.sql.test.SQLTestData.{NullStrings, TestData2}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
+import org.apache.spark.sql.test.SQLTestData.{DecimalData, NullStrings, TestData2}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
-class DataFrameSuite extends QueryTest with SharedSQLContext {
+class DataFrameSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
@@ -154,6 +155,27 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       structDf.select(xxhash64($"a", $"*")),
       structDf.select(xxhash64($"a", $"record.*")))
+  }
+
+  test("SPARK-28224: Aggregate sum big decimal overflow") {
+    val largeDecimals = spark.sparkContext.parallelize(
+      DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
+        DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
+
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+        val structDf = largeDecimals.select("a").agg(sum("a"))
+        if (!ansiEnabled) {
+          checkAnswer(structDf, Row(null))
+        } else {
+          val e = intercept[SparkException] {
+            structDf.collect
+          }
+          assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
+          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
+        }
+      }
+    }
   }
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
@@ -778,7 +800,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("inputFiles") {
     Seq("csv", "").foreach { useV1List =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1List) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
         withTempDir { dir =>
           val df = Seq((1, 22)).toDF("a", "b")
 
@@ -2084,17 +2106,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         // partitions.
         .write.partitionBy("p").option("compression", "gzip").json(path.getCanonicalPath)
 
-      var numJobs = 0
+      val numJobs = new AtomicLong(0)
       sparkContext.addSparkListener(new SparkListener {
         override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-          numJobs += 1
+          numJobs.incrementAndGet()
         }
       })
 
       val df = spark.read.json(path.getCanonicalPath)
       assert(df.columns === Array("i", "p"))
-      spark.sparkContext.listenerBus.waitUntilEmpty(10000)
-      assert(numJobs == 1)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(numJobs.get() == 1L)
     }
   }
 

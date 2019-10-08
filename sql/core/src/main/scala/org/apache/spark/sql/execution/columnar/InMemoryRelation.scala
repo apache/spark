@@ -146,17 +146,17 @@ object InMemoryRelation {
       storageLevel: StorageLevel,
       child: SparkPlan,
       tableName: Option[String],
-      logicalPlan: LogicalPlan): InMemoryRelation = {
+      optimizedPlan: LogicalPlan): InMemoryRelation = {
     val cacheBuilder = CachedRDDBuilder(useCompression, batchSize, storageLevel, child, tableName)
-    val relation = new InMemoryRelation(child.output, cacheBuilder, logicalPlan.outputOrdering)
-    relation.statsOfPlanToCache = logicalPlan.stats
+    val relation = new InMemoryRelation(child.output, cacheBuilder, optimizedPlan.outputOrdering)
+    relation.statsOfPlanToCache = optimizedPlan.stats
     relation
   }
 
-  def apply(cacheBuilder: CachedRDDBuilder, logicalPlan: LogicalPlan): InMemoryRelation = {
+  def apply(cacheBuilder: CachedRDDBuilder, optimizedPlan: LogicalPlan): InMemoryRelation = {
     val relation = new InMemoryRelation(
-      cacheBuilder.cachedPlan.output, cacheBuilder, logicalPlan.outputOrdering)
-    relation.statsOfPlanToCache = logicalPlan.stats
+      cacheBuilder.cachedPlan.output, cacheBuilder, optimizedPlan.outputOrdering)
+    relation.statsOfPlanToCache = optimizedPlan.stats
     relation
   }
 
@@ -179,10 +179,10 @@ case class InMemoryRelation(
 
   @volatile var statsOfPlanToCache: Statistics = null
 
-  override protected def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
+  override def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
-    copy(output = output.map(QueryPlan.normalizeExprId(_, cachedPlan.output)),
+    copy(output = output.map(QueryPlan.normalizeExpressions(_, cachedPlan.output)),
       cacheBuilder,
       outputOrdering)
 

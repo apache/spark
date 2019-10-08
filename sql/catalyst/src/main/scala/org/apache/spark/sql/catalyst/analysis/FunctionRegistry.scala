@@ -417,6 +417,7 @@ object FunctionRegistry {
     expression[TimeWindow]("window"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[DatePart]("date_part"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -456,6 +457,7 @@ object FunctionRegistry {
     expression[MapFilter]("map_filter"),
     expression[ArrayFilter]("filter"),
     expression[ArrayExists]("exists"),
+    expression[ArrayForAll]("forall"),
     expression[ArrayAggregate]("aggregate"),
     expression[TransformValues]("transform_values"),
     expression[TransformKeys]("transform_keys"),

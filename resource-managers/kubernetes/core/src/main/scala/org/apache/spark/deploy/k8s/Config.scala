@@ -330,6 +330,12 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.dynamicAllocation.deleteGracePeriod")
+      .doc("How long to wait for executors to shut down gracefully before a forceful kill.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5s")
+
   val KUBERNETES_SUBMIT_GRACE_PERIOD =
     ConfigBuilder("spark.kubernetes.appKillPodDeletionGracePeriod")
       .doc("Time to wait for graceful deletion of Spark pods when spark-submit" +

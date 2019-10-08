@@ -21,11 +21,10 @@ import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFPercentileApprox
 
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
-import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.hive.execution.TestingTypedCount
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
@@ -44,9 +43,10 @@ import org.apache.spark.sql.types.LongType
  *      Results will be written to "benchmarks/ObjectHashAggregateExecBenchmark-results.txt".
  * }}}
  */
-object ObjectHashAggregateExecBenchmark extends BenchmarkBase with SQLHelper {
+object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
 
-  private val spark: SparkSession = TestHive.sparkSession
+  override def getSparkSession: SparkSession = TestHive.sparkSession
+
   private val sql = spark.sql _
   import spark.implicits._
 

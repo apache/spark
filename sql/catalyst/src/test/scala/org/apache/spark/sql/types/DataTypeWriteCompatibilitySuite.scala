@@ -22,20 +22,148 @@ import scala.collection.mutable
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 
-class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
-  private val atomicTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
-    DoubleType, DateType, TimestampType, StringType, BinaryType)
+class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBaseSuite {
+  override def storeAssignmentPolicy: SQLConf.StoreAssignmentPolicy.Value =
+    StoreAssignmentPolicy.STRICT
 
-  private val point2 = StructType(Seq(
+  override def canCast: (DataType, DataType) => Boolean = Cast.canUpCast
+
+  test("Check struct types: unsafe casts are not allowed") {
+    assertNumErrors(widerPoint2, point2, "t",
+      "Should fail because types require unsafe casts", 2) { errs =>
+
+      assert(errs(0).contains("'t.x'"), "Should include the nested field name context")
+      assert(errs(0).contains("Cannot safely cast"))
+
+      assert(errs(1).contains("'t.y'"), "Should include the nested field name context")
+      assert(errs(1).contains("Cannot safely cast"))
+    }
+  }
+
+  test("Check array types: unsafe casts are not allowed") {
+    val arrayOfLong = ArrayType(LongType)
+    val arrayOfInt = ArrayType(IntegerType)
+
+    assertSingleError(arrayOfLong, arrayOfInt, "arr",
+      "Should not allow array of longs to array of ints") { err =>
+      assert(err.contains("'arr.element'"),
+        "Should identify problem with named array's element type")
+      assert(err.contains("Cannot safely cast"))
+    }
+  }
+
+  test("Check map value types: casting Long to Integer is not allowed") {
+    val mapOfLong = MapType(StringType, LongType)
+    val mapOfInt = MapType(StringType, IntegerType)
+
+    assertSingleError(mapOfLong, mapOfInt, "m",
+      "Should not allow map of longs to map of ints") { err =>
+      assert(err.contains("'m.value'"), "Should identify problem with named map's value type")
+      assert(err.contains("Cannot safely cast"))
+    }
+  }
+
+  test("Check map key types: unsafe casts are not allowed") {
+    val mapKeyLong = MapType(LongType, StringType)
+    val mapKeyInt = MapType(IntegerType, StringType)
+
+    assertSingleError(mapKeyLong, mapKeyInt, "m",
+      "Should not allow map of long keys to map of int keys") { err =>
+      assert(err.contains("'m.key'"), "Should identify problem with named map's key type")
+      assert(err.contains("Cannot safely cast"))
+    }
+  }
+}
+
+class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBaseSuite {
+  override protected def storeAssignmentPolicy: SQLConf.StoreAssignmentPolicy.Value =
+    StoreAssignmentPolicy.ANSI
+
+  override def canCast: (DataType, DataType) => Boolean = Cast.canANSIStoreAssign
+
+  test("Check map value types: unsafe casts are not allowed") {
+    val mapOfString = MapType(StringType, StringType)
+    val mapOfInt = MapType(StringType, IntegerType)
+
+    assertSingleError(mapOfString, mapOfInt, "m",
+      "Should not allow map of strings to map of ints") { err =>
+      assert(err.contains("'m.value'"), "Should identify problem with named map's value type")
+      assert(err.contains("Cannot safely cast"))
+    }
+  }
+
+  private val stringPoint2 = StructType(Seq(
+    StructField("x", StringType, nullable = false),
+    StructField("y", StringType, nullable = false)))
+
+  test("Check struct types: unsafe casts are not allowed") {
+    assertNumErrors(stringPoint2, point2, "t",
+      "Should fail because types require unsafe casts", 2) { errs =>
+
+      assert(errs(0).contains("'t.x'"), "Should include the nested field name context")
+      assert(errs(0).contains("Cannot safely cast"))
+
+      assert(errs(1).contains("'t.y'"), "Should include the nested field name context")
+      assert(errs(1).contains("Cannot safely cast"))
+    }
+  }
+
+  test("Check array types: unsafe casts are not allowed") {
+    val arrayOfString = ArrayType(StringType)
+    val arrayOfInt = ArrayType(IntegerType)
+
+    assertSingleError(arrayOfString, arrayOfInt, "arr",
+      "Should not allow array of strings to array of ints") { err =>
+      assert(err.contains("'arr.element'"),
+        "Should identify problem with named array's element type")
+      assert(err.contains("Cannot safely cast"))
+    }
+  }
+
+  test("Check map key types: unsafe casts are not allowed") {
+    val mapKeyString = MapType(StringType, StringType)
+    val mapKeyInt = MapType(IntegerType, StringType)
+
+    assertSingleError(mapKeyString, mapKeyInt, "m",
+      "Should not allow map of string keys to map of int keys") { err =>
+      assert(err.contains("'m.key'"), "Should identify problem with named map's key type")
+      assert(err.contains("Cannot safely cast"))
+    }
+  }
+
+  test("Conversions between timestamp and long are not allowed") {
+    assertSingleError(LongType, TimestampType, "longToTimestamp",
+      "Should not allow long to timestamp") { err =>
+      assert(err.contains("Cannot safely cast 'longToTimestamp': LongType to TimestampType"))
+    }
+
+    assertSingleError(TimestampType, LongType, "timestampToLong",
+      "Should not allow timestamp to long") { err =>
+      assert(err.contains("Cannot safely cast 'timestampToLong': TimestampType to LongType"))
+    }
+  }
+}
+
+abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
+  protected def storeAssignmentPolicy: StoreAssignmentPolicy.Value
+
+  protected def canCast: (DataType, DataType) => Boolean
+
+  protected val atomicTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType,
+    FloatType, DoubleType, DateType, TimestampType, StringType, BinaryType)
+
+  protected val point2 = StructType(Seq(
     StructField("x", FloatType, nullable = false),
     StructField("y", FloatType, nullable = false)))
 
-  private val widerPoint2 = StructType(Seq(
+  protected val widerPoint2 = StructType(Seq(
     StructField("x", DoubleType, nullable = false),
     StructField("y", DoubleType, nullable = false)))
 
-  private val point3 = StructType(Seq(
+  protected val point3 = StructType(Seq(
     StructField("x", FloatType, nullable = false),
     StructField("y", FloatType, nullable = false),
     StructField("z", FloatType)))
@@ -67,7 +195,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
   test("Check atomic types: write allowed only when casting is safe") {
     atomicTypes.foreach { w =>
       atomicTypes.foreach { r =>
-        if (Cast.canUpCast(w, r)) {
+        if (canCast(w, r)) {
           assertAllowed(w, r, "t", s"Should allow writing $w to $r because cast is safe")
 
         } else {
@@ -172,18 +300,6 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
     }
   }
 
-  test("Check struct types: unsafe casts are not allowed") {
-    assertNumErrors(widerPoint2, point2, "t",
-      "Should fail because types require unsafe casts", 2) { errs =>
-
-      assert(errs(0).contains("'t.x'"), "Should include the nested field name context")
-      assert(errs(0).contains("Cannot safely cast"))
-
-      assert(errs(1).contains("'t.y'"), "Should include the nested field name context")
-      assert(errs(1).contains("Cannot safely cast"))
-    }
-  }
-
   test("Check struct types: type promotion is allowed") {
     assertAllowed(point2, widerPoint2, "t",
       "Should allow widening float fields x and y to double")
@@ -201,18 +317,6 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
     // built-in data sources do not yet support missing fields when optional
     assertAllowed(point2, point3, "t",
       "Should allow writing point (x,y) to point(x,y,z=null)")
-  }
-
-  test("Check array types: unsafe casts are not allowed") {
-    val arrayOfLong = ArrayType(LongType)
-    val arrayOfInt = ArrayType(IntegerType)
-
-    assertSingleError(arrayOfLong, arrayOfInt, "arr",
-      "Should not allow array of longs to array of ints") { err =>
-      assert(err.contains("'arr.element'"),
-        "Should identify problem with named array's element type")
-      assert(err.contains("Cannot safely cast"))
-    }
   }
 
   test("Check array types: type promotion is allowed") {
@@ -241,17 +345,6 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       "Should allow array of required elements to array of optional elements")
   }
 
-  test("Check map value types: unsafe casts are not allowed") {
-    val mapOfLong = MapType(StringType, LongType)
-    val mapOfInt = MapType(StringType, IntegerType)
-
-    assertSingleError(mapOfLong, mapOfInt, "m",
-      "Should not allow map of longs to map of ints") { err =>
-      assert(err.contains("'m.value'"), "Should identify problem with named map's value type")
-      assert(err.contains("Cannot safely cast"))
-    }
-  }
-
   test("Check map value types: type promotion is allowed") {
     val mapOfLong = MapType(StringType, LongType)
     val mapOfInt = MapType(StringType, IntegerType)
@@ -276,17 +369,6 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
 
     assertAllowed(mapOfRequired, mapOfOptional, "m",
       "Should allow map of required elements to map of optional elements")
-  }
-
-  test("Check map key types: unsafe casts are not allowed") {
-    val mapKeyLong = MapType(LongType, StringType)
-    val mapKeyInt = MapType(IntegerType, StringType)
-
-    assertSingleError(mapKeyLong, mapKeyInt, "m",
-      "Should not allow map of long keys to map of int keys") { err =>
-      assert(err.contains("'m.key'"), "Should identify problem with named map's key type")
-      assert(err.contains("Cannot safely cast"))
-    }
   }
 
   test("Check map key types: type promotion is allowed") {
@@ -317,9 +399,9 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       StructField("a", ArrayType(StringType)),
       StructField("arr_of_structs", ArrayType(point3)),
       StructField("bad_nested_type", point3),
-      StructField("m", MapType(DoubleType, DoubleType)),
+      StructField("m", MapType(StringType, BooleanType)),
       StructField("map_of_structs", MapType(StringType, missingMiddleField)),
-      StructField("y", LongType)
+      StructField("y", StringType)
     ))
 
     assertNumErrors(writeType, readType, "top", "Should catch 14 errors", 14) { errs =>
@@ -342,11 +424,11 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
 
       assert(errs(5).contains("'top.m.key'"), "Should identify bad type")
       assert(errs(5).contains("Cannot safely cast"))
-      assert(errs(5).contains("DoubleType to LongType"))
+      assert(errs(5).contains("StringType to LongType"))
 
       assert(errs(6).contains("'top.m.value'"), "Should identify bad type")
       assert(errs(6).contains("Cannot safely cast"))
-      assert(errs(6).contains("DoubleType to FloatType"))
+      assert(errs(6).contains("BooleanType to FloatType"))
 
       assert(errs(7).contains("'top.m'"), "Should identify bad type")
       assert(errs(7).contains("Cannot write nullable values to map of non-nulls"))
@@ -364,7 +446,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
 
       assert(errs(11).contains("'top.x'"), "Should identify bad type")
       assert(errs(11).contains("Cannot safely cast"))
-      assert(errs(11).contains("LongType to IntegerType"))
+      assert(errs(11).contains("StringType to IntegerType"))
 
       assert(errs(12).contains("'top'"), "Should identify bad type")
       assert(errs(12).contains("expected 'x', found 'y'"), "Should detect name mismatch")
@@ -386,6 +468,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       byName: Boolean = true): Unit = {
     assert(
       DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
+        storeAssignmentPolicy,
         errMsg => fail(s"Should not produce errors but was called with: $errMsg")), desc)
   }
 
@@ -411,7 +494,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
     val errs = new mutable.ArrayBuffer[String]()
     assert(
       DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
-        errMsg => errs += errMsg) === false, desc)
+        storeAssignmentPolicy, errMsg => errs += errMsg) === false, desc)
     assert(errs.size === numErrs, s"Should produce $numErrs error messages")
     checkErrors(errs)
   }

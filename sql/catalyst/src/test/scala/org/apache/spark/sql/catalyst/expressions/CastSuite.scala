@@ -21,6 +21,8 @@ import java.sql.{Date, Timestamp}
 import java.util.{Calendar, TimeZone}
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.parallel.immutable.ParVector
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -29,27 +31,23 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-/**
- * Test suite for data type casting expression [[Cast]].
- */
-class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
+abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
-  private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
-    v match {
-      case lit: Expression => Cast(lit, targetType, timeZoneId)
-      case _ => Cast(Literal(v), targetType, timeZoneId)
-    }
-  }
+  // Whether it is required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
+  protected def requiredAnsiEnabledForOverflowTestCases: Boolean
+
+  protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase
 
   // expected cannot be null
-  private def checkCast(v: Any, expected: Any): Unit = {
+  protected def checkCast(v: Any, expected: Any): Unit = {
     checkEvaluation(cast(v, Literal(expected).dataType), expected)
   }
 
-  private def checkNullCast(from: DataType, to: DataType): Unit = {
+  protected def checkNullCast(from: DataType, to: DataType): Unit = {
     checkEvaluation(cast(Literal.create(null, from), to, Option("GMT")), null)
   }
 
@@ -112,7 +110,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
-    ALL_TIMEZONES.par.foreach { tz =>
+    new ParVector(ALL_TIMEZONES.toVector).foreach { tz =>
       def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
         checkEvaluation(cast(Literal(str), TimestampType, Option(tz.getID)), expected)
       }
@@ -206,43 +204,6 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("cast from int") {
-    checkCast(0, false)
-    checkCast(1, true)
-    checkCast(-5, true)
-    checkCast(1, 1.toByte)
-    checkCast(1, 1.toShort)
-    checkCast(1, 1)
-    checkCast(1, 1.toLong)
-    checkCast(1, 1.0f)
-    checkCast(1, 1.0)
-    checkCast(123, "123")
-
-    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 1)), null)
-    checkEvaluation(cast(123, DecimalType(2, 0)), null)
-  }
-
-  test("cast from long") {
-    checkCast(0L, false)
-    checkCast(1L, true)
-    checkCast(-5L, true)
-    checkCast(1L, 1.toByte)
-    checkCast(1L, 1.toShort)
-    checkCast(1L, 1)
-    checkCast(1L, 1.toLong)
-    checkCast(1L, 1.0f)
-    checkCast(1L, 1.0)
-    checkCast(123L, "123")
-
-    checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123))
-    checkEvaluation(cast(123L, DecimalType(3, 1)), null)
-
-    checkEvaluation(cast(123L, DecimalType(2, 0)), null)
-  }
-
   test("cast from boolean") {
     checkEvaluation(cast(true, IntegerType), 1)
     checkEvaluation(cast(false, IntegerType), 0)
@@ -250,17 +211,6 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(false, StringType), "false")
     checkEvaluation(cast(cast(1, BooleanType), IntegerType), 1)
     checkEvaluation(cast(cast(0, BooleanType), IntegerType), 0)
-  }
-
-  test("cast from int 2") {
-    checkEvaluation(cast(1, LongType), 1.toLong)
-    checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
-    checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
-
-    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 1)), null)
-    checkEvaluation(cast(123, DecimalType(2, 0)), null)
   }
 
   test("cast from float") {
@@ -398,101 +348,6 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(Decimal(1.5), 1.5f)
     checkCast(Decimal(1.5), 1.5)
     checkCast(Decimal(1.5), "1.5")
-  }
-
-  test("casting to fixed-precision decimals") {
-    assert(cast(123, DecimalType.USER_DEFAULT).nullable === false)
-    assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable)
-    assert(cast(10.03, DecimalType.SYSTEM_DEFAULT).nullable)
-    assert(cast(Decimal(10.03), DecimalType.SYSTEM_DEFAULT).nullable === false)
-
-    assert(cast(123, DecimalType(2, 1)).nullable)
-    assert(cast(10.03f, DecimalType(2, 1)).nullable)
-    assert(cast(10.03, DecimalType(2, 1)).nullable)
-    assert(cast(Decimal(10.03), DecimalType(2, 1)).nullable)
-
-    assert(cast(123, DecimalType.IntDecimal).nullable === false)
-    assert(cast(10.03f, DecimalType.FloatDecimal).nullable)
-    assert(cast(10.03, DecimalType.DoubleDecimal).nullable)
-    assert(cast(Decimal(10.03), DecimalType(4, 2)).nullable === false)
-    assert(cast(Decimal(10.03), DecimalType(5, 3)).nullable === false)
-
-    assert(cast(Decimal(10.03), DecimalType(3, 1)).nullable)
-    assert(cast(Decimal(10.03), DecimalType(4, 1)).nullable === false)
-    assert(cast(Decimal(9.95), DecimalType(2, 1)).nullable)
-    assert(cast(Decimal(9.95), DecimalType(3, 1)).nullable === false)
-
-    assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable)
-    assert(cast(Decimal("1003"), DecimalType(4, -1)).nullable === false)
-    assert(cast(Decimal("995"), DecimalType(2, -1)).nullable)
-    assert(cast(Decimal("995"), DecimalType(3, -1)).nullable === false)
-
-    assert(cast(true, DecimalType.SYSTEM_DEFAULT).nullable === false)
-    assert(cast(true, DecimalType(1, 1)).nullable)
-
-
-    checkEvaluation(cast(10.03, DecimalType.SYSTEM_DEFAULT), Decimal(10.03))
-    checkEvaluation(cast(10.03, DecimalType(4, 2)), Decimal(10.03))
-    checkEvaluation(cast(10.03, DecimalType(3, 1)), Decimal(10.0))
-    checkEvaluation(cast(10.03, DecimalType(2, 0)), Decimal(10))
-    checkEvaluation(cast(10.03, DecimalType(1, 0)), null)
-    checkEvaluation(cast(10.03, DecimalType(2, 1)), null)
-    checkEvaluation(cast(10.03, DecimalType(3, 2)), null)
-    checkEvaluation(cast(Decimal(10.03), DecimalType(3, 1)), Decimal(10.0))
-    checkEvaluation(cast(Decimal(10.03), DecimalType(3, 2)), null)
-
-    checkEvaluation(cast(10.05, DecimalType.SYSTEM_DEFAULT), Decimal(10.05))
-    checkEvaluation(cast(10.05, DecimalType(4, 2)), Decimal(10.05))
-    checkEvaluation(cast(10.05, DecimalType(3, 1)), Decimal(10.1))
-    checkEvaluation(cast(10.05, DecimalType(2, 0)), Decimal(10))
-    checkEvaluation(cast(10.05, DecimalType(1, 0)), null)
-    checkEvaluation(cast(10.05, DecimalType(2, 1)), null)
-    checkEvaluation(cast(10.05, DecimalType(3, 2)), null)
-    checkEvaluation(cast(Decimal(10.05), DecimalType(3, 1)), Decimal(10.1))
-    checkEvaluation(cast(Decimal(10.05), DecimalType(3, 2)), null)
-
-    checkEvaluation(cast(9.95, DecimalType(3, 2)), Decimal(9.95))
-    checkEvaluation(cast(9.95, DecimalType(3, 1)), Decimal(10.0))
-    checkEvaluation(cast(9.95, DecimalType(2, 0)), Decimal(10))
-    checkEvaluation(cast(9.95, DecimalType(2, 1)), null)
-    checkEvaluation(cast(9.95, DecimalType(1, 0)), null)
-    checkEvaluation(cast(Decimal(9.95), DecimalType(3, 1)), Decimal(10.0))
-    checkEvaluation(cast(Decimal(9.95), DecimalType(1, 0)), null)
-
-    checkEvaluation(cast(-9.95, DecimalType(3, 2)), Decimal(-9.95))
-    checkEvaluation(cast(-9.95, DecimalType(3, 1)), Decimal(-10.0))
-    checkEvaluation(cast(-9.95, DecimalType(2, 0)), Decimal(-10))
-    checkEvaluation(cast(-9.95, DecimalType(2, 1)), null)
-    checkEvaluation(cast(-9.95, DecimalType(1, 0)), null)
-    checkEvaluation(cast(Decimal(-9.95), DecimalType(3, 1)), Decimal(-10.0))
-    checkEvaluation(cast(Decimal(-9.95), DecimalType(1, 0)), null)
-
-    checkEvaluation(cast(Decimal("1003"), DecimalType.SYSTEM_DEFAULT), Decimal(1003))
-    checkEvaluation(cast(Decimal("1003"), DecimalType(4, 0)), Decimal(1003))
-    checkEvaluation(cast(Decimal("1003"), DecimalType(3, -1)), Decimal(1000))
-    checkEvaluation(cast(Decimal("1003"), DecimalType(2, -2)), Decimal(1000))
-    checkEvaluation(cast(Decimal("1003"), DecimalType(1, -2)), null)
-    checkEvaluation(cast(Decimal("1003"), DecimalType(2, -1)), null)
-    checkEvaluation(cast(Decimal("1003"), DecimalType(3, 0)), null)
-
-    checkEvaluation(cast(Decimal("995"), DecimalType(3, 0)), Decimal(995))
-    checkEvaluation(cast(Decimal("995"), DecimalType(3, -1)), Decimal(1000))
-    checkEvaluation(cast(Decimal("995"), DecimalType(2, -2)), Decimal(1000))
-    checkEvaluation(cast(Decimal("995"), DecimalType(2, -1)), null)
-    checkEvaluation(cast(Decimal("995"), DecimalType(1, -2)), null)
-
-    checkEvaluation(cast(Double.NaN, DecimalType.SYSTEM_DEFAULT), null)
-    checkEvaluation(cast(1.0 / 0.0, DecimalType.SYSTEM_DEFAULT), null)
-    checkEvaluation(cast(Float.NaN, DecimalType.SYSTEM_DEFAULT), null)
-    checkEvaluation(cast(1.0f / 0.0f, DecimalType.SYSTEM_DEFAULT), null)
-
-    checkEvaluation(cast(Double.NaN, DecimalType(2, 1)), null)
-    checkEvaluation(cast(1.0 / 0.0, DecimalType(2, 1)), null)
-    checkEvaluation(cast(Float.NaN, DecimalType(2, 1)), null)
-    checkEvaluation(cast(1.0f / 0.0f, DecimalType(2, 1)), null)
-
-    checkEvaluation(cast(true, DecimalType(2, 1)), Decimal(1))
-    checkEvaluation(cast(true, DecimalType(1, 1)), null)
   }
 
   test("cast from date") {
@@ -815,6 +670,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       new CalendarInterval(15, -3 * CalendarInterval.MICROS_PER_DAY), CalendarIntervalType),
       StringType),
       "interval 1 years 3 months -3 days")
+    checkEvaluation(Cast(Literal("INTERVAL 1 Second 1 microsecond"), CalendarIntervalType),
+      new CalendarInterval(0, 1000001))
   }
 
   test("cast string to boolean") {
@@ -833,6 +690,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("0", false)
 
     checkEvaluation(cast("abc", BooleanType), null)
+    checkEvaluation(cast("tru", BooleanType), null)
+    checkEvaluation(cast("fla", BooleanType), null)
     checkEvaluation(cast("", BooleanType), null)
   }
 
@@ -973,7 +832,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       )
     }
 
-    import DataTypeTestUtils.numericTypes
+    import DataTypeTestUtils._
     numericTypes.foreach { from =>
       val (safeTargetTypes, unsafeTargetTypes) = numericTypes.partition(to => isCastSafe(from, to))
 
@@ -1007,6 +866,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         assert(!Cast.canUpCast(complexType, StringType))
       }
     }
+
+    atomicTypes.foreach { atomicType =>
+      assert(Cast.canUpCast(NullType, atomicType))
+    }
   }
 
   test("SPARK-27671: cast from nested null type in struct") {
@@ -1021,6 +884,341 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("a", atomicType, nullable = true))))
       assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null))
+    }
+  }
+
+  test("Throw exception on casting out-of-range value to decimal type") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)),
+        "cannot be represented")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
+    }
+  }
+
+  test("Process Infinity, -Infinity, NaN in case insensitive manner") {
+    Seq("inf", "+inf", "infinity", "+infiNity", " infinity ").foreach { value =>
+      checkEvaluation(cast(value, FloatType), Float.PositiveInfinity)
+    }
+    Seq("-infinity", "-infiniTy", "  -infinity  ", "  -inf  ").foreach { value =>
+      checkEvaluation(cast(value, FloatType), Float.NegativeInfinity)
+    }
+    Seq("inf", "+inf", "infinity", "+infiNity", " infinity ").foreach { value =>
+      checkEvaluation(cast(value, DoubleType), Double.PositiveInfinity)
+    }
+    Seq("-infinity", "-infiniTy", "  -infinity  ", "  -inf  ").foreach { value =>
+      checkEvaluation(cast(value, DoubleType), Double.NegativeInfinity)
+    }
+    Seq("nan", "nAn", " nan ").foreach { value =>
+      checkEvaluation(cast(value, FloatType), Float.NaN)
+    }
+    Seq("nan", "nAn", " nan ").foreach { value =>
+      checkEvaluation(cast(value, DoubleType), Double.NaN)
+    }
+
+    // Invalid literals when casted to double and float results in null.
+    Seq(DoubleType, FloatType).foreach { dataType =>
+      checkEvaluation(cast("badvalue", dataType), null)
+    }
+  }
+
+  private def testIntMaxAndMin(dt: DataType): Unit = {
+    assert(Seq(IntegerType, ShortType, ByteType).contains(dt))
+    Seq(Int.MaxValue + 1L, Int.MinValue - 1L).foreach { value =>
+      checkExceptionInExpression[ArithmeticException](cast(value, dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](cast(Decimal(value.toString), dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value * MICROS_PER_SECOND, TimestampType), dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value * 1.5f, FloatType), dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value * 1.0, DoubleType), dt), "overflow")
+    }
+  }
+
+  private def testLongMaxAndMin(dt: DataType): Unit = {
+    assert(Seq(LongType, IntegerType).contains(dt))
+    Seq(Decimal(Long.MaxValue) + Decimal(1), Decimal(Long.MinValue) - Decimal(1)).foreach { value =>
+      checkExceptionInExpression[ArithmeticException](
+        cast(value, dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast((value * Decimal(1.1)).toFloat, dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast((value * Decimal(1.1)).toDouble, dt), "overflow")
+    }
+  }
+
+  test("Throw exception on casting out-of-range value to byte type") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+      testIntMaxAndMin(ByteType)
+      Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
+        checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value * MICROS_PER_SECOND, TimestampType), ByteType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value.toFloat, FloatType), ByteType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value.toDouble, DoubleType), ByteType), "overflow")
+      }
+
+      Seq(Byte.MaxValue, 0.toByte, Byte.MinValue).foreach { value =>
+        checkEvaluation(cast(value, ByteType), value)
+        checkEvaluation(cast(value.toString, ByteType), value)
+        checkEvaluation(cast(Decimal(value.toString), ByteType), value)
+        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ByteType), value)
+        checkEvaluation(cast(Literal(value.toInt, DateType), ByteType), null)
+        checkEvaluation(cast(Literal(value.toFloat, FloatType), ByteType), value)
+        checkEvaluation(cast(Literal(value.toDouble, DoubleType), ByteType), value)
+      }
+    }
+  }
+
+  test("Throw exception on casting out-of-range value to short type") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+      testIntMaxAndMin(ShortType)
+      Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
+        checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value * MICROS_PER_SECOND, TimestampType), ShortType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value.toFloat, FloatType), ShortType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value.toDouble, DoubleType), ShortType), "overflow")
+      }
+
+      Seq(Short.MaxValue, 0.toShort, Short.MinValue).foreach { value =>
+        checkEvaluation(cast(value, ShortType), value)
+        checkEvaluation(cast(value.toString, ShortType), value)
+        checkEvaluation(cast(Decimal(value.toString), ShortType), value)
+        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ShortType), value)
+        checkEvaluation(cast(Literal(value.toInt, DateType), ShortType), null)
+        checkEvaluation(cast(Literal(value.toFloat, FloatType), ShortType), value)
+        checkEvaluation(cast(Literal(value.toDouble, DoubleType), ShortType), value)
+      }
+    }
+  }
+
+  test("Throw exception on casting out-of-range value to int type") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+      testIntMaxAndMin(IntegerType)
+      testLongMaxAndMin(IntegerType)
+
+      Seq(Int.MaxValue, 0, Int.MinValue).foreach { value =>
+        checkEvaluation(cast(value, IntegerType), value)
+        checkEvaluation(cast(value.toString, IntegerType), value)
+        checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
+        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), IntegerType), value)
+        checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
+      }
+      checkEvaluation(cast(Int.MaxValue + 0.9D, IntegerType), Int.MaxValue)
+      checkEvaluation(cast(Int.MinValue - 0.9D, IntegerType), Int.MinValue)
+    }
+  }
+
+  test("Throw exception on casting out-of-range value to long type") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+      testLongMaxAndMin(LongType)
+
+      Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
+        checkEvaluation(cast(value, LongType), value)
+        checkEvaluation(cast(value.toString, LongType), value)
+        checkEvaluation(cast(Decimal(value.toString), LongType), value)
+        checkEvaluation(cast(Literal(value, TimestampType), LongType),
+          Math.floorDiv(value, MICROS_PER_SECOND))
+      }
+      checkEvaluation(cast(Long.MaxValue + 0.9F, LongType), Long.MaxValue)
+      checkEvaluation(cast(Long.MinValue - 0.9F, LongType), Long.MinValue)
+      checkEvaluation(cast(Long.MaxValue + 0.9D, LongType), Long.MaxValue)
+      checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
+    }
+  }
+}
+
+/**
+ * Test suite for data type casting expression [[Cast]].
+ */
+class CastSuite extends CastSuiteBase {
+  // It is required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
+  override protected def requiredAnsiEnabledForOverflowTestCases: Boolean = true
+
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
+    v match {
+      case lit: Expression => Cast(lit, targetType, timeZoneId)
+      case _ => Cast(Literal(v), targetType, timeZoneId)
+    }
+  }
+
+
+  test("cast from int") {
+    checkCast(0, false)
+    checkCast(1, true)
+    checkCast(-5, true)
+    checkCast(1, 1.toByte)
+    checkCast(1, 1.toShort)
+    checkCast(1, 1)
+    checkCast(1, 1.toLong)
+    checkCast(1, 1.0f)
+    checkCast(1, 1.0)
+    checkCast(123, "123")
+
+    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
+    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
+    checkEvaluation(cast(123, DecimalType(3, 1)), null)
+    checkEvaluation(cast(123, DecimalType(2, 0)), null)
+  }
+
+  test("cast from long") {
+    checkCast(0L, false)
+    checkCast(1L, true)
+    checkCast(-5L, true)
+    checkCast(1L, 1.toByte)
+    checkCast(1L, 1.toShort)
+    checkCast(1L, 1)
+    checkCast(1L, 1.toLong)
+    checkCast(1L, 1.0f)
+    checkCast(1L, 1.0)
+    checkCast(123L, "123")
+
+    checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123))
+    checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123))
+    checkEvaluation(cast(123L, DecimalType(3, 1)), null)
+
+    checkEvaluation(cast(123L, DecimalType(2, 0)), null)
+  }
+
+  test("cast from int 2") {
+    checkEvaluation(cast(1, LongType), 1.toLong)
+    checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
+    checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
+
+    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
+    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
+    checkEvaluation(cast(123, DecimalType(3, 1)), null)
+    checkEvaluation(cast(123, DecimalType(2, 0)), null)
+  }
+
+  test("casting to fixed-precision decimals") {
+    assert(cast(123, DecimalType.USER_DEFAULT).nullable === false)
+    assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable)
+    assert(cast(10.03, DecimalType.SYSTEM_DEFAULT).nullable)
+    assert(cast(Decimal(10.03), DecimalType.SYSTEM_DEFAULT).nullable === false)
+
+    assert(cast(123, DecimalType(2, 1)).nullable)
+    assert(cast(10.03f, DecimalType(2, 1)).nullable)
+    assert(cast(10.03, DecimalType(2, 1)).nullable)
+    assert(cast(Decimal(10.03), DecimalType(2, 1)).nullable)
+
+    assert(cast(123, DecimalType.IntDecimal).nullable === false)
+    assert(cast(10.03f, DecimalType.FloatDecimal).nullable)
+    assert(cast(10.03, DecimalType.DoubleDecimal).nullable)
+    assert(cast(Decimal(10.03), DecimalType(4, 2)).nullable === false)
+    assert(cast(Decimal(10.03), DecimalType(5, 3)).nullable === false)
+
+    assert(cast(Decimal(10.03), DecimalType(3, 1)).nullable)
+    assert(cast(Decimal(10.03), DecimalType(4, 1)).nullable === false)
+    assert(cast(Decimal(9.95), DecimalType(2, 1)).nullable)
+    assert(cast(Decimal(9.95), DecimalType(3, 1)).nullable === false)
+
+    assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable)
+    assert(cast(Decimal("1003"), DecimalType(4, -1)).nullable === false)
+    assert(cast(Decimal("995"), DecimalType(2, -1)).nullable)
+    assert(cast(Decimal("995"), DecimalType(3, -1)).nullable === false)
+
+    assert(cast(true, DecimalType.SYSTEM_DEFAULT).nullable === false)
+    assert(cast(true, DecimalType(1, 1)).nullable)
+
+
+    checkEvaluation(cast(10.03, DecimalType.SYSTEM_DEFAULT), Decimal(10.03))
+    checkEvaluation(cast(10.03, DecimalType(4, 2)), Decimal(10.03))
+    checkEvaluation(cast(10.03, DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(cast(10.03, DecimalType(2, 0)), Decimal(10))
+    checkEvaluation(cast(10.03, DecimalType(1, 0)), null)
+    checkEvaluation(cast(10.03, DecimalType(2, 1)), null)
+    checkEvaluation(cast(10.03, DecimalType(3, 2)), null)
+    checkEvaluation(cast(Decimal(10.03), DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(cast(Decimal(10.03), DecimalType(3, 2)), null)
+
+    checkEvaluation(cast(10.05, DecimalType.SYSTEM_DEFAULT), Decimal(10.05))
+    checkEvaluation(cast(10.05, DecimalType(4, 2)), Decimal(10.05))
+    checkEvaluation(cast(10.05, DecimalType(3, 1)), Decimal(10.1))
+    checkEvaluation(cast(10.05, DecimalType(2, 0)), Decimal(10))
+    checkEvaluation(cast(10.05, DecimalType(1, 0)), null)
+    checkEvaluation(cast(10.05, DecimalType(2, 1)), null)
+    checkEvaluation(cast(10.05, DecimalType(3, 2)), null)
+    checkEvaluation(cast(Decimal(10.05), DecimalType(3, 1)), Decimal(10.1))
+    checkEvaluation(cast(Decimal(10.05), DecimalType(3, 2)), null)
+
+    checkEvaluation(cast(9.95, DecimalType(3, 2)), Decimal(9.95))
+    checkEvaluation(cast(9.95, DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(cast(9.95, DecimalType(2, 0)), Decimal(10))
+    checkEvaluation(cast(9.95, DecimalType(2, 1)), null)
+    checkEvaluation(cast(9.95, DecimalType(1, 0)), null)
+    checkEvaluation(cast(Decimal(9.95), DecimalType(3, 1)), Decimal(10.0))
+    checkEvaluation(cast(Decimal(9.95), DecimalType(1, 0)), null)
+
+    checkEvaluation(cast(-9.95, DecimalType(3, 2)), Decimal(-9.95))
+    checkEvaluation(cast(-9.95, DecimalType(3, 1)), Decimal(-10.0))
+    checkEvaluation(cast(-9.95, DecimalType(2, 0)), Decimal(-10))
+    checkEvaluation(cast(-9.95, DecimalType(2, 1)), null)
+    checkEvaluation(cast(-9.95, DecimalType(1, 0)), null)
+    checkEvaluation(cast(Decimal(-9.95), DecimalType(3, 1)), Decimal(-10.0))
+    checkEvaluation(cast(Decimal(-9.95), DecimalType(1, 0)), null)
+
+    checkEvaluation(cast(Decimal("1003"), DecimalType.SYSTEM_DEFAULT), Decimal(1003))
+    checkEvaluation(cast(Decimal("1003"), DecimalType(4, 0)), Decimal(1003))
+    checkEvaluation(cast(Decimal("1003"), DecimalType(3, -1)), Decimal(1000))
+    checkEvaluation(cast(Decimal("1003"), DecimalType(2, -2)), Decimal(1000))
+    checkEvaluation(cast(Decimal("1003"), DecimalType(1, -2)), null)
+    checkEvaluation(cast(Decimal("1003"), DecimalType(2, -1)), null)
+    checkEvaluation(cast(Decimal("1003"), DecimalType(3, 0)), null)
+
+    checkEvaluation(cast(Decimal("995"), DecimalType(3, 0)), Decimal(995))
+    checkEvaluation(cast(Decimal("995"), DecimalType(3, -1)), Decimal(1000))
+    checkEvaluation(cast(Decimal("995"), DecimalType(2, -2)), Decimal(1000))
+    checkEvaluation(cast(Decimal("995"), DecimalType(2, -1)), null)
+    checkEvaluation(cast(Decimal("995"), DecimalType(1, -2)), null)
+
+    checkEvaluation(cast(Double.NaN, DecimalType.SYSTEM_DEFAULT), null)
+    checkEvaluation(cast(1.0 / 0.0, DecimalType.SYSTEM_DEFAULT), null)
+    checkEvaluation(cast(Float.NaN, DecimalType.SYSTEM_DEFAULT), null)
+    checkEvaluation(cast(1.0f / 0.0f, DecimalType.SYSTEM_DEFAULT), null)
+
+    checkEvaluation(cast(Double.NaN, DecimalType(2, 1)), null)
+    checkEvaluation(cast(1.0 / 0.0, DecimalType(2, 1)), null)
+    checkEvaluation(cast(Float.NaN, DecimalType(2, 1)), null)
+    checkEvaluation(cast(1.0f / 0.0f, DecimalType(2, 1)), null)
+
+    checkEvaluation(cast(true, DecimalType(2, 1)), Decimal(1))
+    checkEvaluation(cast(true, DecimalType(1, 1)), null)
+  }
+
+  test("SPARK-28470: Cast should honor nullOnOverflow property") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(Cast(Literal("134.12"), DecimalType(3, 2)), null)
+      checkEvaluation(
+        Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)), null)
+      checkEvaluation(Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), null)
+      checkEvaluation(Cast(Literal(134.12), DecimalType(3, 2)), null)
+    }
+  }
+}
+
+/**
+ * Test suite for data type casting expression [[AnsiCast]].
+ */
+class AnsiCastSuite extends CastSuiteBase {
+  // It is not required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
+  override protected def requiredAnsiEnabledForOverflowTestCases: Boolean = false
+
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
+    v match {
+      case lit: Expression => AnsiCast(lit, targetType, timeZoneId)
+      case _ => AnsiCast(Literal(v), targetType, timeZoneId)
     }
   }
 }

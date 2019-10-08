@@ -235,6 +235,9 @@ public class UnsafeExternalSorterSuite {
     sorter.insertRecord(null, 0, 0, 0, false);
     UnsafeSorterIterator iter = sorter.getSortedIterator();
     assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
   }
 
   @Test
@@ -510,6 +513,8 @@ public class UnsafeExternalSorterSuite {
     verifyIntIterator(sorter.getIterator(79), 79, 300);
     verifyIntIterator(sorter.getIterator(139), 139, 300);
     verifyIntIterator(sorter.getIterator(279), 279, 300);
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
   }
 
   @Test

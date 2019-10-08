@@ -66,12 +66,20 @@ private[netty] case class RpcOutboxMessage(
     this.requestId = client.sendRpc(content, this)
   }
 
-  def onTimeout(): Unit = {
+  private[netty] def removeRpcRequest(): Unit = {
     if (client != null) {
       client.removeRpcRequest(requestId)
     } else {
-      logError("Ask timeout before connecting successfully")
+      logError("Ask terminated before connecting successfully")
     }
+  }
+
+  def onTimeout(): Unit = {
+    removeRpcRequest()
+  }
+
+  def onAbort(): Unit = {
+    removeRpcRequest()
   }
 
   override def onFailure(e: Throwable): Unit = {

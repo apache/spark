@@ -77,17 +77,29 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("indexOf method") {
-    val df = Seq((0, "a a b b c d".split(" ").toSeq)).toDF("id", "words")
     val n = 100
     val hashingTF = new HashingTF()
       .setInputCol("words")
       .setOutputCol("features")
       .setNumFeatures(n)
-    val mLlibHashingTF = new MLlibHashingTF(n)
-    assert(hashingTF.indexOf("a") === mLlibHashingTF.indexOf("a"))
-    assert(hashingTF.indexOf("b") === mLlibHashingTF.indexOf("b"))
-    assert(hashingTF.indexOf("c") === mLlibHashingTF.indexOf("c"))
-    assert(hashingTF.indexOf("d") === mLlibHashingTF.indexOf("d"))
+    assert(hashingTF.indexOf("a") === 67)
+    assert(hashingTF.indexOf("b") === 65)
+    assert(hashingTF.indexOf("c") === 68)
+    assert(hashingTF.indexOf("d") === 90)
+  }
+
+  test("SPARK-23469: Load HashingTF prior to Spark 3.0") {
+    val hashingTFPath = testFile("test-data/hashingTF-pre3.0")
+    val loadedHashingTF = HashingTF.load(hashingTFPath)
+    val mLlibHashingTF = new MLlibHashingTF(100)
+    assert(loadedHashingTF.indexOf("a") === mLlibHashingTF.indexOf("a"))
+    assert(loadedHashingTF.indexOf("b") === mLlibHashingTF.indexOf("b"))
+    assert(loadedHashingTF.indexOf("c") === mLlibHashingTF.indexOf("c"))
+    assert(loadedHashingTF.indexOf("d") === mLlibHashingTF.indexOf("d"))
+
+    val metadata = spark.read.json(s"$hashingTFPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr == "2.3.0-SNAPSHOT")
   }
 
   test("read/write") {
@@ -103,7 +115,7 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
 object HashingTFSuite {
 
   private[feature] def murmur3FeatureIdx(numFeatures: Int)(term: Any): Int = {
-    Utils.nonNegativeMod(MLlibHashingTF.murmur3Hash(term), numFeatures)
+    Utils.nonNegativeMod(FeatureHasher.murmur3Hash(term), numFeatures)
   }
 
 }

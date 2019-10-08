@@ -254,7 +254,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       .reduceByKey { case (_, _) =>
         val ctx = TaskContext.get()
         if (ctx.stageAttemptNumber() == 0) {
-          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 1, 1, 1,
+          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 1, 1L, 1, 1,
             new Exception("Failure for test."))
         } else {
           ctx.stageId()
@@ -288,7 +288,7 @@ private case class OutputCommitFunctions(tempDirPath: String) {
 
   // Mock output committer that simulates a failed commit (after commit is authorized)
   private def failingOutputCommitter = new FakeOutputCommitter {
-    override def commitTask(taskAttemptContext: TaskAttemptContext) {
+    override def commitTask(taskAttemptContext: TaskAttemptContext): Unit = {
       throw new RuntimeException
     }
   }

@@ -123,7 +123,7 @@ case class WindowExec(
         var nextRow: UnsafeRow = null
         var nextGroup: UnsafeRow = null
         var nextRowAvailable: Boolean = false
-        private[this] def fetchNextRow() {
+        private[this] def fetchNextRow(): Unit = {
           nextRowAvailable = stream.hasNext
           if (nextRowAvailable) {
             nextRow = stream.next().asInstanceOf[UnsafeRow]
@@ -144,7 +144,7 @@ case class WindowExec(
         val windowFunctionResult = new SpecificInternalRow(expressions.map(_.dataType))
         val frames = factories.map(_(windowFunctionResult))
         val numFrames = frames.length
-        private[this] def fetchNextPartition() {
+        private[this] def fetchNextPartition(): Unit = {
           // Collect all the rows in the current partition.
           // Before we start to fetch new input rows, make a copy of nextGroup.
           val currentGroup = nextGroup.copy()

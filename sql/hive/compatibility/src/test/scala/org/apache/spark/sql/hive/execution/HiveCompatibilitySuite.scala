@@ -46,7 +46,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
@@ -65,7 +65,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     RuleExecutor.resetMetrics()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
       TimeZone.setDefault(originalTimeZone)
@@ -597,7 +597,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "correlationoptimizer4",
     "multiMapJoin1",
     "orc_dictionary_threshold",
-    "udf_hash"
+    "udf_hash",
+    // Moved to HiveQuerySuite
+    "udf_radians"
   )
 
   private def commonWhiteList = Seq(
@@ -1057,7 +1059,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_positive",
     "udf_pow",
     "udf_power",
-    "udf_radians",
     "udf_rand",
     "udf_regexp",
     "udf_regexp_extract",

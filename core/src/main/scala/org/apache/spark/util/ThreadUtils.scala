@@ -29,6 +29,7 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
+import org.apache.spark.rpc.RpcAbortException
 
 private[spark] object ThreadUtils {
 
@@ -220,8 +221,10 @@ private[spark] object ThreadUtils {
     } catch {
       case e: SparkFatalException =>
         throw e.throwable
-      // TimeoutException is thrown in the current thread, so not need to warp the exception.
-      case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
+      // TimeoutException and RpcAbortException is thrown in the current thread, so not need to warp
+      // the exception.
+      case NonFatal(t)
+          if !t.isInstanceOf[TimeoutException] && !t.isInstanceOf[RpcAbortException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)
     }
   }

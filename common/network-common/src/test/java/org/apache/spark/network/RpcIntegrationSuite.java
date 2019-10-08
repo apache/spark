@@ -175,8 +175,8 @@ public class RpcIntegrationSuite {
     final Semaphore sem = new Semaphore(0);
 
     final RpcResult res = new RpcResult();
-    res.successMessages = Collections.synchronizedSet(new HashSet<String>());
-    res.errorMessages = Collections.synchronizedSet(new HashSet<String>());
+    res.successMessages = Collections.synchronizedSet(new HashSet<>());
+    res.errorMessages = Collections.synchronizedSet(new HashSet<>());
 
     RpcResponseCallback callback = new RpcResponseCallback() {
       @Override
@@ -208,8 +208,8 @@ public class RpcIntegrationSuite {
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     final Semaphore sem = new Semaphore(0);
     RpcResult res = new RpcResult();
-    res.successMessages = Collections.synchronizedSet(new HashSet<String>());
-    res.errorMessages = Collections.synchronizedSet(new HashSet<String>());
+    res.successMessages = Collections.synchronizedSet(new HashSet<>());
+    res.errorMessages = Collections.synchronizedSet(new HashSet<>());
 
     for (String stream : streams) {
       int idx = stream.lastIndexOf('/');
