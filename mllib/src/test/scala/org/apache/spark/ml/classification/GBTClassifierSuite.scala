@@ -317,21 +317,21 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       val e: SparkException = intercept[SparkException] {
         gbt.fit(df1)
       }
-      assert(e.getMessage.contains("Labels must be integers in range [0, 2)"))
+      assert(e.getMessage.contains("currently only supports binary classification"))
     }
     val df2 = getTestData(Seq(0.0, 0.1, 1.0, 0.0))
     withClue("Classifier should fail if label is not an integer") {
       val e: SparkException = intercept[SparkException] {
         gbt.fit(df2)
       }
-      assert(e.getMessage.contains("Labels must be integers in range [0, 2)"))
+      assert(e.getMessage.contains("currently only supports binary classification"))
     }
     val df3 = getTestData(Seq(0.0, 2.0, 1.0, 0.0))
     withClue("Classifier should fail if label is >= 2") {
       val e: SparkException = intercept[SparkException] {
         gbt.fit(df3)
       }
-      assert(e.getMessage.contains("Labels must be integers in range [0, 2)"))
+      assert(e.getMessage.contains("currently only supports binary classification"))
     }
   }
 
