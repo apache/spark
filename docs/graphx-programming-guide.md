@@ -183,7 +183,7 @@ code constructs a graph from a collection of RDDs:
 val sc: SparkContext
 // Create an RDD for the vertices
 val users: RDD[(VertexId, (String, String))] =
-  sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
+  sc.parallelize(Seq((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
                        (5L, ("franklin", "prof")), (2L, ("istoica", "prof"))))
 // Create an RDD for edges
 val relationships: RDD[Edge[String]] =
@@ -420,7 +420,7 @@ interest or eliminate broken links. For example in the following code we remove 
 {% highlight scala %}
 // Create an RDD for the vertices
 val users: RDD[(VertexId, (String, String))] =
-  sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
+  sc.parallelize(Seq((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
                        (5L, ("franklin", "prof")), (2L, ("istoica", "prof")),
                        (4L, ("peter", "student"))))
 // Create an RDD for edges
