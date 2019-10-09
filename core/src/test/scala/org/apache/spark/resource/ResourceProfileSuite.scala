@@ -40,6 +40,8 @@ class ResourceProfileSuite extends SparkFunSuite {
       s"Executor resources should have 1 core")
     assert(rprof.getExecutorResources(ResourceProfile.MEMORY).amount === 1024,
       s"Executor resources should have 1024 memory")
+    assert(rprof.getExecutorResources(ResourceProfile.MEMORY).units.get === "b",
+      s"Executor resources should have 1024 memory")
     assert(rprof.getTaskResources.size === 1,
       "Task resources should just contain cpus by default")
     assert(rprof.getTaskResources(ResourceProfile.CPUS).amount === 1,
@@ -71,7 +73,7 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(rprof.getTaskResources === Map.empty)
 
     val taskReq = new TaskResourceRequest("resource.gpu", 1)
-    val execReq = new ExecutorResourceRequest("resource.gpu", 2, Some("myscript"), None)
+    val execReq = new ExecutorResourceRequest("resource.gpu", 2, None, Some("myscript"), None)
     rprof.require(taskReq).require(execReq)
 
     assert(rprof.getExecutorResources.size === 1)
@@ -82,7 +84,7 @@ class ResourceProfileSuite extends SparkFunSuite {
 
     val cpuTaskReq = new TaskResourceRequest(ResourceProfile.CPUS, 1)
     val coresExecReq = new ExecutorResourceRequest(ResourceProfile.CORES, 2)
-    val memExecReq = new ExecutorResourceRequest(ResourceProfile.MEMORY, 4096)
+    val memExecReq = new ExecutorResourceRequest(ResourceProfile.MEMORY, 4096, Some("mb"))
     val omemExecReq = new ExecutorResourceRequest(ResourceProfile.OVERHEAD_MEM, 2048)
     val pysparkMemExecReq = new ExecutorResourceRequest(ResourceProfile.PYSPARK_MEM, 1024)
 
@@ -97,6 +99,8 @@ class ResourceProfileSuite extends SparkFunSuite {
       s"Executor resources should have 2 cores")
     assert(rprof.getExecutorResources(ResourceProfile.MEMORY).amount === 4096,
       s"Executor resources should have 4096 memory")
+    assert(rprof.getExecutorResources(ResourceProfile.MEMORY).units === Some("mb"),
+      s"Executor resources should have memory units mb")
     assert(rprof.getExecutorResources(ResourceProfile.OVERHEAD_MEM).amount === 2048,
       s"Executor resources should have 2048 overhead memory")
     assert(rprof.getExecutorResources(ResourceProfile.PYSPARK_MEM).amount === 1024,

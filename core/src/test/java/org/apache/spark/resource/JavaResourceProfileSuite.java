@@ -33,14 +33,9 @@ public class JavaResourceProfileSuite {
     TaskResourceRequest taskReq1 = new TaskResourceRequest("resource.gpu", 1);
     rprof.require(taskReq1);
 
-    ResourceInformation test = new ResourceInformation("gpu", new String[]{"2"});
-    test.name()
-        test.addresses()
-
     assertEquals(rprof.getExecutorResources().size(), 1);
     assert(rprof.getExecutorResources().contains("resource.gpu"));
-    ExecutorResourceRequest res1 = rprof.getExecutorResources();
-    assertEquals().amount(), 1);
+    // ExecutorResourceRequest res1 = rprof.getExecutorResources().asJava;
 
     assertEquals(rprof.getTaskResources().size(), 1);
     assert(rprof.getTaskResources().contains("resource.gpu"));

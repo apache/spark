@@ -25,7 +25,8 @@ package org.apache.spark.resource
  *
  * @param resourceName Name of the resource
  * @param amount Amount requesting
- * @param units Optional units of amount for things like Memory, default is no units
+ * @param units Optional units of amount for things like Memory, default is no units, only byte
+ *              types (b, mb, gb, etc) are supported.
  * @param discoveryScript Optional script used to discovery the resources
  * @param vendor Optional vendor, required for some cluster managers
  *

@@ -120,9 +120,6 @@ private[spark] object ResourceProfile extends Logging {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
-  val SPARK_RP_TASK_PREFIX = "spark.resourceProfile.task"
-  val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
-
   val CPUS = "cpus"
   val CORES = "cores"
   val MEMORY = "memory"
@@ -134,7 +131,7 @@ private[spark] object ResourceProfile extends Logging {
   // The default resource profile uses the application level configs.
   // Create the default profile immediately to get ID 0, its initialized later when fetched.
   private val defaultProfileRef: AtomicReference[ResourceProfile] =
-  new AtomicReference[ResourceProfile](new ResourceProfile())
+    new AtomicReference[ResourceProfile](new ResourceProfile())
 
   assert(defaultProfileRef.get().getId == DEFAULT_RESOURCE_PROFILE_ID,
     s"Default Profile must have the default profile id: $DEFAULT_RESOURCE_PROFILE_ID")
@@ -169,9 +166,9 @@ private[spark] object ResourceProfile extends Logging {
   }
 
   private def addDefaultExecutorResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
-    rprof.require(new ExecutorResourceRequest(CORES, conf.get(EXECUTOR_CORES), None, None))
+    rprof.require(new ExecutorResourceRequest(CORES, conf.get(EXECUTOR_CORES), None, None, None))
     rprof.require(
-      new ExecutorResourceRequest(MEMORY, conf.get(EXECUTOR_MEMORY).toInt, Some("MiB"), None, None))
+      new ExecutorResourceRequest(MEMORY, conf.get(EXECUTOR_MEMORY).toInt, Some("b"), None, None))
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
 
     execReq.foreach { req =>
@@ -180,39 +177,8 @@ private[spark] object ResourceProfile extends Logging {
         req.vendor)
       rprof.require(execReq)
     }
-    // TODO - remove
-    logWarning("Default executor resources: " + execReq)
   }
 
   // for testing purposes
   def resetDefaultProfile(conf: SparkConf): Unit = getOrCreateDefaultProfile(conf).reset()
-
-  /**
-   * Create the ResourceProfile internal confs that are used to pass between Driver and Executors.
-   * It pulls any "resource." resources from the ResourceProfile and returns a Map of key
-   * to value where the keys get formatted as:
-   *
-   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
-   * spark.resourceProfile.task.[rpId].resource.[resourceName].amount
-   *
-   * Keep this here as utility a function rather then in public ResourceProfile interface because
-   * end users shouldn't need this.
-   */
-  def createResourceProfileInternalConfs(rp: ResourceProfile): Map[String, String] = {
-    val res = new mutable.HashMap[String, String]()
-    // task resources
-    rp.getTaskResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
-      val prefix = s"${ResourceProfile.SPARK_RP_TASK_PREFIX}.${rp.getId}.$name"
-      res(s"$prefix.amount") = req.amount.toString
-    }
-    // executor resources
-    rp.getExecutorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
-      val prefix = s"${ResourceProfile.SPARK_RP_EXEC_PREFIX}.${rp.getId}.$name"
-      res(s"${prefix}.amount") = req.amount.toString
-      if (req.vendor.nonEmpty) res(s"${prefix}.vendor") = req.vendor.get
-      if (req.discoveryScript.nonEmpty) res(s"${prefix}.discoveryScript") = req.discoveryScript.get
-    }
-    res.toMap
-  }
-
 }
