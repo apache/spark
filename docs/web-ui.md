@@ -51,7 +51,7 @@ The information that is displayed in this section is
   <img src="img/AllJobsPageDetail2.png" title="Event timeline" alt="Event timeline"/>
 </p>
 
-When you click on a executor, you can make the color darker to point it out.
+When you click on a executor, you can make the color darker to point it at.
 
 <p style="text-align: center;">
   <img src="img/AllJobsPageDetail3.png" title="Clicked executor" alt="Clicked executor"/>
