@@ -74,36 +74,26 @@ public class CalendarIntervalSuite {
     testSingleUnit("millisecond", 3, 0, 3 * MICROS_PER_MILLI);
     testSingleUnit("microsecond", 3, 0, 3);
 
-    String input;
-
-    input = "interval   -5  years  23   month";
     CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0);
-    assertEquals(fromString(input), result);
-
-    input = "interval   -5  years  23   month   ";
-    assertEquals(fromString(input), result);
-
-    input = "  interval   -5  years  23   month   ";
-    assertEquals(fromString(input), result);
+    Arrays.asList(
+      "interval   -5  years  23   month",
+      "  -5  years  23   month",
+      "interval   -5  years  23   month   ",
+      "  -5  years  23   month   ",
+      "  interval   -5  years  23   month   ").forEach(input ->
+      assertEquals(fromString(input), result)
+    );
 
     // Error cases
-    input = "interval   3month 1 hour";
-    assertNull(fromString(input));
-
-    input = "interval 3 moth 1 hour";
-    assertNull(fromString(input));
-
-    input = "interval";
-    assertNull(fromString(input));
-
-    input = "int";
-    assertNull(fromString(input));
-
-    input = "";
-    assertNull(fromString(input));
-
-    input = null;
-    assertNull(fromString(input));
+    Arrays.asList(
+      "interval   3month 1 hour",
+      "3month 1 hour",
+      "interval 3 moth 1 hour",
+      "3 moth 1 hour",
+      "interval",
+      "int",
+      "",
+      null).forEach(input -> assertNull(fromString(input)));
   }
 
   @Test
