@@ -26,7 +26,6 @@ import org.scalatest.mockito.MockitoSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.Config.WAIT_FOR_APP_COMPLETION
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
@@ -143,7 +142,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("The client should configure the pod using the builder.") {
-    kconf.sparkConf.set(WAIT_FOR_APP_COMPLETION, false)
     val submissionClient = new Client(
       kconf,
       driverBuilder,
@@ -154,7 +152,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("The client should create Kubernetes resources") {
-    kconf.sparkConf.set(WAIT_FOR_APP_COMPLETION, false)
     val submissionClient = new Client(
       kconf,
       driverBuilder,
@@ -178,7 +175,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Waiting for app completion should stall on the watcher") {
-    kconf.sparkConf.set(WAIT_FOR_APP_COMPLETION, true)
     val submissionClient = new Client(
       kconf,
       driverBuilder,

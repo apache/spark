@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.util.concurrent.{CountDownLatch, TimeUnit}
-
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
@@ -26,7 +24,6 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesDriverConf
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.ThreadUtils
 
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
   def watchOrStop(submissionId: String): Unit
@@ -43,15 +40,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   private val appId = conf.appId
 
-  private val podCompletedFuture = new CountDownLatch(1)
-
-  // start timer for periodic logging
-  private lazy val maybeLoggingService = if (conf.get(WAIT_FOR_APP_COMPLETION)) {
-    val service = ThreadUtils.newDaemonSingleThreadScheduledExecutor("logging-pod-status-watcher")
-    Some(service)
-  } else {
-    None
-  }
+  @volatile private var podCompleted = false
 
   private var pod = Option.empty[Pod]
 
@@ -85,23 +74,21 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
   }
 
   private def closeWatch(): Unit = {
-    podCompletedFuture.countDown()
-    maybeLoggingService.foreach(_.shutdown())
+    podCompleted = true
   }
 
-  override def watchOrStop(sId: String): Unit = maybeLoggingService match {
-    case Some(service) =>
-      logInfo(s"Waiting for application ${conf.appName} with submission ID $sId to finish...")
-      val interval = conf.get(REPORT_INTERVAL)
-      val logShortStatus: Runnable = () => logInfo(s"Application status for $appId (phase: $phase)")
-      service.scheduleAtFixedRate(logShortStatus, 0, interval, TimeUnit.MILLISECONDS)
-      podCompletedFuture.await()
-      logInfo(
-        pod.map { p => s"Container final statuses:\n\n${containersDescription(p)}" }
-          .getOrElse("No containers were found in the driver pod."))
-      logInfo(s"Application ${conf.appName} with submission ID $sId finished")
-    case _ =>
-      logInfo(s"Deployed Spark application ${conf.appName} with submission ID $sId into Kubernetes")
-
+  override def watchOrStop(sId: String): Unit = if (conf.get(WAIT_FOR_APP_COMPLETION)) {
+    logInfo(s"Waiting for application ${conf.appName} with submission ID $sId to finish...")
+    val interval = conf.get(REPORT_INTERVAL)
+    while (!podCompleted) {
+      Thread.sleep(interval)
+      logInfo(s"Application status for $appId (phase: $phase)")
+    }
+    logInfo(
+      pod.map { p => s"Container final statuses:\n\n${containersDescription(p)}" }
+        .getOrElse("No containers were found in the driver pod."))
+    logInfo(s"Application ${conf.appName} with submission ID $sId finished")
+  } else {
+    logInfo(s"Deployed Spark application ${conf.appName} with submission ID $sId into Kubernetes")
   }
 }
