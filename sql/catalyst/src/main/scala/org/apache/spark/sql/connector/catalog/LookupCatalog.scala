@@ -84,32 +84,14 @@ private[sql] trait LookupCatalog extends Logging {
     }
   }
 
-  type DefaultCatalogAndNamespace = (Option[CatalogPlugin], Seq[String])
-
-  /**
-   * Extract catalog and namespace from a multi-part identifier with the default catalog if needed.
-   * Catalog name takes precedence over namespaces.
-   */
-  object DefaultCatalogAndNamespace {
-    def unapply(parts: Seq[String]): Some[DefaultCatalogAndNamespace] = parts match {
-      case Seq(catalogName, tail @ _*) =>
-        try {
-          Some((Some(catalogManager.catalog(catalogName)), tail))
-        } catch {
-          case _: CatalogNotFoundException =>
-            Some((defaultCatalog, parts))
-        }
-    }
-  }
-
-  type CurrentCatalogAndNamespace = (CatalogPlugin, Option[Seq[String]])
+  type CatalogAndNamespace = (CatalogPlugin, Option[Seq[String]])
 
   /**
    * Extract catalog and namespace from a multi-part identifier with the current catalog if needed.
    * Catalog name takes precedence over namespaces.
    */
-  object CurrentCatalogAndNamespace {
-    def unapply(parts: Seq[String]): Some[CurrentCatalogAndNamespace] = parts match {
+  object CatalogAndNamespace {
+    def unapply(parts: Seq[String]): Some[CatalogAndNamespace] = parts match {
       case Seq(catalogName, tail @ _*) =>
         try {
           Some(
