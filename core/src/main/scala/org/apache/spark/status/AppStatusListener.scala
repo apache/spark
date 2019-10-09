@@ -146,7 +146,7 @@ private[spark] class AppStatusListener(
           .index(TaskIndexNames.STATUS)
           .first(TaskState.RUNNING.toString)
           .last(TaskState.RUNNING.toString)
-          .closeableIterator().asScala
+          .asScala
           .map(_.toLiveTask)
           .foreach { task =>
             liveTasks.put(task.info.taskId, task)
