@@ -131,4 +131,34 @@ class ResourceProfileSuite extends SparkFunSuite {
     }.getMessage()
     assert(taskError.contains("Task resource not allowed"))
   }
+
+  test("Test TaskResourceRequest fractional") {
+
+    val rprof = new ResourceProfile()
+    val taskReq = new TaskResourceRequest("resource.gpu", 0.33)
+    rprof.require(taskReq)
+
+    assert(rprof.taskResources.size === 1, "Should have 1 task resource")
+    assert(rprof.taskResources.contains("resource.gpu"), "Task resources should have gpu")
+    assert(rprof.taskResources.get("resource.gpu").get.amount === 0.33,
+      "Task resources should have 0.33 gpu")
+
+    val fpgaReq = new TaskResourceRequest("resource.fpga", 4.0)
+    rprof.require(fpgaReq)
+
+    assert(rprof.taskResources.size === 2, "Should have 2 task resource")
+    assert(rprof.taskResources.contains("resource.fpga"), "Task resources should have gpu")
+    assert(rprof.taskResources.get("resource.fpga").get.amount === 4.0,
+      "Task resources should have 4.0 gpu")
+
+    var taskError = intercept[IllegalArgumentException] {
+      rprof.require(new TaskResourceRequest("resource.gpu", 1.5))
+    }.getMessage()
+    assert(taskError.contains("The resource amount 1.5 must be either <= 0.5, or a whole number."))
+
+    taskError = intercept[IllegalArgumentException] {
+      rprof.require(new TaskResourceRequest("resource.gpu", 0.7))
+    }.getMessage()
+    assert(taskError.contains("The resource amount 0.7 must be either <= 0.5, or a whole number."))
+  }
 }

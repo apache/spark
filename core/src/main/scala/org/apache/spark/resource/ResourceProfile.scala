@@ -170,7 +170,8 @@ private[spark] object ResourceProfile extends Logging {
   }
 
   private def addDefaultTaskResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
-    rprof.require(new TaskResourceRequest(CPUS, conf.get(CPUS_PER_TASK)))
+    val cpusPerTask = conf.get(CPUS_PER_TASK)
+    rprof.require(new TaskResourceRequest(CPUS, cpusPerTask))
     val taskReq = ResourceUtils.parseResourceRequirements(conf, SPARK_TASK_PREFIX)
 
     taskReq.foreach { req =>
