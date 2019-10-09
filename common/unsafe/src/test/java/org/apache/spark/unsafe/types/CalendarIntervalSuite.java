@@ -19,6 +19,8 @@ package org.apache.spark.unsafe.types;
 
 import org.junit.Test;
 
+import java.util.Arrays;
+
 import static org.junit.Assert.*;
 import static org.apache.spark.unsafe.types.CalendarInterval.*;
 
@@ -275,11 +277,13 @@ public class CalendarIntervalSuite {
   }
 
   private static void testSingleUnit(String unit, int number, int months, long microseconds) {
-    String input1 = "interval " + number + " " + unit;
-    String input2 = "interval " + number + " " + unit + "s";
-    CalendarInterval result = new CalendarInterval(months, microseconds);
-    assertEquals(fromString(input1), result);
-    assertEquals(fromString(input2), result);
+    Arrays.asList("interval ", "").forEach(prefix -> {
+      String input1 = prefix + number + " " + unit;
+      String input2 = prefix + number + " " + unit + "s";
+      CalendarInterval result = new CalendarInterval(months, microseconds);
+      assertEquals(fromString(input1), result);
+      assertEquals(fromString(input2), result);
+    });
   }
 
   @Test
