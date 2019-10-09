@@ -88,7 +88,6 @@ class SQLAppStatusListener(
     stageMetrics.clear()
   }
 
-
   override def onJobStart(event: SparkListenerJobStart): Unit = {
     val executionIdString = event.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
     if (executionIdString == null) {
