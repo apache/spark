@@ -690,10 +690,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     def checkResult(rows: RowSet, start: Long, end: Long): Unit = {
       assert(rows.getStartOffset() == start)
       assert(rows.numRows() == end - start)
-      // scalastyle:off
-      rows.iterator.asScala.zip((start until end).iterator).foreach { a =>
-        val rowValue = a._1(0).asInstanceOf[Long]
-        assert(rowValue == a._2)
+      rows.iterator.asScala.zip((start until end).iterator).foreach { case (row, v) =>
+        assert(row(0).asInstanceOf[Long] === v)
       }
     }
 
@@ -706,7 +704,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         sessionHandle,
         "SELECT * FROM range(10)",
         confOverlay) // 10 rows result with sequence 0, 1, 2, ..., 9
-    var rows: RowSet = null
+      var rows: RowSet = null
 
       // Fetch 5 rows with FETCH_NEXT
       rows = client.fetchResults(
