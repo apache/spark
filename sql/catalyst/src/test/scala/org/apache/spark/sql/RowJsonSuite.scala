@@ -35,7 +35,7 @@ class RowJsonSuite extends SparkFunSuite {
     .add("c1", "string")
     .add("c2", IntegerType)
 
-    private def testJson(name: String, value: Any, dt: DataType, expected: JValue): Unit = {
+  private def testJson(name: String, value: Any, dt: DataType, expected: JValue): Unit = {
     test(name) {
       val row = new GenericRowWithSchema(Array(value), new StructType().add("a", dt))
       assert(row.jsonValue === JObject("a" -> expected))
