@@ -29,7 +29,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private case class DummyCatalogPlugin(override val name: String) extends CatalogPlugin {
 
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = Unit
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = ()
 }
 
 class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
