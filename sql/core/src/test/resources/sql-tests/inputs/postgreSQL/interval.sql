@@ -253,11 +253,13 @@ SELECT interval '1 2:03:04' minute to second;
 -- test inputting and outputting SQL standard interval literals
 -- [SPARK-29406] Interval output styles
 -- SET IntervalStyle TO sql_standard;
-SELECT  interval '0'                       AS zero,
-        interval '1-2' year to month       AS `year-month`,
-        interval '1 2:03:04' day to second AS `day-time`,
-        - interval '1-2'                   AS `negative year-month`,
-        - interval '1 2:03:04'             AS `negative day-time`;
+-- [SPARK-29407] Support syntax for zero interval
+-- SELECT  interval '0'                       AS zero,
+--        interval '1-2' year to month       AS `year-month`,
+--        interval '1 2:03:04' day to second AS `day-time`,
+-- [SPARK-29408] Support interval literal with negative sign `-`
+--        - interval '1-2'                   AS `negative year-month`,
+--        - interval '1 2:03:04'             AS `negative day-time`;
 
 -- test input of some not-quite-standard interval values in the sql style
 -- [SPARK-29406] Interval output styles
