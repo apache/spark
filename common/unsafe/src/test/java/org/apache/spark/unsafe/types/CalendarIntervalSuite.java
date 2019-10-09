@@ -115,7 +115,9 @@ public class CalendarIntervalSuite {
         fromCaseInsensitiveString(input);
         fail("Expected to throw an exception for the invalid input");
       } catch (IllegalArgumentException e) {
-        assertTrue(e.getMessage().contains("cannot be null or blank"));
+        String msg = e.getMessage();
+        if (input == null) assertTrue(msg.contains("cannot be null"));
+        else assertTrue(msg.contains("cannot be blank"));
       }
     }
 
@@ -124,7 +126,12 @@ public class CalendarIntervalSuite {
         fromCaseInsensitiveString(input);
         fail("Expected to throw an exception for the invalid input");
       } catch (IllegalArgumentException e) {
-        assertTrue(e.getMessage().contains("Invalid interval"));
+        String msg = e.getMessage();
+        if (input.trim().equalsIgnoreCase("interval")) {
+          assertTrue(msg.contains("Interval string must have time units"));
+        } else {
+          assertTrue(msg.contains("Invalid interval:"));
+        }
       }
     }
   }
