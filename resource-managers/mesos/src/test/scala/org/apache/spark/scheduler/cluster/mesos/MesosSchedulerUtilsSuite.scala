@@ -68,7 +68,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
 
   def arePortsEqual(array1: Array[Long], array2: Array[Long])
     : Boolean = {
-    array1.sortBy(identity).sameElements(array2.sortBy(identity))
+    array1.sortBy(identity).deep == array2.sortBy(identity).deep
   }
 
   def getRangesFromResources(resources: List[Resource]): List[(Long, Long)] = {
