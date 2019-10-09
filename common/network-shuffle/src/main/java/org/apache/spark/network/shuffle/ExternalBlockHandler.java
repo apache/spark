@@ -102,10 +102,10 @@ public class ExternalBlockHandler extends RpcHandler {
           FetchShuffleBlocks msg = (FetchShuffleBlocks) msgObj;
           checkAuth(client, msg.appId);
           numBlockIds = 0;
-          for (int[] ids: msg.reduceIds) {
-            if (msg.batchFetchEnabled) {
-              numBlockIds = msg.mapIds.length;
-            } else {
+          if (msg.batchFetchEnabled) {
+            numBlockIds = msg.mapIds.length;
+          } else {
+            for (int[] ids: msg.reduceIds) {
               numBlockIds += ids.length;
             }
           }
@@ -353,15 +353,16 @@ public class ExternalBlockHandler extends RpcHandler {
       if (!batchFetchEnabled) {
         block = blockManager.getBlockData(
           appId, execId, shuffleId, mapIds[mapIdx], reduceIds[mapIdx][reduceIdx]);
+        if (reduceIdx < reduceIds[mapIdx].length - 1) {
+          reduceIdx += 1;
+        } else {
+          reduceIdx = 0;
+          mapIdx += 1;
+        }
       } else {
-        block = blockManager.getContinuousBlocksData(
-          appId, execId, shuffleId, mapIds[mapIdx],
-          reduceIds[mapIdx][reduceIdx], reduceIds[mapIdx][++reduceIdx]);
-      }
-      if (reduceIdx < reduceIds[mapIdx].length - 1) {
-        reduceIdx += 1;
-      } else {
-        reduceIdx = 0;
+        assert(reduceIds[mapIdx].length == 2);
+        block = blockManager.getContinuousBlocksData(appId, execId, shuffleId, mapIds[mapIdx],
+          reduceIds[mapIdx][0], reduceIds[mapIdx][1]);
         mapIdx += 1;
       }
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);

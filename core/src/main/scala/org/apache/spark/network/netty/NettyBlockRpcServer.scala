@@ -73,10 +73,8 @@ class NettyBlockRpcServer(
           } else {
             val startAndEndId = fetchShuffleBlocks.reduceIds(index)
             if (startAndEndId.length != 2) {
-              throw new RuntimeException("Invalid reduceIds for batch fetch mode, " +
-                "the reduceIds in ShuffleBlockBatchId should contains both start and end " +
-                s"reduce id. ShuffleId: ${fetchShuffleBlocks.shuffleId}, mapId: $mapId, " +
-                s"current reduceIds: $startAndEndId")
+              throw new IllegalStateException(s"Invalid shuffle fetch request: " +
+                s"$fetchShuffleBlocks")
             }
             Array(blockManager.getBlockData(
               ShuffleBlockBatchId(

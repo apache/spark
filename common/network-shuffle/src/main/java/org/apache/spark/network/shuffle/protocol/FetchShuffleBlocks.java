@@ -56,6 +56,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
     this.reduceIds = reduceIds;
     assert(mapIds.length == reduceIds.length);
     this.batchFetchEnabled = batchFetchEnabled;
+    if (batchFetchEnabled) assert(reduceIds.length == 2);
   }
 
   @Override
