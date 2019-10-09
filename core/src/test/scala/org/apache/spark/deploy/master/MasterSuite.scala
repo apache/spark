@@ -542,9 +542,10 @@ class MasterSuite extends SparkFunSuite
   // | Utility methods and fields for testing |
   // ==========================================
 
-  private val _scheduleExecutorsOnWorkers = PrivateMethod[Array[Int]]('scheduleExecutorsOnWorkers)
-  private val _drivers = PrivateMethod[HashSet[DriverInfo]]('drivers)
-  private val _state = PrivateMethod[RecoveryState.Value]('state)
+  private val _scheduleExecutorsOnWorkers =
+    PrivateMethod[Array[Int]](Symbol("scheduleExecutorsOnWorkers"))
+  private val _drivers = PrivateMethod[HashSet[DriverInfo]](Symbol("drivers"))
+  private val _state = PrivateMethod[RecoveryState.Value](Symbol("state"))
 
   private val workerInfo = makeWorkerInfo(4096, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)

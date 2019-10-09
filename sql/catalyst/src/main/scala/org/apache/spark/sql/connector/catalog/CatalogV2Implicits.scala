@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.types.StructType
@@ -92,8 +93,22 @@ private[sql] object CatalogV2Implicits {
     }
   }
 
-  implicit class MultipartIdentifierHelper(namespace: Seq[String]) {
-    def quoted: String = namespace.map(quote).mkString(".")
+  implicit class MultipartIdentifierHelper(parts: Seq[String]) {
+    if (parts.isEmpty) {
+      throw new AnalysisException("multi-part identifier cannot be empty.")
+    }
+
+    def asIdentifier: Identifier = Identifier.of(parts.init.toArray, parts.last)
+
+    def asTableIdentifier: TableIdentifier = parts match {
+      case Seq(tblName) => TableIdentifier(tblName)
+      case Seq(dbName, tblName) => TableIdentifier(tblName, Some(dbName))
+      case _ =>
+        throw new AnalysisException(
+          s"$quoted is not a valid TableIdentifier as it has more than 2 name parts.")
+    }
+
+    def quoted: String = parts.map(quote).mkString(".")
   }
 
   private def quote(part: String): String = {

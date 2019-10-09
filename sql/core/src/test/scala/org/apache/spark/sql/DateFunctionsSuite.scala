@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class DateFunctionsSuite extends QueryTest with SharedSparkSession {
@@ -794,6 +795,15 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       val df = Seq(timestamp).toDF("t")
       checkAnswer(df.select(to_timestamp($"t", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX")),
         Seq(Row(Instant.parse(timestamp))))
+    }
+  }
+
+  test("handling null field by date_part") {
+    val input = Seq(Date.valueOf("2019-09-20")).toDF("d")
+    Seq("date_part(null, d)", "date_part(null, date'2019-09-20')").foreach { expr =>
+      val df = input.selectExpr(expr)
+      assert(df.schema.headOption.get.dataType == DoubleType)
+      checkAnswer(df, Row(null))
     }
   }
 }

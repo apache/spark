@@ -84,7 +84,7 @@ private[deploy] class DriverRunner(
   /** Starts a thread to run and manage the driver. */
   private[worker] def start() = {
     new Thread("DriverRunner for " + driverId) {
-      override def run() {
+      override def run(): Unit = {
         var shutdownHook: AnyRef = null
         try {
           shutdownHook = ShutdownHookManager.addShutdownHook { () =>

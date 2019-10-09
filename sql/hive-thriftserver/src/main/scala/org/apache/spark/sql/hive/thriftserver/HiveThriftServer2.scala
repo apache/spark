@@ -72,7 +72,7 @@ object HiveThriftServer2 extends Logging {
     server
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // If the arguments contains "-h" or "--help", print out the usage and exit.
     if (args.contains("-h") || args.contains("--help")) {
       HiveServer2.main(args)
@@ -303,7 +303,7 @@ private[hive] class HiveThriftServer2(sqlContext: SQLContext)
   // started, and then once only.
   private val started = new AtomicBoolean(false)
 
-  override def init(hiveConf: HiveConf) {
+  override def init(hiveConf: HiveConf): Unit = {
     val sparkSqlCliService = new SparkSQLCLIService(this, sqlContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)

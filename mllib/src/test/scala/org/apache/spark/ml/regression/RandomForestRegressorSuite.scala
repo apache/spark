@@ -38,7 +38,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
 
   private var orderedLabeledPoints50_1000: RDD[LabeledPoint] = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     orderedLabeledPoints50_1000 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
@@ -49,7 +49,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
 
-  def regressionTestWithContinuousFeatures(rf: RandomForestRegressor) {
+  def regressionTestWithContinuousFeatures(rf: RandomForestRegressor): Unit = {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val newRF = rf
       .setImpurity("variance")
