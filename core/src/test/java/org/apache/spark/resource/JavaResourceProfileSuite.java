@@ -17,27 +17,49 @@
 
 package org.apache.spark.resource;
 
+import java.util.Map;
+
 import static org.junit.Assert.*;
 import org.junit.Test;
 
 // Test the ResourceProfile and Request api's from Java
 public class JavaResourceProfileSuite {
 
+  String GpuResource = "resource.gpu";
+  String FPGAResource = "resource.fpga";
+
   @Test
-  public void testSortingOnlyByPrefix() throws Exception {
-    ExecutorResourceRequest execReq1 = new ExecutorResourceRequest("resource.gpu", 2, "", "myscript");
-    ExecutorResourceRequest execReq2 = new ExecutorResourceRequest("resource.fpga", 3, "", "myfpgascript", "nvidia");
+  public void testResourceProfileAccessFromJava() throws Exception {
+    ExecutorResourceRequest execReqGpu = new ExecutorResourceRequest(GpuResource, 2, "", "myscript");
+    ExecutorResourceRequest execReqFpga = new ExecutorResourceRequest(FPGAResource, 3, "", "myfpgascript", "nvidia");
 
     ResourceProfile rprof = new ResourceProfile();
-    rprof.require(execReq1);
-    TaskResourceRequest taskReq1 = new TaskResourceRequest("resource.gpu", 1);
+    rprof.require(execReqGpu);
+    rprof.require(execReqFpga);
+    TaskResourceRequest taskReq1 = new TaskResourceRequest(GpuResource, 1);
     rprof.require(taskReq1);
 
-    assertEquals(rprof.getExecutorResources().size(), 1);
-    assert(rprof.getExecutorResources().contains("resource.gpu"));
-    // ExecutorResourceRequest res1 = rprof.getExecutorResources().asJava;
+    assertEquals(rprof.executorResources().size(), 2);
+    Map<String, ExecutorResourceRequest> eresources = rprof.executorResourcesJMap();
+    assert(eresources.containsKey(GpuResource));
+    ExecutorResourceRequest gpuReq = eresources.get(GpuResource);
+    assertEquals(gpuReq.amount(), 2);
+    assertEquals(gpuReq.discoveryScript(), "myscript");
+    assertEquals(gpuReq.vendor(), "");
+    assertEquals(gpuReq.units(), "");
 
-    assertEquals(rprof.getTaskResources().size(), 1);
-    assert(rprof.getTaskResources().contains("resource.gpu"));
+    assert(eresources.containsKey(FPGAResource));
+    ExecutorResourceRequest fpgaReq = eresources.get(FPGAResource);
+    assertEquals(fpgaReq.amount(), 3);
+    assertEquals(fpgaReq.discoveryScript(), "myfpgascript");
+    assertEquals(fpgaReq.vendor(), "nvidia");
+    assertEquals(fpgaReq.units(), "");
+
+    assertEquals(rprof.taskResources().size(), 1);
+    Map<String, TaskResourceRequest> tresources = rprof.taskResourcesJMap();
+    assert(tresources.containsKey(GpuResource));
+    TaskResourceRequest taskReq = tresources.get(GpuResource);
+    assertEquals(taskReq.amount(), 1.0, 0);
+    assertEquals(taskReq.resourceName(), GpuResource);
   }
 }
