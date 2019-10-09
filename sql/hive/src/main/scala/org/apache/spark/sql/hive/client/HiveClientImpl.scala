@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
@@ -573,8 +574,9 @@ private[hive] class HiveClientImpl(
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
     verifyColumnDataType(table.dataSchema)
+    val owner = if (StringUtils.isEmpty(table.owner)) userName else table.owner
     val hiveTable = toHiveTable(
-      table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
+      table.copy(properties = table.ignoredProperties ++ table.properties), Some(owner))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"$dbName.$tableName"
     shim.alterTable(client, qualifiedTableName, hiveTable)
