@@ -531,9 +531,9 @@ trait Row extends Serializable {
   private[sql] def jsonValue: JValue = {
     require(schema != null, "JSON serialization requires a non-null schema.")
 
-    lazy val timeZone = TimeZone.getTimeZone(SQLConf.get.sessionLocalTimeZone)
-    lazy val dateFormatter = DateFormatter.apply(timeZone.toZoneId)
-    lazy val timestampFormatter = TimestampFormatter.apply(timeZone.toZoneId)
+    lazy val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+    lazy val dateFormatter = DateFormatter.apply(zoneId)
+    lazy val timestampFormatter = TimestampFormatter(zoneId)
 
     // Convert an iterator of values to a json array
     def iteratorToJsonArray(iterator: Iterator[_], elementType: DataType): JArray = {

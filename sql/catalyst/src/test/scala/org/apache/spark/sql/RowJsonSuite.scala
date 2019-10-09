@@ -35,18 +35,10 @@ class RowJsonSuite extends SparkFunSuite {
     .add("c1", "string")
     .add("c2", IntegerType)
 
-  private val conf: SQLConf = {
-    val conf = new SQLConf
-    conf.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, "UTC")
-    conf
-  }
-
-  private def testJson(name: String, value: Any, dt: DataType, expected: JValue): Unit = {
+    private def testJson(name: String, value: Any, dt: DataType, expected: JValue): Unit = {
     test(name) {
-      SQLConf.withExistingConf(conf) {
-        val row = new GenericRowWithSchema(Array(value), new StructType().add("a", dt))
-        assert(row.jsonValue === JObject("a" -> expected))
-      }
+      val row = new GenericRowWithSchema(Array(value), new StructType().add("a", dt))
+      assert(row.jsonValue === JObject("a" -> expected))
     }
   }
 
@@ -85,11 +77,11 @@ class RowJsonSuite extends SparkFunSuite {
   testJson(Date.valueOf("2019-04-22"), DateType, JString("2019-04-22"))
   testJson(LocalDate.of(2018, 5, 14), DateType, JString("2018-05-14"))
   testJson(
-    new Timestamp(Instant.parse("2017-01-06T10:22:03.00Z").toEpochMilli),
+    Timestamp.valueOf("2017-01-06 10:22:03.00"),
     TimestampType,
     JString("2017-01-06 10:22:03"))
   testJson(
-    Instant.parse("2017-05-30T10:22:03.00Z"),
+    Timestamp.valueOf("2017-05-30 10:22:03.00").toInstant,
     TimestampType,
     JString("2017-05-30 10:22:03"))
 
