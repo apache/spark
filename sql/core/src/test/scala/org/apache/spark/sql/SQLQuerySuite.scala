@@ -59,7 +59,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
       StringUtils.filterPattern(
-        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName), pattern)
+        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName)
+        ++ Seq("!=", "<>", "between", "case"), pattern)
         .map(Row(_))
     }
 
@@ -80,16 +81,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
 
     createFunction(functions)
 
-    checkAnswer(sql("SHOW functions"), (getFunctions("*") ++
-      Seq(Row("!="), Row("<>"), Row("between"), Row("case"))))
+    checkAnswer(sql("SHOW functions"), getFunctions("*"))
     assert(sql("SHOW functions").collect().size > 200)
 
     Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
       // For the pattern part, only '*' and '|' are allowed as wildcards.
       // For '*', we need to replace it to '.*'.
-      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"),
-        getFunctions(pattern) ++
-          StringUtils.filterPattern(Seq("!=", "<>", "between", "case"), pattern).map(Row(_)))
+      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
     }
     dropFunction(functions)
   }
