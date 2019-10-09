@@ -455,7 +455,7 @@ private[spark] class LiveExecutionData(val executionId: Long) extends LiveEntity
 
 }
 
-private[spark] class LiveStageMetrics (
+private[spark] class LiveStageMetrics(
     val stageId: Int,
     var attemptId: Int,
     val accumulatorIds: Set[Long],
