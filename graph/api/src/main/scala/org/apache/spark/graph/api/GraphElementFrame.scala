@@ -65,12 +65,12 @@ sealed abstract class GraphElementFrame {
 /**
  * Interface used to build a [[NodeFrame]].
  *
- * @param dataFrame DataFrame containing a single node in each row
+ * @param df DataFrame containing a single node in each row
  * @since 3.0.0
  */
-final class NodeFrameBuilder(var dataFrame: DataFrame) {
+final class NodeFrameBuilder(var df: DataFrame) {
 
-  private var idColumn: String = "id"
+  private var idColumn: String = CypherSession.ID_COLUMN
   private var labelSet: Set[String] = Set.empty
   private var properties: Map[String, String] = Map.empty
 
@@ -119,7 +119,7 @@ final class NodeFrameBuilder(var dataFrame: DataFrame) {
    * @since 3.0.0
    */
   def build(): NodeFrame = {
-    NodeFrame(dataFrame, idColumn, labelSet, properties)
+    NodeFrame(df, idColumn, labelSet, properties)
   }
 
 }
@@ -143,81 +143,98 @@ case class NodeFrame private[graph] (
     properties: Map[String, String])
     extends GraphElementFrame
 
-object RelationshipFrame {
+/**
+ * Interface used to build a [[RelationshipFrame]].
+ *
+ * @param df DataFrame containing a single relationship in each row
+ * @since 3.0.0
+ */
+final class RelationshipFrameBuilder(val df: DataFrame) {
+
+  private var idColumn: String = CypherSession.ID_COLUMN
+  private var sourceIdColumn: String = CypherSession.SOURCE_ID_COLUMN
+  private var targetIdColumn: String = CypherSession.TARGET_ID_COLUMN
+  private var maybeRelationshipType: Option[String] = Option.empty
+  private var properties: Map[String, String] = Map.empty
 
   /**
-   * Describes how to map a DataFrame to relationships.
-   *
-   * All columns apart from the given identifier columns are mapped to relationship properties.
-   *
-   * @param df               DataFrame containing a single relationship in each row
-   * @param idColumn         column that contains the relationship identifier
-   * @param sourceIdColumn   column that contains the source node identifier of the relationship
-   * @param targetIdColumn   column that contains the target node identifier of the relationship
-   * @param relationshipType relationship type that is assigned to all relationships
+   * @param idColumn column that contains the relationship identifier
    * @since 3.0.0
    */
-  def create(
-      df: DataFrame,
-      idColumn: String,
-      sourceIdColumn: String,
-      targetIdColumn: String,
-      relationshipType: String): RelationshipFrame = {
-    val properties = (df.columns.toSet - idColumn - sourceIdColumn - targetIdColumn)
-      .map(columnName => columnName -> columnName)
-      .toMap
-
-    create(df, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
+  def idColumn(idColumn: String): RelationshipFrameBuilder = {
+    if (idColumn.isEmpty) {
+      throw new IllegalArgumentException("idColumn must not be empty")
+    }
+    this.idColumn = idColumn;
+    this
   }
 
   /**
-   * Describes how to map a DataFrame to relationships.
-   *
-   * @param df               DataFrame containing a single relationship in each row
-   * @param idColumn         column that contains the relationship identifier
-   * @param sourceIdColumn   column that contains the source node identifier of the relationship
-   * @param targetIdColumn   column that contains the target node identifier of the relationship
-   * @param relationshipType relationship type that is assigned to all relationships
-   * @param properties       mapping from property keys to corresponding columns
+   * @param sourceIdColumn column that contains the source node identifier of the relationship
    * @since 3.0.0
    */
-  def create(
-      df: DataFrame,
-      idColumn: String,
-      sourceIdColumn: String,
-      targetIdColumn: String,
-      relationshipType: String,
-      properties: Map[String, String]): RelationshipFrame = {
-    RelationshipFrame(df, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
+  def sourceIdColumn(sourceIdColumn: String): RelationshipFrameBuilder = {
+    if (sourceIdColumn.isEmpty) {
+      throw new IllegalArgumentException("sourceIdColumn must not be empty")
+    }
+    this.sourceIdColumn = sourceIdColumn;
+    this
   }
 
   /**
-   * Describes how to map a DataFrame to relationships.
-   *
-   * @param df               DataFrame containing a single relationship in each row
-   * @param idColumn         column that contains the relationship identifier
-   * @param sourceIdColumn   column that contains the source node identifier of the relationship
-   * @param targetIdColumn   column that contains the target node identifier of the relationship
-   * @param relationshipType relationship type that is assigned to all relationships
-   * @param properties       mapping from property keys to corresponding columns
+   * @param targetIdColumn column that contains the target node identifier of the relationship
    * @since 3.0.0
    */
-  def create(
-      df: DataFrame,
-      idColumn: String,
-      sourceIdColumn: String,
-      targetIdColumn: String,
-      relationshipType: String,
-      properties: java.util.Map[String, String]): RelationshipFrame = {
-    RelationshipFrame(
-      df,
-      idColumn,
-      sourceIdColumn,
-      targetIdColumn,
-      relationshipType,
-      properties.asScala.toMap)
+  def targetIdColumn(targetIdColumn: String): RelationshipFrameBuilder = {
+    if (targetIdColumn.isEmpty) {
+      throw new IllegalArgumentException("targetIdColumn must not be empty")
+    }
+    this.targetIdColumn = targetIdColumn;
+    this
   }
 
+  /**
+   * @param relationshipType relationship type that is assigned to all relationships
+   * @since 3.0.0
+   */
+  def relationshipType(relationshipType: String): RelationshipFrameBuilder = {
+    if (relationshipType.isEmpty) {
+      throw new IllegalArgumentException("Relationship type must not be empty")
+    }
+    this.maybeRelationshipType = Some(relationshipType)
+    this
+  }
+
+  /**
+   * @param properties mapping from property keys to corresponding columns
+   * @since 3.0.0
+   */
+  def properties(properties: Map[String, String]): RelationshipFrameBuilder = {
+    this.properties = properties
+    this
+  }
+
+  /**
+   * @param properties mapping from property keys to corresponding columns
+   * @since 3.0.0
+   */
+  def properties(properties: java.util.Map[String, String]): RelationshipFrameBuilder = {
+    this.properties = properties.asScala.toMap
+    this
+  }
+
+  /**
+   * Creates a [[RelationshipFrame]] from the specified builder parameters.
+   *
+   * @since 3.0.0
+   */
+  def build(): RelationshipFrame = {
+    maybeRelationshipType match {
+      case Some(relationshipType) =>
+        RelationshipFrame(df, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
+      case None => throw new IllegalArgumentException("Relationship type must be set.")
+    }
+  }
 }
 
 /**

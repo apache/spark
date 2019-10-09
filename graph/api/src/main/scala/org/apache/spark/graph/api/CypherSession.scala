@@ -254,4 +254,13 @@ trait CypherSession extends Logging {
   def buildNodeFrame(df: DataFrame): NodeFrameBuilder =
     new NodeFrameBuilder(df)
 
+  /**
+   * Returns a [[RelationshipFrameBuilder]] that can be used to construct a [[RelationshipFrame]].
+   *
+   * @param df DataFrame containing a single relationship in each row
+   * @since 3.0.0
+   */
+  def buildRelationshipFrame(df: DataFrame): RelationshipFrameBuilder =
+    new RelationshipFrameBuilder(df)
+
 }

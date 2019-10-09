@@ -59,12 +59,13 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
     val relationshipData = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))
       .toDF("id", "source", "target", "since")
-    val relationshipFrame = RelationshipFrame.create(
-      relationshipData,
-      "id",
-      "source",
-      "target",
-      "KNOWS")
+    val relationshipFrame = cypherSession.buildRelationshipFrame(relationshipData)
+        .idColumn("id")
+        .sourceIdColumn("source")
+        .targetIdColumn("target")
+        .relationshipType("KNOWS")
+        .properties(Map("since" -> "since"))
+        .build()
 
     val graph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
 
@@ -107,18 +108,19 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
       .createDataFrame(Seq((1L, 2L, 1L)))
       .toDF("id", "source", "target")
 
-    val knowsRF = RelationshipFrame.create(
-      knowsDF,
-      "id",
-      "source",
-      "target",
-      "KNOWS")
-    val teachesRF = RelationshipFrame.create(
-      teachesDF,
-      "id",
-      "source",
-      "target",
-      "TEACHES")
+    val knowsRF = cypherSession.buildRelationshipFrame(knowsDF)
+        .idColumn("id")
+        .sourceIdColumn("source")
+        .targetIdColumn("target")
+        .relationshipType("KNOWS")
+        .properties(Map("since" -> "since"))
+        .build()
+    val teachesRF = cypherSession.buildRelationshipFrame(teachesDF)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("TEACHES")
+      .build()
 
     val graph = cypherSession.createGraph(Array(studentNF, teacherNF), Array(knowsRF, teachesRF))
 
@@ -184,12 +186,13 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
       "target",
       relationshipType = "KNOWS",
       properties = Map("since" -> "col_since"))
-    val teachesRF = RelationshipFrame.create(
+    val teachesRF = RelationshipFrame(
       teachesDF,
       "id",
       "source",
       "target",
-      "TEACHES")
+      "TEACHES",
+      Map.empty)
 
     val graph = cypherSession.createGraph(Array(studentNF, teacherNF), Array(knowsRF, teachesRF))
 
