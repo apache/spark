@@ -1,3 +1,0 @@
-[submodule "test"]
-	path = test
-	url = https://github.com/radanalyticsio/openshift-test-kit
