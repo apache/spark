@@ -31,7 +31,7 @@ import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 class ShuffleDriverComponentsSuite
     extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach {
 
-  test(s"test serialization of shuffle initialization conf to executors") {
+  test("test serialization of shuffle initialization conf to executors") {
     val testConf = new SparkConf()
       .setAppName("testing")
       .set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + "test-plugin-key", "user-set-value")
@@ -43,16 +43,12 @@ class ShuffleDriverComponentsSuite
 
     val out = sc.parallelize(Seq((1, "one"), (2, "two"), (3, "three")), 3)
       .groupByKey()
-      .foreach { x =>
+      .foreach { _ =>
         if (!TestShuffleExecutorComponentsInitialized.initialized.get()) {
           throw new RuntimeException("TestShuffleExecutorComponents wasn't initialized")
         }
       }
   }
-}
-
-object TestShuffleExecutorComponentsInitialized {
-  var initialized = new AtomicBoolean(false)
 }
 
 class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
@@ -70,6 +66,10 @@ class TestShuffleDriverComponents extends ShuffleDriverComponents {
   }
 
   override def cleanupApplication(): Unit = {}
+}
+
+object TestShuffleExecutorComponentsInitialized {
+  val initialized = new AtomicBoolean(false)
 }
 
 class TestShuffleExecutorComponentsInitialized(delegate: ShuffleExecutorComponents)
