@@ -94,16 +94,18 @@ private[hive] class SparkGetTypeInfoOperation(
       setState(OperationState.FINISHED)
     } catch {
       case e: Throwable =>
-        logError(s"Error executing get table types type info with $statementId", e)
+        logError(s"Error executing get type info with $statementId", e)
         setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        if (e.isInstanceOf[HiveSQLException]) {
-          throw e.asInstanceOf[HiveSQLException]
-        } else {
-          val root = ExceptionUtils.getRootCause(e)
-          throw new HiveSQLException("Error getting type info: " +
-            (if (root == null) e.toString else root.toString), e)
+        e match {
+          case hiveException: HiveSQLException =>
+            HiveThriftServer2.listener.onStatementError(
+              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+            throw hiveException
+          case _ =>
+            val root = ExceptionUtils.getRootCause(e)
+            HiveThriftServer2.listener.onStatementError(
+              statementId, root.getMessage, SparkUtils.exceptionString(root))
+            throw new HiveSQLException("Error getting type info: " + root.toString, root)
         }
     }
     HiveThriftServer2.listener.onStatementFinish(statementId)

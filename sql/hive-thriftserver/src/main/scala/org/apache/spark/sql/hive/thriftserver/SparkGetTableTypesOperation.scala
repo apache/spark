@@ -78,14 +78,16 @@ private[hive] class SparkGetTableTypesOperation(
       case e: Throwable =>
         logError(s"Error executing get table types operation with $statementId", e)
         setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        if (e.isInstanceOf[HiveSQLException]) {
-          throw e.asInstanceOf[HiveSQLException]
-        } else {
-          val root = ExceptionUtils.getRootCause(e)
-          throw new HiveSQLException("Error getting table types: " +
-            (if (root == null) e.toString else root.toString), e)
+        e match {
+          case hiveException: HiveSQLException =>
+            HiveThriftServer2.listener.onStatementError(
+              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+            throw hiveException
+          case _ =>
+            val root = ExceptionUtils.getRootCause(e)
+            HiveThriftServer2.listener.onStatementError(
+              statementId, root.getMessage, SparkUtils.exceptionString(root))
+            throw new HiveSQLException("Error getting table types: " + root.toString, root)
         }
     }
     HiveThriftServer2.listener.onStatementFinish(statementId)

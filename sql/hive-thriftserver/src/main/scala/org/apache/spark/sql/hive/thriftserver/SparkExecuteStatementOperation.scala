@@ -282,14 +282,16 @@ private[hive] class SparkExecuteStatementOperation(
         } else {
           logError(s"Error executing query with $statementId, currentState $currentState, ", e)
           setState(OperationState.ERROR)
-          HiveThriftServer2.listener.onStatementError(
-            statementId, e.getMessage, SparkUtils.exceptionString(e))
-          if (e.isInstanceOf[HiveSQLException]) {
-            throw e.asInstanceOf[HiveSQLException]
-          } else {
-            val root = ExceptionUtils.getRootCause(e)
-            throw new HiveSQLException("Error running query: " +
-              (if (root == null) e.toString else root.toString), e)
+          e match {
+            case hiveException: HiveSQLException =>
+              HiveThriftServer2.listener.onStatementError(
+                statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+              throw hiveException
+            case _ =>
+              val root = ExceptionUtils.getRootCause(e)
+              HiveThriftServer2.listener.onStatementError(
+                statementId, root.getMessage, SparkUtils.exceptionString(root))
+              throw new HiveSQLException("Error running query: " + root.toString, root)
           }
         }
     } finally {
