@@ -152,8 +152,10 @@ private[spark] class AppStatusListener(
             liveTasks.put(task.info.taskId, task)
             stage.activeTasksPerExecutor(task.info.executorId) += 1
           }
+
         stage.savedTasks.addAndGet(kvstore.count(classOf[TaskDataWrapper]).intValue())
       }
+
       kvstore.view(classOf[ExecutorSummaryWrapper]).asScala.filter(_.info.isActive)
         .map(_.toLiveExecutor).foreach(exec => liveExecutors.put(exec.executorId, exec))
       kvstore.view(classOf[RDDStorageInfoWrapper]).asScala
