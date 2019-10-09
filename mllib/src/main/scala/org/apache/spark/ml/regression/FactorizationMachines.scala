@@ -32,11 +32,11 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.{linalg => oldLinalg}
-import org.apache.spark.mllib.linalg.{Vector => oldVector, Vectors => oldVectors}
+import org.apache.spark.mllib.{linalg => OldLinalg}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.optimization.{Gradient, GradientDescent, Updater}
-import org.apache.spark.mllib.regression.{LabeledPoint => oldLabeledPoint}
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
@@ -321,10 +321,10 @@ class FactorizationMachines @Since("2.4.3") (
   protected[spark] def train(
       dataset: Dataset[_],
       handlePersistence: Boolean): FactorizationMachinesModel = instrumented { instr =>
-    val instances: RDD[oldLabeledPoint] =
+    val instances: RDD[OldLabeledPoint] =
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
-          oldLabeledPoint(label, features)
+          OldLabeledPoint(label, features)
       }
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -344,7 +344,7 @@ class FactorizationMachines @Since("2.4.3") (
     val initialCoefficients =
       Vectors.dense(Array.fill(coefficientsSize)(Random.nextGaussian() * $(initStd)))
 
-    val data = instances.map{ case oldLabeledPoint(label, features) => (label, features) }
+    val data = instances.map{ case OldLabeledPoint(label, features) => (label, features) }
 
     // optimize coefficients with gradient descent
     val gradient = BaseFactorizationMachinesGradient.parseLoss(
@@ -404,7 +404,7 @@ object FactorizationMachines extends DefaultParamsReadable[FactorizationMachines
 @Since("2.4.3")
 class FactorizationMachinesModel (
     @Since("2.4.3") override val uid: String,
-    @Since("2.4.3") val coefficients: oldVector,
+    @Since("2.4.3") val coefficients: OldVector,
     @Since("2.4.3") override val numFeatures: Int)
   extends PredictionModel[Vector, FactorizationMachinesModel]
   with FactorizationMachinesParams with MLWritable {
@@ -461,7 +461,7 @@ object FactorizationMachinesModel extends MLReadable[FactorizationMachinesModel]
 
     private case class Data(
         numFeatures: Int,
-        coefficients: oldVector)
+        coefficients: OldVector)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
@@ -480,7 +480,7 @@ object FactorizationMachinesModel extends MLReadable[FactorizationMachinesModel]
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val Row(numFeatures: Int, coefficients: oldVector) = data
+      val Row(numFeatures: Int, coefficients: OldVector) = data
         .select("numFeatures", "coefficients").head()
       val model = new FactorizationMachinesModel(
         metadata.uid, coefficients, numFeatures)
@@ -541,10 +541,10 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
     numFeatures: Int) extends Gradient {
 
   override def compute(
-      data: oldVector,
+      data: OldVector,
       label: Double,
-      weights: oldVector,
-      cumGradient: oldVector): Double = {
+      weights: OldVector,
+      cumGradient: OldVector): Double = {
     val rawPrediction = getRawPrediction(data, weights)
     val rawGradient = getRawGradient(data, weights)
     val multiplier = getMultiplier(rawPrediction, label)
@@ -561,7 +561,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
 
   private val sumVX = Array.fill(numFactors)(0.0)
 
-  def getRawPrediction(data: oldVector, weights: oldVector): Double = {
+  def getRawPrediction(data: OldVector, weights: OldVector): Double = {
     var rawPrediction = 0.0
     val vWeightsSize = numFeatures * numFactors
 
@@ -587,11 +587,11 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
     rawPrediction
   }
 
-  private def getRawGradient(data: oldVector, weights: oldVector): oldVector = {
+  private def getRawGradient(data: OldVector, weights: OldVector): OldVector = {
     data match {
       // Usually Factorization Machines is used, there will be a lot of sparse features.
       // So need to optimize the gradient descent of sparse vector.
-      case data: oldLinalg.SparseVector =>
+      case data: OldLinalg.SparseVector =>
         val gardSize = data.indices.length * numFactors +
           (if (fitLinear) data.indices.length else 0) +
           (if (fitBias) 1 else 0)
@@ -619,8 +619,8 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
           gradValue(gradI) = 1.0
         }
 
-        oldVectors.sparse(weights.size, gradIndex, gradValue)
-      case data: oldLinalg.DenseVector =>
+        OldVectors.sparse(weights.size, gradIndex, gradValue)
+      case data: OldLinalg.DenseVector =>
         val gradient = Array.fill(weights.size)(0.0)
         val vWeightsSize = numFeatures * numFactors
 
@@ -637,7 +637,7 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
           }
         }
 
-        oldVectors.dense(gradient)
+        OldVectors.dense(gradient)
     }
   }
 }
@@ -754,12 +754,12 @@ private[ml] class FactorizationMachinesUpdater extends Updater with Logging {
   }
 
   override def compute(
-      weightsOld: oldVector,
-      gradient: oldVector,
+      weightsOld: OldVector,
+      gradient: OldVector,
       stepSize: Double,
       iter: Int,
       regParam: Double
-    ): (oldVector, Double) = {
+    ): (OldVector, Double) = {
     // add up both updates from the gradient of the loss (= step) as well as
     // the gradient of the regularizer (= regParam * weightsOld)
     // w' = w - thisIterStepSize * (gradient + regParam * w)
@@ -801,12 +801,12 @@ private[ml] class AdamWUpdater(weightSize: Int) extends Updater with Logging {
   }
 
   override def compute(
-    weightsOld: oldVector,
-    gradient: oldVector,
+    weightsOld: OldVector,
+    gradient: OldVector,
     stepSize: Double,
     iter: Int,
     regParam: Double
-  ): (oldVector, Double) = {
+  ): (OldVector, Double) = {
     val w: BV[Double] = weightsOld.asBreeze.toDenseVector
     val lr = stepSize // learning rate
     if (stepSize > 0) {
