@@ -51,15 +51,17 @@ The information that is displayed in this section is
   <img src="img/AllJobsPageDetail2.png" title="Event timeline" alt="Event timeline"/>
 </p>
 
+When you click on a executor, you can make the color darker to point it out.
 
-When you click on a executor, you can change the color to point it out.
+<p style="text-align: center;">
+  <img src="img/AllJobsPageDetail3.png" title="Clicked executor" alt="Clicked executor"/>
+</p>
 
 * Details of jobs grouped by status: Displays detailed information of the jobs including Job ID, description (with a link to detailed job page), submitted time, duration, stages summary and tasks progress bar
 
 <p style="text-align: center;">
-  <img src="img/AllJobsPageDetail3.png" title="Details of jobs grouped by status" alt="Details of jobs grouped by status"/>
+  <img src="img/AllJobsPageDetail4.png" title="Details of jobs grouped by status" alt="Details of jobs grouped by status"/>
 </p>
-
 
 When you click on a specific job, you can see the detailed information of this job.
 
