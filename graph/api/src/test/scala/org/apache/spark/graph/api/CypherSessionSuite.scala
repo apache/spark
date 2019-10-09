@@ -37,8 +37,12 @@ abstract class CypherSessionSuite extends QueryTest with SharedSparkSession with
     val relationshipData = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))
       .toDF("id", "source", "target", "since")
-    val relationshipFrame =
-      RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
+    val relationshipFrame = cypherSession.buildRelationshipFrame(relationshipData)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("KNOWS")
+      .build()
 
     val writeGraph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
 

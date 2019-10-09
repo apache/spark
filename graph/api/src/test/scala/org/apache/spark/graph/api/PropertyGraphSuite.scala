@@ -57,8 +57,13 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
     val relationshipData = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))
       .toDF("id", "source", "target", "since")
-    val relationshipFrame =
-      RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
+    val relationshipFrame = cypherSession.buildRelationshipFrame(relationshipData)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("KNOWS")
+      .properties(Map("since" -> "since"))
+      .build()
 
     val graph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
 
@@ -101,8 +106,19 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
       .createDataFrame(Seq((1L, 2L, 1L)))
       .toDF("id", "source", "target")
 
-    val knowsRF = RelationshipFrame.create(knowsDF, "id", "source", "target", "KNOWS")
-    val teachesRF = RelationshipFrame.create(teachesDF, "id", "source", "target", "TEACHES")
+    val knowsRF = cypherSession.buildRelationshipFrame(knowsDF)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("KNOWS")
+      .properties(Map("since" -> "since"))
+      .build()
+    val teachesRF = cypherSession.buildRelationshipFrame(teachesDF)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("TEACHES")
+      .build()
 
     val graph = cypherSession.createGraph(Array(studentNF, teacherNF), Array(knowsRF, teachesRF))
 
@@ -146,12 +162,12 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
       .createDataFrame(Seq((2L, "Eve", "CS")))
       .toDF("id", "col_name", "col_subject")
 
-    val studentNF = NodeFrame.create(
+    val studentNF = NodeFrame(
       studentDF,
       "id",
       Set("Person", "Student"),
       properties = Map("name" -> "col_name", "age" -> "col_age"))
-    val teacherNF = NodeFrame.create(
+    val teacherNF = NodeFrame(
       teacherDF,
       "id",
       Set("Person", "Teacher"),
@@ -162,14 +178,20 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
       .toDF("id", "source", "target", "col_since")
     val teachesDF = spark.createDataFrame(Seq((1L, 2L, 1L))).toDF("id", "source", "target")
 
-    val knowsRF = RelationshipFrame.create(
+    val knowsRF = RelationshipFrame(
       knowsDF,
       "id",
       "source",
       "target",
-      "KNOWS",
-      Map("since" -> "col_since"))
-    val teachesRF = RelationshipFrame.create(teachesDF, "id", "source", "target", "TEACHES")
+      relationshipType = "KNOWS",
+      properties = Map("since" -> "col_since"))
+    val teachesRF = RelationshipFrame(
+      teachesDF,
+      "id",
+      "source",
+      "target",
+      "TEACHES",
+      Map.empty)
 
     val graph = cypherSession.createGraph(Array(studentNF, teacherNF), Array(knowsRF, teachesRF))
 

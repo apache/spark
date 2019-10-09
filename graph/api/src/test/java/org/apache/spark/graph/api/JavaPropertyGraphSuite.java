@@ -80,9 +80,15 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
             .properties(Collections.singletonMap("name", "name"))
             .build();
 
-    Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
-    RelationshipFrame knowsRelFrame = RelationshipFrame
-        .create(knowsDf, "id", "source", "target", "KNOWS");
+        Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
+        RelationshipFrame knowsRelFrame = cypherSession.buildRelationshipFrame(knowsDf)
+                .idColumn("id")
+                .sourceIdColumn("source")
+                .targetIdColumn("target")
+                .relationshipType("KNOWS")
+                .properties(Collections.singletonMap("since", "since"))
+                .build();
+
 
     PropertyGraph graph = cypherSession.createGraph(
         new NodeFrame[]{personNodeFrame},
