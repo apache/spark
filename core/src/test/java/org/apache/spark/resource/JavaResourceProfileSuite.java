@@ -59,7 +59,7 @@ public class JavaResourceProfileSuite {
     Map<String, TaskResourceRequest> tresources = rprof.taskResourcesJMap();
     assert(tresources.containsKey(GpuResource));
     TaskResourceRequest taskReq = tresources.get(GpuResource);
-    assertEquals(taskReq.amount(), 1);
+    assertEquals(taskReq.amount(), 1.0, 0);
     assertEquals(taskReq.resourceName(), GpuResource);
   }
 }
