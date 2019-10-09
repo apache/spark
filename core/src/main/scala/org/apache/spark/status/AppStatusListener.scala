@@ -163,6 +163,7 @@ private[spark] class AppStatusListener(
           val liveRdd = rddWrapper.toLiveRDD(liveExecutors)
           liveRDDs.put(liveRdd.info.id, liveRdd)
         }
+
       kvstore.view(classOf[PoolData]).asScala.foreach { poolData =>
         val schedulerPool = poolData.toSchedulerPool
         pools.put(schedulerPool.name, schedulerPool)
