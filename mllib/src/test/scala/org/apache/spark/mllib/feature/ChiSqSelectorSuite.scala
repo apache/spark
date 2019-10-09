@@ -189,6 +189,6 @@ object ChiSqSelectorSuite extends SparkFunSuite {
   }
 
   def checkEqual(a: ChiSqSelectorModel, b: ChiSqSelectorModel): Unit = {
-    assert(a.selectedFeatures.deep == b.selectedFeatures.deep)
+    assert(a.selectedFeatures.sameElements(b.selectedFeatures)
   }
 }
