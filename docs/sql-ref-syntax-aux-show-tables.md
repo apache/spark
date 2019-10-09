@@ -38,10 +38,13 @@ SHOW TABLES [{FROM|IN} database_name] [LIKE 'regex_pattern']
   </dd>
   <dt><code><em>LIKE 'regex_pattern'</em></code></dt>
   <dd>
-     Specifies the regex pattern that is used to filter out unwanted tables.
-       <br> - The pattern is a regex except `*` and `|`characters
-       <br> - `*` matches 0 or more characters and `|` used to provide more than one regex with OR condition
-       <br> - The leading and trailing blanks are trimmed in the input pattern before processing.  
+     Specifies the regular expression pattern that is used to filter out unwanted tables. 
+     <ul> 
+          <li> Except `*` and `|` characters remaining characters will follow the regular expression convention.</li>
+          <li> `*` matches 0 or more characters and `|` used to provide more than one regex with OR condition. </li>
+          <li> The leading and trailing blanks are trimmed in the input pattern before processing.</li>
+     </ul>
+    
   </dd>
 </dl>
 
