@@ -17,7 +17,7 @@
 
 package org.apache.spark.metrics
 
-import java.io.{File, FileWriter, PrintWriter}
+import java.io.{File, PrintWriter}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -289,7 +289,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
       }
     })
 
-    val rdd = sc.parallelize(Array("a", "b", "c", "d"), 2)
+    val rdd = sc.parallelize(Seq("a", "b", "c", "d"), 2)
 
     try {
       rdd.saveAsTextFile(outPath.toString)

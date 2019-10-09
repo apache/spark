@@ -34,7 +34,6 @@ import org.scalatest.Assertions
 
 import org.apache.spark._
 import org.apache.spark.Partitioner
-import org.apache.spark.util.Utils
 
 class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   test("aggregateByKey") {
@@ -496,8 +495,8 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("default partitioner uses largest partitioner") {
-    val a = sc.makeRDD(Array((1, "a"), (2, "b")), 2)
-    val b = sc.makeRDD(Array((1, "a"), (2, "b")), 2000)
+    val a = sc.makeRDD(Seq((1, "a"), (2, "b")), 2)
+    val b = sc.makeRDD(Seq((1, "a"), (2, "b")), 2000)
     val c = a.join(b)
     assert(c.partitions.size === 2000)
   }
