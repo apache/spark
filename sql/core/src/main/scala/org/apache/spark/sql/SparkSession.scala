@@ -461,7 +461,8 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
-    val enc = encoderFor[T]
+    // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
+    val enc = encoderFor[T].copy()
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
