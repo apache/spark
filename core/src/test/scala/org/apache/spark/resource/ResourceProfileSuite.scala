@@ -119,4 +119,30 @@ class ResourceProfileSuite extends SparkFunSuite {
     }.getMessage()
     assert(taskError.contains("Task resource not allowed"))
   }
+
+  test("Internal confs") {
+    val rprof = new ResourceProfile()
+    val gpuTaskReq = new TaskResourceRequest("resource.gpu", 2)
+    val gpuExecReq =
+      new ExecutorResourceRequest("resource.gpu", 2, None, Some("someScript"))
+
+    rprof.require(gpuTaskReq)
+    rprof.require(gpuExecReq)
+
+    val internalResourceConfs = ResourceProfile.createResourceProfileInternalConfs(rprof)
+    val sparkConf = new SparkConf
+    internalResourceConfs.foreach { case(key, value) => sparkConf.set(key, value) }
+    val resourceReq = ResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, rprof.getId)
+    val taskReq = ResourceProfile.getTaskRequirementsFromInternalConfs(sparkConf, rprof.getId)
+
+    assert(resourceReq.size === 1, "ResourceRequest should have 1 item")
+    assert(resourceReq(0).id.resourceName === "gpu")
+    assert(resourceReq(0).amount === 2)
+    assert(resourceReq(0).discoveryScript === Some("someScript"))
+
+    assert(taskReq.getTaskResources.size === 1,
+      "TaskResourceRequirements should have 1 item")
+    assert(taskReq.getTaskResources.contains("resource.gpu"))
+    assert(taskReq.getTaskResources("resource.gpu").amount === 2)
+  }
 }

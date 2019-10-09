@@ -34,6 +34,7 @@ import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkCon
 import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor}
@@ -716,7 +717,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
     val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty,
-      Map.empty, Map.empty)
+      Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     backend.driverEndpoint.askSync[Boolean](message)
   }

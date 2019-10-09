@@ -33,7 +33,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TestUtils._
-import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
+import org.apache.spark.resource.{ResourceAllocation, ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEnv
@@ -55,7 +55,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
-      4, Seq.empty[URL], env, None)
+      4, Seq.empty[URL], env, None, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     withTempDir { tmpDir =>
       val testResourceArgs: JObject = ("" -> "")
       val ja = JArray(List(testResourceArgs))
@@ -77,7 +77,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
-      4, Seq.empty[URL], env, None)
+      4, Seq.empty[URL], env, None, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     withTempDir { tmpDir =>
       val ra = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
       val ja = Extraction.decompose(Seq(ra))
@@ -102,7 +102,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend( env.rpcEnv, "driverurl", "1", "host1",
-      4, Seq.empty[URL], env, None)
+      4, Seq.empty[URL], env, None, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     withTempDir { tmpDir =>
       val gpuArgs = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
@@ -130,7 +130,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
-      4, Seq.empty[URL], env, None)
+      4, Seq.empty[URL], env, None, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     // not enough gpu's on the executor
     withTempDir { tmpDir =>
@@ -169,7 +169,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function
     val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
-      4, Seq.empty[URL], env, None)
+      4, Seq.empty[URL], env, None, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     // executor resources < required
     withTempDir { tmpDir =>
@@ -201,7 +201,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
       // we don't really use this, just need it to get at the parser function
       val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
-        4, Seq.empty[URL], env, None)
+        4, Seq.empty[URL], env, None, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
       val parsedResources = backend.parseOrFindResources(None)
 
@@ -227,7 +227,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
       // we don't really use this, just need it to get at the parser function
       val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, "driverurl", "1", "host1",
-        4, Seq.empty[URL], env, None)
+        4, Seq.empty[URL], env, None, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       val gpuArgs = ResourceAllocation(EXECUTOR_GPU_ID, Seq("0", "1"))
       val ja = Extraction.decompose(Seq(gpuArgs))
       val f1 = createTempJsonFile(dir, "resources", ja)
@@ -254,7 +254,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val rpcEnv = RpcEnv.create("1", "localhost", 0, conf, securityMgr)
       val env = createMockEnv(conf, serializer, Some(rpcEnv))
       backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
-        "host1", 4, Seq.empty[URL], env, None)
+        "host1", 4, Seq.empty[URL], env, None, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       assert(backend.taskResources.isEmpty)
 
       val taskId = 1000000

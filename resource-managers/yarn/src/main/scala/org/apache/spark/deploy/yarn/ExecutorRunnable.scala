@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import java.util.{Collections, Locale}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer}
 
 import org.apache.hadoop.HadoopIllegalArgumentException
 import org.apache.hadoop.fs.Path
@@ -40,6 +40,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
 
 private[yarn] class ExecutorRunnable(
@@ -53,7 +54,8 @@ private[yarn] class ExecutorRunnable(
     executorCores: Int,
     appId: String,
     securityMgr: SecurityManager,
-    localResources: Map[String, LocalResource]) extends Logging {
+    localResources: Map[String, LocalResource],
+    resourceProfileId: Int) extends Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
@@ -72,7 +74,7 @@ private[yarn] class ExecutorRunnable(
 
     s"""
     |===============================================================================
-    |YARN executor launch context:
+    |Default YARN executor launch context:
     |  env:
     |${Utils.redact(sparkConf, env.toSeq).map { case (k, v) => s"    $k -> $v\n" }.mkString}
     |  command:
@@ -185,6 +187,12 @@ private[yarn] class ExecutorRunnable(
         }
     */
 
+    // add the extra resources from the resource profile to javaOpts.
+    // Using default one for now until the ResourceProfile stuff is fully supported in YARN
+    val defaultResourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val rpMap = ResourceProfile.createResourceProfileInternalConfs(defaultResourceProfile)
+    javaOpts ++= rpMap.map { case (key, value) => s"-D$key=$value"}.toSeq
+
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
@@ -207,7 +215,8 @@ private[yarn] class ExecutorRunnable(
         "--executor-id", executorId,
         "--hostname", hostname,
         "--cores", executorCores.toString,
-        "--app-id", appId) ++
+        "--app-id", appId,
+        "--resourceProfileId", resourceProfileId.toString) ++
       userClassPath ++
       Seq(
         s"1>${ApplicationConstants.LOG_DIR_EXPANSION_VAR}/stdout",

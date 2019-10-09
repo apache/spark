@@ -120,6 +120,9 @@ private[spark] object ResourceProfile extends Logging {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
+  val SPARK_RP_TASK_PREFIX = "spark.resourceProfile.task"
+  val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
+
   val CPUS = "cpus"
   val CORES = "cores"
   val MEMORY = "memory"
@@ -181,4 +184,80 @@ private[spark] object ResourceProfile extends Logging {
 
   // for testing purposes
   def resetDefaultProfile(conf: SparkConf): Unit = getOrCreateDefaultProfile(conf).reset()
+
+  /**
+   * Create the ResourceProfile internal confs that are used to pass between Driver and Executors.
+   * It pulls any "resource." resources from the ResourceProfile and returns a Map of key
+   * to value where the keys get formatted as:
+   *
+   * spark.resourceProfile.executor.[rpId].resource.[resourceName].[amount, vendor, discoveryScript]
+   * spark.resourceProfile.task.[rpId].resource.[resourceName].amount
+   *
+   * Keep this here as utility a function rather then in public ResourceProfile interface because
+   * end users shouldn't need this.
+   */
+  def createResourceProfileInternalConfs(rp: ResourceProfile): Map[String, String] = {
+    val res = new mutable.HashMap[String, String]()
+    // task resources
+    rp.getTaskResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
+      val prefix = s"${ResourceProfile.SPARK_RP_TASK_PREFIX}.${rp.getId}.$name"
+      res(s"$prefix.amount") = req.amount.toString
+    }
+    // executor resources
+    rp.getExecutorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
+      val prefix = s"${ResourceProfile.SPARK_RP_EXEC_PREFIX}.${rp.getId}.$name"
+      res(s"${prefix}.amount") = req.amount.toString
+      if (req.vendor.nonEmpty) res(s"${prefix}.vendor") = req.vendor.get
+      if (req.discoveryScript.nonEmpty) res(s"${prefix}.discoveryScript") = req.discoveryScript.get
+    }
+    res.toMap
+  }
+
+  /**
+   * Parse out just the resourceName given the map of confs. It only looks for confs that
+   * end with .amount because we should always have one of those for every resource.
+   * Format is expected to be: [resourcsname].amount, where resourceName could have multiple
+   * .'s like resource.gpu.foo.amount
+   */
+  private def listResourceProfileResourceNames(confs: Map[String, String]): Seq[String] = {
+    confs.filterKeys(_.endsWith(ResourceUtils.AMOUNT)).
+      map { case (key, _) => key.substring(0, key.lastIndexOf(s".${ResourceUtils.AMOUNT}")) }.toSeq
+  }
+
+  /**
+   * Get a ResourceProfile with the task requirements from the internal resource confs.
+   * The configs looks like:
+   * spark.resourceProfile.task.[rpId].resource.[resourceName].amount
+   */
+  def getTaskRequirementsFromInternalConfs(sparkConf: SparkConf, rpId: Int): ResourceProfile = {
+    val rp = new ResourceProfile()
+    val taskRpIdConfPrefix = s"${SPARK_RP_TASK_PREFIX}.${rpId}."
+    val taskConfs = sparkConf.getAllWithPrefix(taskRpIdConfPrefix).toMap
+    val taskResourceNames = listResourceProfileResourceNames(taskConfs)
+    taskResourceNames.foreach { resource =>
+      val amount = taskConfs.get(s"${resource}.amount").get.toInt
+      rp.require(new TaskResourceRequest(resource, amount))
+    }
+    rp
+  }
+
+  /**
+   * Get the executor ResourceRequests from the internal resource confs
+   * The configs looks like:
+   * spark.resourceProfile.executor.[rpId].resource.gpu.[amount, vendor, discoveryScript]
+   */
+  def getResourceRequestsFromInternalConfs(
+      sparkConf: SparkConf,
+      rpId: Int): Seq[ResourceRequest] = {
+    val execRpIdConfPrefix = s"${SPARK_RP_EXEC_PREFIX}.${rpId}.${RESOURCE_DOT}"
+    val execConfs = sparkConf.getAllWithPrefix(execRpIdConfPrefix).toMap
+    val execResourceNames = listResourceProfileResourceNames(execConfs)
+    val resourceReqs = execResourceNames.map { resource =>
+      val amount = execConfs.get(s"${resource}.amount").get.toInt
+      val vendor = execConfs.get(s"${resource}.vendor")
+      val discoveryScript = execConfs.get(s"${resource}.discoveryScript")
+      ResourceRequest(ResourceID(SPARK_EXECUTOR_PREFIX, resource), amount, discoveryScript, vendor)
+    }
+    resourceReqs
+  }
 }

@@ -66,7 +66,8 @@ private[spark] object CoarseGrainedClusterMessages {
       cores: Int,
       logUrls: Map[String, String],
       attributes: Map[String, String],
-      resources: Map[String, ResourceInformation])
+      resources: Map[String, ResourceInformation],
+      resourceProfileId: Int)
     extends CoarseGrainedClusterMessage
 
   case class StatusUpdate(

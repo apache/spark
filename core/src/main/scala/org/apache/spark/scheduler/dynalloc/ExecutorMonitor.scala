@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.dynalloc
 
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -26,6 +26,7 @@ import scala.collection.mutable
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Clock
@@ -50,7 +51,10 @@ private[spark] class ExecutorMonitor(
   private val shuffleTrackingEnabled = !conf.get(SHUFFLE_SERVICE_ENABLED) &&
     conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING)
 
-  private val executors = new ConcurrentHashMap[String, Tracker]()
+  private case class ExecutorTrackingInfo(tracker: Tracker, rProfId: Int)
+
+  private val executors = new ConcurrentHashMap[String, ExecutorTrackingInfo]()
+  private val execResourceProfileCount = new ConcurrentHashMap[Int, AtomicInteger]()
 
   // The following fields are an optimization to avoid having to scan all executors on every EAM
   // schedule interval to find out which ones are timed out. They keep track of when the next
@@ -91,6 +95,7 @@ private[spark] class ExecutorMonitor(
 
   def reset(): Unit = {
     executors.clear()
+    execResourceProfileCount.clear()
     nextTimeout.set(Long.MaxValue)
     timedOutExecs = Nil
   }
@@ -110,15 +115,15 @@ private[spark] class ExecutorMonitor(
 
       var newNextTimeout = Long.MaxValue
       timedOutExecs = executors.asScala
-        .filter { case (_, exec) => !exec.pendingRemoval && !exec.hasActiveShuffle }
+        .filter { case (_, exec) => !exec.tracker.pendingRemoval && !exec.tracker.hasActiveShuffle }
         .filter { case (_, exec) =>
-          val deadline = exec.timeoutAt
+          val deadline = exec.tracker.timeoutAt
           if (deadline > now) {
             newNextTimeout = math.min(newNextTimeout, deadline)
-            exec.timedOut = false
+            exec.tracker.timedOut = false
             false
           } else {
-            exec.timedOut = true
+            exec.tracker.timedOut = true
             true
           }
         }
@@ -136,7 +141,7 @@ private[spark] class ExecutorMonitor(
     ids.foreach { id =>
       val tracker = executors.get(id)
       if (tracker != null) {
-        tracker.pendingRemoval = true
+        tracker.tracker.pendingRemoval = true
       }
     }
 
@@ -147,7 +152,17 @@ private[spark] class ExecutorMonitor(
 
   def executorCount: Int = executors.size()
 
-  def pendingRemovalCount: Int = executors.asScala.count { case (_, exec) => exec.pendingRemoval }
+  def executorCountWithResourceProfile(id: Int): Int = {
+    execResourceProfileCount.getOrDefault(id, new AtomicInteger(0)).get()
+  }
+
+  def getResourceProfileId(executorId: String): Int = {
+    executors.get(executorId).rProfId
+  }
+
+  def pendingRemovalCount: Int = executors.asScala.count {
+    case (_, exec) => exec.tracker.pendingRemoval
+  }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
     if (!shuffleTrackingEnabled) {
@@ -184,9 +199,9 @@ private[spark] class ExecutorMonitor(
       var needTimeoutUpdate = false
       val activatedExecs = new ExecutorIdCollector()
       executors.asScala.foreach { case (id, exec) =>
-        if (!exec.hasActiveShuffle) {
-          exec.updateActiveShuffles(activeShuffleIds)
-          if (exec.hasActiveShuffle) {
+        if (!exec.tracker.hasActiveShuffle) {
+          exec.tracker.updateActiveShuffles(activeShuffleIds)
+          if (exec.tracker.hasActiveShuffle) {
             needTimeoutUpdate = true
             activatedExecs.add(id)
           }
@@ -237,9 +252,9 @@ private[spark] class ExecutorMonitor(
 
       val deactivatedExecs = new ExecutorIdCollector()
       executors.asScala.foreach { case (id, exec) =>
-        if (exec.hasActiveShuffle) {
-          exec.updateActiveShuffles(activeShuffles)
-          if (!exec.hasActiveShuffle) {
+        if (exec.tracker.hasActiveShuffle) {
+          exec.tracker.updateActiveShuffles(activeShuffles)
+          if (!exec.tracker.hasActiveShuffle) {
             deactivatedExecs.add(id)
           }
         }
@@ -260,7 +275,7 @@ private[spark] class ExecutorMonitor(
     val executorId = event.taskInfo.executorId
     // Guard against a late arriving task start event (SPARK-26927).
     if (client.isExecutorActive(executorId)) {
-      val exec = ensureExecutorIsTracked(executorId)
+      val exec = ensureExecutorIsTracked(executorId, UNKNOWN_RESOURCE_PROFILE_ID)
       exec.updateRunningTasks(1)
     }
   }
@@ -278,18 +293,18 @@ private[spark] class ExecutorMonitor(
       // from being removed, even though the data may not be used.
       if (shuffleTrackingEnabled && event.reason == Success) {
         stageToShuffleID.get(event.stageId).foreach { shuffleId =>
-          exec.addShuffle(shuffleId)
+          exec.tracker.addShuffle(shuffleId)
         }
       }
 
       // Update the number of running tasks after checking for shuffle data, so that the shuffle
       // information is up-to-date in case the executor is going idle.
-      exec.updateRunningTasks(-1)
+      exec.tracker.updateRunningTasks(-1)
     }
   }
 
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
-    val exec = ensureExecutorIsTracked(event.executorId)
+    val exec = ensureExecutorIsTracked(event.executorId, event.executorInfo.resourceProfileId)
     exec.updateRunningTasks(0)
     logInfo(s"New executor ${event.executorId} has registered (new total is ${executors.size()})")
   }
@@ -297,8 +312,15 @@ private[spark] class ExecutorMonitor(
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     val removed = executors.remove(event.executorId)
     if (removed != null) {
+      val rprofCount = execResourceProfileCount.get(removed.rProfId)
+      if (rprofCount != null) {
+        val numLeft = rprofCount.getAndDecrement()
+        if (numLeft == 0) {
+          execResourceProfileCount.remove(removed.rProfId, numLeft)
+        }
+      }
       logInfo(s"Executor ${event.executorId} removed (new total is ${executors.size()})")
-      if (!removed.pendingRemoval) {
+      if (!removed.tracker.pendingRemoval) {
         nextTimeout.set(Long.MinValue)
       }
     }
@@ -308,8 +330,8 @@ private[spark] class ExecutorMonitor(
     if (!event.blockUpdatedInfo.blockId.isInstanceOf[RDDBlockId]) {
       return
     }
-
-    val exec = ensureExecutorIsTracked(event.blockUpdatedInfo.blockManagerId.executorId)
+    val exec = ensureExecutorIsTracked(event.blockUpdatedInfo.blockManagerId.executorId,
+      UNKNOWN_RESOURCE_PROFILE_ID)
     val storageLevel = event.blockUpdatedInfo.storageLevel
     val blockId = event.blockUpdatedInfo.blockId.asInstanceOf[RDDBlockId]
 
@@ -340,9 +362,9 @@ private[spark] class ExecutorMonitor(
 
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD): Unit = {
     executors.values().asScala.foreach { exec =>
-      exec.cachedBlocks -= event.rddId
-      if (exec.cachedBlocks.isEmpty) {
-        exec.updateTimeout()
+      exec.tracker.cachedBlocks -= event.rddId
+      if (exec.tracker.cachedBlocks.isEmpty) {
+        exec.tracker.updateTimeout()
       }
     }
   }
@@ -371,19 +393,19 @@ private[spark] class ExecutorMonitor(
 
   // Visible for testing.
   private[dynalloc] def isExecutorIdle(id: String): Boolean = {
-    Option(executors.get(id)).map(_.isIdle).getOrElse(throw new NoSuchElementException(id))
+    Option(executors.get(id)).map(_.tracker.isIdle).getOrElse(throw new NoSuchElementException(id))
   }
 
   // Visible for testing
   private[dynalloc] def timedOutExecutors(when: Long): Seq[String] = {
     executors.asScala.flatMap { case (id, tracker) =>
-      if (tracker.isIdle && tracker.timeoutAt <= when) Some(id) else None
+      if (tracker.tracker.isIdle && tracker.tracker.timeoutAt <= when) Some(id) else None
     }.toSeq
   }
 
   // Visible for testing
   def executorsPendingToRemove(): Set[String] = {
-    executors.asScala.filter { case (_, exec) => exec.pendingRemoval }.keys.toSet
+    executors.asScala.filter { case (_, exec) => exec.tracker.pendingRemoval }.keys.toSet
   }
 
   /**
@@ -391,8 +413,24 @@ private[spark] class ExecutorMonitor(
    * which the `SparkListenerTaskStart` event is posted before the `SparkListenerBlockManagerAdded`
    * event, which is possible because these events are posted in different threads. (see SPARK-4951)
    */
-  private def ensureExecutorIsTracked(id: String): Tracker = {
-    executors.computeIfAbsent(id, _ => new Tracker())
+  private def ensureExecutorIsTracked(id: String, resourceProfileId: Int): Tracker = {
+    val numExecsWithRpId =
+      execResourceProfileCount.computeIfAbsent(resourceProfileId, _ => new AtomicInteger(0))
+    val exec = executors.computeIfAbsent(id, _ => {
+        numExecsWithRpId.getAndIncrement()
+        ExecutorTrackingInfo(new Tracker(), resourceProfileId)
+      })
+    // if we had added executor before knowing the resource profile id, fix it up
+    if (exec.rProfId == UNKNOWN_RESOURCE_PROFILE_ID &&
+        resourceProfileId != UNKNOWN_RESOURCE_PROFILE_ID) {
+      logDebug(s"Executor: $id, resource profile id was unknown, setting " +
+        s"it to $resourceProfileId")
+      executors.put(id, ExecutorTrackingInfo(exec.tracker, resourceProfileId))
+      // fix up the counts for each resource profile id
+      numExecsWithRpId.getAndIncrement()
+      execResourceProfileCount.get(UNKNOWN_RESOURCE_PROFILE_ID).getAndDecrement()
+    }
+    exec.tracker
   }
 
   private def updateNextTimeout(newValue: Long): Unit = {
@@ -408,7 +446,7 @@ private[spark] class ExecutorMonitor(
     logDebug(s"Cleaning up state related to shuffle $id.")
     shuffleToActiveJobs -= id
     executors.asScala.foreach { case (_, exec) =>
-      exec.removeShuffle(id)
+      exec.tracker.removeShuffle(id)
     }
   }
 

@@ -35,6 +35,7 @@ import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
@@ -50,7 +51,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     cores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv,
-    resourcesFileOpt: Option[String])
+    resourcesFileOpt: Option[String],
+    resourceProfileId: Int)
   extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
 
   private implicit val formats = DefaultFormats
@@ -77,7 +79,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes, resources))
+        extractAttributes, resources, resourceProfileId))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) =>
@@ -89,24 +91,44 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   // visible for testing
   def parseOrFindResources(resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
-    // only parse the resources if a task requires them
-    val resourceInfo = if (parseResourceRequirements(env.conf, SPARK_TASK_PREFIX).nonEmpty) {
-      val resources = getOrDiscoverAllResources(env.conf, SPARK_EXECUTOR_PREFIX, resourcesFileOpt)
-      if (resources.isEmpty) {
-        throw new SparkException("User specified resources per task via: " +
-          s"$SPARK_TASK_PREFIX, but can't find any resources available on the executor.")
+    logDebug(s"Resource profile id is: $resourceProfileId")
+    // if resource profile specified we look at different confs
+    if (resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID) {
+      // only parse the resources if a task requires them
+      val resourceInfo = if (parseResourceRequirements(env.conf, SPARK_TASK_PREFIX).nonEmpty) {
+        val resources = getOrDiscoverAllResources(env.conf, SPARK_EXECUTOR_PREFIX, resourcesFileOpt)
+        if (resources.isEmpty) {
+          throw new SparkException("User specified resources per task via: " +
+            s"$SPARK_TASK_PREFIX, but can't find any resources available on the executor.")
+        } else {
+          logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
+        }
+        resources
       } else {
-        logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
+        if (resourcesFileOpt.nonEmpty) {
+          logWarning("A resources file was specified but the application is not configured " +
+            s"to use any resources, see the configs with prefix: ${SPARK_TASK_PREFIX}")
+        }
+        Map.empty[String, ResourceInformation]
       }
-      resources
+      resourceInfo
     } else {
-      if (resourcesFileOpt.nonEmpty) {
-        logWarning("A resources file was specified but the application is not configured " +
-          s"to use any resources, see the configs with prefix: ${SPARK_TASK_PREFIX}")
+      val taskResourceProf = getTaskRequirementsFromInternalConfs(env.conf, resourceProfileId)
+      val resourceInfo = if (taskResourceProf.getTaskResources.nonEmpty) {
+        val resources = getOrDiscoverAllResourcesForResourceProfile(resourceProfileId, env.conf,
+          resourcesFileOpt, SPARK_EXECUTOR_PREFIX)
+        if (resources.isEmpty) {
+          throw new SparkException("User specified resources per task via: " +
+            s"$SPARK_TASK_PREFIX, but can't find any resources available on the executor.")
+        } else {
+          logResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
+        }
+        resources
+      } else {
+        Map.empty[String, ResourceInformation]
       }
-      Map.empty[String, ResourceInformation]
+      resourceInfo
     }
-    resourceInfo
   }
 
   def extractLogUrls: Map[String, String] = {
@@ -232,14 +254,15 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       appId: String,
       workerUrl: Option[String],
       userClassPath: mutable.ListBuffer[URL],
-      resourcesFileOpt: Option[String])
+      resourcesFileOpt: Option[String],
+      resourceProfileId: Int)
 
   def main(args: Array[String]): Unit = {
     val createFn: (RpcEnv, Arguments, SparkEnv) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
       new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
         arguments.hostname, arguments.cores, arguments.userClassPath, env,
-        arguments.resourcesFileOpt)
+        arguments.resourcesFileOpt, arguments.resourceProfileId)
     }
     run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
     System.exit(0)
@@ -317,6 +340,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     var appId: String = null
     var workerUrl: Option[String] = None
     val userClassPath = new mutable.ListBuffer[URL]()
+    var resourceProfileId: Int = UNKNOWN_RESOURCE_PROFILE_ID
 
     var argv = args.toList
     while (!argv.isEmpty) {
@@ -346,6 +370,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         case ("--user-class-path") :: value :: tail =>
           userClassPath += new URL(value)
           argv = tail
+        case ("--resourceProfileId") :: value :: tail =>
+          resourceProfileId = value.toInt
+          argv = tail
         case Nil =>
         case tail =>
           // scalastyle:off println
@@ -365,7 +392,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     }
 
     Arguments(driverUrl, executorId, hostname, cores, appId, workerUrl,
-      userClassPath, resourcesFileOpt)
+      userClassPath, resourcesFileOpt, resourceProfileId)
   }
 
   private def printUsageAndExit(classNameForEntry: String): Unit = {
@@ -383,6 +410,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       |   --app-id <appid>
       |   --worker-url <workerUrl>
       |   --user-class-path <url>
+      |   --resourceProfileId <id>
       |""".stripMargin)
     // scalastyle:on println
     System.exit(1)

@@ -27,6 +27,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
@@ -158,6 +159,7 @@ private[spark] object ResourceUtils extends Logging {
    * Gets all allocated resource information for the input component from input resources file and
    * discover the remaining via discovery scripts.
    * It also verifies the resource allocation meets required amount for each resource.
+   * This uses the global application resource configs.
    * @return a map from resource name to resource info
    */
   def getOrDiscoverAllResources(
@@ -169,6 +171,31 @@ private[spark] object ResourceUtils extends Logging {
     assertAllResourceAllocationsMeetRequests(allocations, requests)
     val resourceInfoMap = allocations.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
     resourceInfoMap
+  }
+
+  /**
+   * Gets all allocated resource information based on the ResourceProfile information.
+   * This uses the input resources file and discovers the remaining via discovery scripts
+   * from the ResourceProfile. It also verifies the resource allocation meets required amount
+   * for each resource.
+   * @return a map from resource name to resource info
+   */
+  def getOrDiscoverAllResourcesForResourceProfile(
+      resourceProfileId: Int,
+      sparkConf: SparkConf,
+      resourcesFileOpt: Option[String],
+      componentName: String): Map[String, ResourceInformation] = {
+    val requests = getResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
+    assert(requests.nonEmpty, "Resource requests should never be empty")
+
+    val allocated = resourcesFileOpt.toSeq.flatMap(parseAllocatedFromJsonFile)
+      .filter(_.id.componentName == componentName)
+    val otherResourceIds = requests.diff(allocated.map(_.id))
+    val allocations = allocated ++ otherResourceIds.map { req =>
+      ResourceAllocation(req.id, discoverResource(req).addresses)
+    }
+    assertAllResourceAllocationsMeetRequests(allocations, requests)
+    allocations.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
   }
 
   def logResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
