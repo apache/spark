@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
@@ -1976,11 +1977,19 @@ object SQLConf {
     .stringConf
     .createOptional
 
-  val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
-      .doc("A catalog implementation that will be used in place of the Spark built-in session " +
-        "catalog for v2 operations. The implementation may extend `CatalogExtension` to be " +
-        "passed the Spark built-in session catalog, so that it may delegate calls to the " +
-        "built-in session catalog.")
+  val V2_SESSION_CATALOG_IMPLEMENTATION =
+    buildConf(s"spark.sql.catalog.${CatalogManager.SESSION_CATALOG_NAME}")
+      .doc("A catalog implementation that will be used in place of the Spark Catalog for v2 " +
+        "operations (e.g. create table using a v2 source, alter a v2 table). The Spark Catalog " +
+        "is the current catalog by default, and supports all kinds of catalog operations like " +
+        "CREATE TABLE USING v1/v2 source, VIEW/FUNCTION related operations, etc. This config is " +
+        "used to extend the Spark Catalog and inject custom logic to v2 operations, while other" +
+        "operations still go through the Spark Catalog. The catalog implementation specified " +
+        "by this config should extend `CatalogExtension` to be passed the Spark Catalog, " +
+        "so that it can delegate calls to Spark Catalog. Otherwise, the implementation " +
+        "should figure out a way to access the Spark Catalog or its underlying meta-store " +
+        "by itself. It's important to make the implementation share the underlying meta-store " +
+        "of the Spark Catalog and act as an extension, instead of a separated catalog.")
       .stringConf
       .createOptional
 

@@ -36,8 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 // TODO: all commands should look up table from the current catalog. The `SessionCatalog` doesn't
 //       need to track current database at all.
-private[sql]
-class CatalogManager(
+private[sql] class CatalogManager(
     conf: SQLConf,
     defaultSessionCatalog: CatalogPlugin,
     val v1SessionCatalog: SessionCatalog) extends Logging {
@@ -77,7 +76,7 @@ class CatalogManager(
   // If the V2_SESSION_CATALOG config is specified, we try to instantiate the user-specified v2
   // session catalog. Otherwise, return the default session catalog.
   def v2SessionCatalog: CatalogPlugin = {
-    conf.getConf(SQLConf.V2_SESSION_CATALOG).map { customV2SessionCatalog =>
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {
         catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
       } catch {
@@ -146,5 +145,5 @@ class CatalogManager(
 }
 
 private[sql] object CatalogManager {
-  val SESSION_CATALOG_NAME: String = "session"
+  val SESSION_CATALOG_NAME: String = "spark_catalog"
 }
