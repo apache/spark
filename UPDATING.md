@@ -41,6 +41,15 @@ assists users migrating to a new version.
 
 ## Airflow Master
 
+### Fernet is enabled by default
+
+The fernet mechanism is enabled by default to increase the security of the default installation.  In order to
+restore the previous behavior, the user must consciously set an empty key in the ``fernet_key`` option of
+section ``[core]`` in the ``airflow.cfg`` file.
+
+At the same time, this means that the `apache-airflow[crypto]` extra-packages are always installed.
+However, this requires that your operating system has ``libffi-dev`` installed.
+
 ### Changes to Google PubSub Operators, Hook and Sensor
 In the `PubSubPublishOperator` and `PubSubHook.publsh` method the data field in a message should be bytestring (utf-8 encoded) rather than base64 encoded string.
 
