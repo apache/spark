@@ -56,72 +56,72 @@ private[regression] trait FactorizationMachinesParams
    * Param for dimensionality of the factors (&gt;= 0)
    * @group param
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final val numFactors: IntParam = new IntParam(this, "numFactors",
     "dimensionality of the factorization")
 
   /** @group getParam */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final def getNumFactors: Int = $(numFactors)
 
   /**
    * Param for whether to fit global bias term
    * @group param
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final val fitBias: BooleanParam = new BooleanParam(this, "fitBias",
     "whether to fit global bias term")
 
   /** @group getParam */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final def getFitBias: Boolean = $(fitBias)
 
   /**
    * Param for whether to fit linear term (aka 1-way term)
    * @group param
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final val fitLinear: BooleanParam = new BooleanParam(this, "fitLinear",
     "whether to fit linear term (aka 1-way term)")
 
   /** @group getParam */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final def getFitLinear: Boolean = $(fitLinear)
 
   /**
    * Param for L2 regularization parameter (&gt;= 0)
    * @group param
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final val regParam: DoubleParam = new DoubleParam(this, "regParam",
     "regularization for L2")
 
   /** @group getParam */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final def getRegParam: Double = $(regParam)
 
   /**
    * Param for mini-batch fraction, must be in range (0, 1]
    * @group param
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final val miniBatchFraction: DoubleParam = new DoubleParam(this, "miniBatchFraction",
     "mini-batch fraction")
 
   /** @group getParam */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final def getMiniBatchFraction: Double = $(miniBatchFraction)
 
   /**
    * Param for standard deviation of initial coefficients
    * @group param
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final val initStd: DoubleParam = new DoubleParam(this, "initStd",
     "standard deviation of initial coefficients")
 
   /** @group getParam */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final def getInitStd: Double = $(initStd)
 
   /**
@@ -131,7 +131,7 @@ private[regression] trait FactorizationMachinesParams
    *
    * @group param
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
       s"${supportedSolvers.mkString(", ")}. (Default adamW)",
@@ -144,7 +144,7 @@ private[regression] trait FactorizationMachinesParams
    *
    * @group param
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final override val loss: Param[String] = new Param[String](this, "loss", "The loss function to" +
     s" be optimized. Supported options: ${supportedLosses.mkString(", ")}. (Default logisticLoss)",
     ParamValidators.inArray[String](supportedLosses))
@@ -154,12 +154,12 @@ private[regression] trait FactorizationMachinesParams
    *
    * @group param
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final val verbose: BooleanParam = new BooleanParam(this, "verbose",
     "whether to print information per iteration step")
 
   /** @group getParam */
-  @Since("2.4.3")
+  @Since("3.0.0")
   final def getVerbose: Boolean = $(verbose)
 
 }
@@ -167,15 +167,15 @@ private[regression] trait FactorizationMachinesParams
 /**
  * Factorization Machines
  */
-@Since("2.4.3")
-class FactorizationMachines @Since("2.4.3") (
-    @Since("2.4.3") override val uid: String)
+@Since("3.0.0")
+class FactorizationMachines @Since("3.0.0") (
+    @Since("3.0.0") override val uid: String)
   extends Predictor[Vector, FactorizationMachines, FactorizationMachinesModel]
   with FactorizationMachinesParams with DefaultParamsWritable with Logging {
 
   import FactorizationMachines._
 
-  @Since("2.4.3")
+  @Since("3.0.0")
   def this() = this(Identifiable.randomUID("fm"))
 
   /**
@@ -184,7 +184,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setNumFactors(value: Int): this.type = set(numFactors, value)
   setDefault(numFactors -> 8)
 
@@ -194,7 +194,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setFitBias(value: Boolean): this.type = set(fitBias, value)
   setDefault(fitBias -> true)
 
@@ -204,7 +204,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setFitLinear(value: Boolean): this.type = set(fitLinear, value)
   setDefault(fitLinear -> true)
 
@@ -214,7 +214,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
   setDefault(regParam -> 0.0)
 
@@ -224,7 +224,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setMiniBatchFraction(value: Double): this.type = {
     require(value > 0 && value <= 1.0,
       s"Fraction for mini-batch SGD must be in range (0, 1] but got $value")
@@ -238,7 +238,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setInitStd(value: Double): this.type = set(initStd, value)
   setDefault(initStd -> 0.01)
 
@@ -248,7 +248,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
   setDefault(maxIter -> 100)
 
@@ -258,7 +258,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
   setDefault(stepSize -> 1.0)
 
@@ -268,7 +268,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
@@ -278,7 +278,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> AdamW)
 
@@ -290,7 +290,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setLoss(value: String): this.type = set(loss, value)
   setDefault(loss -> LogisticLoss)
 
@@ -309,7 +309,7 @@ class FactorizationMachines @Since("2.4.3") (
    *
    * @group setParam
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def setVerbose(value: Boolean): this.type = set(verbose, value)
   setDefault(verbose -> false)
 
@@ -369,14 +369,14 @@ class FactorizationMachines @Since("2.4.3") (
     model
   }
 
-  @Since("2.4.3")
+  @Since("3.0.0")
   override def copy(extra: ParamMap): FactorizationMachines = defaultCopy(extra)
 }
 
-@Since("2.4.3")
+@Since("3.0.0")
 object FactorizationMachines extends DefaultParamsReadable[FactorizationMachines] {
 
-  @Since("2.4.3")
+  @Since("3.0.0")
   override def load(path: String): FactorizationMachines = super.load(path)
 
   /** String name for "gd". */
@@ -401,11 +401,11 @@ object FactorizationMachines extends DefaultParamsReadable[FactorizationMachines
 /**
  * Model produced by [[FactorizationMachines]].
  */
-@Since("2.4.3")
+@Since("3.0.0")
 class FactorizationMachinesModel (
-    @Since("2.4.3") override val uid: String,
-    @Since("2.4.3") val coefficients: OldVector,
-    @Since("2.4.3") override val numFeatures: Int)
+    @Since("3.0.0") override val uid: String,
+    @Since("3.0.0") val coefficients: OldVector,
+    @Since("3.0.0") override val numFeatures: Int)
   extends PredictionModel[Vector, FactorizationMachinesModel]
   with FactorizationMachinesParams with MLWritable {
 
@@ -418,7 +418,7 @@ class FactorizationMachinesModel (
    *
    * @return Vector
    */
-  @Since("2.4.3")
+  @Since("3.0.0")
   def getCoefficients: Vector = coefficients
 
   private lazy val gradient = BaseFactorizationMachinesGradient.parseLoss(
@@ -429,13 +429,13 @@ class FactorizationMachinesModel (
     gradient.getPrediction(rawPrediction)
   }
 
-  @Since("2.4.3")
+  @Since("3.0.0")
   override def copy(extra: ParamMap): FactorizationMachinesModel = {
     copyValues(new FactorizationMachinesModel(
       uid, coefficients, numFeatures), extra)
   }
 
-  @Since("2.4.3")
+  @Since("3.0.0")
   override def write: MLWriter =
     new FactorizationMachinesModel.FactorizationMachinesModelWriter(this)
 
@@ -446,13 +446,13 @@ class FactorizationMachinesModel (
   }
 }
 
-@Since("2.4.3")
+@Since("3.0.0")
 object FactorizationMachinesModel extends MLReadable[FactorizationMachinesModel] {
 
-  @Since("2.4.3")
+  @Since("3.0.0")
   override def read: MLReader[FactorizationMachinesModel] = new FactorizationMachinesModelReader
 
-  @Since("2.4.3")
+  @Since("3.0.0")
   override def load(path: String): FactorizationMachinesModel = super.load(path)
 
   /** [[MLWriter]] instance for [[FactorizationMachinesModel]] */
