@@ -55,7 +55,6 @@ public class JavaResourceProfileSuite {
     assertEquals(fpgaReq.vendor(), "nvidia");
     assertEquals(fpgaReq.units(), "");
 
-
     assertEquals(rprof.taskResources().size(), 1);
     Map<String, TaskResourceRequest> tresources = rprof.taskResourcesJMap();
     assert(tresources.containsKey(GpuResource));

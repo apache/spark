@@ -181,15 +181,15 @@ private[spark] object ResourceProfile extends Logging {
   }
 
   private def addDefaultExecutorResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
-    rprof.require(new ExecutorResourceRequest(CORES, conf.get(EXECUTOR_CORES), None, None, None))
+    rprof.require(new ExecutorResourceRequest(CORES, conf.get(EXECUTOR_CORES)))
     rprof.require(
-      new ExecutorResourceRequest(MEMORY, conf.get(EXECUTOR_MEMORY).toInt, Some("b"), None, None))
+      new ExecutorResourceRequest(MEMORY, conf.get(EXECUTOR_MEMORY).toInt, "b"))
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
 
     execReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.id.resourceName}"
-      val execReq = new ExecutorResourceRequest(name, req.amount, None, req.discoveryScript,
-        req.vendor)
+      val execReq = new ExecutorResourceRequest(name, req.amount, "",
+        req.discoveryScript.getOrElse(""), req.vendor.getOrElse(""))
       rprof.require(execReq)
     }
   }

@@ -73,8 +73,7 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(rprof.taskResources === Map.empty)
 
     val taskReq = new TaskResourceRequest("resource.gpu", 1)
-    val execReq = new ExecutorResourceRequest("resource.gpu", 2, None,
-      Some("myscript"), Some("nvidia"))
+    val execReq = new ExecutorResourceRequest("resource.gpu", 2, "", "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
 
     assert(rprof.executorResources.size === 1)

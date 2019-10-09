@@ -25,10 +25,10 @@ package org.apache.spark.resource
  *
  * @param resourceName Name of the resource
  * @param amount Amount requesting
- * @param units Optional units of amount for things like Memory, default is no units, only byte
+ * @param units Units of amount for things like Memory, default is no units, only byte
  *              types (b, mb, gb, etc) are supported.
- * @param discoveryScript Optional script used to discovery the resources
- * @param vendor Optional vendor, required for some cluster managers
+ * @param discoveryScript Script used to discovery the resources
+ * @param vendor Vendor, required for some cluster managers
  *
  * This api is currently private until the rest of the pieces are in place and then it
  * will become public.
@@ -36,41 +36,21 @@ package org.apache.spark.resource
 class ExecutorResourceRequest(
     val resourceName: String,
     val amount: Int,
-    _units: Option[String] = None,
-    _discoveryScript: Option[String] = None,
-    _vendor: Option[String] = None) extends Serializable {
+    val units: String = "",
+    val discoveryScript: String = "",
+    val vendor: String = "") extends Serializable {
 
   def this(resourceName: String, amount: Int) {
-    this(resourceName, amount, None, None, None)
+    this(resourceName, amount, "", "", "")
   }
 
   def this(resourceName: String, amount: Int, units: String) {
-    this(resourceName, amount, if (units.isEmpty()) None else Some(units), None, None)
+    this(resourceName, amount, units, "", "")
   }
 
   def this(resourceName: String, amount: Int, units: String, discoveryScript: String) {
-    this(resourceName, amount, if (units.isEmpty()) None else Some(units),
-      Some(discoveryScript), None)
+    this(resourceName, amount, units, discoveryScript, "")
   }
-
-  def this(resourceName: String,
-      amount: Int,
-      units: String,
-      discoveryScript: String,
-      vendor: String) {
-    this(resourceName,
-      amount,
-      if (units.isEmpty()) None else Some(units),
-      if (discoveryScript.isEmpty()) None else Some(discoveryScript),
-      if (vendor.isEmpty()) None else Some(vendor))
-  }
-
-  // API not using Option to be accessible from Java
-  def units: String = _units.getOrElse("")
-
-  def discoveryScript: String = _discoveryScript.getOrElse("")
-
-  def vendor: String = _vendor.getOrElse("")
 
   override def toString(): String = {
     s"ExecutorResourceRequest: resourceName = $resourceName, amount = $amount, " +
