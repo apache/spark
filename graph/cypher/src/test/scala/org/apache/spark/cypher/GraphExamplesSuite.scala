@@ -26,7 +26,11 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
 
   test("create PropertyGraph from single NodeFrame") {
     val nodeData: DataFrame = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
-    val nodeFrame: NodeFrame = NodeFrame.create(df = nodeData, "id", Set("Person"))
+    val nodeFrame: NodeFrame = cypherSession.buildNodeFrame(nodeData)
+      .idColumn("id")
+      .labelSet(Array("Person"))
+      .properties(Map("name" -> "name"))
+      .build()
     val graph: PropertyGraph = cypherSession.createGraph(Array(nodeFrame), Array.empty[RelationshipFrame])
     val result: CypherResult = graph.cypher("MATCH (n) RETURN n")
     result.df.show()
@@ -35,7 +39,11 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
   test("create PropertyGraph from Node- and RelationshipFrames") {
     val nodeData: DataFrame = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
     val relationshipData: DataFrame = spark.createDataFrame(Seq((0, 0, 1))).toDF("id", "source", "target")
-    val nodeFrame: NodeFrame = NodeFrame.create(nodeData, "id", Set("Person"))
+    val nodeFrame: NodeFrame = cypherSession.buildNodeFrame(nodeData)
+      .idColumn("id")
+      .labelSet(Array("Person"))
+      .properties(Map("name" -> "name"))
+      .build()
     val relationshipFrame: RelationshipFrame = RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
     val graph: PropertyGraph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
     val result: CypherResult = graph.cypher(
@@ -49,8 +57,17 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     val studentDF: DataFrame = spark.createDataFrame(Seq((0, "Alice", 42), (1, "Bob", 23))).toDF("id", "name", "age")
     val teacherDF: DataFrame = spark.createDataFrame(Seq((2, "Eve", "CS"))).toDF("id", "name", "subject")
 
-    val studentNF: NodeFrame = NodeFrame.create(studentDF, "id", Set("Person", "Student"))
-    val teacherNF: NodeFrame = NodeFrame.create(teacherDF, "id", Set("Person", "Teacher"))
+    val studentNF = cypherSession.buildNodeFrame(studentDF)
+      .idColumn("id")
+      .labelSet(Array("Person", "Student"))
+      .properties(Map("name" -> "name", "age" -> "age"))
+      .build()
+
+    val teacherNF = cypherSession.buildNodeFrame(teacherDF)
+      .idColumn("id")
+      .labelSet(Array("Person", "Teacher"))
+      .properties(Map("name" -> "name", "subject" -> "subject"))
+      .build()
 
     val knowsDF: DataFrame = spark.createDataFrame(Seq((0, 0, 1, 1984))).toDF("id", "source", "target", "since")
     val teachesDF: DataFrame = spark.createDataFrame(Seq((1, 2, 1))).toDF("id", "source", "target")

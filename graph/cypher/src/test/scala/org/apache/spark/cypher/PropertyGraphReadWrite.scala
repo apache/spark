@@ -51,7 +51,11 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
     Tuple3(0, 0, 1)
   )).toDF("id", "source", "target")
 
-  private lazy val nodeDataFrame: NodeFrame = NodeFrame.create(nodeData, "id", Set("Person"))
+  private lazy val nodeDataFrame: NodeFrame = cypherSession.buildNodeFrame(nodeData)
+    .idColumn("id")
+    .labelSet(Array("Person"))
+    .properties(Map("name" -> "name"))
+    .build()
 
   private lazy val relationshipFrame: RelationshipFrame = RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
 
@@ -67,7 +71,11 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
 
   test("save and loads a property graph") {
     val nodeData = spark.createDataFrame(Seq(0L -> "Alice", 1L -> "Bob")).toDF("id", "name")
-    val nodeFrame = NodeFrame.create(nodeData, "id", Set("Person"))
+    val nodeFrame = cypherSession.buildNodeFrame(nodeData)
+      .idColumn("id")
+      .labelSet(Array("Person"))
+      .properties(Map("name" -> "name"))
+      .build()
 
     val relationshipData = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))

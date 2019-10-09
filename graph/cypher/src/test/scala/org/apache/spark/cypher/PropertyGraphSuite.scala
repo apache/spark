@@ -35,7 +35,11 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
 
   test("create graph from NodeFrame") {
     val nodeData = spark.createDataFrame(Seq(0L -> "Alice", 1L -> "Bob")).toDF("id", "name")
-    val nodeFrame = NodeFrame.create(nodeData, "id", Set("Person"))
+    val nodeFrame = cypherSession.buildNodeFrame(nodeData)
+      .idColumn("id")
+      .labelSet(Array("Person"))
+      .properties(Map("name" -> "name"))
+      .build()
     val graph = cypherSession.createGraph(Array(nodeFrame), Array.empty[RelationshipFrame])
 
     val expectedDf = spark
@@ -47,8 +51,11 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
 
   test("create graph from NodeFrame and RelationshipFrame") {
     val nodeData = spark.createDataFrame(Seq(0L -> "Alice", 1L -> "Bob")).toDF("id", "name")
-    val nodeFrame = NodeFrame.create(nodeData, "id", Set("Person"))
-
+    val nodeFrame = cypherSession.buildNodeFrame(nodeData)
+      .idColumn("id")
+      .labelSet(Array("Person"))
+      .properties(Map("name" -> "name"))
+      .build()
     val relationshipData = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))
       .toDF("id", "source", "target", "since")
@@ -81,10 +88,17 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
       .createDataFrame(Seq((2L, "Eve", "CS")))
       .toDF("id", "name", "subject")
 
-    val studentNF =
-      NodeFrame.create(studentDF, "id", Set("Person", "Student"))
-    val teacherNF =
-      NodeFrame.create(teacherDF, "id", Set("Person", "Teacher"))
+    val studentNF = cypherSession.buildNodeFrame(studentDF)
+        .idColumn("id")
+        .labelSet(Array("Person", "Student"))
+        .properties(Map("name" -> "name", "age" -> "age"))
+        .build()
+
+    val teacherNF = cypherSession.buildNodeFrame(teacherDF)
+      .idColumn("id")
+      .labelSet(Array("Person", "Teacher"))
+      .properties(Map("name" -> "name", "subject" -> "subject"))
+      .build()
 
     val knowsDF = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))
