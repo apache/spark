@@ -22,9 +22,9 @@ from multiprocessing.pool import ThreadPool
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param.shared import *
-from pyspark.ml.tree import DecisionTreeModel, DecisionTreeParams, \
-    TreeEnsembleModel, RandomForestParams, GBTParams, \
-    HasVarianceImpurity, TreeClassifierParams, TreeEnsembleParams
+from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
+    _TreeEnsembleModel, _RandomForestParams, _GBTParams, \
+    _HasVarianceImpurity, _TreeClassifierParams, _TreeEnsembleParams
 from pyspark.ml.regression import DecisionTreeRegressionModel
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
@@ -941,7 +941,7 @@ class BinaryLogisticRegressionTrainingSummary(BinaryLogisticRegressionSummary,
 
 
 @inherit_doc
-class _DecisionTreeClassifierParams(DecisionTreeParams, TreeClassifierParams):
+class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams):
     """
     Params for :py:class:`DecisionTreeClassifier` and :py:class:`DecisionTreeClassificationModel`.
     """
@@ -1120,7 +1120,7 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifie
 
 
 @inherit_doc
-class DecisionTreeClassificationModel(DecisionTreeModel, JavaProbabilisticClassificationModel,
+class DecisionTreeClassificationModel(_DecisionTreeModel, JavaProbabilisticClassificationModel,
                                       _DecisionTreeClassifierParams, JavaMLWritable,
                                       JavaMLReadable):
     """
@@ -1152,7 +1152,7 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaProbabilisticClassi
 
 
 @inherit_doc
-class _RandomForestClassifierParams(RandomForestParams, TreeClassifierParams):
+class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams):
     """
     Params for :py:class:`RandomForestClassifier` and :py:class:`RandomForestClassificationModel`.
     """
@@ -1337,7 +1337,7 @@ class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifie
         return self._set(featureSubsetStrategy=value)
 
 
-class RandomForestClassificationModel(TreeEnsembleModel, JavaProbabilisticClassificationModel,
+class RandomForestClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,
                                       _RandomForestClassifierParams, JavaMLWritable,
                                       JavaMLReadable):
     """
@@ -1368,7 +1368,7 @@ class RandomForestClassificationModel(TreeEnsembleModel, JavaProbabilisticClassi
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
 
-class GBTClassifierParams(GBTParams, HasVarianceImpurity):
+class GBTClassifierParams(_GBTParams, _HasVarianceImpurity):
     """
     Private class to track supported GBTClassifier params.
 
@@ -1601,7 +1601,7 @@ class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams,
         return self._set(validationIndicatorCol=value)
 
 
-class GBTClassificationModel(TreeEnsembleModel, JavaProbabilisticClassificationModel,
+class GBTClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,
                              GBTClassifierParams, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTClassifier.

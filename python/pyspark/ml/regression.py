@@ -19,9 +19,9 @@ import sys
 
 from pyspark import since, keyword_only
 from pyspark.ml.param.shared import *
-from pyspark.ml.tree import DecisionTreeModel, DecisionTreeParams, \
-    TreeEnsembleModel, TreeEnsembleParams, RandomForestParams, GBTParams, \
-    HasVarianceImpurity, TreeRegressorParams
+from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
+    _TreeEnsembleModel, _TreeEnsembleParams, _RandomForestParams, _GBTParams, \
+    _HasVarianceImpurity, _TreeRegressorParams
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
     JavaPredictor, JavaPredictionModel, JavaWrapper
@@ -594,7 +594,7 @@ class IsotonicRegressionModel(JavaPredictionModel, JavaMLWritable, JavaMLReadabl
         return self._call_java("predictions")
 
 
-class _DecisionTreeRegressorParams(DecisionTreeParams, TreeRegressorParams, HasVarianceCol):
+class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, HasVarianceCol):
     """
     Params for :py:class:`DecisionTreeRegressor` and :py:class:`DecisionTreeRegressionModel`.
 
@@ -765,7 +765,7 @@ class DecisionTreeRegressor(JavaPredictor, _DecisionTreeRegressorParams, JavaMLW
 
 
 @inherit_doc
-class DecisionTreeRegressionModel(DecisionTreeModel, _DecisionTreeRegressorParams,
+class DecisionTreeRegressionModel(_DecisionTreeModel, _DecisionTreeRegressorParams,
                                   JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`DecisionTreeRegressor`.
@@ -795,7 +795,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel, _DecisionTreeRegressorParam
         return self._call_java("featureImportances")
 
 
-class _RandomForestRegressorParams(RandomForestParams, TreeRegressorParams):
+class _RandomForestRegressorParams(_RandomForestParams, _TreeRegressorParams):
     """
     Params for :py:class:`RandomForestRegressor` and :py:class:`RandomForestRegressionModel`.
 
@@ -969,7 +969,7 @@ class RandomForestRegressor(JavaPredictor, _RandomForestRegressorParams, JavaMLW
         return self._set(featureSubsetStrategy=value)
 
 
-class RandomForestRegressionModel(TreeEnsembleModel, _RandomForestRegressorParams,
+class RandomForestRegressionModel(_TreeEnsembleModel, _RandomForestRegressorParams,
                                   JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`RandomForestRegressor`.
@@ -999,9 +999,10 @@ class RandomForestRegressionModel(TreeEnsembleModel, _RandomForestRegressorParam
         return self._call_java("featureImportances")
 
 
-class GBTRegressorParams(GBTParams, TreeRegressorParams):
+class _GBTRegressorParams(_GBTParams, _TreeRegressorParams):
     """
-    (Private) class to track supported GBTRegressor params.
+    Params for :py:class:`GBTRegressor` and :py:class:`GBTRegressorModel`.
+
     .. versionadded:: 3.0.0
     """
 
@@ -1021,7 +1022,7 @@ class GBTRegressorParams(GBTParams, TreeRegressorParams):
 
 
 @inherit_doc
-class GBTRegressor(JavaPredictor, GBTRegressorParams, JavaMLWritable, JavaMLReadable):
+class GBTRegressor(JavaPredictor, _GBTRegressorParams, JavaMLWritable, JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
@@ -1204,8 +1205,7 @@ class GBTRegressor(JavaPredictor, GBTRegressorParams, JavaMLWritable, JavaMLRead
         return self._set(validationIndicatorCol=value)
 
 
-class GBTRegressionModel(TreeEnsembleModel, GBTRegressorParams,
-                         JavaMLWritable, JavaMLReadable):
+class GBTRegressionModel(_TreeEnsembleModel, _GBTRegressorParams, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`GBTRegressor`.
 

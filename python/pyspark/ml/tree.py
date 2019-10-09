@@ -24,9 +24,10 @@ from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
 
 @inherit_doc
-class DecisionTreeModel(JavaPredictionModel):
+class _DecisionTreeModel(JavaPredictionModel):
     """
     Abstraction for Decision Tree models.
+
     .. versionadded:: 1.5.0
     """
 
@@ -59,7 +60,7 @@ class DecisionTreeModel(JavaPredictionModel):
         return self._call_java("toString")
 
 
-class DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
+class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
     """
     Mixin for Decision Tree parameters.
     """
@@ -106,7 +107,7 @@ class DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
                          typeConverter=TypeConverters.toBoolean)
 
     def __init__(self):
-        super(DecisionTreeParams, self).__init__()
+        super(_DecisionTreeParams, self).__init__()
 
     def setLeafCol(self, value):
         """
@@ -164,7 +165,7 @@ class DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
 
 
 @inherit_doc
-class TreeEnsembleModel(JavaPredictionModel):
+class _TreeEnsembleModel(JavaPredictionModel):
     """
     (private abstraction)
     Represents a tree ensemble model.
@@ -174,7 +175,7 @@ class TreeEnsembleModel(JavaPredictionModel):
     @since("2.0.0")
     def trees(self):
         """Trees in this ensemble. Warning: These have null parent Estimators."""
-        return [DecisionTreeModel(m) for m in list(self._call_java("trees"))]
+        return [_DecisionTreeModel(m) for m in list(self._call_java("trees"))]
 
     @property
     @since("2.0.0")
@@ -211,7 +212,7 @@ class TreeEnsembleModel(JavaPredictionModel):
         return self._call_java("toString")
 
 
-class TreeEnsembleParams(DecisionTreeParams):
+class _TreeEnsembleParams(_DecisionTreeParams):
     """
     Mixin for Decision Tree-based ensemble algorithms parameters.
     """
@@ -234,7 +235,7 @@ class TreeEnsembleParams(DecisionTreeParams):
               " n features). default = 'auto'", typeConverter=TypeConverters.toString)
 
     def __init__(self):
-        super(TreeEnsembleParams, self).__init__()
+        super(_TreeEnsembleParams, self).__init__()
 
     @since("1.4.0")
     def getSubsamplingRate(self):
@@ -251,7 +252,7 @@ class TreeEnsembleParams(DecisionTreeParams):
         return self.getOrDefault(self.featureSubsetStrategy)
 
 
-class RandomForestParams(TreeEnsembleParams):
+class _RandomForestParams(_TreeEnsembleParams):
     """
     Private class to track supported random forest parameters.
     """
@@ -260,7 +261,7 @@ class RandomForestParams(TreeEnsembleParams):
                      typeConverter=TypeConverters.toInt)
 
     def __init__(self):
-        super(RandomForestParams, self).__init__()
+        super(_RandomForestParams, self).__init__()
 
     @since("1.4.0")
     def getNumTrees(self):
@@ -270,7 +271,7 @@ class RandomForestParams(TreeEnsembleParams):
         return self.getOrDefault(self.numTrees)
 
 
-class GBTParams(TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndicatorCol):
+class _GBTParams(_TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndicatorCol):
     """
     Private class to track supported GBT params.
     """
@@ -295,7 +296,7 @@ class GBTParams(TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndica
         return self.getOrDefault(self.validationTol)
 
 
-class HasVarianceImpurity(Params):
+class _HasVarianceImpurity(Params):
     """
     Private class to track supported impurity measures.
     """
@@ -308,7 +309,7 @@ class HasVarianceImpurity(Params):
                      ", ".join(supportedImpurities), typeConverter=TypeConverters.toString)
 
     def __init__(self):
-        super(HasVarianceImpurity, self).__init__()
+        super(_HasVarianceImpurity, self).__init__()
 
     @since("1.4.0")
     def getImpurity(self):
@@ -318,11 +319,13 @@ class HasVarianceImpurity(Params):
         return self.getOrDefault(self.impurity)
 
 
-class TreeClassifierParams(object):
+class _TreeClassifierParams(object):
     """
     Private class to track supported impurity measures.
+
     .. versionadded:: 1.4.0
     """
+
     supportedImpurities = ["entropy", "gini"]
 
     impurity = Param(Params._dummy(), "impurity",
@@ -331,7 +334,7 @@ class TreeClassifierParams(object):
                      ", ".join(supportedImpurities), typeConverter=TypeConverters.toString)
 
     def __init__(self):
-        super(TreeClassifierParams, self).__init__()
+        super(_TreeClassifierParams, self).__init__()
 
     @since("1.6.0")
     def getImpurity(self):
@@ -341,7 +344,7 @@ class TreeClassifierParams(object):
         return self.getOrDefault(self.impurity)
 
 
-class TreeRegressorParams(HasVarianceImpurity):
+class _TreeRegressorParams(_HasVarianceImpurity):
     """
     Private class to track supported impurity measures.
     """
