@@ -89,11 +89,16 @@ object SQLConf {
   }
 
   def withExistingConf[T](conf: SQLConf)(f: => T): T = {
+    val old = existingConf.get()
     existingConf.set(conf)
     try {
       f
     } finally {
-      existingConf.remove()
+      if (old != null) {
+        existingConf.set(old)
+      } else {
+        existingConf.remove()
+      }
     }
   }
 
