@@ -262,11 +262,11 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
 
   test("defaultPartitioner") {
     val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
-    val rdd2 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+    val rdd2 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
       .partitionBy(new HashPartitioner(10))
-    val rdd3 = sc.parallelize(Array((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
+    val rdd3 = sc.parallelize(Seq((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
       .partitionBy(new HashPartitioner(100))
-    val rdd4 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+    val rdd4 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
       .partitionBy(new HashPartitioner(9))
     val rdd5 = sc.parallelize((1 to 10).map(x => (x, x)), 11)
 
@@ -289,14 +289,14 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
       sc.conf.set("spark.default.parallelism", "4")
 
       val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
-      val rdd2 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+      val rdd2 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
         .partitionBy(new HashPartitioner(10))
-      val rdd3 = sc.parallelize(Array((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
+      val rdd3 = sc.parallelize(Seq((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
         .partitionBy(new HashPartitioner(100))
-      val rdd4 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+      val rdd4 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
         .partitionBy(new HashPartitioner(9))
       val rdd5 = sc.parallelize((1 to 10).map(x => (x, x)), 11)
-      val rdd6 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+      val rdd6 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
         .partitionBy(new HashPartitioner(3))
 
       val partitioner1 = Partitioner.defaultPartitioner(rdd1, rdd2)

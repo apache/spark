@@ -554,7 +554,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   }
 
   test("replace column using withColumns") {
-    val df2 = sparkContext.parallelize(Array((1, 2), (2, 3), (3, 4))).toDF("x", "y")
+    val df2 = sparkContext.parallelize(Seq((1, 2), (2, 3), (3, 4))).toDF("x", "y")
     val df3 = df2.withColumns(Seq("x", "newCol1", "newCol2"),
       Seq(df2("x") + 1, df2("y"), df2("y") + 1))
     checkAnswer(

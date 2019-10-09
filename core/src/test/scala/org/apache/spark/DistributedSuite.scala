@@ -77,7 +77,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("simple groupByKey") {
     sc = new SparkContext(clusterUrl, "test")
-    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 5)
+    val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)), 5)
     val groups = pairs.groupByKey(5).collect()
     assert(groups.size === 2)
     val valuesFor1 = groups.find(_._1 == 1).get._2
