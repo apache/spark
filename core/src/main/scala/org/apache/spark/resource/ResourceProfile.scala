@@ -17,8 +17,10 @@
 
 package org.apache.spark.resource
 
+import java.util.{Map => JMap}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
+import scala.collection.JavaConverters._
 import scala.collection.immutable.HashMap
 import scala.collection.mutable
 
@@ -55,9 +57,9 @@ import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
 @Evolving
 private[spark] class ResourceProfile() extends Serializable {
 
-  private val id = ResourceProfile.getNextProfileId
-  private val taskResources = new mutable.HashMap[String, TaskResourceRequest]()
-  private val executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
+  private val _id = ResourceProfile.getNextProfileId
+  private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
+  private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
 
   private val allowedExecutorResources = HashMap[String, Boolean](
     (ResourceProfile.MEMORY -> true),
@@ -68,21 +70,32 @@ private[spark] class ResourceProfile() extends Serializable {
   private val allowedTaskResources = HashMap[String, Boolean]((
     ResourceProfile.CPUS -> true))
 
-  def getId: Int = id
+  def id: Int = _id
 
-  def getTaskResources: Map[String, TaskResourceRequest] = taskResources.toMap
+  def taskResources: Map[String, TaskResourceRequest] = _taskResources.toMap
 
-  def getExecutorResources: Map[String, ExecutorResourceRequest] = executorResources.toMap
+  def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.toMap
+
+  /**
+   * (Java-specific) gets a Java Map of resources to TaskResourceRequest
+   */
+  def taskResourcesJMap: JMap[String, TaskResourceRequest] = _taskResources.asJava
+
+  /**
+   * (Java-specific) gets a Java Map of resources to ExecutorResourceRequest
+   */
+  def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = _executorResources.asJava
+
 
   def reset(): Unit = {
-    taskResources.clear()
-    executorResources.clear()
+    _taskResources.clear()
+    _executorResources.clear()
   }
 
   def require(request: TaskResourceRequest): this.type = {
     if (allowedTaskResources.contains(request.resourceName) ||
       request.resourceName.startsWith(RESOURCE_DOT)) {
-      taskResources(request.resourceName) = request
+      _taskResources(request.resourceName) = request
     } else {
       throw new IllegalArgumentException(s"Task resource not allowed: ${request.resourceName}")
     }
@@ -92,7 +105,7 @@ private[spark] class ResourceProfile() extends Serializable {
   def require(request: ExecutorResourceRequest): this.type = {
     if (allowedExecutorResources.contains(request.resourceName) ||
         request.resourceName.startsWith(RESOURCE_DOT)) {
-      executorResources(request.resourceName) = request
+      _executorResources(request.resourceName) = request
     } else {
       throw new IllegalArgumentException(s"Executor resource not allowed: ${request.resourceName}")
     }
@@ -103,16 +116,17 @@ private[spark] class ResourceProfile() extends Serializable {
     obj match {
       case that: ResourceProfile =>
         that.getClass == this.getClass &&
-          that.taskResources == taskResources && that.executorResources == executorResources
+          that._taskResources == _taskResources && that._executorResources == _executorResources
       case _ =>
         false
     }
   }
 
-  override def hashCode(): Int = Seq(taskResources, executorResources).hashCode()
+  override def hashCode(): Int = Seq(_taskResources, _executorResources).hashCode()
 
   override def toString(): String = {
-    s"Profile: id = $id, executor resources: $executorResources, task resources: $taskResources"
+    s"Profile: id = ${_id}, executor resources: ${_executorResources}, " +
+      s"task resources: ${_taskResources}"
   }
 }
 
@@ -133,7 +147,7 @@ private[spark] object ResourceProfile extends Logging {
   private val defaultProfileRef: AtomicReference[ResourceProfile] =
     new AtomicReference[ResourceProfile](new ResourceProfile())
 
-  assert(defaultProfileRef.get().getId == DEFAULT_RESOURCE_PROFILE_ID,
+  assert(defaultProfileRef.get().id == DEFAULT_RESOURCE_PROFILE_ID,
     s"Default Profile must have the default profile id: $DEFAULT_RESOURCE_PROFILE_ID")
 
   def getNextProfileId: Int = nextProfileId.getAndIncrement()
@@ -141,10 +155,10 @@ private[spark] object ResourceProfile extends Logging {
   def getOrCreateDefaultProfile(conf: SparkConf): ResourceProfile = {
     val defaultProf = defaultProfileRef.get()
     // check to see if the default profile was initialized yet
-    if (defaultProf.getExecutorResources == Map.empty) {
+    if (defaultProf.executorResources == Map.empty) {
       synchronized {
         val prof = defaultProfileRef.get()
-        if (prof.getExecutorResources == Map.empty) {
+        if (prof.executorResources == Map.empty) {
           addDefaultTaskResources(prof, conf)
           addDefaultExecutorResources(prof, conf)
         }

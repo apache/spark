@@ -33,12 +33,12 @@ package org.apache.spark.resource
  * This api is currently private until the rest of the pieces are in place and then it
  * will become public.
  */
-private[spark] class ExecutorResourceRequest(
+class ExecutorResourceRequest(
     val resourceName: String,
     val amount: Int,
-    val units: Option[String] = None,
-    val discoveryScript: Option[String] = None,
-    val vendor: Option[String] = None) extends Serializable {
+    _units: Option[String] = None,
+    _discoveryScript: Option[String] = None,
+    _vendor: Option[String] = None) extends Serializable {
 
   def this(resourceName: String, amount: Int) {
     this(resourceName, amount, None, None, None)
@@ -64,6 +64,13 @@ private[spark] class ExecutorResourceRequest(
       if (discoveryScript.isEmpty()) None else Some(discoveryScript),
       if (vendor.isEmpty()) None else Some(vendor))
   }
+
+  // API not using Option to be accessible from Java
+  def units: String = _units.getOrElse("")
+
+  def discoveryScript: String = _discoveryScript.getOrElse("")
+
+  def vendor: String = _vendor.getOrElse("")
 
   override def toString(): String = {
     s"ExecutorResourceRequest: resourceName = $resourceName, amount = $amount, " +
