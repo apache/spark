@@ -160,4 +160,11 @@ class ThreadUtilsSuite extends SparkFunSuite {
       assert(!t.isAlive)
     }
   }
+
+  test("parmap should return the same collection type of input") {
+    val l1 = 1 :: 2 :: 3 :: Nil
+    // The explicit type is to verify the return type of `parmap`
+    val l2: List[Int] = ThreadUtils.parmap(l1, "test", 2)(_ + 1)
+    assert(l2 === l1.map(_ + 1))
+  }
 }

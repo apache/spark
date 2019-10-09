@@ -274,12 +274,19 @@ private[spark] object ThreadUtils {
    * @return new collection in which each element was given from the input collection `in` by
    *         applying the lambda function `f`.
    */
-  def parmap[I, O](in: Seq[I], prefix: String, maxThreads: Int)(f: I => O): Seq[O] = {
+  def parmap[I, O, Col[X] <: TraversableOnce[X]]
+      (in: Col[I], prefix: String, maxThreads: Int)
+      (f: I => O)
+      (implicit
+        cbf: CanBuildFrom[Col[I], Future[O], Col[Future[O]]],
+        cbf2: CanBuildFrom[Col[Future[O]], O, Col[O]] // for Future.sequence
+      ): Col[O] = {
     val pool = newForkJoinPool(prefix, maxThreads)
     try {
       implicit val ec = ExecutionContext.fromExecutor(pool)
-
-      val futures = in.map(x => Future(f(x)))
+      val futures = in.foldLeft((cbf(in))) { (r, a) =>
+        r += Future(f(a))
+      }.result()
       val futureSeq = Future.sequence(futures)
 
       awaitResult(futureSeq, Duration.Inf)
