@@ -48,7 +48,9 @@ import org.apache.spark.storage.StorageLevel
  */
 private[regression] trait FactorizationMachinesParams
   extends PredictorParams
-  with HasMaxIter with HasStepSize with HasTol {
+  with HasMaxIter with HasStepSize with HasTol with HasSolver with HasLoss {
+
+  import FactorizationMachines._
 
   /**
    * Param for dimensionality of the factors (&gt;= 0)
@@ -123,40 +125,32 @@ private[regression] trait FactorizationMachinesParams
   final def getInitStd: Double = $(initStd)
 
   /**
-   * Param for loss function type
+   * The solver algorithm for optimization.
+   * Supported options: "gd", "adamW".
+   * Default: "adamW"
+   *
    * @group param
    */
   @Since("2.4.3")
-  final val lossFunc: Param[String] = new Param[String](this, "lossFunc",
-    "loss function type")
-
-  /** @group getParam */
-  @Since("2.4.3")
-  final def getLossFunc: String = $(lossFunc)
+  final override val solver: Param[String] = new Param[String](this, "solver",
+    "The solver algorithm for optimization. Supported options: " +
+      s"${supportedSolvers.mkString(", ")}. (Default adamW)",
+    ParamValidators.inArray[String](supportedSolvers))
 
   /**
-   * Param for optimizer
+   * The loss function to be optimized.
+   * Supported options: "logisticLoss" and "squaredError".
+   * Default: "logisticLoss"
+   *
    * @group param
    */
   @Since("2.4.3")
-  final val optimizer: Param[String] = new Param[String](this, "optimizer",
-    "optimizer type")
-
-  /** @group getParam */
-  @Since("2.4.3")
-  final def getOptimizer: String = $(optimizer)
+  final override val loss: Param[String] = new Param[String](this, "loss", "The loss function to" +
+    s" be optimized. Supported options: ${supportedLosses.mkString(", ")}. (Default logisticLoss)",
+    ParamValidators.inArray[String](supportedLosses))
 
   /**
    * Param for whether to print information per iteration step
-   * Factorization Machines may produce a gradient explosion, so output some log use logInfo.
-   * logInfo will output:
-   *   iter_num: current iterate epoch
-   *   iter_step_size: step size(aka learning rate)
-   *   weights_norm2: weight's L2 norm
-   *   cur_tol: current tolerance in GradientDescent
-   *   grad_norm1: gradient's L1 norm
-   *   first_weight: first parameter in weights
-   *   first_gradient: first parameter's gradient
    *
    * @group param
    */
@@ -179,6 +173,9 @@ class FactorizationMachines @Since("2.4.3") (
   extends Predictor[Vector, FactorizationMachines, FactorizationMachinesModel]
   with FactorizationMachinesParams with DefaultParamsWritable with Logging {
 
+  import FactorizationMachines._
+
+  @Since("2.4.3")
   def this() = this(Identifiable.randomUID("fm"))
 
   /**
@@ -276,29 +273,38 @@ class FactorizationMachines @Since("2.4.3") (
   setDefault(tol -> 1E-6)
 
   /**
-   * Set the loss function type.
-   * Supports: logisticloss/logloss, leastsquaresloss/mse.
-   * Default is logisticloss.
+   * Set the solver algorithm used for optimization.
+   * Default is adamW.
    *
    * @group setParam
    */
   @Since("2.4.3")
-  def setLossFunc(value: String): this.type = set(lossFunc, value)
-  setDefault(lossFunc -> "logisticloss")
+  def setSolver(value: String): this.type = set(solver, value)
+  setDefault(solver -> AdamW)
 
   /**
-   * Set the optimizer type.
-   * Supports: sgd, adamw.
-   * Default is adamw.
+   * Sets the value of param [[loss]].
+   * - "logisticLoss" is used to classification, label must be in {0, 1}.
+   * - "squaredError" is used to regression.
+   * Default is logisticLoss.
    *
    * @group setParam
    */
   @Since("2.4.3")
-  def setOptimizer(value: String): this.type = set(optimizer, value)
-  setDefault(optimizer -> "adamw")
+  def setLoss(value: String): this.type = set(loss, value)
+  setDefault(loss -> LogisticLoss)
 
   /**
    * Set the verbose.
+   * Factorization Machines may produce a gradient explosion, so output some log use logInfo.
+   * logInfo will output
+   *  - iter_num: current iterate epoch
+   *  - iter_step_size: step size(aka learning rate)
+   *  - weights_norm2: weight's L2 norm
+   *  - cur_tol: current tolerance in GradientDescent
+   *  - grad_norm1: gradient's L1 norm
+   *  - first_weight: first parameter in weights
+   *  - first_gradient: first parameter's gradient
    * Default is false.
    *
    * @group setParam
@@ -326,7 +332,7 @@ class FactorizationMachines @Since("2.4.3") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, numFactors, fitBias, fitLinear, regParam,
-      miniBatchFraction, maxIter, stepSize, tol, lossFunc)
+      miniBatchFraction, initStd, maxIter, stepSize, tol, solver, loss)
 
     val numFeatures = instances.first().features.size
     instr.logNumFeatures(numFeatures)
@@ -341,21 +347,21 @@ class FactorizationMachines @Since("2.4.3") (
     val data = instances.map{ case oldLabeledPoint(label, features) => (label, features) }
 
     // optimize coefficients with gradient descent
-    val gradient = BaseFactorizationMachinesGradient.parseLossFuncStr(
-      $(lossFunc), $(numFactors), $(fitBias), $(fitLinear), numFeatures)
+    val gradient = BaseFactorizationMachinesGradient.parseLoss(
+      $(loss), $(numFactors), $(fitBias), $(fitLinear), numFeatures)
 
-    val updater = $(optimizer) match {
-      case "sgd" => new FactorizationMachinesUpdater().setVerbose($(verbose))
-      case "adamw" => new AdamWUpdater(coefficientsSize).setVerbose($(verbose))
+    val updater = $(solver) match {
+      case GD => new FactorizationMachinesUpdater().setVerbose($(verbose))
+      case AdamW => new AdamWUpdater(coefficientsSize).setVerbose($(verbose))
     }
 
-    val GD = new GradientDescent(gradient, updater)
+    val optimizer = new GradientDescent(gradient, updater)
       .setStepSize($(stepSize))
       .setNumIterations($(maxIter))
       .setRegParam($(regParam))
       .setMiniBatchFraction($(miniBatchFraction))
       .setConvergenceTol($(tol))
-    val coefficients = GD.optimize(data, initialCoefficients)
+    val coefficients = optimizer.optimize(data, initialCoefficients)
 
     if (handlePersistence) instances.unpersist()
 
@@ -372,6 +378,24 @@ object FactorizationMachines extends DefaultParamsReadable[FactorizationMachines
 
   @Since("2.4.3")
   override def load(path: String): FactorizationMachines = super.load(path)
+
+  /** String name for "gd". */
+  private[regression] val GD = "gd"
+
+  /** String name for "adamW". */
+  private[regression] val AdamW = "adamW"
+
+  /** Set of solvers that FactorizationMachines supports. */
+  private[regression] val supportedSolvers = Array(GD, AdamW)
+
+  /** String name for "logisticLoss". */
+  private[regression] val LogisticLoss = "logisticLoss"
+
+  /** String name for "squaredError". */
+  private[regression] val SquaredError = "squaredError"
+
+  /** Set of loss function names that FactorizationMachines supports. */
+  private[regression] val supportedLosses = Array(SquaredError, LogisticLoss)
 }
 
 /**
@@ -397,8 +421,8 @@ class FactorizationMachinesModel (
   @Since("2.4.3")
   def getCoefficients: Vector = coefficients
 
-  private lazy val gradient = BaseFactorizationMachinesGradient.parseLossFuncStr(
-    $(lossFunc), $(numFactors), $(fitBias), $(fitLinear), numFeatures)
+  private lazy val gradient = BaseFactorizationMachinesGradient.parseLoss(
+    $(loss), $(numFactors), $(fitBias), $(fitLinear), numFeatures)
 
   override def predict(features: Vector): Double = {
     val rawPrediction = gradient.getRawPrediction(features, coefficients)
@@ -417,7 +441,7 @@ class FactorizationMachinesModel (
 
   override def toString: String = {
     s"FactorizationMachinesModel: " +
-      s"uid = ${super.toString}, lossFunc = ${$(lossFunc)}, numFeatures = $numFeatures, " +
+      s"uid = ${super.toString}, lossFunc = ${$(loss)}, numFeatures = $numFeatures, " +
       s"numFactors = ${$(numFactors)}, fitLinear = ${$(fitLinear)}, fitBias = ${$(fitBias)}"
   }
 }
@@ -565,6 +589,8 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
 
   private def getRawGradient(data: oldVector, weights: oldVector): oldVector = {
     data match {
+      // Usually Factorization Machines is used, there will be a lot of sparse features.
+      // So need to optimize the gradient descent of sparse vector.
       case data: oldLinalg.SparseVector =>
         val gardSize = data.indices.length * numFactors +
           (if (fitLinear) data.indices.length else 0) +
@@ -617,16 +643,19 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
 }
 
 object BaseFactorizationMachinesGradient {
-  def parseLossFuncStr(
+  def parseLoss(
       lossFunc: String,
       numFactors: Int,
       fitBias: Boolean,
       fitLinear: Boolean,
       numFeatures: Int): BaseFactorizationMachinesGradient = {
+
+    import FactorizationMachines._
+
     lossFunc match {
-      case "logisticloss" | "logloss" =>
+      case LogisticLoss =>
         new LogisticFactorizationMachinesGradient(numFactors, fitBias, fitLinear, numFeatures)
-      case "leastsquaresloss" | "mse" =>
+      case SquaredError =>
         new MSEFactorizationMachinesGradient(numFactors, fitBias, fitLinear, numFeatures)
       case _ => throw new IllegalArgumentException(s"loss function type $lossFunc is invalidation")
     }

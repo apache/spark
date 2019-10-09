@@ -48,7 +48,7 @@ class FactorizationMachinesSuite extends MLTest {
 
     val fmModel = new FactorizationMachinesModel(
       "fm_test", oldVectors.dense(coefficients), numFeatures)
-    fmModel.set(fmModel.lossFunc, "mse")
+    fmModel.set(fmModel.loss, "squaredError")
     fmModel.set(fmModel.numFactors, numFactors)
     fmModel.set(fmModel.fitBias, true)
     fmModel.set(fmModel.fitLinear, true)
@@ -57,10 +57,10 @@ class FactorizationMachinesSuite extends MLTest {
       .select("features", "label")
   }
 
-  test("factorization machines mse") {
+  test("factorization machines squaredError") {
     val fm = new FactorizationMachines()
-      .setOptimizer("adamw")
-      .setLossFunc("mse")
+      .setSolver("adamW")
+      .setLoss("squaredError")
       .setFeaturesCol("features")
       .setLabelCol("label")
       .setNumFactors(2)
