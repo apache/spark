@@ -5,7 +5,9 @@
 -- INTERVAL
 -- https://github.com/postgres/postgres/blob/REL_12_STABLE/src/test/regress/sql/interval.sql
 
+-- [SPARK-28259] Date/Time Output Styles and Date Order Conventions
 -- SET DATESTYLE = 'ISO';
+-- [SPARK-29406] Interval output styles
 -- SET IntervalStyle to postgres;
 
 -- check acceptance of "time zone style"
@@ -130,8 +132,9 @@
 -- FROM INTERVAL_MULDIV_TBL;
 
 -- DROP TABLE INTERVAL_MULDIV_TBL;
-
+-- [SPARK-28259] Date/Time Output Styles and Date Order Conventions
 -- SET DATESTYLE = 'postgres';
+-- [SPARK-29406] Interval output styles
 -- SET IntervalStyle to postgres_verbose;
 
 -- SELECT '' AS ten, * FROM INTERVAL_TBL;
@@ -163,7 +166,9 @@
 -- SELECT justify_interval(interval '1 month -1 hour') as `1 month -1 hour`;
 
 -- test fractional second input, and detection of duplicate units
+-- [SPARK-28259] Date/Time Output Styles and Date Order Conventions
 -- SET DATESTYLE = 'ISO';
+-- [SPARK-29406] Interval output styles
 -- SET IntervalStyle TO postgres;
 -- [SPARK-29369] Accept strings without `interval` prefix in casting to intervals
 -- SELECT '1 millisecond'::interval, '1 microsecond'::interval,
@@ -246,6 +251,7 @@ SELECT interval '1 2:03:04' minute to second;
 --  FROM interval_tbl;
 
 -- test inputting and outputting SQL standard interval literals
+-- [SPARK-29406] Interval output styles
 -- SET IntervalStyle TO sql_standard;
 SELECT  interval '0'                       AS zero,
         interval '1-2' year to month       AS `year-month`,
@@ -254,6 +260,7 @@ SELECT  interval '0'                       AS zero,
         - interval '1 2:03:04'             AS `negative day-time`;
 
 -- test input of some not-quite-standard interval values in the sql style
+-- [SPARK-29406] Interval output styles
 -- SET IntervalStyle TO postgres;
 -- SELECT  interval '+1 -1:00:00',
 --         interval '-1 +1:00:00',
@@ -261,6 +268,7 @@ SELECT  interval '0'                       AS zero,
 --         interval '-1-2 +3 -4:05:06.789';
 
 -- test output of couple non-standard interval values in the sql style
+-- [SPARK-29406] Interval output styles
 -- SET IntervalStyle TO sql_standard;
 -- SELECT  interval '1 day -1 hours',
 --         interval '-1 days +1 hours',
@@ -268,6 +276,7 @@ SELECT  interval '0'                       AS zero,
 --         - interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds';
 
 -- test outputting iso8601 intervals
+-- [SPARK-29406] Interval output styles
 -- SET IntervalStyle to iso_8601;
 -- select  interval '0'                                AS zero,
 --         interval '1-2'                              AS `a year 2 months`,
@@ -278,6 +287,7 @@ SELECT  interval '0'                       AS zero,
 --         (- interval '1-2' + interval '3 4:05:06.7') AS negative;
 
 -- test inputting ISO 8601 4.4.2.1 "Format With Time Unit Designators"
+-- [SPARK-29406] Interval output styles
 -- SET IntervalStyle to sql_standard;
 -- [SPARK-29394] Support ISO 8601 format for intervals
 -- select  interval 'P0Y'                    AS zero,
@@ -289,6 +299,7 @@ SELECT  interval '0'                       AS zero,
 --         interval 'PT-0.1S'                AS `fractional second`;
 
 -- test inputting ISO 8601 4.4.2.2 "Alternative Format"
+-- [SPARK-29406] Interval output styles
 -- SET IntervalStyle to postgres;
 -- select  interval 'P00021015T103020'       AS `ISO8601 Basic Format`,
 --         interval 'P0002-10-15T10:30:20'   AS `ISO8601 Extended Format`;
@@ -304,6 +315,7 @@ SELECT  interval '0'                       AS zero,
 --         interval 'PT10:30'                AS `hour minute`;
 
 -- test a couple rounding cases that changed since 8.3 w/ HAVE_INT64_TIMESTAMP.
+-- [SPARK-29406] Interval output styles
 -- SET IntervalStyle to postgres_verbose;
 -- select interval '-10 mons -3 days +03:55:06.70';
 -- select interval '1 year 2 mons 3 days 04:05:06.699999';
