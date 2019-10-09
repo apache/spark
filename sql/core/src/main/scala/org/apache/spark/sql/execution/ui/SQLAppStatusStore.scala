@@ -120,7 +120,7 @@ class SQLExecutionUIData(
 }
 
 /**
- * Used to recover LiveStageMetrics in SQLAppStatusListener. It would be wrote into KVStore
+ * Used to recover LiveStageMetrics in SQLAppStatusListener. It would be written into KVStore
  * continuously and deleted when related LiveStageMetrics is no longer used in SQLAppStatusListener
  */
 class SQLStageMetricsWrapper(
