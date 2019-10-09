@@ -2276,7 +2276,6 @@
               <arg>-deprecation</arg>
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
-              <arg>-Yno-adapted-args</arg>
               <arg>-target:jvm-1.8</arg>
             </args>
             <jvmArgs>
