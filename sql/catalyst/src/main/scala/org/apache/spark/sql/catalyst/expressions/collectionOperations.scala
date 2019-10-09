@@ -79,7 +79,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
     _FUNC_(expr) - Returns the size of an array or a map.
     The function returns -1 if its input is null and spark.sql.legacy.sizeOfNull is set to true.
     If spark.sql.legacy.sizeOfNull is set to false, the function returns null for null input.
-    By default, the spark.sql.legacy.sizeOfNull parameter is set to true.
+    By default, the spark.sql.legacy.sizeOfNull parameter is set to false.
   """,
   examples = """
     Examples:
@@ -88,7 +88,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
       > SELECT _FUNC_(map('a', 1, 'b', 2));
        2
       > SELECT _FUNC_(NULL);
-       -1
+       NULL
   """)
 case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 

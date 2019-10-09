@@ -372,7 +372,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   test ("prevent user from overwriting the empty directory (old Hadoop API)") {
     sc = new SparkContext("local", "test")
-    val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    val randomRDD = sc.parallelize(Seq((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
     intercept[FileAlreadyExistsException] {
       randomRDD.saveAsTextFile(tempDir.getPath)
     }
@@ -380,7 +380,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   test ("prevent user from overwriting the non-empty directory (old Hadoop API)") {
     sc = new SparkContext("local", "test")
-    val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    val randomRDD = sc.parallelize(Seq((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
     assert(new File(tempDir.getPath + "/output/part-00000").exists())
     intercept[FileAlreadyExistsException] {
@@ -392,7 +392,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf()
     conf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
     sc = new SparkContext(conf)
-    val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    val randomRDD = sc.parallelize(Seq((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
     assert(new File(tempDir.getPath + "/output/part-00000").exists())
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
