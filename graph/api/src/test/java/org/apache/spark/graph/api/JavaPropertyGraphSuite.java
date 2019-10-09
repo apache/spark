@@ -18,7 +18,6 @@
 package org.apache.spark.graph.api;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -74,9 +73,12 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
 
     List<Row> knowsData = Collections.singletonList(RowFactory.create(0L, 0L, 1L, 1984));
 
-    Dataset<Row> personDf = spark.createDataFrame(personData, personSchema);
-    NodeFrame personNodeFrame = NodeFrame
-        .create(personDf, "id", Sets.newHashSet("Person"));
+        Dataset<Row> personDf = spark.createDataFrame(personData, personSchema);
+        NodeFrame personNodeFrame = cypherSession.buildNodeFrame(personDf)
+            .idColumn("id")
+            .labelSet(new String[]{"Person"})
+            .properties(Collections.singletonMap("name", "name"))
+            .build();
 
     Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
     RelationshipFrame knowsRelFrame = RelationshipFrame

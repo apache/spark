@@ -242,4 +242,13 @@ trait CypherSession extends Logging {
    */
   def read: PropertyGraphReader
 
+  /**
+   * Returns a [[NodeFrameBuilder]] that can be used to construct a [[NodeFrame]].
+   *
+   * @param df DataFrame containing a single node in each row
+   * @since 3.0.0
+   */
+  def buildNodeFrame(df: DataFrame): NodeFrameBuilder =
+    new NodeFrameBuilder(df)
+
 }

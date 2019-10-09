@@ -62,77 +62,64 @@ abstract class GraphElementFrame {
 
 }
 
-object NodeFrame {
+/**
+ * Interface used to build a [[NodeFrame]].
+ *
+ * @param dataFrame DataFrame containing a single node in each row
+ * @since 3.0.0
+ */
+final class NodeFrameBuilder(var dataFrame: DataFrame) {
+
+  private var idColumn: String = "id"
+  private var labelSet: Set[String] = Set.empty
+  private var properties: Map[String, String] = Map.empty
 
   /**
-   * Describes how to map an initial DataFrame to nodes.
-   *
-   * All columns apart from the given `idColumn` are mapped to node properties.
-   *
-   * @param df        DataFrame containing a single node in each row
-   * @param idColumn  column that contains the node identifier
-   * @param labelSet  labels that are assigned to all nodes
+   * @param idColumn column that contains the node identifier
    * @since 3.0.0
    */
-  def create(df: DataFrame, idColumn: String, labelSet: Set[String]): NodeFrame = {
-    val properties = (df.columns.toSet - idColumn)
-      .map(columnName => columnName -> columnName)
-      .toMap
-    create(df, idColumn, labelSet, properties)
+  def idColumn(idColumn: String): NodeFrameBuilder = {
+    if (idColumn.isEmpty) {
+      throw new IllegalArgumentException("idColumn must not be empty")
+    }
+    this.idColumn = idColumn;
+    this
   }
 
   /**
-   * Describes how to map an initial DataFrame to nodes.
-   *
-   * All columns apart from the given `idColumn` are mapped to node properties.
-   *
-   * @param df        DataFrame containing a single node in each row
-   * @param idColumn  column that contains the node identifier
-   * @param labelSet  labels that are assigned to all nodes
+   * @param labelSet labels that are assigned to all nodes
+   * @since 3.0.0
+   */
+  def labelSet(labelSet: Array[String]): NodeFrameBuilder = {
+    this.labelSet = labelSet.toSet
+    this
+  }
+
+  /**
    * @param properties mapping from property keys to corresponding columns
    * @since 3.0.0
    */
-  def create(
-      df: DataFrame,
-      idColumn: String,
-      labelSet: Set[String],
-      properties: Map[String, String]): NodeFrame = {
-    NodeFrame(df, idColumn, labelSet, properties)
+  def properties(properties: Map[String, String]): NodeFrameBuilder = {
+    this.properties = properties
+    this
   }
 
   /**
-   * Describes how to map an initial DataFrame to nodes.
-   *
-   * All columns apart from the given `idColumn` are mapped to node properties.
-   *
-   * @param df        DataFrame containing a single node in each row
-   * @param idColumn  column that contains the node identifier
-   * @param labelSet  labels that are assigned to all nodes
-   * @since 3.0.0
-   */
-  def create(df: DataFrame, idColumn: String, labelSet: java.util.Set[String]): NodeFrame = {
-    create(df, idColumn, labelSet.asScala.toSet)
-  }
-
-  /**
-   * Describes how to map an initial DataFrame to nodes.
-   *
-   * All columns apart from the given `idColumn` are mapped to node properties.
-   *
-   * @param df        DataFrame containing a single node in each row
-   * @param idColumn  column that contains the node identifier
-   * @param labelSet  labels that are assigned to all nodes
    * @param properties mapping from property keys to corresponding columns
    * @since 3.0.0
    */
-  def create(
-      df: DataFrame,
-      idColumn: String,
-      labelSet: java.util.Set[String],
-      properties: java.util.Map[String, String]): NodeFrame = {
-    val scalaLabelSet = labelSet.asScala.toSet
-    val scalaProperties = properties.asScala.toMap
-    NodeFrame(df, idColumn, scalaLabelSet, scalaProperties)
+  def properties(properties: java.util.Map[String, String]): NodeFrameBuilder = {
+    this.properties = properties.asScala.toMap
+    this
+  }
+
+  /**
+   * Creates a `NodeFrame` from the specified builder parameters.
+   *
+   * @since 3.0.0
+   */
+  def build(): NodeFrame = {
+    NodeFrame(dataFrame, idColumn, labelSet, properties)
   }
 
 }
