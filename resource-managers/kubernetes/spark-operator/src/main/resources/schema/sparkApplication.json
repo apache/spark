@@ -1,0 +1,218 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "A Spark application configuration",
+  "type": "object",
+  "extends": {
+    "type": "object",
+    "existingJavaType": "io.radanalytics.operator.common.EntityInfo"
+  },
+  "properties": {
+    "deps": {
+      "type": "object",
+      "properties": {
+        "jars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pyFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "jarsDownloadDir": {
+          "type": "string"
+        },
+        "filesDownloadDir": {
+          "type": "string"
+        },
+        "downloadTimeout": {
+          "type": "integer",
+          "default": "60",
+          "minimum": "0"
+        },
+        "maxSimultaneousDownloads": {
+          "type": "integer",
+          "default": "5",
+          "minimum": "0"
+        }
+      }
+    },
+    "historyServer": {
+      "type": "string"
+    },
+    "driver": {
+      "type": "object",
+      "properties": {
+        "memory": {
+          "type": "string",
+          "default": "512m"
+        },
+        "memoryOverhead": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "string",
+          "existingJavaType": "java.util.Map<String,String>",
+          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]"
+        },
+        "cores": {
+          "type": "string",
+          "default": "0.5"
+        },
+        "coreLimit": {
+          "type": "string",
+          "default": "500m"
+        },
+        "serviceAccount": {
+          "type": "string",
+          "default": "spark-operator"
+        }
+      }
+    },
+    "executor": {
+      "type": "object",
+      "properties": {
+        "memory": {
+          "type": "string",
+          "default": "512m"
+        },
+        "memoryOverhead": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "string",
+          "existingJavaType": "java.util.Map<String,String>",
+          "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]"
+        },
+        "instances": {
+          "type": "integer",
+          "default": "1",
+          "minimum": "0"
+        },
+        "cores": {
+          "type": "string",
+          "default": "1",
+          "description": "Must be a positive integer"
+        },
+        "coreLimit": {
+          "type": "string",
+          "default": "1000m"
+        }
+      }
+    },
+    "image": {
+      "type": "string"
+    },
+    "mainApplicationFile": {
+      "type": "string"
+    },
+    "mainClass": {
+      "type": "string"
+    },
+    "arguments": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "default": "cluster",
+      "enum": [
+        "client",
+        "cluster"
+      ],
+      "javaEnumNames": [
+        "client",
+        "cluster"
+      ]
+    },
+    "restartPolicy": {
+      "type": "string",
+      "default": "Always",
+      "enum": [
+        "Always",
+        "OnFailure",
+        "Never"
+      ],
+      "javaEnumNames": [
+        "Always",
+        "OnFailure",
+        "Never"
+      ]
+    },
+    "imagePullPolicy": {
+      "type": "string",
+      "default": "IfNotPresent",
+      "enum": [
+        "IfNotPresent",
+        "Always",
+        "Never"
+      ],
+      "javaEnumNames": [
+        "IfNotPresent",
+        "Always",
+        "Never"
+      ]
+    },
+    "type": {
+      "type": "string",
+      "default": "Java",
+      "enum": [
+        "Java",
+        "Scala",
+        "Python",
+        "R"
+      ],
+      "javaEnumNames": [
+        "Java",
+        "Scala",
+        "Python",
+        "R"
+      ]
+    },
+    "sleep": {
+      "type": "integer",
+      "default": "31536000",
+      "minimum": "0"
+    },
+    "labels": {
+      "type": "string",
+      "existingJavaType": "java.util.Map<String,String>",
+      "pattern": "([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]"
+    },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ]
+      }
+    },
+    "sparkConfigMap": {
+      "type": "string"
+    }
+  }
+}

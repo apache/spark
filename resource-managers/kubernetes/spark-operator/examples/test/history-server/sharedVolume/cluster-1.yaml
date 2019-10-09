@@ -1,0 +1,14 @@
+apiVersion: radanalytics.io/v1
+kind: SparkCluster
+metadata:
+  name: my-spark-cluster-with-history-1
+spec:
+  historyServer:
+    name: my-history-server
+    sharedVolume:
+      size: 0.2Gi
+      mountPath: /history/spark-events
+      matchLabels:
+        sparkClusterName: my-spark-cluster-with-history-1
+  worker:
+    instances: "1"

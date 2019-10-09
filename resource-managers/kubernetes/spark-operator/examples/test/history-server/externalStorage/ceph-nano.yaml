@@ -1,0 +1,97 @@
+---
+---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: ceph-nano-services
+    labels:
+      app: ceph
+      daemon: nano
+  spec:
+    ports:
+    - name: cn-s3
+      port: 80
+      protocol: TCP
+      targetPort: 8000
+    type: LoadBalancer
+    selector:
+      app: ceph
+      daemon: demo
+---
+  apiVersion: apps/v1beta1
+  kind: StatefulSet
+  metadata:
+    labels:
+      app: ceph
+      daemon: nano
+    name: ceph-nano
+  spec:
+    replicas: 1
+    serviceName: ceph-nano
+    selector:
+      matchLabels:
+        app: ceph
+    template:
+      metadata:
+        name: ceph-nano
+        labels:
+          app: ceph
+          daemon: nano
+      spec:
+#        volumes:
+#        - name: foo
+#          emptyDir: {}
+#        - name: bar
+#          emptyDir: {}
+        containers:
+        - image: ceph/daemon
+          imagePullPolicy: Always
+          name: ceph-nano
+#          volumeMounts:
+#          - name: foo
+#            mountPath: /var/lib/ceph
+#          - name: bar
+#            mountPath: /var/run/ceph/
+          ports:
+          - containerPort: 8000
+            name: cn-s3
+            protocol: TCP
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512M
+            requests:
+              cpu: "1"
+              memory: 512M
+          env:
+          - name: NETWORK_AUTO_DETECT
+            value: "4"
+          - name: RGW_CIVETWEB_PORT
+            value: "8000"
+          - name: SREE_PORT
+            value: "5001"
+          - name: CEPH_DEMO_UID
+            value: "nano"
+          - name: CEPH_DAEMON
+            value: "demo"
+          - name: DEBUG
+            value: "verbose"
+          - name: CEPH_DEMO_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: ceph-rgw-keys
+                key: rgw_user_user_key
+          - name: CEPH_DEMO_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: ceph-rgw-keys
+                key: rgw_user_secret_key
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ceph-rgw-keys
+type: Opaque
+data:
+  rgw_user_user_key: Zm9v
+  rgw_user_secret_key: YmFy

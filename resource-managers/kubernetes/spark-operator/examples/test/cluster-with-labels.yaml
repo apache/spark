@@ -1,0 +1,18 @@
+apiVersion: radanalytics.io/v1
+kind: SparkCluster
+metadata:
+  name: spark-cluster-with-labels
+spec:
+  worker:
+    instances: "2"
+    labels:
+      example-label-for-all-workers/bar: foo
+      common-label-to-be-replaced-on-some-resources: worker-value
+  master:
+    instances: "1"
+    labels:
+      example-label-for-master/foo: bar
+      common-label-to-be-replaced-on-some-resources: master-value
+  labels:
+    common-label-for-all-the-resources-operator-deploys/deployed-by: john
+    common-label-to-be-replaced-on-some-resources: global-value

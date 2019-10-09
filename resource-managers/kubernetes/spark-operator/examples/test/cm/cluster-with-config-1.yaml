@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sparky-cluster-1
+  labels:
+    radanalytics.io/kind: SparkCluster
+data:
+  config: |-
+    sparkConfigurationMap: non-existent
+    sparkConfiguration:
+    - name: spark.executor.memory
+      value: 1g
+    downloadData:
+    - url: https://raw.githubusercontent.com/radanalyticsio/spark-operator/master/README.md
+      to: /tmp/

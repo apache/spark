@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spark-cluster-with-metrics
+  labels:
+    radanalytics.io/kind: SparkCluster
+data:
+  config: |-
+    metrics: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: masters-metrics
+  labels:
+    radanalytics.io/metrics: masters
+spec:
+  type: NodePort
+  ports:
+  - name: metrics
+    port: 7777
+    protocol: TCP
+  selector:
+    radanalytics.io/SparkCluster: spark-cluster-with-metrics
+    radanalytics.io/podType: master
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workers-metrics
+  labels:
+    radanalytics.io/metrics: workers
+spec:
+  type: NodePort
+  ports:
+  - name: metrics
+    port: 7777
+    protocol: TCP
+  selector:
+    radanalytics.io/SparkCluster: spark-cluster-with-metrics
+    radanalytics.io/podType: worker
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["get"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: default
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: workers-monitor
+  labels:
+    team: spark-cluster-with-metrics
+spec:
+  selector:
+    matchLabels:
+      radanalytics.io/metrics: workers
+  endpoints:
+  - port: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: masters-monitor
+  labels:
+    team: spark-cluster-with-metrics
+spec:
+  selector:
+    matchLabels:
+      radanalytics.io/metrics: masters
+  endpoints:
+  - port: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: prometheus
+spec:
+  serviceMonitorSelector:
+    matchLabels:
+      team: spark-cluster-with-metrics
+  resources:
+    requests:
+      memory: 400Mi

@@ -1,0 +1,9 @@
+apiVersion: radanalytics.io/v1
+kind: SparkCluster
+metadata:
+  name: my-spark-cluster-with-history-2
+spec:
+  historyServer:
+    name: my-history-server
+  worker:
+    instances: "1"

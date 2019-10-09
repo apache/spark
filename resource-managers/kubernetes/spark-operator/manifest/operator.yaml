@@ -1,0 +1,64 @@
+# for creating these resources it requires the user to be logged in as system admin
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: spark-operator-edit-resources
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: ""
+subjects:
+  - kind: ServiceAccount
+    name: spark-operator
+    namespace: default
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: spark-operator
+  labels: &default-labels
+    app.kubernetes.io/name: spark-operator
+    app.kubernetes.io/version: v1.0.3-v1alpha1
+spec:
+  replicas: 1
+  selector:
+    matchLabels: *default-labels
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: *default-labels
+    spec:
+      serviceAccountName: spark-operator
+      containers:
+      - name: spark-operator
+        image: quay.io/radanalyticsio/spark-operator:latest-released
+        env:
+        - name: WATCH_NAMESPACE # if not specified all the namespaces will be watched; ~ denotes the same ns as the operator's
+          value: "~"
+        #- name: CRD # if false, the operator will watch on ConfigMaps
+        #  value: "true"
+        #- name: FULL_RECONCILIATION_INTERVAL_S
+        #  value: "180"
+        #- name: METRICS # should we expose metrics for Prometheus?
+        #  value: "true"
+        #- name: METRICS_PORT
+        #  value: "8080"
+        #- name: METRICS_JVM # should we expose also internal JVM metrics?
+        #  value: "false"
+        #- name: COLORS
+        #  value: "false"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+        imagePullPolicy: Always
+

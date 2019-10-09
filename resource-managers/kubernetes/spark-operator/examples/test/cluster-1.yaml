@@ -1,0 +1,10 @@
+apiVersion: radanalytics.io/v1
+kind: SparkCluster
+metadata:
+  name: my-spark-cluster-1
+spec:
+  # this should fail
+  w0rker:
+    instances: "1"
+  master:
+    instances: "1"

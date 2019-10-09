@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sparky-cluster-2
+  labels:
+    radanalytics.io/kind: SparkCluster
+data:
+  config: |-
+    sparkConfiguration:
+    - name: spark.executor.memory
+      value: 3g

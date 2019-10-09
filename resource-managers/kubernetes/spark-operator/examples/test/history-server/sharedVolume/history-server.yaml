@@ -1,0 +1,20 @@
+apiVersion: radanalytics.io/v1
+kind: SparkHistoryServer
+metadata:
+  name: my-history-server
+spec:
+  type: sharedVolume
+  sharedVolume:
+    size: 0.3Gi
+    mountPath: /history/spark-events
+    matchLabels:
+      myCustomLabel: foobar
+
+  expose: true
+  logDirectory: /history/spark-events
+  updateInterval: 10
+  retainedApplications: 50
+
+  cleaner:
+    enabled: false
+#    interval: 10

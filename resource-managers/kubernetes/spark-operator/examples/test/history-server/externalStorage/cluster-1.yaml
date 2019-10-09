@@ -1,0 +1,19 @@
+apiVersion: radanalytics.io/v1
+kind: SparkCluster
+metadata:
+  name: my-spark-cluster-with-history-1
+spec:
+  historyServer:
+    type: remoteStorage
+    name: my-history-server
+
+  sparkConfiguration:
+  - name: spark.hadoop.fs.s3a.impl
+    value: org.apache.hadoop.fs.s3a.S3AFileSystem
+  - name: spark.hadoop.fs.s3a.access.key
+    value: foo
+  - name: spark.hadoop.fs.s3a.secret.key
+    value: bar
+
+  worker:
+    instances: "1"

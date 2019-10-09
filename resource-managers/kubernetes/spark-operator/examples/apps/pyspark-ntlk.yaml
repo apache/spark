@@ -1,0 +1,15 @@
+apiVersion: radanalytics.io/v1
+kind: SparkApplication
+metadata:
+  name: ntlk-example
+spec:
+  image: jkremser/spark-operator:2.4.0-ntlk
+  type: Python
+  mainApplicationFile: local:///app.py
+  deps:
+    pyFiles:
+      - local:///deps.zip
+  driver:
+    cores: 0.4
+    coreLimit: 400m
+    memory: 600m

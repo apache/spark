@@ -1,0 +1,12 @@
+apiVersion: radanalytics.io/v1
+kind: SparkCluster
+metadata:
+  name: spark-cluster-with-data
+spec:
+  worker:
+    instances: "1"
+  downloadData:
+  - url: https://data.cityofnewyork.us/api/views/kku6-nxdu/rows.csv
+    to: /tmp/
+  - url: https://data.lacity.org/api/views/nxs9-385f/rows.csv
+    to: /tmp/LA.csv

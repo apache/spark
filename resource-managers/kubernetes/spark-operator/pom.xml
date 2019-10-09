@@ -1,0 +1,69 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <parent>
+        <groupId>io.radanalytics</groupId>
+        <artifactId>operator-parent-pom</artifactId>
+        <version>0.3.23</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>io.radanalytics</groupId>
+    <artifactId>spark-operator</artifactId>
+    <version>1.0.3-SNAPSHOT</version>
+
+    <scm>
+        <url>https://github.com/radanalyticsio/spark-operator</url>
+        <connection>scm:git:git@github.com:radanalyticsio/spark-operator.git</connection>
+        <developerConnection>scm:git:git@github.com:radanalyticsio/spark-operator.git</developerConnection>
+        <tag>HEAD</tag>
+    </scm>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <abstract-operator.version>0.6.10</abstract-operator.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.radanalytics</groupId>
+            <artifactId>abstract-operator</artifactId>
+	        <version>${abstract-operator.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>openshift-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-core</artifactId>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>buildnumber-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.jsonschema2pojo</groupId>
+                <artifactId>jsonschema2pojo-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

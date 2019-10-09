@@ -1,0 +1,100 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark-operator
+  {{- if or .Values.env.crd .Values.env.installNamespace }}
+  namespace: "{{ default "default" .Values.env.installNamespace }}"
+  {{- end }}
+---
+{{- if .Values.env.crd }}
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: spark-operator-edit-resources
+  namespace: "{{ default "default" .Values.env.installNamespace }}"
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: ""
+subjects:
+  - kind: ServiceAccount
+    name: spark-operator
+    namespace: "{{ default "default" .Values.env.installNamespace }}"
+{{- else }}
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: edit-resources
+  {{- if .Values.env.installNamespace }}
+  namespace: "{{ .Values.env.installNamespace }}"
+  {{- end }}
+rules:
+- apiGroups: [""]
+  resources: ["pods", "replicationcontrollers", "services", "configmaps"]
+  verbs: ["create", "delete", "deletecollection", "get", "list", "update", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: spark-operator-edit-resources
+  {{- if .Values.env.installNamespace }}
+  namespace: "{{ .Values.env.installNamespace }}"
+  {{- end }}
+roleRef:
+  kind: Role
+  name: edit-resources
+  apiGroup: ""
+subjects:
+  - kind: ServiceAccount
+    name: spark-operator
+{{- end }}
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: spark-operator
+  {{- if or .Values.env.crd .Values.env.installNamespace }}
+  namespace: "{{ default "default" .Values.env.installNamespace }}"
+  {{- end }}
+  labels: &default-labels
+    app.kubernetes.io/name: spark-operator
+    app.kubernetes.io/version: {{ .Values.version }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:  *default-labels
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: *default-labels
+      initializers:
+        pending: []  
+    spec:
+      serviceAccountName: spark-operator
+      containers:
+      - name: spark-operator
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        env:
+        - name: WATCH_NAMESPACE
+          value: "{{ .Values.env.watchNamespace }}"
+        - name: FULL_RECONCILIATION_INTERVAL_S
+          value: "{{ .Values.env.reconciliationInterval }}"
+        - name: CRD
+          value: "{{ .Values.env.crd }}"
+        - name: METRICS
+          value: "{{ .Values.env.metrics }}"
+        - name: METRICS_PORT
+          value: "{{ .Values.env.metricsPort }}"
+        - name: METRICS_JVM
+          value: "{{ .Values.env.internalJvmMetrics }}"
+        - name: COLORS
+          value: "{{ .Values.env.colors }}"
+        resources:
+          limits:
+            memory: {{ .Values.resources.memory }}
+            cpu: {{ .Values.resources.cpu }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+

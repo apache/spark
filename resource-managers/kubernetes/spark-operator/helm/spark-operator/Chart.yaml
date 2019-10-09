@@ -1,0 +1,15 @@
+apiVersion: v1
+name: spark-cluster-operator
+description: Operator for managing the Spark clusters and apps in Kubernetes and OpenShift
+version: 0.0.1
+appVersion: 1.0.1
+icon: https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Apache_Spark_logo.svg/388px-Apache_Spark_logo.svg.png
+home: https://github.com/radanalyticsio/spark-operator
+sources:
+  - https://github.com/radanalyticsio/spark-operator
+maintainers:
+  - name: Jiri-Kremser
+    email: jkremser@redhat.com
+keywords:
+  - Apache Spark
+  - Operator

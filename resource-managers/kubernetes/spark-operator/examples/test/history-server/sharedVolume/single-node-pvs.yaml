@@ -1,0 +1,55 @@
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: spark-history-server-pv
+  labels:
+    myCustomLabel: foobar
+spec:
+  capacity:
+    storage: 0.3Gi
+  accessModes:
+  - ReadWriteMany
+  hostPath:
+    path: "/tmp/spark-events"
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: spark-master-1-pv
+  labels:
+    sparkClusterName: my-spark-cluster-with-history-1
+spec:
+  capacity:
+    storage: 0.3Gi
+  accessModes:
+  - ReadWriteMany
+  hostPath:
+    path: "/tmp/spark-events"
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: spark-master-2-pv
+  labels:
+    radanalytics.io/SparkCluster: my-spark-cluster-with-history-2
+spec:
+  capacity:
+    storage: 0.3Gi
+  accessModes:
+  - ReadWriteMany
+  hostPath:
+    path: "/tmp/spark-events"
+---
+#kind: PersistentVolume
+#apiVersion: v1
+#metadata:
+#  name: example-nfs-pv
+#spec:
+#  capacity:
+#    storage: 0.3Gi
+#  accessModes:
+#  - ReadWriteMany
+#  nfs:
+#    server: "http://example.com"
+#    path: "/tmp/spark-events"

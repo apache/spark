@@ -1,0 +1,20 @@
+apiVersion: radanalytics.io/v1
+kind: SparkHistoryServer
+metadata:
+  name: my-history-server
+spec:
+  type: remoteStorage
+  expose: true
+  logDirectory: s3a://my-history-server/
+  updateInterval: 10
+  retainedApplications: 50
+  customImage: quay.io/jkremser/openshift-spark:2.4.0-aws
+  sparkConfiguration:
+  - name: spark.hadoop.fs.s3a.impl
+    value: org.apache.hadoop.fs.s3a.S3AFileSystem
+  - name: spark.hadoop.fs.s3a.access.key
+    value: foo
+  - name: spark.hadoop.fs.s3a.secret.key
+    value: bar
+  - name: spark.hadoop.fs.s3a.endpoint
+    value: http://ceph-nano-0:8000

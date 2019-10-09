@@ -1,0 +1,5 @@
+apiVersion: radanalytics.io/v1
+kind: SparkCluster
+metadata:
+  name: sparky-cluster-3
+spec:

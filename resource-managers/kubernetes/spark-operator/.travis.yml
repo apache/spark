@@ -1,0 +1,102 @@
+language: java
+
+services:
+  - docker
+
+# skip install step
+install: true
+
+before_cache:
+  - ./.travis/cache/.travis.before_cache.sh
+
+before_install:
+  - ./.travis/cache/.travis.before_install.sh
+
+
+cache:
+  timeout: 120
+  directories:
+  - $HOME/maven
+  - $HOME/docker
+
+stages:
+  - test
+  - Kubernetes and Openshift tests
+  - deploy
+
+jobs:
+  include:
+    - stage: test
+      name: "Maven & cont. image build"
+      language: java
+      script:
+        # run the tests
+        - make test
+
+    - stage: Kubernetes and Openshift tests
+      name: "[oc • CMs] Full specs"
+      env: BIN=oc VERSION=v3.9.0 CRD=0
+      script: &oc-script-defaults
+        - make build-travis
+        - ./.travis/.travis.prepare.openshift.sh
+        - ./.travis/.travis.test-oc-and-k8s.sh
+
+    - stage:
+      name: "[oc • CRs] Full specs"
+      env: BIN=oc VERSION=v3.9.0 CRD=1
+      script: *oc-script-defaults
+
+    #- stage:
+    #  env: BIN=oc VERSION=v3.10.0 CRD=0
+    #  script: *oc-script-defaults
+
+    - stage:
+      name: "[K8s • CMs] Full specs"
+      env: BIN=kubectl VERSION=v1.9.0 CRD=0 MINIKUBE_VERSION=v0.25.2
+      script: &kc-script-defaults
+        - make build-travis
+        - ./.travis/.travis.prepare.minikube.sh
+        - ./.travis/.travis.test-oc-and-k8s.sh
+
+    - stage:
+      name: "[K8s • CRs] Full specs"
+      env: BIN=kubectl VERSION=v1.9.0 CRD=1 MINIKUBE_VERSION=v0.25.2
+      script: *kc-script-defaults
+
+    - stage:
+      name: "[oc • CMs] Random restarts"
+      env: BIN=oc VERSION=v3.9.0 CRD=0
+      script:
+        - make build-travis
+        - ./.travis/.travis.prepare.openshift.sh
+        - ./.travis/.travis.test-restarts.sh
+
+    - stage:
+      name: "[K8s • CRs] Random restarts"
+      env: BIN=kubectl VERSION=v1.9.0 CRD=1 MINIKUBE_VERSION=v0.25.2
+      script:
+        - make build-travis
+        - ./.travis/.travis.prepare.minikube.sh
+        - ./.travis/.travis.test-restarts.sh
+
+    - stage:
+      name: "[oc • CMs] Cross namespaces (WATCH_NAMESPACE=*)"
+      env: BIN=oc VERSION=v3.9.0 CRD=0
+      script: &cross-ns-defaults
+      - make build-travis
+      - ./.travis/.travis.prepare.openshift.sh
+      - ./.travis/.travis.test-cross-ns.sh
+
+    - stage:
+      name: "[oc • CRs] Cross namespaces (WATCH_NAMESPACE=*)"
+      env: BIN=oc VERSION=v3.9.0 CRD=1
+      script: *cross-ns-defaults
+
+    - stage: deploy
+      name: "Push container images"
+      script:
+        # release x.y.z or x.y.z-ubi if there is a release
+        # or release the latest image if building the master branch
+        - ./.travis/.travis.release.images.sh
+        # release maven artifacts
+        #- 'if [[ $TRAVIS_PULL_REQUEST == "false" ]] && [[ $TRAVIS_BRANCH == "master" ]] ; then make build-travis && ./mvnw -s ./.travis/settings.xml clean deploy; fi'

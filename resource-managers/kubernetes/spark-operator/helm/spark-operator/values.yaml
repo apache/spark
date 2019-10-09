@@ -1,0 +1,17 @@
+version: v1.0.1-v1alpha1
+image:
+  repository: quay.io/radanalyticsio/spark-operator
+  tag: latest-released
+  pullPolicy: IfNotPresent
+env:
+  installNamespace: ""         # into which namespace the deployment and RBAC resources for operator should be created
+  watchNamespace: ""           # empty string represents the same ns as the operator's installNamespace, use * for all
+  crd: true                    # if false, the operator will watch on ConfigMaps
+  reconciliationInterval: 180  # how often (in seconds) the full reconciliation should be run
+  metrics: false               # should we expose metrics for Prometheus?
+  metricsPort: 8080            # port for the metrics http server
+  internalJvmMetrics: false    # should we expose also internal JVM metrics?
+  colors: true                 # colorized log messages
+resources:
+  memory: 512Mi
+  cpu: 1000m

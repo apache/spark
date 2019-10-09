@@ -1,0 +1,29 @@
+Once the operator is up and running, you can simply create Spark clusters by
+
+# create cluster
+cat <<EOF | kubectl create -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cluster
+  labels:
+    radanalytics.io/kind: SparkCluster
+data:
+  config: |-
+    worker:
+      instances: "2"
+EOF
+
+or in case of CRD approach:
+
+cat <<EOF | kubectl create -f -
+apiVersion: radanalytics.io/v1
+kind: SparkCluster
+metadata:
+  name: my-cluster
+spec:
+  worker:
+    instances: "2"
+EOF
+
+For more details consult https://github.com/radanalyticsio/spark-operator/blob/master/README.md

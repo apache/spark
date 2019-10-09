@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-spark-cluster-1
+  labels:
+    radanalytics.io/kind: SparkCluster
+data:
+  # this should fail
+  config: |-
+    w0rker:
+      instances: "1"
+    master:
+      instances: "1"

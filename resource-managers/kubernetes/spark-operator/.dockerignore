@@ -1,0 +1,5 @@
+# ignore all by default
+*
+
+# except these:
+!/target/
