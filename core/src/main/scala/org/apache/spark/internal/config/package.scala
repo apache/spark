@@ -1074,7 +1074,7 @@ package object config {
 
   private[spark] val SHUFFLE_FETCH_CONTINUOUS_BLOCKS_IN_BATCH =
     ConfigBuilder("spark.shuffle.fetchContinuousBlocksInBatch")
-      .doc("Whether to fetch the continuous blocks in batch. Instead of fetching blocks " +
+      .doc("Whether to fetch the continuous shuffle blocks in batch. Instead of fetching blocks " +
         "one by one, fetching continuous shuffle blocks for the same map task in batch can " +
         "reduce IO and improve performance. Note, this feature also depends on a relocatable " +
         "serializer and the concatenation support codec in use.")

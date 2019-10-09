@@ -104,7 +104,7 @@ public class ExternalBlockHandler extends RpcHandler {
           numBlockIds = 0;
           for (int[] ids: msg.reduceIds) {
             if (msg.batchFetchEnabled) {
-              numBlockIds += ids.length / 2;
+              numBlockIds = msg.mapIds.length;
             } else {
               numBlockIds += ids.length;
             }
