@@ -24,6 +24,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkCuratorUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Deploy.ZOOKEEPER_DIRECTORY
+import org.apache.spark.util.SignalUtils
 
 private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderElectable,
     conf: SparkConf) extends LeaderLatchListener with LeaderElectionAgent with Logging  {
@@ -42,6 +43,12 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderEle
     leaderLatch = new LeaderLatch(zk, workingDir)
     leaderLatch.addListener(this)
     leaderLatch.start()
+    // Terminate zookeeper connections on spark shutdown
+    SignalUtils.register("TERM") {
+      stop()
+      notLeader()
+      false
+    }
   }
 
   override def stop(): Unit = {
@@ -70,6 +77,7 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderEle
 
       logInfo("We have lost leadership")
       updateLeadershipStatus(false)
+      stop()
     }
   }
 

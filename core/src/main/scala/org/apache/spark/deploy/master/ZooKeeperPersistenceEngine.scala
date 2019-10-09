@@ -30,7 +30,7 @@ import org.apache.spark.deploy.SparkCuratorUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.serializer.Serializer
-
+import org.apache.spark.util.SignalUtils
 
 private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer: Serializer)
   extends PersistenceEngine
@@ -39,8 +39,13 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
   private val workingDir = conf.get(ZOOKEEPER_DIRECTORY).getOrElse("/spark") + "/master_status"
   private val zk: CuratorFramework = SparkCuratorUtil.newClient(conf)
 
-  SparkCuratorUtil.mkdir(zk, workingDir)
+  // Terminate zookeeper connections on spark shutdown
+  SignalUtils.register("TERM") {
+    zk.close()
+    false
+  }
 
+  SparkCuratorUtil.mkdir(zk, workingDir)
 
   override def persist(name: String, obj: Object): Unit = {
     serializeIntoFile(workingDir + "/" + name, obj)
