@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils.executeAndGetOutput
  * @param resourceName  gpu, fpga, etc
  */
 private[spark] case class ResourceID(componentName: String, resourceName: String) {
-  def confPrefix: String = s"$componentName.resource.$resourceName." // with ending dot
+  def confPrefix: String = s"$componentName.${ResourceUtils.RESOURCE_PREFIX}.$resourceName."
   def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
   def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
   def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
@@ -79,7 +79,7 @@ private[spark] object ResourceUtils extends Logging {
   }
 
   def listResourceIds(sparkConf: SparkConf, componentName: String): Seq[ResourceID] = {
-    sparkConf.getAllWithPrefix(s"$componentName.resource.").map { case (key, _) =>
+    sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_DOT").map { case (key, _) =>
       key.substring(0, key.indexOf('.'))
     }.toSet.toSeq.map(name => ResourceID(componentName, name))
   }
@@ -206,4 +206,7 @@ private[spark] object ResourceUtils extends Logging {
   // known types of resources
   final val GPU: String = "gpu"
   final val FPGA: String = "fpga"
+
+  final val RESOURCE_PREFIX: String = "resource"
+  final val RESOURCE_DOT: String = s"$RESOURCE_PREFIX."
 }
