@@ -85,7 +85,10 @@ class PredictorSuite extends SparkFunSuite with MLlibTestSparkContext {
       predictor.setFeaturesCol(Array("feature1", "feature2", "feature3")).fit(df2)
     }
 
-    // Should fail due to wrong type in schema for single column of features
+    // Should fail due to wrong type in schema for single column of features.
+    // "features", being equal to the single column name, are provided in "df2" schema
+    // but not specified as multi-columns, so treat it as single column and should be
+    // "Vector", but actually "Int".
     intercept[IllegalArgumentException] {
       predictor.setFeaturesCol(Array("feature2", "feature3")).fit(df2)
     }
