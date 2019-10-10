@@ -890,7 +890,7 @@ private[spark] object MapOutputTracker extends Logging {
         deserializeObject(bytes, 1, bytes.length - 1).asInstanceOf[Array[MapStatus]]
       case BROADCAST =>
         // deserialize the Broadcast, pull .value array out of it, and then deserialize that
-        val bcast = deserializeObject(bytes, 2, bytes.length - 1).
+        val bcast = deserializeObject(bytes, 1, bytes.length - 1).
           asInstanceOf[Broadcast[Array[Byte]]]
         logInfo("Broadcast mapstatuses size = " + bytes.length +
           ", actual size = " + bcast.value.length)
