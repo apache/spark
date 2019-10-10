@@ -22,7 +22,6 @@ import java.nio.file.{Files, Path}
 import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.types.StructType

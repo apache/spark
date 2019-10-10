@@ -1100,7 +1100,8 @@ class HiveDDLSuite
       sql(s"CREATE DATABASE $dbName Location '${tmpDir.toURI.getPath.stripSuffix("/")}'")
       val db1 = catalog.getDatabaseMetadata(dbName)
       val dbPath = new URI(tmpDir.toURI.toString.stripSuffix("/"))
-      assert(db1 == CatalogDatabase(dbName, "", dbPath, Utils.getCurrentUserName(), "USER", Map.empty))
+      assert(db1 == CatalogDatabase(dbName, "", dbPath, Utils.getCurrentUserName(), "USER",
+        Map.empty))
       sql("USE db1")
 
       sql(s"CREATE TABLE $tabName as SELECT 1")

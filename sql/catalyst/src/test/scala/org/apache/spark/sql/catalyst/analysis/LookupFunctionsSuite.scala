@@ -63,7 +63,8 @@ class LookupFunctionsSuite extends PlanTest {
     val catalog = new SessionCatalog(externalCatalog, customerFunctionReg, conf)
     val analyzer = {
       catalog.createDatabase(
-        CatalogDatabase("default", "", new URI("loc"),Utils.getCurrentUserName(), "USER", Map.empty),
+        CatalogDatabase("default", "", new URI("loc"), Utils.getCurrentUserName(), "USER",
+          Map.empty),
         ignoreIfExists = false)
       new Analyzer(catalog, conf)
     }

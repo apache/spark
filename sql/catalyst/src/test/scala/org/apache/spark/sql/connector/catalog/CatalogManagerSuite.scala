@@ -18,10 +18,9 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.net.URI
-
 import java.util
-import org.apache.spark.SparkFunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.internal.SQLConf
@@ -34,7 +33,7 @@ class CatalogManagerSuite extends SparkFunSuite {
     val catalog = new InMemoryCatalog()
     catalog.createDatabase(
       CatalogDatabase(SessionCatalog.DEFAULT_DATABASE, "", new URI("fake"),
-        Utils.getCurrentUserName(), "USER",Map.empty),
+        Utils.getCurrentUserName(), "USER", Map.empty),
       ignoreIfExists = true)
     new SessionCatalog(catalog, EmptyFunctionRegistry, conf)
   }
