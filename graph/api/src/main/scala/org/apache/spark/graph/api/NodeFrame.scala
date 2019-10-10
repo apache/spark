@@ -20,42 +20,20 @@ package org.apache.spark.graph.api
 import org.apache.spark.sql.DataFrame
 
 /**
- * A [[PropertyGraph]] is created from GraphElementFrames.
+ * Describes how to map a DataFrame to nodes.
  *
- * A graph element is either a node or a relationship.
- * A GraphElementFrame wraps a DataFrame and describes how it maps to graph elements.
+ * Each row in the DataFrame represents a node which has exactly the labels defined by the given
+ * label set.
  *
+ * @param df         DataFrame containing a single node in each row
+ * @param idColumn   column that contains the node identifier
+ * @param labelSet   labels that are assigned to all nodes
+ * @param properties mapping from property keys to corresponding columns
  * @since 3.0.0
  */
-abstract class GraphElementFrame {
-
-  /**
-   * Initial DataFrame that can still contain unmapped, arbitrarily ordered columns.
-   *
-   * @since 3.0.0
-   */
-  def df: DataFrame
-
-  /**
-   * Name of the column that contains the graph element identifier.
-   *
-   * @since 3.0.0
-   */
-  def idColumn: String
-
-  /**
-   * Name of all columns that contain graph element identifiers.
-   *
-   * @since 3.0.0
-   */
-  def idColumns: Seq[String] = Seq(idColumn)
-
-  /**
-   * Mapping from graph element property keys to the columns that contain the corresponding property
-   * values.
-   *
-   * @since 3.0.0
-   */
-  def properties: Map[String, String]
-
-}
+case class NodeFrame private[graph] (
+    df: DataFrame,
+    idColumn: String,
+    labelSet: Set[String],
+    properties: Map[String, String])
+    extends GraphElementFrame
