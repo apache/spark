@@ -855,15 +855,15 @@ private[spark] object MapOutputTracker extends Logging {
         oos.close()
       }
       val outArr = {
-        val result = new ByteArrayOutputStream(4096)
-        val zos = new ZstdOutputStream(result)
+        val compressedOut = new ByteArrayOutputStream(4096)
+        val zos = new ZstdOutputStream(compressedOut)
         Utils.tryWithSafeFinally {
-          result.write(BROADCAST)
+          compressedOut.write(BROADCAST)
           zos.write(out.getBuf, 0, out.size())
         } {
           zos.close()
         }
-        result.toByteArray
+        compressedOut.toByteArray
       }
       logInfo("Broadcast mapstatuses size = " + outArr.length + ", actual size = " + arr.length)
       (outArr, bcast)
