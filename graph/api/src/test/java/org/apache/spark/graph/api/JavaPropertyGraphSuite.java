@@ -60,16 +60,16 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
     @Test
     public void testCreateFromNodeFrame() {
         StructType personSchema = createSchema(
-                Lists.newArrayList("id", "name"),
-                Lists.newArrayList(LongType, StringType));
+            Lists.newArrayList("id", "name"),
+            Lists.newArrayList(LongType, StringType));
 
         List<Row> personData = Arrays.asList(
-                RowFactory.create(0L, "Alice"),
-                RowFactory.create(1L, "Bob"));
+            RowFactory.create(0L, "Alice"),
+            RowFactory.create(1L, "Bob"));
 
         StructType knowsSchema = createSchema(
-                Lists.newArrayList("id", "source", "target", "since"),
-                Lists.newArrayList(LongType, LongType, LongType, IntegerType));
+            Lists.newArrayList("id", "source", "target", "since"),
+            Lists.newArrayList(LongType, LongType, LongType, IntegerType));
 
         List<Row> knowsData = Collections.singletonList(RowFactory.create(0L, 0L, 1L, 1984));
 
@@ -82,17 +82,17 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
 
         Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
         RelationshipFrame knowsRelFrame = cypherSession.buildRelationshipFrame(knowsDf)
-                .idColumn("id")
-                .sourceIdColumn("source")
-                .targetIdColumn("target")
-                .relationshipType("KNOWS")
-                .properties(Collections.singletonMap("since", "since"))
-                .build();
+            .idColumn("id")
+            .sourceIdColumn("source")
+            .targetIdColumn("target")
+            .relationshipType("KNOWS")
+            .properties(Collections.singletonMap("since", "since"))
+            .build();
 
 
         PropertyGraph graph = cypherSession.createGraph(
-                new NodeFrame[]{personNodeFrame},
-                new RelationshipFrame[]{knowsRelFrame});
+            new NodeFrame[]{personNodeFrame},
+            new RelationshipFrame[]{knowsRelFrame});
         List<Row> result = graph.nodes().collectAsList();
         Assert.assertEquals(2, result.size());
     }
