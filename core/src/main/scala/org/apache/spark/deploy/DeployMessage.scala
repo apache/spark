@@ -60,6 +60,10 @@ private[deploy] object DeployMessages {
     assert (port > 0)
   }
 
+  /**
+   * @param id the worker id
+   * @param worker the worker endpoint ref
+   */
   case class WorkerDecommission(
       id: String,
       worker: RpcEndpointRef)
@@ -154,7 +158,7 @@ private[deploy] object DeployMessages {
 
   case object ReregisterWithMaster // used when a worker attempts to reconnect to a master
 
-  case object DecommissionSelf // Mark self for decommissioning.
+  case object DecommissionSelf // Mark as decommissioned. May be Master to Worker in the future.
 
   // AppClient to Master
 
