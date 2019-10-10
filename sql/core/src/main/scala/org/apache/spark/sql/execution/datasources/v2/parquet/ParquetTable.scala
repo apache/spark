@@ -58,6 +58,8 @@ case class ParquetTable(
 
     case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
 
+    case _: CalendarIntervalType => true
+
     case _ => false
   }
 
