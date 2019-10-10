@@ -992,7 +992,8 @@ abstract class CatalogTestUtils {
   def newUriForDatabase(): URI = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
 
   def newDb(name: String): CatalogDatabase = {
-    CatalogDatabase(name, name + " description", newUriForDatabase(), Map.empty)
+    CatalogDatabase(name, name + " description", newUriForDatabase(), Utils.getCurrentUserName(),
+      "USER", Map.empty)
   }
 
   def newTable(name: String, db: String): CatalogTable = newTable(name, Some(db))

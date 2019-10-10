@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 trait AnalysisTest extends PlanTest {
 
@@ -37,7 +38,7 @@ trait AnalysisTest extends PlanTest {
     val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
     val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
     catalog.createDatabase(
-      CatalogDatabase("default", "", new URI("loc"), Map.empty),
+      CatalogDatabase("default", "", new URI("loc"), Utils.getCurrentUserName(), "USER", Map.empty),
       ignoreIfExists = false)
     catalog.createTempView("TaBlE", TestRelations.testRelation, overrideIfExists = true)
     catalog.createTempView("TaBlE2", TestRelations.testRelation2, overrideIfExists = true)

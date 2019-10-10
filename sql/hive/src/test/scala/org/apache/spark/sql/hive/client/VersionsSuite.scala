@@ -70,7 +70,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
   test("success sanity check") {
     val badClient = buildClient(HiveUtils.builtinHiveVersion, new Configuration())
-    val db = new CatalogDatabase("default", "desc", new URI("loc"), Map())
+    val db = new CatalogDatabase("default", "desc", new URI("loc"), Utils.getCurrentUserName(), "USER", Map())
     badClient.createDatabase(db, ignoreIfExists = true)
   }
 
@@ -163,17 +163,20 @@ class VersionsSuite extends SparkFunSuite with Logging {
     val tempDatabasePath = Utils.createTempDir().toURI
 
     test(s"$version: createDatabase") {
-      val defaultDB = CatalogDatabase("default", "desc", new URI("loc"), Map())
+      val defaultDB = CatalogDatabase("default", "desc", new URI("loc"), Utils.getCurrentUserName(),
+        "USER", Map())
       client.createDatabase(defaultDB, ignoreIfExists = true)
       val tempDB = CatalogDatabase(
-        "temporary", description = "test create", tempDatabasePath, Map())
+        "temporary", description = "test create", tempDatabasePath, Utils.getCurrentUserName(),
+        "USER", Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
     }
 
     test(s"$version: createDatabase with null description") {
       withTempDir { tmpDir =>
         val dbWithNullDesc =
-          CatalogDatabase("dbWithNullDesc", description = null, tmpDir.toURI, Map())
+          CatalogDatabase("dbWithNullDesc", description = null, tmpDir.toURI,
+            Utils.getCurrentUserName(), "USER", Map())
         client.createDatabase(dbWithNullDesc, ignoreIfExists = true)
         assert(client.getDatabase("dbWithNullDesc").description == "")
       }
@@ -323,7 +326,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: alterTable - change database") {
       val tempDB = CatalogDatabase(
-        "temporary", description = "test create", tempDatabasePath, Map())
+        "temporary", description = "test create", tempDatabasePath, Utils.getCurrentUserName(),
+        "USER", Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
 
       val newTable = client.getTable("default", "tgt")

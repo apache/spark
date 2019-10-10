@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 class LookupFunctionsSuite extends PlanTest {
 
@@ -34,7 +35,8 @@ class LookupFunctionsSuite extends PlanTest {
     val catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin, conf)
     val analyzer = {
       catalog.createDatabase(
-        CatalogDatabase("default", "", new URI("loc"), Map.empty),
+        CatalogDatabase("default", "", new URI("loc"), Utils.getCurrentUserName(), "USER",
+          Map.empty),
         ignoreIfExists = false)
       new Analyzer(catalog, conf)
     }
@@ -61,7 +63,7 @@ class LookupFunctionsSuite extends PlanTest {
     val catalog = new SessionCatalog(externalCatalog, customerFunctionReg, conf)
     val analyzer = {
       catalog.createDatabase(
-        CatalogDatabase("default", "", new URI("loc"), Map.empty),
+        CatalogDatabase("default", "", new URI("loc"),Utils.getCurrentUserName(), "USER", Map.empty),
         ignoreIfExists = false)
       new Analyzer(catalog, conf)
     }

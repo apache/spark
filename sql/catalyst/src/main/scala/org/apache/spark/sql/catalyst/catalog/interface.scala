@@ -576,6 +576,8 @@ case class CatalogDatabase(
     name: String,
     description: String,
     locationUri: URI,
+    ownerName: String,
+    ownerType: String,
     properties: Map[String, String])
 
 

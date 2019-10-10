@@ -36,7 +36,8 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
     val conf = new SQLConf()
     val catalog = new SessionCatalog(externCatalog, FunctionRegistry.builtin, conf)
     catalog.createDatabase(
-      CatalogDatabase("default", "", databasePath.toURI, Map.empty),
+      CatalogDatabase("default", "", databasePath.toURI, Utils.getCurrentUserName(), "USER",
+        Map.empty),
       ignoreIfExists = false)
     catalog.createTable(
       CatalogTable(
@@ -69,7 +70,8 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
       val externCatalog = spy(inMemoryCatalog)
       val catalog = new SessionCatalog(externCatalog, FunctionRegistry.builtin, conf)
       catalog.createDatabase(
-        CatalogDatabase("default", "", new URI(tempDir.toString), Map.empty),
+        CatalogDatabase("default", "", new URI(tempDir.toString), Utils.getCurrentUserName(),
+          "USER", Map.empty),
         ignoreIfExists = false)
       reset(externCatalog)
       catalog.functionExists(FunctionIdentifier("sum"))

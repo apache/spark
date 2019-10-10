@@ -75,6 +75,8 @@ case class CreateDatabaseCommand(
         databaseName,
         comment.getOrElse(""),
         path.map(CatalogUtils.stringToURI).getOrElse(catalog.getDefaultDBPath(databaseName)),
+        sparkSession.sparkContext.sparkUser,
+        "USER",
         props),
       ifNotExists)
     Seq.empty[Row]

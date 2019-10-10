@@ -32,8 +32,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{IMetaStoreClient, TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, Table => MetaStoreApiTable}
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, Order, SerDeInfo, StorageDescriptor}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, Table => MetaStoreApiTable, _}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
@@ -355,13 +354,14 @@ private[hive] class HiveClientImpl(
   override def createDatabase(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
-    client.createDatabase(
-      new HiveDatabase(
-        database.name,
-        database.description,
-        CatalogUtils.URIToString(database.locationUri),
-        Option(database.properties).map(_.asJava).orNull),
-        ignoreIfExists)
+    val hiveDb = new HiveDatabase(
+      database.name,
+      database.description,
+      CatalogUtils.URIToString(database.locationUri),
+      Option(database.properties).map(_.asJava).orNull)
+    hiveDb.setOwnerName(database.ownerName)
+    hiveDb.setOwnerType(PrincipalType.valueOf(database.ownerType))
+    client.createDatabase(hiveDb, ignoreIfExists)
   }
 
   override def dropDatabase(
@@ -379,13 +379,14 @@ private[hive] class HiveClientImpl(
           s"Hive ${version.fullVersion} does not support altering database location")
       }
     }
-    client.alterDatabase(
+    val hiveDb = new HiveDatabase(
       database.name,
-      new HiveDatabase(
-        database.name,
-        database.description,
-        CatalogUtils.URIToString(database.locationUri),
-        Option(database.properties).map(_.asJava).orNull))
+      database.description,
+      CatalogUtils.URIToString(database.locationUri),
+      Option(database.properties).map(_.asJava).orNull)
+    hiveDb.setOwnerName(database.ownerName)
+    hiveDb.setOwnerType(PrincipalType.valueOf(database.ownerType))
+    client.alterDatabase(database.name, hiveDb)
   }
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
@@ -394,6 +395,8 @@ private[hive] class HiveClientImpl(
         name = d.getName,
         description = Option(d.getDescription).getOrElse(""),
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
+        ownerName = d.getOwnerName,
+        ownerType = d.getOwnerType.name(),
         properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
   }

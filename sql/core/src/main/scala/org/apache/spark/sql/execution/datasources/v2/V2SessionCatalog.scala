@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
@@ -264,7 +265,10 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 private[sql] object V2SessionCatalog {
   val COMMENT_TABLE_PROP: String = "comment"
   val LOCATION_TABLE_PROP: String = "location"
-  val RESERVED_PROPERTIES: Set[String] = Set(COMMENT_TABLE_PROP, LOCATION_TABLE_PROP)
+  val OWNER_NAME_PROP: String = "ownerName"
+  val OWNER_TYPE_PROP: String = "ownerType"
+  val RESERVED_PROPERTIES: Set[String] =
+    Set(COMMENT_TABLE_PROP, LOCATION_TABLE_PROP, OWNER_NAME_PROP, OWNER_TYPE_PROP)
 
   /**
    * Convert v2 Transforms to v1 partition columns and an optional bucket spec.
@@ -299,7 +303,9 @@ private[sql] object V2SessionCatalog {
           .map(CatalogUtils.stringToURI)
           .orElse(defaultLocation)
           .getOrElse(throw new IllegalArgumentException("Missing database location")),
-      properties = metadata.asScala.toMap -- Seq("comment", "location"))
+      ownerName = metadata.getOrDefault(OWNER_NAME_PROP, Utils.getCurrentUserName()),
+      ownerType = metadata.getOrDefault(OWNER_TYPE_PROP, "USER"),
+      properties = metadata.asScala.toMap -- RESERVED_PROPERTIES)
   }
 
   private implicit class CatalogDatabaseHelper(catalogDatabase: CatalogDatabase) {
@@ -311,6 +317,8 @@ private[sql] object V2SessionCatalog {
       }
       metadata.put(LOCATION_TABLE_PROP, catalogDatabase.locationUri.toString)
       metadata.put(COMMENT_TABLE_PROP, catalogDatabase.description)
+      metadata.put(OWNER_NAME_PROP, catalogDatabase.ownerName)
+      metadata.put(OWNER_TYPE_PROP, catalogDatabase.ownerType)
 
       metadata.asJava
     }

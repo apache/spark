@@ -18,20 +18,23 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.net.URI
-import java.util
 
+import java.util
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 class CatalogManagerSuite extends SparkFunSuite {
 
   private def createSessionCatalog(conf: SQLConf): SessionCatalog = {
     val catalog = new InMemoryCatalog()
     catalog.createDatabase(
-      CatalogDatabase(SessionCatalog.DEFAULT_DATABASE, "", new URI("fake"), Map.empty),
+      CatalogDatabase(SessionCatalog.DEFAULT_DATABASE, "", new URI("fake"),
+        Utils.getCurrentUserName(), "USER",Map.empty),
       ignoreIfExists = true)
     new SessionCatalog(catalog, EmptyFunctionRegistry, conf)
   }
@@ -89,7 +92,8 @@ class CatalogManagerSuite extends SparkFunSuite {
     val v1SessionCatalog = createSessionCatalog(conf)
     v1SessionCatalog.createDatabase(
       CatalogDatabase(
-        "test", "", v1SessionCatalog.getDefaultDBPath("test"), Map.empty),
+        "test", "", v1SessionCatalog.getDefaultDBPath("test"), Utils.getCurrentUserName(), "USER",
+        Map.empty),
       ignoreIfExists = false)
     val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog, v1SessionCatalog)
 

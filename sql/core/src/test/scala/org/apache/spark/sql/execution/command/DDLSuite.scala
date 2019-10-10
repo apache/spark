@@ -225,7 +225,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(
       CatalogDatabase(
-        name, "", CatalogUtils.stringToURI(spark.sessionState.conf.warehousePath), Map()),
+        name, "", CatalogUtils.stringToURI(spark.sessionState.conf.warehousePath),
+        Utils.getCurrentUserName(), "USER", Map()),
       ignoreIfExists = false)
   }
 
@@ -319,6 +320,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         dbName,
         "",
         getDBPath(dbName),
+        Utils.getCurrentUserName(),
+        "USER",
         Map.empty))
       sql(s"DROP DATABASE $dbName CASCADE")
       assert(!catalog.databaseExists(dbName))
@@ -342,6 +345,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             dbNameWithoutBackTicks,
             "",
             expPath,
+            Utils.getCurrentUserName(),
+            "USER",
             Map.empty))
           sql(s"DROP DATABASE $dbName CASCADE")
           assert(!catalog.databaseExists(dbNameWithoutBackTicks))
@@ -365,6 +370,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           dbNameWithoutBackTicks,
           "",
           getDBPath(dbNameWithoutBackTicks),
+          Utils.getCurrentUserName(),
+          "USER",
           Map.empty))
 
         // TODO: HiveExternalCatalog should throw DatabaseAlreadyExistsException
@@ -741,6 +748,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             Row("Properties", "") :: Nil)
 
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+        val catalogDatabase =
+          spark.sessionState.catalog.externalCatalog.getDatabase(dbNameWithoutBackTicks)
+        assert(catalogDatabase.ownerName === Utils.getCurrentUserName())
+        assert(catalogDatabase.ownerType === "USER")
 
         checkAnswer(
           sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
