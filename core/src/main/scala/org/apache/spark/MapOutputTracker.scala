@@ -21,7 +21,6 @@ import java.io._
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
-import java.util.concurrent.locks.{ReadWriteLock, ReentrantReadWriteLock}
 
 import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
@@ -360,8 +359,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
  */
 private[spark] class MapOutputTrackerMaster(
     conf: SparkConf,
-    broadcastManager: BroadcastManager,
-    isLocal: Boolean)
+    private[spark] val broadcastManager: BroadcastManager,
+    private[spark] val isLocal: Boolean)
   extends MapOutputTracker(conf) {
 
   // The size at which we use Broadcast to send the map output statuses to the executors
@@ -814,9 +813,13 @@ private[spark] object MapOutputTracker extends Logging {
   // generally be pretty compressible because many map outputs will be on the same hostname.
   def serializeMapStatuses(statuses: Array[MapStatus], broadcastManager: BroadcastManager,
       isLocal: Boolean, minBroadcastSize: Int): (Array[Byte], Broadcast[Array[Byte]]) = {
-    val out = new ByteArrayOutputStream
-    out.write(DIRECT)
-    val objOut = new ObjectOutputStream(new ZstdOutputStream(out))
+    import scala.language.reflectiveCalls
+    val out = new ByteArrayOutputStream(4096) {
+      // exposing `buf` directly to avoid copy
+      def getBuf: Array[Byte] = buf
+    }
+    val objOut = new ObjectOutputStream(out)
+
     Utils.tryWithSafeFinally {
       // Since statuses can be modified in parallel, sync on it
       statuses.synchronized {
@@ -825,18 +828,43 @@ private[spark] object MapOutputTracker extends Logging {
     } {
       objOut.close()
     }
-    val arr = out.toByteArray
+
+    val arr: Array[Byte] = {
+      val compressedOut = new ByteArrayOutputStream(4096)
+      val zos = new ZstdOutputStream(compressedOut)
+      Utils.tryWithSafeFinally {
+        compressedOut.write(DIRECT)
+        zos.write(out.getBuf, 0, out.size())
+      } {
+        zos.close()
+      }
+      // We don't want to use the internal `buf` of `compressedOut` as it can be larger than
+      // the actual used size since it's a buffer kept growing.
+      compressedOut.toByteArray
+    }
     if (arr.length >= minBroadcastSize) {
       // Use broadcast instead.
       // Important arr(0) is the tag == DIRECT, ignore that while deserializing !
       val bcast = broadcastManager.newBroadcast(arr, isLocal)
       // toByteArray creates copy, so we can reuse out
       out.reset()
-      out.write(BROADCAST)
-      val oos = new ObjectOutputStream(new ZstdOutputStream(out))
-      oos.writeObject(bcast)
-      oos.close()
-      val outArr = out.toByteArray
+      val oos = new ObjectOutputStream(out)
+      Utils.tryWithSafeFinally {
+        oos.writeObject(bcast)
+      } {
+        oos.close()
+      }
+      val outArr = {
+        val result = new ByteArrayOutputStream(4096)
+        val zos = new ZstdOutputStream(result)
+        Utils.tryWithSafeFinally {
+          result.write(BROADCAST)
+          zos.write(out.getBuf, 0, out.size())
+        } {
+          zos.close()
+        }
+        result.toByteArray
+      }
       logInfo("Broadcast mapstatuses size = " + outArr.length + ", actual size = " + arr.length)
       (outArr, bcast)
     } else {
@@ -863,7 +891,7 @@ private[spark] object MapOutputTracker extends Logging {
         deserializeObject(bytes, 1, bytes.length - 1).asInstanceOf[Array[MapStatus]]
       case BROADCAST =>
         // deserialize the Broadcast, pull .value array out of it, and then deserialize that
-        val bcast = deserializeObject(bytes, 1, bytes.length - 1).
+        val bcast = deserializeObject(bytes, 2, bytes.length - 1).
           asInstanceOf[Broadcast[Array[Byte]]]
         logInfo("Broadcast mapstatuses size = " + bytes.length +
           ", actual size = " + bcast.value.length)

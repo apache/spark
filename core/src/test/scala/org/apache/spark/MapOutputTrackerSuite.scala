@@ -333,27 +333,64 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
-  test("performance test in serialization") {
-    val numOfTry = 20
-    val numOfWarmUp = 10
+  ignore("Benchmarking `MapOutputTracker.serializeMapStatuses`") {
+    val newConf = new SparkConf
 
-//    val tracker: MapOutputTrackerMaster = newTrackerMaster()
-//    val shuffleId = 10
-//    val numMaps = 20000
-//    tracker.registerShuffle(shuffleId, numMaps)
-//    val compressedSize10000 = MapStatus.compressSize(10000L)
-//
-//    (0 until numMaps).foreach { i =>
-//      tracker.registerMapOutput(10, i,
-//        MapStatus(BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000),
-//        Array(compressedSize10000, compressedSize10000), 5))
-//    }
-//
-//   val shuffleStatus: ShuffleStatus = tracker.shuffleStatuses.get(shuffleId).head
-//
-//
-//    shuffleStatus.serializedMapStatus(tracker.broadcastManager, tracker.isLocal, 1000000)
-//    shuffleStatus.invalidateSerializedMapOutputStatusCache()
-//    tracker.stop()
+    // needs TorrentBroadcast so need a SparkContext
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val tracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val rpcEnv = sc.env.rpcEnv
+      val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, newConf)
+      rpcEnv.stop(tracker.trackerEndpoint)
+      rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+
+      val shuffleId = 10
+      val numMaps = 20000
+      val minBroadcastSize = Int.MaxValue
+
+      tracker.registerShuffle(shuffleId, numMaps)
+      val compressedSize10000 = MapStatus.compressSize(10000L)
+
+      (0 until numMaps).foreach { i =>
+        tracker.registerMapOutput(shuffleId, i,
+          MapStatus(BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000),
+            Array(compressedSize10000, compressedSize10000), numMaps))
+      }
+
+      val shuffleStatus = tracker.shuffleStatuses.get(shuffleId).head
+
+      val numOfTry = 200
+      val numOfWarmUp = 20
+
+      var serializedMapStatusSizes = 0
+      var serializedBroadcastSizes = 0
+
+      for (i <- 1 to numOfWarmUp) {
+        val (serializedMapStatus, serializedBroadcast) = MapOutputTracker.serializeMapStatuses(
+          shuffleStatus.mapStatuses, tracker.broadcastManager, tracker.isLocal, minBroadcastSize)
+        if (i == 1) {
+          serializedMapStatusSizes = serializedMapStatus.length
+          if (serializedBroadcast != null) {
+            serializedBroadcastSizes = serializedBroadcast.value.length
+          }
+        }
+      }
+
+      val start = System.nanoTime()
+      for (i <- 1 to numOfTry) {
+        MapOutputTracker.serializeMapStatuses(
+          shuffleStatus.mapStatuses, tracker.broadcastManager, tracker.isLocal, minBroadcastSize)
+      }
+      val throughput = (numOfTry.toDouble / (System.nanoTime() - start)) * 10E6
+
+      // scalastyle:off println
+      println("serialized MapStatus sizes : " + serializedMapStatusSizes)
+      println("serialized Broadcast MapStatus sizes : " + serializedBroadcastSizes)
+      println(s"Throughput : $throughput ops/ms")
+      // scalastyle:on println
+
+      tracker.unregisterShuffle(shuffleId)
+      tracker.stop()
+    }
   }
 }
