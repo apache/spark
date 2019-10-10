@@ -34,14 +34,15 @@ SHOW TABLES [{FROM|IN} database_name] [LIKE 'regex_pattern']
 <dl>
   <dt><code><em>{FROM|IN} database_name</em></code></dt>
   <dd>
-     Specifies the `database` name from which tables are listed.
+     Specifies the database name from which tables are listed.
   </dd>
-  <dt><code><em>LIKE 'regex_pattern'</em></code></dt>
+  <dt><code><em>LIKE regex_pattern</em></code></dt>
   <dd>
      Specifies the regular expression pattern that is used to filter out unwanted tables. 
      <ul> 
-          <li> Except `*` and `|` characters remaining characters will follow the regular expression convention.</li>
-          <li> `*` matches 0 or more characters and `|` used to provide more than one regex with OR condition. </li>
+          <li> Except for * and | character, the pattern works like a regex</li>
+          <li> * alone matches 0 or more characters and | is used to separate multiple different regexes,
+           any of which can match </li>
           <li> The leading and trailing blanks are trimmed in the input pattern before processing.</li>
      </ul>
     
