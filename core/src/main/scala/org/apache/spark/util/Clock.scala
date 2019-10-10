@@ -23,8 +23,10 @@ package org.apache.spark.util
 private[spark] trait Clock {
   /** @return Current system time, in ms. */
   def getTimeMillis(): Long
+
   /** @return Current value of monotonic time source, in ns. */
   def nanoTime(): Long
+
   /**
    * Wait until the wall clock reaches at least the given time. Note this may not actually wait for
    * the actual difference between the current and target times, since the wall clock may drift.
@@ -59,7 +61,7 @@ private[spark] class SystemClock extends Clock {
 
     var waitTime = targetTime - currentTime
     if (waitTime <= 0) {
-      return getTimeMillis()
+      return currentTime
     }
 
     val pollTime = math.max(waitTime / 10.0, minPollTime).toLong
