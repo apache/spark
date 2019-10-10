@@ -355,7 +355,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       // Make sure no other query with same id is active across all sessions
       val activeOption =
         Option(sparkSession.sharedState.activeStreamingQueries.putIfAbsent(query.id, this))
-      if (activeOption.isDefined) {
+      if (activeOption.isDefined || activeQueries.values.exists(_.id == query.id) {
         throw new IllegalStateException(
           s"Cannot start query with id ${query.id} as another query with same id is " +
             s"already active. Perhaps you are attempting to restart a query from checkpoint " +
