@@ -182,7 +182,7 @@ private[hive] class SparkExecuteStatementOperation(
         resultOffset += 1
       }
       previousFetchEndOffset = resultOffset
-      log.info(s"Returning result set with ${curRow} rows from offsets +" +
+      log.info(s"Returning result set with ${curRow} rows from offsets " +
         s"[$previousFetchStartOffset, $previousFetchEndOffset) with $statementId")
       resultRowSet
     }
