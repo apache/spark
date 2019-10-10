@@ -96,7 +96,10 @@ public final class CalendarInterval implements Serializable {
     }
     String prefix = "interval";
     String intervalStr = trimmed;
+    // Checks the given interval string does not start with the `interval` prefix
     if (!intervalStr.regionMatches(true, 0, prefix, 0, prefix.length())) {
+      // Prepend `interval` if it does not present because
+      // the regular expression strictly require it.
       intervalStr = prefix + " " + trimmed;
     } else if (intervalStr.length() == prefix.length()) {
       throw new IllegalArgumentException("Interval string must have time units");
