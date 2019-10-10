@@ -19,13 +19,12 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.Future
-
 import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
@@ -33,6 +32,7 @@ import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
+import org.apache.spark.resource.ResourceRequirement
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -68,7 +68,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
   private val createTimeNs = System.nanoTime()
 
-  private val taskResources = scheduler.resourcesReqsPerTask
+  private val taskResources =
+    scheduler.resourcesReqsPerTask.map(req => req.resourceName -> req).toMap
 
   // Accessing `executorDataMap` in the inherited methods from ThreadSafeRpcEndpoint doesn't need
   // any protection. But accessing `executorDataMap` out of the inherited methods must be
@@ -219,11 +220,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val resourcesInfo = resources.map{ case (k, v) =>
             (v.name,
              new ExecutorResourceInfo(v.name, v.addresses,
+               // tell the executor it can schedule resources up to numParts times,
+               // as configured by the user, or set to 1 as that is the default (1 task/resource)
                taskResources
-                 .filter(r => r.resourceName == v.name)
-                 .map(_.numParts)
-                 .headOption
-                 .getOrElse(1)))
+                 .getOrElse(v.name, ResourceRequirement(v.name, 1))
+                 .numParts))
           }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,

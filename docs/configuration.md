@@ -2001,9 +2001,11 @@ Apart from these, the following properties are also available, and may be useful
     If this is specified you must also provide the executor config 
     <code>spark.executor.resource.{resourceName}.amount</code> and any corresponding discovery configs 
     so that your executors are created with that resource type. In addition to whole amounts, 
-    a fractional amount (for example, 0.25, or 1/4th of a resource) may be specified. 
+    a fractional amount (for example, 0.25, which means 1/4th of a resource) may be specified. 
     Fractional amounts must be less than or equal to 0.5, or in other words, the minimum amount of
-    resource sharing is 2 tasks per resource.
+    resource sharing is 2 tasks per resource. Additionally, fractional amounts are floored 
+    in order to assign resource slots (e.g. a 0.2222 configuration, or 1/0.2222 slots will become 
+    4 tasks/resource, not 5).
   </td>
 </tr>
 <tr>

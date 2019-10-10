@@ -2793,7 +2793,7 @@ object SparkContext extends Logging {
         // If the configured amount per task was < 1.0, a task is subdividing
         // executor resources. If the amount per task was > 1.0, the task wants
         // multiple executor resources.
-        val resourceNumSlots = Math.floor(execAmount * taskReq.numParts/taskReq.amount).toInt
+        val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
         if (resourceNumSlots < numSlots) {
           numSlots = resourceNumSlots
           limitingResourceName = taskReq.resourceName

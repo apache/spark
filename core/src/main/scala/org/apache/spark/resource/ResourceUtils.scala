@@ -48,8 +48,24 @@ private[spark] case class ResourceRequest(
     discoveryScript: Option[String],
     vendor: Option[String])
 
-private[spark] case class ResourceRequirement(resourceName: String, amount: Int,
-                                              numParts: Int = 1) {
+/**
+ * Case class that represents a user's resource requirement as given by configuration
+ * (e.g spark.task.resource.[resource type].amount = 4)
+ *
+ * A configuration of spark.task.resource.[resource type].amount = 4, equates to:
+ * amount = 4, and numParts = 1.
+ *
+ * A configuration of spark.task.resource.[resource type].amount = 0.25, equates to:
+ * amount = 1, and numParts = 4.
+ *
+ * @param resourceName gpu, fpga, etc.
+ * @param amount whole units of the resource we expect (e.g. 1 gpus, 2 fpgas)
+ * @param numParts if not 1, the number of ways a whole resource is subdivided.
+ */
+private[spark] case class ResourceRequirement(
+    resourceName: String,
+    amount: Int,
+    numParts: Int = 1) {
 }
 
 /**

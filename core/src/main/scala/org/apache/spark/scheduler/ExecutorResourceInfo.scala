@@ -27,11 +27,13 @@ import org.apache.spark.resource.{ResourceAllocator, ResourceInformation}
  * @param addresses Resource addresses provided by the executor
  * @param numParts Number of ways each resource is subdivided when scheduling tasks
  */
-private[spark] class ExecutorResourceInfo(name: String, addresses: Seq[String],
-                                          numParts: Int)
+private[spark] class ExecutorResourceInfo(
+    name: String,
+    addresses: Seq[String],
+    numParts: Int)
   extends ResourceInformation(name, addresses.toArray) with ResourceAllocator {
 
   override protected def resourceName = this.name
   override protected def resourceAddresses = this.addresses
-  override protected def resourcesPerAddress = numParts
+  override protected def tasksPerAddress = numParts
 }

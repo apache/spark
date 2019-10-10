@@ -37,7 +37,8 @@ trait ResourceAllocator {
    * while value of 0 means the address is fully assigned.
    *
    * For task resources ([[org.apache.spark.scheduler.ExecutorResourceInfo]]), this value
-   * can be fractional.
+   * can be a multiple, such that each address can be allocated up to [[resourcesPerAddress]]
+   * times.
    *
    * TODO Use [[OpenHashMap]] instead to gain better performance.
    */
