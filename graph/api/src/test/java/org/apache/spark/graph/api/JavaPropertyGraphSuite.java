@@ -73,21 +73,21 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
 
     List<Row> knowsData = Collections.singletonList(RowFactory.create(0L, 0L, 1L, 1984));
 
-        Dataset<Row> personDf = spark.createDataFrame(personData, personSchema);
-        NodeFrame personNodeFrame = cypherSession.buildNodeFrame(personDf)
-            .idColumn("id")
-            .labelSet(new String[]{"Person"})
-            .properties(Collections.singletonMap("name", "name"))
-            .build();
+    Dataset<Row> personDf = spark.createDataFrame(personData, personSchema);
+    NodeFrame personNodeFrame = cypherSession.buildNodeFrame(personDf)
+        .idColumn("id")
+        .labelSet(new String[]{"Person"})
+        .properties(Collections.singletonMap("name", "name"))
+        .build();
 
-        Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
-        RelationshipFrame knowsRelFrame = cypherSession.buildRelationshipFrame(knowsDf)
-                .idColumn("id")
-                .sourceIdColumn("source")
-                .targetIdColumn("target")
-                .relationshipType("KNOWS")
-                .properties(Collections.singletonMap("since", "since"))
-                .build();
+    Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
+    RelationshipFrame knowsRelFrame = cypherSession.buildRelationshipFrame(knowsDf)
+        .idColumn("id")
+        .sourceIdColumn("source")
+        .targetIdColumn("target")
+        .relationshipType("KNOWS")
+        .properties(Collections.singletonMap("since", "since"))
+        .build();
 
 
     PropertyGraph graph = cypherSession.createGraph(

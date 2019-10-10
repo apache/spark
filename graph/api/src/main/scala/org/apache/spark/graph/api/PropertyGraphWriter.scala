@@ -64,9 +64,7 @@ abstract class PropertyGraphWriter(val graph: PropertyGraph) {
     saveMode.toLowerCase(Locale.ROOT) match {
       case "overwrite" => mode(SaveMode.Overwrite)
       case "ignore" => mode(SaveMode.Ignore)
-      case "error" | "errorifexists" => mode(SaveMode.ErrorIfExists)
-      case "default" => this
-      case "append" => mode(SaveMode.Append)
+      case "error" | "errorifexists" | "default" => mode(SaveMode.ErrorIfExists)
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
         "Accepted save modes are 'overwrite', 'ignore', 'error', 'errorifexists'.")
     }
