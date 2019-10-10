@@ -140,7 +140,7 @@ object SparkPlanGraph {
         if (parent != null) {
           edges += SparkPlanGraphEdge(node.id, parent.id)
         }
-        planInfo.children.foreach(
+        planInfo.children.union(planInfo.relation).foreach(
           buildSparkPlanGraphNode(_, nodeIdGenerator, nodes, edges, node, subgraph, exchanges))
     }
   }
