@@ -173,6 +173,8 @@ class ColumnarBatchRow extends InternalRow {
           row.setInt(i, getInt(i));
         } else if (dt instanceof TimestampType) {
           row.setLong(i, getLong(i));
+        } else if (dt instanceof CalendarIntervalType) {
+          row.update(i, getInterval(i));
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }
