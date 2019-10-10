@@ -349,17 +349,16 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       val minBroadcastSize = Int.MaxValue
 
       tracker.registerShuffle(shuffleId, numMaps)
-      val compressedSize10000 = MapStatus.compressSize(10000L)
-
+      val r = new scala.util.Random(912)
       (0 until numMaps).foreach { i =>
         tracker.registerMapOutput(shuffleId, i,
-          MapStatus(BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000),
-            Array(compressedSize10000, compressedSize10000), numMaps))
+          new CompressedMapStatus(BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000),
+            Array.range(0, 500).map(i => math.abs(r.nextLong())), i))
       }
 
       val shuffleStatus = tracker.shuffleStatuses.get(shuffleId).head
 
-      val numOfTry = 200
+      val numOfTry = 100
       val numOfWarmUp = 20
 
       var serializedMapStatusSizes = 0
