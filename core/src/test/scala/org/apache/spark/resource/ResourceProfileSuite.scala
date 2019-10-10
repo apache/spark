@@ -165,7 +165,7 @@ class ResourceProfileSuite extends SparkFunSuite {
     val rprof = new ResourceProfile()
     val gpuTaskReq = new TaskResourceRequest("resource.gpu", 2)
     val gpuExecReq =
-      new ExecutorResourceRequest("resource.gpu", 2, None, Some("someScript"))
+      new ExecutorResourceRequest("resource.gpu", 2, "", "someScript")
 
     rprof.require(gpuTaskReq)
     rprof.require(gpuExecReq)
@@ -173,17 +173,17 @@ class ResourceProfileSuite extends SparkFunSuite {
     val internalResourceConfs = ResourceProfile.createResourceProfileInternalConfs(rprof)
     val sparkConf = new SparkConf
     internalResourceConfs.foreach { case(key, value) => sparkConf.set(key, value) }
-    val resourceReq = ResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, rprof.getId)
-    val taskReq = ResourceProfile.getTaskRequirementsFromInternalConfs(sparkConf, rprof.getId)
+    val resourceReq = ResourceProfile.getResourceRequestsFromInternalConfs(sparkConf, rprof.id)
+    val taskReq = ResourceProfile.getTaskRequirementsFromInternalConfs(sparkConf, rprof.id)
 
     assert(resourceReq.size === 1, "ResourceRequest should have 1 item")
     assert(resourceReq(0).id.resourceName === "gpu")
     assert(resourceReq(0).amount === 2)
     assert(resourceReq(0).discoveryScript === Some("someScript"))
 
-    assert(taskReq.getTaskResources.size === 1,
+    assert(taskReq.taskResources.size === 1,
       "TaskResourceRequirements should have 1 item")
-    assert(taskReq.getTaskResources.contains("resource.gpu"))
-    assert(taskReq.getTaskResources("resource.gpu").amount === 2)
+    assert(taskReq.taskResources.contains("resource.gpu"))
+    assert(taskReq.taskResources("resource.gpu").amount === 2)
   }
 }

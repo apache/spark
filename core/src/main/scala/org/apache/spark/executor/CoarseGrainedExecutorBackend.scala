@@ -114,7 +114,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       resourceInfo
     } else {
       val taskResourceProf = getTaskRequirementsFromInternalConfs(env.conf, resourceProfileId)
-      val resourceInfo = if (taskResourceProf.getTaskResources.nonEmpty) {
+      val resourceInfo = if (taskResourceProf.taskResources.nonEmpty) {
         val resources = getOrDiscoverAllResourcesForResourceProfile(resourceProfileId, env.conf,
           resourcesFileOpt, SPARK_EXECUTOR_PREFIX)
         if (resources.isEmpty) {

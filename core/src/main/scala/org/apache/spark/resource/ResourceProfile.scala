@@ -214,16 +214,16 @@ private[spark] object ResourceProfile extends Logging {
   def createResourceProfileInternalConfs(rp: ResourceProfile): Map[String, String] = {
     val res = new mutable.HashMap[String, String]()
     // task resources
-    rp.getTaskResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
-      val prefix = s"${ResourceProfile.SPARK_RP_TASK_PREFIX}.${rp.getId}.$name"
+    rp.taskResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
+      val prefix = s"${ResourceProfile.SPARK_RP_TASK_PREFIX}.${rp.id}.$name"
       res(s"$prefix.amount") = req.amount.toString
     }
     // executor resources
-    rp.getExecutorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
-      val prefix = s"${ResourceProfile.SPARK_RP_EXEC_PREFIX}.${rp.getId}.$name"
+    rp.executorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
+      val prefix = s"${ResourceProfile.SPARK_RP_EXEC_PREFIX}.${rp.id}.$name"
       res(s"${prefix}.amount") = req.amount.toString
-      if (req.vendor.nonEmpty) res(s"${prefix}.vendor") = req.vendor.get
-      if (req.discoveryScript.nonEmpty) res(s"${prefix}.discoveryScript") = req.discoveryScript.get
+      if (req.vendor.nonEmpty) res(s"${prefix}.vendor") = req.vendor
+      if (req.discoveryScript.nonEmpty) res(s"${prefix}.discoveryScript") = req.discoveryScript
     }
     res.toMap
   }
