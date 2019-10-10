@@ -40,9 +40,9 @@ SHOW TABLES [{FROM|IN} database_name] [LIKE 'regex_pattern']
   <dd>
      Specifies the regular expression pattern that is used to filter out unwanted tables. 
      <ul> 
-          <li> Except for * and | character, the pattern works like a regex</li>
+          <li> Except for * and | character, the pattern works like a regex.</li>
           <li> * alone matches 0 or more characters and | is used to separate multiple different regexes,
-           any of which can match </li>
+           any of which can match. </li>
           <li> The leading and trailing blanks are trimmed in the input pattern before processing.</li>
      </ul>
     
