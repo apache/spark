@@ -20,7 +20,6 @@ package org.apache.spark
 import java.io._
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
