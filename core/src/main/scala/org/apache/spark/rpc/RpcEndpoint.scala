@@ -152,7 +152,13 @@ private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
  */
 private[spark] trait IsolatedRpcEndpoint extends RpcEndpoint {
 
-  /** How many threads to use for delivering messages. By default, use a single thread. */
+  /**
+   * How many threads to use for delivering messages. By default, use a single thread.
+   *
+   * Note that requesting more than one thread means that the endpoint should be able to handle
+   * messages arriving from many threads at once, and all the things that entails (including
+   * messages being delivered to the endpoint out of order).
+   */
   def threadCount(): Int = 1
 
 }
