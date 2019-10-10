@@ -84,14 +84,12 @@ private[sql] trait LookupCatalog extends Logging {
     }
   }
 
-  type CatalogAndNamespace = (CatalogPlugin, Option[Seq[String]])
-
   /**
    * Extract catalog and namespace from a multi-part identifier with the current catalog if needed.
    * Catalog name takes precedence over namespaces.
    */
   object CatalogAndNamespace {
-    def unapply(parts: Seq[String]): Some[CatalogAndNamespace] = parts match {
+    def unapply(parts: Seq[String]): Some[(CatalogPlugin, Option[Seq[String]])] = parts match {
       case Seq(catalogName, tail @ _*) =>
         try {
           Some(
