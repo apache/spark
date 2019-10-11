@@ -101,6 +101,15 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
+  def createSerializerForJavaDuration(inputObject: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      CalendarIntervalType,
+      "durationToInterval",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
   def createSerializerForJavaBigDecimal(inputObject: Expression): Expression = {
     CheckOverflow(StaticInvoke(
       Decimal.getClass,
