@@ -1843,6 +1843,11 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     assert(spark.range(1).map { _ => instant }.head === instant)
   }
 
+  test("implicit encoder for Duration") {
+    val duration = java.time.Duration.ofMinutes(10)
+    assert(spark.range(1).map { _ => duration }.head === duration)
+  }
+
   val dotColumnTestModes = Table(
     ("caseSensitive", "colName"),
     ("true", "field.1"),
