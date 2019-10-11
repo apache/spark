@@ -1735,15 +1735,14 @@ class Dataset[T] private[sql](
   @scala.annotation.varargs
   def groupByRelationKey(
       col1: String,
-      cols: String*): KeyValueGroupedDataset[Row, Row] = {
+      cols: String*): KeyValueGroupedDataset[Row, T] = {
     val colNames: Seq[String] = col1 +: cols
     val keyAttrs = colNames.map(colName => resolve(colName).toAttribute)
     val keySchema = StructType.fromAttributes(keyAttrs)
     val keyEncoder = RowEncoder(keySchema)
-    val valEncoder = RowEncoder(schema)
     new KeyValueGroupedDataset(
       keyEncoder,
-      valEncoder,
+      encoder,
       queryExecution,
       logicalPlan.output,
       keyAttrs)
