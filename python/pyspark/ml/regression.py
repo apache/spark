@@ -34,7 +34,8 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'IsotonicRegression', 'IsotonicRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
-           'RandomForestRegressor', 'RandomForestRegressionModel']
+           'RandomForestRegressor', 'RandomForestRegressionModel',
+           'FactorizationMachines', 'FactorizationMachinesModel']
 
 
 @inherit_doc
@@ -2124,6 +2125,179 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
 
     def __repr__(self):
         return self._call_java("toString")
+
+
+@inherit_doc
+class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver, HasLoss,
+                            JavaMLWritable, JavaMLReadable):
+    """
+    Factorization Machines.
+
+    loss Supports:
+
+    * logisticLoss (default)
+
+    * squaredError
+
+    solver Supports:
+
+    * gd (normal mini-batch gradient descent)
+
+    * adamW (default)
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml.regression import FactorizationMachines
+    >>> df = spark.createDataFrame([
+    ...     (1.0, Vectors.dense(1.0)),
+    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    >>> fm = FactorizationMachines(numFactors=2, )
+    >>> model = fm.fit(df)
+    >>> test0 = spark.createDataFrame([
+    ...     (Vectors.dense(-1.0),),
+    ...     (Vectors.dense(0.5),),
+    ...     (Vectors.dense(1.0),),
+    ...     (Vectors.dense(2.0),)], ["features"])
+    >>> model.transform(test0).show(10, False)
+    +--------+----------------------+
+    |features|prediction            |
+    +--------+----------------------+
+    |[-1.0]  |1.7219239347644947E-10|
+    |[0.5]   |0.612429917023823     |
+    |[1.0]   |0.99969782036162      |
+    |[2.0]   |0.9999999999310394    |
+    +--------+----------------------+
+
+    .. versionadded:: 3.0.0
+    """
+
+    numFactors = Param(Params._dummy(), "numFactors", "dimensionality of the factorization",
+                       typeConverter=TypeConverters.toInt)
+
+    fitBias = Param(Params._dummy(), "fitBias", "whether to fit global bias term",
+                    typeConverter=TypeConverters.toBoolean)
+
+    fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
+                      typeConverter=TypeConverters.toBoolean)
+
+    regParam = Param(Params._dummy(), "regParam", "regularization for L2",
+                     typeConverter=TypeConverters.toFloat)
+
+    miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "mini-batch fraction",
+                              typeConverter=TypeConverters.toFloat)
+
+    initStd = Param(Params._dummy(), "initStd", "standard deviation of initial coefficients",
+                    typeConverter=TypeConverters.toFloat)
+
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: gd, adamW. (Default adamW)", typeConverter=TypeConverters.toString)
+
+    loss = Param(Params._dummy(), "loss", "The loss function to be optimized. Supported " +
+                 "options: logisticLoss, squaredError. (Default logisticLoss)",
+                 typeConverter=TypeConverters.toString)
+
+    verbose = Param(Params._dummy(), "verbose", "whether to print information per iteration step",
+                    typeConverter=TypeConverters.toBoolean)
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, miniBatchFraction=1.0,
+                 initStd=0.01, maxIter=100, stepSize=1.0, tol=1e-6, solver="adamW", loss="logisticLoss",
+                 verbose=False):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, miniBatchFraction=1.0,
+                 initStd=0.01, maxIter=100, stepSize=1.0, tol=1e-6, solver="adamW", loss="logisticLoss",
+                 verbose=False)
+        """
+        super(FactorizationMachines, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.FactorizationMachines", self.uid)
+        self._setDefault(numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, miniBatchFraction=1.0,
+                         initStd=0.01, maxIter=100, stepSize=1.0, tol=1e-6, solver="adamW", loss="logisticLoss",
+                         verbose=False)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, miniBatchFraction=1.0,
+                  initStd=0.01, maxIter=100, stepSize=1.0, tol=1e-6, solver="adamW", loss="logisticLoss",
+                  verbose=False):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, miniBatchFraction=1.0,
+                  initStd=0.01, maxIter=100, stepSize=1.0, tol=1e-6, solver="adamW", loss="logisticLoss",
+                  verbose=False)
+        Sets Params for Factorization Machines.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return FactorizationMachinesModel(java_model)
+
+    @since("3.0.0")
+    def setNumFactors(self, value):
+        """
+        Sets the value of :py:attr:`numFactors`.
+        """
+        return self._set(numFactors=value)
+
+    @since("3.0.0")
+    def setFitBias(self, value):
+        """
+        Sets the value of :py:attr:`fitBias`.
+        """
+        return self._set(fitBias=value)
+
+    @since("3.0.0")
+    def setFitLinear(self, value):
+        """
+        Sets the value of :py:attr:`fitLinear`.
+        """
+        return self._set(fitLinear=value)
+
+    @since("3.0.0")
+    def setMiniBatchFraction(self, value):
+        """
+        Sets the value of :py:attr:`miniBatchFraction`.
+        """
+        return self._set(miniBatchFraction=value)
+
+    @since("3.0.0")
+    def setInitStd(self, value):
+        """
+        Sets the value of :py:attr:`initStd`.
+        """
+        return self._set(initStd=value)
+
+    @since("3.0.0")
+    def setVerbose(self, value):
+        """
+        Sets the value of :py:attr:`verbose`.
+        """
+        return self._set(verbose=value)
+
+
+class FactorizationMachinesModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+    """
+    Model fitted by :class:`FactorizationMachines`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("3.0.0")
+    def coefficients(self):
+        """
+        Model coefficients
+        coefficients concat from 2-way coefficients, 1-way coefficients, global bias
+        index 0 ~ numFeatures*numFactors is 2-way coefficients,
+            [i * numFactors + f] denotes i-th feature and f-th factor
+        Following indices are 1-way coefficients and global bias.
+        """
+        return self._call_java("coefficients")
 
 
 if __name__ == "__main__":
