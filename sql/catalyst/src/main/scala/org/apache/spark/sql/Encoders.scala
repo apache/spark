@@ -129,6 +129,14 @@ object Encoders {
   def INSTANT: Encoder[java.time.Instant] = ExpressionEncoder()
 
   /**
+   * Creates an encoder that serializes instances of the `java.time.Duration` class
+   * to the internal representation of nullable Catalyst's CalendarIntervalType.
+   *
+   * @since 3.0.0
+   */
+  def DURATION: Encoder[java.time.Duration] = ExpressionEncoder()
+
+  /**
    * An encoder for arrays of bytes.
    *
    * @since 1.6.1
