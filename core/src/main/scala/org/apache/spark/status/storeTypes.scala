@@ -193,6 +193,10 @@ private[spark] class StageDataWrapper(
       Nil, // rddInfo
       Nil, // parentIds
       info.details)
+
+    // Note that attributes for `executorSummaries`, `activeTasksPerExecutor`,
+    // `blackListedExecutors`, `savedTasks` are computed later in
+    // AppStatusListener.recoverLiveEntities().
     liveStage.jobs = jobs
     liveStage.jobIds = jobs.map(_.jobId).toSet
     liveStage.info = stageInfo
