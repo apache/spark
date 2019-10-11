@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -138,5 +139,15 @@ public class JavaUDFSuite implements Serializable {
     } finally {
       spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
     }
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void udf8Test() {
+    spark.udf().register(
+            "plusDay",
+            (Duration d) -> d.plusDays(1), DataTypes.CalendarIntervalType);
+    Row result = spark.sql("SELECT plusDay(interval 40 minutes)").head();
+    Assert.assertEquals(Duration.ofMinutes(40).plusDays(1), result.get(0));
   }
 }
