@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
@@ -214,6 +214,20 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         val localDate = DateTimeUtils.daysToLocalDate(days)
         assert(CatalystTypeConverters.createToScalaConverter(DateType)(days) === localDate)
       }
+    }
+  }
+
+  test("converting java.time.Duration to CalendarIntervalType") {
+    Seq(
+      "P0D",
+      "PT0.000001S",
+      "PT-0.000001S",
+      "P1DT2H3M4.000001S",
+      "P-1DT2H3M4.000001S").foreach { time =>
+      val input = Duration.parse(time)
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = DateTimeUtils.durationToInterval(input)
+      assert(result === expected)
     }
   }
 }
