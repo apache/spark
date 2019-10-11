@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, Strategy}
+import org.apache.spark.sql.catalyst.analysis.ResolvedV2Table
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowNamespaces, ShowTables}
@@ -251,7 +252,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       OverwritePartitionsDynamicExec(
         r.table.asWritable, writeOptions.asOptions, planLater(query)) :: Nil
 
-    case DeleteFromTable(r: DataSourceV2Relation, condition) =>
+    case DeleteFromTable(r: ResolvedV2Table, condition) =>
       if (condition.exists(SubqueryExpression.hasSubquery)) {
         throw new AnalysisException(
           s"Delete by condition with subquery is not supported: $condition")
@@ -280,8 +281,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         Nil
       }
 
-    case desc @ DescribeTable(r: DataSourceV2Relation, isExtended) =>
-      DescribeTableExec(desc.output, r.table, isExtended) :: Nil
+    case desc @ DescribeTable(ResolvedV2Table(table, _), isExtended) =>
+      DescribeTableExec(desc.output, table, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>
       DropTableExec(catalog, ident, ifExists) :: Nil

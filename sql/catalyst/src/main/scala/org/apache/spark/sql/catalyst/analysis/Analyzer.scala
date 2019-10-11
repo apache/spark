@@ -684,7 +684,7 @@ class Analyzer(
 
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadTable(u.catalog, u.tableName).map { table =>
-          DataSourceV2Relation.create(table)
+          ResolvedV2Table.create(table)
         }.getOrElse(u)
     }
   }

@@ -62,7 +62,7 @@ object UnresolvedRelation {
 
 /**
  * A variant of [[UnresolvedRelation]] which can only be resolved to a v2 relation
- * (`DataSourceV2Relation`), not v1 relation or temp view.
+ * (e.g. `ResolvedV2Table`), not v1 relation or temp view.
  *
  * @param originalNameParts the original table identifier name parts before catalog is resolved.
  * @param catalog The catalog which the table should be looked up from.
