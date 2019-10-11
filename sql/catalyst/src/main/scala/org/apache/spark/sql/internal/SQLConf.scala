@@ -400,7 +400,7 @@ object SQLConf {
       " converting the shuffle reader to local shuffle reader for the shuffle exchange" +
       " of the broadcast hash join in probe side.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")

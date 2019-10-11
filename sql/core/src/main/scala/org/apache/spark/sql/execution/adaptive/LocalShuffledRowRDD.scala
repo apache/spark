@@ -57,15 +57,15 @@ class LocalShuffledRowRDD(
      metrics: Map[String, SQLMetric])
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
-  private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
-  private[this] val numPostShufflePartitions = dependency.rdd.partitions.length
+  private[this] val numReducers = dependency.partitioner.numPartitions
+  private[this] val numMappers = dependency.rdd.partitions.length
 
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
   override def getPartitions: Array[Partition] = {
 
-    Array.tabulate[Partition](numPostShufflePartitions) { i =>
-      new LocalShuffleRowRDDPartition(i, 0, numPreShufflePartitions)
+    Array.tabulate[Partition](numMappers) { i =>
+      new LocalShuffleRowRDDPartition(i, 0, numReducers)
     }
   }
 
@@ -86,7 +86,7 @@ class LocalShuffledRowRDD(
     val reader = SparkEnv.get.shuffleManager.getMapReader(
       dependency.shuffleHandle,
       0,
-      numPreShufflePartitions,
+      numReducers,
       context,
       sqlMetricsReporter,
       mapId)

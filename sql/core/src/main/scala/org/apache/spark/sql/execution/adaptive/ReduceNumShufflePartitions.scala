@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution.adaptive.rule
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
-
 import org.apache.spark.MapOutputStatistics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.{QueryStageExec, ReusedQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
@@ -190,7 +189,7 @@ case class CoalescedShuffleReaderExec(
     UnknownPartitioning(partitionStartIndices.length)
   }
 
-  private var cachedShuffleRDD: RDD[InternalRow] = null
+  private var cachedShuffleRDD: ShuffledRowRDD = null
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (cachedShuffleRDD == null) {
