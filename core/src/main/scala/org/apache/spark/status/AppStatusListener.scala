@@ -115,48 +115,47 @@ private[spark] class AppStatusListener(
         .filter { stageData =>
           stageData.info.status == v1.StageStatus.PENDING ||
             stageData.info.status == v1.StageStatus.ACTIVE
-        }
-        .map { stageData =>
+        }.map { stageData =>
           val stageId = stageData.info.stageId
           val jobs = liveJobs.values.filter(_.stageIds.contains(stageId)).toSeq
           stageData.toLiveStage(jobs)
         }.foreach { stage =>
-        val stageId = stage.info.stageId
-        val stageAttempt = stage.info.attemptNumber()
-        liveStages.put((stageId, stageAttempt), stage)
+          val stageId = stage.info.stageId
+          val stageAttempt = stage.info.attemptNumber()
+          liveStages.put((stageId, stageAttempt), stage)
 
-        kvstore.view(classOf[ExecutorSummaryWrapper]).asScala.filter(_.info.isActive)
-          .map(_.toLiveExecutor).foreach(exec => liveExecutors.put(exec.executorId, exec))
+          kvstore.view(classOf[ExecutorSummaryWrapper]).asScala.filter(_.info.isActive)
+            .map(_.toLiveExecutor).foreach(exec => liveExecutors.put(exec.executorId, exec))
 
-        kvstore.view(classOf[ExecutorStageSummaryWrapper])
-          .index("stage")
-          .first(Array(stageId, stageAttempt))
-          .last(Array(stageId, stageAttempt))
-          .asScala
-          .map(_.toLiveExecutorStageSummary)
-          .foreach { esummary =>
-            stage.executorSummaries.put(esummary.executorId, esummary)
-            if (esummary.isBlacklisted) {
-              stage.blackListedExecutors += esummary.executorId
-              liveExecutors.get(esummary.executorId).foreach(_.isBlacklisted = true)
-              liveExecutors.get(esummary.executorId).foreach(_.blacklistedInStages += stageId)
+          kvstore.view(classOf[ExecutorStageSummaryWrapper])
+            .index("stage")
+            .first(Array(stageId, stageAttempt))
+            .last(Array(stageId, stageAttempt))
+            .asScala
+            .map(_.toLiveExecutorStageSummary)
+            .foreach { esummary =>
+              stage.executorSummaries.put(esummary.executorId, esummary)
+              if (esummary.isBlacklisted) {
+                stage.blackListedExecutors += esummary.executorId
+                liveExecutors.get(esummary.executorId).foreach(_.isBlacklisted = true)
+                liveExecutors.get(esummary.executorId).foreach(_.blacklistedInStages += stageId)
+              }
             }
-          }
 
-        kvstore.view(classOf[TaskDataWrapper])
-          .parent(Array(stageId, stageAttempt))
-          .index(TaskIndexNames.STATUS)
-          .first(TaskState.RUNNING.toString)
-          .last(TaskState.RUNNING.toString)
-          .asScala
-          .map(_.toLiveTask)
-          .foreach { task =>
-            liveTasks.put(task.info.taskId, task)
-            stage.activeTasksPerExecutor(task.info.executorId) += 1
-          }
+          kvstore.view(classOf[TaskDataWrapper])
+            .parent(Array(stageId, stageAttempt))
+            .index(TaskIndexNames.STATUS)
+            .first(TaskState.RUNNING.toString)
+            .last(TaskState.RUNNING.toString)
+            .asScala
+            .map(_.toLiveTask)
+            .foreach { task =>
+              liveTasks.put(task.info.taskId, task)
+              stage.activeTasksPerExecutor(task.info.executorId) += 1
+            }
 
-        stage.savedTasks.addAndGet(kvstore.count(classOf[TaskDataWrapper]).intValue())
-      }
+          stage.savedTasks.addAndGet(kvstore.count(classOf[TaskDataWrapper]).intValue())
+        }
 
       kvstore.view(classOf[RDDStorageInfoWrapper]).asScala
         .foreach { rddWrapper =>
