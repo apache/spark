@@ -137,6 +137,8 @@ private[spark] object ResourceProfile extends Logging {
   val SPARK_RP_TASK_PREFIX = "spark.resourceProfile.task"
   val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
 
+  // Helper class for constructing the resource profile internal configs used to pass to
+  // executors
   case class ResourceProfileInternalConf(componentName: String,
       id: Int, resourceName: String) {
     def confPrefix: String = s"$componentName.$id.${RESOURCE_DOT}$resourceName."

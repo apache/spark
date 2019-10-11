@@ -54,7 +54,7 @@ private[spark] class ExecutorMonitor(
   private case class ExecutorTrackingInfo(tracker: Tracker, rProfId: Int)
 
   private val executors = new ConcurrentHashMap[String, ExecutorTrackingInfo]()
-  private val execResourceProfileCount = new ConcurrentHashMap[Int, AtomicInteger]()
+  private val execResourceProfileCount = new mutable.HashMap[Int, Int]()
 
   // The following fields are an optimization to avoid having to scan all executors on every EAM
   // schedule interval to find out which ones are timed out. They keep track of when the next
@@ -153,11 +153,16 @@ private[spark] class ExecutorMonitor(
   def executorCount: Int = executors.size()
 
   def executorCountWithResourceProfile(id: Int): Int = {
-    execResourceProfileCount.getOrDefault(id, new AtomicInteger(0)).get()
+    execResourceProfileCount.getOrElse(id, 0)
   }
 
   def getResourceProfileId(executorId: String): Int = {
-    executors.get(executorId).rProfId
+    val execTrackingInfo = executors.get(executorId)
+    if (execTrackingInfo != null) {
+      execTrackingInfo.rProfId
+    } else {
+      UNKNOWN_RESOURCE_PROFILE_ID
+    }
   }
 
   def pendingRemovalCount: Int = executors.asScala.count {
@@ -312,14 +317,12 @@ private[spark] class ExecutorMonitor(
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     val removed = executors.remove(event.executorId)
     if (removed != null) {
-      val rprofCount = execResourceProfileCount.get(removed.rProfId)
-      if (rprofCount != null) {
-        val numLeft = rprofCount.getAndDecrement()
-        if (numLeft == 0) {
-          execResourceProfileCount.remove(removed.rProfId, numLeft)
-        }
+      val countOption = execResourceProfileCount.get(removed.rProfId).map { count =>
+        val decCount = count - 1
+        execResourceProfileCount(removed.rProfId) = decCount
+        decCount
       }
-      logInfo(s"Executor ${event.executorId} removed (new total is ${executors.size()})")
+      if (countOption.contains(0)) execResourceProfileCount.remove(removed.rProfId)
       if (!removed.tracker.pendingRemoval) {
         nextTimeout.set(Long.MinValue)
       }
@@ -415,9 +418,9 @@ private[spark] class ExecutorMonitor(
    */
   private def ensureExecutorIsTracked(id: String, resourceProfileId: Int): Tracker = {
     val numExecsWithRpId =
-      execResourceProfileCount.computeIfAbsent(resourceProfileId, _ => new AtomicInteger(0))
+      execResourceProfileCount.getOrElseUpdate(resourceProfileId, 0)
     val exec = executors.computeIfAbsent(id, _ => {
-        numExecsWithRpId.getAndIncrement()
+        execResourceProfileCount(resourceProfileId) = numExecsWithRpId + 1
         ExecutorTrackingInfo(new Tracker(), resourceProfileId)
       })
     // if we had added executor before knowing the resource profile id, fix it up
@@ -427,8 +430,9 @@ private[spark] class ExecutorMonitor(
         s"it to $resourceProfileId")
       executors.put(id, ExecutorTrackingInfo(exec.tracker, resourceProfileId))
       // fix up the counts for each resource profile id
-      numExecsWithRpId.getAndIncrement()
-      execResourceProfileCount.get(UNKNOWN_RESOURCE_PROFILE_ID).getAndDecrement()
+      execResourceProfileCount(resourceProfileId) = numExecsWithRpId + 1
+      val unknownCount = execResourceProfileCount(UNKNOWN_RESOURCE_PROFILE_ID)
+      execResourceProfileCount(UNKNOWN_RESOURCE_PROFILE_ID) = unknownCount - 1
     }
     exec.tracker
   }
