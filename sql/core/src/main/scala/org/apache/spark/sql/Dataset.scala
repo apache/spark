@@ -1726,6 +1726,30 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by a row of given
+   * columns.
+   *
+   * @group typedrel
+   * @since 3.0.0
+   */
+  @scala.annotation.varargs
+  def groupByRelationKey(
+      col1: String,
+      cols: String*): KeyValueGroupedDataset[Row, Row] = {
+    val colNames: Seq[String] = col1 +: cols
+    val keyAttrs = colNames.map(colName => resolve(colName).toAttribute)
+    val keySchema = StructType.fromAttributes(keyAttrs)
+    val keyEncoder = RowEncoder(keySchema)
+    val valEncoder = RowEncoder(schema)
+    new KeyValueGroupedDataset(
+      keyEncoder,
+      valEncoder,
+      queryExecution,
+      logicalPlan.output,
+      keyAttrs)
+  }
+
+  /**
    * (Java-specific)
    * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
    *

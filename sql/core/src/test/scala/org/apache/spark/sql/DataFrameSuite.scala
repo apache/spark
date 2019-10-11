@@ -2203,4 +2203,20 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
           |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
     }
   }
+
+  test("groupByRelationKey") {
+    val df1 = Seq((1, 2, 3), (2, 3, 4)).toDF("a", "b", "c")
+      .repartition($"a", $"b").sortWithinPartitions("a", "b")
+    val df2 = Seq((1, 2, 4), (2, 3, 5)).toDF("a", "b", "c")
+      .repartition($"a", $"b").sortWithinPartitions("a", "b")
+
+    val df3 = df1.groupByRelationKey("a", "b")
+      .cogroup(df2.groupByRelationKey("a", "b")) { case (key, data1, data2) =>
+         data1.zip(data2).map { p =>
+           p._1.getInt(2) + p._2.getInt(2)
+         }
+      }.toDF
+
+    checkAnswer(df3, Row(7) :: Row(9) :: Nil)
+  }
 }
