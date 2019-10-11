@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
@@ -228,6 +228,18 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       val result = CatalystTypeConverters.convertToCatalyst(input)
       val expected = DateTimeUtils.durationToInterval(input)
       assert(result === expected)
+    }
+  }
+
+  test("converting CalendarIntervalType to java.time.Duration") {
+    Seq(
+      CalendarInterval.fromString("interval 0 days"),
+      CalendarInterval.fromString("interval 1 month"),
+      CalendarInterval.fromString("interval 1 month 1 microsecond"),
+      CalendarInterval.fromString("interval -1 month -1 microsecond"),
+      CalendarInterval.fromString("interval 10000 years -1 microsecond")).foreach { i =>
+      val duration = DateTimeUtils.intervalToDuration(i)
+      assert(CatalystTypeConverters.createToScalaConverter(CalendarIntervalType)(i) === duration)
     }
   }
 }
