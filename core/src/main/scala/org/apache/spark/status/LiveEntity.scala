@@ -75,7 +75,7 @@ private[spark] class LiveJob(
   // Holds both the stage ID and the task index, packed into a single long value.
   val completedIndices = new OpenHashSet[Long]()
   // will only be set when recover LiveJob is needed.
-  var completedIndicesNum = 0
+  var numCompletedIndices = 0
 
   var killedTasks = 0
   var killedSummary: Map[String, Int] = Map()
@@ -88,7 +88,7 @@ private[spark] class LiveJob(
 
   var completedStages: Set[Int] = Set()
   // will only be set when recover LiveJob is needed.
-  var completedStagesNum = 0
+  var numCompletedStages = 0
   var activeStages = 0
   var failedStages = 0
 
@@ -108,9 +108,9 @@ private[spark] class LiveJob(
       skippedTasks,
       failedTasks,
       killedTasks,
-      completedIndices.size + completedIndicesNum,
+      completedIndices.size + numCompletedIndices,
       activeStages,
-      completedStages.size + completedStagesNum,
+      completedStages.size + numCompletedStages,
       skippedStages.size,
       failedStages,
       killedSummary)
@@ -375,7 +375,7 @@ private[spark] class LiveStage extends LiveEntity {
   var failedTasks = 0
   val completedIndices = new OpenHashSet[Int]()
   // will only be set when recover LiveStage is needed.
-  var completedIndicesNum = 0
+  var numCompletedIndices = 0
 
   var killedTasks = 0
   var killedSummary: Map[String, Int] = Map()
@@ -411,7 +411,7 @@ private[spark] class LiveStage extends LiveEntity {
       numCompleteTasks = completedTasks,
       numFailedTasks = failedTasks,
       numKilledTasks = killedTasks,
-      numCompletedIndices = completedIndices.size + completedIndicesNum,
+      numCompletedIndices = completedIndices.size + numCompletedIndices,
 
       submissionTime = info.submissionTime.map(new Date(_)),
       firstTaskLaunchedTime =

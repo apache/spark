@@ -122,12 +122,12 @@ private[spark] class JobDataWrapper(
     liveJob.activeTasks = info.numActiveTasks
     liveJob.completedTasks = info.numCompletedTasks
     liveJob.failedTasks = info.numFailedTasks
-    liveJob.completedIndicesNum = info.numCompletedIndices
+    liveJob.numCompletedIndices = info.numCompletedIndices
     liveJob.killedTasks = info.numKilledTasks
     liveJob.killedSummary = info.killedTasksSummary
     liveJob.skippedTasks = info.numSkippedTasks
     liveJob.skippedStages = skippedStages
-    liveJob.completedStagesNum = info.numCompletedStages
+    liveJob.numCompletedStages = info.numCompletedStages
     liveJob.activeStages = info.numActiveStages
     liveJob.failedStages = info.numFailedStages
     liveJob
@@ -202,7 +202,7 @@ private[spark] class StageDataWrapper(
     liveStage.activeTasks = info.numActiveTasks
     liveStage.completedTasks = info.numCompleteTasks
     liveStage.failedTasks = info.numFailedTasks
-    liveStage.completedIndicesNum = info.numCompletedIndices
+    liveStage.numCompletedIndices = info.numCompletedIndices
     liveStage.killedTasks = info.numKilledTasks
     liveStage.killedSummary = info.killedTasksSummary
     liveStage.firstLaunchTime = firstLaunchTime

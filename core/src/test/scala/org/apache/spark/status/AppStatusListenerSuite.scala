@@ -1883,7 +1883,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(sStage.schedulingPool === dStage.schedulingPool)
       assert(sStage.activeTasks === dStage.activeTasks)
       assert(sStage.completedTasks === dStage.completedTasks)
-      assert(sStage.completedIndices.size === dStage.completedIndicesNum)
+      assert(sStage.completedIndices.size === dStage.numCompletedIndices)
       assert(sStage.killedTasks === dStage.killedTasks)
       assert(sStage.killedSummary === dStage.killedSummary)
       assert(sStage.firstLaunchTime === dStage.firstLaunchTime)
