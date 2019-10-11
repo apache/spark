@@ -27,7 +27,7 @@ import java.lang.{Short => JavaShort}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate}
 import java.util
 import java.util.Objects
 import javax.xml.bind.DatatypeConverter
@@ -42,7 +42,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{durationToInterval, instantToMicros}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
@@ -71,6 +71,7 @@ object Literal {
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
+    case d: Duration => Literal(durationToInterval(d), CalendarIntervalType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case a: collection.mutable.WrappedArray[_] => apply(a.array)
     case a: Array[_] =>
@@ -120,6 +121,7 @@ object Literal {
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+    case _ if clz == classOf[Duration] => CalendarIntervalType
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
 

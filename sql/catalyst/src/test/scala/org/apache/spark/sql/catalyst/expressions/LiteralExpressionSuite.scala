@@ -317,4 +317,22 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(literalStr === expected)
     }
   }
+
+  test("construct literals from java.time.Duration") {
+    Seq(
+      Duration.ofSeconds(0),
+      Duration.ofSeconds(1, 999999000),
+      Duration.ofSeconds(-1, -999999000),
+      Duration.ofDays(365 * 10000),
+      Duration.ofDays(-365 * 10000)).foreach { duration =>
+      checkEvaluation(Literal(duration), duration)
+    }
+  }
+
+  test("construct literals from arrays of java.time.Duration") {
+    val duration0 = Duration.ofMinutes(10)
+    checkEvaluation(Literal(Array(duration0)), Array(duration0))
+    val duration1 = Duration.ofHours(3)
+    checkEvaluation(Literal(Array(duration0, duration1)), Array(duration0, duration1))
+  }
 }
