@@ -137,6 +137,14 @@ private[spark] object ResourceProfile extends Logging {
   val SPARK_RP_TASK_PREFIX = "spark.resourceProfile.task"
   val SPARK_RP_EXEC_PREFIX = "spark.resourceProfile.executor"
 
+  case class ResourceProfileInternalConf(componentName: String,
+      id: Int, resourceName: String) {
+    def confPrefix: String = s"$componentName.$id.${RESOURCE_DOT}$resourceName."
+    def amountConf: String = s"$confPrefix${ResourceUtils.AMOUNT}"
+    def discoveryScriptConf: String = s"$confPrefix${ResourceUtils.DISCOVERY_SCRIPT}"
+    def vendorConf: String = s"$confPrefix${ResourceUtils.VENDOR}"
+  }
+
   val CPUS = "cpus"
   val CORES = "cores"
   val MEMORY = "memory"
@@ -215,15 +223,16 @@ private[spark] object ResourceProfile extends Logging {
     val res = new mutable.HashMap[String, String]()
     // task resources
     rp.taskResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
-      val prefix = s"${ResourceProfile.SPARK_RP_TASK_PREFIX}.${rp.id}.$name"
-      res(s"$prefix.amount") = req.amount.toString
+      val taskIntConf = ResourceProfileInternalConf(SPARK_RP_TASK_PREFIX, rp.id, name)
+      res(s"${taskIntConf.amountConf}") = req.amount.toString
     }
     // executor resources
     rp.executorResources.filterKeys(_.startsWith(RESOURCE_DOT)).foreach { case (name, req) =>
-      val prefix = s"${ResourceProfile.SPARK_RP_EXEC_PREFIX}.${rp.id}.$name"
-      res(s"${prefix}.amount") = req.amount.toString
-      if (req.vendor.nonEmpty) res(s"${prefix}.vendor") = req.vendor
-      if (req.discoveryScript.nonEmpty) res(s"${prefix}.discoveryScript") = req.discoveryScript
+      val execIntConf = ResourceProfileInternalConf(SPARK_RP_EXEC_PREFIX, rp.id, name)
+
+      res(execIntConf.amountConf) = req.amount.toString
+      if (req.vendor.nonEmpty) res(execIntConf.vendorConf) = req.vendor
+      if (req.discoveryScript.nonEmpty) res(execIntConf.discoveryScriptConf) = req.discoveryScript
     }
     res.toMap
   }
@@ -231,10 +240,10 @@ private[spark] object ResourceProfile extends Logging {
   /**
    * Parse out just the resourceName given the map of confs. It only looks for confs that
    * end with .amount because we should always have one of those for every resource.
-   * Format is expected to be: [resourcsname].amount, where resourceName could have multiple
+   * Format is expected to be: [resourcesname].amount, where resourceName could have multiple
    * .'s like resource.gpu.foo.amount
    */
-  private def listResourceProfileResourceNames(confs: Map[String, String]): Seq[String] = {
+  private def listResourceNames(confs: Map[String, String]): Seq[String] = {
     confs.filterKeys(_.endsWith(ResourceUtils.AMOUNT)).
       map { case (key, _) => key.substring(0, key.lastIndexOf(s".${ResourceUtils.AMOUNT}")) }.toSeq
   }
@@ -248,7 +257,7 @@ private[spark] object ResourceProfile extends Logging {
     val rp = new ResourceProfile()
     val taskRpIdConfPrefix = s"${SPARK_RP_TASK_PREFIX}.${rpId}."
     val taskConfs = sparkConf.getAllWithPrefix(taskRpIdConfPrefix).toMap
-    val taskResourceNames = listResourceProfileResourceNames(taskConfs)
+    val taskResourceNames = listResourceNames(taskConfs)
     taskResourceNames.foreach { resource =>
       val amount = taskConfs.get(s"${resource}.amount").get.toInt
       rp.require(new TaskResourceRequest(resource, amount))
@@ -266,7 +275,7 @@ private[spark] object ResourceProfile extends Logging {
       rpId: Int): Seq[ResourceRequest] = {
     val execRpIdConfPrefix = s"${SPARK_RP_EXEC_PREFIX}.${rpId}.${RESOURCE_DOT}"
     val execConfs = sparkConf.getAllWithPrefix(execRpIdConfPrefix).toMap
-    val execResourceNames = listResourceProfileResourceNames(execConfs)
+    val execResourceNames = listResourceNames(execConfs)
     val resourceReqs = execResourceNames.map { resource =>
       val amount = execConfs.get(s"${resource}.amount").get.toInt
       val vendor = execConfs.get(s"${resource}.vendor")

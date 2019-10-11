@@ -125,6 +125,13 @@ private[spark] class CoarseGrainedExecutorBackend(
         }
         resources
       } else {
+        if (resourcesFileOpt.nonEmpty) {
+          logWarning("A resources file was specified but the application is not configured " +
+            s"to use any resources, see the configs with prefix: ${SPARK_TASK_PREFIX}")
+        } else {
+          logWarning(s"A resource profile id ${resourceProfileId} was specified but no " +
+            s"task resources were configured, see the configs with prefix ${SPARK_TASK_PREFIX}")
+        }
         Map.empty[String, ResourceInformation]
       }
       resourceInfo

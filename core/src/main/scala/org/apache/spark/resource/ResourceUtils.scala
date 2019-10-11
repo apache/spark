@@ -126,15 +126,21 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
+  /**
+   * This function parses any resources allocated via passed in resources file, then
+   * looks at the configs
+   */
   private def parseAllocatedOrDiscoverResources(
       sparkConf: SparkConf,
       componentName: String,
-      resourcesFileOpt: Option[String]): Seq[ResourceAllocation] = {
+      resourcesFileOpt: Option[String],
+      resourceIdsFromConfs: Seq[ResourceID],
+      getResourceRequest: (SparkConf, ResourceID) => ResourceRequest): Seq[ResourceAllocation] = {
     val allocated = resourcesFileOpt.toSeq.flatMap(parseAllocatedFromJsonFile)
       .filter(_.id.componentName == componentName)
-    val otherResourceIds = listResourceIds(sparkConf, componentName).diff(allocated.map(_.id))
+    val otherResourceIds = resourceIdsFromConfs.diff(allocated.map(_.id))
     allocated ++ otherResourceIds.map { id =>
-      val request = parseResourceRequest(sparkConf, id)
+      val request = getResourceRequest(sparkConf, id)
       ResourceAllocation(id, discoverResource(request).addresses)
     }
   }
@@ -167,14 +173,17 @@ private[spark] object ResourceUtils extends Logging {
       componentName: String,
       resourcesFileOpt: Option[String]): Map[String, ResourceInformation] = {
     val requests = parseAllResourceRequests(sparkConf, componentName)
-    val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt)
+    val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName,
+      resourcesFileOpt, listResourceIds(sparkConf, componentName), parseResourceRequest)
     assertAllResourceAllocationsMeetRequests(allocations, requests)
     val resourceInfoMap = allocations.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
     resourceInfoMap
   }
 
   /**
-   * Gets all allocated resource information based on the ResourceProfile information.
+   * Gets all allocated resource information based on the ResourceProfile information. It gets
+   * the ResourceProfile information using the spark internal confs that looks like:
+   * spark.resourceProfile.executor.[rpId].resource.gpu.[amount, vendor, discoveryScript].
    * This uses the input resources file and discovers the remaining via discovery scripts
    * from the ResourceProfile. It also verifies the resource allocation meets required amount
    * for each resource.
@@ -186,14 +195,10 @@ private[spark] object ResourceUtils extends Logging {
       resourcesFileOpt: Option[String],
       componentName: String): Map[String, ResourceInformation] = {
     val requests = getResourceRequestsFromInternalConfs(sparkConf, resourceProfileId)
-    assert(requests.nonEmpty, "Resource requests should never be empty")
-
-    val allocated = resourcesFileOpt.toSeq.flatMap(parseAllocatedFromJsonFile)
-      .filter(_.id.componentName == componentName)
-    val otherResourceIds = requests.diff(allocated.map(_.id))
-    val allocations = allocated ++ otherResourceIds.map { req =>
-      ResourceAllocation(req.id, discoverResource(req).addresses)
-    }
+    val resourceIdToRequest = requests.map( req => (req.id, req)).toMap
+    val requestResourceIds = resourceIdToRequest.keySet.toSeq
+    val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt,
+      requestResourceIds, ((sparkConf: SparkConf, id: ResourceID) => resourceIdToRequest(id)))
     assertAllResourceAllocationsMeetRequests(allocations, requests)
     allocations.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
   }

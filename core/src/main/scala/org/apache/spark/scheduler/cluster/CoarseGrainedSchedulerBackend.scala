@@ -558,6 +558,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.get(executorId).map(_.resourcesInfo).getOrElse(Map.empty)
   }
 
+  // this function is for testing only
+  def getExecutorResourceProfileId(executorId: String): Int = synchronized {
+    val res = executorDataMap.get(executorId)
+    res.map(_.resourceProfileId).getOrElse(ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+  }
+
+
   /**
    * Request an additional number of executors from the cluster manager.
    * @return whether the request is acknowledged.
