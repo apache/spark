@@ -17,7 +17,7 @@
 
 package org.apache.spark.graph.api
 
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Dataset, Row}
 
 /**
  * Describes how to map a DataFrame to nodes.
@@ -32,8 +32,8 @@ import org.apache.spark.sql.DataFrame
  * @since 3.0.0
  */
 case class NodeFrame private[graph] (
-    df: DataFrame,
+    df: Dataset[Row],
     idColumn: String,
     labelSet: Set[String],
     properties: Map[String, String])
-    extends GraphElementFrame
+  extends GraphElementFrame

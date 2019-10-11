@@ -19,7 +19,7 @@ package org.apache.spark.graph.api
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Dataset, Row}
 
 /**
  * Interface used to build a [[RelationshipFrame]].
@@ -27,7 +27,7 @@ import org.apache.spark.sql.DataFrame
  * @param df DataFrame containing a single relationship in each row
  * @since 3.0.0
  */
-final class RelationshipFrameBuilder(val df: DataFrame) {
+final class RelationshipFrameBuilder(val df: Dataset[Row]) {
 
   private var idColumn: String = CypherSession.ID_COLUMN
   private var sourceIdColumn: String = CypherSession.SOURCE_ID_COLUMN

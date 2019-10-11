@@ -17,7 +17,7 @@
 
 package org.apache.spark.graph.api
 
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Dataset, Row}
 
 /**
  * A [[PropertyGraph]] is created from GraphElementFrames.
@@ -34,7 +34,7 @@ abstract class GraphElementFrame {
    *
    * @since 3.0.0
    */
-  def df: DataFrame
+  def df: Dataset[Row]
 
   /**
    * Name of the column that contains the graph element identifier.

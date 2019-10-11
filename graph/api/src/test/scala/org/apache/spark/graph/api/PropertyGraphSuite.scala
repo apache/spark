@@ -20,7 +20,7 @@ package org.apache.spark.graph.api
 import org.scalatest.Matchers
 
 import org.apache.spark.graph.api.CypherSession.{ID_COLUMN, LABEL_COLUMN_PREFIX, SOURCE_ID_COLUMN, TARGET_ID_COLUMN}
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{Dataset, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers {
@@ -31,7 +31,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
 
   def cypherSession: CypherSession
 
-  lazy val nodes: DataFrame = spark
+  lazy val nodes: Dataset[Row] = spark
     .createDataFrame(
       Seq(
         (0L, true, true, false, false, Some(42), Some("Alice"), None, None),
@@ -51,7 +51,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
       "subject",
       "title")
 
-  lazy val relationships: DataFrame = spark
+  lazy val relationships: Dataset[Row] = spark
     .createDataFrame(
       Seq(
         (0L, 0L, 1L, true, false),
