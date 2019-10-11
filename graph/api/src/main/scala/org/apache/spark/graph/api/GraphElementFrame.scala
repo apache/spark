@@ -23,18 +23,18 @@ import org.apache.spark.sql.{Dataset, Row}
  * A [[PropertyGraph]] is created from GraphElementFrames.
  *
  * A graph element is either a node or a relationship.
- * A GraphElementFrame wraps a DataFrame and describes how it maps to graph elements.
+ * A GraphElementFrame wraps a Dataset and describes how it maps to graph elements.
  *
  * @since 3.0.0
  */
 abstract class GraphElementFrame {
 
   /**
-   * Initial DataFrame that can still contain unmapped, arbitrarily ordered columns.
+   * Initial Dataset that can still contain unmapped, arbitrarily ordered columns.
    *
    * @since 3.0.0
    */
-  def df: Dataset[Row]
+  def ds: Dataset[Row]
 
   /**
    * Name of the column that contains the graph element identifier.

@@ -20,11 +20,11 @@ package org.apache.spark.graph.api
 import org.apache.spark.sql.{Dataset, Row}
 
 /**
- * Describes how to map a DataFrame to relationships.
+ * Describes how to map a Dataset to relationships.
  *
- * Each row in the DataFrame represents a relationship with the given relationship type.
+ * Each row in the Dataset represents a relationship with the given relationship type.
  *
- * @param df               DataFrame containing a single relationship in each row
+ * @param ds               Dataset containing a single relationship in each row
  * @param idColumn         column that contains the relationship identifier
  * @param sourceIdColumn   column that contains the source node identifier of the relationship
  * @param targetIdColumn   column that contains the target node identifier of the relationship
@@ -33,7 +33,7 @@ import org.apache.spark.sql.{Dataset, Row}
  * @since 3.0.0
  */
 case class RelationshipFrame private[graph] (
-    df: Dataset[Row],
+    ds: Dataset[Row],
     idColumn: String,
     sourceIdColumn: String,
     targetIdColumn: String,

@@ -24,10 +24,10 @@ import org.apache.spark.sql.{Dataset, Row}
 /**
  * Interface used to build a [[NodeFrame]].
  *
- * @param df DataFrame containing a single node in each row
+ * @param ds Dataset containing a single node in each row
  * @since 3.0.0
  */
-final class NodeFrameBuilder(var df: Dataset[Row]) {
+final class NodeFrameBuilder(var ds: Dataset[Row]) {
 
   private var idColumn: String = CypherSession.ID_COLUMN
   private var labelSet: Set[String] = Set.empty
@@ -78,7 +78,7 @@ final class NodeFrameBuilder(var df: Dataset[Row]) {
    * @since 3.0.0
    */
   def build(): NodeFrame = {
-    NodeFrame(df, idColumn, labelSet, properties)
+    NodeFrame(ds, idColumn, labelSet, properties)
   }
 
 }

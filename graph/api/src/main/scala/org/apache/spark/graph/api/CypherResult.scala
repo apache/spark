@@ -22,7 +22,7 @@ import org.apache.spark.sql.{Dataset, Row}
 /**
  * Result of a Cypher query.
  *
- * Wraps a DataFrame that contains the result rows.
+ * Wraps a Dataset that contains the result rows.
  *
  * @since 3.0.0
  */
@@ -40,5 +40,5 @@ sealed trait CypherResult {
    *       (e.g. `MATCH (n:Person) RETURN n` results in the columns `n`, `n:Person` and `n_name`).
    * @since 3.0.0
    */
-  def df: Dataset[Row]
+  def ds: Dataset[Row]
 }

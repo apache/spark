@@ -284,7 +284,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
         Seq((convertId(2L), Some(22), Some("Carol"), Some("CS"), None: Option[String])))
       .toDF(ID_COLUMN, "age", "name", "subject", "title")
 
-    checkAnswer(nodeFrame.df, expectedNodeDf)
+    checkAnswer(nodeFrame.ds, expectedNodeDf)
   }
 
   test("select relationships via type") {
@@ -307,7 +307,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
           (convertId(4L), convertId(3L), convertId(1L))))
       .toDF(ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN)
 
-    checkAnswer(relationshipFrame.df, expectedRelDf)
+    checkAnswer(relationshipFrame.ds, expectedRelDf)
   }
 
   private def label(label: String): String = s"$LABEL_COLUMN_PREFIX$label"

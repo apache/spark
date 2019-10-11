@@ -95,9 +95,9 @@ abstract class PropertyGraph {
   def relationshipFrame(relationshipType: String): RelationshipFrame
 
   /**
-   * Returns a DataFrame that contains a row for each node in this graph.
+   * Returns a Dataset that contains a row for each node in this graph.
    *
-   * The DataFrame adheres to the following column naming conventions:
+   * The Dataset adheres to the following column naming conventions:
    *
    * {{{
    *     Id column:        `$ID`
@@ -111,10 +111,10 @@ abstract class PropertyGraph {
   def nodes: Dataset[Row]
 
   /**
-   * Returns a DataFrame that contains a row for each relationship in this
+   * Returns a Dataset that contains a row for each relationship in this
    * graph.
    *
-   * The DataFrame adheres to column naming conventions:
+   * The Dataset adheres to column naming conventions:
    *
    * {{{
    *     Id column:        `$ID`

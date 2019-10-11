@@ -20,19 +20,19 @@ package org.apache.spark.graph.api
 import org.apache.spark.sql.{Dataset, Row}
 
 /**
- * Describes how to map a DataFrame to nodes.
+ * Describes how to map a Dataset to nodes.
  *
- * Each row in the DataFrame represents a node which has exactly the labels defined by the given
+ * Each row in the Dataset represents a node which has exactly the labels defined by the given
  * label set.
  *
- * @param df         DataFrame containing a single node in each row
+ * @param ds         Dataset containing a single node in each row
  * @param idColumn   column that contains the node identifier
  * @param labelSet   labels that are assigned to all nodes
  * @param properties mapping from property keys to corresponding columns
  * @since 3.0.0
  */
-case class NodeFrame private[graph] (
-    df: Dataset[Row],
+case class NodeFrame private[graph](
+    ds: Dataset[Row],
     idColumn: String,
     labelSet: Set[String],
     properties: Map[String, String])
