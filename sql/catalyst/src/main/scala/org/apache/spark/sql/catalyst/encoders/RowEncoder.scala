@@ -57,6 +57,7 @@ import org.apache.spark.sql.types._
  *   ArrayType -> scala.collection.Seq or Array
  *   MapType -> scala.collection.Map
  *   StructType -> org.apache.spark.sql.Row
+ *   CalendarIntervalType -> java.time.Duration
  * }}}
  */
 object RowEncoder {
@@ -107,6 +108,8 @@ object RowEncoder {
       } else {
         createSerializerForSqlDate(inputObject)
       }
+
+    case CalendarIntervalType => createSerializerForJavaDuration(inputObject)
 
     case d: DecimalType =>
       CheckOverflow(StaticInvoke(
@@ -226,6 +229,7 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Date])
       }
+    case CalendarIntervalType => ObjectType(classOf[java.time.Duration])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
@@ -280,6 +284,8 @@ object RowEncoder {
       } else {
         createDeserializerForSqlDate(input)
       }
+
+    case CalendarIntervalType => createDeserializerForDuration(input)
 
     case _: DecimalType => createDeserializerForJavaBigDecimal(input, returnNullable = false)
 
