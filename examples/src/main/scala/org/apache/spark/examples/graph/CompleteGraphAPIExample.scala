@@ -29,20 +29,23 @@ object CompleteGraphAPIExample {
     val spark = SparkSession
       .builder()
       .appName(s"${this.getClass.getSimpleName}")
+      .config("spark.master", "local")
       .getOrCreate()
     val sc = spark.sparkContext
+    sc.setLogLevel("ERROR")
 
+    val csvConfig = Map("header" -> "true", "delimiter" -> ";")
     // Load node dfs and edge df
-    val userData = spark.read.csv("examples/src/main/resources/mini_yelp/user.csv")
-    val businessData = spark.read.csv("examples/src/main/resources/mini_yelp/business.csv")
-    val reviewData = spark.read.csv("examples/src/main/resources/mini_yelp/review.csv")
+    val userData = spark.read.options(csvConfig).csv("examples/src/main/resources/mini_yelp/user.csv")
+    val businessData = spark.read.options(csvConfig).csv("examples/src/main/resources/mini_yelp/business.csv")
+    val reviewData = spark.read.options(csvConfig).csv("examples/src/main/resources/mini_yelp/reviews.csv")
 
     // Initialise a GraphSession
     val cypherSession = SparkCypherSession.create(spark)
 
     // Create Node- and RelationshipFrames
-    val userNodeFrame = NodeFrame.create(userData, "id", Set("USER"))
-    val businessNodeFrame = NodeFrame.create(businessData, "id", Set("BUSINESS"))
+    val userNodeFrame = NodeFrame.create(userData, "id", Set("User"))
+    val businessNodeFrame = NodeFrame.create(businessData, "id", Set("Business"))
     val reviewRelationshipFrame = RelationshipFrame.create(reviewData, "id", "user", "business", "REVIEWS")
 
 
@@ -51,7 +54,8 @@ object CompleteGraphAPIExample {
 
     // Get existing node labels
     val labelSet = graph.schema.labels
-    print(s"The graph contains nodes with the following labels: ${labelSet.mkString(",")}")
+    println(s"The graph contains nodes with the following labels: ${labelSet.mkString(",")}")
+    println()
 
     val businessNodes = graph.nodeFrame(Array("Business"))
     businessNodes.df.show()
@@ -59,11 +63,11 @@ object CompleteGraphAPIExample {
     // Run parameterized cypher query
     val result = graph.cypher(
       """
-        |MATCH (a:USER)-[r:REVIEWS]->(b:BUSINESS)
+        |MATCH (a:User)-[r:REVIEWS]->(b:Business)
         |WHERE a.name = $name
         |RETURN a, r.rating, b.name""".stripMargin, Map("name" -> "Bob"))
 
-    print("Reviews from Bob")
+    println("Reviews from Bob")
     result.df.show()
 
     // Store the PropertyGraph
