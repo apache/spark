@@ -905,15 +905,8 @@ private[spark] object MapOutputTracker extends Logging {
         for (part <- startPartition until endPartition) {
           val size = status.getSizeForBlock(part)
           if (size != 0) {
-            if (useOldFetchProtocol) {
-              // While we use the old shuffle fetch protocol, we use mapIndex as mapId in the
-              // ShuffleBlockId.
-              splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                ((ShuffleBlockId(shuffleId, mapIndex, part), size, mapIndex))
-            } else {
-              splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                ((ShuffleBlockId(shuffleId, status.mapTaskId, part), size, mapIndex))
-            }
+            splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
+              ((ShuffleBlockId(shuffleId, status.mapTaskId, part), size, mapIndex))
           }
         }
       }
