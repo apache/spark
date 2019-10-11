@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.adaptive.rule
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
+
 import org.apache.spark.MapOutputStatistics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
