@@ -333,15 +333,13 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("encoding/decoding CalendarIntervalType to/from java.time.Duration") {
-    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
-      val schema = new StructType().add("i", CalendarIntervalType)
-      val encoder = RowEncoder(schema).resolveAndBind()
-      val duration = java.time.Duration.parse("P2DT3H4M")
-      val row = encoder.toRow(Row(duration))
-      assert(row.getInterval(0) === DateTimeUtils.durationToInterval(duration))
-      val readback = encoder.fromRow(row)
-      assert(readback.get(0).equals(duration))
-    }
+    val schema = new StructType().add("i", CalendarIntervalType)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val duration = java.time.Duration.parse("P2DT3H4M")
+    val row = encoder.toRow(Row(duration))
+    assert(row.getInterval(0) === DateTimeUtils.durationToInterval(duration))
+    val readback = encoder.fromRow(row)
+    assert(readback.get(0).equals(duration))
   }
 
   for {
