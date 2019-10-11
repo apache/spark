@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Instant, LocalDate, LocalDateTime, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, ZoneOffset}
 import java.util.TimeZone
 
 import scala.reflect.runtime.universe.TypeTag
@@ -70,12 +70,13 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "false") {
       checkEvaluation(Literal.default(DateType), DateTimeUtils.toJavaDate(0))
       checkEvaluation(Literal.default(TimestampType), DateTimeUtils.toJavaTimestamp(0L))
+      checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0L))
     }
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       checkEvaluation(Literal.default(DateType), LocalDate.ofEpochDay(0))
       checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
+      checkEvaluation(Literal.default(CalendarIntervalType), Duration.ofSeconds(0))
     }
-    checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0L))
     checkEvaluation(Literal.default(ArrayType(StringType)), Array())
     checkEvaluation(Literal.default(MapType(IntegerType, StringType)), Map())
     checkEvaluation(Literal.default(StructType(StructField("a", StringType) :: Nil)), Row(""))
