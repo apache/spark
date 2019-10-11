@@ -593,7 +593,7 @@ class DataFrameWriter(OptionUtils):
 
         * `append`: Append contents of this :class:`DataFrame` to existing data.
         * `overwrite`: Overwrite existing data.
-        * `error` or `errorifexists`: Throw an exception if data already exists.
+        * `error`, `errorifexists`, `default`: Throw an exception if data already exists.
         * `ignore`: Silently ignore this operation if data already exists.
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
