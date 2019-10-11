@@ -40,68 +40,68 @@ import java.util.List;
 import static org.apache.spark.sql.types.DataTypes.*;
 
 public abstract class JavaPropertyGraphSuite implements Serializable {
-    private transient TestSparkSession spark;
-    private transient CypherSession cypherSession;
+  private transient TestSparkSession spark;
+  private transient CypherSession cypherSession;
 
-    abstract CypherSession getCypherSession(SparkSession sparkSession);
+  abstract CypherSession getCypherSession(SparkSession sparkSession);
 
-    @Before
-    public void setUp() {
-        spark = new TestSparkSession();
-        cypherSession = getCypherSession(spark);
+  @Before
+  public void setUp() {
+    spark = new TestSparkSession();
+    cypherSession = getCypherSession(spark);
+  }
+
+  @After
+  public void tearDown() {
+    spark.stop();
+    spark = null;
+  }
+
+  @Test
+  public void testCreateFromNodeFrame() {
+    StructType personSchema = createSchema(
+      Lists.newArrayList("id", "name"),
+      Lists.newArrayList(LongType, StringType));
+
+    List<Row> personData = Arrays.asList(
+      RowFactory.create(0L, "Alice"),
+      RowFactory.create(1L, "Bob"));
+
+    StructType knowsSchema = createSchema(
+      Lists.newArrayList("id", "source", "target", "since"),
+      Lists.newArrayList(LongType, LongType, LongType, IntegerType));
+
+    List<Row> knowsData = Collections.singletonList(RowFactory.create(0L, 0L, 1L, 1984));
+
+    Dataset<Row> personDf = spark.createDataFrame(personData, personSchema);
+    NodeFrame personNodeFrame = cypherSession.buildNodeFrame(personDf)
+      .idColumn("id")
+      .labelSet(new String[]{"Person"})
+      .properties(Collections.singletonMap("name", "name"))
+      .build();
+
+    Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
+    RelationshipFrame knowsRelFrame = cypherSession.buildRelationshipFrame(knowsDf)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("KNOWS")
+      .properties(Collections.singletonMap("since", "since"))
+      .build();
+
+
+    PropertyGraph graph = cypherSession.createGraph(
+      new NodeFrame[]{personNodeFrame},
+      new RelationshipFrame[]{knowsRelFrame});
+    List<Row> result = graph.nodes().collectAsList();
+    Assert.assertEquals(2, result.size());
+  }
+
+  private StructType createSchema(List<String> fieldNames, List<DataType> dataTypes) {
+    List<StructField> fields = new ArrayList<>();
+    for (int i = 0; i < fieldNames.size(); i++) {
+      fields.add(createStructField(fieldNames.get(i), dataTypes.get(i), true));
     }
-
-    @After
-    public void tearDown() {
-        spark.stop();
-        spark = null;
-    }
-
-    @Test
-    public void testCreateFromNodeFrame() {
-        StructType personSchema = createSchema(
-            Lists.newArrayList("id", "name"),
-            Lists.newArrayList(LongType, StringType));
-
-        List<Row> personData = Arrays.asList(
-            RowFactory.create(0L, "Alice"),
-            RowFactory.create(1L, "Bob"));
-
-        StructType knowsSchema = createSchema(
-            Lists.newArrayList("id", "source", "target", "since"),
-            Lists.newArrayList(LongType, LongType, LongType, IntegerType));
-
-        List<Row> knowsData = Collections.singletonList(RowFactory.create(0L, 0L, 1L, 1984));
-
-        Dataset<Row> personDf = spark.createDataFrame(personData, personSchema);
-        NodeFrame personNodeFrame = cypherSession.buildNodeFrame(personDf)
-            .idColumn("id")
-            .labelSet(new String[]{"Person"})
-            .properties(Collections.singletonMap("name", "name"))
-            .build();
-
-        Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
-        RelationshipFrame knowsRelFrame = cypherSession.buildRelationshipFrame(knowsDf)
-            .idColumn("id")
-            .sourceIdColumn("source")
-            .targetIdColumn("target")
-            .relationshipType("KNOWS")
-            .properties(Collections.singletonMap("since", "since"))
-            .build();
-
-
-        PropertyGraph graph = cypherSession.createGraph(
-            new NodeFrame[]{personNodeFrame},
-            new RelationshipFrame[]{knowsRelFrame});
-        List<Row> result = graph.nodes().collectAsList();
-        Assert.assertEquals(2, result.size());
-    }
-
-    private StructType createSchema(List<String> fieldNames, List<DataType> dataTypes) {
-        List<StructField> fields = new ArrayList<>();
-        for (int i = 0; i < fieldNames.size(); i++) {
-            fields.add(createStructField(fieldNames.get(i), dataTypes.get(i), true));
-        }
-        return createStructType(fields);
-    }
+    return createStructType(fields);
+  }
 }
