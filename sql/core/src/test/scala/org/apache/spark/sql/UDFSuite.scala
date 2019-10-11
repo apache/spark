@@ -516,6 +516,14 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Using java.time.Duration in UDF") {
+    val expected = java.time.Duration.ofMinutes(40).plusDays(1)
+    val plusDay = udf((i: java.time.Duration) => i.plusDays(1))
+    val df = spark.sql("SELECT interval 40 minutes as i")
+      .select(plusDay('i))
+    assert(df.collect().toSeq === Seq(Row(expected)))
+  }
+
   test("SPARK-28321 0-args Java UDF should not be called only once") {
     val nonDeterministicJavaUDF = udf(
       new UDF0[Int] {
