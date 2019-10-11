@@ -19,7 +19,7 @@ package org.apache.spark.examples.graph
 // $example on$
 
 import org.apache.spark.cypher.SparkCypherSession
-import org.apache.spark.graph.api.{NodeFrame, PropertyGraph, RelationshipFrame}
+import org.apache.spark.graph.api.PropertyGraph
 import org.apache.spark.sql.{SaveMode, SparkSession}
 
 import scala.io.StdIn
@@ -31,7 +31,7 @@ object CompleteGraphAPIExample {
     val spark = SparkSession
       .builder()
       .appName(s"${this.getClass.getSimpleName}")
-      .config("spark.master", "local")
+      .config("spark.master", "local[*]")
       .getOrCreate()
     val sc = spark.sparkContext
     sc.setLogLevel("ERROR")
@@ -48,9 +48,22 @@ object CompleteGraphAPIExample {
     val cypherSession = SparkCypherSession.create(spark)
 
     // Create Node- and RelationshipFrames
-    val moviesNodeFrame = NodeFrame.create(moviesData, "id", Set("Movie"))
-    val personsNodeFrame = NodeFrame.create(personsData, "id", Set("Person"))
-    val actedInRelationshipFrame = RelationshipFrame.create(actedInData, "id", "source", "target", "ACTED_IN")
+    val moviesNodeFrame = cypherSession.buildNodeFrame(moviesData)
+      .idColumn("id")
+      .labelSet(Array("Movie"))
+      .properties(Map("title" -> "title"))
+      .build()
+    val personsNodeFrame = cypherSession.buildNodeFrame(personsData)
+      .idColumn("id")
+      .labelSet(Array("Person"))
+      .properties(Map("name" -> "name"))
+      .build()
+    val actedInRelationshipFrame = cypherSession.buildRelationshipFrame(actedInData)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("ACTED_IN")
+      .build()
 
 
     // Create a PropertyGraph
@@ -77,11 +90,10 @@ object CompleteGraphAPIExample {
 
     // Store the PropertyGraph
     val savePath = "examples/src/main/resources/exampleGraph/"
-    graph.save(savePath, SaveMode.Overwrite)
+    graph.write.mode(SaveMode.Overwrite).save(savePath)
 
     // Load the PropertyGraph
-    val importedGraph = cypherSession.load(savePath)
-
+    val importedGraph = cypherSession.read.load(savePath)
 
     spark.stop()
   }

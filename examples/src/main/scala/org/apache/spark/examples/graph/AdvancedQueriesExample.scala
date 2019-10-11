@@ -19,7 +19,7 @@ package org.apache.spark.examples.graph
 // $example on$
 
 import org.apache.spark.cypher.SparkCypherSession
-import org.apache.spark.graph.api.{NodeFrame, PropertyGraph, RelationshipFrame}
+import org.apache.spark.graph.api.PropertyGraph
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 
@@ -32,7 +32,7 @@ object AdvancedQueriesExample {
     val spark = SparkSession
       .builder()
       .appName(s"${this.getClass.getSimpleName}")
-      .config("spark.master", "local")
+      .config("spark.master", "local[*]")
       .getOrCreate()
     val sc = spark.sparkContext
     sc.setLogLevel("ERROR")
@@ -60,15 +60,55 @@ object AdvancedQueriesExample {
     val cypherSession = SparkCypherSession.create(spark)
 
     // Create Node- and RelationshipFrames
-    val moviesNodeFrame = NodeFrame.create(moviesData, "id", Set("Movie"))
-    val personsNodeFrame = NodeFrame.create(personsData, "id", Set("Person"))
+    val moviesNodeFrame = cypherSession.buildNodeFrame(moviesData)
+      .idColumn("id")
+      .labelSet(Array("Movie"))
+      .properties(Map("title" -> "title"))
+      .build()
+    val personsNodeFrame = cypherSession.buildNodeFrame(personsData)
+      .idColumn("id")
+      .labelSet(Array("Person"))
+      .properties(Map("name" -> "name"))
+      .build()
 
-    val actedInRelationshipFrame = RelationshipFrame.create(actedInData, "id", "source", "target", "ACTED_IN")
-    val directedRelationshipFrame = RelationshipFrame.create(directedData, "id", "source", "target", "DIRECTED")
-    val followsRelationshipFrame = RelationshipFrame.create(followsData, "id", "source", "target", "FOLLOWS")
-    val producedRelationshipFrame = RelationshipFrame.create(producedData, "id", "source", "target", "PRODUCED")
-    val reviewedRelationshipFrame = RelationshipFrame.create(reviewedData, "id", "source", "target", "REVIEWED")
-    val wroteRelationshipFrame = RelationshipFrame.create(wroteData, "id", "source", "target", "WROTE")
+    val actedInRelationshipFrame = cypherSession.buildRelationshipFrame(actedInData)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("ACTED_IN")
+      .properties(Map("roles" -> "roles"))
+      .build()
+    val directedRelationshipFrame = cypherSession.buildRelationshipFrame(directedData)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("DIRECTED")
+      .build()
+    val followsRelationshipFrame  = cypherSession.buildRelationshipFrame(followsData)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("FOLLOWS")
+      .build()
+    val producedRelationshipFrame = cypherSession.buildRelationshipFrame(producedData)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("PRODUCED")
+      .build()
+    val reviewedRelationshipFrame = cypherSession.buildRelationshipFrame(reviewedData)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("REVIEWED")
+      .properties(Map("rating" -> "rating"))
+      .build()
+    val wroteRelationshipFrame    = cypherSession.buildRelationshipFrame(wroteData)
+      .idColumn("id")
+      .sourceIdColumn("source")
+      .targetIdColumn("target")
+      .relationshipType("WROTE")
+      .build()
     val relationshipFrames = Array(actedInRelationshipFrame, directedRelationshipFrame, followsRelationshipFrame,
       producedRelationshipFrame, reviewedRelationshipFrame, wroteRelationshipFrame)
 
@@ -99,9 +139,10 @@ object AdvancedQueriesExample {
     StdIn.readLine("Press Enter to continue: ")
 
     // TODO: Does this query take too long?
+    //  -- yes :/
     val nearKevinBacon = graph.cypher(
       """
-        |MATCH (bacon:Person {name:"Kevin Bacon"})-[*1..3]-(hollywood)
+        |MATCH (bacon:Person {name:"Kevin Bacon"})-[*1..2]-(hollywood)
         |RETURN DISTINCT hollywood""".stripMargin)
 
     println("""Movies and actors up to 2 "hops" away from Kevin Bacon""")

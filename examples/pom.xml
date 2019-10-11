@@ -85,6 +85,12 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>compile</scope>
@@ -123,9 +129,6 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>com.github.scopt</groupId>
-      <artifactId>scopt_${scala.binary.version}</artifactId>
-      <version>3.7.1</version>
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
       <scope>compile</scope>

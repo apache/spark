@@ -19,6 +19,7 @@ package org.apache.spark.examples.graph
 // $example on$
 
 import org.apache.spark.cypher.SparkCypherSession
+import org.apache.spark.graph.api.CypherSession
 // $example off$
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
@@ -29,14 +30,15 @@ object SimpleExample {
     val spark = SparkSession
       .builder()
       .appName(s"${this.getClass.getSimpleName}")
+      .config("spark.master", "local[*]")
       .getOrCreate()
     val sc = spark.sparkContext
 
     // Create node df and edge df
-    val nodeData: DataFrame = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob"))
-      .toDF("id", "name")
-    val relationshipData: DataFrame = spark.createDataFrame(Seq((0, 0, 1)))
-      .toDF("id", "source", "target")
+    val nodeData: DataFrame = spark.createDataFrame(Seq((0, "Alice", true), (1, "Bob", true)))
+      .toDF(CypherSession.ID_COLUMN, "name", ":Person")
+    val relationshipData: DataFrame = spark.createDataFrame(Seq((0, 0, 1, true)))
+      .toDF(CypherSession.ID_COLUMN, CypherSession.SOURCE_ID_COLUMN, CypherSession.TARGET_ID_COLUMN, ":KNOWS")
 
     // Initialise a GraphSession
     val cypherSession = SparkCypherSession.create(spark)
