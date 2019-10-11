@@ -20,7 +20,7 @@ package org.apache.spark.graph.api
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.{BooleanType, StructType}
 
 /**
@@ -143,7 +143,7 @@ trait CypherSession extends Logging {
   /**
    * Creates a [[PropertyGraph]] from nodes and relationships.
    *
-   * The given DataFrames need to adhere to the following column naming conventions:
+   * The given dataset needs to adhere to the following column naming conventions:
    *
    * {{{
    *     Id column:        `$ID`            (nodes and relationships)
@@ -156,15 +156,15 @@ trait CypherSession extends Logging {
    *     Property columns: `{Property_Key}` (nodes and relationships)
    * }}}
    *
-   * @note It is recommended to cache the input DataFrames if they represent multiple label sets and
+   * @note It is recommended to cache the input datasets if they represent multiple label sets and
    *       relationship types.
    *
    * @see [[CypherSession]]
-   * @param nodes         node DataFrame
-   * @param relationships relationship DataFrame
+   * @param nodes         node dataset
+   * @param relationships relationship dataset
    * @since 3.0.0
    */
-  def createGraph(nodes: DataFrame, relationships: DataFrame): PropertyGraph = {
+  def createGraph(nodes: Dataset[Row], relationships: Dataset[Row]): PropertyGraph = {
     def validateLabelColumns(schema: StructType, columns: Set[String]): Unit = {
       schema.fields
         .filter(f => columns.contains(f.name))
@@ -243,19 +243,19 @@ trait CypherSession extends Logging {
   /**
    * Returns a [[NodeFrameBuilder]] that can be used to construct a [[NodeFrame]].
    *
-   * @param df DataFrame containing a single node in each row
+   * @param ds Dataset containing a single node in each row
    * @since 3.0.0
    */
-  def buildNodeFrame(df: DataFrame): NodeFrameBuilder =
-    new NodeFrameBuilder(df)
+  def buildNodeFrame(ds: Dataset[Row]): NodeFrameBuilder =
+    new NodeFrameBuilder(ds)
 
   /**
    * Returns a [[RelationshipFrameBuilder]] that can be used to construct a [[RelationshipFrame]].
    *
-   * @param df DataFrame containing a single relationship in each row
+   * @param ds Dataset containing a single relationship in each row
    * @since 3.0.0
    */
-  def buildRelationshipFrame(df: DataFrame): RelationshipFrameBuilder =
-    new RelationshipFrameBuilder(df)
+  def buildRelationshipFrame(ds: Dataset[Row]): RelationshipFrameBuilder =
+    new RelationshipFrameBuilder(ds)
 
 }

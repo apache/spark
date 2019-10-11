@@ -18,12 +18,13 @@
 
 package org.apache.spark.cypher
 
-import org.apache.spark.graph.api.CypherSession._
+import org.scalatest.Matchers
+
 import org.apache.spark.graph.api.{CypherSession, NodeFrame, RelationshipFrame}
+import org.apache.spark.graph.api.CypherSession._
+import org.apache.spark.sql.{Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.NumberConverter
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.scalatest.Matchers
 
 class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers {
 
@@ -33,7 +34,7 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
 
   def cypherSession: CypherSession = SparkCypherSession.create
 
-  lazy val nodes: DataFrame = spark
+  lazy val nodes: Dataset[Row] = spark
     .createDataFrame(
       Seq(
         (0L, true, true, false, false, Some(42), Some("Alice"), None, None),
@@ -53,7 +54,7 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
       "subject",
       "title")
 
-  lazy val relationships: DataFrame = spark
+  lazy val relationships: Dataset[Row] = spark
     .createDataFrame(
       Seq(
         (0L, 0L, 1L, true, false),

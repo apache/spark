@@ -17,9 +17,9 @@
 
 package org.apache.spark.graph.api
 
-import org.apache.spark.sql.DataFrame
-
 import scala.collection.JavaConverters._
+
+import org.apache.spark.sql.{Dataset, Row}
 
 /**
  * Interface used to build a [[NodeFrame]].
@@ -27,7 +27,7 @@ import scala.collection.JavaConverters._
  * @param df DataFrame containing a single node in each row
  * @since 3.0.0
  */
-final class NodeFrameBuilder(var df: DataFrame) {
+final class NodeFrameBuilder(var df: Dataset[Row]) {
 
   private var idColumn: String = CypherSession.ID_COLUMN
   private var labelSet: Set[String] = Set.empty

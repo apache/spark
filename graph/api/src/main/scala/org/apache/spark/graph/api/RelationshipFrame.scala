@@ -17,7 +17,7 @@
 
 package org.apache.spark.graph.api
 
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Dataset, Row}
 
 /**
  * Describes how to map a DataFrame to relationships.
@@ -33,13 +33,13 @@ import org.apache.spark.sql.DataFrame
  * @since 3.0.0
  */
 case class RelationshipFrame private[graph] (
-    df: DataFrame,
+    df: Dataset[Row],
     idColumn: String,
     sourceIdColumn: String,
     targetIdColumn: String,
     relationshipType: String,
     properties: Map[String, String])
-    extends GraphElementFrame {
+  extends GraphElementFrame {
 
   override def idColumns: Seq[String] = Seq(idColumn, sourceIdColumn, targetIdColumn)
 

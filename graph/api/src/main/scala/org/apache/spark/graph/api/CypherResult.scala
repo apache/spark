@@ -17,7 +17,7 @@
 
 package org.apache.spark.graph.api
 
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Dataset, Row}
 
 /**
  * Result of a Cypher query.
@@ -40,5 +40,5 @@ trait CypherResult {
    *       (e.g. `MATCH (n:Person) RETURN n` results in the columns `n`, `n:Person` and `n_name`).
    * @since 3.0.0
    */
-  def df: DataFrame
+  def df: Dataset[Row]
 }

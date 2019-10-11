@@ -17,7 +17,7 @@
 
 package org.apache.spark.graph.api
 
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Dataset, Row}
 
 /**
  * A Property Graph as defined by the openCypher Property Graph Data Model.
@@ -108,7 +108,7 @@ abstract class PropertyGraph {
    * @see `org.apache.spark.graph.api.CypherSession.createGraph(nodes, relationships)`
    * @since 3.0.0
    */
-  def nodes: DataFrame
+  def nodes: Dataset[Row]
 
   /**
    * Returns a DataFrame that contains a row for each relationship in this
@@ -127,7 +127,7 @@ abstract class PropertyGraph {
    * @see `org.apache.spark.graph.api.CypherSession.createGraph(nodes, relationships)`
    * @since 3.0.0
    */
-  def relationships: DataFrame
+  def relationships: Dataset[Row]
 
   /**
    * Interface for saving this `PropertyGraph` out into external storage.
