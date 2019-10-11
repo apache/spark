@@ -21,7 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * Functions to convert Scala types to Catalyst types and vice versa.
@@ -74,6 +74,7 @@ object CatalystTypeConverters {
       case LongType => LongConverter
       case FloatType => FloatConverter
       case DoubleType => DoubleConverter
+      case CalendarIntervalType => DurationConverter
       case dataType: DataType => IdentityConverter(dataType)
     }
     converter.asInstanceOf[CatalystTypeConverter[Any, Any, Any]]
@@ -341,6 +342,16 @@ object CatalystTypeConverters {
       DateTimeUtils.microsToInstant(row.getLong(column))
   }
 
+  private object DurationConverter extends CatalystTypeConverter[Duration, Duration, Any] {
+    override def toCatalystImpl(scalaValue: Duration): CalendarInterval =
+      DateTimeUtils.durationToInterval(scalaValue)
+    override def toScala(catalystValue: Any): Duration =
+      if (catalystValue == null) null
+      else DateTimeUtils.intervalToDuration(catalystValue.asInstanceOf[CalendarInterval])
+    override def toScalaImpl(row: InternalRow, column: Int): Duration =
+      DateTimeUtils.intervalToDuration(row.getInterval(column))
+  }
+
   private class DecimalConverter(dataType: DecimalType)
     extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
 
@@ -462,6 +473,7 @@ object CatalystTypeConverters {
         map,
         (key: Any) => convertToCatalyst(key),
         (value: Any) => convertToCatalyst(value))
+    case d: Duration => DurationConverter.toCatalyst(d)
     case other => other
   }
 

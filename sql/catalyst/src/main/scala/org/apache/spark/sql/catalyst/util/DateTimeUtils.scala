@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit._
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * Helper functions for converting between internal and external date and time representations.
@@ -958,5 +958,15 @@ object DateTimeUtils {
     } else {
       None
     }
+  }
+
+  def durationToInterval(duration: Duration): CalendarInterval = {
+    val micros = duration.getSeconds * MICROS_PER_SECOND + duration.getNano / NANOS_PER_MICROS
+    new CalendarInterval(0, micros)
+  }
+
+  def intervalToDuration(interval: CalendarInterval): Duration = {
+    val microsDuration = Duration.ofNanos(interval.microseconds * NANOS_PER_MICROS)
+    microsDuration.plusSeconds(interval.months * SECONDS_PER_MONTH)
   }
 }
