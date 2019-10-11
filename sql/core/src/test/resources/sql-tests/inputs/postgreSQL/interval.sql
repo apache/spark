@@ -23,8 +23,8 @@
 -- SELECT INTERVAL '1.5 months' AS `One month 15 days`;
 -- SELECT INTERVAL '10 years -11 month -12 days +13:14' AS `9 years...`;
 
--- [SPARK-29382] Support the `INTERVAL` type by Parquet datasource
--- CREATE TABLE INTERVAL_TBL (f1 interval) USING parquet;
+-- [SPARK-29382] Support writing `INTERVAL` type to datasource table
+-- CREATE TABLE INTERVAL_TBL (f1 interval);
 
 -- [SPARK-29383] Support the optional prefix `@` in interval strings
 -- INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 1 minute');
