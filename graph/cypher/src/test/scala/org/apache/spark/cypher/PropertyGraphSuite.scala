@@ -32,6 +32,12 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
 
   def convertId(inputId: Long): IdType = NumberConverter.toBinary(inputId)
 
+  /**
+   * This method is supposed to return an implementation of [[CypherSession]]
+   * from a module that depends on spark-graph-api (e.g. spark-cypher).
+   *
+   * This allows us to run the same tests on arbitrary implementations.
+   */
   def cypherSession: CypherSession = SparkCypherSession.create
 
   lazy val nodes: Dataset[Row] = spark
