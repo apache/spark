@@ -2218,5 +2218,11 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       }.toDF
 
     checkAnswer(df3, Row(7) :: Row(9) :: Nil)
+
+    // Assert that no extra shuffle introduced by cogroup.
+    val exchanges = df3.queryExecution.executedPlan.collect {
+      case h: ShuffleExchangeExec => h
+    }
+    assert(exchanges.size == 2)
   }
 }
