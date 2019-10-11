@@ -111,14 +111,13 @@ public final class CalendarInterval implements Serializable {
     }
 
     long months = toLong(m.group(1)) * 12 + toLong(m.group(2));
-    long microseconds = toLong(m.group(3)) * MICROS_PER_WEEK;
-    microseconds += toLong(m.group(4)) * MICROS_PER_DAY;
-    microseconds += toLong(m.group(5)) * MICROS_PER_HOUR;
+    long days = toLong(m.group(3)) * 7 + toLong(m.group(4));
+    long microseconds = toLong(m.group(5)) * MICROS_PER_HOUR;
     microseconds += toLong(m.group(6)) * MICROS_PER_MINUTE;
     microseconds += toLong(m.group(7)) * MICROS_PER_SECOND;
     microseconds += toLong(m.group(8)) * MICROS_PER_MILLI;
     microseconds += toLong(m.group(9));
-    return new CalendarInterval((int) months, microseconds);
+    return new CalendarInterval((int) months, (int) days, microseconds);
   }
 
   public static long toLongWithRange(String fieldName,
@@ -154,7 +153,7 @@ public final class CalendarInterval implements Serializable {
         int sign = m.group(1) != null && m.group(1).equals("-") ? -1 : 1;
         int years = (int) toLongWithRange("year", m.group(2), 0, Integer.MAX_VALUE);
         int months = (int) toLongWithRange("month", m.group(3), 0, 11);
-        result = new CalendarInterval(sign * (years * 12 + months), 0);
+        result = new CalendarInterval(sign * (years * 12 + months), 0, 0);
       } catch (Exception e) {
         throw new IllegalArgumentException(
           "Error parsing interval year-month string: " + e.getMessage(), e);
@@ -195,7 +194,7 @@ public final class CalendarInterval implements Serializable {
     } else {
       try {
         int sign = m.group(1) != null && m.group(1).equals("-") ? -1 : 1;
-        long days = m.group(2) == null ? 0 : toLongWithRange("day", m.group(3),
+        int days = m.group(2) == null ? 0 : (int) toLongWithRange("day", m.group(3),
           0, Integer.MAX_VALUE);
         long hours = 0;
         long minutes;
@@ -231,8 +230,8 @@ public final class CalendarInterval implements Serializable {
             throw new IllegalArgumentException(
               String.format("Cannot support (interval '%s' %s to %s) expression", s, from, to));
         }
-        result = new CalendarInterval(0, sign * (
-          days * MICROS_PER_DAY + hours * MICROS_PER_HOUR + minutes * MICROS_PER_MINUTE +
+        result = new CalendarInterval(0, sign * days, sign * (
+          hours * MICROS_PER_HOUR + minutes * MICROS_PER_MINUTE +
           seconds * MICROS_PER_SECOND + nanos / 1000L));
       } catch (Exception e) {
         throw new IllegalArgumentException(
@@ -260,46 +259,46 @@ public final class CalendarInterval implements Serializable {
           case "year":
             int year = (int) toLongWithRange("year", m.group(1),
               Integer.MIN_VALUE / 12, Integer.MAX_VALUE / 12);
-            result = new CalendarInterval(year * 12, 0L);
+            result = new CalendarInterval(year * 12, 0, 0L);
             break;
           case "month":
             int month = (int) toLongWithRange("month", m.group(1),
               Integer.MIN_VALUE, Integer.MAX_VALUE);
-            result = new CalendarInterval(month, 0L);
+            result = new CalendarInterval(month, 0, 0L);
             break;
           case "week":
-            long week = toLongWithRange("week", m.group(1),
-              Long.MIN_VALUE / MICROS_PER_WEEK, Long.MAX_VALUE / MICROS_PER_WEEK);
-            result = new CalendarInterval(0, week * MICROS_PER_WEEK);
+            int week = (int) toLongWithRange("week", m.group(1),
+              Integer.MIN_VALUE / 7, Integer.MAX_VALUE / 7);
+            result = new CalendarInterval(0, week * 7, 0L);
             break;
           case "day":
-            long day = toLongWithRange("day", m.group(1),
-              Long.MIN_VALUE / MICROS_PER_DAY, Long.MAX_VALUE / MICROS_PER_DAY);
-            result = new CalendarInterval(0, day * MICROS_PER_DAY);
+            int day = (int) toLongWithRange("day", m.group(1),
+              Integer.MIN_VALUE, Integer.MAX_VALUE);
+            result = new CalendarInterval(0, day, 0L);
             break;
           case "hour":
             long hour = toLongWithRange("hour", m.group(1),
               Long.MIN_VALUE / MICROS_PER_HOUR, Long.MAX_VALUE / MICROS_PER_HOUR);
-            result = new CalendarInterval(0, hour * MICROS_PER_HOUR);
+            result = new CalendarInterval(0, 0, hour * MICROS_PER_HOUR);
             break;
           case "minute":
             long minute = toLongWithRange("minute", m.group(1),
               Long.MIN_VALUE / MICROS_PER_MINUTE, Long.MAX_VALUE / MICROS_PER_MINUTE);
-            result = new CalendarInterval(0, minute * MICROS_PER_MINUTE);
+            result = new CalendarInterval(0, 0, minute * MICROS_PER_MINUTE);
             break;
           case "second": {
             long micros = parseSecondNano(m.group(1));
-            result = new CalendarInterval(0, micros);
+            result = new CalendarInterval(0, 0, micros);
             break;
           }
           case "millisecond":
             long millisecond = toLongWithRange("millisecond", m.group(1),
               Long.MIN_VALUE / MICROS_PER_MILLI, Long.MAX_VALUE / MICROS_PER_MILLI);
-            result = new CalendarInterval(0, millisecond * MICROS_PER_MILLI);
+            result = new CalendarInterval(0, 0, millisecond * MICROS_PER_MILLI);
             break;
           case "microsecond": {
             long micros = Long.parseLong(m.group(1));
-            result = new CalendarInterval(0, micros);
+            result = new CalendarInterval(0, 0, micros);
             break;
           }
         }
@@ -332,31 +331,42 @@ public final class CalendarInterval implements Serializable {
   }
 
   public final int months;
+  public final int days;
   public final long microseconds;
 
   public long milliseconds() {
     return this.microseconds / MICROS_PER_MILLI;
   }
 
+  // TODO: Keep this temporarily to pass compile
   public CalendarInterval(int months, long microseconds) {
     this.months = months;
+    this.days = 0;
+    this.microseconds = microseconds;
+  }
+
+  public CalendarInterval(int months, int days, long microseconds) {
+    this.months = months;
+    this.days = days;
     this.microseconds = microseconds;
   }
 
   public CalendarInterval add(CalendarInterval that) {
     int months = this.months + that.months;
+    int days = this.days + that.days;
     long microseconds = this.microseconds + that.microseconds;
-    return new CalendarInterval(months, microseconds);
+    return new CalendarInterval(months, days, microseconds);
   }
 
   public CalendarInterval subtract(CalendarInterval that) {
     int months = this.months - that.months;
+    int days = this.days - that.days;
     long microseconds = this.microseconds - that.microseconds;
-    return new CalendarInterval(months, microseconds);
+    return new CalendarInterval(months, days, microseconds);
   }
 
   public CalendarInterval negate() {
-    return new CalendarInterval(-this.months, -this.microseconds);
+    return new CalendarInterval(-this.months, -this.days, -this.microseconds);
   }
 
   @Override
@@ -365,12 +375,12 @@ public final class CalendarInterval implements Serializable {
     if (other == null || !(other instanceof CalendarInterval)) return false;
 
     CalendarInterval o = (CalendarInterval) other;
-    return this.months == o.months && this.microseconds == o.microseconds;
+    return this.months == o.months && this.days == o.days && this.microseconds == o.microseconds;
   }
 
   @Override
   public int hashCode() {
-    return 31 * months + (int) microseconds;
+    return 31 * (31 * months + days) + (int) microseconds;
   }
 
   @Override
@@ -382,12 +392,13 @@ public final class CalendarInterval implements Serializable {
       appendUnit(sb, months % 12, "month");
     }
 
+    if (days != 0) {
+      appendUnit(sb, days / 7, "week");
+      appendUnit(sb, days % 7, "day");
+    }
+
     if (microseconds != 0) {
       long rest = microseconds;
-      appendUnit(sb, rest / MICROS_PER_WEEK, "week");
-      rest %= MICROS_PER_WEEK;
-      appendUnit(sb, rest / MICROS_PER_DAY, "day");
-      rest %= MICROS_PER_DAY;
       appendUnit(sb, rest / MICROS_PER_HOUR, "hour");
       rest %= MICROS_PER_HOUR;
       appendUnit(sb, rest / MICROS_PER_MINUTE, "minute");
@@ -397,7 +408,7 @@ public final class CalendarInterval implements Serializable {
       appendUnit(sb, rest / MICROS_PER_MILLI, "millisecond");
       rest %= MICROS_PER_MILLI;
       appendUnit(sb, rest, "microsecond");
-    } else if (months == 0) {
+    } else if (months == 0 && days == 0) {
       sb.append(" 0 microseconds");
     }
 

@@ -28,53 +28,66 @@ public class CalendarIntervalSuite {
 
   @Test
   public void equalsTest() {
-    CalendarInterval i1 = new CalendarInterval(3, 123);
-    CalendarInterval i2 = new CalendarInterval(3, 321);
-    CalendarInterval i3 = new CalendarInterval(1, 123);
-    CalendarInterval i4 = new CalendarInterval(3, 123);
+    CalendarInterval i1 = new CalendarInterval(3, 2, 123);
+    CalendarInterval i2 = new CalendarInterval(3, 2,321);
+    CalendarInterval i3 = new CalendarInterval(3, 4,123);
+    CalendarInterval i4 = new CalendarInterval(1, 2, 123);
+    CalendarInterval i5 = new CalendarInterval(1, 4, 321);
+    CalendarInterval i6 = new CalendarInterval(3, 2, 123);
 
     assertNotSame(i1, i2);
     assertNotSame(i1, i3);
+    assertNotSame(i1, i4);
     assertNotSame(i2, i3);
-    assertEquals(i1, i4);
+    assertNotSame(i2, i4);
+    assertNotSame(i3, i4);
+    assertNotSame(i1, i5);
+    assertEquals(i1, i6);
   }
 
   @Test
   public void toStringTest() {
     CalendarInterval i;
 
-    i = new CalendarInterval(0, 0);
+    i = new CalendarInterval(0, 0, 0);
     assertEquals("interval 0 microseconds", i.toString());
 
-    i = new CalendarInterval(34, 0);
+    i = new CalendarInterval(34, 0, 0);
     assertEquals("interval 2 years 10 months", i.toString());
 
-    i = new CalendarInterval(-34, 0);
+    i = new CalendarInterval(-34, 0, 0);
     assertEquals("interval -2 years -10 months", i.toString());
 
-    i = new CalendarInterval(0, 3 * MICROS_PER_WEEK + 13 * MICROS_PER_HOUR + 123);
-    assertEquals("interval 3 weeks 13 hours 123 microseconds", i.toString());
+    i = new CalendarInterval(0, 31, 0);
+    assertEquals("interval 4 weeks 3 days", i.toString());
 
-    i = new CalendarInterval(0, -3 * MICROS_PER_WEEK - 13 * MICROS_PER_HOUR - 123);
-    assertEquals("interval -3 weeks -13 hours -123 microseconds", i.toString());
+    i = new CalendarInterval(0, -31, 0);
+    assertEquals("interval -4 weeks -3 days", i.toString());
 
-    i = new CalendarInterval(34, 3 * MICROS_PER_WEEK + 13 * MICROS_PER_HOUR + 123);
-    assertEquals("interval 2 years 10 months 3 weeks 13 hours 123 microseconds", i.toString());
+    i = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
+    assertEquals("interval 3 hours 13 minutes 123 microseconds", i.toString());
+
+    i = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123);
+    assertEquals("interval -3 hours -13 minutes -123 microseconds", i.toString());
+
+    i = new CalendarInterval(34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
+    assertEquals("interval 2 years 10 months 4 weeks 3 days 3 hours 13 minutes 123 microseconds",
+      i.toString());
   }
 
   @Test
   public void fromStringTest() {
-    testSingleUnit("year", 3, 36, 0);
-    testSingleUnit("month", 3, 3, 0);
-    testSingleUnit("week", 3, 0, 3 * MICROS_PER_WEEK);
-    testSingleUnit("day", 3, 0, 3 * MICROS_PER_DAY);
-    testSingleUnit("hour", 3, 0, 3 * MICROS_PER_HOUR);
-    testSingleUnit("minute", 3, 0, 3 * MICROS_PER_MINUTE);
-    testSingleUnit("second", 3, 0, 3 * MICROS_PER_SECOND);
-    testSingleUnit("millisecond", 3, 0, 3 * MICROS_PER_MILLI);
-    testSingleUnit("microsecond", 3, 0, 3);
+    testSingleUnit("year", 3, 36, 0, 0);
+    testSingleUnit("month", 3, 3, 0, 0);
+    testSingleUnit("week", 3, 0, 21, 0);
+    testSingleUnit("day", 3, 0, 3, 0);
+    testSingleUnit("hour", 3, 0, 0, 3 * MICROS_PER_HOUR);
+    testSingleUnit("minute", 3, 0, 0, 3 * MICROS_PER_MINUTE);
+    testSingleUnit("second", 3, 0, 0, 3 * MICROS_PER_SECOND);
+    testSingleUnit("millisecond", 3, 0, 0, 3 * MICROS_PER_MILLI);
+    testSingleUnit("microsecond", 3, 0, 0, 3);
 
-    CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0);
+    CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0, 0);
     Arrays.asList(
       "interval   -5  years  23   month",
       "  -5  years  23   month",
@@ -99,7 +112,8 @@ public class CalendarIntervalSuite {
   @Test
   public void fromCaseInsensitiveStringTest() {
     for (String input : new String[]{"5 MINUTES", "5 minutes", "5 Minutes"}) {
-      assertEquals(fromCaseInsensitiveString(input), new CalendarInterval(0, 5L * 60 * 1_000_000));
+      assertEquals(fromCaseInsensitiveString(input),
+        new CalendarInterval(0, 0, 5L * 60 * 1_000_000));
     }
 
     for (String input : new String[]{null, "", " "}) {
@@ -134,11 +148,11 @@ public class CalendarIntervalSuite {
     CalendarInterval i;
 
     input = "99-10";
-    i = new CalendarInterval(99 * 12 + 10, 0L);
+    i = new CalendarInterval(99 * 12 + 10, 0, 0L);
     assertEquals(fromYearMonthString(input), i);
 
     input = "-8-10";
-    i = new CalendarInterval(-8 * 12 - 10, 0L);
+    i = new CalendarInterval(-8 * 12 - 10, 0, 0L);
     assertEquals(fromYearMonthString(input), i);
 
     try {
@@ -156,17 +170,16 @@ public class CalendarIntervalSuite {
     CalendarInterval i;
 
     input = "5 12:40:30.999999999";
-    i = new CalendarInterval(0, 5 * MICROS_PER_DAY + 12 * MICROS_PER_HOUR +
+    i = new CalendarInterval(0, 5, 12 * MICROS_PER_HOUR +
       40 * MICROS_PER_MINUTE + 30 * MICROS_PER_SECOND + 999999L);
     assertEquals(fromDayTimeString(input), i);
 
     input = "10 0:12:0.888";
-    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE +
-      888 * MICROS_PER_MILLI);
+    i = new CalendarInterval(0, 10, 12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLI);
     assertEquals(fromDayTimeString(input), i);
 
     input = "-3 0:0:0";
-    i = new CalendarInterval(0, -3 * MICROS_PER_DAY);
+    i = new CalendarInterval(0, -3, 0L);
     assertEquals(fromDayTimeString(input), i);
 
     try {
@@ -200,11 +213,11 @@ public class CalendarIntervalSuite {
     CalendarInterval i;
 
     input = "12";
-    i = new CalendarInterval(12 * 12, 0L);
+    i = new CalendarInterval(12 * 12, 0, 0L);
     assertEquals(fromSingleUnitString("year", input), i);
 
     input = "100";
-    i = new CalendarInterval(0, 100 * MICROS_PER_DAY);
+    i = new CalendarInterval(0, 100, 0L);
     assertEquals(fromSingleUnitString("day", input), i);
 
     input = "1999.38888";
@@ -230,40 +243,41 @@ public class CalendarIntervalSuite {
 
   @Test
   public void addTest() {
-    String input = "interval 3 month 1 hour";
-    String input2 = "interval 2 month 100 hour";
+    String input = "interval 3 month 1 day 1 hour";
+    String input2 = "interval 2 month 4 day 100 hour";
 
     CalendarInterval interval = fromString(input);
     CalendarInterval interval2 = fromString(input2);
 
-    assertEquals(interval.add(interval2), new CalendarInterval(5, 101 * MICROS_PER_HOUR));
+    assertEquals(interval.add(interval2), new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR));
 
-    input = "interval -10 month -81 hour";
-    input2 = "interval 75 month 200 hour";
+    input = "interval -10 month -30 day -81 hour";
+    input2 = "interval 75 month 150 day 200 hour";
 
     interval = fromString(input);
     interval2 = fromString(input2);
 
-    assertEquals(interval.add(interval2), new CalendarInterval(65, 119 * MICROS_PER_HOUR));
+    assertEquals(interval.add(interval2), new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR));
   }
 
   @Test
   public void subtractTest() {
-    String input = "interval 3 month 1 hour";
-    String input2 = "interval 2 month 100 hour";
+    String input = "interval 3 month 1 day 1 hour";
+    String input2 = "interval 2 month 4 day 100 hour";
 
     CalendarInterval interval = fromString(input);
     CalendarInterval interval2 = fromString(input2);
 
-    assertEquals(interval.subtract(interval2), new CalendarInterval(1, -99 * MICROS_PER_HOUR));
+    assertEquals(interval.subtract(interval2), new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR));
 
-    input = "interval -10 month -81 hour";
-    input2 = "interval 75 month 200 hour";
+    input = "interval -10 month -30 day -81 hour";
+    input2 = "interval 75 month 150 day 200 hour";
 
     interval = fromString(input);
     interval2 = fromString(input2);
 
-    assertEquals(interval.subtract(interval2), new CalendarInterval(-85, -281 * MICROS_PER_HOUR));
+    assertEquals(interval.subtract(interval2),
+      new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR));
   }
 
   private static void testSingleUnit(String unit, int number, int months, long microseconds) {
@@ -276,22 +290,31 @@ public class CalendarIntervalSuite {
     });
   }
 
+  private static void testSingleUnit(
+      String unit, int number, int months, int days, long microseconds) {
+    String input1 = "interval " + number + " " + unit;
+    String input2 = "interval " + number + " " + unit + "s";
+    CalendarInterval result = new CalendarInterval(months, days, microseconds);
+    assertEquals(fromString(input1), result);
+    assertEquals(fromString(input2), result);
+  }
+
   @Test
   public void fromStringCaseSensitivityTest() {
-    testSingleUnit("YEAR", 3, 36, 0);
-    testSingleUnit("Month", 3, 3, 0);
-    testSingleUnit("Week", 3, 0, 3 * MICROS_PER_WEEK);
-    testSingleUnit("DAY", 3, 0, 3 * MICROS_PER_DAY);
-    testSingleUnit("HouR", 3, 0, 3 * MICROS_PER_HOUR);
-    testSingleUnit("MiNuTe", 3, 0, 3 * MICROS_PER_MINUTE);
-    testSingleUnit("Second", 3, 0, 3 * MICROS_PER_SECOND);
-    testSingleUnit("MilliSecond", 3, 0, 3 * MICROS_PER_MILLI);
-    testSingleUnit("MicroSecond", 3, 0, 3);
+    testSingleUnit("YEAR", 3, 36, 0, 0);
+    testSingleUnit("Month", 3, 3, 0, 0);
+    testSingleUnit("Week", 3, 0, 21, 0);
+    testSingleUnit("DAY", 3, 0, 3, 0);
+    testSingleUnit("HouR", 3, 0, 0, 3 * MICROS_PER_HOUR);
+    testSingleUnit("MiNuTe", 3, 0, 0, 3 * MICROS_PER_MINUTE);
+    testSingleUnit("Second", 3, 0, 0, 3 * MICROS_PER_SECOND);
+    testSingleUnit("MilliSecond", 3, 0, 0, 3 * MICROS_PER_MILLI);
+    testSingleUnit("MicroSecond", 3, 0, 0, 3);
 
     String input;
 
     input = "INTERVAL -5 YEARS 23 MONTHS";
-    CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0);
+    CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0, 0);
     assertEquals(fromString(input), result);
 
     assertNull(fromString("INTERVAL"));
