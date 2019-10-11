@@ -100,8 +100,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     "subquery/in-subquery/in-group-by.sql",
     "subquery/in-subquery/simple-in.sql",
     "subquery/in-subquery/in-order-by.sql",
-    "subquery/in-subquery/in-set-operations.sql",
-    "explain.sql"
+    "subquery/in-subquery/in-set-operations.sql"
   )
 
   override def runQueries(
