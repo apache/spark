@@ -43,6 +43,12 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
   private transient TestSparkSession spark;
   private transient CypherSession cypherSession;
 
+  /**
+   * This method is supposed to return an implementation of {@link CypherSession}
+   * from a module that depends on spark-graph-api (e.g. spark-cypher).
+   *
+   * This allows us to run the same tests on arbitrary implementations.
+   */
   abstract CypherSession getCypherSession(SparkSession sparkSession);
 
   @Before
