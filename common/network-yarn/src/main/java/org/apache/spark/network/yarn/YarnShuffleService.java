@@ -139,9 +139,15 @@ public class YarnShuffleService extends AuxiliaryService {
     this("spark_shuffle");
   }
 
+  /**
+   * Instantiate YarnShuffleService with arbitrary service name.
+   * Used for tests.
+   * YARN doesn't pass service name or any parameters to AuxiliaryServices.
+   * When instantiated by YARN, constructor without arguments would be called.
+   */
   protected YarnShuffleService(String serviceName) {
     super(serviceName);
-    logger.info("Initializing YARN shuffle service for Spark");
+    logger.info("Initializing YARN shuffle service \"{}\" for Spark", serviceName);
     instance = this;
   }
 

@@ -496,7 +496,8 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.shuffle.service.name</code></td>
   <td><code>spark_shuffle</code></td>
   <td>
-    Name of the external shuffle service.
+    The name of the external shuffle service.
+    The external shuffle service itself is configured and started by YARN (see [Configuring the External Shuffle Service](#configuring-the-external-shuffle-service) for details). The name specified here must match the name used in YARN service implementation.
   </td>
 </tr>
 </table>
