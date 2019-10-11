@@ -19,38 +19,38 @@
 package org.apache.spark.cypher.conversions
 
 import org.apache.spark.graph.api.GraphElementFrame
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.types.{BinaryType, ByteType, IntegerType, LongType, ShortType, StringType}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Dataset, Row}
 
 object GraphElementFrameConversions {
 
-  def normalizeDf(frame: GraphElementFrame): DataFrame = {
+  def normalizeDf(frame: GraphElementFrame): Dataset[Row] = {
     val mappedColumnNames = frame.idColumns ++ frame.properties.values.toSeq.sorted
-    val mappedDf = if (mappedColumnNames == frame.df.columns.toSeq) {
-      frame.df
+    val mappedDf = if (mappedColumnNames == frame.ds.columns.toSeq) {
+      frame.ds
     } else {
-      frame.df.select(mappedColumnNames.map(frame.df.col): _*)
+      frame.ds.select(mappedColumnNames.map(frame.ds.col): _*)
     }
-    if (frame.idColumns.forall(idColumn => frame.df.schema(idColumn).dataType == BinaryType)) {
+    if (frame.idColumns.forall(idColumn => frame.ds.schema(idColumn).dataType == BinaryType)) {
       mappedDf
     } else {
       encodeIdColumns(mappedDf, frame.idColumns: _*)
     }
   }
 
-  private def encodeIdColumns(df: DataFrame, idColumnNames: String*): DataFrame = {
+  private def encodeIdColumns(ds: Dataset[Row], idColumnNames: String*): Dataset[Row] = {
     val encodedIdCols = idColumnNames.map { idColumnName =>
-      val col = df.col(idColumnName)
-      df.schema(idColumnName).dataType match {
+      val col = ds.col(idColumnName)
+      ds.schema(idColumnName).dataType match {
         case BinaryType => col
         case StringType | ByteType | ShortType | IntegerType | LongType => col.cast(BinaryType)
         // TODO: Constrain to types that make sense as IDs
         case _ => col.cast(StringType).cast(BinaryType)
       }
     }
-    val remainingColumnNames = df.columns.filterNot(idColumnNames.contains)
-    val remainingCols = remainingColumnNames.map(df.col)
-    df.select(encodedIdCols ++ remainingCols: _*)
+    val remainingColumnNames = ds.columns.filterNot(idColumnNames.contains)
+    val remainingCols = remainingColumnNames.map(ds.col)
+    ds.select(encodedIdCols ++ remainingCols: _*)
   }
 
 }

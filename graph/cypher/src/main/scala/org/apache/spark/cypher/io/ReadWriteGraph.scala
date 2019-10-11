@@ -26,7 +26,7 @@ import org.apache.spark.cypher.SparkGraphDirectoryStructure._
 import org.apache.spark.cypher.SparkTable.DataFrameTable
 import org.apache.spark.cypher.conversions.StringEncodingUtilities._
 import org.apache.spark.graph.api.{NodeFrame, RelationshipFrame}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.opencypher.okapi.api.graph.{SourceEndNodeKey, SourceIdKey, SourceStartNodeKey}
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.ir.api.expr.{Property, Var}
@@ -83,7 +83,7 @@ object ReadWriteGraph {
 
   implicit class GraphExport(graph: RelationalCypherGraph[DataFrameTable]) {
 
-    def canonicalNodeTable(labels: Set[String]): DataFrame = {
+    def canonicalNodeTable(labels: Set[String]): Dataset[Row] = {
       val ct = CTNode(labels)
       val v = Var("n")(ct)
       val nodeRecords = graph.nodes(v.name, ct, exactLabelMatch = true)
@@ -100,7 +100,7 @@ object ReadWriteGraph {
       nodeRecords.table.df.select(selectColumns: _*)
     }
 
-    def canonicalRelationshipTable(relType: String): DataFrame = {
+    def canonicalRelationshipTable(relType: String): Dataset[Row] = {
       val ct = CTRelationship(relType)
       val v = Var("r")(ct)
       val relRecords = graph.relationships(v.name, ct)

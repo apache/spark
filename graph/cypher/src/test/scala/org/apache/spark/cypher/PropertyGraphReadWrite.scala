@@ -21,7 +21,7 @@ package org.apache.spark.cypher
 import java.nio.file.Paths
 
 import org.apache.spark.graph.api.{NodeFrame, RelationshipFrame}
-import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
+import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.junit.rules.TemporaryFolder
 import org.scalatest.BeforeAndAfterEach
 
@@ -42,12 +42,12 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
 
   private def basePath: String = s"file://${Paths.get(tempDir.getRoot.getAbsolutePath)}"
 
-  private lazy val nodeData: DataFrame = spark.createDataFrame(Seq(
+  private lazy val nodeData: Dataset[Row] = spark.createDataFrame(Seq(
     0 -> "Alice",
     1 -> "Bob"
   )).toDF("id", "name")
 
-  private lazy val relationshipData: DataFrame = spark.createDataFrame(Seq(
+  private lazy val relationshipData: Dataset[Row] = spark.createDataFrame(Seq(
     Tuple3(0, 0, 1)
   )).toDF("id", "source", "target")
 
@@ -66,7 +66,7 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
     val readGraph = cypherSession.read.load(basePath)
     readGraph.cypher(
       "MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name AS person1, b.name AS person2"
-    ).df.show()
+    ).ds.show()
   }
 
   test("save and loads a property graph") {

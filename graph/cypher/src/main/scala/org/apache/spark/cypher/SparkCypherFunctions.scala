@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
-import org.apache.spark.sql.{Column, DataFrame, functions}
+import org.apache.spark.sql.{Column, Dataset, Row, functions}
 import org.opencypher.okapi.api.value.CypherValue.{CypherList, CypherMap, CypherValue}
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.ir.api.expr.Expr
@@ -119,13 +119,13 @@ object SparkCypherFunctions {
     new Column(StringTranslate(src.expr, matchingString.expr, replaceString.expr))
   }
 
-  def column_for(expr: Expr)(implicit header: RecordHeader, df: DataFrame): Column = {
+  def column_for(expr: Expr)(implicit header: RecordHeader, ds: Dataset[Row]): Column = {
     val columnName = header.getColumn(expr).getOrElse(throw IllegalArgumentException(
       expected = s"Expression in ${header.expressions.mkString("[", ", ", "]")}",
       actual = expr)
     )
-    if (df.columns.contains(columnName)) {
-      df.col(columnName)
+    if (ds.columns.contains(columnName)) {
+      ds.col(columnName)
     } else {
       NULL_LIT
     }

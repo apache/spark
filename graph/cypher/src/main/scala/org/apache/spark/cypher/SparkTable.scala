@@ -21,7 +21,7 @@ package org.apache.spark.cypher
 import org.apache.spark.cypher.conversions.ExprConversions._
 import org.apache.spark.cypher.conversions.TypeConversions._
 import org.apache.spark.sql.types.StructField
-import org.apache.spark.sql.{Column, DataFrame, RelationalGroupedDataset, functions}
+import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
 import org.opencypher.okapi.api.types.CypherType
 import org.opencypher.okapi.api.value.CypherValue
@@ -36,7 +36,7 @@ import scala.collection.JavaConverters._
 
 object SparkTable {
 
-  implicit class DataFrameTable(val df: DataFrame) extends Table[DataFrameTable] {
+  implicit class DataFrameTable(val df: Dataset[Row]) extends Table[DataFrameTable] {
 
     private case class EmptyRow()
 
@@ -123,7 +123,7 @@ object SparkTable {
       def withInnerExpr(expr: Expr)(f: Column => Column) =
         f(expr.asSparkSQLExpr(header, df, parameters))
 
-      val data: Either[RelationalGroupedDataset, DataFrame] =
+      val data: Either[RelationalGroupedDataset, Dataset[Row]] =
         if (by.nonEmpty) {
           val columns = by.flatMap { expr =>
             val withChildren = header.ownedBy(expr)
@@ -206,9 +206,9 @@ object SparkTable {
     def unpersist(blocking: Boolean): DataFrameTable = df.unpersist(blocking)
   }
 
-  implicit class DataFrameOps(val df: DataFrame) extends AnyVal {
+  implicit class DataFrameOps(val df: Dataset[Row]) extends AnyVal {
 
-    def safeJoin(other: DataFrame, joinCols: Seq[(String, String)], joinType: String): DataFrame = {
+    def safeJoin(other: Dataset[Row], joinCols: Seq[(String, String)], joinType: String): Dataset[Row] = {
       require(joinCols.map(_._1).forall(col => !other.columns.contains(col)))
       require(joinCols.map(_._2).forall(col => !df.columns.contains(col)))
 
@@ -222,7 +222,7 @@ object SparkTable {
       df.join(other, joinExpr, joinType)
     }
 
-    def safeDropColumns(names: String*): DataFrame = {
+    def safeDropColumns(names: String*): Dataset[Row] = {
       val nonExistentColumns = names.toSet -- df.columns
       require(nonExistentColumns.isEmpty,
         s"Cannot drop column(s) ${nonExistentColumns.map(c => s"`$c`").mkString(", ")}. They do not exist.")
@@ -243,11 +243,11 @@ object SparkTable {
       df.schema.fields(df.schema.fieldIndex(columnName))
     }
 
-    def safeRenameColumns(renames: (String, String)*): DataFrame = {
+    def safeRenameColumns(renames: (String, String)*): Dataset[Row] = {
       safeRenameColumns(renames.toMap)
     }
 
-    def safeRenameColumns(renames: Map[String, String]): DataFrame = {
+    def safeRenameColumns(renames: Map[String, String]): Dataset[Row] = {
       if (renames.isEmpty || renames.forall { case (oldColumn, newColumn) => oldColumn == newColumn }) {
         df
       } else {

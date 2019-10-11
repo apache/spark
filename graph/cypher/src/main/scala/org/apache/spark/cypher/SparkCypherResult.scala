@@ -20,9 +20,9 @@ package org.apache.spark.cypher
 
 import org.apache.spark.cypher.SparkTable.DataFrameTable
 import org.apache.spark.graph.api.CypherResult
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Dataset, Row}
 import org.opencypher.okapi.relational.api.table.RelationalCypherRecords
 
 case class SparkCypherResult(relationalTable: RelationalCypherRecords[DataFrameTable]) extends CypherResult {
-  override val df: DataFrame = relationalTable.table.df
+  override val ds: Dataset[Row] = relationalTable.table.df
 }

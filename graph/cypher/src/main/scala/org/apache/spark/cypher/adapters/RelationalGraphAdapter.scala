@@ -23,7 +23,7 @@ import org.apache.spark.cypher.adapters.MappingAdapter._
 import org.apache.spark.cypher.io.SparkCypherPropertyGraphWriter
 import org.apache.spark.cypher.{SparkCypherSession, SparkEntityTable}
 import org.apache.spark.graph.api.{NodeFrame, PropertyGraph, PropertyGraphType, RelationshipFrame}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Dataset, Row}
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.ir.api.expr.Var
 
@@ -38,8 +38,8 @@ case class RelationalGraphAdapter(
     if (nodeFrames.isEmpty) {
       cypherSession.graphs.empty
     } else {
-      val nodeTables = nodeFrames.map { nodeDataFrame => SparkEntityTable(nodeDataFrame.toNodeMapping, nodeDataFrame.df) }
-      val relTables = relationshipFrames.map { relDataFrame => SparkEntityTable(relDataFrame.toRelationshipMapping, relDataFrame.df) }
+      val nodeTables = nodeFrames.map { nodeDataFrame => SparkEntityTable(nodeDataFrame.toNodeMapping, nodeDataFrame.ds) }
+      val relTables = relationshipFrames.map { relDataFrame => SparkEntityTable(relDataFrame.toRelationshipMapping, relDataFrame.ds) }
       cypherSession.graphs.create(nodeTables.head, nodeTables.tail ++ relTables: _*)
     }
   }
@@ -48,7 +48,7 @@ case class RelationalGraphAdapter(
 
   private lazy val _relationshipFrame: Map[String, RelationshipFrame] = relationshipFrames.map(rf => rf.relationshipType -> rf).toMap
 
-  override def nodes: DataFrame = {
+  override def nodes: Dataset[Row] = {
     // TODO: move to API as default implementation
     val nodeVar = Var("n")(CTNode)
     val nodes = graph.nodes(nodeVar.name)
@@ -65,7 +65,7 @@ case class RelationalGraphAdapter(
     df.select(selectColumns: _*)
   }
 
-  override def relationships: DataFrame = {
+  override def relationships: Dataset[Row] = {
     // TODO: move to API as default implementation
     val relVar = Var("r")(CTRelationship)
     val rels = graph.relationships(relVar.name)

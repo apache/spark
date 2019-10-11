@@ -74,10 +74,10 @@ case class SparkCypherRecords(
 )(implicit session: SparkCypherSession) extends RelationalCypherRecords[DataFrameTable] with RecordBehaviour {
   override type Records = SparkCypherRecords
 
-  def df: DataFrame = table.df
+  def ds: Dataset[Row] = table.df
 
   override def cache(): SparkCypherRecords = {
-    df.cache()
+    ds.cache()
     this
   }
 

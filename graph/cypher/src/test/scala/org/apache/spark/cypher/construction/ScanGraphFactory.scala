@@ -25,7 +25,7 @@ import org.apache.spark.cypher.conversions.TemporalConversions._
 import org.apache.spark.cypher.conversions.TypeConversions._
 import org.apache.spark.cypher.{SparkCypherSession, SparkEntityTable}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{Dataset, Row}
 import org.opencypher.okapi.api.graph.Pattern
 import org.opencypher.okapi.api.io.conversion.{ElementMapping, NodeMappingBuilder, RelationshipMappingBuilder}
 import org.opencypher.okapi.api.schema.PropertyKeys.PropertyKeys
@@ -39,7 +39,7 @@ import scala.collection.JavaConverters._
 
 object ScanGraphFactory extends CypherTestGraphFactory[SparkCypherSession] {
 
-  def encodeIdColumns(df: DataFrame, mapping: ElementMapping): DataFrame = {
+  def encodeIdColumns(df: Dataset[Row], mapping: ElementMapping): Dataset[Row] = {
     val idCols = mapping.allSourceIdKeys.map { columnName =>
       val dataType = df.schema.fields(df.schema.fieldIndex(columnName)).dataType
       dataType match {

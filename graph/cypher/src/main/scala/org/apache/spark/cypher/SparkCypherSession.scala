@@ -51,7 +51,7 @@ object SparkCypherSession {
   * Default [[CypherSession]] implementation.
   *
   * This class is the main entry point for working with the spark-cypher module.
-  * It wraps a [[SparkSession]] and allows to run Cypher queries over graphs represented as [[org.apache.spark.sql.DataFrame]]s.
+  * It wraps a [[SparkSession]] and allows to run Cypher queries over graphs represented as [[org.apache.spark.sql.Dataset]]s.
   */
 private[spark] class SparkCypherSession(override val sparkSession: SparkSession) extends RelationalCypherSession[DataFrameTable] with CypherSession {
 
@@ -78,8 +78,8 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
     require(relationships.groupBy(_.relationshipType).forall(_._2.length == 1),
       "There can be at most one RelationshipFrame per relationship type")
 
-    val normalizedNodes = nodes.map(nf => nf.copy(df = normalizeDf(nf)))
-    val normalizedRelationships = relationships.map(rf => rf.copy(df = normalizeDf(rf)))
+    val normalizedNodes = nodes.map(nf => nf.copy(ds = normalizeDf(nf)))
+    val normalizedRelationships = relationships.map(rf => rf.copy(ds = normalizeDf(rf)))
     RelationalGraphAdapter(this, normalizedNodes, normalizedRelationships)
   }
 

@@ -25,7 +25,7 @@ import org.apache.spark.cypher.udfs.TemporalUdfs
 import org.apache.spark.sql.catalyst.expressions.CaseWhen
 import org.apache.spark.sql.functions.{array_contains => _, translate => _, _}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.{Column, Dataset, Row}
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.exception._
@@ -47,7 +47,7 @@ object ExprConversions {
       * values from the evaluated children.
       */
     def nullSafeConversion(expr: Expr)(withConvertedChildren: Seq[Column] => Column)
-      (implicit header: RecordHeader, df: DataFrame, parameters: CypherMap): Column = {
+      (implicit header: RecordHeader, ds: Dataset[Row], parameters: CypherMap): Column = {
       if (expr.cypherType == CTNull) {
         NULL_LIT
       } else if (expr.cypherType == CTTrue) {
@@ -70,11 +70,11 @@ object ExprConversions {
       * Attempts to create a Spark SQL expression from the CAPS expression.
       *
       * @param header     the header of the CAPSRecords in which the expression should be evaluated.
-      * @param df         the dataframe containing the data over which the expression should be evaluated.
+      * @param ds         the dataset containing the data over which the expression should be evaluated.
       * @param parameters query parameters
       * @return Some Spark SQL expression if the input was mappable, otherwise None.
       */
-    def asSparkSQLExpr(implicit header: RecordHeader, df: DataFrame, parameters: CypherMap): Column = {
+    def asSparkSQLExpr(implicit header: RecordHeader, ds: Dataset[Row], parameters: CypherMap): Column = {
       val outCol = expr match {
         // Evaluate based on already present data; no recursion
         case _: Var | _: HasLabel | _: HasType | _: StartNode | _: EndNode => column_for(expr)
@@ -88,7 +88,7 @@ object ExprConversions {
     }
 
     private def convert(convertedChildren: Seq[Column])
-      (implicit header: RecordHeader, df: DataFrame, parameters: CypherMap): Column = {
+      (implicit header: RecordHeader, ds: Dataset[Row], parameters: CypherMap): Column = {
 
       def child0: Column = convertedChildren.head
 

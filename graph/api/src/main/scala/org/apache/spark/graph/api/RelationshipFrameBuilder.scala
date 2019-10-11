@@ -24,10 +24,10 @@ import org.apache.spark.sql.{Dataset, Row}
 /**
  * Interface used to build a [[RelationshipFrame]].
  *
- * @param df DataFrame containing a single relationship in each row
+ * @param ds Dataset containing a single relationship in each row
  * @since 3.0.0
  */
-final class RelationshipFrameBuilder(val df: Dataset[Row]) {
+final class RelationshipFrameBuilder(val ds: Dataset[Row]) {
 
   private var idColumn: String = CypherSession.ID_COLUMN
   private var sourceIdColumn: String = CypherSession.SOURCE_ID_COLUMN
@@ -109,7 +109,7 @@ final class RelationshipFrameBuilder(val df: Dataset[Row]) {
   def build(): RelationshipFrame = {
     maybeRelationshipType match {
       case Some(relType) =>
-        RelationshipFrame(df, idColumn, sourceIdColumn, targetIdColumn, relType, properties)
+        RelationshipFrame(ds, idColumn, sourceIdColumn, targetIdColumn, relType, properties)
       case None => throw new IllegalArgumentException("Relationship type must be set.")
     }
   }
