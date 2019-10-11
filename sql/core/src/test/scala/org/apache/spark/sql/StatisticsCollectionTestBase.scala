@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.{lang => jl}
+import java.io.File
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.TimeUnit
 
@@ -292,6 +293,14 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
         assert(table.stats.get.colStats(k) == v)
       }
     }
+  }
+
+  // Filter out the checksum file refer to ChecksumFileSystem#isChecksumFile.
+  def getDataSize(file: File): Long = {
+    file.listFiles.filter { f =>
+      val name = f.getName
+      !(name.startsWith(".") && name.endsWith(".crc"))
+    }.map(_.length).sum
   }
 
   // This test will be run twice: with and without Hive support

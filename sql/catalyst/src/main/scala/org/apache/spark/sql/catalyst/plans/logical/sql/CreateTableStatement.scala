@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.sql
 
-import org.apache.spark.sql.catalog.v2.expressions.Transform
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -30,7 +28,7 @@ import org.apache.spark.sql.types.StructType
  * This is a metadata-only command and is not used to write data to the created table.
  */
 case class CreateTableStatement(
-    table: TableIdentifier,
+    tableName: Seq[String],
     tableSchema: StructType,
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
@@ -39,18 +37,13 @@ case class CreateTableStatement(
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
-    ifNotExists: Boolean) extends ParsedStatement {
-
-  override def output: Seq[Attribute] = Seq.empty
-
-  override def children: Seq[LogicalPlan] = Seq.empty
-}
+    ifNotExists: Boolean) extends ParsedStatement
 
 /**
  * A CREATE TABLE AS SELECT command, as parsed from SQL.
  */
 case class CreateTableAsSelectStatement(
-    table: TableIdentifier,
+    tableName: Seq[String],
     asSelect: LogicalPlan,
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
@@ -60,8 +53,6 @@ case class CreateTableAsSelectStatement(
     location: Option[String],
     comment: Option[String],
     ifNotExists: Boolean) extends ParsedStatement {
-
-  override def output: Seq[Attribute] = Seq.empty
 
   override def children: Seq[LogicalPlan] = Seq(asSelect)
 }

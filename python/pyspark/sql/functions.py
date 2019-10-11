@@ -36,6 +36,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_udf
+from pyspark.sql.utils import to_str
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
 # Namely, if columns are referred as arguments, they can be always both Column or string,
@@ -113,6 +114,10 @@ def _create_window_function(name, doc=''):
     _.__name__ = name
     _.__doc__ = 'Window function: ' + doc
     return _
+
+
+def _options_to_str(options):
+    return {key: to_str(value) for (key, value) in options.items()}
 
 _lit_doc = """
     Creates a :class:`Column` of literal value.
@@ -209,14 +214,14 @@ _collect_set_doc = """
     """
 _functions_1_6_over_column = {
     # unary math functions
-    'stddev': 'Aggregate function: returns the unbiased sample standard deviation of' +
-              ' the expression in a group.',
+    'stddev': 'Aggregate function: alias for stddev_samp.',
     'stddev_samp': 'Aggregate function: returns the unbiased sample standard deviation of' +
                    ' the expression in a group.',
     'stddev_pop': 'Aggregate function: returns population standard deviation of' +
                   ' the expression in a group.',
-    'variance': 'Aggregate function: returns the population variance of the values in a group.',
-    'var_samp': 'Aggregate function: returns the unbiased variance of the values in a group.',
+    'variance': 'Aggregate function: alias for var_samp.',
+    'var_samp': 'Aggregate function: returns the unbiased sample variance of' +
+                ' the values in a group.',
     'var_pop':  'Aggregate function: returns the population variance of the values in a group.',
     'skewness': 'Aggregate function: returns the skewness of the values in a group.',
     'kurtosis': 'Aggregate function: returns the kurtosis of the values in a group.',
@@ -1242,7 +1247,7 @@ def last_day(date):
 
 @ignore_unicode_prefix
 @since(1.5)
-def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
+def from_unixtime(timestamp, format="uuuu-MM-dd HH:mm:ss"):
     """
     Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
     representing the timestamp of that moment in the current system time zone in the given
@@ -1259,9 +1264,9 @@ def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
 
 
 @since(1.5)
-def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
+def unix_timestamp(timestamp=None, format='uuuu-MM-dd HH:mm:ss'):
     """
-    Convert time string with given pattern ('yyyy-MM-dd HH:mm:ss', by default)
+    Convert time string with given pattern ('uuuu-MM-dd HH:mm:ss', by default)
     to Unix time stamp (in seconds), using the default timezone and the default
     locale, return null if fail.
 
@@ -1564,8 +1569,9 @@ def format_string(format, *cols):
     """
     Formats the arguments in printf-style and returns the result as a string column.
 
-    :param col: the column name of the numeric value to be formatted
-    :param d: the N decimal places
+    :param format: string that can contain embedded format tags and used as result column's value
+    :param cols: list of column names (string) or list of :class:`Column` expressions to
+        be used in formatting
 
     >>> df = spark.createDataFrame([(5, "hello")], ['a', 'b'])
     >>> df.select(format_string('%d %s', df.a, df.b).alias('v')).collect()
@@ -1963,7 +1969,7 @@ def arrays_overlap(a1, a2):
 def slice(x, start, length):
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
-    (or starting from the end if `start` is negative) with the specified `length`.
+    (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
     >>> df = spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
     >>> df.select(slice(df.x, 2, 2).alias("sliced")).collect()
     [Row(sliced=[2, 3]), Row(sliced=[5])]
@@ -2046,11 +2052,12 @@ def element_at(col, extraction):
     [Row(element_at(data, 1)=u'a'), Row(element_at(data, 1)=None)]
 
     >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},), ({},)], ['data'])
-    >>> df.select(element_at(df.data, "a")).collect()
+    >>> df.select(element_at(df.data, lit("a"))).collect()
     [Row(element_at(data, a)=1.0), Row(element_at(data, a)=None)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.element_at(_to_java_column(col), extraction))
+    return Column(sc._jvm.functions.element_at(
+        _to_java_column(col), lit(extraction)._jc))  # noqa: F821 'lit' is dynamically defined.
 
 
 @since(2.4)
@@ -2142,7 +2149,10 @@ def array_except(col1, col2):
 
 @since(1.4)
 def explode(col):
-    """Returns a new row for each element in the given array or map.
+    """
+    Returns a new row for each element in the given array or map.
+    Uses the default column name `col` for elements in the array and
+    `key` and `value` for elements in the map unless specified otherwise.
 
     >>> from pyspark.sql import Row
     >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
@@ -2163,7 +2173,10 @@ def explode(col):
 
 @since(2.1)
 def posexplode(col):
-    """Returns a new row for each element with position in the given array or map.
+    """
+    Returns a new row for each element with position in the given array or map.
+    Uses the default column name `pos` for position, and `col` for elements in the
+    array and `key` and `value` for elements in the map unless specified otherwise.
 
     >>> from pyspark.sql import Row
     >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
@@ -2184,8 +2197,11 @@ def posexplode(col):
 
 @since(2.3)
 def explode_outer(col):
-    """Returns a new row for each element in the given array or map.
+    """
+    Returns a new row for each element in the given array or map.
     Unlike explode, if the array/map is null or empty then null is produced.
+    Uses the default column name `col` for elements in the array and
+    `key` and `value` for elements in the map unless specified otherwise.
 
     >>> df = spark.createDataFrame(
     ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
@@ -2217,8 +2233,11 @@ def explode_outer(col):
 
 @since(2.3)
 def posexplode_outer(col):
-    """Returns a new row for each element with position in the given array or map.
+    """
+    Returns a new row for each element with position in the given array or map.
     Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
+    Uses the default column name `pos` for position, and `col` for elements in the
+    array and `key` and `value` for elements in the map unless specified otherwise.
 
     >>> df = spark.createDataFrame(
     ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
@@ -2331,7 +2350,7 @@ def from_json(col, schema, options={}):
         schema = schema.json()
     elif isinstance(schema, Column):
         schema = _to_java_column(schema)
-    jc = sc._jvm.functions.from_json(_to_java_column(col), schema, options)
+    jc = sc._jvm.functions.from_json(_to_java_column(col), schema, _options_to_str(options))
     return Column(jc)
 
 
@@ -2372,7 +2391,7 @@ def to_json(col, options={}):
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.to_json(_to_java_column(col), options)
+    jc = sc._jvm.functions.to_json(_to_java_column(col), _options_to_str(options))
     return Column(jc)
 
 
@@ -2403,7 +2422,7 @@ def schema_of_json(json, options={}):
         raise TypeError("schema argument should be a column or string")
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.schema_of_json(col, options)
+    jc = sc._jvm.functions.schema_of_json(col, _options_to_str(options))
     return Column(jc)
 
 
@@ -2430,7 +2449,7 @@ def schema_of_csv(csv, options={}):
         raise TypeError("schema argument should be a column or string")
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.schema_of_csv(col, options)
+    jc = sc._jvm.functions.schema_of_csv(col, _options_to_str(options))
     return Column(jc)
 
 
@@ -2452,7 +2471,7 @@ def to_csv(col, options={}):
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.to_csv(_to_java_column(col), options)
+    jc = sc._jvm.functions.to_csv(_to_java_column(col), _options_to_str(options))
     return Column(jc)
 
 
@@ -2681,7 +2700,10 @@ def array_repeat(col, count):
     [Row(r=[u'ab', u'ab', u'ab'])]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.array_repeat(_to_java_column(col), count))
+    return Column(sc._jvm.functions.array_repeat(
+        _to_java_column(col),
+        _to_java_column(count) if isinstance(count, Column) else count
+    ))
 
 
 @since(2.4)
@@ -2763,6 +2785,11 @@ def from_csv(col, schema, options={}):
     >>> value = data[0][0]
     >>> df.select(from_csv(df.value, schema_of_csv(value)).alias("csv")).collect()
     [Row(csv=Row(_c0=1, _c1=2, _c2=3))]
+    >>> data = [("   abc",)]
+    >>> df = spark.createDataFrame(data, ("value",))
+    >>> options = {'ignoreLeadingWhiteSpace': True}
+    >>> df.select(from_csv(df.value, "s string", options).alias("csv")).collect()
+    [Row(csv=Row(s=u'abc'))]
     """
 
     sc = SparkContext._active_spark_context
@@ -2773,7 +2800,7 @@ def from_csv(col, schema, options={}):
     else:
         raise TypeError("schema argument should be a column or string")
 
-    jc = sc._jvm.functions.from_csv(_to_java_column(col), schema, options)
+    jc = sc._jvm.functions.from_csv(_to_java_column(col), schema, _options_to_str(options))
     return Column(jc)
 
 
@@ -2784,9 +2811,15 @@ class PandasUDFType(object):
     """
     SCALAR = PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
+    SCALAR_ITER = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+
     GROUPED_MAP = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
 
+    COGROUPED_MAP = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
+
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+
+    MAP_ITER = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
 
 
 @since(1.3)
@@ -2836,34 +2869,33 @@ def udf(f=None, returnType=StringType()):
     # The following table shows most of Python data and SQL type conversions in normal UDFs that
     # are not yet visible to the user. Some of behaviors are buggy and might be changed in the near
     # future. The table might have to be eventually documented externally.
-    # Please see SPARK-25666's PR to see the codes in order to generate the table below.
+    # Please see SPARK-28131's PR to see the codes in order to generate the table below.
     #
-    # +-----------------------------+--------------+----------+------+-------+---------------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+-----------------+------------+--------------+------------------+----------------------+  # noqa
-    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|1(long)|         a(str)|     a(unicode)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|         (1,)(tuple)|   ABC(bytearray)|  1(Decimal)|{'a': 1}(dict)|Row(kwargs=1)(Row)|Row(namedtuple=1)(Row)|  # noqa
-    # +-----------------------------+--------------+----------+------+-------+---------------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+-----------------+------------+--------------+------------------+----------------------+  # noqa
-    # |                      boolean|          None|      True|  None|   None|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
-    # |                      tinyint|          None|      None|     1|      1|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
-    # |                     smallint|          None|      None|     1|      1|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
-    # |                          int|          None|      None|     1|      1|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
-    # |                       bigint|          None|      None|     1|      1|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
-    # |                       string|          None|   u'true'|  u'1'|   u'1'|           u'a'|           u'a'|u'java.util.Grego...|         u'java.util.Grego...|    u'1.0'|        u'[I@24a83055'|   u'[1]'|u'[Ljava.lang.Obj...|   u'[B@49093632'|        u'1'|      u'{a=1}'|                 X|                     X|  # noqa
-    # |                         date|          None|         X|     X|      X|              X|              X|datetime.date(197...|         datetime.date(197...|         X|                     X|        X|                   X|                X|           X|             X|                 X|                     X|  # noqa
-    # |                    timestamp|          None|         X|     X|      X|              X|              X|                   X|         datetime.datetime...|         X|                     X|        X|                   X|                X|           X|             X|                 X|                     X|  # noqa
-    # |                        float|          None|      None|  None|   None|           None|           None|                None|                         None|       1.0|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
-    # |                       double|          None|      None|  None|   None|           None|           None|                None|                         None|       1.0|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
-    # |                   array<int>|          None|      None|  None|   None|           None|           None|                None|                         None|      None|                   [1]|      [1]|                 [1]|     [65, 66, 67]|        None|          None|                 X|                     X|  # noqa
-    # |                       binary|          None|      None|  None|   None|bytearray(b'a')|bytearray(b'a')|                None|                         None|      None|                  None|     None|                None|bytearray(b'ABC')|        None|          None|                 X|                     X|  # noqa
-    # |                decimal(10,0)|          None|      None|  None|   None|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|Decimal('1')|          None|                 X|                     X|  # noqa
-    # |              map<string,int>|          None|      None|  None|   None|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|     {u'a': 1}|                 X|                     X|  # noqa
-    # |               struct<_1:int>|          None|         X|     X|      X|              X|              X|                   X|                            X|         X|                     X|Row(_1=1)|           Row(_1=1)|                X|           X|  Row(_1=None)|         Row(_1=1)|             Row(_1=1)|  # noqa
-    # +-----------------------------+--------------+----------+------+-------+---------------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+-----------------+------------+--------------+------------------+----------------------+  # noqa
+    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
+    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|         a(str)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|         (1,)(tuple)|bytearray(b'ABC')(bytearray)|  1(Decimal)|{'a': 1}(dict)|Row(kwargs=1)(Row)|Row(namedtuple=1)(Row)|  # noqa
+    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
+    # |                      boolean|          None|      True|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
+    # |                      tinyint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
+    # |                     smallint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
+    # |                          int|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
+    # |                       bigint|          None|      None|     1|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
+    # |                       string|          None|    'true'|   '1'|            'a'|'java.util.Gregor...|         'java.util.Gregor...|     '1.0'|         '[I@66cbb73a'|    '[1]'|'[Ljava.lang.Obje...|               '[B@5a51eb1a'|         '1'|       '{a=1}'|                 X|                     X|  # noqa
+    # |                         date|          None|         X|     X|              X|datetime.date(197...|         datetime.date(197...|         X|                     X|        X|                   X|                           X|           X|             X|                 X|                     X|  # noqa
+    # |                    timestamp|          None|         X|     X|              X|                   X|         datetime.datetime...|         X|                     X|        X|                   X|                           X|           X|             X|                 X|                     X|  # noqa
+    # |                        float|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
+    # |                       double|          None|      None|  None|           None|                None|                         None|       1.0|                  None|     None|                None|                        None|        None|          None|                 X|                     X|  # noqa
+    # |                   array<int>|          None|      None|  None|           None|                None|                         None|      None|                   [1]|      [1]|                 [1]|                [65, 66, 67]|        None|          None|                 X|                     X|  # noqa
+    # |                       binary|          None|      None|  None|bytearray(b'a')|                None|                         None|      None|                  None|     None|                None|           bytearray(b'ABC')|        None|          None|                 X|                     X|  # noqa
+    # |                decimal(10,0)|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|Decimal('1')|          None|                 X|                     X|  # noqa
+    # |              map<string,int>|          None|      None|  None|           None|                None|                         None|      None|                  None|     None|                None|                        None|        None|      {'a': 1}|                 X|                     X|  # noqa
+    # |               struct<_1:int>|          None|         X|     X|              X|                   X|                            X|         X|                     X|Row(_1=1)|           Row(_1=1)|                           X|           X|  Row(_1=None)|         Row(_1=1)|             Row(_1=1)|  # noqa
+    # +-----------------------------+--------------+----------+------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+----------------------------+------------+--------------+------------------+----------------------+  # noqa
     #
     # Note: DDL formatted string is used for 'SQL Type' for simplicity. This string can be
     #       used in `returnType`.
     # Note: The values inside of the table are generated by `repr`.
-    # Note: Python 2 is used to generate this table since it is used to check the backward
-    #       compatibility often in practice.
     # Note: 'X' means it throws an exception during the conversion.
+    # Note: Python 3.7.3 is used.
 
     # decorator @udf, @udf(), @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):
@@ -2888,8 +2920,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
 
-    .. note:: Experimental
-
     The function type of the UDF can be one of the following:
 
     1. SCALAR
@@ -2900,7 +2930,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        :class:`MapType`, nested :class:`StructType` are currently not supported as output types.
 
-       Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
+       Scalar UDFs can be used with :meth:`pyspark.sql.DataFrame.withColumn` and
        :meth:`pyspark.sql.DataFrame.select`.
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -2938,7 +2968,107 @@ def pandas_udf(f=None, returnType=None, functionType=None):
            Therefore, this can be used, for example, to ensure the length of each returned
            `pandas.Series`, and can not be used as the column length.
 
-    2. GROUPED_MAP
+    2. SCALAR_ITER
+
+       A scalar iterator UDF is semantically the same as the scalar Pandas UDF above except that the
+       wrapped Python function takes an iterator of batches as input instead of a single batch and,
+       instead of returning a single output batch, it yields output batches or explicitly returns an
+       generator or an iterator of output batches.
+       It is useful when the UDF execution requires initializing some state, e.g., loading a machine
+       learning model file to apply inference to every input batch.
+
+       .. note:: It is not guaranteed that one invocation of a scalar iterator UDF will process all
+           batches from one partition, although it is currently implemented this way.
+           Your code shall not rely on this behavior because it might change in the future for
+           further optimization, e.g., one invocation processes multiple partitions.
+
+       Scalar iterator UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
+       :meth:`pyspark.sql.DataFrame.select`.
+
+       >>> import pandas as pd  # doctest: +SKIP
+       >>> from pyspark.sql.functions import col, pandas_udf, struct, PandasUDFType
+       >>> pdf = pd.DataFrame([1, 2, 3], columns=["x"])  # doctest: +SKIP
+       >>> df = spark.createDataFrame(pdf)  # doctest: +SKIP
+
+       When the UDF is called with a single column that is not `StructType`, the input to the
+       underlying function is an iterator of `pd.Series`.
+
+       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
+       ... def plus_one(batch_iter):
+       ...     for x in batch_iter:
+       ...         yield x + 1
+       ...
+       >>> df.select(plus_one(col("x"))).show()  # doctest: +SKIP
+       +-----------+
+       |plus_one(x)|
+       +-----------+
+       |          2|
+       |          3|
+       |          4|
+       +-----------+
+
+       When the UDF is called with more than one columns, the input to the underlying function is an
+       iterator of `pd.Series` tuple.
+
+       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
+       ... def multiply_two_cols(batch_iter):
+       ...     for a, b in batch_iter:
+       ...         yield a * b
+       ...
+       >>> df.select(multiply_two_cols(col("x"), col("x"))).show()  # doctest: +SKIP
+       +-----------------------+
+       |multiply_two_cols(x, x)|
+       +-----------------------+
+       |                      1|
+       |                      4|
+       |                      9|
+       +-----------------------+
+
+       When the UDF is called with a single column that is `StructType`, the input to the underlying
+       function is an iterator of `pd.DataFrame`.
+
+       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
+       ... def multiply_two_nested_cols(pdf_iter):
+       ...    for pdf in pdf_iter:
+       ...        yield pdf["a"] * pdf["b"]
+       ...
+       >>> df.select(
+       ...     multiply_two_nested_cols(
+       ...         struct(col("x").alias("a"), col("x").alias("b"))
+       ...     ).alias("y")
+       ... ).show()  # doctest: +SKIP
+       +---+
+       |  y|
+       +---+
+       |  1|
+       |  4|
+       |  9|
+       +---+
+
+       In the UDF, you can initialize some states before processing batches, wrap your code with
+       `try ... finally ...` or use context managers to ensure the release of resources at the end
+       or in case of early termination.
+
+       >>> y_bc = spark.sparkContext.broadcast(1)  # doctest: +SKIP
+       >>> @pandas_udf("long", PandasUDFType.SCALAR_ITER)  # doctest: +SKIP
+       ... def plus_y(batch_iter):
+       ...     y = y_bc.value  # initialize some state
+       ...     try:
+       ...         for x in batch_iter:
+       ...             yield x + y
+       ...     finally:
+       ...         pass  # release resources here, if any
+       ...
+       >>> df.select(plus_y(col("x"))).show()  # doctest: +SKIP
+       +---------+
+       |plus_y(x)|
+       +---------+
+       |        2|
+       |        3|
+       |        4|
+       +---------+
+
+    3. GROUPED_MAP
 
        A grouped map UDF defines transformation: A `pandas.DataFrame` -> A `pandas.DataFrame`
        The returnType should be a :class:`StructType` describing the schema of the returned
@@ -3017,7 +3147,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 
-    3. GROUPED_AGG
+    4. GROUPED_AGG
 
        A grouped aggregate UDF defines a transformation: One or more `pandas.Series` -> A scalar
        The `returnType` should be a primitive data type, e.g., :class:`DoubleType`.
@@ -3076,6 +3206,33 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
 
+    5. MAP_ITER
+
+       A map iterator Pandas UDFs are used to transform data with an iterator of batches.
+       It can be used with :meth:`pyspark.sql.DataFrame.mapInPandas`.
+
+       It can return the output of arbitrary length in contrast to the scalar Pandas UDF.
+       It maps an iterator of batches in the current :class:`DataFrame` using a Pandas user-defined
+       function and returns the result as a :class:`DataFrame`.
+
+       The user-defined function should take an iterator of `pandas.DataFrame`\\s and return another
+       iterator of `pandas.DataFrame`\\s. All columns are passed together as an
+       iterator of `pandas.DataFrame`\\s to the user-defined function and the returned iterator of
+       `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
+
+       >>> df = spark.createDataFrame([(1, 21), (2, 30)],
+       ...                            ("id", "age"))  # doctest: +SKIP
+       >>> @pandas_udf(df.schema, PandasUDFType.MAP_ITER)  # doctest: +SKIP
+       ... def filter_func(batch_iter):
+       ...     for pdf in batch_iter:
+       ...         yield pdf[pdf.id == 1]
+       >>> df.mapInPandas(filter_func).show()  # doctest: +SKIP
+       +---+---+
+       | id|age|
+       +---+---+
+       |  1| 21|
+       +---+---+
+
     .. note:: The user-defined functions are considered deterministic by default. Due to
         optimization, duplicate invocations may be eliminated or the function may even be invoked
         more times than it is present in the query. If your function is not deterministic, call
@@ -3104,37 +3261,34 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     # The following table shows most of Pandas data and SQL type conversions in Pandas UDFs that
     # are not yet visible to the user. Some of behaviors are buggy and might be changed in the near
     # future. The table might have to be eventually documented externally.
-    # Please see SPARK-25798's PR to see the codes in order to generate the table below.
+    # Please see SPARK-28132's PR to see the codes in order to generate the table below.
     #
-    # +-----------------------------+----------------------+----------+-------+--------+--------------------+--------------------+--------+---------+---------+---------+------------+------------+------------+-----------------------------------+-----------------------------------------------------+-----------------+--------------------+-----------------------------+-------------+-----------------+------------------+-----------+--------------------------------+  # noqa
-    # |SQL Type \ Pandas Value(Type)|None(object(NoneType))|True(bool)|1(int8)|1(int16)|            1(int32)|            1(int64)|1(uint8)|1(uint16)|1(uint32)|1(uint64)|1.0(float16)|1.0(float32)|1.0(float64)|1970-01-01 00:00:00(datetime64[ns])|1970-01-01 00:00:00-05:00(datetime64[ns, US/Eastern])|a(object(string))|  1(object(Decimal))|[1 2 3](object(array[int32]))|1.0(float128)|(1+0j)(complex64)|(1+0j)(complex128)|A(category)|1 days 00:00:00(timedelta64[ns])|  # noqa
-    # +-----------------------------+----------------------+----------+-------+--------+--------------------+--------------------+--------+---------+---------+---------+------------+------------+------------+-----------------------------------+-----------------------------------------------------+-----------------+--------------------+-----------------------------+-------------+-----------------+------------------+-----------+--------------------------------+  # noqa
-    # |                      boolean|                  None|      True|   True|    True|                True|                True|    True|     True|     True|     True|       False|       False|       False|                              False|                                                False|                X|                   X|                            X|        False|            False|             False|          X|                           False|  # noqa
-    # |                      tinyint|                  None|         1|      1|       1|                   1|                   1|       X|        X|        X|        X|           1|           1|           1|                                  X|                                                    X|                X|                   X|                            X|            X|                X|                 X|          0|                               X|  # noqa
-    # |                     smallint|                  None|         1|      1|       1|                   1|                   1|       1|        X|        X|        X|           1|           1|           1|                                  X|                                                    X|                X|                   X|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # |                          int|                  None|         1|      1|       1|                   1|                   1|       1|        1|        X|        X|           1|           1|           1|                                  X|                                                    X|                X|                   X|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # |                       bigint|                  None|         1|      1|       1|                   1|                   1|       1|        1|        1|        X|           1|           1|           1|                                  0|                                       18000000000000|                X|                   X|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # |                        float|                  None|       1.0|    1.0|     1.0|                 1.0|                 1.0|     1.0|      1.0|      1.0|      1.0|         1.0|         1.0|         1.0|                                  X|                                                    X|                X|1.401298464324817...|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # |                       double|                  None|       1.0|    1.0|     1.0|                 1.0|                 1.0|     1.0|      1.0|      1.0|      1.0|         1.0|         1.0|         1.0|                                  X|                                                    X|                X|                   X|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # |                         date|                  None|         X|      X|       X|datetime.date(197...|                   X|       X|        X|        X|        X|           X|           X|           X|               datetime.date(197...|                                                    X|                X|                   X|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # |                    timestamp|                  None|         X|      X|       X|                   X|datetime.datetime...|       X|        X|        X|        X|           X|           X|           X|               datetime.datetime...|                                 datetime.datetime...|                X|                   X|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # |                       string|                  None|       u''|u'\x01'| u'\x01'|             u'\x01'|             u'\x01'| u'\x01'|  u'\x01'|  u'\x01'|  u'\x01'|         u''|         u''|         u''|                                  X|                                                    X|             u'a'|                   X|                            X|          u''|              u''|               u''|          X|                               X|  # noqa
-    # |                decimal(10,0)|                  None|         X|      X|       X|                   X|                   X|       X|        X|        X|        X|           X|           X|           X|                                  X|                                                    X|                X|        Decimal('1')|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # |                   array<int>|                  None|         X|      X|       X|                   X|                   X|       X|        X|        X|        X|           X|           X|           X|                                  X|                                                    X|                X|                   X|                    [1, 2, 3]|            X|                X|                 X|          X|                               X|  # noqa
-    # |              map<string,int>|                     X|         X|      X|       X|                   X|                   X|       X|        X|        X|        X|           X|           X|           X|                                  X|                                                    X|                X|                   X|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # |               struct<_1:int>|                     X|         X|      X|       X|                   X|                   X|       X|        X|        X|        X|           X|           X|           X|                                  X|                                                    X|                X|                   X|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # |                       binary|                     X|         X|      X|       X|                   X|                   X|       X|        X|        X|        X|           X|           X|           X|                                  X|                                                    X|                X|                   X|                            X|            X|                X|                 X|          X|                               X|  # noqa
-    # +-----------------------------+----------------------+----------+-------+--------+--------------------+--------------------+--------+---------+---------+---------+------------+------------+------------+-----------------------------------+-----------------------------------------------------+-----------------+--------------------+-----------------------------+-------------+-----------------+------------------+-----------+--------------------------------+  # noqa
+    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+--------------------+-----------------------------+--------------+-----------------+------------------+-----------+--------------------------------+  # noqa
+    # |SQL Type \ Pandas Value(Type)|None(object(NoneType))|        True(bool)|           1(int8)|          1(int16)|            1(int32)|            1(int64)|          1(uint8)|         1(uint16)|         1(uint32)|         1(uint64)|  1.0(float16)|  1.0(float32)|  1.0(float64)|1970-01-01 00:00:00(datetime64[ns])|1970-01-01 00:00:00-05:00(datetime64[ns, US/Eastern])|a(object(string))|  1(object(Decimal))|[1 2 3](object(array[int32]))| 1.0(float128)|(1+0j)(complex64)|(1+0j)(complex128)|A(category)|1 days 00:00:00(timedelta64[ns])|  # noqa
+    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+--------------------+-----------------------------+--------------+-----------------+------------------+-----------+--------------------------------+  # noqa
+    # |                      boolean|                  None|              True|              True|              True|                True|                True|              True|              True|              True|              True|          True|          True|          True|                                  X|                                                    X|                X|                   X|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |                      tinyint|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  X|                                                    X|                X|                   1|                            X|             X|                X|                 X|          0|                               X|  # noqa
+    # |                     smallint|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  X|                                                    X|                X|                   1|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |                          int|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  X|                                                    X|                X|                   1|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |                       bigint|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  0|                                       18000000000000|                X|                   1|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |                        float|                  None|               1.0|               1.0|               1.0|                 1.0|                 1.0|               1.0|               1.0|               1.0|               1.0|           1.0|           1.0|           1.0|                                  X|                                                    X|                X|                   X|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |                       double|                  None|               1.0|               1.0|               1.0|                 1.0|                 1.0|               1.0|               1.0|               1.0|               1.0|           1.0|           1.0|           1.0|                                  X|                                                    X|                X|                   X|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |                         date|                  None|                 X|                 X|                 X|datetime.date(197...|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|               datetime.date(197...|                                 datetime.date(197...|                X|datetime.date(197...|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |                    timestamp|                  None|                 X|                 X|                 X|                   X|datetime.datetime...|                 X|                 X|                 X|                 X|             X|             X|             X|               datetime.datetime...|                                 datetime.datetime...|                X|datetime.datetime...|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |                       string|                  None|                ''|                ''|                ''|              '\x01'|              '\x01'|                ''|                ''|            '\x01'|            '\x01'|            ''|            ''|            ''|                                  X|                                                    X|              'a'|                   X|                            X|            ''|                X|                ''|          X|                               X|  # noqa
+    # |                decimal(10,0)|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|        Decimal('1')|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |                   array<int>|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                   X|                    [1, 2, 3]|             X|                X|                 X|          X|                               X|  # noqa
+    # |              map<string,int>|                     X|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                   X|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |               struct<_1:int>|                     X|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                   X|                            X|             X|                X|                 X|          X|                               X|  # noqa
+    # |                       binary|                  None|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|  bytearray(b'\x01')|  bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'')|bytearray(b'')|bytearray(b'')|                     bytearray(b'')|                                       bytearray(b'')|  bytearray(b'a')|                   X|                            X|bytearray(b'')|   bytearray(b'')|    bytearray(b'')|          X|                  bytearray(b'')|  # noqa
+    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+--------------------+-----------------------------+--------------+-----------------+------------------+-----------+--------------------------------+  # noqa
     #
     # Note: DDL formatted string is used for 'SQL Type' for simplicity. This string can be
     #       used in `returnType`.
     # Note: The values inside of the table are generated by `repr`.
-    # Note: Python 2 is used to generate this table since it is used to check the backward
-    #       compatibility often in practice.
-    # Note: Pandas 0.19.2 and PyArrow 0.9.0 are used.
-    # Note: Timezone is Singapore timezone.
+    # Note: Python 3.7.3, Pandas 0.24.2 and PyArrow 0.13.0 are used.
+    # Note: Timezone is KST.
     # Note: 'X' means it throws an exception during the conversion.
-    # Note: 'binary' type is only supported with PyArrow 0.10.0+ (SPARK-23555).
 
     # decorator @pandas_udf(returnType, functionType)
     is_decorator = f is None or isinstance(f, (str, DataType))
@@ -3166,8 +3320,11 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         raise ValueError("Invalid returnType: returnType can not be None")
 
     if eval_type not in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                          PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
+                         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+                         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF]:
         raise ValueError("Invalid functionType: "
                          "functionType must be one the values from PandasUDFType")
 

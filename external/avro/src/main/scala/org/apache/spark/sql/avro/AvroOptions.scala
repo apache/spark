@@ -59,6 +59,7 @@ class AvroOptions(
    * If the option is not set, the Hadoop's config `avro.mapred.ignore.inputs.without.extension`
    * is taken into account. If the former one is not set too, file extensions are ignored.
    */
+  @deprecated("Use the general data source option pathGlobFilter for filtering file names", "3.0")
   val ignoreExtension: Boolean = {
     val ignoreFilesWithoutExtensionByDefault = false
     val ignoreFilesWithoutExtension = conf.getBoolean(
@@ -66,7 +67,7 @@ class AvroOptions(
       ignoreFilesWithoutExtensionByDefault)
 
     parameters
-      .get("ignoreExtension")
+      .get(AvroOptions.ignoreExtensionKey)
       .map(_.toBoolean)
       .getOrElse(!ignoreFilesWithoutExtension)
   }
@@ -93,4 +94,6 @@ object AvroOptions {
       .getOrElse(new Configuration())
     new AvroOptions(CaseInsensitiveMap(parameters), hadoopConf)
   }
+
+  val ignoreExtensionKey = "ignoreExtension"
 }

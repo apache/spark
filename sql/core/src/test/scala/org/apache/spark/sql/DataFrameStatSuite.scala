@@ -25,10 +25,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
 
-class DataFrameStatSuite extends QueryTest with SharedSQLContext {
+class DataFrameStatSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private def toLetter(i: Int): String = (i + 97).toChar.toString
@@ -366,6 +366,30 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-28818: Respect original column nullability in `freqItems`") {
+    val rows = spark.sparkContext.parallelize(
+      Seq(Row("1", "a"), Row("2", null), Row("3", "b"))
+    )
+    val schema = StructType(Seq(
+      StructField("non_null", StringType, false),
+      StructField("nullable", StringType, true)
+    ))
+    val df = spark.createDataFrame(rows, schema)
+
+    val result = df.stat.freqItems(df.columns)
+
+    val nonNullableDataType = result.schema("non_null_freqItems").dataType.asInstanceOf[ArrayType]
+    val nullableDataType = result.schema("nullable_freqItems").dataType.asInstanceOf[ArrayType]
+
+    assert(nonNullableDataType.containsNull == false)
+    assert(nullableDataType.containsNull == true)
+    // Original bug was a NullPointerException exception caused by calling collect(), test for this
+    val resultRow = result.collect()(0)
+
+    assert(resultRow.get(0).asInstanceOf[Seq[String]].toSet == Set("1", "2", "3"))
+    assert(resultRow.get(1).asInstanceOf[Seq[String]].toSet == Set("a", "b", null))
+  }
+
   test("sampleBy") {
     val df = spark.range(0, 100).select((col("id") % 3).as("key"))
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
@@ -449,7 +473,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 }
 
 
-class DataFrameStatPerfSuite extends QueryTest with SharedSQLContext with Logging {
+class DataFrameStatPerfSuite extends QueryTest with SharedSparkSession with Logging {
 
   // Turn on this test if you want to test the performance of approximate quantiles.
   ignore("computing quantiles should not take much longer than describe()") {

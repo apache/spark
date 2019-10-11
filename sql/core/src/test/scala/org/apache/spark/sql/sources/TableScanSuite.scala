@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 class DefaultSource extends SimpleScanSource
@@ -108,7 +108,7 @@ case class AllDataTypesScan(
   }
 }
 
-class TableScanSuite extends DataSourceTest with SharedSQLContext {
+class TableScanSuite extends DataSourceTest with SharedSparkSession {
   protected override lazy val sql = spark.sql _
 
   private lazy val tableWithSchemaExpected = (1 to 10).map { i =>

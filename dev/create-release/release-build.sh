@@ -164,7 +164,6 @@ DEST_DIR_NAME="$SPARK_PACKAGE_VERSION"
 
 git clean -d -f -x
 rm .gitignore
-rm -rf .git
 cd ..
 
 if [[ "$1" == "package" ]]; then
@@ -179,7 +178,7 @@ if [[ "$1" == "package" ]]; then
     rm -r spark-$SPARK_VERSION/licenses-binary
   fi
 
-  tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
+  tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \

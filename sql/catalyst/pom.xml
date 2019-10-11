@@ -71,6 +71,11 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
 
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -108,6 +113,10 @@
       <artifactId>univocity-parsers</artifactId>
       <version>2.7.3</version>
       <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-vector</artifactId>
     </dependency>
   </dependencies>
   <build>
@@ -161,4 +170,16 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>scala-2.13</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.scala-lang.modules</groupId>
+          <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 </project>

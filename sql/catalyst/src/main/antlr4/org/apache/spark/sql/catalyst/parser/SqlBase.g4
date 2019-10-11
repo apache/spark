@@ -82,13 +82,20 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE db=identifier                                                #use
-    | CREATE database (IF NOT EXISTS)? identifier
-        (COMMENT comment=STRING)? locationSpec?
-        (WITH DBPROPERTIES tablePropertyList)?                         #createDatabase
-    | ALTER database identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
-    | DROP database (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
+    | USE NAMESPACE? multipartIdentifier                               #use
+    | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
+        ((COMMENT comment=STRING) |
+         locationSpec |
+         (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
+    | ALTER database db=errorCapturingIdentifier
+        SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
+    | ALTER database db=errorCapturingIdentifier
+        SET locationSpec                                               #setDatabaseLocation
+    | DROP database (IF EXISTS)? db=errorCapturingIdentifier
+        (RESTRICT | CASCADE)?                                          #dropDatabase
     | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
+    | SHOW NAMESPACES ((FROM | IN) multipartIdentifier)?
+        (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitioning=transformList) |
@@ -110,18 +117,40 @@ statement
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
+    | replaceTableHeader ('(' colTypeList ')')? tableProvider
+        ((OPTIONS options=tablePropertyList) |
+        (PARTITIONED BY partitioning=transformList) |
+        bucketSpec |
+        locationSpec |
+        (COMMENT comment=STRING) |
+        (TBLPROPERTIES tableProps=tablePropertyList))*
+        (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
-    | ALTER TABLE tableIdentifier
-        ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
+    | ALTER TABLE multipartIdentifier
+        ADD (COLUMN | COLUMNS)
+        columns=qualifiedColTypeWithPositionList                       #addTableColumns
+    | ALTER TABLE multipartIdentifier
+        ADD (COLUMN | COLUMNS)
+        '(' columns=qualifiedColTypeWithPositionList ')'               #addTableColumns
+    | ALTER TABLE multipartIdentifier
+        RENAME COLUMN from=qualifiedName TO to=identifier              #renameTableColumn
+    | ALTER TABLE multipartIdentifier
+        DROP (COLUMN | COLUMNS) '(' columns=qualifiedNameList ')'      #dropTableColumns
+    | ALTER TABLE multipartIdentifier
+        DROP (COLUMN | COLUMNS) columns=qualifiedNameList              #dropTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
         RENAME TO to=tableIdentifier                                   #renameTable
-    | ALTER (TABLE | VIEW) tableIdentifier
+    | ALTER (TABLE | VIEW) multipartIdentifier
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
-    | ALTER (TABLE | VIEW) tableIdentifier
+    | ALTER (TABLE | VIEW) multipartIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
+    | ALTER TABLE multipartIdentifier
+        (ALTER | CHANGE) COLUMN? qualifiedName
+        (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
     | ALTER TABLE tableIdentifier partitionSpec?
-        CHANGE COLUMN? identifier colType colPosition?                 #changeColumn
+        CHANGE COLUMN?
+        colName=errorCapturingIdentifier colType colPosition?          #changeColumn
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?
@@ -136,15 +165,18 @@ statement
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
     | ALTER VIEW tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
-    | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
+    | ALTER TABLE multipartIdentifier SET locationSpec                 #setTableLocation
+    | ALTER TABLE tableIdentifier partitionSpec SET locationSpec       #setPartitionLocation
     | ALTER TABLE tableIdentifier RECOVER PARTITIONS                   #recoverPartitions
-    | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?                   #dropTable
-    | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
+    | DROP TABLE (IF EXISTS)? multipartIdentifier PURGE?               #dropTable
+    | DROP VIEW (IF EXISTS)? multipartIdentifier                       #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
         VIEW (IF NOT EXISTS)? tableIdentifier
-        identifierCommentList? (COMMENT STRING)?
-        (PARTITIONED ON identifierList)?
-        (TBLPROPERTIES tablePropertyList)? AS query                    #createView
+        identifierCommentList?
+        ((COMMENT STRING) |
+         (PARTITIONED ON identifierList) |
+         (TBLPROPERTIES tablePropertyList))*
+        AS query                                                       #createView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTempViewUsing
@@ -155,22 +187,22 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
-    | SHOW TABLES ((FROM | IN) db=identifier)?
+    | SHOW TABLES ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
-    | SHOW TABLE EXTENDED ((FROM | IN) db=identifier)?
+    | SHOW TABLE EXTENDED ((FROM | IN) db=errorCapturingIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) tableIdentifier
-        ((FROM | IN) db=identifier)?                                   #showColumns
+        ((FROM | IN) db=errorCapturingIdentifier)?                     #showColumns
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
-    | (DESC | DESCRIBE) database EXTENDED? identifier                  #describeDatabase
+    | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
-        tableIdentifier partitionSpec? describeColName?                #describeTable
+        multipartIdentifier partitionSpec? describeColName?                #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
@@ -186,6 +218,8 @@ statement
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
+    | DELETE FROM multipartIdentifier tableAlias whereClause?          #deleteFromTable
+    | UPDATE multipartIdentifier tableAlias setClause whereClause?     #updateTable
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -238,7 +272,11 @@ unsupportedHiveNativeCommands
     ;
 
 createTableHeader
-    : CREATE TEMPORARY? EXTERNAL? TABLE (IF NOT EXISTS)? tableIdentifier
+    : CREATE TEMPORARY? EXTERNAL? TABLE (IF NOT EXISTS)? multipartIdentifier
+    ;
+
+replaceTableHeader
+    : (CREATE OR)? REPLACE TABLE multipartIdentifier
     ;
 
 bucketSpec
@@ -258,12 +296,12 @@ locationSpec
     ;
 
 query
-    : ctes? queryNoWith
+    : ctes? queryTerm queryOrganization
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?                              #insertOverwriteTable
-    | INSERT INTO TABLE? tableIdentifier partitionSpec?                                                     #insertIntoTable
+    : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)?                         #insertOverwriteTable
+    | INSERT INTO TABLE? multipartIdentifier partitionSpec? (IF NOT EXISTS)?                                #insertIntoTable
     | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                            #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=tablePropertyList)?   #insertOverwriteDir
     ;
@@ -302,7 +340,7 @@ ctes
     ;
 
 namedQuery
-    : name=identifier AS? '(' query ')'
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? '(' query ')'
     ;
 
 tableProvider
@@ -360,26 +398,17 @@ dmlStatementNoWith
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     ;
 
-queryNoWith
-    : queryTerm queryOrganization                                               #noWithQuery
-    | fromClause selectStatement+                                               #queryWithFrom
-    ;
-
 queryOrganization
     : (ORDER BY order+=sortItem (',' order+=sortItem)*)?
       (CLUSTER BY clusterBy+=expression (',' clusterBy+=expression)*)?
       (DISTRIBUTE BY distributeBy+=expression (',' distributeBy+=expression)*)?
       (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
-      windows?
+      windowClause?
       (LIMIT (ALL | limit=expression))?
     ;
 
 multiInsertQueryBody
-    : insertInto selectStatement
-    ;
-
-selectStatement
-    : querySpecification queryOrganization
+    : insertInto fromStatementBody
     ;
 
 queryTerm
@@ -394,34 +423,76 @@ queryTerm
 
 queryPrimary
     : querySpecification                                                    #queryPrimaryDefault
-    | TABLE tableIdentifier                                                 #table
+    | fromStatement                                                         #fromStmt
+    | TABLE multipartIdentifier                                             #table
     | inlineTable                                                           #inlineTableDefault1
-    | '(' queryNoWith  ')'                                                  #subquery
+    | '(' query ')'                                                         #subquery
     ;
 
 sortItem
     : expression ordering=(ASC | DESC)? (NULLS nullOrder=(LAST | FIRST))?
     ;
 
+fromStatement
+    : fromClause fromStatementBody+
+    ;
+
+fromStatementBody
+    : transformClause
+      whereClause?
+      queryOrganization
+    | selectClause
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windowClause?
+      queryOrganization
+    ;
+
 querySpecification
-    : (((SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
-        | kind=MAP namedExpressionSeq
-        | kind=REDUCE namedExpressionSeq))
-       inRowFormat=rowFormat?
-       (RECORDWRITER recordWriter=STRING)?
-       USING script=STRING
-       (AS (identifierSeq | colTypeList | ('(' (identifierSeq | colTypeList) ')')))?
-       outRowFormat=rowFormat?
-       (RECORDREADER recordReader=STRING)?
-       fromClause?
-       (WHERE where=booleanExpression)?)
-    | ((kind=SELECT (hints+=hint)* setQuantifier? namedExpressionSeq fromClause?
-       | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
-       lateralView*
-       (WHERE where=booleanExpression)?
-       aggregation?
-       (HAVING having=booleanExpression)?
-       windows?)
+    : transformClause
+      fromClause?
+      whereClause?                                                          #transformQuerySpecification
+    | selectClause
+      fromClause?
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windowClause?                                                         #regularQuerySpecification
+    ;
+
+transformClause
+    : (SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
+            | kind=MAP namedExpressionSeq
+            | kind=REDUCE namedExpressionSeq)
+      inRowFormat=rowFormat?
+      (RECORDWRITER recordWriter=STRING)?
+      USING script=STRING
+      (AS (identifierSeq | colTypeList | ('(' (identifierSeq | colTypeList) ')')))?
+      outRowFormat=rowFormat?
+      (RECORDREADER recordReader=STRING)?
+    ;
+
+selectClause
+    : SELECT (hints+=hint)* setQuantifier? namedExpressionSeq
+    ;
+
+setClause
+    : SET assign (',' assign)*
+    ;
+
+assign
+    : key=multipartIdentifier EQ value=expression
+    ;
+
+whereClause
+    : WHERE booleanExpression
+    ;
+
+havingClause
+    : HAVING booleanExpression
     ;
 
 hint
@@ -437,7 +508,7 @@ fromClause
     : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
-aggregation
+aggregationClause
     : GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
@@ -513,7 +584,7 @@ identifierList
     ;
 
 identifierSeq
-    : identifier (',' identifier)*
+    : ident+=errorCapturingIdentifier (',' ident+=errorCapturingIdentifier)*
     ;
 
 orderedIdentifierList
@@ -521,7 +592,7 @@ orderedIdentifierList
     ;
 
 orderedIdentifier
-    : identifier ordering=(ASC | DESC)?
+    : ident=errorCapturingIdentifier ordering=(ASC | DESC)?
     ;
 
 identifierCommentList
@@ -533,8 +604,8 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier sample? tableAlias      #tableName
-    | '(' queryNoWith ')' sample? tableAlias  #aliasedQuery
+    : multipartIdentifier sample? tableAlias  #tableName
+    | '(' query ')' sample? tableAlias        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
     | functionTable                           #tableValuedFunction
@@ -545,7 +616,7 @@ inlineTable
     ;
 
 functionTable
-    : identifier '(' (expression (',' expression)*)? ')' tableAlias
+    : funcName=errorCapturingIdentifier '(' (expression (',' expression)*)? ')' tableAlias
     ;
 
 tableAlias
@@ -563,19 +634,19 @@ rowFormat
     ;
 
 multipartIdentifier
-    : parts+=identifier ('.' parts+=identifier)*
+    : parts+=errorCapturingIdentifier ('.' parts+=errorCapturingIdentifier)*
     ;
 
 tableIdentifier
-    : (db=identifier '.')? table=identifier
+    : (db=errorCapturingIdentifier '.')? table=errorCapturingIdentifier
     ;
 
 functionIdentifier
-    : (db=identifier '.')? function=identifier
+    : (db=errorCapturingIdentifier '.')? function=errorCapturingIdentifier
     ;
 
 namedExpression
-    : expression (AS? (identifier | identifierList))?
+    : expression (AS? (name=errorCapturingIdentifier | identifierList))?
     ;
 
 namedExpressionSeq
@@ -615,6 +686,7 @@ predicate
     | NOT? kind=IN '(' query ')'
     | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
     | IS NOT? kind=NULL
+    | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
     | IS NOT? kind=DISTINCT FROM right=valueExpression
     ;
 
@@ -635,8 +707,8 @@ primaryExpression
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
-    | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
-    | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
+    | (FIRST | FIRST_VALUE) '(' expression ((IGNORE | RESPECT) NULLS)? ')'                     #first
+    | (LAST | LAST_VALUE) '(' expression ((IGNORE | RESPECT) NULLS)? ')'                       #last
     | POSITION '(' substr=valueExpression IN str=valueExpression ')'                           #position
     | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
@@ -645,8 +717,6 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
-      FROM argument+=expression ')'                                                            #functionCall
     | IDENTIFIER '->' expression                                                               #lambda
     | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
@@ -654,6 +724,12 @@ primaryExpression
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
     | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
+    | (SUBSTR | SUBSTRING) '(' str=valueExpression (FROM | ',') pos=valueExpression
+      ((FOR | ',') len=valueExpression)? ')'                                                   #substring
+    | TRIM '(' trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
+       FROM srcStr=valueExpression ')'                                                         #trim
+    | OVERLAY '(' input=valueExpression PLACING replace=valueExpression
+      FROM position=valueExpression (FOR length=valueExpression)? ')'                          #overlay
     ;
 
 constant
@@ -717,7 +793,7 @@ intervalUnit
     ;
 
 colPosition
-    : FIRST | AFTER identifier
+    : FIRST | AFTER qualifiedName
     ;
 
 dataType
@@ -727,12 +803,20 @@ dataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
 
+qualifiedColTypeWithPositionList
+    : qualifiedColTypeWithPosition (',' qualifiedColTypeWithPosition)*
+    ;
+
+qualifiedColTypeWithPosition
+    : name=qualifiedName dataType (COMMENT comment=STRING)? colPosition?
+    ;
+
 colTypeList
     : colType (',' colType)*
     ;
 
 colType
-    : identifier dataType (COMMENT STRING)?
+    : colName=errorCapturingIdentifier dataType (COMMENT STRING)?
     ;
 
 complexColTypeList
@@ -747,23 +831,23 @@ whenClause
     : WHEN condition=expression THEN result=expression
     ;
 
-windows
+windowClause
     : WINDOW namedWindow (',' namedWindow)*
     ;
 
 namedWindow
-    : identifier AS windowSpec
+    : name=errorCapturingIdentifier AS windowSpec
     ;
 
 windowSpec
-    : name=identifier  #windowRef
-    | '('name=identifier')'  #windowRef
+    : name=errorCapturingIdentifier         #windowRef
+    | '('name=errorCapturingIdentifier')'   #windowRef
     | '('
       ( CLUSTER BY partition+=expression (',' partition+=expression)*
       | ((PARTITION | DISTRIBUTE) BY partition+=expression (',' partition+=expression)*)?
         ((ORDER | SORT) BY sortItem (',' sortItem)*)?)
       windowFrame?
-      ')'              #windowDef
+      ')'                                   #windowDef
     ;
 
 windowFrame
@@ -779,8 +863,25 @@ frameBound
     | expression boundType=(PRECEDING | FOLLOWING)
     ;
 
+qualifiedNameList
+    : qualifiedName (',' qualifiedName)*
+    ;
+
 qualifiedName
     : identifier ('.' identifier)*
+    ;
+
+// this rule is used for explicitly capturing wrong identifiers such as test-table, which should actually be `test-table`
+// replace identifier with errorCapturingIdentifier where the immediate follow symbol is not an expression, otherwise
+// valid expressions such as "a-b" can be recognized as an identifier
+errorCapturingIdentifier
+    : identifier errorCapturingIdentifierExtra
+    ;
+
+// extra left-factoring grammar
+errorCapturingIdentifierExtra
+    : (MINUS identifier)+    #errorIdent
+    |                        #realIdent
     ;
 
 identifier
@@ -809,7 +910,7 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// When `spark.sql.parser.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
+// When `spark.sql.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
 //     function, alias, etc.
@@ -918,6 +1019,8 @@ ansiNonReserved
     | MINUTES
     | MONTHS
     | MSCK
+    | NAMESPACE
+    | NAMESPACES
     | NO
     | NULLS
     | OF
@@ -926,12 +1029,14 @@ ansiNonReserved
     | OUT
     | OUTPUTFORMAT
     | OVER
+    | OVERLAY
     | OVERWRITE
     | PARTITION
     | PARTITIONED
     | PARTITIONS
     | PERCENTLIT
     | PIVOT
+    | PLACING
     | POSITION
     | PRECEDING
     | PRINCIPALS
@@ -947,6 +1052,7 @@ ansiNonReserved
     | REPAIR
     | REPLACE
     | RESET
+    | RESPECT
     | RESTRICT
     | REVOKE
     | RLIKE
@@ -972,6 +1078,8 @@ ansiNonReserved
     | STORED
     | STRATIFY
     | STRUCT
+    | SUBSTR
+    | SUBSTRING
     | TABLES
     | TABLESAMPLE
     | TBLPROPERTIES
@@ -981,6 +1089,7 @@ ansiNonReserved
     | TRANSACTION
     | TRANSACTIONS
     | TRANSFORM
+    | TRIM
     | TRUE
     | TRUNCATE
     | UNARCHIVE
@@ -988,6 +1097,7 @@ ansiNonReserved
     | UNCACHE
     | UNLOCK
     | UNSET
+    | UPDATE
     | USE
     | VALUES
     | VIEW
@@ -997,9 +1107,9 @@ ansiNonReserved
     | YEARS
     ;
 
-// When `spark.sql.parser.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
+// When `spark.sql.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
 // - Non-reserved keywords:
-//     Same definition as the one when `spark.sql.parser.ansi.enabled=true`.
+//     Same definition as the one when `spark.sql.ansi.enabled=true`.
 // - Strict-non-reserved keywords:
 //     A strict version of non-reserved keywords, which can not be used as table alias.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.
@@ -1105,6 +1215,7 @@ nonReserved
     | FIELDS
     | FILEFORMAT
     | FIRST
+    | FIRST_VALUE
     | FOLLOWING
     | FOR
     | FOREIGN
@@ -1135,6 +1246,7 @@ nonReserved
     | ITEMS
     | KEYS
     | LAST
+    | LAST_VALUE
     | LATERAL
     | LAZY
     | LEADING
@@ -1159,6 +1271,8 @@ nonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAMESPACE
+    | NAMESPACES
     | NO
     | NOT
     | NULL
@@ -1174,12 +1288,14 @@ nonReserved
     | OUTPUTFORMAT
     | OVER
     | OVERLAPS
+    | OVERLAY
     | OVERWRITE
     | PARTITION
     | PARTITIONED
     | PARTITIONS
     | PERCENTLIT
     | PIVOT
+    | PLACING
     | POSITION
     | PRECEDING
     | PRIMARY
@@ -1197,6 +1313,7 @@ nonReserved
     | REPAIR
     | REPLACE
     | RESET
+    | RESPECT
     | RESTRICT
     | REVOKE
     | RLIKE
@@ -1226,6 +1343,8 @@ nonReserved
     | STORED
     | STRATIFY
     | STRUCT
+    | SUBSTR
+    | SUBSTRING
     | TABLE
     | TABLES
     | TABLESAMPLE
@@ -1239,14 +1358,18 @@ nonReserved
     | TRANSACTION
     | TRANSACTIONS
     | TRANSFORM
+    | TRIM
     | TRUE
     | TRUNCATE
+    | TYPE
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
     | UNIQUE
+    | UNKNOWN
     | UNLOCK
     | UNSET
+    | UPDATE
     | USE
     | USER
     | VALUES
@@ -1350,6 +1473,7 @@ FETCH: 'FETCH';
 FIELDS: 'FIELDS';
 FILEFORMAT: 'FILEFORMAT';
 FIRST: 'FIRST';
+FIRST_VALUE: 'FIRST_VALUE';
 FOLLOWING: 'FOLLOWING';
 FOR: 'FOR';
 FOREIGN: 'FOREIGN';
@@ -1384,6 +1508,7 @@ ITEMS: 'ITEMS';
 JOIN: 'JOIN';
 KEYS: 'KEYS';
 LAST: 'LAST';
+LAST_VALUE: 'LAST_VALUE';
 LATERAL: 'LATERAL';
 LAZY: 'LAZY';
 LEADING: 'LEADING';
@@ -1409,6 +1534,8 @@ MINUTES: 'MINUTES';
 MONTH: 'MONTH';
 MONTHS: 'MONTHS';
 MSCK: 'MSCK';
+NAMESPACE: 'NAMESPACE';
+NAMESPACES: 'NAMESPACES';
 NATURAL: 'NATURAL';
 NO: 'NO';
 NOT: 'NOT' | '!';
@@ -1426,12 +1553,14 @@ OUTER: 'OUTER';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
 OVER: 'OVER';
 OVERLAPS: 'OVERLAPS';
+OVERLAY: 'OVERLAY';
 OVERWRITE: 'OVERWRITE';
 PARTITION: 'PARTITION';
 PARTITIONED: 'PARTITIONED';
 PARTITIONS: 'PARTITIONS';
 PERCENTLIT: 'PERCENT';
 PIVOT: 'PIVOT';
+PLACING: 'PLACING';
 POSITION: 'POSITION';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
@@ -1449,6 +1578,7 @@ RENAME: 'RENAME';
 REPAIR: 'REPAIR';
 REPLACE: 'REPLACE';
 RESET: 'RESET';
+RESPECT: 'RESPECT';
 RESTRICT: 'RESTRICT';
 REVOKE: 'REVOKE';
 RIGHT: 'RIGHT';
@@ -1481,6 +1611,8 @@ STATISTICS: 'STATISTICS';
 STORED: 'STORED';
 STRATIFY: 'STRATIFY';
 STRUCT: 'STRUCT';
+SUBSTR: 'SUBSTR';
+SUBSTRING: 'SUBSTRING';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLESAMPLE: 'TABLESAMPLE';
@@ -1494,15 +1626,19 @@ TRAILING: 'TRAILING';
 TRANSACTION: 'TRANSACTION';
 TRANSACTIONS: 'TRANSACTIONS';
 TRANSFORM: 'TRANSFORM';
+TRIM: 'TRIM';
 TRUE: 'TRUE';
 TRUNCATE: 'TRUNCATE';
+TYPE: 'TYPE';
 UNARCHIVE: 'UNARCHIVE';
 UNBOUNDED: 'UNBOUNDED';
 UNCACHE: 'UNCACHE';
 UNION: 'UNION';
 UNIQUE: 'UNIQUE';
+UNKNOWN: 'UNKNOWN';
 UNLOCK: 'UNLOCK';
 UNSET: 'UNSET';
+UPDATE: 'UPDATE';
 USE: 'USE';
 USER: 'USER';
 USING: 'USING';

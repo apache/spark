@@ -52,7 +52,7 @@ abstract class BaseYarnClusterSuite
     |log4j.logger.org.apache.hadoop=WARN
     |log4j.logger.org.eclipse.jetty=WARN
     |log4j.logger.org.mortbay=WARN
-    |log4j.logger.org.spark_project.jetty=WARN
+    |log4j.logger.org.sparkproject.jetty=WARN
     """.stripMargin
 
   private var yarnCluster: MiniYARNCluster = _
@@ -63,7 +63,7 @@ abstract class BaseYarnClusterSuite
 
   def newYarnConfig(): YarnConfiguration
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
 
     tempDir = Utils.createTempDir()
@@ -115,7 +115,7 @@ abstract class BaseYarnClusterSuite
     File.createTempFile("token", ".txt", hadoopConfDir)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       yarnCluster.stop()
     } finally {
@@ -167,7 +167,7 @@ abstract class BaseYarnClusterSuite
 
     val handle = launcher.startApplication()
     try {
-      eventually(timeout(2.minutes), interval(1.second)) {
+      eventually(timeout(3.minutes), interval(1.second)) {
         assert(handle.getState().isFinal())
       }
     } finally {

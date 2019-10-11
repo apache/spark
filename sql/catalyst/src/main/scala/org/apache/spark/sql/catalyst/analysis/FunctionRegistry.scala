@@ -21,7 +21,6 @@ import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -217,15 +216,19 @@ object FunctionRegistry {
     expression[PosExplode]("posexplode"),
     expressionGeneratorOuter[PosExplode]("posexplode_outer"),
     expression[Rand]("rand"),
+    expression[Rand]("random"),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
     expression[CaseWhen]("when"),
 
     // math functions
     expression[Acos]("acos"),
+    expression[Acosh]("acosh"),
     expression[Asin]("asin"),
+    expression[Asinh]("asinh"),
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
+    expression[Atanh]("atanh"),
     expression[Bin]("bin"),
     expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
@@ -282,6 +285,7 @@ object FunctionRegistry {
     expression[Average]("avg"),
     expression[Corr]("corr"),
     expression[Count]("count"),
+    expression[CountIf]("count_if"),
     expression[CovPopulation]("covar_pop"),
     expression[CovSample]("covar_samp"),
     expression[First]("first"),
@@ -290,8 +294,10 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Last]("last_value"),
     expression[Max]("max"),
+    expression[MaxBy]("max_by"),
     expression[Average]("mean"),
     expression[Min]("min"),
+    expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
@@ -346,6 +352,7 @@ object FunctionRegistry {
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
+    expression[Overlay]("overlay"),
     expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
@@ -408,6 +415,9 @@ object FunctionRegistry {
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
+    expression[MakeDate]("make_date"),
+    expression[MakeTimestamp]("make_timestamp"),
+    expression[DatePart]("date_part"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -447,6 +457,7 @@ object FunctionRegistry {
     expression[MapFilter]("map_filter"),
     expression[ArrayFilter]("filter"),
     expression[ArrayExists]("exists"),
+    expression[ArrayForAll]("forall"),
     expression[ArrayAggregate]("aggregate"),
     expression[TransformValues]("transform_values"),
     expression[TransformKeys]("transform_keys"),
@@ -581,14 +592,19 @@ object FunctionRegistry {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
-          val expectedNumberOfParameters = if (validParametersCount.length == 1) {
-            validParametersCount.head.toString
+          val invalidArgumentsMsg = if (validParametersCount.length == 0) {
+            s"Invalid arguments for function $name"
           } else {
-            validParametersCount.init.mkString("one of ", ", ", " and ") +
-              validParametersCount.last
+            val expectedNumberOfParameters = if (validParametersCount.length == 1) {
+              validParametersCount.head.toString
+            } else {
+              validParametersCount.init.mkString("one of ", ", ", " and ") +
+                validParametersCount.last
+            }
+            s"Invalid number of arguments for function $name. " +
+              s"Expected: $expectedNumberOfParameters; Found: ${params.length}"
           }
-          throw new AnalysisException(s"Invalid number of arguments for function $name. " +
-            s"Expected: $expectedNumberOfParameters; Found: ${params.length}")
+          throw new AnalysisException(invalidArgumentsMsg)
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e

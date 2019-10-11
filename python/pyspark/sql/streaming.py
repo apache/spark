@@ -186,7 +186,7 @@ class StreamingQuery(object):
             je = self._jsq.exception().get()
             msg = je.toString().split(': ', 1)[1]  # Drop the Java StreamingQueryException type info
             stackTrace = '\n\t at '.join(map(lambda x: x.toString(), je.getStackTrace()))
-            return StreamingQueryException(msg, stackTrace)
+            return StreamingQueryException(msg, stackTrace, je.getCause())
         else:
             return None
 
@@ -341,6 +341,9 @@ class DataStreamReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
 
         .. note:: Evolving.
 
@@ -357,6 +360,9 @@ class DataStreamReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
 
         .. note:: Evolving.
 
@@ -458,12 +464,12 @@ class DataStreamReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
-                           default value, ``yyyy-MM-dd``.
+                           default value, ``uuuu-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at
                                 ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
@@ -634,12 +640,12 @@ class DataStreamReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
-                           default value, ``yyyy-MM-dd``.
+                           default value, ``uuuu-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format.
                                 Custom date formats follow the formats at
                                 ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+                                default value, ``uuuu-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -1149,7 +1155,7 @@ def _test():
     globs['sqlContext'] = SQLContext.getOrCreate(spark.sparkContext)
     globs['sdf'] = \
         spark.readStream.format('text').load('python/test_support/sql/streaming')
-    globs['sdf_schema'] = StructType([StructField("data", StringType(), False)])
+    globs['sdf_schema'] = StructType([StructField("data", StringType(), True)])
     globs['df'] = \
         globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
 

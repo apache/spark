@@ -466,11 +466,12 @@ class DataFrameTests(ReusedSQLTestCase):
         df1 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
         df2 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
 
-        # joins without conditions require cross join syntax
-        self.assertRaises(AnalysisException, lambda: df1.join(df2).collect())
+        with self.sql_conf({"spark.sql.crossJoin.enabled": False}):
+            # joins without conditions require cross join syntax
+            self.assertRaises(AnalysisException, lambda: df1.join(df2).collect())
 
-        # works with crossJoin
-        self.assertEqual(1, df1.crossJoin(df2).count())
+            # works with crossJoin
+            self.assertEqual(1, df1.crossJoin(df2).count())
 
     def test_cache(self):
         spark = self.spark
@@ -677,6 +678,40 @@ class DataFrameTests(ReusedSQLTestCase):
                     self.assertEquals(None, df._repr_html_())
                     self.assertEquals(expected, df.__repr__())
 
+    def test_to_local_iterator(self):
+        df = self.spark.range(8, numPartitions=4)
+        expected = df.collect()
+        it = df.toLocalIterator()
+        self.assertEqual(expected, list(it))
+
+        # Test DataFrame with empty partition
+        df = self.spark.range(3, numPartitions=4)
+        it = df.toLocalIterator()
+        expected = df.collect()
+        self.assertEqual(expected, list(it))
+
+    def test_to_local_iterator_prefetch(self):
+        df = self.spark.range(8, numPartitions=4)
+        expected = df.collect()
+        it = df.toLocalIterator(prefetchPartitions=True)
+        self.assertEqual(expected, list(it))
+
+    def test_to_local_iterator_not_fully_consumed(self):
+        # SPARK-23961: toLocalIterator throws exception when not fully consumed
+        # Create a DataFrame large enough so that write to socket will eventually block
+        df = self.spark.range(1 << 20, numPartitions=2)
+        it = df.toLocalIterator()
+        self.assertEqual(df.take(1)[0], next(it))
+        with QuietTest(self.sc):
+            it = None  # remove iterator from scope, socket is closed when cleaned up
+            # Make sure normal df operations still work
+            result = []
+            for i, row in enumerate(df.toLocalIterator()):
+                result.append(row)
+                if i == 7:
+                    break
+            self.assertEqual(df.take(8), result)
+
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
@@ -722,6 +757,7 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
             self.spark._jvm.OnSuccessCall.isCalled(),
             "The callback from the query execution listener should not be called before 'collect'")
         self.spark.sql("SELECT * FROM range(1)").collect()
+        self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty(10000)
         self.assertTrue(
             self.spark._jvm.OnSuccessCall.isCalled(),
             "The callback from the query execution listener should be called after 'collect'")
@@ -730,12 +766,13 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
         not have_pandas or not have_pyarrow,
         pandas_requirement_message or pyarrow_requirement_message)
     def test_query_execution_listener_on_collect_with_arrow(self):
-        with self.sql_conf({"spark.sql.execution.arrow.enabled": True}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
             self.assertFalse(
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should not be "
                 "called before 'toPandas'")
             self.spark.sql("SELECT * FROM range(1)").toPandas()
+            self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty(10000)
             self.assertTrue(
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should be called after 'toPandas'")
@@ -746,7 +783,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -21,7 +21,6 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.ExecutionContext
-import scala.language.existentials
 import scala.util.{Failure, Success}
 
 import org.apache.spark._
@@ -224,7 +223,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    * Clean up the data and metadata of blocks and batches that are strictly
    * older than the threshold time. Note that this does not
    */
-  def cleanupOldBlocksAndBatches(cleanupThreshTime: Time) {
+  def cleanupOldBlocksAndBatches(cleanupThreshTime: Time): Unit = {
     // Clean up old block and batch metadata
     receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
 
@@ -310,7 +309,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Deregister a receiver */
-  private def deregisterReceiver(streamId: Int, message: String, error: String) {
+  private def deregisterReceiver(streamId: Int, message: String, error: String): Unit = {
     val lastErrorTime =
       if (error == null || error == "") -1 else ssc.scheduler.clock.getTimeMillis()
     val errorInfo = ReceiverErrorInfo(
@@ -346,7 +345,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Report error sent by a receiver */
-  private def reportError(streamId: Int, message: String, error: String) {
+  private def reportError(streamId: Int, message: String, error: String): Unit = {
     val newReceiverTrackingInfo = receiverTrackingInfos.get(streamId) match {
       case Some(oldInfo) =>
         val errorInfo = ReceiverErrorInfo(lastErrorMessage = message, lastError = error,
@@ -614,7 +613,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       ssc.sparkContext.setCallSite(Option(ssc.getStartSite()).getOrElse(Utils.getCallSite()))
 
       val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](
-        receiverRDD, startReceiverFunc, Seq(0), (_, _) => Unit, ())
+        receiverRDD, startReceiverFunc, Seq(0), (_, _) => (), ())
       // We will keep restarting the receiver job until ReceiverTracker is stopped
       future.onComplete {
         case Success(_) =>
@@ -654,7 +653,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
     /** Send stop signal to the receivers. */
-    private def stopReceivers() {
+    private def stopReceivers(): Unit = {
       receiverTrackingInfos.values.flatMap(_.endpoint).foreach { _.send(StopReceiver) }
       logInfo("Sent stop signal to all " + receiverTrackingInfos.size + " receivers")
     }

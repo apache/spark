@@ -30,9 +30,10 @@ import io.fabric8.kubernetes.client.Watcher.Action
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
 import org.scalatest.Matchers
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
+import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.time.{Minutes, Seconds, Span}
 
-import org.apache.spark.{SPARK_VERSION, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
 import org.apache.spark.internal.Logging
@@ -40,8 +41,8 @@ import org.apache.spark.internal.config._
 
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with RTestsSuite with ClientModeTestsSuite with PodTemplateSuite
-  with PVTestsSuite with Logging with Eventually with Matchers {
+  with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite with PVTestsSuite
+  with DepsTestsSuite with RTestsSuite with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 
@@ -120,12 +121,8 @@ class KubernetesSuite extends SparkFunSuite
     pyImage = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_PYTHON, "spark-py"))
     rImage = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_R, "spark-r"))
 
-    val scalaVersion = scala.util.Properties.versionNumberString
-      .split("\\.")
-      .take(2)
-      .mkString(".")
     containerLocalSparkDistroExamplesJar =
-      s"local:///opt/spark/examples/jars/spark-examples_$scalaVersion-${SPARK_VERSION}.jar"
+      s"local:///opt/spark/examples/jars/${Utils.getExamplesJarName()}"
     testBackend = IntegrationTestBackendFactory.getTestBackend
     testBackend.initialize()
     kubernetesTestComponents = new KubernetesTestComponents(testBackend.getKubernetesClient)
@@ -198,7 +195,7 @@ class KubernetesSuite extends SparkFunSuite
       appLocator,
       isJVM,
       None,
-      interval)
+      Option((interval, None)))
   }
 
   protected def runSparkRemoteCheckAndVerifyCompletion(
@@ -206,7 +203,8 @@ class KubernetesSuite extends SparkFunSuite
       driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
       executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
       appArgs: Array[String],
-      appLocator: String = appLocator): Unit = {
+      appLocator: String = appLocator,
+      timeout: Option[PatienceConfiguration.Timeout] = None): Unit = {
     runSparkApplicationAndVerifyCompletion(
       appResource,
       SPARK_REMOTE_MAIN_CLASS,
@@ -215,7 +213,8 @@ class KubernetesSuite extends SparkFunSuite
       driverPodChecker,
       executorPodChecker,
       appLocator,
-      true)
+      true,
+      executorPatience = Option((None, timeout)))
   }
 
   protected def runSparkJVMCheckAndVerifyCompletion(
@@ -265,7 +264,7 @@ class KubernetesSuite extends SparkFunSuite
       appLocator: String,
       isJVM: Boolean,
       pyFiles: Option[String] = None,
-      interval: Option[PatienceConfiguration.Interval] = None): Unit = {
+      executorPatience: Option[(Option[Interval], Option[Timeout])] = None): Unit = {
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
       mainClass = mainClass,
@@ -306,8 +305,16 @@ class KubernetesSuite extends SparkFunSuite
         }
       })
 
-    val patienceInterval = interval.getOrElse(INTERVAL)
-    Eventually.eventually(TIMEOUT, patienceInterval) { execPods.values.nonEmpty should be (true) }
+    val (patienceInterval, patienceTimeout) = {
+      executorPatience match {
+        case Some(patience) => (patience._1.getOrElse(INTERVAL), patience._2.getOrElse(TIMEOUT))
+        case _ => (INTERVAL, TIMEOUT)
+      }
+    }
+
+    Eventually.eventually(patienceTimeout, patienceInterval) {
+      execPods.values.nonEmpty should be (true)
+    }
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
     Eventually.eventually(TIMEOUT, patienceInterval) {
@@ -328,6 +335,10 @@ class KubernetesSuite extends SparkFunSuite
       === baseMemory)
   }
 
+  protected def doExecutorServiceAccountCheck(executorPod: Pod, account: String): Unit = {
+    doBasicExecutorPodCheck(executorPod)
+    assert(executorPod.getSpec.getServiceAccount == kubernetesTestComponents.serviceAccountName)
+  }
 
   protected def doBasicDriverPyPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
@@ -408,6 +419,7 @@ class KubernetesSuite extends SparkFunSuite
 
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
+  val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
   val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"

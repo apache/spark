@@ -32,7 +32,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, SparkEnv, TaskContext}
+import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.util.Utils
 
 
@@ -109,7 +109,6 @@ private[spark] class PipedRDD[T: ClassTag](
     }
 
     val proc = pb.start()
-    val env = SparkEnv.get
     val childThreadException = new AtomicReference[Throwable](null)
 
     // Start a thread to print the process's stderr to ours

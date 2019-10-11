@@ -27,6 +27,8 @@ For Scala/Java applications using SBT/Maven project definitions, link your appli
     artifactId = spark-sql-kafka-0-10_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION_SHORT}}
 
+Please note that to use the headers functionality, your Kafka client version should be version 0.11.0.0 or up.
+
 For Python applications, you need to add this above library and its dependencies when deploying your
 application. See the [Deploying](#deploying) subsection below.
 
@@ -49,6 +51,17 @@ val df = spark
   .load()
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
+
+// Subscribe to 1 topic, with headers
+val df = spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .option("includeHeaders", "true")
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
+  .as[(String, String, Map)]
 
 // Subscribe to multiple topics
 val df = spark
@@ -84,6 +97,16 @@ Dataset<Row> df = spark
   .load();
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
+// Subscribe to 1 topic, with headers
+Dataset<Row> df = spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .option("includeHeaders", "true")
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers");
+
 // Subscribe to multiple topics
 Dataset<Row> df = spark
   .readStream()
@@ -115,6 +138,16 @@ df = spark \
   .option("subscribe", "topic1") \
   .load()
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to 1 topic, with headers
+val df = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
+  .option("includeHeaders", "true") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
 
 # Subscribe to multiple topics
 df = spark \
@@ -286,6 +319,10 @@ Each row in the source has the following schema:
   <td>timestampType</td>
   <td>int</td>
 </tr>
+<tr>
+  <td>headers (optional)</td>
+  <td>array</td>
+</tr>
 </table>
 
 The following options must be set for the Kafka source
@@ -326,6 +363,27 @@ The following configurations are optional:
 <table class="table">
 <tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr>
 <tr>
+  <td>startingOffsetsByTimestamp</td>
+  <td>json string
+  """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
+  </td>
+  <td>none (the value of <code>startingOffsets<code/> will apply)</td>
+  <td>streaming and batch</td>
+  <td>The start point of timestamp when a query is started, a json string specifying a starting timestamp for
+  each TopicPartition. The returned offset for each partition is the earliest offset whose timestamp is greater than or
+  equal to the given timestamp in the corresponding partition. If the matched offset doesn't exist,
+  the query will fail immediately to prevent unintended read from such partition. (This is a kind of limitation as of now, and will be addressed in near future.)<p/>
+  <p/>
+  Spark simply passes the timestamp information to <code>KafkaConsumer.offsetsForTimes</code>, and doesn't interpret or reason about the value. <p/>
+  For more details on <code>KafkaConsumer.offsetsForTimes</code>, please refer <a href="https://kafka.apache.org/21/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html#offsetsForTimes-java.util.Map-">javadoc</a> for details.<p/>
+  Also the meaning of <code>timestamp</code> here can be vary according to Kafka configuration (<code>log.message.timestamp.type</code>): please refer <a href="https://kafka.apache.org/documentation/">Kafka documentation</a> for further details.<p/>
+  Note: This option requires Kafka 0.10.1.0 or higher.<p/>
+  Note2: <code>startingOffsetsByTimestamp</code> takes precedence over <code>startingOffsets</code>.<p/>
+  Note3: For streaming queries, this only applies when a new query is started, and that resuming will
+  always pick up from where the query left off. Newly discovered partitions during a query will start at
+  earliest.</td>
+</tr>
+<tr>
   <td>startingOffsets</td>
   <td>"earliest", "latest" (streaming only), or json string
   """ {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}} """
@@ -339,6 +397,25 @@ The following configurations are optional:
   For streaming queries, this only applies when a new query is started, and that resuming will
   always pick up from where the query left off. Newly discovered partitions during a query will start at
   earliest.</td>
+</tr>
+<tr>
+  <td>endingOffsetsByTimestamp</td>
+  <td>json string
+  """ {"topicA":{"0": 1000, "1": 1000}, "topicB": {"0": 2000, "1": 2000}} """
+  </td>
+  <td>latest</td>
+  <td>batch query</td>
+  <td>The end point when a batch query is ended, a json string specifying an ending timesamp for each TopicPartition.
+  The returned offset for each partition is the earliest offset whose timestamp is greater than or equal to
+  the given timestamp in the corresponding partition. If the matched offset doesn't exist, the offset will
+  be set to latest.<p/>
+  <p/>
+  Spark simply passes the timestamp information to <code>KafkaConsumer.offsetsForTimes</code>, and doesn't interpret or reason about the value. <p/>
+  For more details on <code>KafkaConsumer.offsetsForTimes</code>, please refer <a href="https://kafka.apache.org/21/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html#offsetsForTimes-java.util.Map-">javadoc</a> for details.<p/>
+  Also the meaning of <code>timestamp</code> here can be vary according to Kafka configuration (<code>log.message.timestamp.type</code>): please refer <a href="https://kafka.apache.org/documentation/">Kafka documentation</a> for further details.<p/>
+  Note: This option requires Kafka 0.10.1.0 or higher.<p/>
+  Note2: <code>endingOffsetsByTimestamp</code> takes precedence over <code>endingOffsets</code>.
+  </td>
 </tr>
 <tr>
   <td>endingOffsets</td>
@@ -355,11 +432,10 @@ The following configurations are optional:
   <td>failOnDataLoss</td>
   <td>true or false</td>
   <td>true</td>
-  <td>streaming query</td>
+  <td>streaming and batch</td>
   <td>Whether to fail the query when it's possible that data is lost (e.g., topics are deleted, or
   offsets are out of range). This may be a false alarm. You can disable it when it doesn't work
-  as you expected. Batch queries will always fail if it fails to read any data from the provided
-  offsets due to lost data.</td>
+  as you expected.</td>
 </tr>
 <tr>
   <td>kafkaConsumer.pollTimeoutMs</td>
@@ -390,12 +466,24 @@ The following configurations are optional:
   <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
 </tr>
 <tr>
+  <td>minPartitions</td>
+  <td>int</td>
+  <td>none</td>
+  <td>streaming and batch</td>
+  <td>Desired minimum number of partitions to read from Kafka.
+  By default, Spark has a 1-1 mapping of topicPartitions to Spark partitions consuming from Kafka.
+  If you set this option to a value greater than your topicPartitions, Spark will divvy up large
+  Kafka partitions to smaller pieces. Please note that this configuration is like a `hint`: the
+  number of Spark tasks will be **approximately** `minPartitions`. It can be less or more depending on
+  rounding errors or Kafka partitions that didn't receive any new data.</td>
+</tr>
+<tr>
   <td>groupIdPrefix</td>
   <td>string</td>
   <td>spark-kafka-source</td>
   <td>streaming and batch</td>
   <td>Prefix of consumer group identifiers (`group.id`) that are generated by structured streaming
-  queries. If "kafka.group.id" is set, this option will be ignored. </td>
+  queries. If "kafka.group.id" is set, this option will be ignored.</td>
 </tr>
 <tr>
   <td>kafka.group.id</td>
@@ -412,7 +500,87 @@ The following configurations are optional:
   same group id are likely interfere with each other causing each query to read only part of the
   data. This may also occur when queries are started/restarted in quick succession. To minimize such
   issues, set the Kafka consumer session timeout (by setting option "kafka.session.timeout.ms") to
-  be very small. When this is set, option "groupIdPrefix" will be ignored. </td>
+  be very small. When this is set, option "groupIdPrefix" will be ignored.</td>
+</tr>
+<tr>
+  <td>includeHeaders</td>
+  <td>boolean</td>
+  <td>false</td>
+  <td>streaming and batch</td>
+  <td>Whether to include the Kafka headers in the row.</td>
+</tr>
+</table>
+
+### Consumer Caching
+
+It's time-consuming to initialize Kafka consumers, especially in streaming scenarios where processing time is a key factor.
+Because of this, Spark pools Kafka consumers on executors, by leveraging Apache Commons Pool.
+
+The caching key is built up from the following information:
+
+* Topic name
+* Topic partition
+* Group ID
+
+The following properties are available to configure the consumer pool:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.kafka.consumer.cache.capacity</td>
+  <td>The maximum number of consumers cached. Please note that it's a soft limit.</td>
+  <td>64</td>
+</tr>
+<tr>
+  <td>spark.kafka.consumer.cache.timeout</td>
+  <td>The minimum amount of time a consumer may sit idle in the pool before it is eligible for eviction by the evictor.</td>
+  <td>5m (5 minutes)</td>
+</tr>
+<tr>
+  <td>spark.kafka.consumer.cache.evictorThreadRunInterval</td>
+  <td>The interval of time between runs of the idle evictor thread for consumer pool. When non-positive, no idle evictor thread will be run.</td>
+  <td>1m (1 minutes)</td>
+</tr>
+<tr>
+  <td>spark.kafka.consumer.cache.jmx.enable</td>
+  <td>Enable or disable JMX for pools created with this configuration instance. Statistics of the pool are available via JMX instance.
+  The prefix of JMX name is set to "kafka010-cached-simple-kafka-consumer-pool".
+  </td>
+  <td>false</td>
+</tr>
+</table>
+
+The size of the pool is limited by <code>spark.kafka.consumer.cache.capacity</code>,
+but it works as "soft-limit" to not block Spark tasks.
+
+Idle eviction thread periodically removes consumers which are not used longer than given timeout.
+If this threshold is reached when borrowing, it tries to remove the least-used entry that is currently not in use.
+
+If it cannot be removed, then the pool will keep growing. In the worst case, the pool will grow to
+the max number of concurrent tasks that can run in the executor (that is, number of task slots).
+
+If a task fails for any reason, the new task is executed with a newly created Kafka consumer for safety reasons.
+At the same time, we invalidate all consumers in pool which have same caching key, to remove consumer which was used
+in failed execution. Consumers which any other tasks are using will not be closed, but will be invalidated as well
+when they are returned into pool.
+
+Along with consumers, Spark pools the records fetched from Kafka separately, to let Kafka consumers stateless in point
+of Spark's view, and maximize the efficiency of pooling. It leverages same cache key with Kafka consumers pool.
+Note that it doesn't leverage Apache Commons Pool due to the difference of characteristics.
+
+The following properties are available to configure the fetched data pool:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.kafka.consumer.fetchedData.cache.timeout</td>
+  <td>The minimum amount of time a fetched data may sit idle in the pool before it is eligible for eviction by the evictor.</td>
+  <td>5m (5 minutes)</td>
+</tr>
+<tr>
+  <td>spark.kafka.consumer.fetchedData.cache.evictorThreadRunInterval</td>
+  <td>The interval of time between runs of the idle evictor thread for fetched data pool. When non-positive, no idle evictor thread will be run.</td>
+  <td>1m (1 minutes)</td>
 </tr>
 </table>
 
@@ -437,6 +605,10 @@ The Dataframe being written to Kafka should have the following columns in schema
 <tr>
   <td>value (required)</td>
   <td>string or binary</td>
+</tr>
+<tr>
+  <td>headers (optional)</td>
+  <td>array</td>
 </tr>
 <tr>
   <td>topic (*optional)</td>
@@ -474,6 +646,13 @@ The following configurations are optional:
   <td>streaming and batch</td>
   <td>Sets the topic that all rows will be written to in Kafka. This option overrides any
   topic column that may exist in the data.</td>
+</tr>
+<tr>
+  <td>includeHeaders</td>
+  <td>boolean</td>
+  <td>false</td>
+  <td>streaming and batch</td>
+  <td>Whether to include the Kafka headers in the row.</td>
 </tr>
 </table>
 
@@ -676,7 +855,7 @@ This way the application can be configured via Spark parameters and may not need
 configuration (Spark can use Kafka's dynamic JAAS configuration feature). For further information
 about delegation tokens, see [Kafka delegation token docs](http://kafka.apache.org/documentation/#security_delegation_token).
 
-The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.bootstrap.servers` is set,
+The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.clusters.${cluster}.auth.bootstrap.servers` is set,
 Spark considers the following log in options, in order of preference:
 - **JAAS login configuration**, please see example below.
 - **Keytab file**, such as,
@@ -684,13 +863,13 @@ Spark considers the following log in options, in order of preference:
       ./bin/spark-submit \
           --keytab <KEYTAB_FILE> \
           --principal <PRINCIPAL> \
-          --conf spark.kafka.bootstrap.servers=<KAFKA_SERVERS> \
+          --conf spark.kafka.clusters.${cluster}.auth.bootstrap.servers=<KAFKA_SERVERS> \
           ...
 
 - **Kerberos credential cache**, such as,
 
       ./bin/spark-submit \
-          --conf spark.kafka.bootstrap.servers=<KAFKA_SERVERS> \
+          --conf spark.kafka.clusters.${cluster}.auth.bootstrap.servers=<KAFKA_SERVERS> \
           ...
 
 The Kafka delegation token provider can be turned off by setting `spark.security.credentials.kafka.enabled` to `false` (default: `true`).
@@ -703,10 +882,110 @@ Kafka broker configuration):
 
 After obtaining delegation token successfully, Spark distributes it across nodes and renews it accordingly.
 Delegation token uses `SCRAM` login module for authentication and because of that the appropriate
-`spark.kafka.sasl.token.mechanism` (default: `SCRAM-SHA-512`) has to be configured. Also, this parameter
+`spark.kafka.clusters.${cluster}.sasl.token.mechanism` (default: `SCRAM-SHA-512`) has to be configured. Also, this parameter
 must match with Kafka broker configuration.
 
-When delegation token is available on an executor it can be overridden with JAAS login configuration.
+When delegation token is available on an executor Spark considers the following log in options, in order of preference:
+- **JAAS login configuration**, please see example below.
+- **Delegation token**, please see <code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code> parameter for further details.
+
+When none of the above applies then unsecure connection assumed.
+
+
+#### Configuration
+
+Delegation tokens can be obtained from multiple clusters and <code>${cluster}</code> is an arbitrary unique identifier which helps to group different configurations.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.auth.bootstrap.servers</code></td>
+    <td>None</td>
+    <td>
+      A list of coma separated host/port pairs to use for establishing the initial connection
+      to the Kafka cluster. For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code></td>
+    <td>.*</td>
+    <td>
+      Regular expression to match against the <code>bootstrap.servers</code> config for sources and sinks in the application.
+      If a server address matches this regex, the delegation token obtained from the respective bootstrap servers will be used when connecting.
+      If multiple clusters match the address, an exception will be thrown and the query won't be started.
+      Kafka's secure and unsecure listeners are bound to different ports. When both used the secure listener port has to be part of the regular expression.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.security.protocol</code></td>
+    <td>SASL_SSL</td>
+    <td>
+      Protocol used to communicate with brokers. For further details please see Kafka documentation. Protocol is applied on all the sources and sinks as default where
+      <code>bootstrap.servers</code> config matches (for further details please see <code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code>),
+      and can be overridden by setting <code>kafka.security.protocol</code> on the source or sink.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.sasl.kerberos.service.name</code></td>
+    <td>kafka</td>
+    <td>
+      The Kerberos principal name that Kafka runs as. This can be defined either in Kafka's JAAS config or in Kafka's config.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.location</code></td>
+    <td>None</td>
+    <td>
+      The location of the trust store file. For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.password</code></td>
+    <td>None</td>
+    <td>
+      The store password for the trust store file. This is optional and only needed if <code>spark.kafka.clusters.${cluster}.ssl.truststore.location</code> is configured.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.keystore.location</code></td>
+    <td>None</td>
+    <td>
+      The location of the key store file. This is optional for client and can be used for two-way authentication for client.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.keystore.password</code></td>
+    <td>None</td>
+    <td>
+      The store password for the key store file. This is optional and only needed if <code>spark.kafka.clusters.${cluster}.ssl.keystore.location</code> is configured.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.key.password</code></td>
+    <td>None</td>
+    <td>
+      The password of the private key in the key store file. This is optional for client.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.sasl.token.mechanism</code></td>
+    <td>SCRAM-SHA-512</td>
+    <td>
+      SASL mechanism used for client connections with delegation token. Because SCRAM login module used for authentication a compatible mechanism has to be set here.
+      For further details please see Kafka documentation (<code>sasl.mechanism</code>). Only used to authenticate against Kafka broker with delegation token.
+    </td>
+  </tr>
+</table>
+
+#### Kafka Specific Configurations
+
+Kafka's own configurations can be set with `kafka.` prefix, e.g, `--conf spark.kafka.clusters.${cluster}.kafka.retries=1`.
+For possible Kafka parameters, see [Kafka adminclient config docs](http://kafka.apache.org/documentation.html#adminclientconfigs).
 
 #### Caveats
 

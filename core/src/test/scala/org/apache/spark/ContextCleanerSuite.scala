@@ -21,7 +21,6 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.HashSet
-import scala.language.existentials
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfter
@@ -70,10 +69,11 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
   protected def newShuffleRDD() = newPairRDD().reduceByKey(_ + _)
   protected def newBroadcast() = sc.broadcast(1 to 100)
 
-  protected def newRDDWithShuffleDependencies(): (RDD[_], Seq[ShuffleDependency[_, _, _]]) = {
-    def getAllDependencies(rdd: RDD[_]): Seq[Dependency[_]] = {
+  protected def newRDDWithShuffleDependencies():
+      (RDD[(Int, Int)], Seq[ShuffleDependency[Int, Int, Int]]) = {
+    def getAllDependencies(rdd: RDD[(Int, Int)]): Seq[Dependency[_]] = {
       rdd.dependencies ++ rdd.dependencies.flatMap { dep =>
-        getAllDependencies(dep.rdd)
+        getAllDependencies(dep.rdd.asInstanceOf[RDD[(Int, Int)]])
       }
     }
     val rdd = newShuffleRDD()
@@ -81,7 +81,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
     // Get all the shuffle dependencies
     val shuffleDeps = getAllDependencies(rdd)
       .filter(_.isInstanceOf[ShuffleDependency[_, _, _]])
-      .map(_.asInstanceOf[ShuffleDependency[_, _, _]])
+      .map(_.asInstanceOf[ShuffleDependency[Int, Int, Int]])
     (rdd, shuffleDeps)
   }
 
@@ -97,7 +97,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
   }
 
   /** Run GC and make sure it actually has run */
-  protected def runGC() {
+  protected def runGC(): Unit = {
     val weakRef = new WeakReference(new Object())
     val startTimeNs = System.nanoTime()
     System.gc() // Make a best effort to run the garbage collection. It *usually* runs GC.
@@ -406,7 +406,7 @@ class CleanerTester(
   sc.cleaner.get.attachListener(cleanerListener)
 
   /** Assert that all the stuff has been cleaned up */
-  def assertCleanup()(implicit waitTimeout: PatienceConfiguration.Timeout) {
+  def assertCleanup()(implicit waitTimeout: PatienceConfiguration.Timeout): Unit = {
     try {
       eventually(waitTimeout, interval(100.milliseconds)) {
         assert(isAllCleanedUp,
@@ -419,7 +419,7 @@ class CleanerTester(
   }
 
   /** Verify that RDDs, shuffles, etc. occupy resources */
-  private def preCleanupValidate() {
+  private def preCleanupValidate(): Unit = {
     assert(rddIds.nonEmpty || shuffleIds.nonEmpty || broadcastIds.nonEmpty ||
       checkpointIds.nonEmpty, "Nothing to cleanup")
 
@@ -465,7 +465,7 @@ class CleanerTester(
    * Verify that RDDs, shuffles, etc. do not occupy resources. Tests multiple times as there is
    * as there is not guarantee on how long it will take clean up the resources.
    */
-  private def postCleanupValidate() {
+  private def postCleanupValidate(): Unit = {
     // Verify the RDDs have been persisted and blocks are present
     rddIds.foreach { rddId =>
       assert(

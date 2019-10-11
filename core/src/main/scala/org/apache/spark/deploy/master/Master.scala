@@ -25,8 +25,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
-  ExecutorState, SparkHadoopUtil}
+import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
@@ -38,6 +37,7 @@ import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
+import org.apache.spark.resource.{ResourceRequirement, ResourceUtils}
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
@@ -192,7 +192,7 @@ private[deploy] class Master(
     leaderElectionAgent = leaderElectionAgent_
   }
 
-  override def onStop() {
+  override def onStop(): Unit = {
     masterMetricsSystem.report()
     applicationMetricsSystem.report()
     // prevent the CompleteRecovery message sending to restarted master
@@ -211,11 +211,11 @@ private[deploy] class Master(
     leaderElectionAgent.stop()
   }
 
-  override def electedLeader() {
+  override def electedLeader(): Unit = {
     self.send(ElectedLeader)
   }
 
-  override def revokedLeadership() {
+  override def revokedLeadership(): Unit = {
     self.send(RevokedLeadership)
   }
 
@@ -244,19 +244,21 @@ private[deploy] class Master(
       System.exit(0)
 
     case RegisterWorker(
-      id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl, masterAddress) =>
+      id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl,
+      masterAddress, resources) =>
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else if (idToWorker.contains(id)) {
-        workerRef.send(RegisterWorkerFailed("Duplicate worker ID"))
+        workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
       } else {
+        val workerResources = resources.map(r => r._1 -> WorkerResourceInfo(r._1, r._2.addresses))
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          workerRef, workerWebUiUrl)
+          workerRef, workerWebUiUrl, workerResources)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
-          workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress))
+          workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, false))
           schedule()
         } else {
           val workerAddress = worker.endpoint.address
@@ -361,24 +363,31 @@ private[deploy] class Master(
 
       if (canCompleteRecovery) { completeRecovery() }
 
-    case WorkerSchedulerStateResponse(workerId, executors, driverIds) =>
+    case WorkerSchedulerStateResponse(workerId, execResponses, driverResponses) =>
       idToWorker.get(workerId) match {
         case Some(worker) =>
           logInfo("Worker has been re-registered: " + workerId)
           worker.state = WorkerState.ALIVE
 
-          val validExecutors = executors.filter(exec => idToApp.get(exec.appId).isDefined)
+          val validExecutors = execResponses.filter(
+            exec => idToApp.get(exec.desc.appId).isDefined)
           for (exec <- validExecutors) {
-            val app = idToApp(exec.appId)
-            val execInfo = app.addExecutor(worker, exec.cores, Some(exec.execId))
+            val (execDesc, execResources) = (exec.desc, exec.resources)
+            val app = idToApp(execDesc.appId)
+            val execInfo = app.addExecutor(
+              worker, execDesc.cores, execResources, Some(execDesc.execId))
             worker.addExecutor(execInfo)
-            execInfo.copyState(exec)
+            worker.recoverResources(execResources)
+            execInfo.copyState(execDesc)
           }
 
-          for (driverId <- driverIds) {
+          for (driver <- driverResponses) {
+            val (driverId, driverResource) = (driver.driverId, driver.resources)
             drivers.find(_.id == driverId).foreach { driver =>
               driver.worker = Some(worker)
               driver.state = DriverState.RUNNING
+              driver.withResources(driverResource)
+              worker.recoverResources(driverResource)
               worker.addDriver(driver)
             }
           }
@@ -520,7 +529,7 @@ private[deploy] class Master(
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
-      storedWorkers: Seq[WorkerInfo]) {
+      storedWorkers: Seq[WorkerInfo]): Unit = {
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
       try {
@@ -550,7 +559,7 @@ private[deploy] class Master(
     }
   }
 
-  private def completeRecovery() {
+  private def completeRecovery(): Unit = {
     // Ensure "only-once" recovery semantics using a short synchronization period.
     if (state != RecoveryState.RECOVERING) { return }
     state = RecoveryState.COMPLETING_RECOVERY
@@ -614,24 +623,34 @@ private[deploy] class Master(
     val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
     val oneExecutorPerWorker = coresPerExecutor.isEmpty
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
+    val resourceReqsPerExecutor = app.desc.resourceReqsPerExecutor
     val numUsable = usableWorkers.length
     val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
     val assignedExecutors = new Array[Int](numUsable) // Number of new executors on each worker
     var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
 
     /** Return whether the specified worker can launch an executor for this app. */
-    def canLaunchExecutor(pos: Int): Boolean = {
+    def canLaunchExecutorForApp(pos: Int): Boolean = {
       val keepScheduling = coresToAssign >= minCoresPerExecutor
       val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor
+      val assignedExecutorNum = assignedExecutors(pos)
 
       // If we allow multiple executors per worker, then we can always launch new executors.
       // Otherwise, if there is already an executor on this worker, just give it more cores.
-      val launchingNewExecutor = !oneExecutorPerWorker || assignedExecutors(pos) == 0
+      val launchingNewExecutor = !oneExecutorPerWorker || assignedExecutorNum == 0
       if (launchingNewExecutor) {
-        val assignedMemory = assignedExecutors(pos) * memoryPerExecutor
+        val assignedMemory = assignedExecutorNum * memoryPerExecutor
         val enoughMemory = usableWorkers(pos).memoryFree - assignedMemory >= memoryPerExecutor
+        val assignedResources = resourceReqsPerExecutor.map {
+          req => req.resourceName -> req.amount * assignedExecutorNum
+        }.toMap
+        val resourcesFree = usableWorkers(pos).resourcesAmountFree.map {
+          case (rName, free) => rName -> (free - assignedResources.getOrElse(rName, 0))
+        }
+        val enoughResources = ResourceUtils.resourcesMeetRequirements(
+          resourcesFree, resourceReqsPerExecutor)
         val underLimit = assignedExecutors.sum + app.executors.size < app.executorLimit
-        keepScheduling && enoughCores && enoughMemory && underLimit
+        keepScheduling && enoughCores && enoughMemory && enoughResources && underLimit
       } else {
         // We're adding cores to an existing executor, so no need
         // to check memory and executor limits
@@ -641,11 +660,11 @@ private[deploy] class Master(
 
     // Keep launching executors until no more workers can accommodate any
     // more executors, or if we have reached this application's limits
-    var freeWorkers = (0 until numUsable).filter(canLaunchExecutor)
+    var freeWorkers = (0 until numUsable).filter(canLaunchExecutorForApp)
     while (freeWorkers.nonEmpty) {
       freeWorkers.foreach { pos =>
         var keepScheduling = true
-        while (keepScheduling && canLaunchExecutor(pos)) {
+        while (keepScheduling && canLaunchExecutorForApp(pos)) {
           coresToAssign -= minCoresPerExecutor
           assignedCores(pos) += minCoresPerExecutor
 
@@ -666,7 +685,7 @@ private[deploy] class Master(
           }
         }
       }
-      freeWorkers = freeWorkers.filter(canLaunchExecutor)
+      freeWorkers = freeWorkers.filter(canLaunchExecutorForApp)
     }
     assignedCores
   }
@@ -683,9 +702,11 @@ private[deploy] class Master(
       if (app.coresLeft >= coresPerExecutor) {
         // Filter out workers that don't have enough resources to launch an executor
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-            worker.coresFree >= coresPerExecutor)
+          .filter(canLaunchExecutor(_, app.desc))
           .sortBy(_.coresFree).reverse
+        if (waitingApps.length == 1 && usableWorkers.isEmpty) {
+          logWarning(s"App ${app.id} requires more resource than any of Workers could have.")
+        }
         val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
         // Now that we've decided how many cores to allocate on each worker, let's allocate them
@@ -715,10 +736,42 @@ private[deploy] class Master(
     val numExecutors = coresPerExecutor.map { assignedCores / _ }.getOrElse(1)
     val coresToAssign = coresPerExecutor.getOrElse(assignedCores)
     for (i <- 1 to numExecutors) {
-      val exec = app.addExecutor(worker, coresToAssign)
+      val allocated = worker.acquireResources(app.desc.resourceReqsPerExecutor)
+      val exec = app.addExecutor(worker, coresToAssign, allocated)
       launchExecutor(worker, exec)
       app.state = ApplicationState.RUNNING
     }
+  }
+
+  private def canLaunch(
+      worker: WorkerInfo,
+      memoryReq: Int,
+      coresReq: Int,
+      resourceRequirements: Seq[ResourceRequirement])
+    : Boolean = {
+    val enoughMem = worker.memoryFree >= memoryReq
+    val enoughCores = worker.coresFree >= coresReq
+    val enoughResources = ResourceUtils.resourcesMeetRequirements(
+      worker.resourcesAmountFree, resourceRequirements)
+    enoughMem && enoughCores && enoughResources
+  }
+
+  /**
+   * @return whether the worker could launch the driver represented by DriverDescription
+   */
+  private def canLaunchDriver(worker: WorkerInfo, desc: DriverDescription): Boolean = {
+    canLaunch(worker, desc.mem, desc.cores, desc.resourceReqs)
+  }
+
+  /**
+   * @return whether the worker could launch the executor according to application's requirement
+   */
+  private def canLaunchExecutor(worker: WorkerInfo, desc: ApplicationDescription): Boolean = {
+    canLaunch(
+      worker,
+      desc.memoryPerExecutorMB,
+      desc.coresPerExecutor.getOrElse(1),
+      desc.resourceReqsPerExecutor)
   }
 
   /**
@@ -738,16 +791,23 @@ private[deploy] class Master(
       // start from the last worker that was assigned a driver, and continue onwards until we have
       // explored all alive workers.
       var launched = false
+      var isClusterIdle = true
       var numWorkersVisited = 0
       while (numWorkersVisited < numWorkersAlive && !launched) {
         val worker = shuffledAliveWorkers(curPos)
+        isClusterIdle = worker.drivers.isEmpty && worker.executors.isEmpty
         numWorkersVisited += 1
-        if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
+        if (canLaunchDriver(worker, driver.desc)) {
+          val allocated = worker.acquireResources(driver.desc.resourceReqs)
+          driver.withResources(allocated)
           launchDriver(worker, driver)
           waitingDrivers -= driver
           launched = true
         }
         curPos = (curPos + 1) % numWorkersAlive
+      }
+      if (!launched && isClusterIdle) {
+        logWarning(s"Driver ${driver.id} requires more resource than any of Workers could have.")
       }
     }
     startExecutorsOnWorkers()
@@ -756,8 +816,8 @@ private[deploy] class Master(
   private def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit = {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
-    worker.endpoint.send(LaunchExecutor(masterUrl,
-      exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory))
+    worker.endpoint.send(LaunchExecutor(masterUrl, exec.application.id, exec.id,
+      exec.application.desc, exec.cores, exec.memory, exec.resources))
     exec.application.driver.send(
       ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
@@ -790,7 +850,7 @@ private[deploy] class Master(
     true
   }
 
-  private def removeWorker(worker: WorkerInfo, msg: String) {
+  private def removeWorker(worker: WorkerInfo, msg: String): Unit = {
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
@@ -819,7 +879,7 @@ private[deploy] class Master(
     persistenceEngine.removeWorker(worker)
   }
 
-  private def relaunchDriver(driver: DriverInfo) {
+  private def relaunchDriver(driver: DriverInfo): Unit = {
     // We must setup a new driver with a new driver id here, because the original driver may
     // be still running. Consider this scenario: a worker is network partitioned with master,
     // the master then relaunches driver driverID1 with a driver id driverID2, then the worker
@@ -859,11 +919,11 @@ private[deploy] class Master(
     waitingApps += app
   }
 
-  private def finishApplication(app: ApplicationInfo) {
+  private def finishApplication(app: ApplicationInfo): Unit = {
     removeApplication(app, ApplicationState.FINISHED)
   }
 
-  def removeApplication(app: ApplicationInfo, state: ApplicationState.Value) {
+  def removeApplication(app: ApplicationInfo, state: ApplicationState.Value): Unit = {
     if (apps.contains(app)) {
       logInfo("Removing app " + app.id)
       apps -= app
@@ -987,7 +1047,7 @@ private[deploy] class Master(
   }
 
   /** Check for, and remove, any timed-out workers */
-  private def timeOutDeadWorkers() {
+  private def timeOutDeadWorkers(): Unit = {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
     val currentTime = System.currentTimeMillis()
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - workerTimeoutMs).toArray
@@ -1017,18 +1077,18 @@ private[deploy] class Master(
     new DriverInfo(now, newDriverId(date), desc, date)
   }
 
-  private def launchDriver(worker: WorkerInfo, driver: DriverInfo) {
+  private def launchDriver(worker: WorkerInfo, driver: DriverInfo): Unit = {
     logInfo("Launching driver " + driver.id + " on worker " + worker.id)
     worker.addDriver(driver)
     driver.worker = Some(worker)
-    worker.endpoint.send(LaunchDriver(driver.id, driver.desc))
+    worker.endpoint.send(LaunchDriver(driver.id, driver.desc, driver.resources))
     driver.state = DriverState.RUNNING
   }
 
   private def removeDriver(
       driverId: String,
       finalState: DriverState,
-      exception: Option[Exception]) {
+      exception: Option[Exception]): Unit = {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
@@ -1053,7 +1113,7 @@ private[deploy] object Master extends Logging {
   val SYSTEM_NAME = "sparkMaster"
   val ENDPOINT_NAME = "Master"
 
-  def main(argStrings: Array[String]) {
+  def main(argStrings: Array[String]): Unit = {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(
       exitOnUncaughtException = false))
     Utils.initDaemon(log)

@@ -22,10 +22,11 @@ import java.io.File
 import com.google.common.io.Files
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 
@@ -215,6 +216,72 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
         sql("CREATE TABLE spark_23340(a array<float>, b array<double>) STORED AS ORC")
         sql("INSERT INTO spark_23340 VALUES (array(), array())")
         checkAnswer(spark.table("spark_23340"), Seq(Row(Array.empty[Float], Array.empty[Double])))
+      }
+    }
+  }
+
+  test("SPARK-26437 Can not query decimal type when value is 0") {
+    assume(HiveUtils.isHive23, "bad test: This bug fixed by HIVE-13083(Hive 2.0.1)")
+    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
+      withTable("spark_26437") {
+        sql("CREATE TABLE spark_26437 STORED AS ORCFILE AS SELECT 0.00 AS c1")
+        checkAnswer(spark.table("spark_26437"), Seq(Row(0.00)))
+      }
+    }
+  }
+
+  private def getCachedDataSourceTable(table: TableIdentifier) = {
+    spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
+      .getCachedDataSourceTable(table)
+  }
+
+  private def checkCached(tableIdentifier: TableIdentifier): Unit = {
+    getCachedDataSourceTable(tableIdentifier) match {
+      case null => fail(s"Converted ${tableIdentifier.table} should be cached in the cache.")
+      case LogicalRelation(_: HadoopFsRelation, _, _, _) => // OK
+      case other =>
+        fail(
+          s"The cached ${tableIdentifier.table} should be a HadoopFsRelation. " +
+            s"However, $other is returned form the cache.")
+    }
+  }
+
+  test("SPARK-28573 ORC conversation could be applied for partitioned table insertion") {
+    withTempView("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+      Seq("true", "false").foreach { conversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true",
+          HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> conversion) {
+          withTable("dummy_orc_partitioned") {
+            spark.sessionState.refreshTable("dummy_orc_partitioned")
+            spark.sql(
+              s"""
+                 |CREATE TABLE dummy_orc_partitioned(key INT, value STRING)
+                 |PARTITIONED by (`date` STRING)
+                 |STORED AS ORC
+                 """.stripMargin)
+
+            spark.sql(
+              s"""
+                 |INSERT INTO TABLE dummy_orc_partitioned
+                 |PARTITION (`date` = '2019-04-01')
+                 |SELECT key, value FROM single
+                 """.stripMargin)
+
+            val orcPartitionedTable = TableIdentifier("dummy_orc_partitioned", Some("default"))
+            if (conversion == "true") {
+              // if converted, it's cached as a datasource table.
+              checkCached(orcPartitionedTable)
+            } else {
+              // otherwise, not cached.
+              assert(getCachedDataSourceTable(orcPartitionedTable) === null)
+            }
+
+            val df = spark.sql("SELECT key, value FROM dummy_orc_partitioned WHERE key=0")
+            checkAnswer(df, singleRowDF)
+          }
+        }
       }
     }
   }

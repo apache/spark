@@ -16,10 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.json
 
+import java.io.File
+import java.time.{Instant, LocalDate}
+
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
-import org.apache.spark.sql.functions.{from_json, get_json_object, json_tuple, lit}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
@@ -36,7 +40,7 @@ import org.apache.spark.sql.types._
  * }}}
  */
 
-object JSONBenchmark extends SqlBasedBenchmark {
+object JsonBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
   private def prepareDataInfo(benchmark: Benchmark): Unit = {
@@ -46,7 +50,7 @@ object JSONBenchmark extends SqlBasedBenchmark {
   }
 
   private def run(ds: Dataset[_]): Unit = {
-    ds.write.format("noop").save()
+    ds.write.format("noop").mode(Overwrite).save()
   }
 
   def schemaInferring(rowsNum: Int, numIters: Int): Unit = {
@@ -374,6 +378,126 @@ object JSONBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def datetimeBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    def timestamps = {
+      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+        iter.map(Instant.ofEpochSecond(_))
+      }.select($"value".as("timestamp"))
+    }
+
+    def dates = {
+      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+        iter.map(d => LocalDate.ofEpochDay(d % (100 * 365)))
+      }.select($"value".as("date"))
+    }
+
+    withTempPath { path =>
+
+      val timestampDir = new File(path, "timestamp").getAbsolutePath
+      val dateDir = new File(path, "date").getAbsolutePath
+
+      val writeBench = new Benchmark("Write dates and timestamps", rowsNum, output = output)
+      writeBench.addCase(s"Create a dataset of timestamps", numIters) { _ =>
+        run(timestamps)
+      }
+
+      writeBench.addCase("to_json(timestamp)", numIters) { _ =>
+        run(timestamps.select(to_json(struct($"timestamp"))))
+      }
+
+      writeBench.addCase("write timestamps to files", numIters) { _ =>
+        timestamps.write.option("header", true).mode("overwrite").json(timestampDir)
+      }
+
+      writeBench.addCase("Create a dataset of dates", numIters) { _ =>
+        run(dates)
+      }
+
+      writeBench.addCase("to_json(date)", numIters) { _ =>
+        run(dates.select(to_json(struct($"date"))))
+      }
+
+      writeBench.addCase("write dates to files", numIters) { _ =>
+        dates.write.option("header", true).mode("overwrite").json(dateDir)
+      }
+
+      writeBench.run()
+
+      val readBench = new Benchmark("Read dates and timestamps", rowsNum, output = output)
+      val tsSchema = new StructType().add("timestamp", TimestampType)
+
+      readBench.addCase("read timestamp text from files", numIters) { _ =>
+        run(spark.read.text(timestampDir))
+      }
+
+      readBench.addCase("read timestamps from files", numIters) { _ =>
+        run(spark.read.schema(tsSchema).json(timestampDir))
+      }
+
+      readBench.addCase("infer timestamps from files", numIters) { _ =>
+        run(spark.read.json(timestampDir))
+      }
+
+      val dateSchema = new StructType().add("date", DateType)
+
+      readBench.addCase("read date text from files", numIters) { _ =>
+        run(spark.read.text(dateDir))
+      }
+
+      readBench.addCase("read date from files", numIters) { _ =>
+        run(spark.read.schema(dateSchema).json(dateDir))
+      }
+
+      def timestampStr: Dataset[String] = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map(i => s"""{"timestamp":"1970-01-01T01:02:03.${100 + i % 100}Z"}""")
+        }.select($"value".as("timestamp")).as[String]
+      }
+
+      readBench.addCase("timestamp strings", numIters) { _ =>
+        run(timestampStr)
+      }
+
+      readBench.addCase("parse timestamps from Dataset[String]", numIters) { _ =>
+        run(spark.read.schema(tsSchema).json(timestampStr))
+      }
+
+      readBench.addCase("infer timestamps from Dataset[String]", numIters) { _ =>
+        run(spark.read.json(timestampStr))
+      }
+
+      def dateStr: Dataset[String] = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map(i => s"""{"date":"${LocalDate.ofEpochDay(i % 1000 * 365).toString}"}""")
+        }.select($"value".as("date")).as[String]
+      }
+
+      readBench.addCase("date strings", numIters) { _ =>
+        run(dateStr)
+      }
+
+      readBench.addCase("parse dates from Dataset[String]", numIters) { _ =>
+        val ds = spark.read
+          .option("header", false)
+          .schema(dateSchema)
+          .json(dateStr)
+        run(ds)
+      }
+
+      readBench.addCase("from_json(timestamp)", numIters) { _ =>
+        val ds = timestampStr.select(from_json($"timestamp", tsSchema, Map.empty[String, String]))
+        run(ds)
+      }
+
+      readBench.addCase("from_json(date)", numIters) { _ =>
+        val ds = dateStr.select(from_json($"date", dateSchema, Map.empty[String, String]))
+        run(ds)
+      }
+
+      readBench.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
     runBenchmark("Benchmark for performance of JSON parsing") {
@@ -386,6 +510,7 @@ object JSONBenchmark extends SqlBasedBenchmark {
       jsonFunctions(10 * 1000 * 1000, numIters)
       jsonInDS(50 * 1000 * 1000, numIters)
       jsonInFile(50 * 1000 * 1000, numIters)
+      datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
     }
   }
 }

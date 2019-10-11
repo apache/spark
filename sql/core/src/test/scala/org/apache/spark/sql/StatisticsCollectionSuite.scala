@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.io.File
+import java.io.{File, PrintWriter}
+import java.net.URI
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -38,7 +39,7 @@ import org.apache.spark.util.Utils
 /**
  * End-to-end suite testing statistics collection and use on both entire table and columns.
  */
-class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSQLContext {
+class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSparkSession {
   import testImplicits._
 
   test("estimates the size of a limit 0 on outer join") {
@@ -594,6 +595,59 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val stats4 = getTableStats(s"$database.v")
       assert(stats4.sizeInBytes === stats1.sizeInBytes)
       assert(stats4.rowCount === Some(1))
+    }
+  }
+
+  test(s"CTAS should update statistics if ${SQLConf.AUTO_SIZE_UPDATE_ENABLED.key} is enabled") {
+    val tableName = "spark_27694"
+    Seq(false, true).foreach { updateEnabled =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString) {
+        withTable(tableName) {
+          // Create a data source table using the result of a query.
+          sql(s"CREATE TABLE $tableName USING parquet AS SELECT 'a', 'b'")
+          val catalogTable = getCatalogTable(tableName)
+          if (updateEnabled) {
+            assert(catalogTable.stats.nonEmpty)
+          } else {
+            assert(catalogTable.stats.isEmpty)
+          }
+        }
+      }
+    }
+  }
+
+  test("Metadata files and temporary files should not be counted as data files") {
+    withTempDir { tempDir =>
+      val tableName = "t1"
+      val stagingDirName = ".test-staging-dir"
+      val tableLocation = s"${tempDir.toURI}/$tableName"
+      withSQLConf(
+        SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true",
+        "hive.exec.stagingdir" -> stagingDirName) {
+        withTable("t1") {
+          sql(s"CREATE TABLE $tableName(c1 BIGINT) USING PARQUET LOCATION '$tableLocation'")
+          sql(s"INSERT INTO TABLE $tableName VALUES(1)")
+
+          val staging = new File(new URI(s"$tableLocation/$stagingDirName"))
+          Utils.tryWithResource(new PrintWriter(staging)) { stagingWriter =>
+            stagingWriter.write("12")
+          }
+
+          val metadata = new File(new URI(s"$tableLocation/_metadata"))
+          Utils.tryWithResource(new PrintWriter(metadata)) { metadataWriter =>
+            metadataWriter.write("1234")
+          }
+
+          sql(s"INSERT INTO TABLE $tableName VALUES(1)")
+
+          val stagingFileSize = staging.length()
+          val metadataFileSize = metadata.length()
+          val tableLocationSize = getDataSize(new File(new URI(tableLocation)))
+
+          val stats = checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = None)
+          assert(stats.get.sizeInBytes === tableLocationSize - stagingFileSize - metadataFileSize)
+        }
+      }
     }
   }
 }

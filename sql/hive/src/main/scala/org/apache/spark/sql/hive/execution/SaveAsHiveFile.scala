@@ -114,7 +114,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // be removed by Hive when Hive is trying to empty the table directory.
     val hiveVersionsUsingOldExternalTempPath: Set[HiveVersion] = Set(v12, v13, v14, v1_0)
     val hiveVersionsUsingNewExternalTempPath: Set[HiveVersion] =
-      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_1)
+      Set(v1_1, v1_2, v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
 
     // Ensure all the supported versions are considered here.
     assert(hiveVersionsUsingNewExternalTempPath ++ hiveVersionsUsingOldExternalTempPath ==
@@ -210,12 +210,11 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       stagingDir)
   }
 
-  private def getStagingDir(
+  private[hive] def getStagingDir(
       inputPath: Path,
       hadoopConf: Configuration,
       stagingDir: String): Path = {
-    val inputPathUri: URI = inputPath.toUri
-    val inputPathName: String = inputPathUri.getPath
+    val inputPathName: String = inputPath.toString
     val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
     var stagingPathName: String =
       if (inputPathName.indexOf(stagingDir) == -1) {
@@ -228,7 +227,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
     // under the table directory.
     if (isSubDir(new Path(stagingPathName), inputPath, fs) &&
-      !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
+      !stagingPathName.stripPrefix(inputPathName).stripPrefix("/").startsWith(".")) {
       logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
         "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
         "directory.")

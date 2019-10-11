@@ -20,7 +20,6 @@ package org.apache.spark.graphx.util
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.HashSet
-import scala.language.existentials
 
 import org.apache.xbean.asm7.{ClassReader, ClassVisitor, MethodVisitor}
 import org.apache.xbean.asm7.Opcodes._
@@ -48,7 +47,7 @@ private[graphx] object BytecodeUtils {
           return true
         }
       }
-      return false
+      false
     }
   }
 
@@ -59,7 +58,8 @@ private[graphx] object BytecodeUtils {
     var stack = List[(Class[_], String)]((cls, method))
 
     while (stack.nonEmpty) {
-      val (c, m) = stack.head
+      val c = stack.head._1
+      val m = stack.head._2
       stack = stack.tail
       seen.add((c, m))
       val finder = new MethodInvocationFinder(c.getName, m)
@@ -72,7 +72,7 @@ private[graphx] object BytecodeUtils {
         }
       }
     }
-    return false
+    false
   }
 
   /**
@@ -118,7 +118,7 @@ private[graphx] object BytecodeUtils {
       if (name == methodName) {
         new MethodVisitor(ASM7) {
           override def visitMethodInsn(
-              op: Int, owner: String, name: String, desc: String, itf: Boolean) {
+              op: Int, owner: String, name: String, desc: String, itf: Boolean): Unit = {
             if (op == INVOKEVIRTUAL || op == INVOKESPECIAL || op == INVOKESTATIC) {
               if (!skipClass(owner)) {
                 methodsInvoked.add((Utils.classForName(owner.replace("/", ".")), name))

@@ -3,11 +3,11 @@
 
 
 -- !query 0
-SET spark.sql.parser.ansi.enabled=true
+SET spark.sql.ansi.enabled=true
 -- !query 0 schema
 struct<key:string,value:string>
 -- !query 0 output
-spark.sql.parser.ansi.enabled	true
+spark.sql.ansi.enabled	true
 
 
 -- !query 1
@@ -25,7 +25,7 @@ select
   '1' year,
   2  years
 -- !query 1 schema
-struct<interval 1 seconds:calendarinterval,interval 2 seconds:calendarinterval,interval 1 minutes:calendarinterval,interval 2 minutes:calendarinterval,interval 1 hours:calendarinterval,interval 2 hours:calendarinterval,interval 1 days:calendarinterval,interval 2 days:calendarinterval,interval 1 months:calendarinterval,interval 2 months:calendarinterval,interval 1 years:calendarinterval,interval 2 years:calendarinterval>
+struct<interval 1 seconds:interval,interval 2 seconds:interval,interval 1 minutes:interval,interval 2 minutes:interval,interval 1 hours:interval,interval 2 hours:interval,interval 1 days:interval,interval 2 days:interval,interval 1 months:interval,interval 2 months:interval,interval 1 years:interval,interval 2 years:interval>
 -- !query 1 output
 interval 1 seconds	interval 2 seconds	interval 1 minutes	interval 2 minutes	interval 1 hours	interval 2 hours	interval 1 days	interval 2 days	interval 1 months	interval 2 months	interval 1 years	interval 2 years
 
@@ -36,7 +36,7 @@ select
   interval '10' year,
   interval '11' month
 -- !query 2 schema
-struct<interval 10 years 11 months:calendarinterval,interval 10 years:calendarinterval,interval 11 months:calendarinterval>
+struct<interval 10 years 11 months:interval,interval 10 years:interval,interval 11 months:interval>
 -- !query 2 output
 interval 10 years 11 months	interval 10 years	interval 11 months
 
@@ -47,7 +47,7 @@ select
   '10' year,
   '11' month
 -- !query 3 schema
-struct<interval 10 years 11 months:calendarinterval,interval 10 years:calendarinterval,interval 11 months:calendarinterval>
+struct<interval 10 years 11 months:interval,interval 10 years:interval,interval 11 months:interval>
 -- !query 3 output
 interval 10 years 11 months	interval 10 years	interval 11 months
 
@@ -61,7 +61,7 @@ select
   interval '13' second,
   interval '13.123456789' second
 -- !query 4 schema
-struct<interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microseconds:calendarinterval,interval 1 weeks 3 days:calendarinterval,interval 11 hours:calendarinterval,interval 12 minutes:calendarinterval,interval 13 seconds:calendarinterval,interval 13 seconds 123 milliseconds 456 microseconds:calendarinterval>
+struct<interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microseconds:interval,interval 1 weeks 3 days:interval,interval 11 hours:interval,interval 12 minutes:interval,interval 13 seconds:interval,interval 13 seconds 123 milliseconds 456 microseconds:interval>
 -- !query 4 output
 interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microseconds	interval 1 weeks 3 days	interval 11 hours	interval 12 minutes	interval 13 seconds	interval 13 seconds 123 milliseconds 456 microseconds
 
@@ -75,7 +75,7 @@ select
   '13' second,
   '13.123456789' second
 -- !query 5 schema
-struct<interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microseconds:calendarinterval,interval 1 weeks 3 days:calendarinterval,interval 11 hours:calendarinterval,interval 12 minutes:calendarinterval,interval 13 seconds:calendarinterval,interval 13 seconds 123 milliseconds 456 microseconds:calendarinterval>
+struct<interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microseconds:interval,interval 1 weeks 3 days:interval,interval 11 hours:interval,interval 12 minutes:interval,interval 13 seconds:interval,interval 13 seconds 123 milliseconds 456 microseconds:interval>
 -- !query 5 output
 interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microseconds	interval 1 weeks 3 days	interval 11 hours	interval 12 minutes	interval 13 seconds	interval 13 seconds 123 milliseconds 456 microseconds
 
@@ -83,7 +83,7 @@ interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microse
 -- !query 6
 select map(1, interval 1 day, 2, interval 3 week)
 -- !query 6 schema
-struct<map(1, interval 1 days, 2, interval 3 weeks):map<int,calendarinterval>>
+struct<map(1, interval 1 days, 2, interval 3 weeks):map<int,interval>>
 -- !query 6 output
 {1:interval 1 days,2:interval 3 weeks}
 
@@ -91,7 +91,7 @@ struct<map(1, interval 1 days, 2, interval 3 weeks):map<int,calendarinterval>>
 -- !query 7
 select map(1, 1 day, 2, 3 week)
 -- !query 7 schema
-struct<map(1, interval 1 days, 2, interval 3 weeks):map<int,calendarinterval>>
+struct<map(1, interval 1 days, 2, interval 3 weeks):map<int,interval>>
 -- !query 7 output
 {1:interval 1 days,2:interval 3 weeks}
 
@@ -177,7 +177,7 @@ select
   interval '2-2' year to month - interval '3-3' year to month
 from interval_arithmetic
 -- !query 13 schema
-struct<(interval 2 years 2 months + interval 3 years 3 months):calendarinterval,(interval 2 years 2 months - interval 3 years 3 months):calendarinterval>
+struct<(interval 2 years 2 months + interval 3 years 3 months):interval,(interval 2 years 2 months - interval 3 years 3 months):interval>
 -- !query 13 output
 interval 5 years 5 months	interval -1 years -1 months
 
@@ -188,7 +188,7 @@ select
   '2-2' year to month - '3-3' year to month
 from interval_arithmetic
 -- !query 14 schema
-struct<(interval 2 years 2 months + interval 3 years 3 months):calendarinterval,(interval 2 years 2 months - interval 3 years 3 months):calendarinterval>
+struct<(interval 2 years 2 months + interval 3 years 3 months):interval,(interval 2 years 2 months - interval 3 years 3 months):interval>
 -- !query 14 output
 interval 5 years 5 months	interval -1 years -1 months
 
@@ -263,7 +263,7 @@ select
   interval '99 11:22:33.123456789' day to second - interval '10 9:8:7.123456789' day to second
 from interval_arithmetic
 -- !query 19 schema
-struct<(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds + interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):calendarinterval,(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds - interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):calendarinterval>
+struct<(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds + interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):interval,(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds - interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):interval>
 -- !query 19 output
 interval 15 weeks 4 days 20 hours 30 minutes 40 seconds 246 milliseconds 912 microseconds	interval 12 weeks 5 days 2 hours 14 minutes 26 seconds
 
@@ -274,7 +274,7 @@ select
   '99 11:22:33.123456789' day to second - '10 9:8:7.123456789' day to second
 from interval_arithmetic
 -- !query 20 schema
-struct<(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds + interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):calendarinterval,(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds - interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):calendarinterval>
+struct<(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds + interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):interval,(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds - interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):interval>
 -- !query 20 output
 interval 15 weeks 4 days 20 hours 30 minutes 40 seconds 246 milliseconds 912 microseconds	interval 12 weeks 5 days 2 hours 14 minutes 26 seconds
 
@@ -282,7 +282,7 @@ interval 15 weeks 4 days 20 hours 30 minutes 40 seconds 246 milliseconds 912 mic
 -- !query 21
 select 30 day
 -- !query 21 schema
-struct<interval 4 weeks 2 days:calendarinterval>
+struct<interval 4 weeks 2 days:interval>
 -- !query 21 output
 interval 4 weeks 2 days
 
@@ -432,8 +432,8 @@ select date '2012-01-01' + (a + 1) day from t
 
 
 -- !query 34
-SET spark.sql.parser.ansi.enabled=false
+SET spark.sql.ansi.enabled=false
 -- !query 34 schema
 struct<key:string,value:string>
 -- !query 34 output
-spark.sql.parser.ansi.enabled	false
+spark.sql.ansi.enabled	false

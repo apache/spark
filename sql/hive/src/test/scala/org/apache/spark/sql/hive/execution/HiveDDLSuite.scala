@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.net.URI
 
-import scala.language.existentials
-
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
@@ -548,6 +546,14 @@ class HiveDDLSuite
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
     }
     assert(e.message == "Found duplicate column(s) in the table definition of `default`.`tbl`: `a`")
+  }
+
+  test("create partitioned table without specifying data type for the partition columns") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (b) STORED AS parquet")
+    }
+    assert(e.message.contains("Must specify a data type for each partition column while creating " +
+      "Hive partitioned table."))
   }
 
   test("add/drop partition with location - managed table") {
@@ -1743,7 +1749,7 @@ class HiveDDLSuite
   test("create hive serde table with Catalog") {
     withTable("t") {
       withTempDir { dir =>
-        val df = spark.catalog.createExternalTable(
+        val df = spark.catalog.createTable(
           "t",
           "hive",
           new StructType().add("i", "int"),
@@ -2360,10 +2366,11 @@ class HiveDDLSuite
             checkAnswer(spark.table("t"), Row(1))
             val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
 
-            val reader = getReader(maybeFile.head.getCanonicalPath)
-            assert(reader.getCompressionKind.name === "ZLIB")
-            assert(reader.getCompressionSize == 1001)
-            assert(reader.getRowIndexStride == 2002)
+            Utils.tryWithResource(getReader(maybeFile.head.getCanonicalPath)) { reader =>
+              assert(reader.getCompressionKind.name === "ZLIB")
+              assert(reader.getCompressionSize == 1001)
+              assert(reader.getRowIndexStride == 2002)
+            }
           }
         }
       }
@@ -2429,7 +2436,7 @@ class HiveDDLSuite
         .select("data_type")
       // check if the last access time doesnt have the default date of year
       // 1970 as its a wrong access time
-      assert(!(desc.first.toString.contains("1970")))
+      assert((desc.first.toString.contains("UNKNOWN")))
     }
   }
 

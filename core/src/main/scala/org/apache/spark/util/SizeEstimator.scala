@@ -34,7 +34,7 @@ import org.apache.spark.util.collection.OpenHashSet
 /**
  * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
  * When a class extends it, [[SizeEstimator]] will query the `estimatedSize` first.
- * If `estimatedSize` does not return [[None]], [[SizeEstimator]] will use the returned size
+ * If `estimatedSize` does not return `None`, [[SizeEstimator]] will use the returned size
  * as the size of the object. Otherwise, [[SizeEstimator]] will do the estimation work.
  * The difference between a [[KnownSizeEstimation]] and
  * [[org.apache.spark.util.collection.SizeTracker]] is that, a
@@ -107,7 +107,7 @@ object SizeEstimator extends Logging {
 
   // Sets object size, pointer size based on architecture and CompressedOops settings
   // from the JVM.
-  private def initialize() {
+  private def initialize(): Unit = {
     val arch = System.getProperty("os.arch")
     is64bit = arch.contains("64") || arch.contains("s390x")
     isCompressedOops = getIsCompressedOops
@@ -171,7 +171,7 @@ object SizeEstimator extends Logging {
     val stack = new ArrayBuffer[AnyRef]
     var size = 0L
 
-    def enqueue(obj: AnyRef) {
+    def enqueue(obj: AnyRef): Unit = {
       if (obj != null && !visited.containsKey(obj)) {
         visited.put(obj, null)
         stack += obj
@@ -205,7 +205,7 @@ object SizeEstimator extends Logging {
     state.size
   }
 
-  private def visitSingleObject(obj: AnyRef, state: SearchState) {
+  private def visitSingleObject(obj: AnyRef, state: SearchState): Unit = {
     val cls = obj.getClass
     if (cls.isArray) {
       visitArray(obj, cls, state)
@@ -234,7 +234,7 @@ object SizeEstimator extends Logging {
   private val ARRAY_SIZE_FOR_SAMPLING = 400
   private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
-  private def visitArray(array: AnyRef, arrayClass: Class[_], state: SearchState) {
+  private def visitArray(array: AnyRef, arrayClass: Class[_], state: SearchState): Unit = {
     val length = ScalaRunTime.array_length(array)
     val elementClass = arrayClass.getComponentType()
 

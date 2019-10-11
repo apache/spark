@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.{Comparator, TimeZone}
+import java.time.ZoneId
+import java.util.Comparator
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -30,6 +31,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -77,7 +79,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
     _FUNC_(expr) - Returns the size of an array or a map.
     The function returns -1 if its input is null and spark.sql.legacy.sizeOfNull is set to true.
     If spark.sql.legacy.sizeOfNull is set to false, the function returns null for null input.
-    By default, the spark.sql.legacy.sizeOfNull parameter is set to true.
+    By default, the spark.sql.legacy.sizeOfNull parameter is set to false.
   """,
   examples = """
     Examples:
@@ -86,7 +88,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
       > SELECT _FUNC_(map('a', 1, 'b', 2));
        2
       > SELECT _FUNC_(NULL);
-       -1
+       NULL
   """)
 case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
@@ -1426,7 +1428,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(x, start, length) - Subsets array x starting from index start (or starting from the end if start is negative) with the specified length.",
+  usage = "_FUNC_(x, start, length) - Subsets array x starting from index start (array indices start at 1, or starting from the end if start is negative) with the specified length.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 2, 2);
@@ -2458,10 +2460,10 @@ case class Sequence(
       new IntegralSequenceImpl(iType)(ct, iType.integral)
 
     case TimestampType =>
-      new TemporalSequenceImpl[Long](LongType, 1, identity, timeZone)
+      new TemporalSequenceImpl[Long](LongType, 1, identity, zoneId)
 
     case DateType =>
-      new TemporalSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, timeZone)
+      new TemporalSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, zoneId)
   }
 
   override def eval(input: InternalRow): Any = {
@@ -2602,7 +2604,7 @@ object Sequence {
   }
 
   private class TemporalSequenceImpl[T: ClassTag]
-      (dt: IntegralType, scale: Long, fromLong: Long => T, timeZone: TimeZone)
+      (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
       (implicit num: Integral[T]) extends SequenceImpl {
 
     override val defaultStep: DefaultStep = new DefaultStep(
@@ -2640,8 +2642,8 @@ object Sequence {
 
         while (t < exclusiveItem ^ stepSign < 0) {
           arr(i) = fromLong(t / scale)
-          t = timestampAddInterval(t, stepMonths, stepMicros, timeZone)
           i += 1
+          t = timestampAddInterval(startMicros, i * stepMonths, i * stepMicros, zoneId)
         }
 
         // truncate array to the correct length
@@ -2667,18 +2669,12 @@ object Sequence {
       val exclusiveItem = ctx.freshName("exclusiveItem")
       val t = ctx.freshName("t")
       val i = ctx.freshName("i")
-      val genTimeZone = ctx.addReferenceObj("timeZone", timeZone, classOf[TimeZone].getName)
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
 
       val sequenceLengthCode =
         s"""
            |final long $intervalInMicros = $stepMicros + $stepMonths * ${microsPerMonth}L;
            |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
-          """.stripMargin
-
-      val timestampAddIntervalCode =
-        s"""
-           |$t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
-           |  $t, $stepMonths, $stepMicros, $genTimeZone);
           """.stripMargin
 
       s"""
@@ -2704,8 +2700,9 @@ object Sequence {
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
          |    $arr[$i] = ($elemType) ($t / ${scale}L);
-         |    $timestampAddIntervalCode
          |    $i += 1;
+         |    $t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
+         |       $startMicros, $i * $stepMonths, $i * $stepMicros, $zid);
          |  }
          |
          |  if ($arr.length > $i) {

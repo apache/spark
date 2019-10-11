@@ -362,7 +362,6 @@ pyspark_sql = Module(
         "pyspark.sql.window",
         "pyspark.sql.avro.functions",
         # unittests
-        "pyspark.sql.tests.test_appsubmit",
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
@@ -373,6 +372,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_functions",
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_pandas_udf",
+        "pyspark.sql.tests.test_pandas_udf_cogrouped_map",
         "pyspark.sql.tests.test_pandas_udf_grouped_agg",
         "pyspark.sql.tests.test_pandas_udf_grouped_map",
         "pyspark.sql.tests.test_pandas_udf_scalar",
@@ -546,6 +546,13 @@ kubernetes = Module(
     sbt_test_goals=["kubernetes/test"]
 )
 
+hadoop_cloud = Module(
+    name="hadoop-cloud",
+    dependencies=[],
+    source_file_regexes=["hadoop-cloud"],
+    build_profile_flags=["-Phadoop-cloud"],
+    sbt_test_goals=["hadoop-cloud/test"]
+)
 
 spark_ganglia_lgpl = Module(
     name="spark-ganglia-lgpl",

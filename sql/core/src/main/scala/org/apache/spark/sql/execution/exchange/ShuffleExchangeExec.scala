@@ -39,12 +39,12 @@ import org.apache.spark.util.MutablePair
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
 
 /**
- * Performs a shuffle that will result in the desired `newPartitioning`.
+ * Performs a shuffle that will result in the desired partitioning.
  */
 case class ShuffleExchangeExec(
-    var newPartitioning: Partitioning,
+    override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
+    canChangeNumPartitions: Boolean = true) extends Exchange {
 
   // NOTE: coordinator can be null after serialization/deserialization,
   //       e.g. it can be null on the Executor side
@@ -56,69 +56,30 @@ case class ShuffleExchangeExec(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size")
   ) ++ readMetrics ++ writeMetrics
 
-  override def nodeName: String = {
-    val extraInfo = coordinator match {
-      case Some(exchangeCoordinator) =>
-        s"(coordinator id: ${System.identityHashCode(exchangeCoordinator)})"
-      case _ => ""
-    }
-
-    val simpleNodeName = "Exchange"
-    s"$simpleNodeName$extraInfo"
-  }
-
-  override def outputPartitioning: Partitioning = newPartitioning
+  override def nodeName: String = "Exchange"
 
   private val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
-  override protected def doPrepare(): Unit = {
-    // If an ExchangeCoordinator is needed, we register this Exchange operator
-    // to the coordinator when we do prepare. It is important to make sure
-    // we register this operator right before the execution instead of register it
-    // in the constructor because it is possible that we create new instances of
-    // Exchange operators when we transform the physical plan
-    // (then the ExchangeCoordinator will hold references of unneeded Exchanges).
-    // So, we should only call registerExchange just before we start to execute
-    // the plan.
-    coordinator match {
-      case Some(exchangeCoordinator) => exchangeCoordinator.registerExchange(this)
-      case _ =>
-    }
-  }
+  @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
 
   /**
-   * Returns a [[ShuffleDependency]] that will partition rows of its child based on
+   * A [[ShuffleDependency]] that will partition rows of its child based on
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
    * the returned ShuffleDependency will be the input of shuffle.
    */
-  private[exchange] def prepareShuffleDependency()
-    : ShuffleDependency[Int, InternalRow, InternalRow] = {
+  @transient
+  lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
     ShuffleExchangeExec.prepareShuffleDependency(
-      child.execute(),
+      inputRDD,
       child.output,
-      newPartitioning,
+      outputPartitioning,
       serializer,
       writeMetrics)
   }
 
-  /**
-   * Returns a [[ShuffledRowRDD]] that represents the post-shuffle dataset.
-   * This [[ShuffledRowRDD]] is created based on a given [[ShuffleDependency]] and an optional
-   * partition start indices array. If this optional array is defined, the returned
-   * [[ShuffledRowRDD]] will fetch pre-shuffle partitions based on indices of this array.
-   */
-  private[exchange] def preparePostShuffleRDD(
-      shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
-      specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
-    // If an array of partition start indices is provided, we need to use this array
-    // to create the ShuffledRowRDD. Also, we need to update newPartitioning to
-    // update the number of post-shuffle partitions.
-    specifiedPartitionStartIndices.foreach { indices =>
-      assert(newPartitioning.isInstanceOf[HashPartitioning])
-      newPartitioning = UnknownPartitioning(indices.length)
-    }
-    new ShuffledRowRDD(shuffleDependency, readMetrics, specifiedPartitionStartIndices)
+  def createShuffledRDD(partitionStartIndices: Option[Array[Int]]): ShuffledRowRDD = {
+    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndices)
   }
 
   /**
@@ -129,24 +90,13 @@ case class ShuffleExchangeExec(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = coordinator match {
-        case Some(exchangeCoordinator) =>
-          val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
-          assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
-          shuffleRDD
-        case _ =>
-          val shuffleDependency = prepareShuffleDependency()
-          preparePostShuffleRDD(shuffleDependency)
-      }
+      cachedShuffleRDD = createShuffledRDD(None)
     }
     cachedShuffleRDD
   }
 }
 
 object ShuffleExchangeExec {
-  def apply(newPartitioning: Partitioning, child: SparkPlan): ShuffleExchangeExec = {
-    ShuffleExchangeExec(newPartitioning, child, coordinator = Option.empty[ExchangeCoordinator])
-  }
 
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
@@ -292,7 +242,7 @@ object ShuffleExchangeExec {
           }
           // The comparator for comparing row hashcode, which should always be Integer.
           val prefixComparator = PrefixComparators.LONG
-          val canUseRadixSort = SQLConf.get.enableRadixSort
+
           // The prefix computer generates row hashcode as the prefix, so we may decrease the
           // probability that the prefixes are equal when input rows choose column values from a
           // limited range.
@@ -314,7 +264,9 @@ object ShuffleExchangeExec {
             prefixComparator,
             prefixComputer,
             pageSize,
-            canUseRadixSort)
+            // We are comparing binary here, which does not support radix sort.
+            // See more details in SPARK-28699.
+            false)
           sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
         }
       } else {

@@ -215,7 +215,7 @@ private[spark] class ApplicationMaster(
 
         // Set the master and deploy mode property to match the requested mode.
         System.setProperty("spark.master", "yarn")
-        System.setProperty("spark.submit.deployMode", "cluster")
+        System.setProperty(SUBMIT_DEPLOY_MODE.key, "cluster")
 
         // Set this internal configuration if it is running on cluster mode, this
         // configuration will be checked in SparkContext to avoid misuse of yarn cluster mode.
@@ -578,7 +578,11 @@ private[spark] class ApplicationMaster(
             e.getMessage)
         case e: Throwable =>
           failureCount += 1
-          if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+          if (!NonFatal(e)) {
+            finish(FinalApplicationStatus.FAILED,
+              ApplicationMaster.EXIT_REPORTER_FAILURE,
+              "Fatal exception: " + StringUtils.stringifyException(e))
+          } else if (failureCount >= reporterMaxFailures) {
             finish(FinalApplicationStatus.FAILED,
               ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
                 s"$failureCount time(s) from Reporter thread.")
@@ -703,7 +707,8 @@ private[spark] class ApplicationMaster(
       // of files to add to PYTHONPATH, which Client.scala already handles, so it's empty.
       userArgs = Seq(args.primaryPyFile, "") ++ userArgs
     }
-    if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
+    if (args.primaryRFile != null &&
+        (args.primaryRFile.endsWith(".R") || args.primaryRFile.endsWith(".r"))) {
       // TODO(davies): add R dependencies here
     }
 
@@ -711,7 +716,7 @@ private[spark] class ApplicationMaster(
       .getMethod("main", classOf[Array[String]])
 
     val userThread = new Thread {
-      override def run() {
+      override def run(): Unit = {
         try {
           if (!Modifier.isStatic(mainMethod.getModifiers)) {
             logError(s"Could not find static main method in object ${args.userClass}")
@@ -851,7 +856,9 @@ object ApplicationMaster extends Logging {
     master = new ApplicationMaster(amArgs, sparkConf, yarnConf)
 
     val ugi = sparkConf.get(PRINCIPAL) match {
-      case Some(principal) =>
+      // We only need to log in with the keytab in cluster mode. In client mode, the driver
+      // handles the user keytab.
+      case Some(principal) if amArgs.userClass != null =>
         val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()

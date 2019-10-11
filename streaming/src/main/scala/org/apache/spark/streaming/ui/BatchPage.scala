@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml._
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.status.api.v1.{JobData, StageData}
 import org.apache.spark.streaming.Time
@@ -104,7 +104,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       }
     }
     val lastFailureReason =
-      sparkJob.stageIds.sorted.reverse.flatMap(getStageData).
+      sparkJob.stageIds.sorted(Ordering.Int.reverse).flatMap(getStageData).
       dropWhile(_.failureReason == None).take(1). // get the first info that contains failure
       flatMap(info => info.failureReason).headOption.getOrElse("")
     val formattedDuration = duration.map(d => SparkUIUtils.formatDuration(d)).getOrElse("-")

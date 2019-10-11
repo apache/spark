@@ -16,13 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import java.io.{File, PrintWriter}
-
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.storage.StorageClassBuilder
-import org.scalatest.Tag
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Milliseconds, Span}
 
@@ -59,7 +56,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
                 .withMatchExpressions(new NodeSelectorRequirementBuilder()
                   .withKey("kubernetes.io/hostname")
                   .withOperator("In")
-                  .withValues("minikube").build()).build())
+                  .withValues("minikube", "docker-for-desktop", "docker-desktop").build()).build())
             .endRequired()
           .endNodeAffinity()
       .endSpec()
@@ -125,25 +122,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  private def createTempFile(): String = {
-    val filename = try {
-      val f = File.createTempFile("tmp", ".txt", new File(HOST_PATH))
-      f.deleteOnExit()
-      new PrintWriter(f) {
-        try {
-          write(FILE_CONTENTS)
-        } finally {
-          close()
-        }
-      }
-      f.getName
-    } catch {
-      case e: Exception => e.printStackTrace(); throw e;
-    }
-    filename
-  }
-
-  test("Test PVs with local storage", k8sTestTag, MinikubeTag) {
+  test("PVs with local storage", k8sTestTag, MinikubeTag) {
     sparkAppConf
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
         CONTAINER_MOUNT_PATH)
@@ -153,7 +132,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
         CONTAINER_MOUNT_PATH)
       .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.claimName",
         PVC_NAME)
-    val file = createTempFile()
+    val file = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
     try {
       setupLocalStorage()
       runDFSReadWriteAndVerifyCompletion(
@@ -170,14 +149,13 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
         interval = Some(PV_TESTS_INTERVAL)
       )
     } finally {
-      // make sure this always run
+      // make sure this always runs
       deleteLocalStorage()
     }
   }
 }
 
 private[spark] object PVTestsSuite {
-  val MinikubeTag = Tag("minikube")
   val STORAGE_NAME = "test-local-storage"
   val PV_NAME = "test-local-pv"
   val PVC_NAME = "test-local-pvc"

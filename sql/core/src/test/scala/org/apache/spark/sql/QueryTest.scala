@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.storage.StorageLevel
 
 
 abstract class QueryTest extends PlanTest {
@@ -203,6 +204,22 @@ abstract class QueryTest extends PlanTest {
       cachedData.size == numCachedTables,
       s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
         planWithCaching)
+  }
+
+  /**
+   * Asserts that a given [[Dataset]] will be executed using the cache with the given name and
+   * storage level.
+   */
+  def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
+    val planWithCaching = query.queryExecution.withCachedData
+    val matched = planWithCaching.collectFirst { case cached: InMemoryRelation =>
+      val cacheBuilder = cached.asInstanceOf[InMemoryRelation].cacheBuilder
+      cachedName == cacheBuilder.tableName.get &&
+        (storageLevel == cacheBuilder.storageLevel)
+    }.getOrElse(false)
+
+    assert(matched, s"Expected query plan to hit cache $cachedName with storage " +
+      s"level $storageLevel, but it doesn't.")
   }
 
   /**
@@ -399,7 +416,7 @@ object QueryTest {
   }
 }
 
-class QueryTestSuite extends QueryTest with test.SharedSQLContext {
+class QueryTestSuite extends QueryTest with test.SharedSparkSession {
   test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)

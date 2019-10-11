@@ -19,6 +19,7 @@ import datetime
 import sys
 
 from pyspark.sql import Row
+from pyspark.sql.functions import udf, input_file_name
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -278,6 +279,37 @@ class FunctionsTests(ReusedSQLTestCase):
             df.select(df.name).orderBy(functions.desc_nulls_last('name')).collect(),
             [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)])
 
+    def test_input_file_name_reset_for_rdd(self):
+        rdd = self.sc.textFile('python/test_support/hello/hello.txt').map(lambda x: {'data': x})
+        df = self.spark.createDataFrame(rdd, "data STRING")
+        df.select(input_file_name().alias('file')).collect()
+
+        non_file_df = self.spark.range(100).select(input_file_name())
+
+        results = non_file_df.collect()
+        self.assertTrue(len(results) == 100)
+
+        # [SPARK-24605]: if everything was properly reset after the last job, this should return
+        # empty string rather than the file read in the last job.
+        for result in results:
+            self.assertEqual(result[0], '')
+
+    def test_array_repeat(self):
+        from pyspark.sql.functions import array_repeat, lit
+
+        df = self.spark.range(1)
+
+        self.assertEquals(
+            df.select(array_repeat("id", 3)).toDF("val").collect(),
+            df.select(array_repeat("id", lit(3))).toDF("val").collect(),
+        )
+
+    def test_input_file_name_udf(self):
+        df = self.spark.read.text('python/test_support/hello/hello.txt')
+        df = df.select(udf(lambda x: x)("value"), input_file_name().alias('file'))
+        file_name = df.collect()[0].file
+        self.assertTrue("python/test_support/hello/hello.txt" in file_name)
+
 
 if __name__ == "__main__":
     import unittest
@@ -285,7 +317,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

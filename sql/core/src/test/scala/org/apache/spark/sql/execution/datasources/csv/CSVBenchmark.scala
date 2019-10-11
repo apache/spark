@@ -16,10 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.io.File
+import java.time.{Instant, LocalDate}
+
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.{Column, Dataset, Row}
+import org.apache.spark.sql.SaveMode.Overwrite
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
@@ -39,7 +43,11 @@ import org.apache.spark.sql.types._
 object CSVBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
-  def quotedValuesBenchmark(rowsNum: Int, numIters: Int): Unit = {
+  private def toNoop(ds: Dataset[_]): Unit = {
+    ds.write.format("noop").mode(Overwrite).save()
+  }
+
+  private def quotedValuesBenchmark(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark(s"Parsing quoted values", rowsNum, output = output)
 
     withTempPath { path =>
@@ -54,14 +62,14 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val ds = spark.read.option("header", true).schema(schema).csv(path.getAbsolutePath)
 
       benchmark.addCase(s"One quoted string", numIters) { _ =>
-        ds.filter((_: Row) => true).count()
+        toNoop(ds)
       }
 
       benchmark.run()
     }
   }
 
-  def multiColumnsBenchmark(rowsNum: Int): Unit = {
+  private def multiColumnsBenchmark(rowsNum: Int, numIters: Int): Unit = {
     val colsNum = 1000
     val benchmark = new Benchmark(s"Wide rows with $colsNum columns", rowsNum, output = output)
 
@@ -78,25 +86,25 @@ object CSVBenchmark extends SqlBasedBenchmark {
 
       val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
 
-      benchmark.addCase(s"Select $colsNum columns", 3) { _ =>
-        ds.select("*").filter((row: Row) => true).count()
+      benchmark.addCase(s"Select $colsNum columns", numIters) { _ =>
+        toNoop(ds.select("*"))
       }
       val cols100 = columnNames.take(100).map(Column(_))
-      benchmark.addCase(s"Select 100 columns", 3) { _ =>
-        ds.select(cols100: _*).filter((row: Row) => true).count()
+      benchmark.addCase(s"Select 100 columns", numIters) { _ =>
+        toNoop(ds.select(cols100: _*))
       }
-      benchmark.addCase(s"Select one column", 3) { _ =>
-        ds.select($"col1").filter((row: Row) => true).count()
+      benchmark.addCase(s"Select one column", numIters) { _ =>
+        toNoop(ds.select($"col1"))
       }
-      benchmark.addCase(s"count()", 3) { _ =>
+      benchmark.addCase(s"count()", numIters) { _ =>
         ds.count()
       }
 
       val schemaErr1 = StructType(StructField("col0", DateType) +:
         (1 until colsNum).map(i => StructField(s"col$i", IntegerType)))
       val dsErr1 = spark.read.schema(schemaErr1).csv(path.getAbsolutePath)
-      benchmark.addCase(s"Select 100 columns, one bad input field", 3) { _ =>
-        dsErr1.select(cols100: _*).filter((row: Row) => true).count()
+      benchmark.addCase(s"Select 100 columns, one bad input field", numIters) { _ =>
+        toNoop(dsErr1.select(cols100: _*))
       }
 
       val badRecColName = "badRecord"
@@ -104,15 +112,15 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val dsErr2 = spark.read.schema(schemaErr2)
         .option("columnNameOfCorruptRecord", badRecColName)
         .csv(path.getAbsolutePath)
-      benchmark.addCase(s"Select 100 columns, corrupt record field", 3) { _ =>
-        dsErr2.select((Column(badRecColName) +: cols100): _*).filter((row: Row) => true).count()
+      benchmark.addCase(s"Select 100 columns, corrupt record field", numIters) { _ =>
+        toNoop(dsErr2.select((Column(badRecColName) +: cols100): _*))
       }
 
       benchmark.run()
     }
   }
 
-  def countBenchmark(rowsNum: Int): Unit = {
+  private def countBenchmark(rowsNum: Int, numIters: Int): Unit = {
     val colsNum = 10
     val benchmark =
       new Benchmark(s"Count a dataset with $colsNum columns", rowsNum, output = output)
@@ -128,13 +136,13 @@ object CSVBenchmark extends SqlBasedBenchmark {
 
       val ds = spark.read.schema(schema).csv(path.getAbsolutePath)
 
-      benchmark.addCase(s"Select $colsNum columns + count()", 3) { _ =>
+      benchmark.addCase(s"Select $colsNum columns + count()", numIters) { _ =>
         ds.select("*").filter((_: Row) => true).count()
       }
-      benchmark.addCase(s"Select 1 column + count()", 3) { _ =>
+      benchmark.addCase(s"Select 1 column + count()", numIters) { _ =>
         ds.select($"col1").filter((_: Row) => true).count()
       }
-      benchmark.addCase(s"count()", 3) { _ =>
+      benchmark.addCase(s"count()", numIters) { _ =>
         ds.count()
       }
 
@@ -142,11 +150,161 @@ object CSVBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def datetimeBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    def timestamps = {
+      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+        iter.map(Instant.ofEpochSecond(_))
+      }.select($"value".as("timestamp"))
+    }
+
+    def dates = {
+      spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+        iter.map(d => LocalDate.ofEpochDay(d % (100 * 365)))
+      }.select($"value".as("date"))
+    }
+
+    withTempPath { path =>
+
+      val timestampDir = new File(path, "timestamp").getAbsolutePath
+      val dateDir = new File(path, "date").getAbsolutePath
+
+      val writeBench = new Benchmark("Write dates and timestamps", rowsNum, output = output)
+      writeBench.addCase(s"Create a dataset of timestamps", numIters) { _ =>
+        toNoop(timestamps)
+      }
+
+      writeBench.addCase("to_csv(timestamp)", numIters) { _ =>
+        toNoop(timestamps.select(to_csv(struct($"timestamp"))))
+      }
+
+      writeBench.addCase("write timestamps to files", numIters) { _ =>
+        timestamps.write.option("header", true).mode("overwrite").csv(timestampDir)
+      }
+
+      writeBench.addCase("Create a dataset of dates", numIters) { _ =>
+        toNoop(dates)
+      }
+
+      writeBench.addCase("to_csv(date)", numIters) { _ =>
+        toNoop(dates.select(to_csv(struct($"date"))))
+      }
+
+      writeBench.addCase("write dates to files", numIters) { _ =>
+        dates.write.option("header", true).mode("overwrite").csv(dateDir)
+      }
+
+      writeBench.run()
+
+      val readBench = new Benchmark("Read dates and timestamps", rowsNum, output = output)
+      val tsSchema = new StructType().add("timestamp", TimestampType)
+
+      readBench.addCase("read timestamp text from files", numIters) { _ =>
+        toNoop(spark.read.text(timestampDir))
+      }
+
+      readBench.addCase("read timestamps from files", numIters) { _ =>
+        val ds = spark.read
+          .option("header", true)
+          .schema(tsSchema)
+          .csv(timestampDir)
+        toNoop(ds)
+      }
+
+      readBench.addCase("infer timestamps from files", numIters) { _ =>
+        val ds = spark.read
+          .option("header", true)
+          .option("inferSchema", true)
+          .csv(timestampDir)
+        toNoop(ds)
+      }
+
+      val dateSchema = new StructType().add("date", DateType)
+
+      readBench.addCase("read date text from files", numIters) { _ =>
+        toNoop(spark.read.text(dateDir))
+      }
+
+      readBench.addCase("read date from files", numIters) { _ =>
+        val ds = spark.read
+          .option("header", true)
+          .schema(dateSchema)
+          .csv(dateDir)
+        toNoop(ds)
+      }
+
+      readBench.addCase("infer date from files", numIters) { _ =>
+        val ds = spark.read
+          .option("header", true)
+          .option("inferSchema", true)
+          .csv(dateDir)
+        toNoop(ds)
+      }
+
+      def timestampStr: Dataset[String] = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map(i => s"1970-01-01T01:02:03.${100 + i % 100}Z")
+        }.select($"value".as("timestamp")).as[String]
+      }
+
+      readBench.addCase("timestamp strings", numIters) { _ =>
+        toNoop(timestampStr)
+      }
+
+      readBench.addCase("parse timestamps from Dataset[String]", numIters) { _ =>
+        val ds = spark.read
+          .option("header", false)
+          .schema(tsSchema)
+          .csv(timestampStr)
+        toNoop(ds)
+      }
+
+      readBench.addCase("infer timestamps from Dataset[String]", numIters) { _ =>
+        val ds = spark.read
+          .option("header", false)
+          .option("inferSchema", true)
+          .csv(timestampStr)
+        toNoop(ds)
+      }
+
+      def dateStr: Dataset[String] = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map(i => LocalDate.ofEpochDay(i % 1000 * 365).toString)
+        }.select($"value".as("date")).as[String]
+      }
+
+      readBench.addCase("date strings", numIters) { _ =>
+        toNoop(dateStr)
+      }
+
+      readBench.addCase("parse dates from Dataset[String]", numIters) { _ =>
+        val ds = spark.read
+          .option("header", false)
+          .schema(dateSchema)
+          .csv(dateStr)
+        toNoop(ds)
+      }
+
+      readBench.addCase("from_csv(timestamp)", numIters) { _ =>
+        val ds = timestampStr.select(from_csv($"timestamp", tsSchema, Map.empty[String, String]))
+        toNoop(ds)
+      }
+
+      readBench.addCase("from_csv(date)", numIters) { _ =>
+        val ds = dateStr.select(from_csv($"date", dateSchema, Map.empty[String, String]))
+        toNoop(ds)
+      }
+
+      readBench.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Benchmark to measure CSV read/write performance") {
-      quotedValuesBenchmark(rowsNum = 50 * 1000, numIters = 3)
-      multiColumnsBenchmark(rowsNum = 1000 * 1000)
-      countBenchmark(10 * 1000 * 1000)
+      val numIters = 3
+      quotedValuesBenchmark(rowsNum = 50 * 1000, numIters)
+      multiColumnsBenchmark(rowsNum = 1000 * 1000, numIters)
+      countBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
+      datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
     }
   }
 }

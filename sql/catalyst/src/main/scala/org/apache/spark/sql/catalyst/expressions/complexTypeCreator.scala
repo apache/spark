@@ -418,13 +418,13 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateName
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`.",
+  usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`. Both `pairDelim` and `keyValueDelim` are treated as regular expressions.",
   examples = """
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
-       map("a":"1","b":"2","c":"3")
+       {"a":"1","b":"2","c":"3"}
       > SELECT _FUNC_('a');
-       map("a":null)
+       {"a":null}
   """)
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)

@@ -19,6 +19,7 @@ package org.apache.spark.network
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.TaskContext
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.storage.{BlockId, StorageLevel}
@@ -58,5 +59,5 @@ trait BlockDataManager {
   /**
    * Release locks acquired by [[putBlockData()]] and [[getBlockData()]].
    */
-  def releaseLock(blockId: BlockId, taskAttemptId: Option[Long]): Unit
+  def releaseLock(blockId: BlockId, taskContext: Option[TaskContext]): Unit
 }

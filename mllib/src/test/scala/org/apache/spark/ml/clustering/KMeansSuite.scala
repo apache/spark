@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.clustering
 
-import scala.language.existentials
 import scala.util.Random
 
 import org.dmg.pmml.PMML
@@ -40,7 +39,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
   import testImplicits._
 
   final val k = 5
-  @transient var dataset: Dataset[_] = _
+  @transient var dataset: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()

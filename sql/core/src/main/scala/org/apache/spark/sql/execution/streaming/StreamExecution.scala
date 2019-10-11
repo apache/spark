@@ -22,7 +22,7 @@ import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.locks.{Condition, ReentrantLock}
+import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
@@ -36,13 +36,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
+import org.apache.spark.sql.connector.write.SupportsTruncate
+import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.SupportsStreamingWrite
-import org.apache.spark.sql.sources.v2.writer.SupportsTruncate
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
@@ -69,7 +70,7 @@ abstract class StreamExecution(
     override val name: String,
     private val checkpointRoot: String,
     analyzedPlan: LogicalPlan,
-    val sink: BaseStreamingSink,
+    val sink: Table,
     val trigger: Trigger,
     val triggerClock: Clock,
     val outputMode: OutputMode,
@@ -205,7 +206,7 @@ abstract class StreamExecution(
   /**
    * A list of unique sources in the query plan. This will be set when generating logical plan.
    */
-  @volatile protected var uniqueSources: Seq[BaseStreamingSource] = Seq.empty
+  @volatile protected var uniqueSources: Seq[SparkDataStream] = Seq.empty
 
   /** Defines the internal state of execution */
   protected val state = new AtomicReference[State](INITIALIZING)
@@ -214,7 +215,7 @@ abstract class StreamExecution(
   var lastExecution: IncrementalExecution = _
 
   /** Holds the most recent input data for each source. */
-  protected var newData: Map[BaseStreamingSource, LogicalPlan] = _
+  protected var newData: Map[SparkDataStream, LogicalPlan] = _
 
   @volatile
   protected var streamDeathCause: StreamingQueryException = null
@@ -437,7 +438,7 @@ abstract class StreamExecution(
    * Blocks the current thread until processing for data from the given `source` has reached at
    * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
-  private[sql] def awaitOffset(sourceIndex: Int, newOffset: Offset, timeoutMs: Long): Unit = {
+  private[sql] def awaitOffset(sourceIndex: Int, newOffset: OffsetV2, timeoutMs: Long): Unit = {
     assertAwaitThread()
     def notDone = {
       val localCommittedOffsets = committedOffsets
@@ -577,12 +578,14 @@ abstract class StreamExecution(
 
   protected def getBatchDescriptionString: String = {
     val batchDescription = if (currentBatchId < 0) "init" else currentBatchId.toString
-    Option(name).map(_ + "<br/>").getOrElse("") +
-      s"id = $id<br/>runId = $runId<br/>batch = $batchDescription"
+    s"""|${Option(name).getOrElse("")}
+        |id = $id
+        |runId = $runId
+        |batch = $batchDescription""".stripMargin
   }
 
   protected def createStreamingWrite(
-      table: SupportsStreamingWrite,
+      table: SupportsWrite,
       options: Map[String, String],
       inputPlan: LogicalPlan): StreamingWrite = {
     val writeBuilder = table.newWriteBuilder(new CaseInsensitiveStringMap(options.asJava))
@@ -608,6 +611,12 @@ abstract class StreamExecution(
             "Data source v2 streaming sinks does not support Update mode.")
         }
     }
+  }
+
+  protected def purge(threshold: Long): Unit = {
+    logDebug(s"Purging metadata at threshold=$threshold")
+    offsetLog.purge(threshold)
+    commitLog.purge(threshold)
   }
 }
 

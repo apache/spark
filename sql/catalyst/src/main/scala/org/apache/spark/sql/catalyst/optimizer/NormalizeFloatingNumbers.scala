@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CreateArray, CreateMap, CreateNamedStruct, CreateNamedStructUnsafe, CreateStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, LambdaFunction, NamedLambdaVariable, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CreateArray, CreateMap, CreateNamedStruct, CreateNamedStructUnsafe, CreateStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, KnownFloatingPointNormalized, LambdaFunction, NamedLambdaVariable, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery, Window}
@@ -61,7 +61,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case _: Subquery => plan
 
     case _ => plan transform {
-      case w: Window if w.partitionSpec.exists(p => needNormalize(p.dataType)) =>
+      case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
         // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need
         // to normalize the `windowExpressions`, as they are executed per input row and should take
         // the input row as it is.
@@ -73,7 +73,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _, _)
           // The analyzer guarantees left and right joins keys are of the same data type. Here we
           // only need to check join keys of one side.
-          if leftKeys.exists(k => needNormalize(k.dataType)) =>
+          if leftKeys.exists(k => needNormalize(k)) =>
         val newLeftJoinKeys = leftKeys.map(normalize)
         val newRightJoinKeys = rightKeys.map(normalize)
         val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
@@ -87,6 +87,14 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * Short circuit if the underlying expression is already normalized
+   */
+  private def needNormalize(expr: Expression): Boolean = expr match {
+    case KnownFloatingPointNormalized(_) => false
+    case _ => needNormalize(expr.dataType)
+  }
+
   private def needNormalize(dt: DataType): Boolean = dt match {
     case FloatType | DoubleType => true
     case StructType(fields) => fields.exists(f => needNormalize(f.dataType))
@@ -98,7 +106,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
   }
 
   private[sql] def normalize(expr: Expression): Expression = expr match {
-    case _ if !needNormalize(expr.dataType) => expr
+    case _ if !needNormalize(expr) => expr
 
     case a: Alias =>
       a.withNewChildren(Seq(normalize(a.child)))
@@ -116,7 +124,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       CreateMap(children.map(normalize))
 
     case _ if expr.dataType == FloatType || expr.dataType == DoubleType =>
-      NormalizeNaNAndZero(expr)
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(expr))
 
     case _ if expr.dataType.isInstanceOf[StructType] =>
       val fields = expr.dataType.asInstanceOf[StructType].fields.indices.map { i =>
@@ -128,7 +136,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       val ArrayType(et, containsNull) = expr.dataType
       val lv = NamedLambdaVariable("arg", et, containsNull)
       val function = normalize(lv)
-      ArrayTransform(expr, LambdaFunction(function, Seq(lv)))
+      KnownFloatingPointNormalized(ArrayTransform(expr, LambdaFunction(function, Seq(lv))))
 
     case _ => throw new IllegalStateException(s"fail to normalize $expr")
   }

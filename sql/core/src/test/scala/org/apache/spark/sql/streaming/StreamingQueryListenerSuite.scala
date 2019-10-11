@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
@@ -31,9 +30,9 @@ import org.scalatest.concurrent.Waiters.Waiter
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{Encoder, SparkSession}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.util.JsonProtocol
@@ -48,9 +47,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   after {
     spark.streams.active.foreach(_.stop())
     assert(spark.streams.active.isEmpty)
-    assert(addedListeners().isEmpty)
+    assert(spark.streams.listListeners().isEmpty)
     // Make sure we don't leak any events to the next test
-    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
   }
 
   testQuietly("single listener, check trigger events are generated correctly") {
@@ -180,7 +179,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val listeners = (1 to 5).map(_ => new EventCollector)
     try {
       listeners.foreach(listener => spark.streams.addListener(listener))
-      testStream(df, OutputMode.Append, useV2Sink = true)(
+      testStream(df, OutputMode.Append)(
         StartStream(Trigger.Continuous(1000)),
         StopStream,
         AssertOnQuery { query =>
@@ -224,7 +223,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       assert(isListenerActive(listener1) === false)
       assert(isListenerActive(listener2))
     } finally {
-      addedListeners().foreach(spark.streams.removeListener)
+      spark.streams.listListeners().foreach(spark.streams.removeListener)
     }
   }
 
@@ -297,8 +296,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       }
       spark.streams.addListener(listener)
       try {
+        var numTriggers = 0
         val input = new MemoryStream[Int](0, sqlContext) {
-          @volatile var numTriggers = 0
           override def latestOffset(): OffsetV2 = {
             numTriggers += 1
             super.latestOffset()
@@ -312,7 +311,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         }
         actions += AssertOnQuery { _ =>
           eventually(timeout(streamingTimeout)) {
-            assert(input.numTriggers > 100) // at least 100 triggers have occurred
+            assert(numTriggers > 100) // at least 100 triggers have occurred
           }
           true
         }
@@ -321,7 +320,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           q.recentProgress.size > 1 && q.recentProgress.size <= 11
         }
         testStream(input.toDS)(actions: _*)
-        spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+        spark.sparkContext.listenerBus.waitUntilEmpty()
         // 11 is the max value of the possible numbers of events.
         assert(numProgressEvent > 1 && numProgressEvent <= 11)
       } finally {
@@ -344,7 +343,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         AddData(mem, 1, 2, 3),
         CheckAnswer(1, 2, 3)
       )
-      session.sparkContext.listenerBus.waitUntilEmpty(5000)
+      session.sparkContext.listenerBus.waitUntilEmpty()
     }
 
     def assertEventsCollected(collector: EventCollector): Unit = {
@@ -363,10 +362,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     assert(session1.streams.ne(session2.streams))
 
     withListenerAdded(collector1, session1) {
-      assert(addedListeners(session1).nonEmpty)
+      assert(session1.streams.listListeners().nonEmpty)
 
       withListenerAdded(collector2, session2) {
-        assert(addedListeners(session2).nonEmpty)
+        assert(session2.streams.listListeners().nonEmpty)
 
         // query on session1 should send events only to collector1
         runQuery(session1)
@@ -439,13 +438,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     } finally {
       session.streams.removeListener(listener)
     }
-  }
-
-  private def addedListeners(session: SparkSession = spark): Array[StreamingQueryListener] = {
-    val listenerBusMethod =
-      PrivateMethod[StreamingQueryListenerBus]('listenerBus)
-    val listenerBus = session.streams invokePrivate listenerBusMethod()
-    listenerBus.listeners.toArray.map(_.asInstanceOf[StreamingQueryListener])
   }
 
   /** Collects events from the StreamingQueryListener for testing */

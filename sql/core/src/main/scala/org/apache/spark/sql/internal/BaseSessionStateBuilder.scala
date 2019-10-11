@@ -17,17 +17,19 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.{Experimental, Unstable}
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.v2.V2WriteSupportCheck
+import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -50,7 +52,6 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * state will clone the parent sessions state's `conf`, `functionRegistry`, `experimentalMethods`
  * and `catalog` fields. Note that the state is cloned when `build` is called, and not before.
  */
-@Experimental
 @Unstable
 abstract class BaseSessionStateBuilder(
     val session: SparkSession,
@@ -85,7 +86,13 @@ abstract class BaseSessionStateBuilder(
    * with its [[SparkConf]] only when there is no parent session.
    */
   protected lazy val conf: SQLConf = {
-    parentState.map(_.conf.clone()).getOrElse {
+    parentState.map { s =>
+      val cloned = s.conf.clone()
+      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
+        mergeSparkConf(cloned, session.sparkContext.conf)
+      }
+      cloned
+    }.getOrElse {
       val conf = new SQLConf
       mergeSparkConf(conf, session.sparkContext.conf)
       conf
@@ -145,6 +152,10 @@ abstract class BaseSessionStateBuilder(
     catalog
   }
 
+  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog, conf)
+
+  protected lazy val catalogManager = new CatalogManager(conf, v2SessionCatalog, catalog)
+
   /**
    * Interface exposed to the user for registering user-defined functions.
    *
@@ -158,16 +169,17 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
-        DataSourceResolution(conf) +:
+        new ResolveSessionCatalog(catalogManager, conf, catalog.isView) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      PreprocessTableCreation(session) +:
+      new DetectAmbiguousSelfJoin(conf) +:
+        PreprocessTableCreation(session) +:
         PreprocessTableInsertion(conf) +:
         DataSourceAnalysis(conf) +:
         customPostHocResolutionRules
@@ -176,7 +188,7 @@ abstract class BaseSessionStateBuilder(
       PreWriteCheck +:
         PreReadCheck +:
         HiveOnlyCheck +:
-        V2WriteSupportCheck +:
+        TableCapabilityCheck +:
         customCheckRules
   }
 
@@ -216,7 +228,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on `catalog` and `experimentalMethods` fields.
    */
   protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalog, experimentalMethods) {
+    new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }
@@ -252,6 +264,10 @@ abstract class BaseSessionStateBuilder(
    */
   protected def customPlanningStrategies: Seq[Strategy] = {
     extensions.buildPlannerStrategies(session)
+  }
+
+  protected def columnarRules: Seq[ColumnarRule] = {
+    extensions.buildColumnarRules(session)
   }
 
   /**
@@ -304,7 +320,8 @@ abstract class BaseSessionStateBuilder(
       listenerManager,
       () => resourceLoader,
       createQueryExecution,
-      createClone)
+      createClone,
+      columnarRules)
   }
 }
 

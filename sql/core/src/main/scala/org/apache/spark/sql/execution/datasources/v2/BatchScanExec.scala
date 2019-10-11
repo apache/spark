@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan}
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
@@ -44,6 +45,10 @@ case class BatchScanExec(
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
+    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar)
+  }
+
+  override def doCanonicalize(): BatchScanExec = {
+    this.copy(output = output.map(QueryPlan.normalizeExpressions(_, output)))
   }
 }

@@ -22,12 +22,14 @@ import java.util.concurrent.TimeUnit._
 
 import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
+import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
@@ -126,6 +128,27 @@ case class AlterDatabasePropertiesCommand(
     val catalog = sparkSession.sessionState.catalog
     val db: CatalogDatabase = catalog.getDatabaseMetadata(databaseName)
     catalog.alterDatabase(db.copy(properties = db.properties ++ props))
+
+    Seq.empty[Row]
+  }
+}
+
+/**
+ * A command for users to set new location path for a database
+ * If the database does not exist, an error message will be issued to indicate the database
+ * does not exist.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    ALTER (DATABASE|SCHEMA) database_name SET LOCATION path
+ * }}}
+ */
+case class AlterDatabaseSetLocationCommand(databaseName: String, location: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val oldDb = catalog.getDatabaseMetadata(databaseName)
+    catalog.alterDatabase(oldDb.copy(locationUri = CatalogUtils.stringToURI(location)))
 
     Seq.empty[Row]
   }
@@ -613,7 +636,7 @@ case class AlterTableRecoverPartitionsCommand(
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
-    val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
+    val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
     val pathFilter = getPathFilter(hadoopConf)
 
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
@@ -662,7 +685,7 @@ case class AlterTableRecoverPartitionsCommand(
     val statusPar: GenSeq[FileStatus] =
       if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
         // parallelize the list of partitions here, then we can have better parallelism later.
-        val parArray = statuses.par
+        val parArray = new ParVector(statuses.toVector)
         parArray.tasksupport = evalTaskSupport
         parArray
       } else {

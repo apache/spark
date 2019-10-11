@@ -28,6 +28,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.RDDBlockId
+import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_ONLY}
 import org.apache.spark.util.Utils
 
 class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -47,17 +48,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
     maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
     maybeBlock.nonEmpty
-  }
-
-  // Blocking uncache table for tests
-  private def uncacheTable(tableName: String): Unit = {
-    val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !spark.sessionState.catalog.isTemporaryTable(tableIdent)
-    spark.sharedState.cacheManager.uncacheQuery(
-      spark,
-      spark.table(tableName).logicalPlan,
-      cascade = cascade,
-      blocking = true)
   }
 
   test("cache table") {
@@ -226,7 +216,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
-    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
+    sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
     // Refresh the table. REFRESH TABLE command should not make a uncached
@@ -247,7 +237,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     tempPath.delete()
     table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
     sql("DROP TABLE IF EXISTS refreshTable")
-    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
+    sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
     checkAnswer(
       table("refreshTable"),
       table("src").collect())
@@ -266,7 +256,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
-    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
+    sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
     // Refresh the table. REFRESH command should not make a uncached
@@ -359,6 +349,83 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val samePlan = LogicalRelation(sameRelation, tableMeta)
 
       assert(spark.sharedState.cacheManager.lookupCachedData(samePlan).isDefined)
+    }
+  }
+
+  test("SPARK-27248 refreshTable should recreate cache with same cache name and storage level") {
+    // This section tests when a table is cached with its qualified name but its is refreshed with
+    // its unqualified name.
+    withTempDatabase { db =>
+      withTable(s"$db.cachedTable") {
+        withCache(s"$db.cachedTable") {
+          // Create table 'cachedTable' in default db for testing purpose.
+          sql(s"CREATE TABLE $db.cachedTable AS SELECT 1 AS key")
+
+          // Cache the table 'cachedTable' in temp db with qualified table name,
+          // and then check whether the table is cached with expected name
+          sql(s"CACHE TABLE $db.cachedTable OPTIONS('storageLevel' 'MEMORY_ONLY')")
+          assertCached(sql(s"SELECT * FROM $db.cachedTable"), s"`$db`.`cachedTable`", MEMORY_ONLY)
+          assert(spark.catalog.isCached(s"$db.cachedTable"),
+            s"Table '$db.cachedTable' should be cached.")
+
+          // Refresh the table 'cachedTable' in temp db with qualified table name, and then check
+          // whether the table is still cached with the same name and storage level.
+          sql(s"REFRESH TABLE $db.cachedTable")
+          assertCached(sql(s"select * from $db.cachedTable"), s"`$db`.`cachedTable`", MEMORY_ONLY)
+          assert(spark.catalog.isCached(s"$db.cachedTable"),
+            s"Table '$db.cachedTable' should be cached after refreshing with its qualified name.")
+
+          // Change the active database to the temp db and refresh the table with unqualified
+          // table name, and then check whether the table is still cached with the same name and
+          // storage level.
+          // Without bug fix 'SPARK-27248', the recreated cache name will be changed to
+          // 'cachedTable', instead of '$db.cachedTable'
+          activateDatabase(db) {
+            sql("REFRESH TABLE cachedTable")
+            assertCached(sql("SELECT * FROM cachedTable"), s"`$db`.`cachedTable`", MEMORY_ONLY)
+            assert(spark.catalog.isCached("cachedTable"),
+              s"Table '$db.cachedTable' should be cached after refreshing with its " +
+                "unqualified name.")
+          }
+        }
+      }
+    }
+
+
+    // This section tests when a table is cached with its unqualified name but it is refreshed
+    // with its qualified name.
+    withTempDatabase { db =>
+      withTable("cachedTable") {
+        withCache("cachedTable") {
+          // Create table 'cachedTable' in default db for testing purpose.
+          sql("CREATE TABLE cachedTable AS SELECT 1 AS key")
+
+          // Cache the table 'cachedTable' in default db without qualified table name , and then
+          // check whether the table is cached with expected name.
+          sql("CACHE TABLE cachedTable OPTIONS('storageLevel' 'DISK_ONLY')")
+          assertCached(sql("SELECT * FROM cachedTable"), "`cachedTable`", DISK_ONLY)
+          assert(spark.catalog.isCached("cachedTable"), "Table 'cachedTable' should be cached.")
+
+          // Refresh the table 'cachedTable' in default db with unqualified table name, and then
+          // check whether the table is still cached with the same name.
+          sql("REFRESH TABLE cachedTable")
+          assertCached(sql("SELECT * FROM cachedTable"), "`cachedTable`", DISK_ONLY)
+          assert(spark.catalog.isCached("cachedTable"),
+            "Table 'cachedTable' should be cached after refreshing with its unqualified name.")
+
+          // Change the active database to the temp db and refresh the table with qualified
+          // table name, and then check whether the table is still cached with the same name and
+          // storage level.
+          // Without bug fix 'SPARK-27248', the recreated cache name will be changed to
+          // 'default.cachedTable', instead of 'cachedTable'
+          activateDatabase(db) {
+            sql("REFRESH TABLE default.cachedTable")
+            assertCached(sql("SELECT * FROM default.cachedTable"), "`cachedTable`", DISK_ONLY)
+            assert(spark.catalog.isCached("default.cachedTable"),
+              "Table 'cachedTable' should be cached after refreshing with its qualified name.")
+          }
+        }
+      }
     }
   }
 }

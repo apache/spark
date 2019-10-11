@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 import scala.concurrent.duration.{Duration, SECONDS}
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals
@@ -52,7 +51,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
   var taskScheduler: TestTaskScheduler = null
   var scheduler: DAGScheduler = null
   var backend: T = _
-  // Even though the tests aren't doing much, occassionally we see flakiness from pauses over
+  // Even though the tests aren't doing much, occasionally we see flakiness from pauses over
   // a second (probably from GC?) so we leave a long timeout in here
   val duration = Duration(10, SECONDS)
 
@@ -297,11 +296,11 @@ private[spark] abstract class MockBackend(
    * Test backends should call this to get a task that has been assigned to them by the scheduler.
    * Each task should be responded to with either [[taskSuccess]] or [[taskFailed]].
    */
-  def beginTask(): (TaskDescription, Task[_]) = {
+  def beginTask[T](): (TaskDescription, Task[T]) = {
     synchronized {
       val toRun = assignedTasksWaitingToRun.remove(assignedTasksWaitingToRun.size - 1)
       runningTasks += toRun._1.taskId
-      toRun
+      toRun.asInstanceOf[(TaskDescription, Task[T])]
     }
   }
 
@@ -312,7 +311,7 @@ private[spark] abstract class MockBackend(
   def taskSuccess(task: TaskDescription, result: Any): Unit = {
     val ser = env.serializer.newInstance()
     val resultBytes = ser.serialize(result)
-    val directResult = new DirectTaskResult(resultBytes, Seq()) // no accumulator updates
+    val directResult = new DirectTaskResult(resultBytes, Seq(), Array()) // no accumulator updates
     taskUpdate(task, TaskState.FINISHED, directResult)
   }
 
@@ -589,7 +588,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
           backend.taskSuccess(taskDescription, 4321 + partition)
       }
     }
-    withBackend(runBackend _) {
+    withBackend(() => runBackend()) {
       val jobFuture = submit(d, (0 until 30).toArray)
       awaitJobTermination(jobFuture, duration)
     }
@@ -622,7 +621,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
           backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostA", 10))
         case (1, 0, 0) =>
           val fetchFailed = FetchFailed(
-            DAGSchedulerSuite.makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored")
+            DAGSchedulerSuite.makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored")
           backend.taskFailed(taskDescription, fetchFailed)
         case (1, _, partition) =>
           backend.taskSuccess(taskDescription, 42 + partition)

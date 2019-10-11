@@ -22,7 +22,7 @@ license: |
 * Table of contents
 {:toc}
 
-## Apache Arrow in Spark
+## Apache Arrow in PySpark
 
 Apache Arrow is an in-memory columnar data format that is used in Spark to efficiently transfer
 data between JVM and Python processes. This currently is most beneficial to Python users that
@@ -35,7 +35,7 @@ working with Arrow-enabled data.
 
 If you install PySpark using pip, then PyArrow can be brought in as an extra dependency of the
 SQL module with the command `pip install pyspark[sql]`. Otherwise, you must ensure that PyArrow
-is installed and available on all cluster nodes. The current supported version is 0.8.0.
+is installed and available on all cluster nodes. The current supported version is 0.12.1.
 You can install using pip or conda from the conda-forge channel. See PyArrow
 [installation](https://arrow.apache.org/docs/python/install.html) for details.
 
@@ -44,11 +44,11 @@ You can install using pip or conda from the conda-forge channel. See PyArrow
 Arrow is available as an optimization when converting a Spark DataFrame to a Pandas DataFrame
 using the call `toPandas()` and when creating a Spark DataFrame from a Pandas DataFrame with
 `createDataFrame(pandas_df)`. To use Arrow when executing these calls, users need to first set
-the Spark configuration 'spark.sql.execution.arrow.enabled' to 'true'. This is disabled by default.
+the Spark configuration `spark.sql.execution.arrow.pyspark.enabled` to `true`. This is disabled by default.
 
-In addition, optimizations enabled by 'spark.sql.execution.arrow.enabled' could fallback automatically
+In addition, optimizations enabled by `spark.sql.execution.arrow.pyspark.enabled` could fallback automatically
 to non-Arrow optimization implementation if an error occurs before the actual computation within Spark.
-This can be controlled by 'spark.sql.execution.arrow.fallback.enabled'.
+This can be controlled by `spark.sql.execution.arrow.pyspark.fallback.enabled`.
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
@@ -83,6 +83,23 @@ The following example shows how to create a scalar Pandas UDF that computes the 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
 {% include_example scalar_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+
+### Scalar Iterator
+
+Scalar iterator (`SCALAR_ITER`) Pandas UDF is the same as scalar Pandas UDF above except that the
+underlying Python function takes an iterator of batches as input instead of a single batch and,
+instead of returning a single output batch, it yields output batches or returns an iterator of
+output batches.
+It is useful when the UDF execution requires initializing some states, e.g., loading an machine
+learning model file to apply inference to every input batch.
+
+The following example shows how to create scalar iterator Pandas UDFs:
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example scalar_iter_pandas_udf python/sql/arrow.py %}
 </div>
 </div>
 
@@ -138,13 +155,35 @@ The following example shows how to use this type of UDF to compute mean with gro
 
 For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf)
 
+
+### Map Iterator
+
+Map iterator Pandas UDFs are used to transform data with an iterator of batches. Map iterator
+Pandas UDFs can be used with 
+[`pyspark.sql.DataFrame.mapInPandas`](api/python/pyspark.sql.html#pyspark.sql.DataFrame.mapInPandas).
+It defines a map function that transforms an iterator of `pandas.DataFrame` to another.
+
+It can return the output of arbitrary length in contrast to the scalar Pandas UDF. It maps an iterator of `pandas.DataFrame`s,
+that represents the current `DataFrame`, using the map iterator UDF and returns the result as a `DataFrame`.
+
+The following example shows how to create map iterator Pandas UDFs:
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+{% include_example map_iter_pandas_udf python/sql/arrow.py %}
+</div>
+</div>
+
+For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf) and
+[`pyspark.sql.DataFrame.mapsInPandas`](api/python/pyspark.sql.html#pyspark.sql.DataFrame.mapInPandas).
+
+
 ## Usage Notes
 
 ### Supported SQL Types
 
 Currently, all Spark SQL data types are supported by Arrow-based conversion except `MapType`,
-`ArrayType` of `TimestampType`, and nested `StructType`. `BinaryType` is supported only when
-installed PyArrow is equal to or higher than 0.10.0.
+`ArrayType` of `TimestampType`, and nested `StructType`.
 
 ### Setting Arrow Batch Size
 
@@ -180,3 +219,20 @@ Note that a standard UDF (non-Pandas) will load timestamp data as Python datetim
 different than a Pandas timestamp. It is recommended to use Pandas time series functionality when
 working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
+
+### Compatibiliy Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
+
+Since Arrow 0.15.0, a change in the binary IPC format requires an environment variable to be
+compatible with previous versions of Arrow <= 0.14.1. This is only necessary to do for PySpark
+users with versions 2.3.x and 2.4.x that have manually upgraded PyArrow to 0.15.0. The following
+can be added to `conf/spark-env.sh` to use the legacy Arrow IPC format:
+
+```
+ARROW_PRE_0_15_IPC_FORMAT=1
+```
+
+This will instruct PyArrow >= 0.15.0 to use the legacy IPC format with the older Arrow Java that
+is in Spark 2.3.x and 2.4.x. Not setting this environment variable will lead to a similar error as
+described in [SPARK-29367](https://issues.apache.org/jira/browse/SPARK-29367) when running
+`pandas_udf`s or `toPandas()` with Arrow enabled. More information about the Arrow IPC change can
+be read on the Arrow 0.15.0 release [blog](http://arrow.apache.org/blog/2019/10/06/0.15.0-release/#columnar-streaming-protocol-change-since-0140).

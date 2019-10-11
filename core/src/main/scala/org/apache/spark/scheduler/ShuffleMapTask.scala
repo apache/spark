@@ -21,13 +21,10 @@ import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.util.Properties
 
-import scala.language.existentials
-
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.shuffle.ShuffleWriter
 
 /**
  * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
@@ -85,14 +82,16 @@ private[spark] class ShuffleMapTask(
       threadMXBean.getCurrentThreadCpuTime
     } else 0L
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
+    val rddAndDep = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
     _executorDeserializeTimeNs = System.nanoTime() - deserializeStartTimeNs
     _executorDeserializeCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
 
-    dep.shuffleWriterProcessor.write(rdd, dep, partitionId, context, partition)
+    val rdd = rddAndDep._1
+    val dep = rddAndDep._2
+    dep.shuffleWriterProcessor.write(rdd, dep, context, partition)
   }
 
   override def preferredLocations: Seq[TaskLocation] = preferredLocs

@@ -92,8 +92,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("Initially request executors in batches. Do not request another batch if the" +
     " first has not finished.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize + 1)
-    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
-    snapshotsStore.notifySubscribers()
     for (nextId <- 1 to podAllocationSize) {
       verify(podOperations).create(podWithAttachedContainerForId(nextId))
     }
@@ -103,8 +101,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("Request executors in batches. Allow another batch to be requested if" +
     " all pending executors start running.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize + 1)
-    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
-    snapshotsStore.notifySubscribers()
     for (execId <- 1 until podAllocationSize) {
       snapshotsStore.updatePod(runningExecutor(execId))
     }
@@ -121,8 +117,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("When a current batch reaches error states immediately, re-request" +
     " them on the next batch.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize)
-    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
-    snapshotsStore.notifySubscribers()
     for (execId <- 1 until podAllocationSize) {
       snapshotsStore.updatePod(runningExecutor(execId))
     }
@@ -134,23 +128,67 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("When an executor is requested but the API does not report it in a reasonable time, retry" +
     " requesting that executor.") {
-    podsAllocatorUnderTest.setTotalExpectedExecutors(1)
-    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
-    snapshotsStore.notifySubscribers()
-    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
-    waitForExecutorPodsClock.setTime(podCreationTimeout + 1)
     when(podOperations
       .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
       .thenReturn(podOperations)
     when(podOperations
-      withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(podOperations)
     when(podOperations
-      .withLabel(SPARK_EXECUTOR_ID_LABEL, "1"))
+      .withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1"))
       .thenReturn(labeledPods)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(1)
+    verify(podOperations).create(podWithAttachedContainerForId(1))
+    waitForExecutorPodsClock.setTime(podCreationTimeout + 1)
     snapshotsStore.notifySubscribers()
     verify(labeledPods).delete()
     verify(podOperations).create(podWithAttachedContainerForId(2))
+  }
+
+  test("SPARK-28487: scale up and down on target executor count changes") {
+    when(podOperations
+      .withField("status.phase", "Pending"))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .thenReturn(podOperations)
+
+    // Target 1 executor, make sure it's requested, even with an empty initial snapshot.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(1)
+    verify(podOperations).create(podWithAttachedContainerForId(1))
+
+    // Mark executor as running, verify that subsequent allocation cycle is a no-op.
+    snapshotsStore.updatePod(runningExecutor(1))
+    snapshotsStore.notifySubscribers()
+    verify(podOperations, times(1)).create(any())
+    verify(podOperations, never()).delete()
+
+    // Request 3 more executors, make sure all are requested.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(4)
+    snapshotsStore.notifySubscribers()
+    verify(podOperations).create(podWithAttachedContainerForId(2))
+    verify(podOperations).create(podWithAttachedContainerForId(3))
+    verify(podOperations).create(podWithAttachedContainerForId(4))
+
+    // Mark 2 as running, 3 as pending. Allocation cycle should do nothing.
+    snapshotsStore.updatePod(runningExecutor(2))
+    snapshotsStore.updatePod(pendingExecutor(3))
+    snapshotsStore.notifySubscribers()
+    verify(podOperations, times(4)).create(any())
+    verify(podOperations, never()).delete()
+
+    // Scale down to 1. Pending executors (both acknowledged and not) should be deleted.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(1)
+    snapshotsStore.notifySubscribers()
+    verify(podOperations, times(4)).create(any())
+    verify(podOperations).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "3", "4")
+    verify(podOperations).delete()
   }
 
   private def executorPodAnswer(): Answer[SparkPod] =

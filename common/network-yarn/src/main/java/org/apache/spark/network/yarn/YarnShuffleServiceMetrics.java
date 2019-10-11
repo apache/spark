@@ -26,7 +26,7 @@ import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 
 /**
- * Forward {@link org.apache.spark.network.shuffle.ExternalShuffleBlockHandler.ShuffleMetrics}
+ * Forward {@link org.apache.spark.network.shuffle.ExternalBlockHandler.ShuffleMetrics}
  * to hadoop metrics system.
  * NodeManager by default exposes JMX endpoint where can be collected.
  */
@@ -55,7 +55,7 @@ class YarnShuffleServiceMetrics implements MetricsSource {
 
   /**
    * The metric types used in
-   * {@link org.apache.spark.network.shuffle.ExternalShuffleBlockHandler.ShuffleMetrics}.
+   * {@link org.apache.spark.network.shuffle.ExternalBlockHandler.ShuffleMetrics}.
    * Visible for testing.
    */
   public static void collectMetric(
@@ -96,13 +96,17 @@ class YarnShuffleServiceMetrics implements MetricsSource {
     } else if (metric instanceof Gauge) {
       final Object gaugeValue = ((Gauge) metric).getValue();
       if (gaugeValue instanceof Integer) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfo(name), (Integer) gaugeValue);
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGauge(name), (Integer) gaugeValue);
       } else if (gaugeValue instanceof Long) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfo(name), (Long) gaugeValue);
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGauge(name), (Long) gaugeValue);
       } else if (gaugeValue instanceof Float) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfo(name), (Float) gaugeValue);
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGauge(name), (Float) gaugeValue);
       } else if (gaugeValue instanceof Double) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfo(name), (Double) gaugeValue);
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGauge(name), (Double) gaugeValue);
       } else {
         throw new IllegalStateException(
                 "Not supported class type of metric[" + name + "] for value " + gaugeValue);
@@ -110,13 +114,16 @@ class YarnShuffleServiceMetrics implements MetricsSource {
     } else if (metric instanceof Counter) {
       Counter c = (Counter) metric;
       long counterValue = c.getCount();
-      metricsRecordBuilder.addGauge(new ShuffleServiceMetricsInfo(name, "Number of " +
-          "connections to shuffle service " + name), counterValue);
+      metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForCounter(name), counterValue);
     }
   }
 
-  private static MetricsInfo getShuffleServiceMetricsInfo(String name) {
+  private static MetricsInfo getShuffleServiceMetricsInfoForGauge(String name) {
     return new ShuffleServiceMetricsInfo(name, "Value of gauge " + name);
+  }
+
+  private static ShuffleServiceMetricsInfo getShuffleServiceMetricsInfoForCounter(String name) {
+    return new ShuffleServiceMetricsInfo(name, "Value of counter " + name);
   }
 
   private static class ShuffleServiceMetricsInfo implements MetricsInfo {

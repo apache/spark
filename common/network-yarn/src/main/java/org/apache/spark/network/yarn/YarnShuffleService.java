@@ -51,7 +51,7 @@ import org.apache.spark.network.crypto.AuthServerBootstrap;
 import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
-import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
+import org.apache.spark.network.shuffle.ExternalBlockHandler;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 
@@ -123,7 +123,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
   // Handles registering executors and opening shuffle blocks
   @VisibleForTesting
-  ExternalShuffleBlockHandler blockHandler;
+  ExternalBlockHandler blockHandler;
 
   // Where to store & reload executor info for recovering state after an NM restart
   @VisibleForTesting
@@ -170,7 +170,7 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
-      blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
+      blockHandler = new ExternalBlockHandler(transportConf, registeredExecutorFile);
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests

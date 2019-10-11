@@ -27,7 +27,7 @@ Structured Streaming is a scalable and fault-tolerant stream processing engine b
 
 Internally, by default, Structured Streaming queries are processed using a *micro-batch processing* engine, which processes data streams as a series of small batch jobs thereby achieving end-to-end latencies as low as 100 milliseconds and exactly-once fault-tolerance guarantees. However, since Spark 2.3, we have introduced a new low-latency processing mode called **Continuous Processing**, which can achieve end-to-end latencies as low as 1 millisecond with at-least-once guarantees. Without changing the Dataset/DataFrame operations in your queries, you will be able to choose the mode based on your application requirements. 
 
-In this guide, we are going to walk you through the programming model and the APIs. We are going to explain the concepts mostly using the default micro-batch processing model, and then [later](#continuous-processing-experimental) discuss Continuous Processing model. First, let's start with a simple example of a Structured Streaming query - a streaming word count.
+In this guide, we are going to walk you through the programming model and the APIs. We are going to explain the concepts mostly using the default micro-batch processing model, and then [later](#continuous-processing) discuss Continuous Processing model. First, let's start with a simple example of a Structured Streaming query - a streaming word count.
 
 # Quick Example
 Let’s say you want to maintain a running word count of text data received from a data server listening on a TCP socket. Let’s see how you can express this using Structured Streaming. You can see the full code in
@@ -510,9 +510,8 @@ returned by `SparkSession.readStream()`. In [R](api/R/read.stream.html), with th
 #### Input Sources
 There are a few built-in sources.
 
-  - **File source** - Reads files written in a directory as a stream of data. Supported file formats are text, csv, json, orc, parquet. See the docs of the DataStreamReader interface for a more up-to-date list, and supported options for each file format. Note that the files must be atomically placed in the given directory, which in most file systems, can be achieved by file move operations.
-
-  - **Kafka source** - Reads data from Kafka. It's compatible with Kafka broker versions 0.10.0 or higher. See the [Kafka Integration Guide](structured-streaming-kafka-0-10-integration.html) for more details.
+  - **File source** - Reads files written in a directory as a stream of data. Files will be processed in the order of file modification time. If `latestFirst` is set, order will be reversed. Supported file formats are text, CSV, JSON, ORC, Parquet. See the docs of the DataStreamReader interface for a more up-to-date list, and supported options for each file format. Note that the files must be atomically placed in the given directory, which in most file systems, can be achieved by file move operations.
+  - **Kafka source** - Reads data from Kafka. It's compatible with Kafka broker versions 0.10.0 or higher. See the [Kafka Integration Guide](structured-streaming-kafka-integration.html) for more details.
 
   - **Socket source (for testing)** - Reads UTF8 text data from a socket connection. The listening server socket is at the driver. Note that this should be used only for testing as this does not provide end-to-end fault-tolerance guarantees. 
 
@@ -540,6 +539,8 @@ Here are the details of all the sources in Spark.
         <code>latestFirst</code>: whether to process the latest new files first, useful when there is a large backlog of files (default: false)
         <br/>
         <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
+        <br/>
+        <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If <code>latestFirst</code> is set to `true` and <code>maxFilesPerTrigger</code> is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.(default: 1 week)
         <br/>
         "file:///dataset.txt"<br/>
         "s3://a/dataset.txt"<br/>
@@ -581,7 +582,7 @@ Here are the details of all the sources in Spark.
   <tr>
     <td><b>Kafka Source</b></td>
     <td>
-        See the <a href="structured-streaming-kafka-0-10-integration.html">Kafka Integration Guide</a>.
+        See the <a href="structured-streaming-kafka-integration.html">Kafka Integration Guide</a>.
     </td>
     <td>Yes</td>
     <td></td>
@@ -1495,15 +1496,14 @@ Additional details on supported joins:
 
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
-- As of Spark 2.3, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
+- As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 
-- As of Spark 2.3, you cannot use other non-map-like operations before joins. Here are a few examples of
+- As of Spark 2.4, you cannot use other non-map-like operations before joins. Here are a few examples of
   what cannot be used.
 
   - Cannot use streaming aggregations before joins.
 
   - Cannot use mapGroupsWithState and flatMapGroupsWithState in Update mode before joins.
-
 
 ### Streaming Deduplication
 You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
@@ -1582,10 +1582,18 @@ be tolerated for stateful operations. You specify these thresholds using
 ``withWatermarks("eventTime", delay)`` on each of the input streams. For example, consider
 a query with stream-stream joins between `inputStream1` and `inputStream2`.
     
-  inputStream1.withWatermark("eventTime1", "1 hour")
-    .join(
-      inputStream2.withWatermark("eventTime2", "2 hours"),
-      joinCondition)
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+inputStream1.withWatermark("eventTime1", "1 hour")
+  .join(
+    inputStream2.withWatermark("eventTime2", "2 hours"),
+    joinCondition)
+{% endhighlight %}
+
+</div>
+</div>
 
 While executing the query, Structured Streaming individually tracks the maximum
 event time seen in each input stream, calculates watermarks based on the corresponding delay,
@@ -1606,6 +1614,8 @@ this configuration judiciously.
 
 ### Arbitrary Stateful Operations
 Many usecases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)).
+
+Though Spark cannot check and force it, the state function should be implemented with respect to the semantics of the output mode. For example, in Update mode Spark doesn't expect that the state function will emit rows which are older than current watermark plus allowed late record delay, whereas in Append mode the state function can emit these rows.
 
 ### Unsupported Operations
 There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
@@ -1637,6 +1647,26 @@ there are others which are fundamentally hard to implement on streaming data eff
 For example, sorting on the input stream is not supported, as it requires keeping 
 track of all the data received in the stream. This is therefore fundamentally hard to execute 
 efficiently.
+
+### Limitation of global watermark
+
+In Append mode, if a stateful operation emits rows older than current watermark plus allowed late record delay,
+they will be "late rows" in downstream stateful operations (as Spark uses global watermark). Note that these rows may be discarded.
+This is a limitation of a global watermark, and it could potentially cause a correctness issue.
+
+Spark will check the logical plan of query and log a warning when Spark detects such a pattern.
+
+Any of the stateful operation(s) after any of below stateful operations can have this issue:
+
+* streaming aggregation in Append mode
+* stream-stream outer join
+* `mapGroupsWithState` and `flatMapGroupsWithState` in Append mode (depending on the implementation of the state function)
+
+As Spark cannot check the state function of `mapGroupsWithState`/`flatMapGroupsWithState`, Spark assumes that the state function
+emits late rows if the operator uses Append mode.
+
+There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
+end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
@@ -1834,7 +1864,7 @@ Here are the details of all the sinks in Spark.
   <tr>
     <td><b>Kafka Sink</b></td>
     <td>Append, Update, Complete</td>
-    <td>See the <a href="structured-streaming-kafka-0-10-integration.html">Kafka Integration Guide</a></td>
+    <td>See the <a href="structured-streaming-kafka-integration.html">Kafka Integration Guide</a></td>
     <td>Yes (at-least-once)</td>
     <td>More details in the <a href="structured-streaming-kafka-integration.html">Kafka Integration Guide</a></td>
   </tr>
@@ -1842,7 +1872,7 @@ Here are the details of all the sinks in Spark.
     <td><b>Foreach Sink</b></td>
     <td>Append, Update, Complete</td>
     <td>None</td>
-    <td>Depends on ForeachWriter implementation</td>
+    <td>Yes (at-least-once)</td>
     <td>More details in the <a href="#using-foreach-and-foreachbatch">next section</a></td>
   </tr>
   <tr>
@@ -2101,12 +2131,20 @@ With `foreachBatch`, you can do the following.
   cause the output data to be recomputed (including possible re-reading of the input data). To avoid recomputations,
   you should cache the output DataFrame/Dataset, write it to multiple locations, and then uncache it. Here is an outline.  
 
-    streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
-      batchDF.persist()
-      batchDF.write.format(...).save(...)  // location 1
-      batchDF.write.format(...).save(...)  // location 2
-      batchDF.unpersist()
-    }
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
+  batchDF.persist()
+  batchDF.write.format(...).save(...)  // location 1
+  batchDF.write.format(...).save(...)  // location 2
+  batchDF.unpersist()
+}
+{% endhighlight %}
+
+</div>
+</div>
 
 - **Apply additional DataFrame operations** - Many DataFrame and Dataset operations are not supported 
   in streaming DataFrames because Spark does not support generating incremental plans in those cases. 
@@ -2181,34 +2219,34 @@ The function offers a simple way to express your processing logic but does not a
 deduplicate generated data when failures cause reprocessing of some input data. 
 For that situation you must specify the processing logic in an object.
 
-1. The function takes a row as input.
+- First, the function takes a row as input.
 
-  {% highlight python %}
-      def process_row(row):
-          # Write row to storage
-          pass
-      
-      query = streamingDF.writeStream.foreach(process_row).start()  
-  {% endhighlight %}
+{% highlight python %}
+def process_row(row):
+    # Write row to storage
+    pass
 
-2. The object has a process method and optional open and close methods: 
+query = streamingDF.writeStream.foreach(process_row).start()  
+{% endhighlight %}
 
-  {% highlight python %}
-      class ForeachWriter:
-          def open(self, partition_id, epoch_id):
-              # Open connection. This method is optional in Python.
-              pass
+- Second, the object has a process method and optional open and close methods:
+
+{% highlight python %}
+class ForeachWriter:
+    def open(self, partition_id, epoch_id):
+        # Open connection. This method is optional in Python.
+        pass
+
+    def process(self, row):
+        # Write row to connection. This method is NOT optional in Python.
+        pass
+
+    def close(self, error):
+        # Close the connection. This method in optional in Python.
+        pass
       
-          def process(self, row):
-              # Write row to connection. This method is NOT optional in Python.
-              pass
-      
-          def close(self, error):
-              # Close the connection. This method in optional in Python.
-              pass
-      
-      query = streamingDF.writeStream.foreach(ForeachWriter()).start()
-  {% endhighlight %}
+query = streamingDF.writeStream.foreach(ForeachWriter()).start()
+{% endhighlight %}
 
 </div>
 <div data-lang="r"  markdown="1">
@@ -2242,13 +2280,11 @@ When the streaming query is started, Spark calls the function or the object’s 
 
 - The close() method (if it exists) is called if an open() method exists and returns successfully (irrespective of the return value), except if the JVM or Python process crashes in the middle.
 
-- **Note:** The partitionId and epochId in the open() method can be used to deduplicate generated data 
-  when failures cause reprocessing of some input data. This depends on the execution mode of the query. 
-  If the streaming query is being executed in the micro-batch mode, then every partition represented 
-  by a unique tuple (partition_id, epoch_id) is guaranteed to have the same data. 
-  Hence, (partition_id, epoch_id) can be used to deduplicate and/or transactionally commit 
-  data and achieve exactly-once guarantees. However, if the streaming query is being executed 
-  in the continuous mode, then this guarantee does not hold and therefore should not be used for deduplication.
+- **Note:** Spark does not guarantee same output for (partitionId, epochId), so deduplication
+  cannot be achieved with (partitionId, epochId). e.g. source provides different number of
+  partitions for some reasons, Spark optimization changes number of partitions, etc.
+  See [SPARK-28650](https://issues.apache.org/jira/browse/SPARK-28650) for more details.
+  If you need deduplication on output, try out `foreachBatch` instead.
 
 #### Triggers
 The trigger settings of a streaming query define the timing of streaming data processing, whether
@@ -2298,7 +2334,7 @@ Here are the different kinds of triggers that are supported.
     <td><b>Continuous with fixed checkpoint interval</b><br/><i>(experimental)</i></td>
     <td>
         The query will be executed in the new low-latency, continuous processing mode. Read more
-        about this in the <a href="#continuous-processing-experimental">Continuous Processing section</a> below.
+        about this in the <a href="#continuous-processing">Continuous Processing section</a> below.
     </td>
   </tr>
 </table>
@@ -2554,11 +2590,11 @@ spark.streams().awaitAnyTermination();   // block until any one of them terminat
 {% highlight python %}
 spark = ...  # spark session
 
-spark.streams().active  # get the list of currently active streaming queries
+spark.streams.active  # get the list of currently active streaming queries
 
-spark.streams().get(id)  # get a query object by its unique id
+spark.streams.get(id)  # get a query object by its unique id
 
-spark.streams().awaitAnyTermination()  # block until any one of them terminates
+spark.streams.awaitAnyTermination()  # block until any one of them terminates
 {% endhighlight %}
 
 </div>
@@ -2995,7 +3031,7 @@ the effect of the change is not well-defined. For all of them:
 
   - Changes to the user-defined foreach sink (that is, the `ForeachWriter` code) are allowed, but the semantics of the change depends on the code.
 
-- *Changes in projection / filter / map-like operations**: Some cases are allowed. For example:
+- *Changes in projection / filter / map-like operations*: Some cases are allowed. For example:
 
   - Addition / deletion of filters is allowed: `sdf.selectExpr("a")` to `sdf.where(...).selectExpr("a").filter(...)`.
 
@@ -3037,12 +3073,6 @@ To run a supported query in continuous processing mode, all you need to do is sp
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
 import org.apache.spark.sql.streaming.Trigger
-
-spark
-  .readStream
-  .format("rate")
-  .option("rowsPerSecond", "10")
-  .option("")
 
 spark
   .readStream
@@ -3103,7 +3133,7 @@ A checkpoint interval of 1 second means that the continuous processing engine wi
 ## Supported Queries
 {:.no_toc}
 
-As of Spark 2.3, only the following type of queries are supported in the continuous processing mode.
+As of Spark 2.4, only the following type of queries are supported in the continuous processing mode.
 
 - *Operations*: Only map-like Dataset/DataFrame operations are supported in continuous mode, that is, only projections (`select`, `map`, `flatMap`, `mapPartitions`, etc.) and selections (`where`, `filter`, etc.).
   + All SQL functions are supported except aggregation functions (since aggregations are not yet supported), `current_timestamp()` and `current_date()` (deterministic computations using time is challenging).

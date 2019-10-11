@@ -110,7 +110,7 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-     case MapObjects(_, _, _, LambdaVariable(_, _, _, false), inputData, None) => inputData
+     case MapObjects(_, LambdaVariable(_, _, false, _), inputData, None) => inputData
   }
 }
 
@@ -226,5 +226,56 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
       } else {
         p.copy(child = SerializeFromObject(prunedSerializer, s.child))
       }
+  }
+}
+
+/**
+ * Reassigns per-query unique IDs to `LambdaVariable`s, whose original IDs are globally unique. This
+ * can help Spark to hit codegen cache more often and improve performance.
+ */
+object ReassignLambdaVariableID extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!SQLConf.get.getConf(SQLConf.OPTIMIZER_REASSIGN_LAMBDA_VARIABLE_ID)) return plan
+
+    // The original LambdaVariable IDs are all positive. To avoid conflicts, the new IDs are all
+    // negative and starts from -1.
+    var newId = 0L
+    val oldIdToNewId = scala.collection.mutable.Map.empty[Long, Long]
+
+    // The `LambdaVariable` IDs in a query should be all positive or negative. Otherwise it's a bug
+    // and we should fail earlier.
+    var hasNegativeIds = false
+    var hasPositiveIds = false
+
+    plan.transformAllExpressions {
+      case lr: LambdaVariable if lr.id == 0 =>
+        throw new IllegalStateException("LambdaVariable should never has 0 as its ID.")
+
+      case lr: LambdaVariable if lr.id < 0 =>
+        hasNegativeIds = true
+        if (hasPositiveIds) {
+          throw new IllegalStateException(
+            "LambdaVariable IDs in a query should be all positive or negative.")
+
+        }
+        lr
+
+      case lr: LambdaVariable if lr.id > 0 =>
+        hasPositiveIds = true
+        if (hasNegativeIds) {
+          throw new IllegalStateException(
+            "LambdaVariable IDs in a query should be all positive or negative.")
+        }
+
+        if (oldIdToNewId.contains(lr.id)) {
+          // This `LambdaVariable` has appeared before, reuse the newly generated ID.
+          lr.copy(id = oldIdToNewId(lr.id))
+        } else {
+          // This is the first appearance of this `LambdaVariable`, generate a new ID.
+          newId -= 1
+          oldIdToNewId(lr.id) = newId
+          lr.copy(id = newId)
+        }
+    }
   }
 }

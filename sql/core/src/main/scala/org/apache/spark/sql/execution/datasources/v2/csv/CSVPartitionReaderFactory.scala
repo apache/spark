@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2.csv
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
+import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.PartitionReader
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -48,11 +48,15 @@ case class CSVPartitionReaderFactory(
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
+    val actualDataSchema = StructType(
+      dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    val actualReadDataSchema = StructType(
+      readDataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     val parser = new UnivocityParser(
-      StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
-      StructType(readDataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
+      actualDataSchema,
+      actualReadDataSchema,
       parsedOptions)
-    val schema = if (columnPruning) readDataSchema else dataSchema
+    val schema = if (columnPruning) actualReadDataSchema else actualDataSchema
     val isStartOfFile = file.start == 0
     val headerChecker = new CSVHeaderChecker(
       schema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)

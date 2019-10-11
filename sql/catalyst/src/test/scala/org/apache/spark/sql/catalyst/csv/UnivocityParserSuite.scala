@@ -231,4 +231,39 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
 
     Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
   }
+
+  test("SPARK-27591 UserDefinedType can be read") {
+
+    @SQLUserDefinedType(udt = classOf[StringBasedUDT])
+    case class NameId(name: String, id: Int)
+
+    class StringBasedUDT extends UserDefinedType[NameId] {
+      override def sqlType: DataType = StringType
+
+      override def serialize(obj: NameId): Any = s"${obj.name}\t${obj.id}"
+
+      override def deserialize(datum: Any): NameId = datum match {
+        case s: String =>
+          val split = s.split("\t")
+          if (split.length != 2) throw new RuntimeException(s"Can't parse $s into NameId");
+          NameId(split(0), Integer.parseInt(split(1)))
+        case _ => throw new RuntimeException(s"Can't parse $datum into NameId");
+      }
+
+      override def userClass: Class[NameId] = classOf[NameId]
+    }
+
+    object StringBasedUDT extends StringBasedUDT
+
+    val input = "name\t42"
+    val expected = UTF8String.fromString(input)
+
+    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
+    val parser = new UnivocityParser(StructType(Seq.empty), options)
+
+    val convertedValue = parser.makeConverter("_1", StringBasedUDT, nullable = false).apply(input)
+
+    assert(convertedValue.isInstanceOf[UTF8String])
+    assert(convertedValue == expected)
+  }
 }

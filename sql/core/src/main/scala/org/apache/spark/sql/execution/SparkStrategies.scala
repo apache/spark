@@ -29,13 +29,14 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.sources.MemoryPlanV2
+import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery}
 import org.apache.spark.sql.types.StructType
@@ -62,6 +63,17 @@ case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
 
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
+
+  override def plan(plan: LogicalPlan): Iterator[SparkPlan] = {
+    super.plan(plan).map { p =>
+      val logicalPlan = plan match {
+        case ReturnAnswer(rootPlan) => rootPlan
+        case _ => plan
+      }
+      p.setLogicalLink(logicalPlan)
+      p
+    }
+  }
 
   /**
    * Plans special cases of limit operators.
@@ -279,7 +291,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createBroadcastHashJoin(canBroadcast(left), canBroadcast(right))
+          createBroadcastHashJoin(
+            canBroadcast(left) && !hint.leftHint.exists(_.strategy.contains(NO_BROADCAST_HASH)),
+            canBroadcast(right) && !hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_HASH)))
             .orElse {
               if (!conf.preferSortMergeJoin) {
                 createShuffleHashJoin(
@@ -609,8 +623,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ArrowEvalPython(udfs, output, child) =>
-        ArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
+      case ArrowEvalPython(udfs, output, child, evalType) =>
+        ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
       case BatchEvalPython(udfs, output, child) =>
         BatchEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case _ =>
@@ -624,9 +638,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 
       case MemoryPlan(sink, output) =>
-        val encoder = RowEncoder(sink.schema)
-        LocalTableScanExec(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil
-      case MemoryPlanV2(sink, output) =>
         val encoder = RowEncoder(StructType.fromAttributes(output))
         LocalTableScanExec(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil
 
@@ -671,6 +682,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           f, p, b, is, ot, planLater(child)) :: Nil
       case logical.FlatMapGroupsInPandas(grouping, func, output, child) =>
         execution.python.FlatMapGroupsInPandasExec(grouping, func, output, planLater(child)) :: Nil
+      case logical.FlatMapCoGroupsInPandas(leftGroup, rightGroup, func, output, left, right) =>
+        execution.python.FlatMapCoGroupsInPandasExec(
+          leftGroup, rightGroup, func, output, planLater(left), planLater(right)) :: Nil
+      case logical.MapInPandas(func, output, child) =>
+        execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
         execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
       case logical.AppendColumns(f, _, _, in, out, child) =>
@@ -690,7 +706,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
-          ShuffleExchangeExec(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
+          ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
+            planLater(child), canChangeNumPartitions = false) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -723,10 +740,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child)) :: Nil
+        exchange.ShuffleExchangeExec(
+          r.partitioning, planLater(r.child), canChangeNumPartitions = false) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
+      case _: UpdateTable =>
+        throw new UnsupportedOperationException(s"UPDATE TABLE is not supported temporarily.")
       case _ => Nil
     }
   }

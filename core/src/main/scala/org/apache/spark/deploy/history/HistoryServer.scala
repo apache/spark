@@ -34,7 +34,6 @@ import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
-import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
 
 /**
@@ -80,7 +79,18 @@ class HistoryServer(
       }
 
       val appId = parts(1)
-      val attemptId = if (parts.length >= 3) Some(parts(2)) else None
+      var shouldAppendAttemptId = false
+      val attemptId = if (parts.length >= 3) {
+        Some(parts(2))
+      } else {
+        val lastAttemptId = provider.getApplicationInfo(appId).flatMap(_.attempts.head.attemptId)
+        if (lastAttemptId.isDefined) {
+          shouldAppendAttemptId = true
+          lastAttemptId
+        } else {
+          None
+        }
+      }
 
       // Since we may have applications with multiple attempts mixed with applications with a
       // single attempt, we need to try both. Try the single-attempt route first, and if an
@@ -98,8 +108,13 @@ class HistoryServer(
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
       // Also, make sure that the redirect url contains the query string present in the request.
-      val requestURI = req.getRequestURI + Option(req.getQueryString).map("?" + _).getOrElse("")
-      res.sendRedirect(res.encodeRedirectURL(requestURI))
+      val redirect = if (shouldAppendAttemptId) {
+        req.getRequestURI.stripSuffix("/") + "/" + attemptId.get
+      } else {
+        req.getRequestURI
+      }
+      val query = Option(req.getQueryString).map("?" + _).getOrElse("")
+      res.sendRedirect(res.encodeRedirectURL(redirect + query))
     }
 
     // SPARK-5983 ensure TRACE is not supported
@@ -120,7 +135,7 @@ class HistoryServer(
    * This starts a background thread that periodically synchronizes information displayed on
    * this UI with the event logs in the provided base directory.
    */
-  def initialize() {
+  def initialize(): Unit = {
     attachPage(new HistoryPage(this))
 
     attachHandler(ApiRootResource.getServletHandler(this))
@@ -134,12 +149,12 @@ class HistoryServer(
   }
 
   /** Bind to the HTTP server behind this web interface. */
-  override def bind() {
+  override def bind(): Unit = {
     super.bind()
   }
 
   /** Stop the server and close the file system. */
-  override def stop() {
+  override def stop(): Unit = {
     super.stop()
     provider.stop()
   }
@@ -149,7 +164,7 @@ class HistoryServer(
       appId: String,
       attemptId: Option[String],
       ui: SparkUI,
-      completed: Boolean) {
+      completed: Boolean): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach { handler =>
       serverInfo.get.addHandler(handler, ui.securityManager)
@@ -274,15 +289,15 @@ object HistoryServer extends Logging {
 
     val providerName = conf.get(History.PROVIDER)
       .getOrElse(classOf[FsHistoryProvider].getName())
-    val provider = Utils.classForName(providerName)
+    val provider = Utils.classForName[ApplicationHistoryProvider](providerName)
       .getConstructor(classOf[SparkConf])
       .newInstance(conf)
-      .asInstanceOf[ApplicationHistoryProvider]
 
     val port = conf.get(History.HISTORY_SERVER_UI_PORT)
 
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
+    provider.start()
 
     ShutdownHookManager.addShutdownHook { () => server.stop() }
 
@@ -312,7 +327,7 @@ object HistoryServer extends Logging {
     new SecurityManager(config)
   }
 
-  def initSecurity() {
+  def initSecurity(): Unit = {
     // If we are accessing HDFS and it has security enabled (Kerberos), we have to login
     // from a keytab file so that we can access HDFS beyond the kerberos ticket expiration.
     // As long as it is using Hadoop rpc (hdfs://), a relogin will automatically

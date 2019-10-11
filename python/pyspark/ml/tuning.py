@@ -489,8 +489,6 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
 class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollectSubModels,
                            MLReadable, MLWritable):
     """
-    .. note:: Experimental
-
     Validation for hyper-parameter tuning. Randomly splits the input dataset into train and
     validation sets, and uses evaluation metric on the validation set to select the best model.
     Similar to :class:`CrossValidator`, but only splits the set once.
@@ -666,8 +664,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
 
 class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
     """
-    .. note:: Experimental
-
     Model from train validation split.
 
     .. versionadded:: 2.0.0

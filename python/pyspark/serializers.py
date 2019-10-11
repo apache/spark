@@ -19,12 +19,12 @@
 PySpark supports custom serializers for transferring data; this can improve
 performance.
 
-By default, PySpark uses L{PickleSerializer} to serialize objects using Python's
-C{cPickle} serializer, which can serialize nearly any Python object.
-Other serializers, like L{MarshalSerializer}, support fewer datatypes but can be
+By default, PySpark uses :class:`PickleSerializer` to serialize objects using Python's
+`cPickle` serializer, which can serialize nearly any Python object.
+Other serializers, like :class:`MarshalSerializer`, support fewer datatypes but can be
 faster.
 
-The serializer is chosen when creating L{SparkContext}:
+The serializer is chosen when creating :class:`SparkContext`:
 
 >>> from pyspark.context import SparkContext
 >>> from pyspark.serializers import MarshalSerializer
@@ -34,7 +34,7 @@ The serializer is chosen when creating L{SparkContext}:
 >>> sc.stop()
 
 PySpark serializes objects in batches; by default, the batch size is chosen based
-on the size of objects and is also configurable by SparkContext's C{batchSize}
+on the size of objects and is also configurable by SparkContext's `batchSize`
 parameter:
 
 >>> sc = SparkContext('local', 'test', batchSize=2)
@@ -69,7 +69,7 @@ else:
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
-from pyspark.util import _exception_message
+from pyspark.util import _exception_message, print_exec
 
 
 __all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]
@@ -129,7 +129,7 @@ class FramedSerializer(Serializer):
 
     """
     Serializer that writes objects as a stream of (length, data) pairs,
-    where C{length} is a 32-bit integer and data is C{length} bytes.
+    where `length` is a 32-bit integer and data is `length` bytes.
     """
 
     def __init__(self):
@@ -206,8 +206,12 @@ class ArrowCollectSerializer(Serializer):
         for batch in self.serializer.load_stream(stream):
             yield batch
 
-        # load the batch order indices
+        # load the batch order indices or propagate any error that occurred in the JVM
         num = read_int(stream)
+        if num == -1:
+            error_msg = UTF8Deserializer().loads(stream)
+            raise RuntimeError("An error occurred while calling "
+                               "ArrowCollectSerializer.load_stream: {}".format(error_msg))
         batch_order = []
         for i in xrange(num):
             index = read_int(stream)
@@ -260,10 +264,14 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
 
-    def arrow_to_pandas(self, arrow_column, data_type):
-        from pyspark.sql.types import _arrow_column_to_pandas, _check_series_localize_timestamps
+    def arrow_to_pandas(self, arrow_column):
+        from pyspark.sql.types import _check_series_localize_timestamps
 
-        s = _arrow_column_to_pandas(arrow_column, data_type)
+        # If the given column is a date type column, creates a series of datetime.date directly
+        # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
+        # datetime64[ns] type handling.
+        s = arrow_column.to_pandas(date_as_object=True)
+
         s = _check_series_localize_timestamps(s, self._timezone)
         return s
 
@@ -275,8 +283,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         :param series: A single pandas.Series, list of Series, or list of (series, arrow_type)
         :return: Arrow RecordBatch
         """
-        import decimal
-        from distutils.version import LooseVersion
         import pandas as pd
         import pyarrow as pa
         from pyspark.sql.types import _check_series_convert_timestamps_internal
@@ -289,25 +295,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         def create_array(s, t):
             mask = s.isnull()
             # Ensure timestamp series are in expected form for Spark internal representation
-            # TODO: maybe don't need None check anymore as of Arrow 0.9.1
             if t is not None and pa.types.is_timestamp(t):
-                s = _check_series_convert_timestamps_internal(s.fillna(0), self._timezone)
-                # TODO: need cast after Arrow conversion, ns values cause error with pandas 0.19.2
-                return pa.Array.from_pandas(s, mask=mask).cast(t, safe=False)
-            elif t is not None and pa.types.is_string(t) and sys.version < '3':
-                # TODO: need decode before converting to Arrow in Python 2
-                # TODO: don't need as of Arrow 0.9.1
-                return pa.Array.from_pandas(s.apply(
-                    lambda v: v.decode("utf-8") if isinstance(v, str) else v), mask=mask, type=t)
-            elif t is not None and pa.types.is_decimal(t) and \
-                    LooseVersion("0.9.0") <= LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-                # TODO: see ARROW-2432. Remove when the minimum PyArrow version becomes 0.10.0.
-                return pa.Array.from_pandas(s.apply(
-                    lambda v: decimal.Decimal('NaN') if v is None else v), mask=mask, type=t)
-            elif LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
-                # TODO: see ARROW-1949. Remove when the minimum PyArrow version becomes 0.11.0.
-                return pa.Array.from_pandas(s, mask=mask, type=t)
-
+                s = _check_series_convert_timestamps_internal(s, self._timezone)
             try:
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
             except pa.ArrowException as e:
@@ -340,12 +329,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                                   for i, field in enumerate(t)]
 
                 struct_arrs, struct_names = zip(*arrs_names)
-
-                # TODO: from_arrays args switched for v0.9.0, remove when bump min pyarrow version
-                if LooseVersion(pa.__version__) < LooseVersion("0.9.0"):
-                    arrs.append(pa.StructArray.from_arrays(struct_names, struct_arrs))
-                else:
-                    arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
+                arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
             else:
                 arrs.append(create_array(s, t))
 
@@ -365,10 +349,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         import pyarrow as pa
-        from pyspark.sql.types import from_arrow_type
         for batch in batches:
-            yield [self.arrow_to_pandas(c, from_arrow_type(c.type))
-                   for c in pa.Table.from_batches([batch]).itercolumns()]
+            yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"
@@ -384,17 +366,17 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             .__init__(timezone, safecheck, assign_cols_by_name)
         self._df_for_struct = df_for_struct
 
-    def arrow_to_pandas(self, arrow_column, data_type):
-        from pyspark.sql.types import StructType, \
-            _arrow_column_to_pandas, _check_dataframe_localize_timestamps
+    def arrow_to_pandas(self, arrow_column):
+        import pyarrow.types as types
 
-        if self._df_for_struct and type(data_type) == StructType:
+        if self._df_for_struct and types.is_struct(arrow_column.type):
             import pandas as pd
-            series = [_arrow_column_to_pandas(column, field.dataType).rename(field.name)
-                      for column, field in zip(arrow_column.flatten(), data_type)]
-            s = _check_dataframe_localize_timestamps(pd.concat(series, axis=1), self._timezone)
+            series = [super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(column)
+                      .rename(field.name)
+                      for column, field in zip(arrow_column.flatten(), arrow_column.type)]
+            s = pd.concat(series, axis=1)
         else:
-            s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column, data_type)
+            s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column)
         return s
 
     def dump_stream(self, iterator, stream):
@@ -417,6 +399,32 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
     def __repr__(self):
         return "ArrowStreamPandasUDFSerializer"
+
+
+class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
+
+    def load_stream(self, stream):
+        """
+        Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and yield as two
+        lists of pandas.Series.
+        """
+        import pyarrow as pa
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 2:
+                batch1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                yield (
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()]
+                )
+
+            elif dataframes_in_group != 0:
+                raise ValueError(
+                    'Invalid number of pandas.DataFrames in group {0}'.format(dataframes_in_group))
 
 
 class BatchedSerializer(Serializer):
@@ -708,7 +716,7 @@ class CloudPickleSerializer(PickleSerializer):
                 msg = "Object too large to serialize: %s" % emsg
             else:
                 msg = "Could not serialize object: %s: %s" % (e.__class__.__name__, emsg)
-            cloudpickle.print_exec(sys.stderr)
+            print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
 
 

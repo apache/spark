@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -124,10 +124,10 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
 }
 
 /**
- * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
- * we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'. Also see
- * the R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+ * we support a limited subset of the R operators, including '~', '.', ':', '+', '-', '*' and '^'.
+ * Also see the R formula docs here:
+ * http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  *
  * The basic operators are:
  *  - `~` separate target and terms
@@ -135,6 +135,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  *  - `-` remove a term, "- 1" means removing intercept
  *  - `:` interaction (multiplication for numeric values, or binarized categorical values)
  *  - `.` all columns except target
+ *  - `*` factor crossing, includes the terms and interactions between them
+ *  - `^` factor crossing to a specified degree
  *
  * Suppose `a` and `b` are double columns, we use the following simple examples
  * to illustrate the effect of `RFormula`:
@@ -142,6 +144,10 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  * are coefficients.
  *  - `y ~ a + b + a:b - 1` means model `y ~ w1 * a + w2 * b + w3 * a * b` where `w1, w2, w3`
  * are coefficients.
+ *  - `y ~ a * b` means model `y ~ w0 + w1 * a + w2 * b + w3 * a * b` where `w0` is the
+ *  intercept and `w1, w2, w3` are coefficients
+ *  - `y ~ (a + b)^2` means model `y ~ w0 + w1 * a + w2 * b + w3 * a * b` where `w0` is the
+ *  intercept and `w1, w2, w3` are coefficients
  *
  * RFormula produces a vector column of features and a double or string column of label.
  * Like when formulas are used in R for linear regression, string input columns will be one-hot
@@ -150,7 +156,6 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  * `StringIndexer`. If the label column does not exist in the DataFrame, the output label column
  * will be created from the specified response variable in the formula.
  */
-@Experimental
 @Since("1.5.0")
 class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[RFormulaModel] with RFormulaBase with DefaultParamsWritable {
@@ -322,14 +327,12 @@ object RFormula extends DefaultParamsReadable[RFormula] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[RFormula]]. Fitting is required to determine the factor levels of
  * formula terms.
  *
  * @param resolvedFormula the fitted R formula.
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
-@Experimental
 @Since("1.5.0")
 class RFormulaModel private[feature](
     @Since("1.5.0") override val uid: String,
@@ -389,7 +392,7 @@ class RFormulaModel private[feature](
     }
   }
 
-  private def checkCanTransform(schema: StructType) {
+  private def checkCanTransform(schema: StructType): Unit = {
     val columnNames = schema.map(_.name)
     require(!columnNames.contains($(featuresCol)), "Features column already exists.")
     require(

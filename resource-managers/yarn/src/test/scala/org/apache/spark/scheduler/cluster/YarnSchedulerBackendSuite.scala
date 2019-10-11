@@ -20,11 +20,8 @@ import java.net.URL
 import java.util.concurrent.atomic.AtomicReference
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.language.reflectiveCalls
-
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.mockito.Mockito.when
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.scheduler.TaskSchedulerImpl
@@ -45,22 +42,24 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     }
   }
 
+  private class TestTaskSchedulerImpl(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+    val blacklistedNodes = new AtomicReference[Set[String]]()
+    def setNodeBlacklist(nodeBlacklist: Set[String]): Unit = blacklistedNodes.set(nodeBlacklist)
+    override def nodeBlacklist(): Set[String] = blacklistedNodes.get()
+  }
+
+  private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
+      extends YarnSchedulerBackend(scheduler, sc) {
+    def setHostToLocalTaskCount(hostToLocalTaskCount: Map[String, Int]): Unit = {
+      this.hostToLocalTaskCount = hostToLocalTaskCount
+    }
+  }
+
   test("RequestExecutors reflects node blacklist and is serializable") {
     sc = new SparkContext("local", "YarnSchedulerBackendSuite")
     // Subclassing the TaskSchedulerImpl here instead of using Mockito. For details see SPARK-26891.
-    val sched = new TaskSchedulerImpl(sc) {
-      val blacklistedNodes = new AtomicReference[Set[String]]()
-
-      def setNodeBlacklist(nodeBlacklist: Set[String]): Unit = blacklistedNodes.set(nodeBlacklist)
-
-      override def nodeBlacklist(): Set[String] = blacklistedNodes.get()
-    }
-
-    val yarnSchedulerBackendExtended = new YarnSchedulerBackend(sched, sc) {
-      def setHostToLocalTaskCount(hostToLocalTaskCount: Map[String, Int]): Unit = {
-        this.hostToLocalTaskCount = hostToLocalTaskCount
-      }
-    }
+    val sched = new TestTaskSchedulerImpl(sc)
+    val yarnSchedulerBackendExtended = new TestYarnSchedulerBackend(sched, sc)
     yarnSchedulerBackend = yarnSchedulerBackendExtended
     val ser = new JavaSerializer(sc.conf).newInstance()
     for {

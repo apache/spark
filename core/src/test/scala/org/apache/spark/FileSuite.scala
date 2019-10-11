@@ -35,19 +35,19 @@ import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInp
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
 import org.apache.spark.internal.config._
-import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD, RDD}
+import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 class FileSuite extends SparkFunSuite with LocalSparkContext {
   var tempDir: File = _
 
-  override def beforeEach() {
+  override def beforeEach(): Unit = {
     super.beforeEach()
     tempDir = Utils.createTempDir()
   }
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       Utils.deleteRecursively(tempDir)
     } finally {
@@ -206,8 +206,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     Utils.withContextClassLoader(loader) {
       sc = new SparkContext("local", "test")
-      val objs = sc.makeRDD(1 to 3).map { x =>
-        Utils.classForName(className, noSparkClassLoader = true).getConstructor().newInstance()
+      val objs = sc.makeRDD(1 to 3).map { _ =>
+        Utils.classForName[AnyRef](className, noSparkClassLoader = true).
+          getConstructor().newInstance()
       }
       val outputDir = new File(tempDir, "output").getAbsolutePath
       objs.saveAsObjectFile(outputDir)
@@ -371,7 +372,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   test ("prevent user from overwriting the empty directory (old Hadoop API)") {
     sc = new SparkContext("local", "test")
-    val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    val randomRDD = sc.parallelize(Seq((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
     intercept[FileAlreadyExistsException] {
       randomRDD.saveAsTextFile(tempDir.getPath)
     }
@@ -379,7 +380,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   test ("prevent user from overwriting the non-empty directory (old Hadoop API)") {
     sc = new SparkContext("local", "test")
-    val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    val randomRDD = sc.parallelize(Seq((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
     assert(new File(tempDir.getPath + "/output/part-00000").exists())
     intercept[FileAlreadyExistsException] {
@@ -391,7 +392,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf()
     conf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
     sc = new SparkContext(conf)
-    val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    val randomRDD = sc.parallelize(Seq((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
     assert(new File(tempDir.getPath + "/output/part-00000").exists())
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
@@ -401,7 +402,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test ("prevent user from overwriting the empty directory (new Hadoop API)") {
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(
-      Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+      Seq(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
     intercept[FileAlreadyExistsException] {
       randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](tempDir.getPath)
     }
@@ -410,7 +411,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test ("prevent user from overwriting the non-empty directory (new Hadoop API)") {
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(
-      Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+      Seq(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
     randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](
       tempDir.getPath + "/output")
     assert(new File(tempDir.getPath + "/output/part-r-00000").exists())
@@ -424,7 +425,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     conf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
     sc = new SparkContext(conf)
     val randomRDD = sc.parallelize(
-      Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+      Seq(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
     randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](
       tempDir.getPath + "/output")
     assert(new File(tempDir.getPath + "/output/part-r-00000").exists())
@@ -436,7 +437,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test ("save Hadoop Dataset through old Hadoop API") {
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(
-      Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+      Seq(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
     val job = new JobConf()
     job.setOutputKeyClass(classOf[String])
     job.setOutputValueClass(classOf[String])
@@ -449,7 +450,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test ("save Hadoop Dataset through new Hadoop API") {
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(
-      Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+      Seq(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
     val job = Job.getInstance(sc.hadoopConfiguration)
     job.setOutputKeyClass(classOf[String])
     job.setOutputValueClass(classOf[String])
@@ -558,7 +559,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(conf)
 
     def testIgnoreEmptySplits(
-        data: Array[Tuple2[String, String]],
+        data: Seq[Tuple2[String, String]],
         actualPartitionNum: Int,
         expectedPartitionNum: Int): Unit = {
       val output = new File(tempDir, "output")
@@ -580,13 +581,13 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if no split is empty, we don't lose any splits
     testIgnoreEmptySplits(
-      data = Array(("key1", "a"), ("key2", "a"), ("key3", "b")),
+      data = Seq(("key1", "a"), ("key2", "a"), ("key3", "b")),
       actualPartitionNum = 2,
       expectedPartitionNum = 2)
 
     // Ensure that if part of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array(("key1", "a"), ("key2", "a")),
+      data = Seq(("key1", "a"), ("key2", "a")),
       actualPartitionNum = 5,
       expectedPartitionNum = 2)
   }
@@ -599,7 +600,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(conf)
 
     def testIgnoreEmptySplits(
-        data: Array[Tuple2[String, String]],
+        data: Seq[Tuple2[String, String]],
         actualPartitionNum: Int,
         expectedPartitionNum: Int): Unit = {
       val output = new File(tempDir, "output")
@@ -623,13 +624,13 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if no split is empty, we don't lose any splits
     testIgnoreEmptySplits(
-      data = Array(("1", "a"), ("2", "a"), ("3", "b")),
+      data = Seq(("1", "a"), ("2", "a"), ("3", "b")),
       actualPartitionNum = 2,
       expectedPartitionNum = 2)
 
     // Ensure that if part of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array(("1", "a"), ("2", "b")),
+      data = Seq(("1", "a"), ("2", "b")),
       actualPartitionNum = 5,
       expectedPartitionNum = 2)
   }

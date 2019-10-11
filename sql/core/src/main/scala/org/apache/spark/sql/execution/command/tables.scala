@@ -34,17 +34,20 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.Utils
 
 /**
  * A command to create a table with the same definition of the given existing table.
@@ -238,7 +241,9 @@ case class AlterTableAddColumnsCommand(
         // TextFileFormat only default to one column "value"
         // Hive type is already considered as hive serde table, so the logic will not
         // come in here.
-        case _: JsonFileFormat | _: CSVDataSourceV2 | _: ParquetFileFormat | _: OrcDataSourceV2 =>
+        case _: CSVFileFormat | _: JsonFileFormat | _: ParquetFileFormat =>
+        case _: JsonDataSourceV2 | _: CSVDataSourceV2 |
+             _: OrcDataSourceV2 | _: ParquetDataSourceV2 =>
         case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
         case s =>
           throw new AnalysisException(
@@ -273,6 +278,13 @@ case class LoadDataCommand(
     val catalog = sparkSession.sessionState.catalog
     val targetTable = catalog.getTableMetadata(table)
     val tableIdentwithDB = targetTable.identifier.quotedString
+    val normalizedSpec = partition.map { spec =>
+      PartitioningUtils.normalizePartitionSpec(
+        spec,
+        targetTable.partitionColumnNames,
+        tableIdentwithDB,
+        sparkSession.sessionState.conf.resolver)
+    }
 
     if (targetTable.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $tableIdentwithDB")
@@ -291,13 +303,6 @@ case class LoadDataCommand(
           s"but number of columns in provided partition spec (${partition.get.size}) " +
           s"do not match number of partitioned columns in table " +
           s"(${targetTable.partitionColumnNames.size})")
-      }
-      partition.get.keys.foreach { colName =>
-        if (!targetTable.partitionColumnNames.contains(colName)) {
-          throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
-            s"but the specified partition spec refers to a column that is not partitioned: " +
-            s"'$colName'")
-        }
       }
     } else {
       if (partition.nonEmpty) {
@@ -348,7 +353,7 @@ case class LoadDataCommand(
       catalog.loadPartition(
         targetTable.identifier,
         loadPath.toString,
-        partition.get,
+        normalizedSpec.get,
         isOverwrite,
         inheritTableSpecs = true,
         isSrcLocal = isLocal)
@@ -495,15 +500,7 @@ case class TruncateTableCommand(
 }
 
 abstract class DescribeCommandBase extends RunnableCommand {
-  override val output: Seq[Attribute] = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column").build())(),
-    AttributeReference("data_type", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "comment of the column").build())()
-  )
+  override val output = DescribeTableSchema.describeTableAttributes()
 
   protected def describeSchema(
       schema: StructType,
@@ -639,12 +636,14 @@ case class DescribeTableCommand(
  *    select * from (from a select * select *)
  * 7. Common table expressions (CTEs)
  */
-case class DescribeQueryCommand(query: LogicalPlan)
+case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
   extends DescribeCommandBase {
+
+  override def simpleString(maxFields: Int): String = s"$nodeName $queryText".trim
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    val queryExecution = sparkSession.sessionState.executePlan(query)
+    val queryExecution = sparkSession.sessionState.executePlan(plan)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
     result
   }
@@ -943,16 +942,22 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val tableMetadata = catalog.getTableMetadata(table)
-
-    // TODO: unify this after we unify the CREATE TABLE syntax for hive serde and data source table.
-    val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
-      showCreateDataSourceTable(tableMetadata)
+    if (catalog.isTemporaryTable(table)) {
+      throw new AnalysisException(
+        s"SHOW CREATE TABLE is not supported on a temporary view: ${table.identifier}")
     } else {
-      showCreateHiveTable(tableMetadata)
-    }
+      val tableMetadata = catalog.getTableMetadata(table)
 
-    Seq(Row(stmt))
+      // TODO: [SPARK-28692] unify this after we unify the
+      //  CREATE TABLE syntax for hive serde and data source table.
+      val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
+        showCreateDataSourceTable(tableMetadata)
+      } else {
+        showCreateHiveTable(tableMetadata)
+      }
+
+      Seq(Row(stmt))
+    }
   }
 
   private def showCreateHiveTable(metadata: CatalogTable): String = {
@@ -1100,7 +1105,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
     builder ++= s"USING ${metadata.provider.get}\n"
 
-    val dataSourceOptions = metadata.storage.properties.map {
+    val dataSourceOptions = SQLConf.get.redactOptions(metadata.storage.properties).map {
       case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
     }
 

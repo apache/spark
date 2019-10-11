@@ -88,6 +88,12 @@ import java.lang.annotation.RetentionPolicy;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ExpressionDescription {
     String usage() default "";
+    /**
+     * @deprecated This field is deprecated as of Spark 3.0. Use {@link #arguments},
+     *   {@link #examples}, {@link #note}, {@link #since} and {@link #deprecated} instead
+     *   to document the extended usage.
+     */
+    @Deprecated
     String extended() default "";
     String arguments() default "";
     String examples() default "";

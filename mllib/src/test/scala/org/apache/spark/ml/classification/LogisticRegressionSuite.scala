@@ -18,7 +18,6 @@
 package org.apache.spark.ml.classification
 
 import scala.collection.JavaConverters._
-import scala.language.existentials
 import scala.util.Random
 import scala.util.control.Breaks._
 
@@ -31,7 +30,7 @@ import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, lit, rand}
 import org.apache.spark.sql.types.LongType
 
@@ -40,11 +39,11 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   import testImplicits._
 
   private val seed = 42
-  @transient var smallBinaryDataset: Dataset[_] = _
-  @transient var smallMultinomialDataset: Dataset[_] = _
-  @transient var binaryDataset: Dataset[_] = _
-  @transient var multinomialDataset: Dataset[_] = _
-  @transient var multinomialDatasetWithZeroVar: Dataset[_] = _
+  @transient var smallBinaryDataset: DataFrame = _
+  @transient var smallMultinomialDataset: DataFrame = _
+  @transient var binaryDataset: DataFrame = _
+  @transient var multinomialDataset: DataFrame = _
+  @transient var multinomialDatasetWithZeroVar: DataFrame = _
   private val eps: Double = 1e-5
 
   override def beforeAll(): Unit = {
@@ -1345,7 +1344,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
          b_k' = b_k - \mean(b_k)
        }}}
      */
-    val rawInterceptsTheory = histogram.map(c => math.log(c + 1)) // add 1 for smoothing
+    val rawInterceptsTheory = histogram.map(math.log1p) // add 1 for smoothing
     val rawMean = rawInterceptsTheory.sum / rawInterceptsTheory.length
     val interceptsTheory = Vectors.dense(rawInterceptsTheory.map(_ - rawMean))
     val coefficientsTheory = new DenseMatrix(numClasses, numFeatures,

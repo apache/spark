@@ -92,7 +92,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
     lexer.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
-    lexer.ansi = SQLConf.get.ansiParserEnabled
+    lexer.ansi = SQLConf.get.ansiEnabled
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
@@ -100,7 +100,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
-    parser.ansi = SQLConf.get.ansiParserEnabled
+    parser.ansi = SQLConf.get.ansiEnabled
 
     try {
       try {
@@ -264,6 +264,14 @@ class ParseException(
  * The post-processor validates & cleans-up the parse tree during the parse process.
  */
 case object PostProcessor extends SqlBaseBaseListener {
+
+  /** Throws error message when exiting a explicitly captured wrong identifier rule */
+  override def exitErrorIdent(ctx: SqlBaseParser.ErrorIdentContext): Unit = {
+    val ident = ctx.getParent.getText
+
+    throw new ParseException(s"Possibly unquoted identifier $ident detected. " +
+      s"Please consider quoting it with back-quotes as `$ident`", ctx)
+  }
 
   /** Remove the back ticks from an Identifier. */
   override def exitQuotedIdentifier(ctx: SqlBaseParser.QuotedIdentifierContext): Unit = {

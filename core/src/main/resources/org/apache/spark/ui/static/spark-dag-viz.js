@@ -172,6 +172,12 @@ function renderDagViz(forJob) {
     svg.selectAll("g." + nodeId).classed("cached", true);
   });
 
+  metadataContainer().selectAll(".barrier-rdd").each(function() {
+    var rddId = d3.select(this).text().trim()
+    var clusterId = VizConstants.clusterPrefix + rddId
+    svg.selectAll("g." + clusterId).classed("barrier", true)
+  });
+
   resizeSvg(svg);
   interpretLineBreak(svg);
 }

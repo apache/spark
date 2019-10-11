@@ -121,7 +121,7 @@ $ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./kubernetes/dockerfiles/spa
 To launch Spark Pi in cluster mode,
 
 ```bash
-$ bin/spark-submit \
+$ ./bin/spark-submit \
     --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
     --deploy-mode cluster \
     --name spark-pi \
@@ -208,8 +208,31 @@ If your application's dependencies are all hosted in remote locations like HDFS 
 by their appropriate remote URIs. Also, application dependencies can be pre-mounted into custom-built Docker images.
 Those dependencies can be added to the classpath by referencing them with `local://` URIs and/or setting the
 `SPARK_EXTRA_CLASSPATH` environment variable in your Dockerfiles. The `local://` scheme is also required when referring to
-dependencies in custom-built Docker images in `spark-submit`. Note that using application dependencies from the submission
-client's local file system is currently not yet supported.
+dependencies in custom-built Docker images in `spark-submit`. We support dependencies from the submission
+client's local file system using the `file://` scheme or without a scheme (using a full path), where the destination should be a Hadoop compatible filesystem.
+A typical example of this using S3 is via passing the following options:
+
+```
+...
+--packages com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6
+--conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
+--conf spark.hadoop.fs.s3a.access.key=...
+--conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+--conf spark.hadoop.fs.s3a.fast.upload=true
+--conf spark.hadoop.fs.s3a.secret.key=....
+--conf spark.driver.extraJavaOptions=-Divy.cache.dir=/tmp -Divy.home=/tmp
+file:///full/path/to/app.jar
+```
+The app jar file will be uploaded to the S3 and then when the driver is launched it will be downloaded
+to the driver pod and will be added to its classpath. Spark will generate a subdir under the upload path with a random name
+to avoid conflicts with spark apps running in parallel. User could manage the subdirs created according to his needs.
+
+The client scheme is supported for the application jar, and dependencies specified by properties `spark.jars` and `spark.files`.
+
+Important: all client-side dependencies will be uploaded to the given path with a flat directory structure so
+file names must be unique otherwise files will be overwritten. Also make sure in the derived k8s image default ivy dir
+has the required access rights or modify the settings as above. The latter is also important if you use `--packages` in
+cluster mode.
 
 ## Secret Management
 Kubernetes [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) can be used to provide credentials for a
@@ -285,7 +308,15 @@ The configuration properties for mounting volumes into the executor pods use pre
 
 ## Local Storage
 
-Spark uses temporary scratch space to spill data to disk during shuffles and other operations.  When using Kubernetes as the resource manager the pods will be created with an [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) volume mounted for each directory listed in `SPARK_LOCAL_DIRS`.  If no directories are explicitly specified then a default directory is created and configured appropriately.
+Spark supports using volumes to spill data during shuffles and other operations. To use a volume as local storage, the volume's name should starts with `spark-local-dir-`, for example:
+
+```
+--conf spark.kubernetes.driver.volumes.[VolumeType].spark-local-dir-[VolumeName].mount.path=<mount path>
+--conf spark.kubernetes.driver.volumes.[VolumeType].spark-local-dir-[VolumeName].mount.readOnly=false
+```
+
+
+If no volume is set as local storage, Spark uses temporary scratch space to spill data to disk during shuffles and other operations. When using Kubernetes as the resource manager the pods will be created with an [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) volume mounted for each directory listed in `spark.local.dir` or the environment variable `SPARK_LOCAL_DIRS` .  If no directories are explicitly specified then a default directory is created and configured appropriately.
 
 `emptyDir` volumes use the ephemeral storage feature of Kubernetes and do not persist beyond the life of the pod.
 
@@ -455,7 +486,6 @@ There are several Spark on Kubernetes features that are currently being worked o
 Some of these include:
 
 * Dynamic Resource Allocation and External Shuffle Service
-* Local File Dependency Management
 * Job Queues and Resource Management
 
 # Configuration
@@ -794,6 +824,15 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.request.cores</code></td>
+  <td>(none)</td>
+  <td>
+    Specify the cpu request for the driver pod. Values conform to the Kubernetes <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu">convention</a>.
+    Example values include 0.1, 500m, 1.5, 5, etc., with the definition of cpu units documented in <a href="https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#cpu-units">CPU units</a>.
+    This takes precedence over <code>spark.driver.cores</code> for specifying the driver pod cpu request if set.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.limit.cores</code></td>
   <td>(none)</td>
   <td>
@@ -1069,6 +1108,15 @@ See the [configuration page](configuration.html) for information on Spark config
   Specify the grace period in seconds when deleting a Spark application using spark-submit.
   </td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.file.upload.path</code></td>
+  <td>(none)</td>
+  <td>
+    Path to store files at the spark submit side in cluster mode. For example:
+    <code>spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path</code>
+    File should specified as <code>file://path/to/file </code> or absolute path.
+  </td>
+</tr>
 </table>
 
 #### Pod template properties
@@ -1206,6 +1254,7 @@ The following affect the driver and executor containers. All other containers in
     The cpu limits are set by <code>spark.kubernetes.{driver,executor}.limit.cores</code>. The cpu is set by
     <code>spark.{driver,executor}.cores</code>. The memory request and limit are set by summing the values of
     <code>spark.{driver,executor}.memory</code> and <code>spark.{driver,executor}.memoryOverhead</code>.
+    Other resource limits are set by <code>spark.{driver,executor}.resources.{resourceName}.*</code> configs.
   </td>
 </tr>
 <tr>
@@ -1217,3 +1266,14 @@ The following affect the driver and executor containers. All other containers in
   </td>
 </tr>
 </table>
+
+### Resource Allocation and Configuration Overview
+
+Please make sure to have read the Custom Resource Scheduling and Configuration Overview section on the [configuration page](configuration.html). This section only talks about the Kubernetes specific aspects of resource scheduling.
+
+The user is responsible to properly configuring the Kubernetes cluster to have the resources available and ideally isolate each resource per container so that a resource is not shared between multiple containers. If the resource is not isolated the user is responsible for writing a discovery script so that the resource is not shared between containers. See the Kubernetes documentation for specifics on configuring Kubernetes with [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/).
+
+Spark automatically handles translating the Spark configs <code>spark.{driver/executor}.resource.{resourceType}</code> into the kubernetes configs as long as the Kubernetes resource type follows the Kubernetes device plugin format of `vendor-domain/resourcetype`. The user must specify the vendor using the <code>spark.{driver/executor}.resource.{resourceType}.vendor</code> config. The user does not need to explicitly add anything if you are using Pod templates. For reference and an example, you can see the Kubernetes documentation for scheduling [GPUs](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/). Spark only supports setting the resource limits.
+
+Kubernetes does not tell Spark the addresses of the resources allocated to each container. For that reason, the user must specify a discovery script that gets run by the executor on startup to discover what resources are available to that executor. You can find an example scripts in `examples/src/main/scripts/getGpusResources.sh`. The script must have execute permissions set and the user should setup permissions to not allow malicious users to modify it. The script should write to STDOUT a JSON string in the format of the ResourceInformation class. This has the resource name and an array of resource addresses available to just that executor.
+

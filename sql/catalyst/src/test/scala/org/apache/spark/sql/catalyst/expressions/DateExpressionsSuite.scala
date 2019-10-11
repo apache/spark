@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.ZoneOffset
+import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
@@ -268,6 +268,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstId),
       Literal("H"), jstId), "0")
     checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), jstId), "22")
+
+    // SPARK-28072 The codegen path should work
+    checkEvaluation(
+      expression = DateFormatClass(
+        BoundReference(ordinal = 0, dataType = TimestampType, nullable = true),
+        BoundReference(ordinal = 1, dataType = StringType, nullable = true),
+        jstId),
+      expected = "22",
+      inputRow = InternalRow(DateTimeUtils.fromJavaTimestamp(ts), UTF8String.fromString("H")))
   }
 
   test("Hour") {
@@ -453,13 +462,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AddMonths(Literal.create(null, DateType), Literal(1)), null)
     checkEvaluation(AddMonths(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
+    // Valid range of DateType is [0001-01-01, 9999-12-31]
+    val maxMonthInterval = 10000 * 12
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(Int.MinValue)), -7293498)
+      AddMonths(Literal(Date.valueOf("0001-01-01")), Literal(maxMonthInterval)), 2933261)
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 1014213)
-    checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -980528)
-    checkConsistencyBetweenInterpretedAndCodegen(AddMonths, DateType, IntegerType)
+      AddMonths(Literal(Date.valueOf("9999-12-31")), Literal(-1 * maxMonthInterval)), -719529)
+    // Test evaluation results between Interpreted mode and Codegen mode
+    forAll (
+      LiteralGenerator.randomGen(DateType),
+      LiteralGenerator.monthIntervalLiterGen
+    ) { (l1: Literal, l2: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, AddMonths(l1, l2))
+    }
   }
 
   test("months_between") {
@@ -581,6 +596,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testTrunc(date, null, null)
     testTrunc(null, "MON", null)
     testTrunc(null, null, null)
+
+    testTrunc(Date.valueOf("2000-03-08"), "decade", Date.valueOf("2000-01-01"))
+    testTrunc(Date.valueOf("2000-03-08"), "century", Date.valueOf("1901-01-01"))
   }
 
   test("TruncTimestamp") {
@@ -649,6 +667,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       testTrunc(inputDate, null, null)
       testTrunc(null, "MON", null)
       testTrunc(null, null, null)
+
+      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "decade",
+        Timestamp.valueOf("2000-01-01 00:00:00"))
+      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "century",
+        Timestamp.valueOf("1901-01-01 00:00:00"))
     }
   }
 
@@ -683,14 +706,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         FromUnixTime(Literal(0L), Literal("not a valid format"), timeZoneId), null)
 
-        // The codegen path for non-literal input should also work
-        checkEvaluation(
-          expression = FromUnixTime(
-            BoundReference(ordinal = 0, dataType = LongType, nullable = true),
-            BoundReference(ordinal = 1, dataType = StringType, nullable = true),
-            timeZoneId),
-          expected = UTF8String.fromString(sdf1.format(new Timestamp(0))),
-          inputRow = InternalRow(0L, UTF8String.fromString(fmt1)))
+      // SPARK-28072 The codegen path for non-literal input should also work
+      checkEvaluation(
+        expression = FromUnixTime(
+          BoundReference(ordinal = 0, dataType = LongType, nullable = true),
+          BoundReference(ordinal = 1, dataType = StringType, nullable = true),
+          timeZoneId),
+        expected = UTF8String.fromString(sdf1.format(new Timestamp(0))),
+        inputRow = InternalRow(0L, UTF8String.fromString(fmt1)))
     }
   }
 
@@ -800,7 +823,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(
           ToUnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
 
-        // The codegen path for non-literal input should also work
+        // SPARK-28072 The codegen path for non-literal input should also work
         checkEvaluation(
           expression = ToUnixTimestamp(
             BoundReference(ordinal = 0, dataType = StringType, nullable = true),
@@ -902,5 +925,166 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         assert(msg.contains(invalidTz))
       }
     }
+  }
+
+  test("creating values of DateType via make_date") {
+    checkEvaluation(MakeDate(Literal(2013), Literal(7), Literal(15)), Date.valueOf("2013-7-15"))
+    checkEvaluation(MakeDate(Literal.create(null, IntegerType), Literal(7), Literal(15)), null)
+    checkEvaluation(MakeDate(Literal(2019), Literal.create(null, IntegerType), Literal(19)), null)
+    checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal.create(null, IntegerType)), null)
+    checkEvaluation(MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)), null)
+    checkEvaluation(MakeDate(Literal(2019), Literal(13), Literal(19)), null)
+    checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
+  }
+
+  test("creating values of TimestampType via make_timestamp") {
+    var makeTimestampExpr = MakeTimestamp(
+      Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
+      Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
+    val expected = Timestamp.valueOf("2013-7-15 8:15:23.5")
+    checkEvaluation(makeTimestampExpr, expected)
+    checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
+
+    checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(year = Literal(Int.MaxValue)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(month = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(month = Literal(13)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(day = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(day = Literal(32)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(hour = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(hour = Literal(25)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(min = Literal(65)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(8, 6))), null)
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(70.0), 8, 6))), null)
+
+    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
+      Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
+    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(60.5), 8, 6))), null)
+
+    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
+      Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
+  }
+
+  test("millennium") {
+    val date = MakeDate(Literal(2019), Literal(1), Literal(1))
+    checkEvaluation(Millennium(date), 3)
+    checkEvaluation(Millennium(date.copy(year = Literal(2001))), 3)
+    checkEvaluation(Millennium(date.copy(year = Literal(2000))), 2)
+    checkEvaluation(Millennium(date.copy(year = Literal(1001), day = Literal(28))), 2)
+    checkEvaluation(Millennium(date.copy(year = Literal(1))), 1)
+    checkEvaluation(Millennium(date.copy(year = Literal(-1))), -1)
+    checkEvaluation(Millennium(date.copy(year = Literal(-100), month = Literal(12))), -1)
+    checkEvaluation(Millennium(date.copy(year = Literal(-2019))), -3)
+  }
+
+  test("century") {
+    val date = MakeDate(Literal(2019), Literal(1), Literal(1))
+    checkEvaluation(Century(date), 21)
+    checkEvaluation(Century(date.copy(year = Literal(2001))), 21)
+    checkEvaluation(Century(date.copy(year = Literal(2000))), 20)
+    checkEvaluation(Century(date.copy(year = Literal(1001), day = Literal(28))), 11)
+    checkEvaluation(Century(date.copy(year = Literal(1))), 1)
+    checkEvaluation(Century(date.copy(year = Literal(-1))), -1)
+    checkEvaluation(Century(date.copy(year = Literal(-100), month = Literal(12))), -2)
+    checkEvaluation(Century(date.copy(year = Literal(-2019))), -21)
+  }
+
+  test("decade") {
+    val date = MakeDate(Literal(2019), Literal(8), Literal(8))
+    checkEvaluation(Decade(date), 201)
+    checkEvaluation(Decade(date.copy(year = Literal(2011))), 201)
+    checkEvaluation(Decade(date.copy(year = Literal(2010))), 201)
+    checkEvaluation(Decade(date.copy(year = Literal(2009))), 200)
+    checkEvaluation(Decade(date.copy(year = Literal(10))), 1)
+    checkEvaluation(Decade(date.copy(year = Literal(1))), 0)
+    checkEvaluation(Decade(date.copy(year = Literal(-1))), -1)
+    checkEvaluation(Decade(date.copy(year = Literal(-10))), -1)
+    checkEvaluation(Decade(date.copy(year = Literal(-11))), -2)
+    checkEvaluation(Decade(date.copy(year = Literal(-2019))), -202)
+  }
+
+  test("milliseconds and microseconds") {
+    outstandingTimezonesIds.foreach { timezone =>
+      var timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
+        Literal(0), Literal(0), Literal(Decimal(BigDecimal(10.123456789), 8, 6)),
+        Some(Literal(timezone)))
+
+      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(10123.457), 8, 3))
+      checkEvaluation(Microseconds(timestamp), 10123457)
+
+      timestamp = timestamp.copy(sec = Literal(Decimal(0.0, 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(Microseconds(timestamp), 0)
+
+      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(59.999999), 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(59999.999), 8, 3))
+      checkEvaluation(Microseconds(timestamp), 59999999)
+
+      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(60.0), 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(Microseconds(timestamp), 0)
+    }
+  }
+
+  test("epoch") {
+    val zoneId = ZoneId.systemDefault()
+    val nanos = 123456000
+    val timestamp = Epoch(MakeTimestamp(
+      Literal(2019), Literal(8), Literal(9), Literal(0), Literal(0),
+      Literal(Decimal(nanos / DateTimeUtils.NANOS_PER_SECOND.toDouble, 8, 6)),
+      Some(Literal(zoneId.getId))))
+    val instant = LocalDateTime.of(2019, 8, 9, 0, 0, 0, nanos)
+      .atZone(zoneId).toInstant
+    val expected = Decimal(BigDecimal(nanos) / DateTimeUtils.NANOS_PER_SECOND +
+      instant.getEpochSecond +
+      zoneId.getRules.getOffset(instant).getTotalSeconds)
+    checkEvaluation(timestamp, expected)
+  }
+
+  test("ISO 8601 week-numbering year") {
+    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
+    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
+  }
+
+  test("extract the seconds part with fraction from timestamps") {
+    outstandingTimezonesIds.foreach { timezone =>
+      val timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
+        Literal(0), Literal(0), Literal(Decimal(10.123456, 8, 6)),
+        Some(Literal(timezone)))
+
+      checkEvaluation(SecondWithFraction(timestamp), Decimal(10.123456, 8, 6))
+      checkEvaluation(
+        SecondWithFraction(timestamp.copy(sec = Literal(Decimal(59000001, 8, 6)))),
+        Decimal(59000001, 8, 6))
+      checkEvaluation(
+        SecondWithFraction(timestamp.copy(sec = Literal(Decimal(1, 8, 6)))),
+        Decimal(0.000001, 8, 6))
+    }
+  }
+
+  test("timestamps difference") {
+    val end = Instant.parse("2019-10-04T11:04:01.123456Z")
+    checkEvaluation(TimestampDiff(Literal(end), Literal(end)),
+      new CalendarInterval(0, 0))
+    checkEvaluation(TimestampDiff(Literal(end), Literal(Instant.EPOCH)),
+      CalendarInterval.fromString("interval 18173 days " +
+        "11 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds"))
+    checkEvaluation(TimestampDiff(Literal(Instant.EPOCH), Literal(end)),
+      CalendarInterval.fromString("interval -18173 days " +
+        "-11 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds"))
+    checkEvaluation(
+      TimestampDiff(
+        Literal(Instant.parse("9999-12-31T23:59:59.999999Z")),
+        Literal(Instant.parse("0001-01-01T00:00:00Z"))),
+      CalendarInterval.fromString("interval 521722 weeks 4 days " +
+        "23 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds"))
   }
 }

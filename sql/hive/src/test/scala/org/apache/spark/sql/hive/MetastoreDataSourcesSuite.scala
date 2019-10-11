@@ -516,13 +516,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         }
 
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
-          sparkSession.catalog.createExternalTable("createdJsonTable", tempPath.toString)
+          sparkSession.catalog.createTable("createdJsonTable", tempPath.toString)
           assert(table("createdJsonTable").schema === df.schema)
           checkAnswer(sql("SELECT * FROM createdJsonTable"), df)
 
           assert(
             intercept[AnalysisException] {
-              sparkSession.catalog.createExternalTable("createdJsonTable", jsonFilePath.toString)
+              sparkSession.catalog.createTable("createdJsonTable", jsonFilePath.toString)
             }.getMessage.contains("Table createdJsonTable already exists."),
             "We should complain that createdJsonTable already exists")
         }
@@ -534,7 +534,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         // Try to specify the schema.
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           val schema = StructType(StructField("b", StringType, true) :: Nil)
-          sparkSession.catalog.createExternalTable(
+          sparkSession.catalog.createTable(
             "createdJsonTable",
             "org.apache.spark.sql.json",
             schema,
@@ -553,7 +553,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("path required error") {
     assert(
       intercept[AnalysisException] {
-        sparkSession.catalog.createExternalTable(
+        sparkSession.catalog.createTable(
           "createdJsonTable",
           "org.apache.spark.sql.json",
           Map.empty[String, String])
@@ -907,30 +907,28 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
       }
       assert(e.getMessage.contains(
-        "The format of the existing table default.appendOrcToParquet is `ParquetFileFormat`. " +
-          "It doesn't match the specified format"))
+        "The format of the existing table default.appendOrcToParquet is `Parquet"))
     }
 
     withTable("appendParquetToJson") {
       createDF(0, 9).write.format("json").saveAsTable("appendParquetToJson")
-      val e = intercept[AnalysisException] {
+      val msg = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
           .saveAsTable("appendParquetToJson")
-      }
-      assert(e.getMessage.contains(
-        "The format of the existing table default.appendParquetToJson is `JsonFileFormat`. " +
-        "It doesn't match the specified format `ParquetFileFormat`"))
+      }.getMessage
+
+      assert(msg.contains(
+        "The format of the existing table default.appendParquetToJson is `Json"))
     }
 
     withTable("appendTextToJson") {
       createDF(0, 9).write.format("json").saveAsTable("appendTextToJson")
-      val e = intercept[AnalysisException] {
+      val msg = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("text")
           .saveAsTable("appendTextToJson")
-      }
-      assert(e.getMessage.contains(
-        "The format of the existing table default.appendTextToJson is `JsonFileFormat`. " +
-        "It doesn't match the specified format"))
+      }.getMessage
+      // The format of the existing table can be JsonDataSourceV2 or JsonFileFormat.
+      assert(msg.contains("The format of the existing table default.appendTextToJson is `Json"))
     }
   }
 

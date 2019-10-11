@@ -18,11 +18,10 @@
 package org.apache.spark.deploy
 
 import java.io._
-import java.net.URI
+import java.net.{URI, URL}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
@@ -58,7 +57,7 @@ trait TestPrematureExit {
   private class BufferPrintStream extends PrintStream(noOpOutputStream) {
     var lineBuffer = ArrayBuffer[String]()
     // scalastyle:off println
-    override def println(line: String) {
+    override def println(line: String): Unit = {
       lineBuffer += line
     }
     // scalastyle:on println
@@ -122,7 +121,7 @@ class SparkSubmitSuite
 
   private val submit = new SparkSubmit()
 
-  override def beforeEach() {
+  override def beforeEach(): Unit = {
     super.beforeEach()
   }
 
@@ -376,8 +375,8 @@ class SparkSubmitSuite
     confMap.keys should contain ("spark.app.name")
     confMap.keys should contain (JARS.key)
     confMap.keys should contain ("spark.driver.memory")
-    confMap.keys should contain ("spark.driver.cores")
-    confMap.keys should contain ("spark.driver.supervise")
+    confMap.keys should contain (DRIVER_CORES.key)
+    confMap.keys should contain (DRIVER_SUPERVISE.key)
     confMap.keys should contain (UI_ENABLED.key)
     confMap.keys should contain (SUBMIT_DEPLOY_MODE.key)
     conf.get(UI_ENABLED) should be (false)
@@ -601,7 +600,7 @@ class SparkSubmitSuite
   }
 
   // TODO(SPARK-9603): Building a package is flaky on Jenkins Maven builds.
-  // See https://gist.github.com/shivaram/3a2fecce60768a603dac for a error log
+  // See https://gist.github.com/shivaram/3a2fecce60768a603dac for an error log
   ignore("correctly builds R packages included in a jar with --packages") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
@@ -750,10 +749,10 @@ class SparkSubmitSuite
     withTempDir { tmpDir =>
       // Test jars and files
       val f1 = File.createTempFile("test-submit-jars-files", "", tmpDir)
-      val writer1 = new PrintWriter(f1)
-      writer1.println("spark.jars " + jars)
-      writer1.println("spark.files " + files)
-      writer1.close()
+      Utils.tryWithResource(new PrintWriter(f1)) { writer =>
+        writer.println("spark.jars " + jars)
+        writer.println("spark.files " + files)
+      }
       val clArgs = Seq(
         "--master", "local",
         "--class", "org.SomeClass",
@@ -767,10 +766,10 @@ class SparkSubmitSuite
 
       // Test files and archives (Yarn)
       val f2 = File.createTempFile("test-submit-files-archives", "", tmpDir)
-      val writer2 = new PrintWriter(f2)
-      writer2.println("spark.yarn.dist.files " + files)
-      writer2.println("spark.yarn.dist.archives " + archives)
-      writer2.close()
+      Utils.tryWithResource(new PrintWriter(f2)) { writer =>
+        writer.println("spark.yarn.dist.files " + files)
+        writer.println("spark.yarn.dist.archives " + archives)
+      }
       val clArgs2 = Seq(
         "--master", "yarn",
         "--class", "org.SomeClass",
@@ -784,9 +783,9 @@ class SparkSubmitSuite
 
       // Test python files
       val f3 = File.createTempFile("test-submit-python-files", "", tmpDir)
-      val writer3 = new PrintWriter(f3)
-      writer3.println("spark.submit.pyFiles " + pyFiles)
-      writer3.close()
+      Utils.tryWithResource(new PrintWriter(f3)) { writer =>
+        writer.println("spark.submit.pyFiles " + pyFiles)
+      }
       val clArgs3 = Seq(
         "--master", "local",
         "--properties-file", f3.getPath,
@@ -803,10 +802,10 @@ class SparkSubmitSuite
       val f4 = File.createTempFile("test-submit-remote-python-files", "", tmpDir)
       val pyFile1 = File.createTempFile("file1", ".py", tmpDir)
       val pyFile2 = File.createTempFile("file2", ".py", tmpDir)
-      val writer4 = new PrintWriter(f4)
       val remotePyFiles = s"s3a://${pyFile1.getAbsolutePath},s3a://${pyFile2.getAbsolutePath}"
-      writer4.println("spark.submit.pyFiles " + remotePyFiles)
-      writer4.close()
+      Utils.tryWithResource(new PrintWriter(f4)) { writer =>
+        writer.println("spark.submit.pyFiles " + remotePyFiles)
+      }
       val clArgs4 = Seq(
         "--master", "yarn",
         "--deploy-mode", "cluster",
@@ -895,6 +894,83 @@ class SparkSubmitSuite
         }
       }
     }
+  }
+
+  test("SPARK-27575: yarn confs should merge new value with existing value") {
+    val tmpJarDir = Utils.createTempDir()
+    val jar1 = TestUtils.createJarWithFiles(Map("test.resource" -> "1"), tmpJarDir)
+    val jar2 = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpJarDir)
+
+    val tmpJarDirYarnOpt = Utils.createTempDir()
+    val jar1YarnOpt = TestUtils.createJarWithFiles(Map("test.resource" -> "2"), tmpJarDirYarnOpt)
+    val jar2YarnOpt = TestUtils.createJarWithFiles(Map("test.resource" -> "USER2"),
+      tmpJarDirYarnOpt)
+
+    val tmpFileDir = Utils.createTempDir()
+    val file1 = File.createTempFile("tmpFile1", "", tmpFileDir)
+    val file2 = File.createTempFile("tmpFile2", "", tmpFileDir)
+
+    val tmpFileDirYarnOpt = Utils.createTempDir()
+    val file1YarnOpt = File.createTempFile("tmpPy1YarnOpt", ".py", tmpFileDirYarnOpt)
+    val file2YarnOpt = File.createTempFile("tmpPy2YarnOpt", ".egg", tmpFileDirYarnOpt)
+
+    val tmpPyFileDir = Utils.createTempDir()
+    val pyFile1 = File.createTempFile("tmpPy1", ".py", tmpPyFileDir)
+    val pyFile2 = File.createTempFile("tmpPy2", ".egg", tmpPyFileDir)
+
+    val tmpPyFileDirYarnOpt = Utils.createTempDir()
+    val pyFile1YarnOpt = File.createTempFile("tmpPy1YarnOpt", ".py", tmpPyFileDirYarnOpt)
+    val pyFile2YarnOpt = File.createTempFile("tmpPy2YarnOpt", ".egg", tmpPyFileDirYarnOpt)
+
+    val tmpArchiveDir = Utils.createTempDir()
+    val archive1 = File.createTempFile("archive1", ".zip", tmpArchiveDir)
+    val archive2 = File.createTempFile("archive2", ".zip", tmpArchiveDir)
+
+    val tmpArchiveDirYarnOpt = Utils.createTempDir()
+    val archive1YarnOpt = File.createTempFile("archive1YarnOpt", ".zip", tmpArchiveDirYarnOpt)
+    val archive2YarnOpt = File.createTempFile("archive2YarnOpt", ".zip", tmpArchiveDirYarnOpt)
+
+    val tempPyFile = File.createTempFile("tmpApp", ".py")
+    tempPyFile.deleteOnExit()
+
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--jars", s"${tmpJarDir.getAbsolutePath}/*.jar",
+      "--files", s"${tmpFileDir.getAbsolutePath}/tmpFile*",
+      "--py-files", s"${tmpPyFileDir.getAbsolutePath}/tmpPy*",
+      "--archives", s"${tmpArchiveDir.getAbsolutePath}/*.zip",
+      "--conf", "spark.yarn.dist.files=" +
+        s"${Seq(file1YarnOpt, file2YarnOpt).map(_.toURI.toString).mkString(",")}",
+      "--conf", "spark.yarn.dist.pyFiles=" +
+        s"${Seq(pyFile1YarnOpt, pyFile2YarnOpt).map(_.toURI.toString).mkString(",")}",
+      "--conf", "spark.yarn.dist.jars=" +
+        s"${Seq(jar1YarnOpt, jar2YarnOpt).map(_.toURI.toString).mkString(",")}",
+      "--conf", "spark.yarn.dist.archives=" +
+        s"${Seq(archive1YarnOpt, archive2YarnOpt).map(_.toURI.toString).mkString(",")}",
+      tempPyFile.toURI().toString())
+
+    def assertEqualsWithURLs(expected: Set[URL], confValue: String): Unit = {
+      val confValPaths = confValue.split(",").map(new Path(_)).toSet
+      assert(expected.map(u => new Path(u.toURI)) === confValPaths)
+    }
+
+    def assertEqualsWithFiles(expected: Set[File], confValue: String): Unit = {
+      assertEqualsWithURLs(expected.map(_.toURI.toURL), confValue)
+    }
+
+    val appArgs = new SparkSubmitArguments(args)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+    assertEqualsWithURLs(
+      Set(jar1, jar2, jar1YarnOpt, jar2YarnOpt), conf.get("spark.yarn.dist.jars"))
+    assertEqualsWithFiles(
+      Set(file1, file2, file1YarnOpt, file2YarnOpt), conf.get("spark.yarn.dist.files"))
+    assertEqualsWithFiles(
+      Set(pyFile1, pyFile2, pyFile1YarnOpt, pyFile2YarnOpt), conf.get("spark.yarn.dist.pyFiles"))
+    assertEqualsWithFiles(Set(archive1, archive2, archive1YarnOpt, archive2YarnOpt),
+      conf.get("spark.yarn.dist.archives"))
   }
 
   // scalastyle:on println
@@ -1249,12 +1325,12 @@ class SparkSubmitSuite
       "--class", "Foo",
       "app.jar")
     val conf = new SparkSubmitArguments(clArgs).toSparkConf()
-     Seq(
-       testConf,
-       masterConf
-     ).foreach { case (k, v) =>
-       conf.get(k) should be (v)
-     }
+    Seq(
+      testConf,
+      masterConf
+    ).foreach { case (k, v) =>
+      conf.get(k) should be (v)
+    }
   }
 }
 
@@ -1289,7 +1365,7 @@ object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
 }
 
 object JarCreationTest extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
@@ -1313,7 +1389,7 @@ object JarCreationTest extends Logging {
 }
 
 object SimpleApplicationTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
@@ -1339,7 +1415,7 @@ object SimpleApplicationTest {
 }
 
 object UserClasspathFirstTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val ccl = Thread.currentThread().getContextClassLoader()
     val resource = ccl.getResourceAsStream("test.resource")
     val bytes = ByteStreams.toByteArray(resource)

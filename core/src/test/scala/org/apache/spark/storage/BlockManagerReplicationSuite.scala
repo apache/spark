@@ -75,7 +75,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val store = new BlockManager(name, rpcEnv, master, serializerManager, conf,
-      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
     memManager.setMemoryStore(store.memoryStore)
     store.initialize("app-id")
     allStores += store
@@ -99,7 +99,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     sc = new SparkContext("local", "test", conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf))), conf, true)
+        new LiveListenerBus(conf), None)), conf, true)
     allStores.clear()
   }
 
@@ -235,7 +235,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val failableStore = new BlockManager("failable-store", rpcEnv, master, serializerManager, conf,
-      memManager, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, 0)
+      memManager, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, None)
     memManager.setMemoryStore(failableStore.memoryStore)
     failableStore.initialize("app-id")
     allStores += failableStore // so that this gets stopped after test
@@ -308,7 +308,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
    * is correct. Then it also drops the block from memory of each store (using LRU) and
    * again checks whether the master's knowledge gets updated.
    */
-  protected def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]) {
+  protected def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]): Unit = {
     import org.apache.spark.storage.StorageLevel._
 
     assert(maxReplication > 1,
@@ -416,12 +416,12 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
 class BlockManagerReplicationSuite extends BlockManagerReplicationBehavior {
   val conf = new SparkConf(false).set("spark.app.id", "test")
-  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
 }
 
 class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehavior {
   val conf = new SparkConf(false).set("spark.app.id", "test")
-  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
   conf.set(STORAGE_REPLICATION_PROACTIVE, true)
   conf.set(STORAGE_EXCEPTION_PIN_LEAK, true)
 
@@ -431,7 +431,7 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     }
   }
 
-  def testProactiveReplication(replicationFactor: Int) {
+  def testProactiveReplication(replicationFactor: Int): Unit = {
     val blockSize = 1000
     val storeSize = 10000
     val initialStores = (1 to 10).map { i => makeBlockManager(storeSize, s"store$i") }
@@ -496,7 +496,7 @@ class DummyTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with Log
 
 class BlockManagerBasicStrategyReplicationSuite extends BlockManagerReplicationBehavior {
   val conf: SparkConf = new SparkConf(false).set("spark.app.id", "test")
-  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
   conf.set(
     STORAGE_REPLICATION_POLICY,
     classOf[BasicBlockReplicationPolicy].getName)

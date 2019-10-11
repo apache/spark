@@ -178,7 +178,7 @@ def local_connect_and_auth(port, auth_secret):
             sock = socket.socket(af, socktype, proto)
             sock.settimeout(15)
             sock.connect(sa)
-            sockfile = sock.makefile("rwb", 65536)
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
         except socket.error as e:

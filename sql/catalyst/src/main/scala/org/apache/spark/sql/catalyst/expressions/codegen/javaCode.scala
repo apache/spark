@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import java.lang.{Boolean => JBool}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.{existentials, implicitConversions}
+import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{BooleanType, DataType}
@@ -143,7 +143,10 @@ trait Block extends TreeNode[Block] with JavaCode {
     case _ => code.trim
   }
 
-  def length: Int = toString.length
+  def length: Int = {
+    // Returns a code length without comments
+    CodeFormatter.stripExtraNewLinesAndComments(toString).length
+  }
 
   def isEmpty: Boolean = toString.isEmpty
 
@@ -183,7 +186,7 @@ trait Block extends TreeNode[Block] with JavaCode {
     def doTransform(arg: Any): AnyRef = arg match {
       case e: ExprValue => transform(e)
       case Some(value) => Some(doTransform(value))
-      case seq: Traversable[_] => seq.map(doTransform)
+      case seq: Iterable[_] => seq.map(doTransform)
       case other: AnyRef => other
     }
 
@@ -198,6 +201,9 @@ trait Block extends TreeNode[Block] with JavaCode {
   }
 
   override def verboseString(maxFields: Int): String = toString
+  override def simpleStringWithNodeId(): String = {
+    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+  }
 }
 
 object Block {

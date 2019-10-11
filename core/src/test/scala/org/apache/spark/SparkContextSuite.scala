@@ -26,15 +26,20 @@ import scala.concurrent.duration._
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.json4s.{DefaultFormats, Extraction}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
+import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.resource.ResourceAllocation
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -160,6 +165,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(jarPath.toString)
       assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size == 1)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("add FS jar files not exists") {
+    try {
+      val jarPath = "hdfs:///no/path/to/TestUDTF.jar"
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addJar(jarPath)
+      assert(sc.listJars().forall(!_.contains("TestUDTF.jar")))
     } finally {
       sc.stop()
     }
@@ -434,7 +450,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     sc.setLocalProperty("testProperty", "testValue")
     var result = "unset";
-    val thread = new Thread() { override def run() = {result = sc.getLocalProperty("testProperty")}}
+    val thread = new Thread() {
+      override def run(): Unit = {result = sc.getLocalProperty("testProperty")}
+    }
     thread.start()
     thread.join()
     sc.stop()
@@ -445,10 +463,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     var result = "unset";
     val thread1 = new Thread() {
-      override def run() = {sc.setLocalProperty("testProperty", "testValue")}}
+      override def run(): Unit = {sc.setLocalProperty("testProperty", "testValue")}}
     // testProperty should be unset and thus return null
     val thread2 = new Thread() {
-      override def run() = {result = sc.getLocalProperty("testProperty")}}
+      override def run(): Unit = {result = sc.getLocalProperty("testProperty")}}
     thread1.start()
     thread1.join()
     thread2.start()
@@ -671,7 +689,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       // task metrics via heartbeat to driver.
       .set(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key, "false")
       // Set a short heartbeat interval to send SparkListenerExecutorMetricsUpdate fast
-      .set("spark.executor.heartbeatInterval", "1s")
+      .set(EXECUTOR_HEARTBEAT_INTERVAL.key, "1s")
     sc = new SparkContext(conf)
     sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
     @volatile var runningTaskIds: Seq[Long] = null
@@ -689,7 +707,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       if (context.stageAttemptNumber == 0) {
         if (context.partitionId == 0) {
           // Make the first task in the first stage attempt fail.
-          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 0, 0, 0,
+          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 0, 0L, 0, 0,
             new java.io.IOException("fake"))
         } else {
           // Make the second task in the first stage attempt sleep to generate a zombie task
@@ -700,7 +718,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
       x
     }.collect()
-    sc.listenerBus.waitUntilEmpty(10000)
+    sc.listenerBus.waitUntilEmpty()
     // As executors will send the metrics of running tasks via heartbeat, we can use this to check
     // whether there is any running task.
     eventually(timeout(10.seconds)) {
@@ -712,7 +730,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192)") {
-    val FAIL_REASON = s"${CPUS_PER_TASK.key} must be <="
+    val FAIL_REASON = s"has to be >= the task config: ${CPUS_PER_TASK.key}"
     Seq(
       ("local", 2, None),
       ("local[2]", 3, None),
@@ -729,6 +747,138 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
       assert(ex.getMessage.contains(FAIL_REASON))
       resetSparkContext()
+    }
+  }
+
+  test("test driver discovery under local-cluster mode") {
+    withTempDir { dir =>
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "gpu","addresses":["5", "6"]}""")
+
+      val conf = new SparkConf()
+        .setMaster("local-cluster[1, 1, 1024]")
+        .setAppName("test-cluster")
+      conf.set(DRIVER_GPU_ID.amountConf, "2")
+      conf.set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get(GPU).get.addresses === Array("5", "6"))
+      assert(sc.resources.get(GPU).get.name === "gpu")
+    }
+  }
+
+  test("test gpu driver resource files and discovery under local-cluster mode") {
+    withTempDir { dir =>
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
+        """{"name": "gpu","addresses":["5", "6"]}""")
+
+      implicit val formats = DefaultFormats
+      val gpusAllocated =
+        ResourceAllocation(DRIVER_GPU_ID, Seq("0", "1", "8"))
+      val ja = Extraction.decompose(Seq(gpusAllocated))
+      val resourcesFile = createTempJsonFile(dir, "resources", ja)
+
+      val conf = new SparkConf()
+        .set(DRIVER_RESOURCES_FILE, resourcesFile)
+        .setMaster("local-cluster[1, 1, 1024]")
+        .setAppName("test-cluster")
+        .set(DRIVER_GPU_ID.amountConf, "3")
+        .set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
+        .set(SPARK_RESOURCES_DIR, dir.getName())
+
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+      // driver gpu resources file should take precedence over the script
+      assert(sc.resources.size === 1)
+      assert(sc.resources.get(GPU).get.addresses === Array("0", "1", "8"))
+      assert(sc.resources.get(GPU).get.name === "gpu")
+    }
+  }
+
+  test("Test parsing resources task configs with missing executor config") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+    conf.set(TASK_GPU_ID.amountConf, "1")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount " +
+      "needs to be specified since a task requirement config: spark.task.resource.gpu.amount " +
+      "was specified"))
+  }
+
+  test("Test parsing resources executor config < task requirements") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+    conf.set(TASK_GPU_ID.amountConf, "2")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "1")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount = 1 " +
+      "has to be >= the requested amount in task resource config: " +
+      "spark.task.resource.gpu.amount = 2"))
+  }
+
+  test("Parse resources executor config not the same multiple numbers of the task requirements") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1, 1, 1024]")
+      .setAppName("test-cluster")
+    conf.set(TASK_GPU_ID.amountConf, "2")
+    conf.set(EXECUTOR_GPU_ID.amountConf, "4")
+
+    var error = intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }.getMessage()
+
+    assert(error.contains("The configuration of resource: gpu (exec = 4, task = 2) will result " +
+      "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
+      "executor to: 1. Please adjust your configuration."))
+  }
+
+  test("test resource scheduling under local-cluster mode") {
+    import org.apache.spark.TestUtils._
+
+    assume(!(Utils.isWindows))
+    withTempDir { dir =>
+      val discoveryScript = createTempScriptWithExpectedOutput(dir, "resourceDiscoveryScript",
+        """{"name": "gpu","addresses":["0", "1", "2", "3", "4", "5", "6", "7", "8"]}""")
+
+      val conf = new SparkConf()
+        .setMaster("local-cluster[3, 3, 1024]")
+        .setAppName("test-cluster")
+        .set(WORKER_GPU_ID.amountConf, "3")
+        .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
+        .set(TASK_GPU_ID.amountConf, "3")
+        .set(EXECUTOR_GPU_ID.amountConf, "3")
+        .set(SPARK_RESOURCES_DIR, dir.getName())
+
+      sc = new SparkContext(conf)
+
+      // Ensure all executors has started
+      TestUtils.waitUntilExecutorsUp(sc, 3, 60000)
+
+      val rdd = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
+        val context = TaskContext.get()
+        context.resources().get(GPU).get.addresses.iterator
+      }
+      val gpus = rdd.collect()
+      assert(gpus.sorted === Seq("0", "1", "2", "3", "4", "5", "6", "7", "8"))
+
+      eventually(timeout(10.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+      }
     }
   }
 }

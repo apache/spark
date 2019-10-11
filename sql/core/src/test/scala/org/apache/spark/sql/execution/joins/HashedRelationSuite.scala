@@ -19,22 +19,23 @@ package org.apache.spark.sql.execution.joins
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.CompactBuffer
 
-class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
+class HashedRelationSuite extends SharedSparkSession {
 
   val mm = new TaskMemoryManager(
     new UnifiedMemoryManager(
@@ -43,6 +44,21 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       Long.MaxValue / 2,
       1),
     0)
+
+  val rand = new Random(100)
+
+  // key arrays used for building different relations under test
+  val contiguousArray = (0 until 1000)
+  val sparseArray = (0 until 1000 by 10)
+  val randomArray = (0 until 1000).filter(_ => rand.nextBoolean())
+
+  val singleKey = Seq(BoundReference(0, LongType, false))
+  val projection = UnsafeProjection.create(singleKey)
+
+  // build the corresponding rows for each array type
+  val contiguousRows = contiguousArray.map(i => projection(InternalRow(i.toLong)).copy())
+  val sparseRows = sparseArray.map(i => projection(InternalRow(i.toLong)).copy())
+  val randomRows = randomArray.map(i => projection(InternalRow(i.toLong)).copy())
 
   test("UnsafeHashedRelation") {
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
@@ -95,7 +111,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     val binaryMap = new BytesToBytesMap(taskMemoryManager, 1, 1)
     val os = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(os)
-    val hashed = new UnsafeHashedRelation(1, binaryMap)
+    val hashed = new UnsafeHashedRelation(1, 1, binaryMap)
     hashed.writeExternal(out)
     out.flush()
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
@@ -383,5 +399,184 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     }
     val m = LongHashedRelation(rows, key, 100 << 20, mm)
     m.close()
+  }
+
+  test("UnsafeHashedRelation: key set iterator on a contiguous array of keys") {
+    val hashedRelation = UnsafeHashedRelation(contiguousRows.iterator, singleKey, 1, mm)
+    val keyIterator = hashedRelation.keys()
+    assert(keyIterator.map(key => key.getLong(0)).toArray === contiguousArray)
+  }
+
+  test("UnsafeHashedRelation: key set iterator on a sparse array of keys") {
+    val hashedRelation = UnsafeHashedRelation(sparseRows.iterator, singleKey, 1, mm)
+    val keyIterator = hashedRelation.keys()
+    assert(keyIterator.map(key => key.getLong(0)).toArray === sparseArray)
+  }
+
+  test("LongHashedRelation: key set iterator on a contiguous array of keys") {
+    val longRelation = LongHashedRelation(contiguousRows.iterator, singleKey, 1, mm)
+    val keyIterator = longRelation.keys()
+    assert(keyIterator.map(key => key.getLong(0)).toArray === contiguousArray)
+  }
+
+  test("LongToUnsafeRowMap: key set iterator on a contiguous array of keys") {
+    val rowMap = new LongToUnsafeRowMap(mm, 1)
+    (contiguousArray, contiguousRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    var keyIterator = rowMap.keys()
+    // in sparse mode the keys are unsorted
+    assert(keyIterator.map(key => key.getLong(0)).toArray.sortWith(_ < _) === contiguousArray)
+    // in dense mode the keys are already ordered
+    rowMap.optimize()
+    keyIterator = rowMap.keys()
+    assert(keyIterator.map(key => key.getLong(0)).toArray === contiguousArray)
+  }
+
+  test("LongToUnsafeRowMap: key set iterator on a sparse array with equidistant keys") {
+    val rowMap = new LongToUnsafeRowMap(mm, 1)
+    (sparseArray, sparseRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    var keyIterator = rowMap.keys()
+    assert(keyIterator.map(_.getLong(0)).toArray.sortWith(_ < _) === sparseArray)
+    rowMap.optimize()
+    keyIterator = rowMap.keys()
+    assert(keyIterator.map(_.getLong(0)).toArray === sparseArray)
+  }
+
+  test("LongToUnsafeRowMap: key set iterator on an array with a single key") {
+    // build several maps each of which has a single valid key
+    (0 to 1000).foreach { i =>
+      val rowMap = new LongToUnsafeRowMap(mm, 1)
+      rowMap.append(i, projection(InternalRow((2 * i + 1).toLong)))
+      var keyIterator = rowMap.keys()
+      assert(keyIterator.next().getLong(0) === i)
+      rowMap.optimize()
+      keyIterator = rowMap.keys()
+      assert(keyIterator.next().getLong(0) === i)
+      rowMap.free()
+    }
+  }
+
+  test("LongToUnsafeRowMap: multiple hasNext calls before calling next() on the key iterator") {
+    val rowMap = new LongToUnsafeRowMap(mm, 1)
+    (randomArray, randomRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    val buffer = new ArrayBuffer[Long]()
+    // hasNext should not change the cursor unless the key was read by a next() call
+    var keyIterator = rowMap.keys()
+    while (keyIterator.hasNext) {
+      keyIterator.hasNext
+      keyIterator.hasNext
+      buffer.append(keyIterator.next().getLong(0))
+    }
+    assert(buffer.sortWith(_ < _) === randomArray)
+    buffer.clear()
+
+    rowMap.optimize()
+    keyIterator = rowMap.keys()
+    while (keyIterator.hasNext) {
+      keyIterator.hasNext
+      keyIterator.hasNext
+      buffer.append(keyIterator.next().getLong(0))
+    }
+    assert(buffer === randomArray)
+  }
+
+  test("LongToUnsafeRowMap: no explicit hasNext calls on the key iterator") {
+    val rowMap = new LongToUnsafeRowMap(mm, 1)
+    (randomArray, randomRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    val buffer = new ArrayBuffer[Long]()
+    // call next() until the buffer is filled with all keys
+    var keyIterator = rowMap.keys()
+    while (buffer.size < randomArray.size) {
+      buffer.append(keyIterator.next().getLong(0))
+    }
+    // attempt an illegal next() call
+    val caught = intercept[NoSuchElementException] {
+      keyIterator.next()
+    }
+    assert(caught.getLocalizedMessage === "End of the iterator")
+    assert(buffer.sortWith(_ < _) === randomArray)
+    buffer.clear()
+
+    rowMap.optimize()
+    keyIterator = rowMap.keys()
+    while (buffer.size < randomArray.size) {
+      buffer.append(keyIterator.next().getLong(0))
+    }
+    assert(buffer === randomArray)
+  }
+
+  test("LongToUnsafeRowMap: call hasNext at the end of the iterator") {
+    val rowMap = new LongToUnsafeRowMap(mm, 1)
+    (sparseArray, sparseRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    var keyIterator = rowMap.keys()
+    assert(keyIterator.map(key => key.getLong(0)).toArray.sortWith(_ < _) === sparseArray)
+    assert(keyIterator.hasNext == false)
+    assert(keyIterator.hasNext == false)
+
+    rowMap.optimize()
+    keyIterator = rowMap.keys()
+    assert(keyIterator.map(key => key.getLong(0)).toArray === sparseArray)
+    assert(keyIterator.hasNext == false)
+    assert(keyIterator.hasNext == false)
+  }
+
+  test("LongToUnsafeRowMap: random sequence of hasNext and next() calls on the key iterator") {
+    val rowMap = new LongToUnsafeRowMap(mm, 1)
+    (randomArray, randomRows).zipped.map { (i, row) => rowMap.append(i, row) }
+    val buffer = new ArrayBuffer[Long]()
+    // call hasNext or next() at random
+    var keyIterator = rowMap.keys()
+    while (buffer.size < randomArray.size) {
+      if (rand.nextBoolean() && keyIterator.hasNext) {
+        buffer.append(keyIterator.next().getLong(0))
+      } else {
+        keyIterator.hasNext
+      }
+    }
+    assert(buffer.sortWith(_ < _) === randomArray)
+    buffer.clear()
+
+    rowMap.optimize()
+    keyIterator = rowMap.keys()
+    while (buffer.size < randomArray.size) {
+      if (rand.nextBoolean() && keyIterator.hasNext) {
+        buffer.append(keyIterator.next().getLong(0))
+      } else {
+        keyIterator.hasNext
+      }
+    }
+    assert(buffer === randomArray)
+  }
+
+  test("HashJoin: packing and unpacking with the same key type in a LongType") {
+    val row = InternalRow(0.toShort, 1.toShort, 2.toShort, 3.toShort)
+    val keys = Seq(BoundReference(0, ShortType, false),
+      BoundReference(1, ShortType, false),
+      BoundReference(2, ShortType, false),
+      BoundReference(3, ShortType, false))
+    val packed = HashJoin.rewriteKeyExpr(keys)
+    val unsafeProj = UnsafeProjection.create(packed)
+    val packedKeys = unsafeProj(row)
+
+    (0 to 3).foreach { i =>
+      val key = HashJoin.extractKeyExprAt(keys, i)
+      val proj = UnsafeProjection.create(key)
+      assert(proj(packedKeys).getShort(0) == i)
+    }
+  }
+
+  test("HashJoin: packing and unpacking with various key types in a LongType") {
+    val row = InternalRow((-1).toByte, (-2).toInt, (-3).toShort)
+    val keys = Seq(BoundReference(0, ByteType, false),
+      BoundReference(1, IntegerType, false),
+      BoundReference(2, ShortType, false))
+    val packed = HashJoin.rewriteKeyExpr(keys)
+    val unsafeProj = UnsafeProjection.create(packed)
+    val packedKeys = unsafeProj(row)
+
+    Seq((0, ByteType), (1, IntegerType), (2, ShortType)).foreach { case (i, dt) =>
+      val key = HashJoin.extractKeyExprAt(keys, i)
+      val proj = UnsafeProjection.create(key)
+      assert(proj(packedKeys).get(0, dt) == -i - 1)
+    }
   }
 }
