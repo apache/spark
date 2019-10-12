@@ -2610,25 +2610,28 @@ object Sequence {
     override val defaultStep: DefaultStep = new DefaultStep(
       (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
       CalendarIntervalType,
-      new CalendarInterval(0, MICROS_PER_DAY))
+      new CalendarInterval(0, 1, 0))
 
     private val backedSequenceImpl = new IntegralSequenceImpl[T](dt)
-    private val microsPerMonth = 28 * CalendarInterval.MICROS_PER_DAY
+    private val microsPerDay = 24 * CalendarInterval.MICROS_PER_HOUR
+    private val microsPerMonth = 28 * microsPerDay
 
     override def eval(input1: Any, input2: Any, input3: Any): Array[T] = {
       val start = input1.asInstanceOf[T]
       val stop = input2.asInstanceOf[T]
       val step = input3.asInstanceOf[CalendarInterval]
       val stepMonths = step.months
+      val stepDays = step.days
       val stepMicros = step.microseconds
 
-      if (stepMonths == 0) {
+      if (stepMonths == 0 && stepDays == 0) {
         backedSequenceImpl.eval(start, stop, fromLong(stepMicros / scale))
 
       } else {
         // To estimate the resulted array length we need to make assumptions
-        // about a month length in microseconds
-        val intervalStepInMicros = stepMicros + stepMonths * microsPerMonth
+        // about a month length in days and a day length in microseconds
+        val intervalStepInMicros =
+          stepMicros + stepMonths * microsPerMonth + stepDays * microsPerDay
         val startMicros: Long = num.toLong(start) * scale
         val stopMicros: Long = num.toLong(stop) * scale
         val maxEstimatedArrayLength =
@@ -2643,7 +2646,8 @@ object Sequence {
         while (t < exclusiveItem ^ stepSign < 0) {
           arr(i) = fromLong(t / scale)
           i += 1
-          t = timestampAddInterval(startMicros, i * stepMonths, i * stepMicros, zoneId)
+          t = timestampAddInterval(
+            startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
         }
 
         // truncate array to the correct length
@@ -2659,6 +2663,7 @@ object Sequence {
         arr: String,
         elemType: String): String = {
       val stepMonths = ctx.freshName("stepMonths")
+      val stepDays = ctx.freshName("stepDays")
       val stepMicros = ctx.freshName("stepMicros")
       val stepScaled = ctx.freshName("stepScaled")
       val intervalInMicros = ctx.freshName("intervalInMicros")
@@ -2673,15 +2678,17 @@ object Sequence {
 
       val sequenceLengthCode =
         s"""
-           |final long $intervalInMicros = $stepMicros + $stepMonths * ${microsPerMonth}L;
+           |final long $intervalInMicros =
+           |  $stepMicros + $stepMonths * ${microsPerMonth}L + $stepDays * ${microsPerDay}L;
            |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
           """.stripMargin
 
       s"""
          |final int $stepMonths = $step.months;
+         |final int $stepDays = $step.days;
          |final long $stepMicros = $step.microseconds;
          |
-         |if ($stepMonths == 0) {
+         |if ($stepMonths == 0 && $stepDays == 0) {
          |  final $elemType $stepScaled = ($elemType) ($stepMicros / ${scale}L);
          |  ${backedSequenceImpl.genCode(ctx, start, stop, stepScaled, arr, elemType)};
          |
@@ -2702,7 +2709,7 @@ object Sequence {
          |    $arr[$i] = ($elemType) ($t / ${scale}L);
          |    $i += 1;
          |    $t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
-         |       $startMicros, $i * $stepMonths, $i * $stepMicros, $zid);
+         |       $startMicros, $i * $stepMonths, $i * $stepDays, $i * $stepMicros, $zid);
          |  }
          |
          |  if ($arr.length > $i) {
