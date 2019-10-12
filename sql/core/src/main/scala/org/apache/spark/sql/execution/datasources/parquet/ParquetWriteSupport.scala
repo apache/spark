@@ -210,7 +210,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case t: UserDefinedType[_] => makeWriter(t.sqlType)
 
-      case t: CalendarIntervalType =>
+      case CalendarIntervalType =>
         (row: SpecializedGetters, ordinal: Int) =>
           val interval = row.getInterval(ordinal)
           val microseconds = interval.microseconds % DateTimeUtils.MICROS_PER_DAY
