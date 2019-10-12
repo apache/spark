@@ -330,13 +330,13 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-24204 error handling for unsupported Interval data types - csv, json, parquet, orc") {
+  test("SPARK-24204 error handling for unsupported Interval data types - csv, json, orc") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
       // TODO: test file source V2 after write path is fixed.
       Seq(true).foreach { useV1 =>
         val useV1List = if (useV1) {
-          "csv,json,orc,parquet"
+          "csv,json,orc"
         } else {
           ""
         }
@@ -349,7 +349,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
 
         withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
           // write path
-          Seq("csv", "json", "parquet", "orc").foreach { format =>
+          Seq("csv", "json", "orc").foreach { format =>
             val msg = intercept[AnalysisException] {
               sql("select interval 1 days").write.format(format).mode("overwrite").save(tempDir)
             }.getMessage
@@ -357,7 +357,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           }
 
           // read path
-          Seq("parquet", "csv").foreach { format =>
+          Seq("csv").foreach { format =>
             var msg = intercept[AnalysisException] {
               val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
               spark.range(1).write.format(format).mode("overwrite").save(tempDir)
