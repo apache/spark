@@ -857,7 +857,7 @@ select date_part('epoch', c) from t2
 -- !query 106 schema
 struct<date_part('epoch', t2.`c`):decimal(18,6)>
 -- !query 106 output
-31873892788.332003
+31896905999.004003
 
 
 -- !query 107
