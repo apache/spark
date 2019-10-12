@@ -85,7 +85,7 @@ then
   # Build PySpark image
   LANGUAGE_BINDING_BUILD_ARGS="-p $DOCKER_FILE_BASE_PATH/bindings/python/Dockerfile"
 
-  # Build SparkR image -- disabled since this fails, re-enable as part of SPARK-25152
+  # Build SparkR image
   LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
 
   # Unset SPARK_HOME to let the docker-image-tool script detect SPARK_HOME. Otherwise, it cannot
