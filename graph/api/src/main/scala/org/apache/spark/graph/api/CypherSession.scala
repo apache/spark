@@ -19,7 +19,8 @@ package org.apache.spark.graph.api
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.internal.Logging
+import org.slf4j.LoggerFactory
+
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.{BooleanType, StructType}
 
@@ -47,6 +48,86 @@ object CypherSession {
    * Naming convention both for node label and relationship type prefixes.
    */
   val LABEL_COLUMN_PREFIX = ":"
+
+  /**
+   * Extracts [[NodeFrame]]s from a [[Dataset]] using column name conventions.
+   *
+   * For information about naming conventions, see [[CypherSession.createGraph]].
+   *
+   * @param nodes node dataset
+   * @since 3.0.0
+   */
+  def extractNodeFrames(nodes: Dataset[Row]): Set[NodeFrame] = {
+    val labelColumns = nodes.columns.filter(_.startsWith(LABEL_COLUMN_PREFIX)).toSet
+    validateLabelColumns(nodes.schema, labelColumns)
+
+    val nodeProperties = (nodes.columns.toSet - ID_COLUMN -- labelColumns)
+      .map(col => col -> col)
+      .toMap
+
+    val labelCount = labelColumns.size
+    if (labelCount > 5) {
+      LoggerFactory.getLogger(CypherSession.getClass).warn(
+        s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node frames.")
+      if (labelCount > 10) {
+        throw new IllegalArgumentException(
+          s"Expected number of label columns to be less than or equal to 10, was $labelCount.")
+      }
+    }
+
+    val labelSets = labelColumns.subsets().toSet
+
+    labelSets.map { labelSet =>
+      val predicate = labelColumns
+        .map { labelColumn =>
+          if (labelSet.contains(labelColumn)) {
+            nodes.col(labelColumn)
+          } else {
+            !nodes.col(labelColumn)
+          }
+        }
+        .reduce(_ && _)
+
+      NodeFrame(nodes.filter(predicate), ID_COLUMN, labelSet.map(_.substring(1)), nodeProperties)
+    }
+  }
+
+  /**
+   * Extracts [[RelationshipFrame]]s from a [[Dataset]] using column name conventions.
+   *
+   * For information about naming conventions, see [[CypherSession.createGraph]].
+   *
+   * @param relationships relationship dataset
+   * @since 3.0.0
+   */
+  def extractRelationshipFrames(relationships: Dataset[Row]): Set[RelationshipFrame] = {
+    val relColumns = relationships.columns.toSet
+    val relTypeColumns = relColumns.filter(_.startsWith(LABEL_COLUMN_PREFIX))
+    validateLabelColumns(relationships.schema, relTypeColumns)
+    val idColumns = Set(ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN)
+    val propertyColumns = relColumns -- idColumns -- relTypeColumns
+    val relProperties = propertyColumns.map(col => col -> col).toMap
+    relTypeColumns.map { relTypeColumn =>
+      val predicate = relationships.col(relTypeColumn)
+
+      RelationshipFrame(
+        relationships.filter(predicate),
+        ID_COLUMN,
+        SOURCE_ID_COLUMN,
+        TARGET_ID_COLUMN,
+        relTypeColumn.substring(1),
+        relProperties)
+    }
+  }
+
+  private def validateLabelColumns(schema: StructType, columns: Set[String]): Unit = {
+    schema.fields.filter(f => columns.contains(f.name)).foreach(field => {
+      if (field.dataType != BooleanType) {
+        throw new IllegalArgumentException(s"Column ${field.name} must be of type BooleanType.")
+      }
+    })
+  }
+
 }
 
 /**
@@ -57,7 +138,7 @@ object CypherSession {
  *
  * @since 3.0.0
  */
-trait CypherSession extends Logging {
+trait CypherSession {
 
   def sparkSession: SparkSession
 
@@ -165,69 +246,9 @@ trait CypherSession extends Logging {
    * @since 3.0.0
    */
   def createGraph(nodes: Dataset[Row], relationships: Dataset[Row]): PropertyGraph = {
-    def validateLabelColumns(schema: StructType, columns: Set[String]): Unit = {
-      schema.fields.filter(f => columns.contains(f.name)).foreach(field => {
-        if (field.dataType != BooleanType) {
-          throw new IllegalArgumentException(s"Column ${field.name} must be of type BooleanType.")
-        }
-      })
-    }
-
-    val idColumn = CypherSession.ID_COLUMN
-    val sourceIdColumn = CypherSession.SOURCE_ID_COLUMN
-    val targetIdColumn = CypherSession.TARGET_ID_COLUMN
-
-    val labelColumns = nodes.columns.filter(_.startsWith(CypherSession.LABEL_COLUMN_PREFIX)).toSet
-    validateLabelColumns(nodes.schema, labelColumns)
-
-    val nodeProperties = (nodes.columns.toSet - idColumn -- labelColumns)
-      .map(col => col -> col)
-      .toMap
-
-    val labelCount = labelColumns.size
-    if (labelCount > 5) {
-      log.warn(
-        s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node frames.")
-      if (labelCount > 10) {
-        throw new IllegalArgumentException(
-          s"Expected number of label columns to be less than or equal to 10, was $labelCount.")
-      }
-    }
-
-    val labelSets = labelColumns.subsets().toSet
-
-    val nodeFrames = labelSets.map { labelSet =>
-      val predicate = labelColumns
-        .map { labelColumn =>
-          if (labelSet.contains(labelColumn)) {
-            nodes.col(labelColumn)
-          } else {
-            !nodes.col(labelColumn)
-          }
-        }
-        .reduce(_ && _)
-
-      NodeFrame(nodes.filter(predicate), idColumn, labelSet.map(_.substring(1)), nodeProperties)
-    }
-
-    val relColumns = relationships.columns.toSet
-    val relTypeColumns = relColumns.filter(_.startsWith(CypherSession.LABEL_COLUMN_PREFIX))
-    validateLabelColumns(relationships.schema, relTypeColumns)
-    val propertyColumns = relColumns - idColumn - sourceIdColumn - targetIdColumn -- relTypeColumns
-    val relProperties = propertyColumns.map(col => col -> col).toMap
-    val relFrames = relTypeColumns.map { relTypeColumn =>
-      val predicate = relationships.col(relTypeColumn)
-
-      RelationshipFrame(
-        relationships.filter(predicate),
-        idColumn,
-        sourceIdColumn,
-        targetIdColumn,
-        relTypeColumn.substring(1),
-        relProperties)
-    }
-
-    createGraph(nodeFrames.toArray, relFrames.toArray)
+    val nodeFrames = CypherSession.extractNodeFrames(nodes)
+    val relationshipFrames = CypherSession.extractRelationshipFrames(relationships)
+    createGraph(nodeFrames.toArray, relationshipFrames.toArray)
   }
 
   /**
