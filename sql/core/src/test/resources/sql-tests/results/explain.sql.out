@@ -60,7 +60,7 @@ struct<plan:string>
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
 ReadSchema: struct<key:int,val:int>
      
@@ -117,7 +117,7 @@ struct<plan:string>
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
 ReadSchema: struct<key:int,val:int>
      
@@ -177,7 +177,7 @@ struct<plan:string>
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
 ReadSchema: struct<key:int,val:int>
      
@@ -196,7 +196,7 @@ Input     : [key#x, val#x]
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
 ReadSchema: struct<key:int,val:int>
      
@@ -249,7 +249,7 @@ struct<plan:string>
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key)]
 ReadSchema: struct<key:int,val:int>
      
@@ -268,7 +268,7 @@ Input     : [key#x, val#x]
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key)]
 ReadSchema: struct<key:int,val:int>
      
@@ -316,7 +316,7 @@ struct<plan:string>
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 2]
@@ -326,7 +326,7 @@ Input: [key#x, val#x]
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key)]
 ReadSchema: struct<key:int,val:int>
      
@@ -375,7 +375,7 @@ struct<plan:string>
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key), IsNotNull(val), GreaterThan(val,3)]
 ReadSchema: struct<key:int,val:int>
      
@@ -406,7 +406,7 @@ Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key), IsNotNull(val), EqualTo(val,2)]
 ReadSchema: struct<key:int,val:int>
      
@@ -444,7 +444,7 @@ Subquery:2 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(val), GreaterThan(val,0)]
 ReadSchema: struct<key:int,val:int>
      
@@ -493,7 +493,7 @@ struct<plan:string>
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 ReadSchema: struct<key:int,val:int>
      
 (2) ColumnarToRow [codegen id : 1]
@@ -519,7 +519,7 @@ Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(val), GreaterThan(val,0)]
 ReadSchema: struct<key:int,val:int>
      
@@ -557,7 +557,7 @@ Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(val), GreaterThan(val,0)]
 ReadSchema: struct<key:int,val:int>
      
@@ -599,7 +599,7 @@ struct<plan:string>
 Output: []
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 ReadSchema: struct<>
      
 (2) ColumnarToRow [codegen id : 1]
@@ -623,7 +623,7 @@ Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery
 Output: [key#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 ReadSchema: struct<key:int>
      
 (5) ColumnarToRow [codegen id : 1]
@@ -669,7 +669,7 @@ struct<plan:string>
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,10)]
 ReadSchema: struct<key:int,val:int>
      
@@ -688,7 +688,7 @@ Input     : [key#x, val#x]
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,10)]
 ReadSchema: struct<key:int,val:int>
      
@@ -742,7 +742,7 @@ struct<plan:string>
 Output: [key#x, val#x]
 Batched: true
 Format: Parquet
-Location [not included in comparison]sql/core/spark-warehouse/[not included in comparison]
+Location [not included in comparison]
 PushedFilters: [IsNotNull(key), GreaterThan(key,10)]
 ReadSchema: struct<key:int,val:int>
      
