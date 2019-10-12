@@ -59,15 +59,6 @@ object DateTimeUtils {
   final val MILLIS_PER_MINUTE: Long = 60 * MILLIS_PER_SECOND
   final val MILLIS_PER_HOUR: Long = 60 * MILLIS_PER_MINUTE
   final val MILLIS_PER_DAY: Long = SECONDS_PER_DAY * MILLIS_PER_SECOND
-  // The average year of the Gregorian calendar 365.2425 days long, see
-  // https://en.wikipedia.org/wiki/Gregorian_calendar
-  // Leap year occurs every 4 years, except for years that are divisible by 100
-  // and not divisible by 400. So, the mean length of of the Gregorian calendar year is:
-  //  1 mean year = (365 + 1/4 - 1/100 + 1/400) days = 365.2425 days
-  // The mean year length in seconds is:
-  //  60 * 60 * 24 * 365.2425 = 31556952.0 = 12 * 2629746
-  final val SECONDS_PER_MONTH: Int = 2629746
-  final val MILLIS_PER_MONTH: Long = SECONDS_PER_MONTH * MILLIS_PER_SECOND
 
   // number of days between 1.1.1970 and 1.1.2001
   final val to2001 = -11323
