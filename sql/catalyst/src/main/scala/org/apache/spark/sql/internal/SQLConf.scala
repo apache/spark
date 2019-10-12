@@ -1153,6 +1153,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val JSON_GENERATOR_STRUCT_IGNORE_NULL =
+    buildConf("spark.sql.jsonGenerator.struct.ignore.null")
+      .doc("If false, JacksonGenerator will generate null for null value in StructType.")
+      .booleanConf
+      .createWithDefault(true)
+
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -2322,6 +2328,8 @@ class SQLConf extends Serializable with Logging {
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
+
+  def jsonGeneratorStructIngoreNull: Boolean = getConf(SQLConf.JSON_GENERATOR_STRUCT_IGNORE_NULL)
 
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)

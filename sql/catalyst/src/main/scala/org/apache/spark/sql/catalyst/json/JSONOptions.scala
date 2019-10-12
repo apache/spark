@@ -76,6 +76,9 @@ private[sql] class JSONOptions(
   // Whether to ignore column of all null values or empty array/struct during schema inference
   val dropFieldIfAllNull = parameters.get("dropFieldIfAllNull").map(_.toBoolean).getOrElse(false)
 
+  // Whether to ignore column of all null during json generating
+  val structIngoreNull = parameters.getOrElse("structIngoreNull", "true").toBoolean
+
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
