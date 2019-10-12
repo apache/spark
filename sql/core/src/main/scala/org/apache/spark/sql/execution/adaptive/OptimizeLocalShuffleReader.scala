@@ -29,57 +29,48 @@ import org.apache.spark.sql.internal.SQLConf
 
 case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
 
-  def canUseOrRevertLocalShuffleReaderLeft(join: BroadcastHashJoinExec): Boolean = {
-    (join.buildSide == BuildRight &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.left)) ||
-      (join.buildSide == BuildRight && join.left.isInstanceOf[LocalShuffleReaderExec])
+  def canUseLocalShuffleReaderLeft(join: BroadcastHashJoinExec): Boolean = {
+    join.buildSide == BuildRight &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.left)
   }
 
-  def canUseOrRevertLocalShuffleReaderRight(join: BroadcastHashJoinExec): Boolean = {
-    (join.buildSide == BuildLeft &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.right)) ||
-      (join.buildSide == BuildLeft && join.right.isInstanceOf[LocalShuffleReaderExec])
-  }
-
-  def revertLocalShuffleReader(plan: SparkPlan): SparkPlan = {
-    plan.transformDown {
-      case join: BroadcastHashJoinExec if canUseOrRevertLocalShuffleReaderRight(join) =>
-        join.copy(right = join.right.asInstanceOf[LocalShuffleReaderExec].child)
-      case join: BroadcastHashJoinExec if canUseOrRevertLocalShuffleReaderLeft(join) =>
-        join.copy(left = join.left.asInstanceOf[LocalShuffleReaderExec].child)
-    }
+  def canUseLocalShuffleReaderRight(join: BroadcastHashJoinExec): Boolean = {
+    join.buildSide == BuildLeft &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.right)
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.optimizedLocalShuffleReaderEnabled) {
+    if (!conf.getConf(SQLConf.OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED)) {
       return plan
     }
 
     val optimizedPlan = plan.transformDown {
-      case join: BroadcastHashJoinExec if canUseOrRevertLocalShuffleReaderRight(join) =>
+      case join: BroadcastHashJoinExec if canUseLocalShuffleReaderRight(join) =>
         val localReader = LocalShuffleReaderExec(join.right.asInstanceOf[QueryStageExec])
         join.copy(right = localReader)
-      case join: BroadcastHashJoinExec if canUseOrRevertLocalShuffleReaderLeft(join) =>
+      case join: BroadcastHashJoinExec if canUseLocalShuffleReaderLeft(join) =>
         val localReader = LocalShuffleReaderExec(join.left.asInstanceOf[QueryStageExec])
         join.copy(left = localReader)
     }
 
-    val afterEnsureRequirements = EnsureRequirements(conf).apply(optimizedPlan)
+    def numExchanges(plan: SparkPlan): Int = {
+      plan.collect {
+        case e: ShuffleExchangeExec => e
+      }.length
+    }
 
-    val numExchanges = afterEnsureRequirements.collect {
-      case e: ShuffleExchangeExec => e
-    }.length
+    val numExchangeBefore = numExchanges(EnsureRequirements(conf).apply(plan))
+    val numExchangeAfter = numExchanges(EnsureRequirements(conf).apply(optimizedPlan))
 
-    if (numExchanges > 0) {
+    if (numExchangeAfter > numExchangeBefore) {
       logWarning("OptimizeLocalShuffleReader rule is not applied due" +
         " to additional shuffles will be introduced.")
-      revertLocalShuffleReader(optimizedPlan)
+      plan
     } else {
       optimizedPlan
     }
   }
 }
 
-case class LocalShuffleReaderExec(
-    child: QueryStageExec) extends LeafExecNode {
+case class LocalShuffleReaderExec(child: QueryStageExec) extends LeafExecNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -87,9 +78,8 @@ case class LocalShuffleReaderExec(
 
   override def outputPartitioning: Partitioning = {
 
-    def canUseChildPartitioning(stage: ShuffleQueryStageExec): Partitioning = {
-      val initialPartitioning = stage.plan.asInstanceOf[ShuffleExchangeExec]
-        .child.outputPartitioning
+    def tryReserveChildPartitioning(stage: ShuffleQueryStageExec): Partitioning = {
+      val initialPartitioning = stage.plan.child.outputPartitioning
       if (initialPartitioning.isInstanceOf[UnknownPartitioning]) {
         UnknownPartitioning(stage.plan.shuffleDependency.rdd.partitions.length)
       } else {
@@ -99,9 +89,9 @@ case class LocalShuffleReaderExec(
 
     child match {
       case stage: ShuffleQueryStageExec =>
-        canUseChildPartitioning(stage)
+        tryReserveChildPartitioning(stage)
       case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-        canUseChildPartitioning(stage)
+        tryReserveChildPartitioning(stage)
     }
   }
 

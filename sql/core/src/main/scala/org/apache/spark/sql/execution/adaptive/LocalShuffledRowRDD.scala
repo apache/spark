@@ -29,9 +29,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsRe
  * (`startPostShufflePartitionIndex` to `endPostShufflePartitionIndex - 1`, inclusive).
  */
 private final class LocalShuffleRowRDDPartition(
-    val preShufflePartitionIndex: Int,
-    val startPostShufflePartitionIndex: Int,
-    val endPostShufflePartitionIndex: Int) extends Partition {
+    val preShufflePartitionIndex: Int) extends Partition {
   override val index: Int = preShufflePartitionIndex
 }
 
@@ -65,14 +63,13 @@ class LocalShuffledRowRDD(
   override def getPartitions: Array[Partition] = {
 
     Array.tabulate[Partition](numMappers) { i =>
-      new LocalShuffleRowRDDPartition(i, 0, numReducers)
+      new LocalShuffleRowRDDPartition(i)
     }
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    val dep = dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
-    tracker.getMapLocation(dep, partition.index, partition.index + 1)
+    tracker.getMapLocation(dependency, partition.index)
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
