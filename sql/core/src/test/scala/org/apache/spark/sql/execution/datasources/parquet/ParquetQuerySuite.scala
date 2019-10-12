@@ -903,6 +903,20 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     testMigration(fromTsType = "INT96", toTsType = "TIMESTAMP_MICROS")
     testMigration(fromTsType = "TIMESTAMP_MICROS", toTsType = "INT96")
   }
+
+  test("interval written and read as Parquet INTERVAL") {
+    withTempPath { file =>
+      val df = spark.range(10)
+        .selectExpr("interval 100 years 1 month 10 second 1 millisecond as i")
+      df.write.parquet(file.getCanonicalPath)
+      ("true" :: "false" :: Nil).foreach { vectorized =>
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+          val df2 = spark.read.parquet(file.getCanonicalPath)
+          checkAnswer(df2, df.collect().toSeq)
+        }
+      }
+    }
+  }
 }
 
 class ParquetV1QuerySuite extends ParquetQuerySuite {

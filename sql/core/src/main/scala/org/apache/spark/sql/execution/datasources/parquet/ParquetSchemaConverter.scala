@@ -553,6 +553,11 @@ class SparkToParquetSchemaConverter(
       case udt: UserDefinedType[_] =>
         convertField(field.copy(dataType = udt.sqlType))
 
+      case i: CalendarIntervalType =>
+        Types.primitive(FIXED_LEN_BYTE_ARRAY, repetition).length(12)
+          .as(INTERVAL)
+          .named(field.name)
+
       case _ =>
         throw new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
     }

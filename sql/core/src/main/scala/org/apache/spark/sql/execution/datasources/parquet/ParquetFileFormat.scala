@@ -371,6 +371,8 @@ class ParquetFileFormat
 
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
+    case _: CalendarIntervalType => true
+
     case _ => false
   }
 }

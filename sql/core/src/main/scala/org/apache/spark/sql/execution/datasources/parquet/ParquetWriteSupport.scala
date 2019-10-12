@@ -73,6 +73,9 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   // Reusable byte array used to write timestamps as Parquet INT96 values
   private val timestampBuffer = new Array[Byte](12)
 
+  // Reusable byte array used to write intervals as Parquet FIXED_LEN_BYTE_ARRAY values
+  private val intervalBuffer = new Array[Byte](12)
+
   // Reusable byte array used to write decimal values
   private val decimalBuffer =
     new Array[Byte](Decimal.minBytesForPrecision(DecimalType.MAX_PRECISION))
@@ -207,7 +210,19 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case t: UserDefinedType[_] => makeWriter(t.sqlType)
 
-      // TODO Adds IntervalType support
+      case t: CalendarIntervalType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          val interval = row.getInterval(ordinal)
+          val microseconds = interval.microseconds % DateTimeUtils.MICROS_PER_DAY
+          val milliseconds: Int = (microseconds / DateTimeUtils.MICROS_PER_MILLIS).toInt
+          val days: Int = Math.toIntExact(interval.microseconds / DateTimeUtils.MICROS_PER_DAY)
+          val buf = ByteBuffer.wrap(intervalBuffer)
+          buf.order(ByteOrder.LITTLE_ENDIAN)
+            .putInt(milliseconds)
+            .putInt(days)
+            .putInt(interval.months)
+          recordConsumer.addBinary(Binary.fromReusedByteArray(intervalBuffer))
+
       case _ => sys.error(s"Unsupported data type $dataType.")
     }
   }

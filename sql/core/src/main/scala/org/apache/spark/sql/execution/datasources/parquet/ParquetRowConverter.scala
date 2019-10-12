@@ -23,20 +23,18 @@ import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import org.apache.parquet.schema.{GroupType, MessageType, OriginalType, Type}
 import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * A [[ParentContainerUpdater]] is used by a Parquet converter to set converted values to some
@@ -324,6 +322,26 @@ private[parquet] class ParquetRowConverter(
           schemaConverter, parquetType.asGroupType(), t, convertTz, new ParentContainerUpdater {
             override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
           })
+
+      case CalendarIntervalType
+        if parquetType.asPrimitiveType().getPrimitiveTypeName == FIXED_LEN_BYTE_ARRAY =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addBinary(value: Binary): Unit = {
+            assert(
+              value.length() == 12,
+              "Intervals are expected to be stored in 12-byte fixed len byte array, " +
+                s"but got a ${value.length()}-byte array.")
+
+            val buf = value.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
+            val milliseconds = buf.getInt
+            var microseconds = milliseconds * DateTimeUtils.MICROS_PER_MILLIS
+            val days = buf.getInt
+            val daysInUs = Math.multiplyExact(days, DateTimeUtils.MICROS_PER_DAY)
+            microseconds = Math.addExact(microseconds, daysInUs)
+            val months = buf.getInt
+            updater.set(new CalendarInterval(months, microseconds))
+          }
+        }
 
       case t =>
         throw new RuntimeException(
