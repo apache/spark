@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
 import java.net.{URI, URISyntaxException}
-import java.nio.file.FileSystems
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -29,7 +27,7 @@ import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -45,7 +43,7 @@ import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -57,16 +55,23 @@ import org.apache.spark.sql.util.SchemaUtils
  * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
  * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
  *
+ * Use "CREATE TABLE t1 LIKE t2 STORED AS file_format"
+ * to specify new file format for t1 from a Hive table t2.
+ * Use "CREATE TABLE t1 LIKE t2 USING file_format"
+ * to specify new file format for t1 from a data source table t2.
+ *
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
  *   LIKE [other_db_name.]existing_table_name [locationSpec]
+ *   [STORED AS file_format | USING file_format]
  * }}}
  */
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
     location: Option[String],
+    fileFormat: Option[HiveSerDe],
     ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -83,12 +88,23 @@ case class CreateTableLikeCommand(
     // Otherwise create a managed table.
     val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
 
+    val newStorage = fileFormat match {
+      case Some(f) =>
+        sourceTableDesc.storage.copy(
+          inputFormat = f.inputFormat,
+          outputFormat = f.outputFormat,
+          serde = f.serde,
+          locationUri = location.map(CatalogUtils.stringToURI(_)))
+      case None =>
+        sourceTableDesc.storage.copy(
+          locationUri = location.map(CatalogUtils.stringToURI(_)))
+    }
+
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
-        storage = sourceTableDesc.storage.copy(
-          locationUri = location.map(CatalogUtils.stringToURI(_))),
+        storage = newStorage,
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,

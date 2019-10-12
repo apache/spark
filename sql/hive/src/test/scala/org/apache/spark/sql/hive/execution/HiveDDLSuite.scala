@@ -1255,16 +1255,19 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE a data source table") {
-    // CREATE TABLE LIKE a data source table.
-    withCreateTableLikeDSTable(location = None)
+    Seq(None, Some("parquet"), Some("orc")) foreach { fileFormat =>
+      // CREATE TABLE LIKE a data source table.
+      withCreateTableLikeDSTable(location = None, fileFormat)
 
-    // CREATE TABLE LIKE a data source table location ...
-    withTempDir { tmpDir =>
-      withCreateTableLikeDSTable(Some(tmpDir.toURI.toString))
+      // CREATE TABLE LIKE a data source table location ...
+      withTempDir { tmpDir =>
+        withCreateTableLikeDSTable(Some(tmpDir.toURI.toString), fileFormat)
+      }
     }
   }
 
-  private def withCreateTableLikeDSTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeDSTable(
+      location : Option[String], fileFormat: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -1273,7 +1276,8 @@ class HiveDDLSuite
         .write.format("json").saveAsTable(sourceTabName)
 
       val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
+      val providerClause = if (fileFormat.nonEmpty) s"USING ${fileFormat.get}" else ""
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause $providerClause")
 
       val sourceTable =
         spark.sessionState.catalog.getTableMetadata(
@@ -1290,16 +1294,19 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE an external data source table") {
-    // CREATE TABLE LIKE an external data source table.
-    withCreateTableLikeExtDSTable(location = None)
+    Seq(None, Some("parquet"), Some("orc")) foreach { fileFormat =>
+      // CREATE TABLE LIKE an external data source table.
+      withCreateTableLikeExtDSTable(location = None, fileFormat)
 
-    // CREATE TABLE LIKE an external data source table location ...
-    withTempDir { tmpDir =>
-      withCreateTableLikeExtDSTable(Some(tmpDir.toURI.toString))
+      // CREATE TABLE LIKE an external data source table location ...
+      withTempDir { tmpDir =>
+        withCreateTableLikeExtDSTable(Some(tmpDir.toURI.toString), fileFormat)
+      }
     }
   }
 
-  private def withCreateTableLikeExtDSTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeExtDSTable(
+      location : Option[String], fileFormat: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -1311,7 +1318,8 @@ class HiveDDLSuite
         sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '${dir.toURI}')")
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
+        val providerClause = if (fileFormat.nonEmpty) s"USING ${fileFormat.get}" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause $providerClause")
 
         // The source table should be an external data source table
         val sourceTable = spark.sessionState.catalog.getTableMetadata(
@@ -1328,16 +1336,19 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE a managed Hive serde table") {
-    // CREATE TABLE LIKE a managed Hive serde table.
-    withCreateTableLikeManagedHiveTable(location = None)
+    Seq(None, Some("parquet"), Some("orc")) foreach { fileFormat =>
+      // CREATE TABLE LIKE a managed Hive serde table.
+      withCreateTableLikeManagedHiveTable(location = None, fileFormat)
 
-    // CREATE TABLE LIKE a managed Hive serde table location ...
-    withTempDir { tmpDir =>
-      withCreateTableLikeManagedHiveTable(Some(tmpDir.toURI.toString))
+      // CREATE TABLE LIKE a managed Hive serde table location ...
+      withTempDir { tmpDir =>
+        withCreateTableLikeManagedHiveTable(Some(tmpDir.toURI.toString), fileFormat)
+      }
     }
   }
 
-  private def withCreateTableLikeManagedHiveTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeManagedHiveTable(
+      location : Option[String], fileFormat: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -1346,7 +1357,8 @@ class HiveDDLSuite
       sql(s"CREATE TABLE $sourceTabName TBLPROPERTIES('prop1'='value1') AS SELECT 1 key, 'a'")
 
       val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
+      val providerClause = if (fileFormat.nonEmpty) s"STORED AS ${fileFormat.get}" else ""
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause $providerClause")
 
       val sourceTable = catalog.getTableMetadata(
         TableIdentifier(sourceTabName, Some("default")))
@@ -1360,16 +1372,19 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE an external Hive serde table") {
-    // CREATE TABLE LIKE an external Hive serde table.
-    withCreateTableLikeExtHiveTable(location = None)
+    Seq(None, Some("parquet"), Some("orc")) foreach { fileFormat =>
+      // CREATE TABLE LIKE an external Hive serde table.
+      withCreateTableLikeExtHiveTable(location = None, fileFormat)
 
-    // CREATE TABLE LIKE an external Hive serde table location ...
-    withTempDir { tmpDir =>
-      withCreateTableLikeExtHiveTable(Some(tmpDir.toURI.toString))
+      // CREATE TABLE LIKE an external Hive serde table location ...
+      withTempDir { tmpDir =>
+        withCreateTableLikeExtHiveTable(Some(tmpDir.toURI.toString), fileFormat)
+      }
     }
   }
 
-  private def withCreateTableLikeExtHiveTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeExtHiveTable(
+      location : Option[String], fileFormat: Option[String]): Unit = {
     val catalog = spark.sessionState.catalog
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTempDir { tmpDir =>
@@ -1395,7 +1410,8 @@ class HiveDDLSuite
         }
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
+        val providerClause = if (fileFormat.nonEmpty) s"STORED AS ${fileFormat.get}" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause $providerClause")
 
         val sourceTable = catalog.getTableMetadata(
           TableIdentifier(sourceTabName, Some("default")))

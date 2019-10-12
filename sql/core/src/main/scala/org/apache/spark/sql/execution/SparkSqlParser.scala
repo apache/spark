@@ -996,13 +996,30 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * {{{
    *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
    *   LIKE [other_db_name.]existing_table_name [locationSpec]
+   *   [STORED AS file_format | USING file_format]
    * }}}
    */
   override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
     val targetTable = visitTableIdentifier(ctx.target)
     val sourceTable = visitTableIdentifier(ctx.source)
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
-    CreateTableLikeCommand(targetTable, sourceTable, location, ctx.EXISTS != null)
+    val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
+    val provider = Option(ctx.tableProvider).map(_.qualifiedName.getText)
+    if (fileStorage.isDefined && provider.isDefined) {
+      throw new ParseException(
+        "STORED AS and USING should not be specified both", ctx)
+    }
+    val fileFormat = if (fileStorage.isDefined) {
+      Some(HiveSerDe(
+        inputFormat = fileStorage.get.inputFormat,
+        outputFormat = fileStorage.get.outputFormat,
+        serde = fileStorage.get.serde))
+    } else if (provider.isDefined) {
+      provider.flatMap(HiveSerDe.sourceToSerDe)
+    } else {
+      None
+    }
+    CreateTableLikeCommand(targetTable, sourceTable, location, fileFormat, ctx.EXISTS != null)
   }
 
   /**
