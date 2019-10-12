@@ -619,6 +619,17 @@ object JdbcUtils extends Logging {
     val conn = getConnection()
     var committed = false
 
+    options.sessionInitStatement.foreach { sql =>
+      val statement = conn.prepareStatement(sql)
+      logInfo(s"Executing sessionInitStatement: $sql")
+      try {
+        statement.setQueryTimeout(options.queryTimeout)
+        statement.execute()
+      } finally {
+        statement.close()
+      }
+    }
+
     var finalIsolationLevel = Connection.TRANSACTION_NONE
     if (isolationLevel != Connection.TRANSACTION_NONE) {
       try {
