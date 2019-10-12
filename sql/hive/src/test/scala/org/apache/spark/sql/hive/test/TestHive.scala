@@ -655,6 +655,7 @@ private[hive] object HiveTestJars {
   def getHiveContribJar(version: String = HiveUtils.builtinHiveVersion): File =
     getJarFromUrl(s"${repository}org/apache/hive/hive-contrib/" +
       s"$version/hive-contrib-$version.jar")
+
   def getHiveHcatalogCoreJar(version: String = HiveUtils.builtinHiveVersion): File =
     getJarFromUrl(s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
       s"$version/hive-hcatalog-core-$version.jar")
