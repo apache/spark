@@ -68,7 +68,6 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
   test("using hadoop config map ahead of conf dir if both defined") {
     val sparkConf = new SparkConfWithEnv(Map(ENV_HADOOP_CONF_DIR -> confDir.getAbsolutePath()))
       .set(Config.KUBERNETES_HADOOP_CONF_CONFIG_MAP, "testConfigMap")
-
     val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
 
     val step = new HadoopConfDriverFeatureStep(conf)
