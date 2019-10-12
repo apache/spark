@@ -22,9 +22,10 @@ from multiprocessing.pool import ThreadPool
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param.shared import *
-from pyspark.ml.regression import DecisionTreeModel, DecisionTreeParams, \
-    DecisionTreeRegressionModel, GBTParams, HasVarianceImpurity, RandomForestParams, \
-    TreeEnsembleModel
+from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
+    _TreeEnsembleModel, _RandomForestParams, _GBTParams, \
+    _HasVarianceImpurity, _TreeClassifierParams, _TreeEnsembleParams
+from pyspark.ml.regression import DecisionTreeRegressionModel
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
     JavaPredictor, JavaPredictorParams, JavaPredictionModel, JavaWrapper
@@ -939,34 +940,17 @@ class BinaryLogisticRegressionTrainingSummary(BinaryLogisticRegressionSummary,
     pass
 
 
-class TreeClassifierParams(object):
+@inherit_doc
+class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams):
     """
-    Private class to track supported impurity measures.
-
-    .. versionadded:: 1.4.0
+    Params for :py:class:`DecisionTreeClassifier` and :py:class:`DecisionTreeClassificationModel`.
     """
-    supportedImpurities = ["entropy", "gini"]
-
-    impurity = Param(Params._dummy(), "impurity",
-                     "Criterion used for information gain calculation (case-insensitive). " +
-                     "Supported options: " +
-                     ", ".join(supportedImpurities), typeConverter=TypeConverters.toString)
-
-    def __init__(self):
-        super(TreeClassifierParams, self).__init__()
-
-    @since("1.6.0")
-    def getImpurity(self):
-        """
-        Gets the value of impurity or its default value.
-        """
-        return self.getOrDefault(self.impurity)
+    pass
 
 
 @inherit_doc
-class DecisionTreeClassifier(JavaProbabilisticClassifier, HasWeightCol,
-                             DecisionTreeParams, TreeClassifierParams, HasCheckpointInterval,
-                             HasSeed, JavaMLWritable, JavaMLReadable):
+class DecisionTreeClassifier(JavaProbabilisticClassifier, _DecisionTreeClassifierParams,
+                             JavaMLWritable, JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for classification.
@@ -1045,20 +1029,20 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, HasWeightCol,
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 seed=None, weightCol=None, leafCol=""):
+                 seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 seed=None, weightCol=None, leafCol="")
+                 seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0)
         """
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.DecisionTreeClassifier", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini", leafCol="")
+                         impurity="gini", leafCol="", minWeightFractionPerNode=0.0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1068,13 +1052,14 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, HasWeightCol,
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="gini", seed=None, weightCol=None, leafCol=""):
+                  impurity="gini", seed=None, weightCol=None, leafCol="",
+                  minWeightFractionPerNode=0.0):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                  seed=None, weightCol=None, leafCol="")
+                  seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0)
         Sets params for the DecisionTreeClassifier.
         """
         kwargs = self._input_kwargs
@@ -1100,6 +1085,13 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, HasWeightCol,
         Sets the value of :py:attr:`minInstancesPerNode`.
         """
         return self._set(minInstancesPerNode=value)
+
+    @since("3.0.0")
+    def setMinWeightFractionPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minWeightFractionPerNode`.
+        """
+        return self._set(minWeightFractionPerNode=value)
 
     def setMinInfoGain(self, value):
         """
@@ -1128,8 +1120,9 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, HasWeightCol,
 
 
 @inherit_doc
-class DecisionTreeClassificationModel(DecisionTreeModel, JavaProbabilisticClassificationModel,
-                                      JavaMLWritable, JavaMLReadable):
+class DecisionTreeClassificationModel(_DecisionTreeModel, JavaProbabilisticClassificationModel,
+                                      _DecisionTreeClassifierParams, JavaMLWritable,
+                                      JavaMLReadable):
     """
     Model fitted by DecisionTreeClassifier.
 
@@ -1159,8 +1152,15 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaProbabilisticClassi
 
 
 @inherit_doc
-class RandomForestClassifier(JavaProbabilisticClassifier, HasSeed, RandomForestParams,
-                             TreeClassifierParams, HasCheckpointInterval,
+class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams):
+    """
+    Params for :py:class:`RandomForestClassifier` and :py:class:`RandomForestClassificationModel`.
+    """
+    pass
+
+
+@inherit_doc
+class RandomForestClassifier(JavaProbabilisticClassifier, _RandomForestClassifierParams,
                              JavaMLWritable, JavaMLReadable):
     """
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
@@ -1230,14 +1230,14 @@ class RandomForestClassifier(JavaProbabilisticClassifier, HasSeed, RandomForestP
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
                  numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0,
-                 leafCol=""):
+                 leafCol="", minWeightFractionPerNode=0.0):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                  numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0, \
-                 leafCol="")
+                 leafCol="", minWeightFractionPerNode=0.0)
         """
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1245,7 +1245,7 @@ class RandomForestClassifier(JavaProbabilisticClassifier, HasSeed, RandomForestP
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="gini", numTrees=20, featureSubsetStrategy="auto",
-                         subsamplingRate=1.0, leafCol="")
+                         subsamplingRate=1.0, leafCol="", minWeightFractionPerNode=0.0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1256,14 +1256,14 @@ class RandomForestClassifier(JavaProbabilisticClassifier, HasSeed, RandomForestP
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0,
-                  leafCol=""):
+                  leafCol="", minWeightFractionPerNode=0.0):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0, \
-                  leafCol="")
+                  leafCol="", minWeightFractionPerNode=0.0)
         Sets params for linear classification.
         """
         kwargs = self._input_kwargs
@@ -1337,8 +1337,9 @@ class RandomForestClassifier(JavaProbabilisticClassifier, HasSeed, RandomForestP
         return self._set(featureSubsetStrategy=value)
 
 
-class RandomForestClassificationModel(TreeEnsembleModel, JavaProbabilisticClassificationModel,
-                                      JavaMLWritable, JavaMLReadable):
+class RandomForestClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,
+                                      _RandomForestClassifierParams, JavaMLWritable,
+                                      JavaMLReadable):
     """
     Model fitted by RandomForestClassifier.
 
@@ -1367,7 +1368,7 @@ class RandomForestClassificationModel(TreeEnsembleModel, JavaProbabilisticClassi
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
 
-class GBTClassifierParams(GBTParams, HasVarianceImpurity):
+class GBTClassifierParams(_GBTParams, _HasVarianceImpurity):
     """
     Private class to track supported GBTClassifier params.
 
@@ -1390,8 +1391,8 @@ class GBTClassifierParams(GBTParams, HasVarianceImpurity):
 
 
 @inherit_doc
-class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams, HasCheckpointInterval,
-                    HasSeed, JavaMLWritable, JavaMLReadable):
+class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams,
+                    JavaMLWritable, JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for classification.
@@ -1485,14 +1486,14 @@ class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams, HasCheckpo
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
                  maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, impurity="variance",
                  featureSubsetStrategy="all", validationTol=0.01, validationIndicatorCol=None,
-                 leafCol=""):
+                 leafCol="", minWeightFractionPerNode=0.0):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                 validationIndicatorCol=None, leafCol="")
+                 validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0)
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1501,7 +1502,7 @@ class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams, HasCheckpo
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0,
                          impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                         leafCol="")
+                         leafCol="", minWeightFractionPerNode=0.0)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1512,14 +1513,14 @@ class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams, HasCheckpo
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0,
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                  validationIndicatorCol=None, leafCol=""):
+                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                  validationIndicatorCol=None, leafCol="")
+                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0)
         Sets params for Gradient Boosted Tree Classification.
         """
         kwargs = self._input_kwargs
@@ -1600,8 +1601,8 @@ class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams, HasCheckpo
         return self._set(validationIndicatorCol=value)
 
 
-class GBTClassificationModel(TreeEnsembleModel, JavaProbabilisticClassificationModel,
-                             JavaMLWritable, JavaMLReadable):
+class GBTClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,
+                             GBTClassifierParams, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTClassifier.
 
