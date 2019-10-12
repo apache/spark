@@ -342,7 +342,9 @@ class FactorizationMachines @Since("3.0.0") (
       (if ($(fitLinear)) numFeatures else 0) +
       (if ($(fitBias)) 1 else 0)
     val initialCoefficients =
-      Vectors.dense(Array.fill(coefficientsSize)(Random.nextGaussian() * $(initStd)))
+      Vectors.dense(Array.fill($(numFactors) * numFeatures)(Random.nextGaussian() * $(initStd)) ++
+        (if ($(fitLinear)) Array.fill(numFeatures)(0.0) else Array.empty[Double]) ++
+        (if ($(fitBias)) Array.fill(1)(0.0) else Array.empty[Double]))
 
     val data = instances.map{ case OldLabeledPoint(label, features) => (label, features) }
 
