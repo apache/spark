@@ -2095,7 +2095,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
 }
 
 /**
- * Returns the interval from startTimestamp to endTimestamp in which the `months` field
+ * Returns the interval from startTimestamp to endTimestamp in which the `months` and `day` field
  * is set to 0 and the `microseconds` field is initialized to the microsecond difference
  * between the given timestamps.
  */
@@ -2108,11 +2108,11 @@ case class TimestampDiff(endTimestamp: Expression, startTimestamp: Expression)
   override def dataType: DataType = CalendarIntervalType
 
   override def nullSafeEval(end: Any, start: Any): Any = {
-    new CalendarInterval(0, end.asInstanceOf[Long] - start.asInstanceOf[Long])
+    new CalendarInterval(0, 0, end.asInstanceOf[Long] - start.asInstanceOf[Long])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (end, start) =>
-      s"new org.apache.spark.unsafe.types.CalendarInterval(0, $end - $start)")
+      s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
   }
 }

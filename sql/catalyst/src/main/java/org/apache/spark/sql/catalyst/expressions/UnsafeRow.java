@@ -402,8 +402,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
-      final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
-      return new CalendarInterval(months, microseconds);
+      final int days = (int) Platform.getLong(baseObject, baseOffset + offset + 8);
+      final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 16);
+      return new CalendarInterval(months, days, microseconds);
     }
   }
 

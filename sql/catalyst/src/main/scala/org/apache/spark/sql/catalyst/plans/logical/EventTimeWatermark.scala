@@ -28,9 +28,9 @@ object EventTimeWatermark {
   val delayKey = "spark.watermarkDelayMs"
 
   def getDelayMs(delay: CalendarInterval): Long = {
+    val millisPerDay = TimeUnit.MICROSECONDS.toMillis(CalendarInterval.MICROS_PER_DAY)
     // We define month as `31 days` to simplify calculation.
-    val millisPerMonth = TimeUnit.MICROSECONDS.toMillis(CalendarInterval.MICROS_PER_DAY) * 31
-    delay.milliseconds + delay.months * millisPerMonth
+    delay.milliseconds + delay.days * millisPerDay + delay.months * millisPerDay * 31
   }
 }
 

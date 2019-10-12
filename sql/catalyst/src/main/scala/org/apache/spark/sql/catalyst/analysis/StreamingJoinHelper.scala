@@ -256,12 +256,12 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           val castedLit = lit.dataType match {
             case CalendarIntervalType =>
               val calendarInterval = lit.value.asInstanceOf[CalendarInterval]
-              if (calendarInterval.months > 0) {
+              if (calendarInterval.months > 0 || calendarInterval.days > 0) {
                 invalid = true
                 logWarning(
                   s"Failed to extract state value watermark from condition $exprToCollectFrom " +
-                    s"as imprecise intervals like months and years cannot be used for" +
-                    s"watermark calculation. Use interval in terms of day instead.")
+                    s"as imprecise intervals like days, weeks, months and years cannot be used" +
+                    s"for watermark calculation. Use interval in terms of hour instead.")
                 Literal(0.0)
               } else {
                 Literal(calendarInterval.microseconds.toDouble)
