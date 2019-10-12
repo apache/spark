@@ -377,15 +377,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         TimeAdd(
           Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal(new CalendarInterval(1, 123000L)),
+          Literal(new CalendarInterval(1, 2, 123000L)),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
-          new Timestamp(sdf.parse("2016-02-29 10:00:00.123").getTime)))
+          new Timestamp(sdf.parse("2016-03-02 10:00:00.123").getTime)))
 
       checkEvaluation(
         TimeAdd(
           Literal.create(null, TimestampType),
-          Literal(new CalendarInterval(1, 123000L)),
+          Literal(new CalendarInterval(1, 2, 123000L)),
           timeZoneId),
         null)
       checkEvaluation(
@@ -415,22 +415,36 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         TimeSub(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
-          Literal(new CalendarInterval(1, 0)),
+          Literal(new CalendarInterval(1, 0, 0)),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-29 10:00:00.000").getTime)))
       checkEvaluation(
         TimeSub(
+          Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
+          Literal(new CalendarInterval(1, 1, 0)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2016-02-28 10:00:00.000").getTime)))
+      checkEvaluation(
+        TimeSub(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
-          Literal(new CalendarInterval(1, 2000000.toLong)),
+          Literal(new CalendarInterval(1, 0, 2000000.toLong)),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 23:59:59.000").getTime)))
+      checkEvaluation(
+        TimeSub(
+          Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
+          Literal(new CalendarInterval(1, 1, 2000000.toLong)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2016-02-27 23:59:59.000").getTime)))
 
       checkEvaluation(
         TimeSub(
           Literal.create(null, TimestampType),
-          Literal(new CalendarInterval(1, 123000L)),
+          Literal(new CalendarInterval(1, 2, 123000L)),
           timeZoneId),
         null)
       checkEvaluation(
@@ -1073,18 +1087,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("timestamps difference") {
     val end = Instant.parse("2019-10-04T11:04:01.123456Z")
     checkEvaluation(TimestampDiff(Literal(end), Literal(end)),
-      new CalendarInterval(0, 0))
+      new CalendarInterval(0, 0, 0))
     checkEvaluation(TimestampDiff(Literal(end), Literal(Instant.EPOCH)),
-      CalendarInterval.fromString("interval 18173 days " +
-        "11 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds"))
+      CalendarInterval.fromString("interval " +
+        "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds"))
     checkEvaluation(TimestampDiff(Literal(Instant.EPOCH), Literal(end)),
-      CalendarInterval.fromString("interval -18173 days " +
-        "-11 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds"))
+      CalendarInterval.fromString("interval " +
+        "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds"))
     checkEvaluation(
       TimestampDiff(
         Literal(Instant.parse("9999-12-31T23:59:59.999999Z")),
         Literal(Instant.parse("0001-01-01T00:00:00Z"))),
-      CalendarInterval.fromString("interval 521722 weeks 4 days " +
-        "23 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds"))
+      CalendarInterval.fromString("interval " +
+        "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds"))
   }
 }

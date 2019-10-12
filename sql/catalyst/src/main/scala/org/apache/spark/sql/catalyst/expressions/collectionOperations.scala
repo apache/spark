@@ -2624,8 +2624,11 @@ object Sequence {
       val stepDays = step.days
       val stepMicros = step.microseconds
 
-      if (stepMonths == 0 && stepDays == 0) {
-        backedSequenceImpl.eval(start, stop, fromLong(stepMicros / scale))
+      if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
+        backedSequenceImpl.eval(start, stop, fromLong(stepDays))
+
+      } else if (stepMonths == 0 && stepDays == 0 && scale == 1) {
+        backedSequenceImpl.eval(start, stop, fromLong(stepMicros))
 
       } else {
         // To estimate the resulted array length we need to make assumptions
@@ -2688,10 +2691,11 @@ object Sequence {
          |final int $stepDays = $step.days;
          |final long $stepMicros = $step.microseconds;
          |
-         |if ($stepMonths == 0 && $stepDays == 0) {
-         |  final $elemType $stepScaled = ($elemType) ($stepMicros / ${scale}L);
-         |  ${backedSequenceImpl.genCode(ctx, start, stop, stepScaled, arr, elemType)};
+         |if ($stepMonths == 0 && $stepMicros == 0 && ${scale}L == ${MICROS_PER_DAY}L) {
+         |  ${backedSequenceImpl.genCode(ctx, start, stop, stepDays, arr, elemType)};
          |
+         |} else if ($stepMonths == 0 && $stepDays == 0 && ${scale}L == 1) {
+         |  ${backedSequenceImpl.genCode(ctx, start, stop, stepMicros, arr, elemType)};
          |} else {
          |  final long $startMicros = $start * ${scale}L;
          |  final long $stopMicros = $stop * ${scale}L;

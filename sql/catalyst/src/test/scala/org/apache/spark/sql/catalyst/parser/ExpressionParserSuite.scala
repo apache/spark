@@ -673,12 +673,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Composed intervals.
     checkIntervals(
-      "3 months 22 seconds 1 millisecond",
-      Literal(new CalendarInterval(3, 22001000L)))
+      "3 months 4 days 22 seconds 1 millisecond",
+      Literal(new CalendarInterval(3, 4, 22001000L)))
     checkIntervals(
       "3 years '-1-10' year to month 3 weeks '1 0:0:2' day to second",
-      Literal(new CalendarInterval(14,
-        22 * CalendarInterval.MICROS_PER_DAY + 2 * CalendarInterval.MICROS_PER_SECOND)))
+      Literal(new CalendarInterval(14, 22, 2 * CalendarInterval.MICROS_PER_SECOND)))
   }
 
   test("SPARK-23264 Interval Compatibility tests") {
