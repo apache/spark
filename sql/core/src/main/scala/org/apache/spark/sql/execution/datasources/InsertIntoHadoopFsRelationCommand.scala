@@ -165,7 +165,7 @@ case class InsertIntoHadoopFsRelationCommand(
       // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
       // will be renamed from staging path to final output path during commit job
       val committerOutputPath = if (dynamicPartitionOverwrite) {
-        new Path(outputPath, ".spark-staging-" + jobId)
+        FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
           .makeQualified(fs.getUri, fs.getWorkingDirectory)
       } else qualifiedOutputPath
 
