@@ -517,12 +517,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   test("sessionInitStatement for write path") {
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     val tableName = "SPARK-28834"
-    df1.write.format("jdbc")
-      .option("url", jdbcUrl)
-      .option("sessionInitStatement",
-        "CREATE TABLE IF NOT EXISTS " + tableName + " (id number(10) NOT NULL)")
-      .mode(SaveMode.Append)
-      .save()
+    val writeProps = new Properties()
+    writeProps.setProperty("sessionInitStatement",
+      "CREATE TABLE IF NOT EXISTS " + tableName + " (id number(10) NOT NULL)")
+    df1.write.jdbc(jdbcUrl, tableName + "op", writeProps)
     assert(spark.read.jdbc(jdbcUrl, tableName, new Properties()).collect().isEmpty)
   }
 }
