@@ -849,7 +849,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSparkSessi
     sparkContext.addSparkListener(jobListener)
     try {
       val result = f
-      sparkContext.listenerBus.waitUntilEmpty(10000L)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(numJobTrigered === 0)
       result
     } finally {

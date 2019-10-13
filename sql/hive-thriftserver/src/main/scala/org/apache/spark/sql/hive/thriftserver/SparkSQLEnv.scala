@@ -33,7 +33,7 @@ private[hive] object SparkSQLEnv extends Logging {
   var sqlContext: SQLContext = _
   var sparkContext: SparkContext = _
 
-  def init() {
+  def init(): Unit = {
     if (sqlContext == null) {
       val sparkConf = new SparkConf(loadDefaults = true)
       // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
@@ -60,7 +60,7 @@ private[hive] object SparkSQLEnv extends Logging {
   }
 
   /** Cleans up and shuts down the Spark SQL environments. */
-  def stop() {
+  def stop(): Unit = {
     logDebug("Shutting down Spark SQL Environment")
     // Stop the SparkContext
     if (SparkSQLEnv.sparkContext != null) {

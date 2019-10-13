@@ -38,7 +38,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
 
-  override def init(hiveConf: HiveConf) {
+  override def init(hiveConf: HiveConf): Unit = {
     setSuperField(this, "operationManager", sparkSqlOperationManager)
     super.init(hiveConf)
   }
@@ -73,7 +73,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     sessionHandle
   }
 
-  override def closeSession(sessionHandle: SessionHandle) {
+  override def closeSession(sessionHandle: SessionHandle): Unit = {
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)

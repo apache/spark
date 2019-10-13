@@ -510,14 +510,15 @@ private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
   def cached: Boolean = info.numCachedPartitions > 0
 
   def toLiveRDD(executors: scala.collection.Map[String, LiveExecutor]): LiveRDD = {
+    val storageLevel = StorageLevel.fromDescription(info.storageLevel)
     val rddInfo = new RDDInfo(
       info.id,
       info.name,
       info.numPartitions,
-      StorageLevel.fromDescription(info.storageLevel),
+      storageLevel,
       false,
       Nil)
-    val liveRDD = new LiveRDD(rddInfo)
+    val liveRDD = new LiveRDD(rddInfo, storageLevel)
     liveRDD.memoryUsed = info.memoryUsed
     liveRDD.diskUsed = info.diskUsed
     info.partitions.get.foreach { rddPartition =>

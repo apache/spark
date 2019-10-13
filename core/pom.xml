@@ -385,6 +385,11 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minikdc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>net.razorvine</groupId>
       <artifactId>pyrolite</artifactId>
       <version>4.30</version>
@@ -550,6 +555,15 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <id>scala-2.13</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.scala-lang.modules</groupId>
+          <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+        </dependency>
+      </dependencies>
     </profile>
   </profiles>
 

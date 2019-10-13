@@ -42,17 +42,13 @@ public interface ShuffleExecutorComponents {
    * partitioned bytes written by that map task.
    *
    * @param shuffleId Unique identifier for the shuffle the map task is a part of
-   * @param mapId Within the shuffle, the identifier of the map task
-   * @param mapTaskAttemptId Identifier of the task attempt. Multiple attempts of the same map task
-   *                         with the same (shuffleId, mapId) pair can be distinguished by the
-   *                         different values of mapTaskAttemptId.
+   * @param mapId An ID of the map task. The ID is unique within this Spark application.
    * @param numPartitions The number of partitions that will be written by the map task. Some of
    *                      these partitions may be empty.
    */
   ShuffleMapOutputWriter createMapOutputWriter(
       int shuffleId,
-      int mapId,
-      long mapTaskAttemptId,
+      long mapId,
       int numPartitions) throws IOException;
 
   /**
@@ -64,15 +60,11 @@ public interface ShuffleExecutorComponents {
    * preserving an optimization in the local disk shuffle storage implementation.
    *
    * @param shuffleId Unique identifier for the shuffle the map task is a part of
-   * @param mapId Within the shuffle, the identifier of the map task
-   * @param mapTaskAttemptId Identifier of the task attempt. Multiple attempts of the same map task
-   *                         with the same (shuffleId, mapId) pair can be distinguished by the
-   *                         different values of mapTaskAttemptId.
+   * @param mapId An ID of the map task. The ID is unique within this Spark application.
    */
   default Optional<SingleSpillShuffleMapOutputWriter> createSingleFileMapOutputWriter(
       int shuffleId,
-      int mapId,
-      long mapTaskAttemptId) throws IOException {
+      long mapId) throws IOException {
     return Optional.empty();
   }
 }

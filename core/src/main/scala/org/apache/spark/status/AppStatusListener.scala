@@ -312,8 +312,8 @@ private[spark] class AppStatusListener(
                 (partition.memoryUsed / partition.executors.length) * -1)
               rdd.diskUsed = addDeltaToValue(rdd.diskUsed,
                 (partition.diskUsed / partition.executors.length) * -1)
-              partition.update(partition.executors
-                .filter(!_.equals(event.executorId)), rdd.storageLevel,
+              partition.update(
+                partition.executors.filter(!_.equals(event.executorId)),
                 addDeltaToValue(partition.memoryUsed,
                   (partition.memoryUsed / partition.executors.length) * -1),
                 addDeltaToValue(partition.diskUsed,
@@ -573,7 +573,7 @@ private[spark] class AppStatusListener(
 
     event.stageInfo.rddInfos.foreach { info =>
       if (info.storageLevel.isValid) {
-        liveUpdate(liveRDDs.getOrElseUpdate(info.id, new LiveRDD(info)), now)
+        liveUpdate(liveRDDs.getOrElseUpdate(info.id, new LiveRDD(info, info.storageLevel)), now)
       }
     }
 
@@ -1000,12 +1000,6 @@ private[spark] class AppStatusListener(
     val diskDelta = event.blockUpdatedInfo.diskSize * (if (storageLevel.useDisk) 1 else -1)
     val memoryDelta = event.blockUpdatedInfo.memSize * (if (storageLevel.useMemory) 1 else -1)
 
-    val updatedStorageLevel = if (storageLevel.isValid) {
-      Some(storageLevel.description)
-    } else {
-      None
-    }
-
     // We need information about the executor to update some memory accounting values in the
     // RDD info, so read that beforehand.
     val maybeExec = liveExecutors.get(executorId)
@@ -1020,13 +1014,9 @@ private[spark] class AppStatusListener(
     // Update the block entry in the RDD info, keeping track of the deltas above so that we
     // can update the executor information too.
     liveRDDs.get(block.rddId).foreach { rdd =>
-      if (updatedStorageLevel.isDefined) {
-        rdd.setStorageLevel(updatedStorageLevel.get)
-      }
-
       val partition = rdd.partition(block.name)
 
-      val executors = if (updatedStorageLevel.isDefined) {
+      val executors = if (storageLevel.isValid) {
         val current = partition.executors
         if (current.contains(executorId)) {
           current
@@ -1041,7 +1031,7 @@ private[spark] class AppStatusListener(
 
       // Only update the partition if it's still stored in some executor, otherwise get rid of it.
       if (executors.nonEmpty) {
-        partition.update(executors, rdd.storageLevel,
+        partition.update(executors,
           addDeltaToValue(partition.memoryUsed, memoryDelta),
           addDeltaToValue(partition.diskUsed, diskDelta))
       } else {

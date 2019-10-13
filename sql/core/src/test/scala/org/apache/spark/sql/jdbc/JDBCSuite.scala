@@ -743,7 +743,7 @@ class JDBCSuite extends QueryTest
   }
 
   test("compile filters") {
-    val compileFilter = PrivateMethod[Option[String]]('compileFilter)
+    val compileFilter = PrivateMethod[Option[String]](Symbol("compileFilter"))
     def doCompileFilter(f: Filter): String =
       JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
     assert(doCompileFilter(EqualTo("col0", 3)) === """"col0" = 3""")

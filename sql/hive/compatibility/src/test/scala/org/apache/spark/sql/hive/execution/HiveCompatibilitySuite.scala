@@ -46,7 +46,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
@@ -65,7 +65,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     RuleExecutor.resetMetrics()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
       TimeZone.setDefault(originalTimeZone)

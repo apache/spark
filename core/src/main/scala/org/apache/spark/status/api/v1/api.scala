@@ -32,6 +32,7 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.status.{LiveExecutor, LiveRDDDistribution, LiveRDDPartition}
+import org.apache.spark.storage.StorageLevel
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -217,7 +218,8 @@ class RDDPartitionInfo private[spark](
     val executors: Seq[String]) {
 
   def toLiveRDDPartition: LiveRDDPartition = {
-    val liveRDDPartition = new LiveRDDPartition(blockName)
+    val liveRDDPartition = new LiveRDDPartition(blockName,
+      StorageLevel.fromDescription(storageLevel))
     liveRDDPartition.value = this
     liveRDDPartition
   }
