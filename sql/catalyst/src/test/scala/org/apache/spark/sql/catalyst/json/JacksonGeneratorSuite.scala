@@ -39,7 +39,8 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     assert(writer.toString === """{"a":1}""")
   }
 
-  test("SPARK-29444: initial with StructType and write out an empty row with allowStructIncludeNull=true") {
+  test("SPARK-29444: initial with StructType and write out an empty row " +
+      "with allowStructIncludeNull=true") {
     val dataType = StructType(StructField("a", IntegerType) :: Nil)
     val input = InternalRow(null)
     val writer = new CharArrayWriter()
