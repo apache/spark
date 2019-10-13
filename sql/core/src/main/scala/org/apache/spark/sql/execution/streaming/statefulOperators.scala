@@ -353,6 +353,7 @@ case class StateStoreSaveExec(
                   finished = true
                   null
                 } else {
+                  numOutputRows += 1
                   removedValueRow
                 }
               }
