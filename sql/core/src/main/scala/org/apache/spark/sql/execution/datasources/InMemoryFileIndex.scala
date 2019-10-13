@@ -276,6 +276,7 @@ object InMemoryFileIndex extends Logging {
           filter,
           None,
           ignoreMissingFiles = ignoreMissingFiles,
+          ignoreLocality = ignoreLocality,
           isRootPath = areRootPaths)
         (fsPath, leafFiles)
       } else {

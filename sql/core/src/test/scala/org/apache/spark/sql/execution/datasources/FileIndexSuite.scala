@@ -458,6 +458,7 @@ class FileIndexSuite extends SharedSparkSession {
 
       val catalog = makeCatalog()
       val leafFiles = catalog.listLeafFiles(catalog.rootPaths)
+      assert(leafFiles.size == 1000000)
     }
   }
 }
@@ -557,7 +558,7 @@ class BigFileStatusFileSystem extends RawLocalFileSystem {
 
   override def listStatus(path: Path): Array[FileStatus] = {
     if (path == rootDirPath) {
-      (0 to numFileStatus).map { i =>
+      (0 until numFileStatus).map { i =>
         new FileStatus(0, true, 0, 0, 0, new Path(rootDirPath, s"subDir$i"))
       }.toArray
     } else {
