@@ -133,18 +133,21 @@ class _ValidatorParams(HasSeed):
         Params._dummy(), "evaluator",
         "evaluator used to select hyper-parameters that maximize the validator metric")
 
+    @since("2.0.0")
     def getEstimator(self):
         """
         Gets the value of estimator or its default value.
         """
         return self.getOrDefault(self.estimator)
 
+    @since("2.0.0")
     def getEstimatorParamMaps(self):
         """
         Gets the value of estimatorParamMaps or its default value.
         """
         return self.getOrDefault(self.estimatorParamMaps)
 
+    @since("2.0.0")
     def getEvaluator(self):
         """
         Gets the value of evaluator or its default value.
@@ -260,18 +263,21 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    @since("2.0.0")
     def setEstimator(self, value):
         """
         Sets the value of :py:attr:`estimator`.
         """
         return self._set(estimator=value)
 
+    @since("2.0.0")
     def setEstimatorParamMaps(self, value):
         """
         Sets the value of :py:attr:`estimatorParamMaps`.
         """
         return self._set(estimatorParamMaps=value)
 
+    @since("2.0.0")
     def setEvaluator(self, value):
         """
         Sets the value of :py:attr:`evaluator`.
@@ -417,18 +423,21 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         #: sub model list from cross validation
         self.subModels = subModels
 
+    @since("2.0.0")
     def setEstimator(self, value):
         """
         Sets the value of :py:attr:`estimator`.
         """
         return self._set(estimator=value)
 
+    @since("2.0.0")
     def setEstimatorParamMaps(self, value):
         """
         Sets the value of :py:attr:`estimatorParamMaps`.
         """
         return self._set(estimatorParamMaps=value)
 
+    @since("2.0.0")
     def setEvaluator(self, value):
         """
         Sets the value of :py:attr:`evaluator`.
@@ -587,18 +596,21 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    @since("2.0.0")
     def setEstimator(self, value):
         """
         Sets the value of :py:attr:`estimator`.
         """
         return self._set(estimator=value)
 
+    @since("2.0.0")
     def setEstimatorParamMaps(self, value):
         """
         Sets the value of :py:attr:`estimatorParamMaps`.
         """
         return self._set(estimatorParamMaps=value)
 
+    @since("2.0.0")
     def setEvaluator(self, value):
         """
         Sets the value of :py:attr:`evaluator`.
@@ -734,18 +746,21 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
         #: sub models from train validation split
         self.subModels = subModels
 
+    @since("2.0.0")
     def setEstimator(self, value):
         """
         Sets the value of :py:attr:`estimator`.
         """
         return self._set(estimator=value)
 
+    @since("2.0.0")
     def setEstimatorParamMaps(self, value):
         """
         Sets the value of :py:attr:`estimatorParamMaps`.
         """
         return self._set(estimatorParamMaps=value)
 
+    @since("2.0.0")
     def setEvaluator(self, value):
         """
         Sets the value of :py:attr:`evaluator`.
