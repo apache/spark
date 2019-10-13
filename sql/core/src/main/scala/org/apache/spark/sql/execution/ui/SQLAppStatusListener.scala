@@ -70,10 +70,12 @@ class SQLAppStatusListener(
 
   // visible for tests
   private[spark] def recoverLiveEntities(): Unit = {
+    def isRunningExecution(execUI: SQLExecutionUIData): Boolean = {
+      execUI.completionTime.isEmpty || execUI.jobs.exists(_._2 == JobExecutionStatus.RUNNING)
+    }
     if (!live) {
       kvstore.view(classOf[SQLExecutionUIData])
-        // null metricValues potentially indicates a live SQLExecutionUIData
-        .asScala.filter(_.metricValues == null)
+        .asScala.filter(isRunningExecution)
         .map(_.toLiveExecutionData)
         .foreach(execData => liveExecutions.put(execData.executionId, execData))
       kvstore.view(classOf[SQLStageMetricsWrapper])
