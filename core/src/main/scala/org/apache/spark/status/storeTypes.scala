@@ -152,6 +152,14 @@ private[spark] class StageDataWrapper(
   @JsonIgnore @KVIndex("completionTime")
   private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
 
+  private def idAwareRDDInfos(rddIds: Seq[Int]): Seq[RDDInfo] = {
+    // It's safe to give arbitrary values except id while recovering RDDInfo,
+    // since a running LiveStage only concerns about rddInfo's id.
+    rddIds.map { id =>
+      new RDDInfo(id, id.toString, 0, null, false, Nil)
+    }
+  }
+
   def toLiveStage(jobs: Seq[LiveJob]): LiveStage = {
     val liveStage = new LiveStage
     val firstLaunchTime = if (info.firstTaskLaunchedTime.isEmpty) {
@@ -190,7 +198,7 @@ private[spark] class StageDataWrapper(
       info.attemptId,
       info.name,
       info.numTasks,
-      Nil, // rddInfo
+      idAwareRDDInfos(info.rddIds),
       Nil, // parentIds
       info.details)
 
