@@ -23,7 +23,6 @@ import java.util.{ArrayList => JArrayList, List => JList, Locale}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
-import scala.util.control.Breaks._
 
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
@@ -475,32 +474,24 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
     try {
       var lastRet: Int = 0
-      var ret: Int = 0
 
       // we can not use "split" function directly as ";" may be quoted
       val commands = splitSemiColon(line).asScala
-
       var command: String = ""
       for (oneCmd <- commands) {
-
-        breakable {
-          if (StringUtils.endsWith(oneCmd, "\\")) {
-            command += StringUtils.chop(oneCmd) + ";"
-            break
-          } else {
-            command += oneCmd
-          }
-          if (StringUtils.isBlank(command)) {
-            break
-          }
-
-          ret = processCmd(command)
-          command = ""
-          lastRet = ret
-          val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
-          if (ret != 0 && !ignoreErrors) {
-            CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
-            return ret
+        if (StringUtils.endsWith(oneCmd, "\\")) {
+          command += StringUtils.chop(oneCmd) + ";"
+        } else {
+          command += oneCmd
+          if (!StringUtils.isBlank(command)) {
+            val ret = processCmd(command)
+            command = ""
+            lastRet = ret
+            val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
+            if (ret != 0 && !ignoreErrors) {
+              CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
+              ret
+            }
           }
         }
       }

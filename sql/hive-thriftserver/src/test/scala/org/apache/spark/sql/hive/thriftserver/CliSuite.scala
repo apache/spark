@@ -385,7 +385,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
-  test("Should not split semicolon within quoted string literals") {
+  test("SPARK-26321 Should not split semicolon within quoted string literals") {
     runCliWithin(3.minute)(
       """select 'Test1', "^;^";""" -> "Test1\t^;^",
       """select 'Test2', "\";";""" -> "Test2\t\";",
