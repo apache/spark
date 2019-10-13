@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.FileNotFoundException
+import java.lang.ref.SoftReference
 
 import scala.collection.mutable
 
@@ -252,24 +253,41 @@ object InMemoryFileIndex extends Logging {
             blockLocations)
         }
         (path.toString, serializableStatuses)
-      }.collect()
+      }.collect().map(p => (p._1, new SoftReference(p._2)))
     } finally {
       sparkContext.setJobDescription(previousJobDescription)
     }
 
     // turn SerializableFileStatus back to Status
-    statusMap.map { case (path, serializableStatuses) =>
-      val statuses = serializableStatuses.map { f =>
-        val blockLocations = f.blockLocations.map { loc =>
-          new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
+    statusMap.map { case (path, serializableStatusesRef) =>
+      val serializableStatuses = serializableStatusesRef.get()
+      // Collected file status was cleaned up by GC.
+      if (serializableStatuses == null) {
+        logWarning(s"The collected file statuses for path '$path' was cleaned up " +
+          "by JVM GC due to memory pressure. Re-listing leaf files now. Increasing " +
+          "driver memory can probably prevent file statuses cleaned up by GC.")
+        val fsPath = new Path(path)
+        val leafFiles = listLeafFiles(
+          fsPath,
+          hadoopConf,
+          filter,
+          None,
+          ignoreMissingFiles = ignoreMissingFiles,
+          isRootPath = areRootPaths)
+        (fsPath, leafFiles)
+      } else {
+        val statuses = serializableStatuses.map { f =>
+          val blockLocations = f.blockLocations.map { loc =>
+            new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
+          }
+          new LocatedFileStatus(
+            new FileStatus(
+              f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime,
+              new Path(f.path)),
+            blockLocations)
         }
-        new LocatedFileStatus(
-          new FileStatus(
-            f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime,
-            new Path(f.path)),
-          blockLocations)
+        (new Path(path), statuses)
       }
-      (new Path(path), statuses)
     }
   }
 

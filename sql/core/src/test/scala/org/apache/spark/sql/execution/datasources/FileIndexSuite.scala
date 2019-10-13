@@ -416,6 +416,21 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-26570: Prevent OOM when transforming very many filestatus in " +
+      "InMemoryFileIndex.bulkListLeafFiles") {
+    val rootDirPath: Path = new Path("mockFs:///rootDir/")
+    withSQLConf(
+      SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1",
+      "fs.mockFs.impl" -> classOf[BigFileStatusFileSystem].getName
+    ) {
+      def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
+        spark, Seq(rootDirPath), Map.empty, None)
+
+      val catalog = makeCatalog()
+      val leafFiles = catalog.listLeafFiles(catalog.rootPaths)
+    }
+  }
+
 }
 
 object DeletionRaceFileSystem {
@@ -500,5 +515,34 @@ class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
       start: Long,
       len: Long): Array[BlockLocation] = {
     Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
+  }
+}
+
+class BigFileStatusFileSystem extends RawLocalFileSystem {
+  override def getScheme: String = "mockFs"
+
+  private val numFileStatus = 1000000
+
+  val rootDirPath: Path = new Path("mockFs:///rootDir/")
+  val subDirPath: Path = new Path(rootDirPath, "subDir")
+
+  override def listStatus(path: Path): Array[FileStatus] = {
+    if (path == rootDirPath) {
+      (0 to numFileStatus).map { i =>
+        new FileStatus(0, true, 0, 0, 0, new Path(rootDirPath, s"subDir$i"))
+      }.toArray
+    } else {
+      Array(new FileStatus(0, false, 0, 0, 0, new Path(path, "file")))
+    }
+  }
+
+  override def getFileBlockLocations(
+      file: FileStatus,
+      start: Long,
+      len: Long): Array[BlockLocation] = {
+    val names = Array("a", "b", "c")
+    val hosts = Array("hostnam1", "hostname2", "hostname3")
+    Array(new BlockLocation(names, hosts, 0, 100), new BlockLocation(names, hosts, 0, 100),
+      new BlockLocation(names, hosts, 0, 100))
   }
 }
