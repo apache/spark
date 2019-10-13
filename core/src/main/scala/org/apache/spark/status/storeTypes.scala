@@ -193,6 +193,10 @@ private[spark] class StageDataWrapper(
       info.shuffleWriteTime,
       info.shuffleWriteRecords
     )
+
+    // parentIds, taskMetrics, taskLocalityPreferences and shuffleDepId aren't assigned here
+    // but it's also OK since a running LiveStage don't visit these attributes. And we'll
+    // get a complete StageInfo again when we receive SparkListenerStageCompleted event.
     val stageInfo = new StageInfo(
       info.stageId,
       info.attemptId,
