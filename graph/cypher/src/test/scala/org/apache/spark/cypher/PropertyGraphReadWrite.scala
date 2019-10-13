@@ -20,7 +20,7 @@ package org.apache.spark.cypher
 
 import java.nio.file.Paths
 
-import org.apache.spark.graph.api.{NodeFrame, RelationshipFrame}
+import org.apache.spark.graph.api.{NodeDataset, RelationshipDataset}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.junit.rules.TemporaryFolder
 import org.scalatest.BeforeAndAfterEach
@@ -51,13 +51,13 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
     Tuple3(0, 0, 1)
   )).toDF("id", "source", "target")
 
-  private lazy val nodeDataFrame: NodeFrame = cypherSession.buildNodeFrame(nodeData)
+  private lazy val nodeDataFrame: NodeDataset = cypherSession.buildNodeDataset(nodeData)
     .idColumn("id")
     .labelSet(Array("Person"))
     .properties(Map("name" -> "name"))
     .build()
 
-  private lazy val relationshipFrame: RelationshipFrame = RelationshipFrame(relationshipData, "id", "source", "target", "KNOWS", Map.empty)
+  private lazy val relationshipFrame: RelationshipDataset = RelationshipDataset(relationshipData, "id", "source", "target", "KNOWS", Map.empty)
 
   test("save and load a graph") {
     val graph = cypherSession.createGraph(Array(nodeDataFrame), Array(relationshipFrame))
@@ -71,7 +71,7 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
 
   test("save and loads a property graph") {
     val nodeData = spark.createDataFrame(Seq(0L -> "Alice", 1L -> "Bob")).toDF("id", "name")
-    val nodeFrame = cypherSession.buildNodeFrame(nodeData)
+    val nodeFrame = cypherSession.buildNodeDataset(nodeData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
@@ -80,7 +80,7 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
     val relationshipData = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))
       .toDF("id", "source", "target", "since")
-    val relationshipFrame = RelationshipFrame(relationshipData, "id", "source", "target", "KNOWS", Map.empty)
+    val relationshipFrame = RelationshipDataset(relationshipData, "id", "source", "target", "KNOWS", Map.empty)
 
     val writeGraph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
 

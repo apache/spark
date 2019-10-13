@@ -17,17 +17,17 @@
 
 package org.apache.spark.graph.api
 
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row}
 
 /**
- * A [[PropertyGraph]] is created from GraphElementFrames.
- *
- * A graph element is either a node or a relationship.
- * A GraphElementFrame wraps a Dataset and describes how it maps to graph elements.
+ * A [[PropertyGraph]] whose graph element is either a node or a relationship.
+ * A GraphElementDataset wraps a Dataset and describes how it maps to graph elements.
  *
  * @since 3.0.0
  */
-abstract class GraphElementFrame {
+@Evolving
+abstract class GraphElementDataset {
 
   /**
    * Initial Dataset that can still contain unmapped, arbitrarily ordered columns.

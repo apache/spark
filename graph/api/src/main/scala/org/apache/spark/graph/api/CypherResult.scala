@@ -17,6 +17,7 @@
 
 package org.apache.spark.graph.api
 
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row}
 
 /**
@@ -26,6 +27,7 @@ import org.apache.spark.sql.{Dataset, Row}
  *
  * @since 3.0.0
  */
+@Evolving
 trait CypherResult {
   // Note that representing the CypherResult as a trait allows for future extensions
   // (e.g. returning graphs in addition to tables).

@@ -25,7 +25,7 @@ import org.apache.spark.cypher.SparkGraphDirectoryStructure
 import org.apache.spark.cypher.SparkGraphDirectoryStructure._
 import org.apache.spark.cypher.SparkTable.DataFrameTable
 import org.apache.spark.cypher.conversions.StringEncodingUtilities._
-import org.apache.spark.graph.api.{NodeFrame, RelationshipFrame}
+import org.apache.spark.graph.api.{NodeDataset, RelationshipDataset}
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.opencypher.okapi.api.graph.{SourceEndNodeKey, SourceIdKey, SourceStartNodeKey}
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
@@ -49,13 +49,13 @@ object ReadWriteGraph {
       }
     }
 
-    def nodeFrames: Seq[NodeFrame] = {
+    def nodeDatasets: Seq[NodeDataset] = {
       labelCombos.map { combo =>
         val df = sparkSession.read.format(format).load(directoryStructure.pathToNodeTable(combo))
         val propertyMappings = df.columns.collect {
           case colName if colName.isPropertyColumnName => colName.toProperty -> colName
         }.toMap
-        NodeFrame(
+        NodeDataset(
           df,
           SourceIdKey.name,
           combo,
@@ -63,13 +63,13 @@ object ReadWriteGraph {
       }
     }
 
-    def relationshipFrames: Seq[RelationshipFrame] = {
+    def relationshipDatasets: Seq[RelationshipDataset] = {
       relTypes.map { relType =>
         val df = sparkSession.read.format(format).load(directoryStructure.pathToRelationshipTable(relType))
         val propertyMappings = df.columns.collect {
           case colName if colName.isPropertyColumnName => colName.toProperty -> colName
         }.toMap
-        RelationshipFrame(
+        RelationshipDataset(
           df,
           SourceIdKey.name,
           SourceStartNodeKey.name,

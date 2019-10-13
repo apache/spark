@@ -25,7 +25,7 @@ class SparkCypherPropertyGraphReader(session: CypherSession) extends PropertyGra
 
   override def load(path: String): PropertyGraph = {
     val graphImporter = GraphImporter(session.sparkSession, path, format)
-    session.createGraph(graphImporter.nodeFrames.toArray, graphImporter.relationshipFrames.toArray)
+    session.createGraph(graphImporter.nodeDatasets.toArray, graphImporter.relationshipDatasets.toArray)
   }
 
 }

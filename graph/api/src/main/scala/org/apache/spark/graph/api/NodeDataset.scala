@@ -17,6 +17,7 @@
 
 package org.apache.spark.graph.api
 
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row}
 
 /**
@@ -31,9 +32,10 @@ import org.apache.spark.sql.{Dataset, Row}
  * @param properties mapping from property keys to corresponding columns
  * @since 3.0.0
  */
-case class NodeFrame private[graph](
+@Evolving
+case class NodeDataset private[graph](
     ds: Dataset[Row],
     idColumn: String,
     labelSet: Set[String],
     properties: Map[String, String])
-  extends GraphElementFrame
+  extends GraphElementDataset

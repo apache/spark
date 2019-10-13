@@ -18,13 +18,13 @@
 
 package org.apache.spark.cypher.conversions
 
-import org.apache.spark.graph.api.GraphElementFrame
+import org.apache.spark.graph.api.GraphElementDataset
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Dataset, Row}
 
 object GraphElementFrameConversions {
 
-  def normalizeDf(frame: GraphElementFrame): Dataset[Row] = {
+  def normalizeDf(frame: GraphElementDataset): Dataset[Row] = {
     val mappedColumnNames = frame.idColumns ++ frame.properties.values.toSeq.sorted
     val mappedDf = if (mappedColumnNames == frame.ds.columns.toSeq) {
       frame.ds

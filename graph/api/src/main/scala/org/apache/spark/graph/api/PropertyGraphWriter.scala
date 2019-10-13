@@ -19,8 +19,10 @@ package org.apache.spark.graph.api
 
 import java.util.Locale
 
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.SaveMode
 
+@Evolving
 abstract class PropertyGraphWriter(val graph: PropertyGraph) {
 
   protected var saveMode: SaveMode = SaveMode.ErrorIfExists

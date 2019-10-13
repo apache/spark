@@ -19,38 +19,38 @@
 package org.apache.spark.cypher
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.graph.api.{CypherResult, NodeFrame, PropertyGraph, RelationshipFrame}
+import org.apache.spark.graph.api.{CypherResult, NodeDataset, PropertyGraph, RelationshipDataset}
 import org.apache.spark.sql.{Dataset, Row, SaveMode}
 
 class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
 
-  test("create PropertyGraph from single NodeFrame") {
+  test("create PropertyGraph from single NodeDataset") {
     val nodeData: Dataset[Row] = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
-    val nodeFrame: NodeFrame = cypherSession.buildNodeFrame(nodeData)
+    val nodeDataset: NodeDataset = cypherSession.buildNodeDataset(nodeData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
       .build()
-    val graph: PropertyGraph = cypherSession.createGraph(Array(nodeFrame), Array.empty[RelationshipFrame])
+    val graph: PropertyGraph = cypherSession.createGraph(Array(nodeDataset), Array.empty[RelationshipDataset])
     val result: CypherResult = graph.cypher("MATCH (n) RETURN n")
     result.ds.show()
   }
 
-  test("create PropertyGraph from Node- and RelationshipFrames") {
+  test("create PropertyGraph from Node- and RelationshipDatasets") {
     val nodeData: Dataset[Row] = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
     val relationshipData: Dataset[Row] = spark.createDataFrame(Seq((0, 0, 1))).toDF("id", "source", "target")
-    val nodeFrame: NodeFrame = cypherSession.buildNodeFrame(nodeData)
+    val nodeDataset: NodeDataset = cypherSession.buildNodeDataset(nodeData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
       .build()
-    val relationshipFrame: RelationshipFrame = cypherSession.buildRelationshipFrame(relationshipData)
+    val relationshipDataset: RelationshipDataset = cypherSession.buildRelationshipDataset(relationshipData)
         .idColumn("id")
         .sourceIdColumn("source")
         .targetIdColumn("target")
         .relationshipType("KNOWS")
         .build()
-    val graph: PropertyGraph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
+    val graph: PropertyGraph = cypherSession.createGraph(Array(nodeDataset), Array(relationshipDataset))
     val result: CypherResult = graph.cypher(
       """
         |MATCH (a:Person)-[r:KNOWS]->(:Person)
@@ -59,16 +59,16 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
   }
 
   test("create PropertyGraph with multiple node and relationship types") {
-    val studentDF: Dataset[Row] = spark.createDataFrame(Seq((0, "Alice", 42), (1, "Bob", 23))).toDF("id", "name", "age")
-    val teacherDF: Dataset[Row] = spark.createDataFrame(Seq((2, "Eve", "CS"))).toDF("id", "name", "subject")
+    val studentDS: Dataset[Row] = spark.createDataFrame(Seq((0, "Alice", 42), (1, "Bob", 23))).toDF("id", "name", "age")
+    val teacherDS: Dataset[Row] = spark.createDataFrame(Seq((2, "Eve", "CS"))).toDF("id", "name", "subject")
 
-    val studentNF = cypherSession.buildNodeFrame(studentDF)
+    val studentNF = cypherSession.buildNodeDataset(studentDS)
       .idColumn("id")
       .labelSet(Array("Person", "Student"))
       .properties(Map("name" -> "name", "age" -> "age"))
       .build()
 
-    val teacherNF = cypherSession.buildNodeFrame(teacherDF)
+    val teacherNF = cypherSession.buildNodeDataset(teacherDS)
       .idColumn("id")
       .labelSet(Array("Person", "Teacher"))
       .properties(Map("name" -> "name", "subject" -> "subject"))
@@ -77,14 +77,14 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     val knowsDF: Dataset[Row] = spark.createDataFrame(Seq((0, 0, 1, 1984))).toDF("id", "source", "target", "since")
     val teachesDF: Dataset[Row] = spark.createDataFrame(Seq((1, 2, 1))).toDF("id", "source", "target")
 
-    val knowsRF: RelationshipFrame = cypherSession.buildRelationshipFrame(knowsDF)
+    val knowsRF: RelationshipDataset = cypherSession.buildRelationshipDataset(knowsDF)
         .idColumn("id")
         .sourceIdColumn("source")
         .targetIdColumn("target")
         .relationshipType("KNOWS")
         .properties(Map("since" -> "since"))
         .build()
-    val teachesRF: RelationshipFrame = cypherSession.buildRelationshipFrame(teachesDF)
+    val teachesRF: RelationshipDataset = cypherSession.buildRelationshipDataset(teachesDF)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
@@ -100,14 +100,14 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     val studentDF: Dataset[Row] = spark.createDataFrame(Seq((0, "Alice", 42), (1, "Bob", 23))).toDF("id", "col_name", "col_age")
     val teacherDF: Dataset[Row] = spark.createDataFrame(Seq((2, "Eve", "CS"))).toDF("id", "col_name", "col_subject")
 
-    val studentNF: NodeFrame = NodeFrame(studentDF, "id", Set("Person", "Student"), Map("name" -> "col_name", "age" -> "col_age"))
-    val teacherNF: NodeFrame = NodeFrame(teacherDF, "id", Set("Person", "Teacher"), Map("name" -> "col_name", "subject" -> "col_subject"))
+    val studentNF: NodeDataset = NodeDataset(studentDF, "id", Set("Person", "Student"), Map("name" -> "col_name", "age" -> "col_age"))
+    val teacherNF: NodeDataset = NodeDataset(teacherDF, "id", Set("Person", "Teacher"), Map("name" -> "col_name", "subject" -> "col_subject"))
 
     val knowsDF: Dataset[Row] = spark.createDataFrame(Seq((0, 0, 1, 1984))).toDF("id", "source", "target", "col_since")
     val teachesDF: Dataset[Row] = spark.createDataFrame(Seq((1, 2, 1))).toDF("id", "source", "target")
 
-    val knowsRF: RelationshipFrame = RelationshipFrame(knowsDF, "id", "source", "target", "KNOWS", Map("since" -> "col_since"))
-    val teachesRF: RelationshipFrame = RelationshipFrame(teachesDF, "id", "source", "target", "TEACHES", Map.empty)
+    val knowsRF: RelationshipDataset = RelationshipDataset(knowsDF, "id", "source", "target", "KNOWS", Map("since" -> "col_since"))
+    val teachesRF: RelationshipDataset = RelationshipDataset(teachesDF, "id", "source", "target", "TEACHES", Map.empty)
 
     val graph: PropertyGraph = cypherSession.createGraph(Array(studentNF, teacherNF), Array(knowsRF, teachesRF))
     val result: CypherResult = graph.cypher("MATCH (n)-[r]->(m) RETURN n, r, m")

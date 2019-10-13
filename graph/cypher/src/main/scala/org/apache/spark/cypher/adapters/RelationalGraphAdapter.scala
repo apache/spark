@@ -22,15 +22,15 @@ import org.apache.spark.cypher.SparkTable.DataFrameTable
 import org.apache.spark.cypher.adapters.MappingAdapter._
 import org.apache.spark.cypher.io.SparkCypherPropertyGraphWriter
 import org.apache.spark.cypher.{SparkCypherSession, SparkEntityTable}
-import org.apache.spark.graph.api.{NodeFrame, PropertyGraph, PropertyGraphType, RelationshipFrame}
+import org.apache.spark.graph.api.{NodeDataset, PropertyGraph, PropertyGraphType, RelationshipDataset}
 import org.apache.spark.sql.{Dataset, Row}
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.ir.api.expr.Var
 
 case class RelationalGraphAdapter(
   cypherSession: SparkCypherSession,
-  nodeFrames: Seq[NodeFrame],
-  relationshipFrames: Seq[RelationshipFrame]) extends PropertyGraph {
+  nodeFrames: Seq[NodeDataset],
+  relationshipFrames: Seq[RelationshipDataset]) extends PropertyGraph {
 
   override def schema: PropertyGraphType = SchemaAdapter(graph.schema)
 
@@ -38,15 +38,15 @@ case class RelationalGraphAdapter(
     if (nodeFrames.isEmpty) {
       cypherSession.graphs.empty
     } else {
-      val nodeTables = nodeFrames.map { nodeDataFrame => SparkEntityTable(nodeDataFrame.toNodeMapping, nodeDataFrame.ds) }
-      val relTables = relationshipFrames.map { relDataFrame => SparkEntityTable(relDataFrame.toRelationshipMapping, relDataFrame.ds) }
+      val nodeTables = nodeFrames.map { nodeDS => SparkEntityTable(nodeDS.toNodeMapping, nodeDS.ds) }
+      val relTables = relationshipFrames.map { relDS => SparkEntityTable(relDS.toRelationshipMapping, relDS.ds) }
       cypherSession.graphs.create(nodeTables.head, nodeTables.tail ++ relTables: _*)
     }
   }
 
-  private lazy val _nodeFrame: Map[Set[String], NodeFrame] = nodeFrames.map(nf => nf.labelSet -> nf).toMap
+  private lazy val _nodeFrame: Map[Set[String], NodeDataset] = nodeFrames.map(nf => nf.labelSet -> nf).toMap
 
-  private lazy val _relationshipFrame: Map[String, RelationshipFrame] = relationshipFrames.map(rf => rf.relationshipType -> rf).toMap
+  private lazy val _relationshipFrame: Map[String, RelationshipDataset] = relationshipFrames.map(rf => rf.relationshipType -> rf).toMap
 
   override def nodes: Dataset[Row] = {
     // TODO: move to API as default implementation
@@ -84,9 +84,9 @@ case class RelationalGraphAdapter(
     df.select(selectColumns: _*)
   }
 
-  override def nodeFrame(labelSet: Array[String]): NodeFrame = _nodeFrame(labelSet.toSet)
+  override def nodeDataset(labelSet: Array[String]): NodeDataset = _nodeFrame(labelSet.toSet)
 
-  override def relationshipFrame(relationshipType: String): RelationshipFrame = _relationshipFrame(relationshipType)
+  override def relationshipDataset(relationshipType: String): RelationshipDataset = _relationshipFrame(relationshipType)
 
   override def write(): SparkCypherPropertyGraphWriter =
 

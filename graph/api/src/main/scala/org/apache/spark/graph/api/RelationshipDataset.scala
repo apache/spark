@@ -17,6 +17,7 @@
 
 package org.apache.spark.graph.api
 
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row}
 
 /**
@@ -32,14 +33,15 @@ import org.apache.spark.sql.{Dataset, Row}
  * @param properties       mapping from property keys to corresponding columns
  * @since 3.0.0
  */
-case class RelationshipFrame private[graph] (
+@Evolving
+case class RelationshipDataset private[graph](
     ds: Dataset[Row],
     idColumn: String,
     sourceIdColumn: String,
     targetIdColumn: String,
     relationshipType: String,
     properties: Map[String, String])
-  extends GraphElementFrame {
+  extends GraphElementDataset {
 
   override def idColumns: Seq[String] = Seq(idColumn, sourceIdColumn, targetIdColumn)
 
