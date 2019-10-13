@@ -122,7 +122,7 @@ class InMemoryFileIndex(
         case None =>
           pathsToFetch += path
       }
-      Unit // for some reasons scalac 2.12 needs this; return type doesn't matter
+      () // for some reasons scalac 2.12 needs this; return type doesn't matter
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
@@ -172,6 +172,7 @@ object InMemoryFileIndex extends Logging {
       areRootPaths: Boolean): Seq[(Path, Seq[FileStatus])] = {
 
     val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
+    val ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
@@ -182,6 +183,7 @@ object InMemoryFileIndex extends Logging {
           filter,
           Some(sparkSession),
           ignoreMissingFiles = ignoreMissingFiles,
+          ignoreLocality = ignoreLocality,
           isRootPath = areRootPaths)
         (path, leafFiles)
       }
@@ -222,6 +224,7 @@ object InMemoryFileIndex extends Logging {
               filter,
               None,
               ignoreMissingFiles = ignoreMissingFiles,
+              ignoreLocality = ignoreLocality,
               isRootPath = areRootPaths)
             (path, leafFiles)
           }.iterator
@@ -305,6 +308,7 @@ object InMemoryFileIndex extends Logging {
       filter: PathFilter,
       sessionOpt: Option[SparkSession],
       ignoreMissingFiles: Boolean,
+      ignoreLocality: Boolean,
       isRootPath: Boolean): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
@@ -317,7 +321,7 @@ object InMemoryFileIndex extends Logging {
         // to retrieve the file status with the file block location. The reason to still fallback
         // to listStatus is because the default implementation would potentially throw a
         // FileNotFoundException which is better handled by doing the lookups manually below.
-        case _: DistributedFileSystem =>
+        case _: DistributedFileSystem if !ignoreLocality =>
           val remoteIter = fs.listLocatedStatus(path)
           new Iterator[LocatedFileStatus]() {
             def next(): LocatedFileStatus = remoteIter.next
@@ -371,6 +375,7 @@ object InMemoryFileIndex extends Logging {
               filter,
               sessionOpt,
               ignoreMissingFiles = ignoreMissingFiles,
+              ignoreLocality = ignoreLocality,
               isRootPath = false)
           }
       }
@@ -394,7 +399,7 @@ object InMemoryFileIndex extends Logging {
       // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
       //   be a big deal since we always use to `bulkListLeafFiles` when the number of
       //   paths exceeds threshold.
-      case f =>
+      case f if !ignoreLocality =>
         // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
         // which is very slow on some file system (RawLocalFileSystem, which is launch a
         // subprocess and parse the stdout).
@@ -418,6 +423,8 @@ object InMemoryFileIndex extends Logging {
             missingFiles += f.getPath.toString
             None
         }
+
+      case f => Some(f)
     }
 
     if (missingFiles.nonEmpty) {

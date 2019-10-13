@@ -234,6 +234,16 @@ object IntegerLiteral {
 }
 
 /**
+ * Extractor for retrieving String literals.
+ */
+object StringLiteral {
+  def unapply(a: Any): Option[String] = a match {
+    case Literal(s: UTF8String, StringType) => Some(s.toString)
+    case _ => None
+  }
+}
+
+/**
  * Extractor for and other utility methods for decimal literals.
  */
 object DecimalLiteral {

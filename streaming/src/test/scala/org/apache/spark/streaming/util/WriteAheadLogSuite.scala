@@ -434,7 +434,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   private var walBatchingExecutionContext: ExecutionContextExecutorService = _
   private val sparkConf = new SparkConf()
 
-  private val queueLength = PrivateMethod[Int]('getQueueLength)
+  private val queueLength = PrivateMethod[Int](Symbol("getQueueLength"))
 
   override def beforeEach(): Unit = {
     super.beforeEach()
