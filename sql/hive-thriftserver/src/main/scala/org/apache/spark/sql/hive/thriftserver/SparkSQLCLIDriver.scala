@@ -493,15 +493,15 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (StringUtils.isBlank(command)) {
             break
           }
-        }
 
-        ret = processCmd(command)
-        command = ""
-        lastRet = ret
-        val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
-        if (ret != 0 && !ignoreErrors) {
-          CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
-          return ret
+          ret = processCmd(command)
+          command = ""
+          lastRet = ret
+          val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
+          if (ret != 0 && !ignoreErrors) {
+            CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
+            return ret
+          }
         }
       }
       CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
