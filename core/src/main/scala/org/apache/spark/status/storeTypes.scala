@@ -205,6 +205,7 @@ private[spark] class StageDataWrapper(
       idAwareRDDInfos(info.rddIds),
       Nil, // parentIds
       info.details)
+    stageInfo.submissionTime = info.submissionTime.map(_.getTime)
 
     // Note that attributes for `executorSummaries`, `activeTasksPerExecutor`,
     // `blackListedExecutors`, `savedTasks` are computed later in
