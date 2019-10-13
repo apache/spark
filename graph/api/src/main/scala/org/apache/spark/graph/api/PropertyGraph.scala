@@ -17,6 +17,7 @@
 
 package org.apache.spark.graph.api
 
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row}
 
 /**
@@ -29,6 +30,7 @@ import org.apache.spark.sql.{Dataset, Row}
  * @see <a href="https://dl.acm.org/citation.cfm?id=3183713.3190657">Property Graph Model</a>
  * @since 3.0.0
  */
+@Evolving
 abstract class PropertyGraph {
 
   /**
@@ -77,22 +79,22 @@ abstract class PropertyGraph {
     cypherSession.cypher(this, query, parameters)
 
   /**
-   * Returns the [[NodeFrame]] for a given node label set.
+   * Returns the [[NodeDataset]] for a given node label set.
    *
-   * @param labelSet Label set used for NodeFrame lookup
-   * @return NodeFrame for the given label set
+   * @param labelSet Label set used for NodeDataset lookup
+   * @return NodeDataset for the given label set
    * @since 3.0.0
    */
-  def nodeFrame(labelSet: Array[String]): NodeFrame
+  def nodeDataset(labelSet: Array[String]): NodeDataset
 
   /**
-   * Returns the [[RelationshipFrame]] for a given relationship type.
+   * Returns the [[RelationshipDataset]] for a given relationship type.
    *
-   * @param relationshipType Relationship type used for RelationshipFrame lookup
-   * @return RelationshipFrame for the given relationship type
+   * @param relationshipType Relationship type used for RelationshipDataset lookup
+   * @return RelationshipDataset for the given relationship type
    * @since 3.0.0
    */
-  def relationshipFrame(relationshipType: String): RelationshipFrame
+  def relationshipDataset(relationshipType: String): RelationshipDataset
 
   /**
    * Returns a Dataset that contains a row for each node in this graph.

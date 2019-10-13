@@ -64,7 +64,7 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
   }
 
   @Test
-  public void testCreateFromNodeFrame() {
+  public void testCreateFromNodeDataset() {
     StructType personSchema = createSchema(
       Lists.newArrayList("id", "name"),
       Lists.newArrayList(LongType, StringType));
@@ -80,14 +80,14 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
     List<Row> knowsData = Collections.singletonList(RowFactory.create(0L, 0L, 1L, 1984));
 
     Dataset<Row> personDf = spark.createDataFrame(personData, personSchema);
-    NodeFrame personNodeFrame = cypherSession.buildNodeFrame(personDf)
+    NodeDataset personNodeDataset = cypherSession.buildNodeDataset(personDf)
       .idColumn("id")
       .labelSet(new String[]{"Person"})
       .properties(Collections.singletonMap("name", "name"))
       .build();
 
     Dataset<Row> knowsDf = spark.createDataFrame(knowsData, knowsSchema);
-    RelationshipFrame knowsRelFrame = cypherSession.buildRelationshipFrame(knowsDf)
+    RelationshipDataset knowsRelDataset = cypherSession.buildRelationshipDataset(knowsDf)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
@@ -97,8 +97,8 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
 
 
     PropertyGraph graph = cypherSession.createGraph(
-      new NodeFrame[]{personNodeFrame},
-      new RelationshipFrame[]{knowsRelFrame});
+      new NodeDataset[]{personNodeDataset},
+      new RelationshipDataset[]{knowsRelDataset});
     List<Row> result = graph.nodes().collectAsList();
     Assert.assertEquals(2, result.size());
   }

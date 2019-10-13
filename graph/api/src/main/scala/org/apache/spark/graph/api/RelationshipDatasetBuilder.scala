@@ -19,15 +19,17 @@ package org.apache.spark.graph.api
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row}
 
 /**
- * Interface used to build a [[RelationshipFrame]].
+ * A builder for [[RelationshipDataset]].
  *
  * @param ds Dataset containing a single relationship in each row
  * @since 3.0.0
  */
-final class RelationshipFrameBuilder(val ds: Dataset[Row]) {
+@Evolving
+final class RelationshipDatasetBuilder(val ds: Dataset[Row]) {
 
   private var idColumn: String = CypherSession.ID_COLUMN
   private var sourceIdColumn: String = CypherSession.SOURCE_ID_COLUMN
@@ -39,7 +41,7 @@ final class RelationshipFrameBuilder(val ds: Dataset[Row]) {
    * @param idColumn column that contains the relationship identifier
    * @since 3.0.0
    */
-  def idColumn(idColumn: String): RelationshipFrameBuilder = {
+  def idColumn(idColumn: String): RelationshipDatasetBuilder = {
     if (idColumn.isEmpty) {
       throw new IllegalArgumentException("idColumn must not be empty")
     }
@@ -51,7 +53,7 @@ final class RelationshipFrameBuilder(val ds: Dataset[Row]) {
    * @param sourceIdColumn column that contains the source node identifier of the relationship
    * @since 3.0.0
    */
-  def sourceIdColumn(sourceIdColumn: String): RelationshipFrameBuilder = {
+  def sourceIdColumn(sourceIdColumn: String): RelationshipDatasetBuilder = {
     if (sourceIdColumn.isEmpty) {
       throw new IllegalArgumentException("sourceIdColumn must not be empty")
     }
@@ -63,7 +65,7 @@ final class RelationshipFrameBuilder(val ds: Dataset[Row]) {
    * @param targetIdColumn column that contains the target node identifier of the relationship
    * @since 3.0.0
    */
-  def targetIdColumn(targetIdColumn: String): RelationshipFrameBuilder = {
+  def targetIdColumn(targetIdColumn: String): RelationshipDatasetBuilder = {
     if (targetIdColumn.isEmpty) {
       throw new IllegalArgumentException("targetIdColumn must not be empty")
     }
@@ -75,7 +77,7 @@ final class RelationshipFrameBuilder(val ds: Dataset[Row]) {
    * @param relationshipType relationship type that is assigned to all relationships
    * @since 3.0.0
    */
-  def relationshipType(relationshipType: String): RelationshipFrameBuilder = {
+  def relationshipType(relationshipType: String): RelationshipDatasetBuilder = {
     if (relationshipType.isEmpty) {
       throw new IllegalArgumentException("Relationship type must not be empty")
     }
@@ -87,7 +89,7 @@ final class RelationshipFrameBuilder(val ds: Dataset[Row]) {
    * @param properties mapping from property keys to corresponding columns
    * @since 3.0.0
    */
-  def properties(properties: Map[String, String]): RelationshipFrameBuilder = {
+  def properties(properties: Map[String, String]): RelationshipDatasetBuilder = {
     this.properties = properties
     this
   }
@@ -96,20 +98,20 @@ final class RelationshipFrameBuilder(val ds: Dataset[Row]) {
    * @param properties mapping from property keys to corresponding columns
    * @since 3.0.0
    */
-  def properties(properties: java.util.Map[String, String]): RelationshipFrameBuilder = {
+  def properties(properties: java.util.Map[String, String]): RelationshipDatasetBuilder = {
     this.properties = properties.asScala.toMap
     this
   }
 
   /**
-   * Creates a [[RelationshipFrame]] from the specified builder parameters.
+   * Creates a [[RelationshipDataset]] from the specified builder parameters.
    *
    * @since 3.0.0
    */
-  def build(): RelationshipFrame = {
+  def build(): RelationshipDataset = {
     maybeRelationshipType match {
       case Some(relType) =>
-        RelationshipFrame(ds, idColumn, sourceIdColumn, targetIdColumn, relType, properties)
+        RelationshipDataset(ds, idColumn, sourceIdColumn, targetIdColumn, relType, properties)
       case None => throw new IllegalArgumentException("Relationship type must be set.")
     }
   }
