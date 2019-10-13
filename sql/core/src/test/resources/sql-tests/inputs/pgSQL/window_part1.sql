@@ -1,7 +1,7 @@
 -- Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
 --
 -- Window Functions Testing
--- https://github.com/postgres/postgres/blob/REL_12_BETA4/src/test/regress/sql/window.sql#L1-L319
+-- https://github.com/postgres/postgres/blob/REL_12_STABLE/src/test/regress/sql/window.sql#L1-L319
 
 CREATE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1;
 
@@ -187,13 +187,13 @@ sum(ten) over (partition by four order by ten range between unbounded preceding 
 last(ten) over (partition by four order by ten range between unbounded preceding and unbounded following)
 FROM (select distinct ten, four from tenk1) ss;
 
--- Failing on thrift server
+-- [SPARK-29451] Some queries with divisions in SQL windows are failling in Thrift
 -- SELECT four, ten/4 as two,
 -- sum(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row),
 -- last(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row)
 -- FROM (select distinct ten, four from tenk1) ss;
 
--- Failing on thrift server
+-- [SPARK-29451] Some queries with divisions in SQL windows are failling in Thrift
 -- SELECT four, ten/4 as two,
 -- sum(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row),
 -- last(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row)
