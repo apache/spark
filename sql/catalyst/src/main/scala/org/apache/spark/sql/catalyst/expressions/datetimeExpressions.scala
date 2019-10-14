@@ -1702,6 +1702,24 @@ case class DateDiff(endDate: Expression, startDate: Expression)
   }
 }
 
+case class SubtractDates(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
+  override def dataType: DataType = CalendarIntervalType
+
+  override def nullSafeEval(leftDays: Any, rightDays: Any): Any = {
+    DateTimeUtils.subtractDates(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (leftDays, rightDays) => {
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      s"$dtu.subtractDates($leftDays, $rightDays)"
+    })
+  }
+}
+
 /**
  * Gets timestamps from strings using given pattern.
  */
