@@ -74,8 +74,8 @@ class CatalogManager(
     }
   }
 
-  // If the V2_SESSION_CATALOG config is specified, we try to instantiate the user-specified v2
-  // session catalog. Otherwise, return the default session catalog.
+  // If the V2_SESSION_CATALOG_IMPLEMENTATION config is specified, we try to instantiate the
+  // user-specified v2 session catalog. Otherwise, return the default session catalog.
   def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {

@@ -25,6 +25,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
@@ -149,7 +150,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
 
   override def afterEach(): Unit = {
     super.afterEach()
-    catalog("session").asInstanceOf[Catalog].clearTables()
+    catalog(SESSION_CATALOG_NAME).asInstanceOf[Catalog].clearTables()
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
   }
 
