@@ -26,10 +26,10 @@ import org.apache.spark.sql.{Dataset, Row}
  * Each row in the Dataset represents a node which has exactly the labels defined by the given
  * label set.
  *
- * @param ds         Dataset containing a single node in each row
- * @param idColumn   column that contains the node identifier
- * @param labelSet   labels that are assigned to all nodes
- * @param properties mapping from property keys to corresponding columns
+ * @param ds              Dataset containing a single node in each row
+ * @param idColumn        column that contains the node identifier
+ * @param labelSet        labels that are assigned to all nodes
+ * @param propertyColumns mapping from property keys to corresponding columns
  * @since 3.0.0
  */
 @Evolving
@@ -37,5 +37,5 @@ case class NodeDataset private[graph](
     ds: Dataset[Row],
     idColumn: String,
     labelSet: Set[String],
-    properties: Map[String, String])
+    propertyColumns: Map[String, String])
   extends GraphElementDataset

@@ -48,7 +48,7 @@ abstract class GraphElementDataset {
    *
    * @since 3.0.0
    */
-  def idColumns: Seq[String] = Seq(idColumn)
+  def idColumns: Array[String] = Array(idColumn)
 
   /**
    * Mapping from graph element property keys to the columns that contain the corresponding property
@@ -56,6 +56,6 @@ abstract class GraphElementDataset {
    *
    * @since 3.0.0
    */
-  def properties: Map[String, String]
+  def propertyColumns: Map[String, String]
 
 }
