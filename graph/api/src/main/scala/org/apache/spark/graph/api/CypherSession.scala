@@ -59,7 +59,7 @@ object CypherSession {
    * @param nodes node dataset
    * @since 3.0.0
    */
-  def extractNodeDataset(nodes: Dataset[Row]): Set[NodeDataset] = {
+  def extractNodeDatasets(nodes: Dataset[Row]): Set[NodeDataset] = {
     val labelColumns = nodes.columns.filter(_.startsWith(LABEL_COLUMN_PREFIX)).toSet
     validateLabelColumns(nodes.schema, labelColumns)
 
@@ -102,7 +102,7 @@ object CypherSession {
    * @param relationships relationship dataset
    * @since 3.0.0
    */
-  def extractRelationshipDataset(relationships: Dataset[Row]): Set[RelationshipDataset] = {
+  def extractRelationshipDatasets(relationships: Dataset[Row]): Set[RelationshipDataset] = {
     val relColumns = relationships.columns.toSet
     val relTypeColumns = relColumns.filter(_.startsWith(CypherSession.LABEL_COLUMN_PREFIX))
     validateLabelColumns(relationships.schema, relTypeColumns)
@@ -251,8 +251,8 @@ trait CypherSession {
    * @since 3.0.0
    */
   def createGraph(nodes: Dataset[Row], relationships: Dataset[Row]): PropertyGraph = {
-    val nodeFrames = CypherSession.extractNodeDataset(nodes)
-    val relationshipFrames = CypherSession.extractRelationshipDataset(relationships)
+    val nodeFrames = CypherSession.extractNodeDatasets(nodes)
+    val relationshipFrames = CypherSession.extractRelationshipDatasets(relationships)
     createGraph(nodeFrames.toArray, relationshipFrames.toArray)
   }
 
