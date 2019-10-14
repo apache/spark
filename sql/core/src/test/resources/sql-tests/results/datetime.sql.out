@@ -126,9 +126,9 @@ struct<date_sub(DATE '2001-10-01', 7):date>
 -- !query 14
 select date '2001-10-01' - date '2001-09-28'
 -- !query 14 schema
-struct<datediff(DATE '2001-10-01', DATE '2001-09-28'):int>
+struct<subtractdates(DATE '2001-10-01', DATE '2001-09-28'):interval>
 -- !query 14 output
-3
+interval 3 days
 
 
 -- !query 15
