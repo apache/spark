@@ -104,11 +104,13 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     locations.headOption.toList.flatMap(_.getHosts).filter(_ != "localhost")
   }
 
+  private lazy val cachedExpireTime =
+    SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME)
+
   /**
    * Return the locations of the checkpoint file associated with the given partition.
    */
   protected override def getPreferredLocations(split: Partition): Seq[String] = {
-    val cachedExpireTime = SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME)
     if (cachedExpireTime.isDefined && cachedExpireTime.get > 0) {
       cachedPreferredLocations.get(split)
     } else {
