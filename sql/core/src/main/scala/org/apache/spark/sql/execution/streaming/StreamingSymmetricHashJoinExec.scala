@@ -279,11 +279,15 @@ case class StreamingSymmetricHashJoinExec(
         // * Getting an iterator over the rows that have aged out on the left side. These rows are
         //   candidates for being null joined. Note that to avoid doing two passes, this iterator
         //   removes the rows from the state manager as they're processed.
-        // * Checking whether the current row matches a key in the right side state, and that key
-        //   has any value which satisfies the filter function when joined. If it doesn't,
-        //   we know we can join with null, since there was never (including this batch) a match
-        //   within the watermark period. If it does, there must have been a match at some point, so
-        //   we know we can't join with null.
+        // * (state format version 1) Checking whether the current row matches a key in the
+        //   right side state, and that key has any value which satisfies the filter function when
+        //   joined. If it doesn't, we know we can join with null, since there was never
+        //   (including this batch) a match within the watermark period. If it does, there must have
+        //   been a match at some point, so we know we can't join with null.
+        // * (state format version 2) We found edge-case of above approach which brings correctness
+        //   issue, and had to take another approach (see SPARK-26154); now Spark stores 'matched'
+        //   flag along with row, which is set to true when there's any matching row on the right.
+
         def matchesWithRightSideState(leftKeyValue: UnsafeRowPair) = {
           rightSideJoiner.get(leftKeyValue.key).exists { rightValue =>
             postJoinFilter(joinedRow.withLeft(leftKeyValue.value).withRight(rightValue))
