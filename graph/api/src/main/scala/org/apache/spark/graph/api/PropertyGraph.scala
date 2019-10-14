@@ -38,7 +38,7 @@ abstract class PropertyGraph {
    *
    * @since 3.0.0
    */
-  def schema: PropertyGraphType
+  def schema: PropertyGraphSchema
 
   /**
    * The session in which this graph is managed.

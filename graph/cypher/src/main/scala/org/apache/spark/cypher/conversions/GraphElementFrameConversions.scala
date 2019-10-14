@@ -25,7 +25,7 @@ import org.apache.spark.sql.{Dataset, Row}
 object GraphElementFrameConversions {
 
   def normalizeDf(frame: GraphElementDataset): Dataset[Row] = {
-    val mappedColumnNames = frame.idColumns ++ frame.properties.values.toSeq.sorted
+    val mappedColumnNames = frame.idColumns.toSeq ++ frame.propertyColumns.values.toSeq.sorted
     val mappedDf = if (mappedColumnNames == frame.ds.columns.toSeq) {
       frame.ds
     } else {

@@ -30,7 +30,7 @@ import org.apache.spark.sql.{Dataset, Row}
  * @param sourceIdColumn   column that contains the source node identifier of the relationship
  * @param targetIdColumn   column that contains the target node identifier of the relationship
  * @param relationshipType relationship type that is assigned to all relationships
- * @param properties       mapping from property keys to corresponding columns
+ * @param propertyColumns  mapping from property keys to corresponding columns
  * @since 3.0.0
  */
 @Evolving
@@ -40,9 +40,9 @@ case class RelationshipDataset private[graph](
     sourceIdColumn: String,
     targetIdColumn: String,
     relationshipType: String,
-    properties: Map[String, String])
+    propertyColumns: Map[String, String])
   extends GraphElementDataset {
 
-  override def idColumns: Seq[String] = Seq(idColumn, sourceIdColumn, targetIdColumn)
+  override def idColumns: Array[String] = Array(idColumn, sourceIdColumn, targetIdColumn)
 
 }

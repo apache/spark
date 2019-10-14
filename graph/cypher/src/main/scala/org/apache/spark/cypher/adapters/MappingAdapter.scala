@@ -27,7 +27,7 @@ object MappingAdapter {
     def toNodeMapping: ElementMapping = NodeMappingBuilder
       .on(nodeDf.idColumn)
       .withImpliedLabels(nodeDf.labelSet.toSeq: _*)
-      .withPropertyKeyMappings(nodeDf.properties.toSeq:_*)
+      .withPropertyKeyMappings(nodeDf.propertyColumns.toSeq:_*)
       .build
   }
 
@@ -37,7 +37,7 @@ object MappingAdapter {
         .withSourceStartNodeKey(relDf.sourceIdColumn)
         .withSourceEndNodeKey(relDf.targetIdColumn)
         .withRelType(relDf.relationshipType)
-        .withPropertyKeyMappings(relDf.properties.toSeq: _*)
+        .withPropertyKeyMappings(relDf.propertyColumns.toSeq: _*)
         .build
   }
 }

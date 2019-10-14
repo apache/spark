@@ -22,7 +22,7 @@ import org.apache.spark.cypher.SparkTable.DataFrameTable
 import org.apache.spark.cypher.adapters.MappingAdapter._
 import org.apache.spark.cypher.io.SparkCypherPropertyGraphWriter
 import org.apache.spark.cypher.{SparkCypherSession, SparkEntityTable}
-import org.apache.spark.graph.api.{NodeDataset, PropertyGraph, PropertyGraphType, RelationshipDataset}
+import org.apache.spark.graph.api.{NodeDataset, PropertyGraph, PropertyGraphSchema, RelationshipDataset}
 import org.apache.spark.sql.{Dataset, Row}
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.ir.api.expr.Var
@@ -32,7 +32,7 @@ case class RelationalGraphAdapter(
   nodeFrames: Seq[NodeDataset],
   relationshipFrames: Seq[RelationshipDataset]) extends PropertyGraph {
 
-  override def schema: PropertyGraphType = SchemaAdapter(graph.schema)
+  override def schema: PropertyGraphSchema = SchemaAdapter(graph.schema)
 
   private[cypher] lazy val graph = {
     if (nodeFrames.isEmpty) {

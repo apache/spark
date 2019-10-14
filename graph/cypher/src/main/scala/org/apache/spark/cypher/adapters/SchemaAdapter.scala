@@ -18,14 +18,14 @@
 
 package org.apache.spark.cypher.adapters
 
-import org.apache.spark.graph.api.PropertyGraphType
-import org.opencypher.okapi.api.schema.PropertyGraphSchema
+import org.apache.spark.graph.api.PropertyGraphSchema
+import org.opencypher.okapi.api.schema.{PropertyGraphSchema => OKAPISchema}
 
-case class SchemaAdapter(schema: PropertyGraphSchema) extends PropertyGraphType {
+case class SchemaAdapter(schema: OKAPISchema) extends PropertyGraphSchema {
 
-  override def labelSets: Set[Set[String]] = schema.labelCombinations.combos
+  override def labelSets: Array[Array[String]] = schema.labelCombinations.combos.map(_.toArray).toArray
 
-  override def relationshipTypes: Set[String] = schema.relationshipTypes
+  override def relationshipTypes: Array[String] = schema.relationshipTypes.toArray
 
 
 }

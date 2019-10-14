@@ -25,26 +25,26 @@ import org.apache.spark.annotation.Evolving
  * @since 3.0.0
  */
 @Evolving
-trait PropertyGraphType {
+trait PropertyGraphSchema {
 
   /**
    * Returns all labels occurring on any node in the graph.
    *
    * @since 3.0.0
    */
-  def labels: Set[String] = labelSets.flatten
+  def labels: Array[String] = labelSets.flatten
 
   /**
    * Returns all distinct label sets occurring on nodes in the graph.
    *
    * @since 3.0.0
    */
-  def labelSets: Set[Set[String]]
+  def labelSets: Array[Array[String]]
 
   /**
    * Returns all relationship types occurring on relationships in the graph.
    *
    * @since 3.0.0
    */
-  def relationshipTypes: Set[String]
+  def relationshipTypes: Array[String]
 }

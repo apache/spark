@@ -47,9 +47,14 @@ object CypherSession {
   val TARGET_ID_COLUMN = "$TARGET_ID"
 
   /**
-   * Naming convention both for node label and relationship type prefixes.
+   * Naming convention for node label prefixes.
    */
   val LABEL_COLUMN_PREFIX = ":"
+
+  /**
+   * Naming convention for relationship type prefixes.
+   */
+  val REL_TYPE_COLUMN_PREFIX = ":"
 
   /**
    * Extracts [[NodeDataset]]s from a [[Dataset]] using column name conventions.
@@ -59,9 +64,9 @@ object CypherSession {
    * @param nodes node dataset
    * @since 3.0.0
    */
-  def extractNodeDatasets(nodes: Dataset[Row]): Set[NodeDataset] = {
+  def extractNodeDatasets(nodes: Dataset[Row]): Array[NodeDataset] = {
     val labelColumns = nodes.columns.filter(_.startsWith(LABEL_COLUMN_PREFIX)).toSet
-    validateLabelColumns(nodes.schema, labelColumns)
+    validateTypeColumns(nodes.schema, labelColumns, LABEL_COLUMN_PREFIX)
 
     val nodeProperties = (nodes.columns.toSet - ID_COLUMN -- labelColumns)
       .map(col => col -> col)
@@ -70,7 +75,7 @@ object CypherSession {
     val labelCount = labelColumns.size
     if (labelCount > 5) {
       LoggerFactory.getLogger(CypherSession.getClass).warn(
-        s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node frames.")
+        s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node datasets.")
       if (labelCount > 10) {
         throw new IllegalArgumentException(
           s"Expected number of label columns to be less than or equal to 10, was $labelCount.")
@@ -91,7 +96,7 @@ object CypherSession {
         .reduce(_ && _)
 
       NodeDataset(nodes.filter(predicate), ID_COLUMN, labelSet.map(_.substring(1)), nodeProperties)
-    }
+    }.toArray
   }
 
   /**
@@ -102,10 +107,10 @@ object CypherSession {
    * @param relationships relationship dataset
    * @since 3.0.0
    */
-  def extractRelationshipDatasets(relationships: Dataset[Row]): Set[RelationshipDataset] = {
+  def extractRelationshipDatasets(relationships: Dataset[Row]): Array[RelationshipDataset] = {
     val relColumns = relationships.columns.toSet
-    val relTypeColumns = relColumns.filter(_.startsWith(CypherSession.LABEL_COLUMN_PREFIX))
-    validateLabelColumns(relationships.schema, relTypeColumns)
+    val relTypeColumns = relColumns.filter(_.startsWith(REL_TYPE_COLUMN_PREFIX))
+    validateTypeColumns(relationships.schema, relTypeColumns, REL_TYPE_COLUMN_PREFIX)
     val idColumns = Set(ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN)
     val propertyColumns = relColumns -- idColumns -- relTypeColumns
     val relProperties = propertyColumns.map(col => col -> col).toMap
@@ -119,13 +124,21 @@ object CypherSession {
         TARGET_ID_COLUMN,
         relTypeColumn.substring(1),
         relProperties)
-    }
+    }.toArray
   }
 
-  private def validateLabelColumns(schema: StructType, columns: Set[String]): Unit = {
+  private def validateTypeColumns(
+      schema: StructType,
+      columns: Set[String],
+      prefix: String): Unit = {
     schema.fields.filter(f => columns.contains(f.name)).foreach(field => {
       if (field.dataType != BooleanType) {
         throw new IllegalArgumentException(s"Column ${field.name} must be of type BooleanType.")
+      }
+    })
+    columns.foreach(typeColumn => {
+      if (typeColumn.sliding(prefix.length).count(_ == prefix) != 1) {
+        throw new IllegalArgumentException(s"Type column $typeColumn must contain exactly one type.")
       }
     })
   }
@@ -253,7 +266,7 @@ trait CypherSession {
   def createGraph(nodes: Dataset[Row], relationships: Dataset[Row]): PropertyGraph = {
     val nodeFrames = CypherSession.extractNodeDatasets(nodes)
     val relationshipFrames = CypherSession.extractRelationshipDatasets(relationships)
-    createGraph(nodeFrames.toArray, relationshipFrames.toArray)
+    createGraph(nodeFrames, relationshipFrames)
   }
 
   /**

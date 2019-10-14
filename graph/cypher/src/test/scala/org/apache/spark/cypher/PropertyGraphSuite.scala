@@ -212,12 +212,12 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
       studentDF,
       "id",
       Set("Person", "Student"),
-      properties = Map("name" -> "col_name", "age" -> "col_age"))
+      propertyColumns = Map("name" -> "col_name", "age" -> "col_age"))
     val teacherNodeDataset = NodeDataset(
       teacherDF,
       "id",
       Set("Person", "Teacher"),
-      properties = Map("name" -> "col_name", "subject" -> "col_subject"))
+      propertyColumns = Map("name" -> "col_name", "subject" -> "col_subject"))
 
     val knowsDF = spark.createDataFrame(Seq((0L, 0L, 1L, 1984))).toDF("id", "source", "target", "col_since")
     val teachesDF = spark.createDataFrame(Seq((1L, 2L, 1L))).toDF("id", "source", "target")
@@ -228,7 +228,7 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
       "source",
       "target",
       relationshipType = "KNOWS",
-      properties = Map("since" -> "col_since"))
+      propertyColumns = Map("since" -> "col_since"))
     val teachesRelationshipDataset = RelationshipDataset(
       teachesDF,
       "id",
@@ -280,7 +280,7 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
 
     nodeDataset.labelSet shouldEqual Set("Person", "Teacher")
     nodeDataset.idColumn shouldEqual ID_COLUMN
-    nodeDataset.properties shouldEqual Map(
+    nodeDataset.propertyColumns shouldEqual Map(
       "age" -> "age",
       "name" -> "name",
       "subject" -> "subject",
@@ -301,7 +301,7 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
     relationshipDataset.idColumn shouldEqual ID_COLUMN
     relationshipDataset.sourceIdColumn shouldEqual SOURCE_ID_COLUMN
     relationshipDataset.targetIdColumn shouldEqual TARGET_ID_COLUMN
-    relationshipDataset.properties shouldBe empty
+    relationshipDataset.propertyColumns shouldBe empty
 
     val expectedRelDf = spark
       .createDataFrame(
