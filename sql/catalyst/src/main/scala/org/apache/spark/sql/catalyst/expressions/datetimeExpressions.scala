@@ -2099,7 +2099,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
  * is set to 0 and the `microseconds` field is initialized to the microsecond difference
  * between the given timestamps.
  */
-case class TimestampDiff(endTimestamp: Expression, startTimestamp: Expression)
+case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = endTimestamp

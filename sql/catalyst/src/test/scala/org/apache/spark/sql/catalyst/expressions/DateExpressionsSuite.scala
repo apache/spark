@@ -1072,16 +1072,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("timestamps difference") {
     val end = Instant.parse("2019-10-04T11:04:01.123456Z")
-    checkEvaluation(TimestampDiff(Literal(end), Literal(end)),
+    checkEvaluation(SubtractTimestamps(Literal(end), Literal(end)),
       new CalendarInterval(0, 0))
-    checkEvaluation(TimestampDiff(Literal(end), Literal(Instant.EPOCH)),
+    checkEvaluation(SubtractTimestamps(Literal(end), Literal(Instant.EPOCH)),
       CalendarInterval.fromString("interval 18173 days " +
         "11 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds"))
-    checkEvaluation(TimestampDiff(Literal(Instant.EPOCH), Literal(end)),
+    checkEvaluation(SubtractTimestamps(Literal(Instant.EPOCH), Literal(end)),
       CalendarInterval.fromString("interval -18173 days " +
         "-11 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds"))
     checkEvaluation(
-      TimestampDiff(
+      SubtractTimestamps(
         Literal(Instant.parse("9999-12-31T23:59:59.999999Z")),
         Literal(Instant.parse("0001-01-01T00:00:00Z"))),
       CalendarInterval.fromString("interval 521722 weeks 4 days " +
