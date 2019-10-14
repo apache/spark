@@ -102,9 +102,14 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
           (blockIds1, listener1) -> {
-            TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockFetcher(client, appId, execId,
-              blockIds1, listener1, conf, downloadFileManager).start();
+            // Unless this client is closed.
+            if (clientFactory != null) {
+              TransportClient client = clientFactory.createClient(host, port);
+              new OneForOneBlockFetcher(client, appId, execId,
+                      blockIds1, listener1, conf, downloadFileManager).start();
+            } else {
+              logger.warn("This client was closed. Skipping further block fetch retries.");
+            }
           };
 
       int maxRetries = conf.maxIORetries();
