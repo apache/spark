@@ -25,6 +25,8 @@ import org.apache.spark.sql.{Dataset, Row}
  *
  * A graph is always tied to and managed by a [[CypherSession]].
  * The lifetime of a graph is bound by the session lifetime.
+ * The implementation of Cypher in this module corresponds to the Cypher 9 specification
+ * published by the openCypher initiative.
  *
  * @see <a href="http://www.opencypher.org/">openCypher project</a>
  * @see <a href="https://dl.acm.org/citation.cfm?id=3183713.3190657">Property Graph Model</a>
