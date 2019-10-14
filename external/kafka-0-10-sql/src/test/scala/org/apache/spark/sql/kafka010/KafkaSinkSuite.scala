@@ -430,7 +430,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
     TestUtils.assertExceptionMsg(ex, "null topic present in the data")
   }
 
-  protected def testUnsupportedSaveModes(msg: (SaveMode) => String) {
+  protected def testUnsupportedSaveModes(msg: (SaveMode) => String): Unit = {
     val topic = newTopic()
     testUtils.createTopic(topic)
     val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")

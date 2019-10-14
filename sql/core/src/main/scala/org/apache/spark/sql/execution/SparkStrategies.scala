@@ -745,6 +745,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
+      case _: UpdateTable =>
+        throw new UnsupportedOperationException(s"UPDATE TABLE is not supported temporarily.")
       case _ => Nil
     }
   }

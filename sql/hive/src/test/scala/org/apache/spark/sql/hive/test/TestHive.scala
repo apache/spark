@@ -489,7 +489,7 @@ private[hive] class TestHiveSparkSession(
 
   def getLoadedTables: collection.mutable.HashSet[String] = sharedState.loadedTables
 
-  def loadTestTable(name: String) {
+  def loadTestTable(name: String): Unit = {
     if (!sharedState.loadedTables.contains(name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
       sharedState.loadedTables += name
@@ -523,7 +523,7 @@ private[hive] class TestHiveSparkSession(
   /**
    * Resets the test instance by deleting any table, view, temp view, and UDF that have been created
    */
-  def reset() {
+  def reset(): Unit = {
     try {
       // HACK: Hive is too noisy by default.
       org.apache.log4j.LogManager.getCurrentLoggers.asScala.foreach { log =>
@@ -649,12 +649,13 @@ private[sql] class TestHiveSessionStateBuilder(
 }
 
 private[hive] object HiveTestJars {
-  private val repository = SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.defaultValueString
+  private val repository = SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.defaultValueString.split(",")(0)
   private val hiveTestJarsDir = Utils.createTempDir()
 
   def getHiveContribJar(version: String = HiveUtils.builtinHiveVersion): File =
     getJarFromUrl(s"${repository}org/apache/hive/hive-contrib/" +
       s"$version/hive-contrib-$version.jar")
+
   def getHiveHcatalogCoreJar(version: String = HiveUtils.builtinHiveVersion): File =
     getJarFromUrl(s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
       s"$version/hive-hcatalog-core-$version.jar")

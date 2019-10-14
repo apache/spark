@@ -237,7 +237,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     lastOffsetCommitted = newOffset
   }
 
-  override def stop() {}
+  override def stop(): Unit = {}
 
   def reset(): Unit = synchronized {
     batches.clear()

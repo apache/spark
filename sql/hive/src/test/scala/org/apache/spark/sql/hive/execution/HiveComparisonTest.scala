@@ -229,7 +229,7 @@ abstract class HiveComparisonTest
       sql: String,
       reset: Boolean = true,
       tryWithoutResettingFirst: Boolean = false,
-      skip: Boolean = false) {
+      skip: Boolean = false): Unit = {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 

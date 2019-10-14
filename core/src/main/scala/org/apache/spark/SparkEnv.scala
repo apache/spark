@@ -79,7 +79,7 @@ class SparkEnv (
 
   private[spark] var driverTmpDir: Option[String] = None
 
-  private[spark] def stop() {
+  private[spark] def stop(): Unit = {
 
     if (!isStopped) {
       isStopped = true
@@ -119,7 +119,8 @@ class SparkEnv (
   }
 
   private[spark]
-  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
+  def destroyPythonWorker(pythonExec: String,
+      envVars: Map[String, String], worker: Socket): Unit = {
     synchronized {
       val key = (pythonExec, envVars)
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
@@ -127,7 +128,8 @@ class SparkEnv (
   }
 
   private[spark]
-  def releasePythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
+  def releasePythonWorker(pythonExec: String,
+      envVars: Map[String, String], worker: Socket): Unit = {
     synchronized {
       val key = (pythonExec, envVars)
       pythonWorkers.get(key).foreach(_.releaseWorker(worker))
@@ -141,7 +143,7 @@ object SparkEnv extends Logging {
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
 
-  def set(e: SparkEnv) {
+  def set(e: SparkEnv): Unit = {
     env = e
   }
 

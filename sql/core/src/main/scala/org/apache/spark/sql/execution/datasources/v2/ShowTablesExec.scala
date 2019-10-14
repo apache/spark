@@ -19,14 +19,12 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.connector.catalog.TableCatalog
-import org.apache.spark.sql.execution.LeafExecNode
 
 /**
  * Physical plan node for showing tables.
@@ -36,8 +34,8 @@ case class ShowTablesExec(
     catalog: TableCatalog,
     namespace: Seq[String],
     pattern: Option[String])
-    extends LeafExecNode {
-  override protected def doExecute(): RDD[InternalRow] = {
+    extends V2CommandExec {
+  override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val encoder = RowEncoder(schema).resolveAndBind()
 
@@ -53,6 +51,6 @@ case class ShowTablesExec(
       }
     }
 
-    sparkContext.parallelize(rows, 1)
+    rows
   }
 }

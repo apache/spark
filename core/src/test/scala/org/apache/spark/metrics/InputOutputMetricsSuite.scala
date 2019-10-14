@@ -17,7 +17,7 @@
 
 package org.apache.spark.metrics
 
-import java.io.{File, FileWriter, PrintWriter}
+import java.io.{File, PrintWriter}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -166,7 +166,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     var shuffleRead = 0L
     var shuffleWritten = 0L
     sc.addSparkListener(new SparkListener() {
-      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         val metrics = taskEnd.taskMetrics
         inputRead += metrics.inputMetrics.recordsRead
         outputWritten += metrics.outputMetrics.recordsWritten
@@ -246,7 +246,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     sc.listenerBus.waitUntilEmpty()
 
     sc.addSparkListener(new SparkListener() {
-      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         taskMetrics += collector(taskEnd)
       }
     })
@@ -284,12 +284,12 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
 
     val taskBytesWritten = new ArrayBuffer[Long]()
     sc.addSparkListener(new SparkListener() {
-      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         taskBytesWritten += taskEnd.taskMetrics.outputMetrics.bytesWritten
       }
     })
 
-    val rdd = sc.parallelize(Array("a", "b", "c", "d"), 2)
+    val rdd = sc.parallelize(Seq("a", "b", "c", "d"), 2)
 
     try {
       rdd.saveAsTextFile(outPath.toString)

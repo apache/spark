@@ -226,6 +226,32 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
+  test("SPARK-29022: Commands using SerDe provided in --hive.aux.jars.path") {
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+    runCliWithin(
+      3.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      """CREATE TABLE addJarWithHiveAux(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+      """.stripMargin
+        -> "",
+      "CREATE TABLE sourceTableForWithHiveAux (key INT, val STRING);"
+        -> "",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithHiveAux;"
+        -> "",
+      "INSERT INTO TABLE addJarWithHiveAux SELECT key, val FROM sourceTableForWithHiveAux;"
+        -> "",
+      "SELECT collect_list(array(val)) FROM addJarWithHiveAux;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+      "DROP TABLE addJarWithHiveAux;"
+        -> "",
+      "DROP TABLE sourceTableForWithHiveAux;"
+        -> ""
+    )
+  }
+
   test("SPARK-11188 Analysis error reporting") {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
@@ -330,6 +356,41 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "CREATE TEMPORARY FUNCTION example_max AS " +
         "'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax';" -> "",
       "SELECT concat_ws(',', 'First', example_max(1234321), 'Third');" -> "First,1234321,Third"
+    )
+  }
+
+  test("SPARK-29022 Commands using SerDe provided in ADD JAR sql") {
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+    runCliWithin(
+      3.minute)(
+      s"ADD JAR ${hiveContribJar};" -> "",
+      """CREATE TABLE addJarWithSQL(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+      """.stripMargin
+        -> "",
+      "CREATE TABLE sourceTableForWithSQL(key INT, val STRING);"
+        -> "",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithSQL;"
+        -> "",
+      "INSERT INTO TABLE addJarWithSQL SELECT key, val FROM sourceTableForWithSQL;"
+        -> "",
+      "SELECT collect_list(array(val)) FROM addJarWithSQL;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+      "DROP TABLE addJarWithSQL;"
+        -> "",
+      "DROP TABLE sourceTableForWithSQL;"
+        -> ""
+    )
+  }
+
+  test("SPARK-26321 Should not split semicolon within quoted string literals") {
+    runCliWithin(3.minute)(
+      """select 'Test1', "^;^";""" -> "Test1\t^;^",
+      """select 'Test2', "\";";""" -> "Test2\t\";",
+      """select 'Test3', "\';";""" -> "Test3\t';",
+      "select concat('Test4', ';');" -> "Test4;"
     )
   }
 }

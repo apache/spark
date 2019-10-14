@@ -690,7 +690,8 @@ class TypeCoercionSuite extends AnalysisTest {
       Some(new StructType().add("a", StringType)))
   }
 
-  private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
+  private def ruleTest(rule: Rule[LogicalPlan],
+      initial: Expression, transformed: Expression): Unit = {
     ruleTest(Seq(rule), initial, transformed)
   }
 
@@ -1430,6 +1431,12 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(dateTimeOperations, Add(intValue, date), DateAdd(date, intValue))
     ruleTest(dateTimeOperations, Subtract(date, intValue), DateSub(date, intValue))
     ruleTest(dateTimeOperations, Subtract(date, date), DateDiff(date, date))
+    ruleTest(dateTimeOperations, Subtract(timestamp, timestamp),
+      TimestampDiff(timestamp, timestamp))
+    ruleTest(dateTimeOperations, Subtract(timestamp, date),
+      TimestampDiff(timestamp, Cast(date, TimestampType)))
+    ruleTest(dateTimeOperations, Subtract(date, timestamp),
+      TimestampDiff(Cast(date, TimestampType), timestamp))
   }
 
   /**

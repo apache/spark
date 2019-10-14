@@ -89,15 +89,15 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
       .filter(filter)
       .build(graphite)
 
-  override def start() {
+  override def start(): Unit = {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     reporter.stop()
   }
 
-  override def report() {
+  override def report(): Unit = {
     reporter.report()
   }
 }

@@ -35,11 +35,11 @@ class PassThroughSuite extends SparkFunSuite {
 
   def testPassThrough[T <: AtomicType](
       columnStats: ColumnStats,
-      columnType: NativeColumnType[T]) {
+      columnType: NativeColumnType[T]): Unit = {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
-    def skeleton(input: Seq[T#InternalType]) {
+    def skeleton(input: Seq[T#InternalType]): Unit = {
       // -------------
       // Tests encoder
       // -------------
@@ -93,7 +93,7 @@ class PassThroughSuite extends SparkFunSuite {
       assert(!decoder.hasNext)
     }
 
-    def skeletonForDecompress(input: Seq[T#InternalType]) {
+    def skeletonForDecompress(input: Seq[T#InternalType]): Unit = {
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, PassThrough)
       val row = new GenericInternalRow(1)
       val nullRow = new GenericInternalRow(1)

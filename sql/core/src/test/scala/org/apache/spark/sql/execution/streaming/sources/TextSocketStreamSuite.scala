@@ -42,7 +42,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     sqlContext.streams.active.foreach(_.stop())
     if (serverThread != null) {
       serverThread.interrupt()

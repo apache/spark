@@ -89,11 +89,16 @@ object SQLConf {
   }
 
   def withExistingConf[T](conf: SQLConf)(f: => T): T = {
+    val old = existingConf.get()
     existingConf.set(conf)
     try {
       f
     } finally {
-      existingConf.remove()
+      if (old != null) {
+        existingConf.set(old)
+      } else {
+        existingConf.remove()
+      }
     }
   }
 
@@ -831,6 +836,17 @@ object SQLConf {
       .internal()
       .intConf
       .createWithDefault(10000)
+
+  val IGNORE_DATA_LOCALITY =
+    buildConf("spark.sql.sources.ignoreDataLocality.enabled")
+      .doc("If true, Spark will not fetch the block locations for each file on " +
+        "listing files. This speeds up file listing, but the scheduler cannot " +
+        "schedule tasks to take advantage of data locality. It can be particularly " +
+        "useful if data is read from a remote cluster so the scheduler could never " +
+        "take advantage of locality anyway.")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
 
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
@@ -1854,7 +1870,7 @@ object SQLConf {
     .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
       "The size function returns null for null input if the flag is disabled.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
@@ -2493,6 +2509,8 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
+
+  def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 
   /** ********************** SQLConf functionality methods ************ */
 

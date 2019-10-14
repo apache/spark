@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.{util => ju}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.{Executors, TimeUnit}
 
@@ -30,10 +31,14 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{TaskContext, TaskContextImpl}
+import org.apache.spark.kafka010.KafkaDelegationTokenTest
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
 import org.apache.spark.sql.test.SharedSparkSession
 
-class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester {
+class KafkaDataConsumerSuite
+  extends SharedSparkSession
+  with PrivateMethodTester
+  with KafkaDelegationTokenTest {
 
   protected var testUtils: KafkaTestUtils = _
   private val topic = "topic" + Random.nextInt()
@@ -66,13 +71,16 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
   private var consumerPool: InternalKafkaConsumerPool = _
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
+
     fetchedDataPool = {
-      val fetchedDataPoolMethod = PrivateMethod[FetchedDataPool]('fetchedDataPool)
+      val fetchedDataPoolMethod = PrivateMethod[FetchedDataPool](Symbol("fetchedDataPool"))
       KafkaDataConsumer.invokePrivate(fetchedDataPoolMethod())
     }
 
     consumerPool = {
-      val internalKafkaConsumerPoolMethod = PrivateMethod[InternalKafkaConsumerPool]('consumerPool)
+      val internalKafkaConsumerPoolMethod =
+        PrivateMethod[InternalKafkaConsumerPool](Symbol("consumerPool"))
       KafkaDataConsumer.invokePrivate(internalKafkaConsumerPoolMethod())
     }
 
@@ -82,7 +90,7 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
 
   test("SPARK-19886: Report error cause correctly in reportDataLoss") {
     val cause = new Exception("D'oh!")
-    val reportDataLoss = PrivateMethod[Unit]('reportDataLoss0)
+    val reportDataLoss = PrivateMethod[Unit](Symbol("reportDataLoss0"))
     val e = intercept[IllegalStateException] {
       KafkaDataConsumer.invokePrivate(reportDataLoss(true, "message", cause))
     }
@@ -96,45 +104,84 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
 
       val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
       TaskContext.setTaskContext(context1)
-      val consumer1 = KafkaDataConsumer.acquire(topicPartition, kafkaParams)
-
-      // any method call which requires consumer is necessary
-      consumer1.getAvailableOffsetRange()
-
-      val consumer1Underlying = consumer1._consumer
-      assert(consumer1Underlying.isDefined)
-
-      consumer1.release()
-
-      assert(consumerPool.size(key) === 1)
-      // check whether acquired object is available in pool
-      val pooledObj = consumerPool.borrowObject(key, kafkaParams)
-      assert(consumer1Underlying.get.eq(pooledObj))
-      consumerPool.returnObject(pooledObj)
+      val consumer1Underlying = initSingleConsumer(kafkaParams, key)
 
       val context2 = new TaskContextImpl(0, 0, 0, 0, 1, null, null, null)
       TaskContext.setTaskContext(context2)
-      val consumer2 = KafkaDataConsumer.acquire(topicPartition, kafkaParams)
+      val consumer2Underlying = initSingleConsumer(kafkaParams, key)
 
-      // any method call which requires consumer is necessary
-      consumer2.getAvailableOffsetRange()
-
-      val consumer2Underlying = consumer2._consumer
-      assert(consumer2Underlying.isDefined)
       // here we expect different consumer as pool will invalidate for task reattempt
-      assert(consumer2Underlying.get.ne(consumer1Underlying.get))
-
-      consumer2.release()
-
-      // The first consumer should be removed from cache, but the consumer after invalidate
-      // should be cached.
-      assert(consumerPool.size(key) === 1)
-      val pooledObj2 = consumerPool.borrowObject(key, kafkaParams)
-      assert(consumer2Underlying.get.eq(pooledObj2))
-      consumerPool.returnObject(pooledObj2)
+      assert(consumer2Underlying.ne(consumer1Underlying))
     } finally {
       TaskContext.unset()
     }
+  }
+
+  test("same KafkaDataConsumer instance in case of same token") {
+    try {
+      val kafkaParams = getKafkaParams()
+      val key = new CacheKey(groupId, topicPartition)
+
+      val context = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+      TaskContext.setTaskContext(context)
+      setSparkEnv(
+        Map(
+          s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
+        )
+      )
+      addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+      val consumer1Underlying = initSingleConsumer(kafkaParams, key)
+      val consumer2Underlying = initSingleConsumer(kafkaParams, key)
+
+      assert(consumer2Underlying.eq(consumer1Underlying))
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
+  test("new KafkaDataConsumer instance in case of token renewal") {
+    try {
+      val kafkaParams = getKafkaParams()
+      val key = new CacheKey(groupId, topicPartition)
+
+      val context = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+      TaskContext.setTaskContext(context)
+      setSparkEnv(
+        Map(
+          s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
+        )
+      )
+      addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+      val consumer1Underlying = initSingleConsumer(kafkaParams, key)
+      addTokenToUGI(tokenService1, tokenId2, tokenPassword2)
+      val consumer2Underlying = initSingleConsumer(kafkaParams, key)
+
+      assert(consumer2Underlying.ne(consumer1Underlying))
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
+  private def initSingleConsumer(
+      kafkaParams: ju.Map[String, Object],
+      key: CacheKey): InternalKafkaConsumer = {
+    val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams)
+
+    // any method call which requires consumer is necessary
+    consumer.getOrRetrieveConsumer()
+
+    val consumerUnderlying = consumer._consumer
+    assert(consumerUnderlying.isDefined)
+
+    consumer.release()
+
+    assert(consumerPool.size(key) === 1)
+    // check whether acquired object is available in pool
+    val pooledObj = consumerPool.borrowObject(key, kafkaParams)
+    assert(consumerUnderlying.get.eq(pooledObj))
+    consumerPool.returnObject(pooledObj)
+
+    consumerUnderlying.get
   }
 
   test("SPARK-23623: concurrent use of KafkaDataConsumer") {

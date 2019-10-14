@@ -26,7 +26,7 @@ import com.google.common.io.Files
 import org.apache.mesos.Protos.{FrameworkInfo, Resource, Value}
 import org.mockito.Mockito._
 import org.scalatest._
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.mesos.{config => mesosConfig}
@@ -63,12 +63,12 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
 
   def arePortsEqual(array1: Array[(Long, Long)], array2: Array[(Long, Long)])
     : Boolean = {
-    array1.sortBy(identity).deep == array2.sortBy(identity).deep
+    array1.sortBy(identity).sameElements(array2.sortBy(identity))
   }
 
   def arePortsEqual(array1: Array[Long], array2: Array[Long])
     : Boolean = {
-    array1.sortBy(identity).deep == array2.sortBy(identity).deep
+    array1.sortBy(identity).sameElements(array2.sortBy(identity))
   }
 
   def getRangesFromResources(resources: List[Resource]): List[(Long, Long)] = {
