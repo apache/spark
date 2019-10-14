@@ -111,6 +111,9 @@ private[spark] class AppStatusListener(
         .asScala.filter(_.info.status == JobExecutionStatus.RUNNING)
         .map(_.toLiveJob).foreach(job => liveJobs.put(job.jobId, job))
 
+      kvstore.view(classOf[ExecutorSummaryWrapper]).asScala.filter(_.info.isActive)
+        .map(_.toLiveExecutor).foreach(exec => liveExecutors.put(exec.executorId, exec))
+
       kvstore.view(classOf[StageDataWrapper]).asScala
         .filter { stageData =>
           stageData.info.status == v1.StageStatus.PENDING ||
@@ -123,9 +126,6 @@ private[spark] class AppStatusListener(
           val stageId = stage.info.stageId
           val stageAttempt = stage.info.attemptNumber()
           liveStages.put((stageId, stageAttempt), stage)
-
-          kvstore.view(classOf[ExecutorSummaryWrapper]).asScala.filter(_.info.isActive)
-            .map(_.toLiveExecutor).foreach(exec => liveExecutors.put(exec.executorId, exec))
 
           kvstore.view(classOf[ExecutorStageSummaryWrapper])
             .index("stage")
