@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row}
 
 /**
- * A [[PropertyGraph]] whose graph element is either a node or a relationship.
+ * A [[PropertyGraph]] component containing graph elements; either nodes or relationships.
  * A GraphElementDataset wraps a Dataset and describes how it maps to graph elements.
  *
  * @since 3.0.0
