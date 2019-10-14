@@ -71,10 +71,8 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   private var outputTimestampType: SQLConf.ParquetOutputTimestampType.Value = _
 
   // Reusable byte array used to write timestamps as Parquet INT96 values
-  private val timestampBuffer = new Array[Byte](12)
-
-  // Reusable byte array used to write intervals as Parquet FIXED_LEN_BYTE_ARRAY values
-  private val intervalBuffer = new Array[Byte](12)
+  // or intervals as Parquet FIXED_LEN_BYTE_ARRAY values
+  private val reusableBuffer = new Array[Byte](12)
 
   // Reusable byte array used to write decimal values
   private val decimalBuffer =
@@ -176,9 +174,9 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
           case SQLConf.ParquetOutputTimestampType.INT96 =>
             (row: SpecializedGetters, ordinal: Int) =>
               val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
-              val buf = ByteBuffer.wrap(timestampBuffer)
+              val buf = ByteBuffer.wrap(reusableBuffer)
               buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
-              recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
+              recordConsumer.addBinary(Binary.fromReusedByteArray(reusableBuffer))
 
           case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS =>
             (row: SpecializedGetters, ordinal: Int) =>
@@ -216,12 +214,12 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
           val microseconds = interval.microseconds % DateTimeUtils.MICROS_PER_DAY
           val milliseconds: Int = (microseconds / DateTimeUtils.MICROS_PER_MILLIS).toInt
           val days: Int = Math.toIntExact(interval.microseconds / DateTimeUtils.MICROS_PER_DAY)
-          val buf = ByteBuffer.wrap(intervalBuffer)
+          val buf = ByteBuffer.wrap(reusableBuffer)
           buf.order(ByteOrder.LITTLE_ENDIAN)
             .putInt(milliseconds)
             .putInt(days)
             .putInt(interval.months)
-          recordConsumer.addBinary(Binary.fromReusedByteArray(intervalBuffer))
+          recordConsumer.addBinary(Binary.fromReusedByteArray(reusableBuffer))
 
       case _ => sys.error(s"Unsupported data type $dataType.")
     }
