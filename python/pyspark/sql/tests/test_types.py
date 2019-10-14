@@ -215,6 +215,52 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
         self.assertEqual(df.first(), Row(key=1, value="1"))
 
+    def test_create_dataframe_from_rows_mixed_with_datetype(self):
+        data = [Row(name='Alice', join_date=datetime.date(2014, 5, 26)),
+                Row(name='Bob', join_date=datetime.date(2016, 7, 26))]
+        schema1 = StructType([
+            StructField("join_date", DateType(), False),
+            StructField("name", StringType(), False),
+        ])
+        schema2 = StructType([
+            StructField("name", StringType(), False),
+            StructField("join_date", DateType(), False),
+        ])
+        df = self.spark.createDataFrame(data, schema=schema1)
+        self.assertEqual(df.dtypes, [("join_date", "date"), ("name", "string")])
+        self.assertEqual(df.first().asDict(),
+                         Row(name='Alice', join_date=datetime.date(2014, 5, 26)).asDict())
+        df = self.spark.createDataFrame(data, schema=schema2)
+        self.assertEqual(df.dtypes, [("name", "string"), ("join_date", "date")])
+        self.assertEqual(df.first().asDict(),
+                         Row(name='Alice', join_date=datetime.date(2014, 5, 26)).asDict())
+
+    def test_create_dataframe_from_rows_with_nested_row(self):
+        schema = StructType([
+            StructField('field2',
+                        StructType([
+                            StructField('sub_field', StringType(), False)
+                        ]), False),
+            StructField('field1', StringType(), False),
+        ])
+        row = Row(field1="Hello", field2=Row(sub_field='world'))
+        data = [row]
+        df = self.spark.createDataFrame(data, schema=schema)
+        self.assertEqual(df.dtypes, [('field2', 'struct<sub_field:string>'),
+                                     ('field1', 'string')])
+        self.assertEqual(df.first().asDict(), row.asDict())
+
+    def test_create_dataframe_from_tuple_rows(self):
+        data = [Row('Alice', datetime.date(2014, 5, 26)),
+                Row('Bob', datetime.date(2016, 7, 26))]
+        schema = StructType([
+            StructField("name", StringType(), False),
+            StructField("join_date", DateType(), False),
+        ])
+        df = self.spark.createDataFrame(data, schema=schema)
+        self.assertEqual(df.dtypes, [("name", "string"), ("join_date", "date")])
+        self.assertEqual(df.first(), Row('Alice', datetime.date(2014, 5, 26)))
+
     def test_apply_schema(self):
         from datetime import date, datetime
         rdd = self.sc.parallelize([(127, -128, -32768, 32767, 2147483647, 1.0,
