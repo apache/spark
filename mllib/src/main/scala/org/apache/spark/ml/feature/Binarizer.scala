@@ -32,6 +32,12 @@ import org.apache.spark.sql.types._
 
 /**
  * Binarize a column of continuous features given a threshold.
+ *
+ * Since 3.0.0,
+ * `Binarize` can map multiple columns at once by setting the `inputCols` parameter. Note that
+ * when both the `inputCol` and `inputCols` parameters are set, an Exception will be thrown. The
+ * `threshold` parameter is used for single column usage, and `thresholds` is for multiple
+ * columns.
  */
 @Since("1.4.0")
 final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)

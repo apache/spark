@@ -68,7 +68,11 @@ __all__ = ['Binarizer',
 class Binarizer(JavaTransformer, HasThreshold, HasThresholds, HasInputCol, HasOutputCol,
                 HasInputCols, HasOutputCols, JavaMLReadable, JavaMLWritable):
     """
-    Binarize a column of continuous features given a threshold.
+    Binarize a column of continuous features given a threshold. Since 3.0.0,
+    :py:class:`Binarize` can map multiple columns at once by setting the :py:attr:`inputCols`
+    parameter. Note that when both the :py:attr:`inputCol` and :py:attr:`inputCols` parameters
+    are set, an Exception will be thrown. The :py:attr:`threshold` parameter is used for
+    single column usage, and :py:attr:`thresholds` is for multiple columns.
 
     >>> df = spark.createDataFrame([(0.5,)], ["values"])
     >>> binarizer = Binarizer(threshold=1.0, inputCol="values", outputCol="features")
