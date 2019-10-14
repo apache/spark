@@ -74,6 +74,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    */
   private final int numElementsForSpillThreshold;
 
+  private boolean resourceCleand = false;
+
   /**
    * Memory pages that hold the records being sorted. The pages in this list are freed when
    * spilling, although in principle we could recycle these pages across spills (on the other hand,
@@ -324,11 +326,16 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     synchronized (this) {
       deleteSpillFiles();
       freeMemory();
+      this.resourceCleand = true;
       if (inMemSorter != null) {
         inMemSorter.free();
         inMemSorter = null;
       }
     }
+  }
+
+  public boolean isResourceCleand() {
+    return resourceCleand;
   }
 
   /**
@@ -464,7 +471,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     assert(recordComparatorSupplier != null);
     if (spillWriters.isEmpty()) {
       assert(inMemSorter != null);
-      readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
+      readingIterator = new SpillableIterator(inMemSorter.getSortedIterator(), this);
       return readingIterator;
     } else {
       final UnsafeSorterSpillMerger spillMerger = new UnsafeSorterSpillMerger(
@@ -473,10 +480,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         spillMerger.addSpillIfNotEmpty(spillWriter.getReader(serializerManager));
       }
       if (inMemSorter != null) {
-        readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
+        readingIterator = new SpillableIterator(inMemSorter.getSortedIterator(), this);
         spillMerger.addSpillIfNotEmpty(readingIterator);
       }
-      return spillMerger.getSortedIterator();
+      return spillMerger.getSortedIterator(this);
     }
   }
 
@@ -503,12 +510,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     private UnsafeSorterIterator upstream;
     private UnsafeSorterIterator nextUpstream = null;
     private MemoryBlock lastPage = null;
+    private UnsafeExternalSorter sorter;
     private boolean loaded = false;
     private int numRecords = 0;
 
-    SpillableIterator(UnsafeSorterIterator inMemIterator) {
+    SpillableIterator(UnsafeSorterIterator inMemIterator, UnsafeExternalSorter sorter) {
       this.upstream = inMemIterator;
       this.numRecords = inMemIterator.getNumRecords();
+      this.sorter = sorter;
     }
 
     @Override
@@ -566,7 +575,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     @Override
     public boolean hasNext() {
-      return numRecords > 0;
+      return !sorter.isResourceCleand() && numRecords > 0;
     }
 
     @Override

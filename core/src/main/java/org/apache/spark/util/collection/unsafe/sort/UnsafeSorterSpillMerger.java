@@ -60,7 +60,7 @@ final class UnsafeSorterSpillMerger {
     }
   }
 
-  public UnsafeSorterIterator getSortedIterator() throws IOException {
+  public UnsafeSorterIterator getSortedIterator(UnsafeExternalSorter sorter) throws IOException {
     return new UnsafeSorterIterator() {
 
       private UnsafeSorterIterator spillReader;
@@ -72,7 +72,8 @@ final class UnsafeSorterSpillMerger {
 
       @Override
       public boolean hasNext() {
-        return !priorityQueue.isEmpty() || (spillReader != null && spillReader.hasNext());
+        return !sorter.isResourceCleand()
+            && (!priorityQueue.isEmpty() || (spillReader != null && spillReader.hasNext()));
       }
 
       @Override
