@@ -29,7 +29,7 @@ import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.{Private, Stable, Unstable}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
@@ -514,10 +514,18 @@ trait Row extends Serializable {
     if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")
     else getAs[T](i)
 
-  /** The compact JSON representation of this row. */
+  /**
+   * The compact JSON representation of this row.
+   * @since 3.0
+   */
+  @Unstable
   def json: String = compact(jsonValue)
 
-  /** The pretty (i.e. indented) JSON representation of this row. */
+  /**
+   * The pretty (i.e. indented) JSON representation of this row.
+   * @since 3.0
+   */
+  @Unstable
   def prettyJson: String = pretty(render(jsonValue))
 
   /**
