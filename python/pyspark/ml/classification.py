@@ -28,7 +28,7 @@ from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
 from pyspark.ml.regression import DecisionTreeRegressionModel
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
-    JavaPredictor, JavaPredictorParams, JavaPredictionModel, JavaWrapper
+    JavaPredictor, _JavaPredictorParams, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 from pyspark.ml.linalg import Vectors
 from pyspark.sql import DataFrame
@@ -48,15 +48,17 @@ __all__ = ['LinearSVC', 'LinearSVCModel',
            'OneVsRest', 'OneVsRestModel']
 
 
-class JavaClassifierParams(HasRawPredictionCol, JavaPredictorParams):
+class _JavaClassifierParams(HasRawPredictionCol, _JavaPredictorParams):
     """
-    (Private) Java Classifier Params for classification tasks.
+    Java Classifier Params for classification tasks.
+
+    .. versionadded:: 3.0.0
     """
     pass
 
 
 @inherit_doc
-class JavaClassifier(JavaPredictor, JavaClassifierParams):
+class JavaClassifier(JavaPredictor, _JavaClassifierParams):
     """
     Java Classifier for classification tasks.
     Classes are indexed {0, 1, ..., numClasses - 1}.
@@ -71,7 +73,7 @@ class JavaClassifier(JavaPredictor, JavaClassifierParams):
 
 
 @inherit_doc
-class JavaClassificationModel(JavaPredictionModel, JavaClassifierParams):
+class JavaClassificationModel(JavaPredictionModel, _JavaClassifierParams):
     """
     Java Model produced by a ``Classifier``.
     Classes are indexed {0, 1, ..., numClasses - 1}.
@@ -94,15 +96,18 @@ class JavaClassificationModel(JavaPredictionModel, JavaClassifierParams):
         return self._call_java("numClasses")
 
 
-class JavaProbabilisticClassifierParams(HasProbabilityCol, HasThresholds, JavaClassifierParams):
+class _JavaProbabilisticClassifierParams(HasProbabilityCol, HasThresholds, _JavaClassifierParams):
     """
-    (Private) Java Probabilistic Classifier Params for classification tasks.
+    Params for :py:class:`JavaProbabilisticClassifier` and
+    :py:class:`JavaProbabilisticClassificationModel`.
+
+    .. versionadded:: 3.0.0
     """
     pass
 
 
 @inherit_doc
-class JavaProbabilisticClassifier(JavaClassifier, JavaProbabilisticClassifierParams):
+class JavaProbabilisticClassifier(JavaClassifier, _JavaProbabilisticClassifierParams):
     """
     Java Probabilistic Classifier for classification tasks.
     """
@@ -124,7 +129,7 @@ class JavaProbabilisticClassifier(JavaClassifier, JavaProbabilisticClassifierPar
 
 @inherit_doc
 class JavaProbabilisticClassificationModel(JavaClassificationModel,
-                                           JavaProbabilisticClassifierParams):
+                                           _JavaProbabilisticClassifierParams):
     """
     Java Model produced by a ``ProbabilisticClassifier``.
     """
@@ -1368,9 +1373,9 @@ class RandomForestClassificationModel(_TreeEnsembleModel, JavaProbabilisticClass
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
 
-class GBTClassifierParams(_GBTParams, _HasVarianceImpurity):
+class _GBTClassifierParams(_GBTParams, _HasVarianceImpurity):
     """
-    Private class to track supported GBTClassifier params.
+    Params for :py:class:`GBTClassifier` and :py:class:`GBTClassifierModel`.
 
     .. versionadded:: 3.0.0
     """
@@ -1391,7 +1396,7 @@ class GBTClassifierParams(_GBTParams, _HasVarianceImpurity):
 
 
 @inherit_doc
-class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams,
+class GBTClassifier(JavaProbabilisticClassifier, _GBTClassifierParams,
                     JavaMLWritable, JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
@@ -1602,7 +1607,7 @@ class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams,
 
 
 class GBTClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassificationModel,
-                             GBTClassifierParams, JavaMLWritable, JavaMLReadable):
+                             _GBTClassifierParams, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTClassifier.
 
@@ -1990,9 +1995,9 @@ class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationMod
         return self._call_java("weights")
 
 
-class OneVsRestParams(JavaClassifierParams, HasWeightCol):
+class _OneVsRestParams(_JavaClassifierParams, HasWeightCol):
     """
-    Parameters for OneVsRest and OneVsRestModel.
+    Params for :py:class:`OneVsRest` and :py:class:`OneVsRestModelModel`.
     """
 
     classifier = Param(Params._dummy(), "classifier", "base binary classifier")
@@ -2006,7 +2011,7 @@ class OneVsRestParams(JavaClassifierParams, HasWeightCol):
 
 
 @inherit_doc
-class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, JavaMLWritable):
+class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, JavaMLWritable):
     """
     Reduction of Multiclass Classification to Binary Classification.
     Performs reduction using one against all strategy.
@@ -2227,7 +2232,7 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
         return paramMap
 
 
-class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
+class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by OneVsRest.
     This stores the models resulting from training k binary classifiers: one for each class.
