@@ -846,7 +846,6 @@ object JdbcUtils extends Logging {
         getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
         options)
       outMetrics.setRecordsWritten(outMetrics.recordsWritten + totalUpdatedRows)
-      Iterator.empty
     }
   }
 
