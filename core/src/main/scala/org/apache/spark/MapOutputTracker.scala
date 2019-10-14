@@ -901,7 +901,7 @@ private[spark] object MapOutputTracker extends Logging {
           val size = status.getSizeForBlock(part)
           if (size != 0) {
             splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-              ((ShuffleBlockId(shuffleId, status.mapTaskId, part), size, mapIndex))
+              ((ShuffleBlockId(shuffleId, status.mapId, part), size, mapIndex))
           }
         }
       }
