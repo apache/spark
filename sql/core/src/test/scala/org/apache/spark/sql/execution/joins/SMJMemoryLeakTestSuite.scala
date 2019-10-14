@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.execution.SparkPlanTest
 import org.apache.spark.sql.functions.{col, rand}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * This test suite permutates three sample test data, different join strategies,
@@ -28,7 +28,7 @@ import org.apache.spark.sql.test.SharedSQLContext
  * combination of possibilities.
  */
 
-class SMJMemoryLeakTestSuite extends SparkPlanTest with SharedSQLContext {
+class SMJMemoryLeakTestSuite extends SparkPlanTest with SharedSparkSession {
 
   /**
    * Calculates all permutations taking n elements of the input List,
