@@ -146,8 +146,7 @@ private[sql] trait LookupCatalog extends Logging {
         Some((catalogManager.catalog(nameParts.head), nameParts.tail))
       } catch {
         case _: CatalogNotFoundException =>
-          // TODO (SPARK-29014): use current catalog here.
-          Some((defaultCatalog.getOrElse(sessionCatalog), nameParts))
+          Some((currentCatalog, nameParts))
       }
     }
   }
