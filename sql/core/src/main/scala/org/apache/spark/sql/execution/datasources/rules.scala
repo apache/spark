@@ -190,14 +190,11 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         query
       }
 
-      // SPARK-28730: for V1 data source, we use the "LEGACY" as default store assignment policy.
-      // TODO: use ANSI store assignment policy by default in SPARK-28495.
-      val storeAssignmentPolicy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.LEGACY)
       c.copy(
         tableDesc = existingTable,
         query = Some(TableOutputResolver.resolveOutputColumns(
           tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
-          byName = true, conf, storeAssignmentPolicy)))
+          byName = true, conf)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
@@ -403,11 +400,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
-    // SPARK-28730: for V1 data source, we use the "LEGACY" as default store assignment policy.
-    // TODO: use ANSI store assignment policy by default in SPARK-28495.
-    val storeAssignmentPolicy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.LEGACY)
     val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, expectedColumns, insert.query, byName = false, conf, storeAssignmentPolicy)
+      tblName, expectedColumns, insert.query, byName = false, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
