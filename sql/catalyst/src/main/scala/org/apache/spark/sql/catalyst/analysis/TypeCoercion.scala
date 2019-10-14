@@ -828,8 +828,8 @@ object TypeCoercion {
   /**
    * 1. Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
    *    to TimeAdd/TimeSub.
-   * 2. Turns Add/Subtract of DateType/IntegerType and IntegerType/DateType
-   *    to DateAdd/DateSub/DateDiff.
+   * 2. Turns Add/Subtract of TimestampType/DateType/IntegerType
+   *    and TimestampType/IntegerType/DateType to DateAdd/DateSub/SubtractDates.
    */
   object DateTimeOperations extends Rule[LogicalPlan] {
 
@@ -849,7 +849,7 @@ object TypeCoercion {
       case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
       case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
       case Subtract(l @ DateType(), r @ IntegerType()) => DateSub(l, r)
-      case Subtract(l @ DateType(), r @ DateType()) => DateDiff(l, r)
+      case Subtract(l @ DateType(), r @ DateType()) => SubtractDates(l, r)
       case Subtract(l @ TimestampType(), r @ TimestampType()) => TimestampDiff(l, r)
       case Subtract(l @ TimestampType(), r @ DateType()) =>
         TimestampDiff(l, Cast(r, TimestampType))
