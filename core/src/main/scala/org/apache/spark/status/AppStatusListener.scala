@@ -120,7 +120,8 @@ private[spark] class AppStatusListener(
       kvstore.view(classOf[StageDataWrapper]).asScala
         .filter { stageData =>
           stageData.info.status == v1.StageStatus.PENDING ||
-            stageData.info.status == v1.StageStatus.ACTIVE
+            stageData.info.status == v1.StageStatus.ACTIVE ||
+            (stageData.info.numActiveTasks > 0 && stageData.info.status != v1.StageStatus.SKIPPED)
         }.map { stageData =>
           val stageId = stageData.info.stageId
           val jobs = liveJobs.values.filter(_.stageIds.contains(stageId)).toSeq
