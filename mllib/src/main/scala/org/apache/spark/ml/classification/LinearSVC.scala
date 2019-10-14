@@ -36,9 +36,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
 
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
@@ -161,12 +159,7 @@ class LinearSVC @Since("2.2.0") (
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
   override protected def train(dataset: Dataset[_]): LinearSVCModel = instrumented { instr =>
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
+    val instances = extractInstances(dataset)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)

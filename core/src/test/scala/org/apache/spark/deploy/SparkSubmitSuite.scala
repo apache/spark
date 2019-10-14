@@ -57,7 +57,7 @@ trait TestPrematureExit {
   private class BufferPrintStream extends PrintStream(noOpOutputStream) {
     var lineBuffer = ArrayBuffer[String]()
     // scalastyle:off println
-    override def println(line: String) {
+    override def println(line: String): Unit = {
       lineBuffer += line
     }
     // scalastyle:on println
@@ -121,7 +121,7 @@ class SparkSubmitSuite
 
   private val submit = new SparkSubmit()
 
-  override def beforeEach() {
+  override def beforeEach(): Unit = {
     super.beforeEach()
   }
 
@@ -1365,7 +1365,7 @@ object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
 }
 
 object JarCreationTest extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
@@ -1389,7 +1389,7 @@ object JarCreationTest extends Logging {
 }
 
 object SimpleApplicationTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
@@ -1415,7 +1415,7 @@ object SimpleApplicationTest {
 }
 
 object UserClasspathFirstTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val ccl = Thread.currentThread().getContextClassLoader()
     val resource = ccl.getResourceAsStream("test.resource")
     val bytes = ByteStreams.toByteArray(resource)

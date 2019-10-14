@@ -598,8 +598,15 @@ def main(infile, outfile):
             process()
     except Exception:
         try:
+            exc_info = traceback.format_exc()
+            if isinstance(exc_info, bytes):
+                # exc_info may contains other encoding bytes, replace the invalid bytes and convert
+                # it back to utf-8 again
+                exc_info = exc_info.decode("utf-8", "replace").encode("utf-8")
+            else:
+                exc_info = exc_info.encode("utf-8")
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(traceback.format_exc().encode("utf-8"), outfile)
+            write_with_length(exc_info, outfile)
         except IOError:
             # JVM close the socket
             pass

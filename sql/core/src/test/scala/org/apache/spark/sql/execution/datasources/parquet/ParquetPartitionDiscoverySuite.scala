@@ -58,7 +58,7 @@ abstract class ParquetPartitionDiscoverySuite
   val defaultPartitionName = ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 
   val timeZoneId = ZoneId.systemDefault()
-  val df = DateFormatter()
+  val df = DateFormatter(timeZoneId)
   val tf = TimestampFormatter(timestampPartitionPattern, timeZoneId)
 
   protected override def beforeAll(): Unit = {

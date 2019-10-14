@@ -17,8 +17,7 @@
 
 package org.apache.spark.network.netty
 
-import org.scalatest.Matchers
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.NettyUtils

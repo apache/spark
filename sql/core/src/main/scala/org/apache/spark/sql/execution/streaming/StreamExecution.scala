@@ -578,8 +578,10 @@ abstract class StreamExecution(
 
   protected def getBatchDescriptionString: String = {
     val batchDescription = if (currentBatchId < 0) "init" else currentBatchId.toString
-    Option(name).map(_ + "<br/>").getOrElse("") +
-      s"id = $id<br/>runId = $runId<br/>batch = $batchDescription"
+    s"""|${Option(name).getOrElse("")}
+        |id = $id
+        |runId = $runId
+        |batch = $batchDescription""".stripMargin
   }
 
   protected def createStreamingWrite(

@@ -59,8 +59,8 @@ private[kafka010] class KafkaBatch(
     // Leverage the KafkaReader to obtain the relevant partition offsets
     val (fromPartitionOffsets, untilPartitionOffsets) = {
       try {
-        (kafkaOffsetReader.fetchPartitionOffsets(startingOffsets),
-          kafkaOffsetReader.fetchPartitionOffsets(endingOffsets))
+        (kafkaOffsetReader.fetchPartitionOffsets(startingOffsets, isStartingOffsets = true),
+          kafkaOffsetReader.fetchPartitionOffsets(endingOffsets, isStartingOffsets = false))
       } finally {
         kafkaOffsetReader.close()
       }

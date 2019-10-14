@@ -77,15 +77,6 @@
       <groupId>${hive.group}</groupId>
       <artifactId>hive-beeline</artifactId>
     </dependency>
-    <!-- Explicit listing hive-contrib and hive-hcatalog-core. Otherwise the maven test fails. -->
-    <dependency>
-      <groupId>${hive.group}</groupId>
-      <artifactId>hive-contrib</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>${hive.group}.hcatalog</groupId>
-      <artifactId>hive-hcatalog-core</artifactId>
-    </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>

@@ -105,6 +105,8 @@ private[kafka010] class KafkaSource(
         case EarliestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchEarliestOffsets())
         case LatestOffsetRangeLimit => KafkaSourceOffset(kafkaReader.fetchLatestOffsets(None))
         case SpecificOffsetRangeLimit(p) => kafkaReader.fetchSpecificOffsets(p, reportDataLoss)
+        case SpecificTimestampRangeLimit(p) =>
+          kafkaReader.fetchSpecificTimestampBasedOffsets(p, failsOnNoMatchingOffset = true)
       }
       metadataLog.add(0, offsets)
       logInfo(s"Initial offsets: $offsets")

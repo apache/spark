@@ -179,6 +179,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>MONTH</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>MONTHS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>MSCK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>NAMESPACE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>NAMESPACES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>NATURAL</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>NO</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
@@ -280,6 +281,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>UNKNOWN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>UNLOCK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>UNSET</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>UPDATE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>USE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>USER</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>USING</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>

@@ -1311,7 +1311,7 @@ private[spark] abstract class SerDeBase {
       }
     }
 
-    private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler)
+    private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit
   }
 
   def dumps(obj: AnyRef): Array[Byte] = {

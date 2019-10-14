@@ -41,8 +41,11 @@ class InMemoryTable(
     override val properties: util.Map[String, String])
   extends Table with SupportsRead with SupportsWrite with SupportsDelete {
 
+  private val allowUnsupportedTransforms =
+    properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
+
   partitioning.foreach { t =>
-    if (!t.isInstanceOf[IdentityTransform]) {
+    if (!t.isInstanceOf[IdentityTransform] && !allowUnsupportedTransforms) {
       throw new IllegalArgumentException(s"Transform $t must be IdentityTransform")
     }
   }

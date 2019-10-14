@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types._
@@ -488,7 +488,7 @@ case class ReplaceTableAsSelect(
   override def tableSchema: StructType = query.schema
   override def children: Seq[LogicalPlan] = Seq(query)
 
-  override lazy val resolved: Boolean = {
+  override lazy val resolved: Boolean = childrenResolved && {
     // the table schema is created from the query schema, so the only resolution needed is to check
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
@@ -506,15 +506,22 @@ case class ReplaceTableAsSelect(
 case class AppendData(
     table: NamedRelation,
     query: LogicalPlan,
+    writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand
 
 object AppendData {
-  def byName(table: NamedRelation, df: LogicalPlan): AppendData = {
-    new AppendData(table, df, isByName = true)
+  def byName(
+      table: NamedRelation,
+      df: LogicalPlan,
+      writeOptions: Map[String, String] = Map.empty): AppendData = {
+    new AppendData(table, df, writeOptions, isByName = true)
   }
 
-  def byPosition(table: NamedRelation, query: LogicalPlan): AppendData = {
-    new AppendData(table, query, isByName = false)
+  def byPosition(
+      table: NamedRelation,
+      query: LogicalPlan,
+      writeOptions: Map[String, String] = Map.empty): AppendData = {
+    new AppendData(table, query, writeOptions, isByName = false)
   }
 }
 
@@ -525,19 +532,26 @@ case class OverwriteByExpression(
     table: NamedRelation,
     deleteExpr: Expression,
     query: LogicalPlan,
+    writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand {
   override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
 }
 
 object OverwriteByExpression {
   def byName(
-      table: NamedRelation, df: LogicalPlan, deleteExpr: Expression): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, df, isByName = true)
+      table: NamedRelation,
+      df: LogicalPlan,
+      deleteExpr: Expression,
+      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, df, writeOptions, isByName = true)
   }
 
   def byPosition(
-      table: NamedRelation, query: LogicalPlan, deleteExpr: Expression): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, query, isByName = false)
+      table: NamedRelation,
+      query: LogicalPlan,
+      deleteExpr: Expression,
+      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, query, writeOptions, isByName = false)
   }
 }
 
@@ -547,15 +561,22 @@ object OverwriteByExpression {
 case class OverwritePartitionsDynamic(
     table: NamedRelation,
     query: LogicalPlan,
+    writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand
 
 object OverwritePartitionsDynamic {
-  def byName(table: NamedRelation, df: LogicalPlan): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, df, isByName = true)
+  def byName(
+      table: NamedRelation,
+      df: LogicalPlan,
+      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, df, writeOptions, isByName = true)
   }
 
-  def byPosition(table: NamedRelation, query: LogicalPlan): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, query, isByName = false)
+  def byPosition(
+      table: NamedRelation,
+      query: LogicalPlan,
+      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, query, writeOptions, isByName = false)
   }
 }
 
@@ -578,10 +599,17 @@ case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Comm
 }
 
 case class DeleteFromTable(
-    child: LogicalPlan,
-    condition: Option[Expression]) extends Command {
+    table: LogicalPlan,
+    condition: Option[Expression]) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
 
-  override def children: Seq[LogicalPlan] = child :: Nil
+case class UpdateTable(
+    table: LogicalPlan,
+    columns: Seq[Expression],
+    values: Seq[Expression],
+    condition: Option[Expression]) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
@@ -637,6 +665,14 @@ case class ShowTables(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
 }
+
+/**
+ * The logical plan of the USE/USE NAMESPACE command that works for v2 catalogs.
+ */
+case class SetCatalogAndNamespace(
+    catalogManager: CatalogManager,
+    catalogName: Option[String],
+    namespace: Option[Seq[String]]) extends Command
 
 /**
  * Insert query result into a directory.
@@ -1211,6 +1247,12 @@ case class Deduplicate(
 
   override def output: Seq[Attribute] = child.output
 }
+
+/**
+ * A trait to represent the commands that support subqueries.
+ * This is used to whitelist such commands in the subquery-related checks.
+ */
+trait SupportsSubquery extends LogicalPlan
 
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {

@@ -24,7 +24,6 @@ import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.types.Decimal
@@ -379,7 +378,7 @@ object DateTimeUtils {
    * `yyyy-[m]m-[d]d *`
    * `yyyy-[m]m-[d]dT*`
    */
-  def stringToDate(s: UTF8String): Option[SQLDate] = {
+  def stringToDate(s: UTF8String, zoneId: ZoneId): Option[SQLDate] = {
     if (s == null) {
       return None
     }
@@ -387,6 +386,8 @@ object DateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trim.getBytes
+    val specialDate = convertSpecialDate(bytes, zoneId)
+    if (specialDate.isDefined) return specialDate
     var j = 0
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
@@ -461,12 +462,19 @@ object DateTimeUtils {
   }
 
   /**
+   * Returns the seconds part and its fractional part with microseconds.
+   */
+  def getSecondsWithFraction(microsec: SQLTimestamp, timeZone: TimeZone): Decimal = {
+    val secFrac = localTimestamp(microsec, timeZone) % (MILLIS_PER_MINUTE * MICROS_PER_MILLIS)
+    Decimal(secFrac, 8, 6)
+  }
+
+  /**
    * Returns seconds, including fractional parts, multiplied by 1000. The timestamp
    * is expressed in microseconds since the epoch.
    */
   def getMilliseconds(timestamp: SQLTimestamp, timeZone: TimeZone): Decimal = {
-    val micros = Decimal(getMicroseconds(timestamp, timeZone))
-    (micros / Decimal(MICROS_PER_MILLIS)).toPrecision(8, 3)
+    Decimal(getMicroseconds(timestamp, timeZone), 8, 3)
   }
 
   /**
@@ -848,12 +856,15 @@ object DateTimeUtils {
    * since 1970-01-01 00:00:00 local time.
    */
   def getEpoch(timestamp: SQLTimestamp, zoneId: ZoneId): Decimal = {
-    val offset = zoneId.getRules.getOffset(microsToInstant(timestamp)).getTotalSeconds
-    val sinceEpoch = BigDecimal(timestamp) / MICROS_PER_SECOND + offset
-    new Decimal().set(sinceEpoch, 20, 6)
+    val offset = SECONDS.toMicros(
+      zoneId.getRules.getOffset(microsToInstant(timestamp)).getTotalSeconds)
+    val sinceEpoch = timestamp + offset
+    Decimal(sinceEpoch, 20, 6)
   }
 
   def currentTimestamp(): SQLTimestamp = instantToMicros(Instant.now())
+
+  def currentDate(zoneId: ZoneId): SQLDate = localDateToDays(LocalDate.now(zoneId))
 
   private def today(zoneId: ZoneId): ZonedDateTime = {
     Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT)
@@ -911,6 +922,30 @@ object DateTimeUtils {
   private def convertSpecialTimestamp(bytes: Array[Byte], zoneId: ZoneId): Option[SQLTimestamp] = {
     if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
       convertSpecialTimestamp(new String(bytes, StandardCharsets.UTF_8), zoneId)
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Converts notational shorthands that are converted to ordinary dates.
+   * @param input - a trimmed string
+   * @param zoneId - zone identifier used to get the current date.
+   * @return some of days since the epoch if the conversion completed successfully otherwise None.
+   */
+  def convertSpecialDate(input: String, zoneId: ZoneId): Option[SQLDate] = {
+    extractSpecialValue(input, zoneId).flatMap {
+      case "epoch" => Some(0)
+      case "now" | "today" => Some(currentDate(zoneId))
+      case "tomorrow" => Some(Math.addExact(currentDate(zoneId), 1))
+      case "yesterday" => Some(Math.subtractExact(currentDate(zoneId), 1))
+      case _ => None
+    }
+  }
+
+  private def convertSpecialDate(bytes: Array[Byte], zoneId: ZoneId): Option[SQLDate] = {
+    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
+      convertSpecialDate(new String(bytes, StandardCharsets.UTF_8), zoneId)
     } else {
       None
     }
