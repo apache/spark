@@ -31,7 +31,6 @@ import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.execution.datasources.{PartitionedFile, RecordReaderIterator}
@@ -188,7 +187,7 @@ case class ParquetPartitionReaderFactory(
       convertTz: Option[TimeZone]): RecordReader[Void, InternalRow] = {
     logDebug(s"Falling back to parquet-mr")
     val taskContext = Option(TaskContext.get())
-    // ParquetRecordReader returns UnsafeRow
+    // ParquetRecordReader returns InternalRow
     val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)
     val reader = if (pushed.isDefined && enableRecordFilter) {
       val parquetFilter = FilterCompat.get(pushed.get, null)
