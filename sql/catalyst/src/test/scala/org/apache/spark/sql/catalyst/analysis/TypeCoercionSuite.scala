@@ -1430,7 +1430,12 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(dateTimeOperations, Add(date, intValue), DateAdd(date, intValue))
     ruleTest(dateTimeOperations, Add(intValue, date), DateAdd(date, intValue))
     ruleTest(dateTimeOperations, Subtract(date, intValue), DateSub(date, intValue))
-    ruleTest(dateTimeOperations, Subtract(date, date), SubtractDates(date, date))
+    withSQLConf(SQLConf.LEGACY_DATES_SUBTRACTION.key -> "false") {
+      ruleTest(dateTimeOperations, Subtract(date, date), SubtractDates(date, date))
+    }
+    withSQLConf(SQLConf.LEGACY_DATES_SUBTRACTION.key -> "true") {
+      ruleTest(dateTimeOperations, Subtract(date, date), DateDiff(date, date))
+    }
     ruleTest(dateTimeOperations, Subtract(timestamp, timestamp),
       TimestampDiff(timestamp, timestamp))
     ruleTest(dateTimeOperations, Subtract(timestamp, date),

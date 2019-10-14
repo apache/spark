@@ -2014,6 +2014,15 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+
+  val LEGACY_DATES_SUBTRACTION =
+    buildConf("spark.sql.legacy.datesSubtraction.enabled")
+      .doc("When true, date subtraction expressions have the INT type and return " +
+        "the number of days between the dates. If it is set to false, the expressions " +
+        "have the INTERVAL type and return an interval from the left date (inclusive) " +
+        "to the right date (exclusive).")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
