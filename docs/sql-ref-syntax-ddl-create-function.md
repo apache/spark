@@ -168,5 +168,4 @@ SELECT simple_udf(c1) AS function_return_value FROM t1;
 ### Related statements
 - [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
 - [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
-- [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
 - [DROP FUNCTION](sql-ref-syntax-ddl-drop-function.html)
