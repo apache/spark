@@ -1828,10 +1828,10 @@ class HiveDDLSuite
         .write.format("hive").mode("append").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Nil)
 
-      Seq("c" -> 3).toDF("i", "j")
+      Seq(3.5 -> 3).toDF("i", "j")
         .write.format("hive").mode("append").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c")
-        :: Row(null, "3") :: Nil)
+        :: Row(3, "3") :: Nil)
 
       Seq(4 -> "d").toDF("i", "j").write.saveAsTable("t1")
 
