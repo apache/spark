@@ -119,7 +119,7 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
       hiveClient.runSqlHive(s"CREATE TABLE hive_serde (c1 BINARY) STORED AS $fileFormat")
       hiveClient.runSqlHive("INSERT INTO TABLE hive_serde values('1')")
       checkAnswer(spark.table("hive_serde"), Row("1".getBytes))
-      spark.sql("INSERT INTO TABLE hive_serde values('2')")
+      spark.sql("INSERT INTO TABLE hive_serde values(BINARY('2'))")
       checkAnswer(spark.table("hive_serde"), Seq(Row("1".getBytes), Row("2".getBytes)))
     }
   }
