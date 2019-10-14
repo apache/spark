@@ -28,6 +28,9 @@ from googleapiclient.errors import HttpError
 
 from airflow.gcp.hooks.base import GoogleCloudBaseHook
 from airflow.utils.log.logging_mixin import LoggingMixin
+from airflow.version import version as airflow_version
+
+_AIRFLOW_VERSION = 'v' + airflow_version.replace('.', '-').replace('+', '-')
 
 
 def _poll_with_exponential_delay(request, max_n, is_done_func, is_error_func):
@@ -112,6 +115,8 @@ class MLEngineHook(GoogleCloudBaseHook):
         assert project_id is not None
 
         hook = self.get_conn()
+
+        self._append_label(job)
 
         request = hook.projects().jobs().create(  # pylint: disable=no-member
             parent='projects/{}'.format(project_id),
@@ -218,6 +223,9 @@ class MLEngineHook(GoogleCloudBaseHook):
         """
         hook = self.get_conn()
         parent_name = 'projects/{}/models/{}'.format(project_id, model_name)
+
+        self._append_label(version_spec)
+
         create_request = hook.projects().models().versions().create(  # pylint: disable=no-member
             parent=parent_name, body=version_spec)
         response = create_request.execute()
@@ -365,6 +373,8 @@ class MLEngineHook(GoogleCloudBaseHook):
                              "could not be an empty string")
         project = 'projects/{}'.format(project_id)
 
+        self._append_label(model)
+
         request = hook.projects().models().create(  # pylint: disable=no-member
             parent=project, body=model)
         return request.execute()
@@ -453,3 +463,7 @@ class MLEngineHook(GoogleCloudBaseHook):
         for version in default_versions:
             _, _, version_name = version['name'].rpartition('/')
             self.delete_version(project_id=project_id, model_name=model_name, version_name=version_name)
+
+    def _append_label(self, model: Dict) -> None:
+        model['labels'] = model.get('labels', {})
+        model['labels']['airflow-version'] = _AIRFLOW_VERSION
