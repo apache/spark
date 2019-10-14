@@ -3256,14 +3256,14 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        ... def asof_join(l, r):
        ...     return pd.merge_asof(l, r, on="time", by="id")
        >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()  # doctest: +SKIP
-       +--------+---+---+---+
-       |    time| id| v1| v2|
-       +--------+---+---+---+
-       |20000101|  1|1.0|  x|
-       |20000102|  1|3.0|  x|
-       |20000101|  2|2.0|  y|
-       |20000102|  2|4.0|  y|
-       +--------+---+---+---+
+       +---------+---+---+---+
+       |     time| id| v1| v2|
+       +---------+---+---+---+
+       | 20000101|  1|1.0|  x|
+       | 20000102|  1|3.0|  x|
+       | 20000101|  2|2.0|  y|
+       | 20000102|  2|4.0|  y|
+       +---------+---+---+---+
 
        Alternatively, the user can define a function that takes three arguments.  In this case,
        the grouping key(s) will be passed as the first argument and the data will be passed as the
@@ -3278,12 +3278,12 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        ...     else:
        ...         return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
        >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()  # doctest: +SKIP
-       +--------+---+---+---+
-       |    time| id| v1| v2|
-       +--------+---+---+---+
-       |20000101|  1|1.0|  x|
-       |20000102|  1|3.0|  x|
-       +--------+---+---+---+
+       +---------+---+---+---+
+       |     time| id| v1| v2|
+       +---------+---+---+---+
+       | 20000101|  1|1.0|  x|
+       | 20000102|  1|3.0|  x|
+       +---------+---+---+---+
 
     .. note:: The user-defined functions are considered deterministic by default. Due to
         optimization, duplicate invocations may be eliminated or the function may even be invoked
