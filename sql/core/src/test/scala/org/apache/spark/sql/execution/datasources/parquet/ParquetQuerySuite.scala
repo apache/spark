@@ -906,8 +906,19 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
   test("interval written and read as Parquet INTERVAL") {
     withTempPath { file =>
-      val df = spark.range(10)
-        .selectExpr("interval 100 years 1 month 10 second 1 millisecond as i")
+      val df = Seq(
+        "interval 0 seconds",
+        "interval 1 month 1 millisecond",
+        "interval -1 month -1 millisecond",
+        "interval 1 year 2 month 3 weeks 4 days 5 hours 6 minutes 7 second 8 millisecond",
+        "interval -1 year -2 month -3 weeks -4 days -5 hours -6 minutes -7 second -8 millisecond",
+        "interval 3650000 days",
+        "interval -3650000 days",
+        "interval 9999 years 12 months 1 millisecond",
+        "interval 9999 years 12 months 23 hours 59 minutes 59 seconds 999 milliseconds",
+        "interval -9999 years -12 months -23 hours -59 minutes -59 seconds -999 milliseconds",
+        "").toDF("intervalStr")
+        .selectExpr("CAST(intervalStr AS interval) AS i")
       df.write.parquet(file.getCanonicalPath)
       ("true" :: "false" :: Nil).foreach { vectorized =>
         withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
