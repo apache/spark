@@ -293,7 +293,7 @@ class RollingEventLogFilesWriter(
 
   import RollingEventLogFilesWriter._
 
-  private val eventFileMaxLength = sparkConf.get(EVENT_LOG_ROLLED_EVENT_LOG_MAX_FILE_SIZE)
+  private val eventFileMaxLength = sparkConf.get(EVENT_LOG_ROLLED_LOG_MAX_FILE_SIZE)
 
   private val logDirForAppPath = getAppEventLogDirPath(logBaseDir, appId, appAttemptId)
 

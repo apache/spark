@@ -300,7 +300,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
       val conf = getLoggingConf(testDirPath, codecShortName)
       conf.set(EVENT_LOG_ENABLE_ROLLING, true)
-      conf.set(EVENT_LOG_ROLLED_EVENT_LOG_MAX_FILE_SIZE.key, "1k")
+      conf.set(EVENT_LOG_ROLLED_LOG_MAX_FILE_SIZE.key, "1k")
 
       val writer = createWriter(appId, attemptId, testDirPath.toUri, conf,
         SparkHadoopUtil.get.newConfiguration(conf))

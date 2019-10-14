@@ -186,7 +186,7 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EVENT_LOG_ROLLED_EVENT_LOG_MAX_FILE_SIZE =
+  private[spark] val EVENT_LOG_ROLLED_LOG_MAX_FILE_SIZE =
     ConfigBuilder("spark.eventLog.logRolling.maxFileSize")
       .doc("The max size of event log file to be rolled over.")
       .bytesConf(ByteUnit.BYTE)
