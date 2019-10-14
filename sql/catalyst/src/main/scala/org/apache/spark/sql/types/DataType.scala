@@ -448,6 +448,8 @@ object DataType {
 
         fieldCompatible
 
+      case (_: NullType, _) => true
+
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == STRICT =>
         if (!Cast.canUpCast(w, r)) {
           addError(s"Cannot safely cast '$context': $w to $r")

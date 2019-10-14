@@ -143,7 +143,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   /** List of test cases to ignore, in lower cases. */
   protected def blackList: Set[String] = Set(
-    "blacklist.sql"   // Do NOT remove this one. It is here to test the blacklist functionality.
+    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
+    // SPARK-28885 String value is not allowed to be stored as numeric type with
+    // ANSI store assignment policy.
+    "postgreSQL/numeric.sql",
+    "postgreSQL/int2.sql",
+    "postgreSQL/int4.sql",
+    "postgreSQL/int8.sql",
+    "postgreSQL/float4.sql",
+    "postgreSQL/float8.sql",
+    // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
+    // ANSI store assignment policy.
+    "postgreSQL/date.sql",
+    "postgreSQL/timestamp.sql"
   )
 
   // Create all the test cases.
