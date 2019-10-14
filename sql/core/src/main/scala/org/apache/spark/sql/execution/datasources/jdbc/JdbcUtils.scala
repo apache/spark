@@ -615,7 +615,7 @@ object JdbcUtils extends Logging {
       batchSize: Int,
       dialect: JdbcDialect,
       isolationLevel: Int,
-      options: JDBCOptions): Iterator[Byte] = {
+      options: JDBCOptions): Long = {
     val conn = getConnection()
     var committed = false
 
@@ -643,7 +643,7 @@ object JdbcUtils extends Logging {
       }
     }
     val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
-
+    var totalUpdatedRows = 0
     try {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
@@ -673,12 +673,12 @@ object JdbcUtils extends Logging {
           stmt.addBatch()
           rowCount += 1
           if (rowCount % batchSize == 0) {
-            stmt.executeBatch()
+            totalUpdatedRows += stmt.executeBatch().sum
             rowCount = 0
           }
         }
         if (rowCount > 0) {
-          stmt.executeBatch()
+          totalUpdatedRows += stmt.executeBatch().sum
         }
       } finally {
         stmt.close()
@@ -687,7 +687,7 @@ object JdbcUtils extends Logging {
         conn.commit()
       }
       committed = true
-      Iterator.empty
+      totalUpdatedRows
     } catch {
       case e: SQLException =>
         val cause = e.getNextException
@@ -840,10 +840,14 @@ object JdbcUtils extends Logging {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.rdd.foreachPartition(iterator => savePartition(
-      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
-      options)
-    )
+    repartitionedDF.rdd.foreachPartition { iterator =>
+      val outMetrics = TaskContext.get().taskMetrics().outputMetrics
+      val totalUpdatedRows = savePartition(
+        getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
+        options)
+      outMetrics.setRecordsWritten(outMetrics.recordsWritten + totalUpdatedRows)
+      Iterator.empty
+    }
   }
 
   /**
