@@ -28,7 +28,7 @@ abstract class CypherSessionSuite extends QueryTest with SharedSparkSession with
 
   test("save and loads a property graph") {
     val nodeData = spark.createDataFrame(Seq(0L -> "Alice", 1L -> "Bob")).toDF("id", "name")
-    val nodeFrame = cypherSession.buildNodeFrame(nodeData)
+    val nodeDataset = cypherSession.buildNodeDataset(nodeData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
@@ -37,14 +37,14 @@ abstract class CypherSessionSuite extends QueryTest with SharedSparkSession with
     val relationshipData = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))
       .toDF("id", "source", "target", "since")
-    val relationshipFrame = cypherSession.buildRelationshipFrame(relationshipData)
+    val relationshipDataset = cypherSession.buildRelationshipDataset(relationshipData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("KNOWS")
       .build()
 
-    val writeGraph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
+    val writeGraph = cypherSession.createGraph(Array(nodeDataset), Array(relationshipDataset))
 
     withTempDir(file => {
       writeGraph.write.mode(SaveMode.Overwrite).save(file.getAbsolutePath)

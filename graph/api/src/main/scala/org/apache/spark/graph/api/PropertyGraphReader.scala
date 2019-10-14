@@ -17,6 +17,9 @@
 
 package org.apache.spark.graph.api
 
+import org.apache.spark.annotation.Evolving
+
+@Evolving
 abstract class PropertyGraphReader(session: CypherSession) {
 
   protected var format: String =

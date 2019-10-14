@@ -17,11 +17,14 @@
 
 package org.apache.spark.graph.api
 
+import org.apache.spark.annotation.Evolving
+
 /**
  * Describes the structure of a [[PropertyGraph]].
  *
  * @since 3.0.0
  */
+@Evolving
 trait PropertyGraphType {
 
   /**

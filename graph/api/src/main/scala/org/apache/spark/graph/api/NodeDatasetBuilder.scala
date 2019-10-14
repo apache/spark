@@ -19,15 +19,17 @@ package org.apache.spark.graph.api
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row}
 
 /**
- * Interface used to build a [[NodeFrame]].
+ * A builder for [[NodeDataset]].
  *
  * @param ds Dataset containing a single node in each row
  * @since 3.0.0
  */
-final class NodeFrameBuilder(var ds: Dataset[Row]) {
+@Evolving
+final class NodeDatasetBuilder(val ds: Dataset[Row]) {
 
   private var idColumn: String = CypherSession.ID_COLUMN
   private var labelSet: Set[String] = Set.empty
@@ -37,7 +39,7 @@ final class NodeFrameBuilder(var ds: Dataset[Row]) {
    * @param idColumn column that contains the node identifier
    * @since 3.0.0
    */
-  def idColumn(idColumn: String): NodeFrameBuilder = {
+  def idColumn(idColumn: String): NodeDatasetBuilder = {
     if (idColumn.isEmpty) {
       throw new IllegalArgumentException("idColumn must not be empty")
     }
@@ -49,7 +51,7 @@ final class NodeFrameBuilder(var ds: Dataset[Row]) {
    * @param labelSet labels that are assigned to all nodes
    * @since 3.0.0
    */
-  def labelSet(labelSet: Array[String]): NodeFrameBuilder = {
+  def labelSet(labelSet: Array[String]): NodeDatasetBuilder = {
     this.labelSet = labelSet.toSet
     this
   }
@@ -58,7 +60,7 @@ final class NodeFrameBuilder(var ds: Dataset[Row]) {
    * @param properties mapping from property keys to corresponding columns
    * @since 3.0.0
    */
-  def properties(properties: Map[String, String]): NodeFrameBuilder = {
+  def properties(properties: Map[String, String]): NodeDatasetBuilder = {
     this.properties = properties
     this
   }
@@ -67,18 +69,18 @@ final class NodeFrameBuilder(var ds: Dataset[Row]) {
    * @param properties mapping from property keys to corresponding columns
    * @since 3.0.0
    */
-  def properties(properties: java.util.Map[String, String]): NodeFrameBuilder = {
+  def properties(properties: java.util.Map[String, String]): NodeDatasetBuilder = {
     this.properties = properties.asScala.toMap
     this
   }
 
   /**
-   * Creates a `NodeFrame` from the specified builder parameters.
+   * Creates a `NodeDataset` from the specified builder parameters.
    *
    * @since 3.0.0
    */
-  def build(): NodeFrame = {
-    NodeFrame(ds, idColumn, labelSet, properties)
+  def build(): NodeDataset = {
+    NodeDataset(ds, idColumn, labelSet, properties)
   }
 
 }

@@ -21,12 +21,14 @@ import scala.collection.JavaConverters._
 
 import org.slf4j.LoggerFactory
 
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.{BooleanType, StructType}
 
 /**
  * Contains constants used for convention based column naming.
  */
+@Evolving
 object CypherSession {
 
   /**
@@ -50,14 +52,14 @@ object CypherSession {
   val LABEL_COLUMN_PREFIX = ":"
 
   /**
-   * Extracts [[NodeFrame]]s from a [[Dataset]] using column name conventions.
+   * Extracts [[NodeDataset]]s from a [[Dataset]] using column name conventions.
    *
    * For information about naming conventions, see [[CypherSession.createGraph]].
    *
    * @param nodes node dataset
    * @since 3.0.0
    */
-  def extractNodeFrames(nodes: Dataset[Row]): Set[NodeFrame] = {
+  def extractNodeDataset(nodes: Dataset[Row]): Set[NodeDataset] = {
     val labelColumns = nodes.columns.filter(_.startsWith(LABEL_COLUMN_PREFIX)).toSet
     validateLabelColumns(nodes.schema, labelColumns)
 
@@ -88,19 +90,19 @@ object CypherSession {
         }
         .reduce(_ && _)
 
-      NodeFrame(nodes.filter(predicate), ID_COLUMN, labelSet.map(_.substring(1)), nodeProperties)
+      NodeDataset(nodes.filter(predicate), ID_COLUMN, labelSet.map(_.substring(1)), nodeProperties)
     }
   }
 
   /**
-   * Extracts [[RelationshipFrame]]s from a [[Dataset]] using column name conventions.
+   * Extracts [[RelationshipDataset]]s from a [[Dataset]] using column name conventions.
    *
    * For information about naming conventions, see [[CypherSession.createGraph]].
    *
    * @param relationships relationship dataset
    * @since 3.0.0
    */
-  def extractRelationshipFrames(relationships: Dataset[Row]): Set[RelationshipFrame] = {
+  def extractRelationshipDataset(relationships: Dataset[Row]): Set[RelationshipDataset] = {
     val relColumns = relationships.columns.toSet
     val relTypeColumns = relColumns.filter(_.startsWith(LABEL_COLUMN_PREFIX))
     validateLabelColumns(relationships.schema, relTypeColumns)
@@ -110,7 +112,7 @@ object CypherSession {
     relTypeColumns.map { relTypeColumn =>
       val predicate = relationships.col(relTypeColumn)
 
-      RelationshipFrame(
+      RelationshipDataset(
         relationships.filter(predicate),
         ID_COLUMN,
         SOURCE_ID_COLUMN,
@@ -138,6 +140,7 @@ object CypherSession {
  *
  * @since 3.0.0
  */
+@Evolving
 trait CypherSession {
 
   def sparkSession: SparkSession
@@ -209,17 +212,19 @@ trait CypherSession {
   }
 
   /**
-   * Creates a [[PropertyGraph]] from a sequence of [[NodeFrame]]s and [[RelationshipFrame]]s.
-   * At least one [[NodeFrame]] has to be provided.
+   * Creates a [[PropertyGraph]] from a sequence of [[NodeDataset]]s and [[RelationshipDataset]]s.
+   * At least one [[NodeDataset]] has to be provided.
    *
-   * For each label set and relationship type there can be at most one [[NodeFrame]] and at most one
-   * [[RelationshipFrame]], respectively.
+   * For each label set and relationship type there can be at most one [[NodeDataset]] and at most
+   * one [[RelationshipDataset]], respectively.
    *
-   * @param nodes         NodeFrames that define the nodes in the graph
-   * @param relationships RelationshipFrames that define the relationships in the graph
+   * @param nodes         NodeDataset that define the nodes in the graph
+   * @param relationships RelationshipDataset that define the relationships in the graph
    * @since 3.0.0
    */
-  def createGraph(nodes: Array[NodeFrame], relationships: Array[RelationshipFrame]): PropertyGraph
+  def createGraph(
+      nodes: Array[NodeDataset],
+      relationships: Array[RelationshipDataset]): PropertyGraph
 
   /**
    * Creates a [[PropertyGraph]] from nodes and relationships.
@@ -246,8 +251,8 @@ trait CypherSession {
    * @since 3.0.0
    */
   def createGraph(nodes: Dataset[Row], relationships: Dataset[Row]): PropertyGraph = {
-    val nodeFrames = CypherSession.extractNodeFrames(nodes)
-    val relationshipFrames = CypherSession.extractRelationshipFrames(relationships)
+    val nodeFrames = CypherSession.extractNodeDataset(nodes)
+    val relationshipFrames = CypherSession.extractRelationshipDataset(relationships)
     createGraph(nodeFrames.toArray, relationshipFrames.toArray)
   }
 
@@ -259,21 +264,22 @@ trait CypherSession {
   def read: PropertyGraphReader
 
   /**
-   * Returns a [[NodeFrameBuilder]] that can be used to construct a [[NodeFrame]].
+   * Returns a [[NodeDatasetBuilder]] that can be used to construct a [[NodeDataset]].
    *
    * @param ds Dataset containing a single node in each row
    * @since 3.0.0
    */
-  def buildNodeFrame(ds: Dataset[Row]): NodeFrameBuilder =
-    new NodeFrameBuilder(ds)
+  def buildNodeDataset(ds: Dataset[Row]): NodeDatasetBuilder =
+    new NodeDatasetBuilder(ds)
 
   /**
-   * Returns a [[RelationshipFrameBuilder]] that can be used to construct a [[RelationshipFrame]].
+   * Returns a [[RelationshipDatasetBuilder]] that can be used to construct
+   * a [[RelationshipDataset]].
    *
    * @param ds Dataset containing a single relationship in each row
    * @since 3.0.0
    */
-  def buildRelationshipFrame(ds: Dataset[Row]): RelationshipFrameBuilder =
-    new RelationshipFrameBuilder(ds)
+  def buildRelationshipDataset(ds: Dataset[Row]): RelationshipDatasetBuilder =
+    new RelationshipDatasetBuilder(ds)
 
 }
