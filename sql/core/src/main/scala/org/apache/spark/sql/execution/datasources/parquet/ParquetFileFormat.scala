@@ -360,7 +360,7 @@ class ParquetFileFormat
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: AtomicType => true
+    case _: AtomicType | _: CalendarIntervalType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
 
@@ -370,8 +370,6 @@ class ParquetFileFormat
       supportDataType(keyType) && supportDataType(valueType)
 
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
-
-    case _: CalendarIntervalType => true
 
     case _ => false
   }
