@@ -217,6 +217,8 @@ license: |
 
   - Since Spark 3.0, the `size` function returns `NULL` for the `NULL` input. In Spark version 2.4 and earlier, this function gives `-1` for the same input. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.sizeOfNull` to `true`.
 
+  - In Spark version 2.4 and earlier, dates subtraction `date1` - `date2` gives the number of days from `date1` to `date2`. Since Spark 3.0, the expression has the `INTERVAL` type and returns an interval between two dates. To get the number of days, use the `datediff` function.
+
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was
