@@ -168,7 +168,9 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
       checkNumericTypes(fileFormat, "DECIMAL(38, 2)", 2.1D)
 
       // Date/Time Types
-      checkDateTimeTypes(fileFormat)
+      // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
+      // ANSI store assignment policy.
+      // checkDateTimeTypes(fileFormat)
 
       // String Types
       checkStringTypes(fileFormat, "STRING", "s1")
