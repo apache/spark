@@ -474,8 +474,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right, _)
           if left.isStreaming && right.isStreaming =>
 
-          new StreamingSymmetricHashJoinExec(
-            leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+          val stateVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
+          new StreamingSymmetricHashJoinExec(leftKeys, rightKeys, joinType, condition,
+            stateVersion, planLater(left), planLater(right)) :: Nil
 
         case Join(left, right, _, _, _) if left.isStreaming && right.isStreaming =>
           throw new AnalysisException(
