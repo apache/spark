@@ -102,7 +102,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
     // ANSI store assignment policy.
     "postgreSQL/date.sql",
-    "postgreSQL/timestamp.sql"
+    "postgreSQL/timestamp.sql",
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
