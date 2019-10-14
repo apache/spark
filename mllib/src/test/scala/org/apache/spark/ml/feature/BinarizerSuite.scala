@@ -223,6 +223,19 @@ class BinarizerSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("Multiple Columns: Mismatched sizes of inputCol/thresholds") {
+    val binarizer = new Binarizer()
+      .setInputCol("input1")
+      .setOutputCol("result1")
+      .setThresholds(Array(1.0, 2.0))
+    val data1 = Array(1.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 2.0, 2.0, 2.0)
+    val data2 = Array(1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0, 3.0, 2.0, 3.0)
+    val df = data1.zip(data2).toSeq.toDF("input1", "input2")
+    intercept[IllegalArgumentException] {
+      binarizer.transform(df).count()
+    }
+  }
+
   test("Multiple Columns: Set both of threshold/thresholds") {
     val binarizer = new Binarizer()
       .setInputCols(Array("input1", "input2"))
