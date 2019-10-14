@@ -99,7 +99,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     "postgreSQL/int4.sql",
     "postgreSQL/int8.sql",
     "postgreSQL/float8.sql",
-    "pgSQL/window_part1.sql",
     // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
     // ANSI store assignment policy.
     "postgreSQL/date.sql",
