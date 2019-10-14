@@ -152,6 +152,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     "postgreSQL/int8.sql",
     "postgreSQL/float4.sql",
     "postgreSQL/float8.sql",
+    "pgSQL/window_part1.sql",
     // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
     // ANSI store assignment policy.
     "postgreSQL/date.sql",
