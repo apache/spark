@@ -781,12 +781,8 @@ class DataSourceV2SQLSuite
   test("ShowNamespaces: default v2 catalog is not set") {
     spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
 
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES")
-    }
-
-    assert(exception.getMessage.contains(
-      "SHOW NAMESPACES is not supported with the session catalog"))
+    // The current catalog is resolved to a v2 session catalog.
+    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
   }
 
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
@@ -814,13 +810,28 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("does not support namespaces"))
   }
 
-  test("ShowNamespaces: session catalog") {
+  test("ShowNamespaces: session catalog is used and namespace doesn't exist") {
     val exception = intercept[AnalysisException] {
       sql("SHOW NAMESPACES in dummy")
     }
 
-    assert(exception.getMessage.contains(
-      "SHOW NAMESPACES is not supported with the session catalog"))
+    assert(exception.getMessage.contains("Namespace 'dummy' not found"))
+  }
+
+  test("ShowNamespaces: change catalog and namespace with USE statements") {
+    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
+
+    // Initially, the current catalog is a v2 session catalog.
+    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
+
+    // Update the current catalog to 'testcat'.
+    sql("USE testcat")
+    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
+
+    // Update the current namespace to 'ns1'.
+    sql("USE ns1")
+    // 'SHOW NAMESPACES' is not affected by the current namespace and lists root namespaces.
+    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
   }
 
   private def testShowNamespaces(
