@@ -114,6 +114,9 @@ private[spark] class AppStatusListener(
       kvstore.view(classOf[ExecutorSummaryWrapper]).asScala.filter(_.info.isActive)
         .map(_.toLiveExecutor).foreach(exec => liveExecutors.put(exec.executorId, exec))
 
+      kvstore.view(classOf[ExecutorSummaryWrapper]).asScala.filter(!_.info.isActive)
+        .map(_.toLiveExecutor).foreach(exec => deadExecutors.put(exec.executorId, exec))
+
       kvstore.view(classOf[StageDataWrapper]).asScala
         .filter { stageData =>
           stageData.info.status == v1.StageStatus.PENDING ||

@@ -66,6 +66,7 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
     val liveExecutor = new LiveExecutor(info.id, info.addTime.getTime)
     liveExecutor.hostPort = info.hostPort
     liveExecutor.host = info.hostPort.split(":")(0)
+    liveExecutor.isActive = info.isActive
     liveExecutor.totalCores = info.totalCores
     liveExecutor.rddBlocks = info.rddBlocks
     liveExecutor.memoryUsed = info.memoryUsed
