@@ -48,7 +48,7 @@ import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, Tex
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DataType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
 
@@ -498,10 +498,8 @@ case class DataSource(
       outputColumnNames: Seq[String],
       physicalPlan: SparkPlan): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
-    if (outputColumns.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
-      throw new AnalysisException("Cannot save interval data type into external storage.")
-    }
 
+    checkUnsupportedTypes(outputColumns.map(_.dataType))
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(
@@ -535,11 +533,7 @@ case class DataSource(
    * Returns a logical plan to write the given [[LogicalPlan]] out to this [[DataSource]].
    */
   def planForWriting(mode: SaveMode, data: LogicalPlan): LogicalPlan = {
-    if (providingClass != classOf[ParquetFileFormat]) {
-      if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
-        throw new AnalysisException("Cannot save interval data type into external storage.")
-      }
-    }
+    checkUnsupportedTypes(data.schema.map(_.dataType))
 
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
@@ -570,6 +564,15 @@ case class DataSource(
 
     DataSource.checkAndGlobPathIfNecessary(allPaths.toSeq, hadoopConf,
       checkEmptyGlobPath, checkFilesExist)
+  }
+
+
+  private def checkUnsupportedTypes(dataTypes: Seq[DataType]): Unit = {
+    if (providingClass != classOf[ParquetFileFormat]) {
+      if (dataTypes.exists(_.isInstanceOf[CalendarIntervalType])) {
+        throw new AnalysisException("Cannot save interval data type into external storage.")
+      }
+    }
   }
 }
 
