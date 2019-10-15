@@ -407,10 +407,25 @@ object FileStreamSource {
     }
 
     private def buildArchiveFilePath(pathUri: URI): Path = {
-      require(baseArchivePathString.isDefined)
-      new Path(baseArchivePathString.get.stripSuffix("/") + pathUri.getPath)
+      require(baseArchivePath.isDefined)
+      new Path(baseArchivePath.get, pathUri.getPath.stripPrefix("/"))
     }
 
+    /**
+     * This method checks whether the destination of archive file will be under the source path
+     * (which contains glob) to prevent the possibility of overwriting/re-reading as input.
+     *
+     * FileStreamSource reads the files which one of below conditions is met:
+     * 1) file itself is matched with source path
+     * 2) parent directory is matched with source path
+     *
+     * Checking with glob pattern is costly, so this method leverages above information to prune
+     * the cases where the file cannot be matched with source path. For example, when file is
+     * moved to archive directory, destination path will retain input file's path as suffix,
+     * so destination path can't be matched with source path if archive directory's depth is
+     * longer than 2, as neither file nor parent directory of destination path can be matched
+     * with source path.
+     */
     private def isArchiveFileMatchedAgainstSourcePattern(archiveFile: Path): Boolean = {
       if (baseArchivePath.get.depth() > 2) {
         // there's no chance for archive file to be matched against source pattern
