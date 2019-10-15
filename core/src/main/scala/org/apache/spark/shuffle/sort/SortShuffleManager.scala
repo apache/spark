@@ -127,6 +127,27 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       startPartition, endPartition, context, metrics)
   }
 
+  /**
+   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive) to
+   * read from mapId.
+   * Called on executors by reduce tasks.
+   */
+  override def getMapReader[K, C](
+      handle: ShuffleHandle,
+      startPartition: Int,
+      endPartition: Int,
+      context: TaskContext,
+      metrics: ShuffleReadMetricsReporter,
+      mapId: Int): ShuffleReader[K, C] = {
+    new BlockStoreShuffleReader(
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
+      startPartition,
+      endPartition,
+      context,
+      metrics,
+      mapId = Some(mapId))
+  }
+
   /** Get a writer for a given partition. Called on executors by map tasks. */
   override def getWriter[K, V](
       handle: ShuffleHandle,
