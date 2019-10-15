@@ -757,12 +757,7 @@ private[spark] class MapOutputTrackerMaster(
             startPartition,
             endPartition,
             statuses,
-<<<<<<< HEAD
-            mapId)
-=======
-            useOldFetchProtocol,
             Some(mapId))
->>>>>>> resolve the comments
         }
       case None =>
         Iterator.empty
@@ -823,12 +818,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       s"partitions $startPartition-$endPartition")
     val statuses = getStatuses(shuffleId)
     try {
-<<<<<<< HEAD
-      MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses, mapId)
-=======
-      MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses,
-        useOldFetchProtocol, Some(mapId))
->>>>>>> resolve the comments
+      MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition,
+        statuses, Some(mapId))
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
@@ -980,7 +971,6 @@ private[spark] object MapOutputTracker extends Logging {
       startPartition: Int,
       endPartition: Int,
       statuses: Array[MapStatus],
-      useOldFetchProtocol: Boolean,
       mapId : Option[Int] = None): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     assert (statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
@@ -994,15 +984,8 @@ private[spark] object MapOutputTracker extends Logging {
         for (part <- startPartition until endPartition) {
           val size = status.getSizeForBlock(part)
           if (size != 0) {
-            if (useOldFetchProtocol) {
-              // While we use the old shuffle fetch protocol, we use mapIndex as mapId in the
-              // ShuffleBlockId.
-              splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                ((ShuffleBlockId(shuffleId, mapIndex, part), size, mapIndex))
-            } else {
-              splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                ((ShuffleBlockId(shuffleId, status.mapTaskId, part), size, mapIndex))
-            }
+            splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
+              ((ShuffleBlockId(shuffleId, status.mapId, part), size, mapIndex))
           }
         }
       }

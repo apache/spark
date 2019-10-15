@@ -44,7 +44,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val blocksByAddress = (mapId) match {
+    val blocksByAddress = mapId match {
       case (Some(mapId)) => mapOutputTracker.getMapSizesByExecutorId(
         handle.shuffleId,
         startPartition,
