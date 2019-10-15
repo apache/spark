@@ -23,10 +23,11 @@ from flask_appbuilder import BaseView as AppBuilderBaseView, expose
 from airflow.executors.base_executor import BaseExecutor
 # Importing base classes that we need to derive
 from airflow.hooks.base_hook import BaseHook
-from airflow.models.baseoperator import BaseOperator, BaseOperatorLink
+from airflow.models.baseoperator import BaseOperator
 # This is the class you derive to create a plugin
 from airflow.plugins_manager import AirflowPlugin
 from airflow.sensors.base_sensor_operator import BaseSensorOperator
+from airflow.utils.tests import AirflowLink, AirflowLink2, GithubLink, GoogleLink
 
 
 # Will show up under airflow.hooks.test_plugin.PluginHook
@@ -87,20 +88,6 @@ def stat_name_dummy_handler(stat_name):
     return stat_name
 
 
-class AirflowLink(BaseOperatorLink):
-    name = 'airflow'
-
-    def get_link(self, operator, dttm):
-        return 'should_be_overridden'
-
-
-class GithubLink(BaseOperatorLink):
-    name = 'github'
-
-    def get_link(self, operator, dttm):
-        return 'https://github.com/apache/airflow'
-
-
 # Defining the plugin class
 class AirflowTestPlugin(AirflowPlugin):
     name = "test_plugin"
@@ -116,6 +103,9 @@ class AirflowTestPlugin(AirflowPlugin):
     global_operator_extra_links = [
         AirflowLink(),
         GithubLink(),
+    ]
+    operator_extra_links = [
+        GoogleLink(), AirflowLink2()
     ]
 
 
