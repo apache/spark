@@ -1601,14 +1601,22 @@ class TypeCoercionSuite extends AnalysisTest {
   test("rule for interval operations") {
     val dateTimeOperations = TypeCoercion.DateTimeOperations
     val interval = Literal(new CalendarInterval(0, 0))
-    val longValue = Literal(10L, LongType)
 
-    ruleTest(dateTimeOperations, Multiply(interval, longValue),
-      MultiplyInterval(interval, longValue))
-    ruleTest(dateTimeOperations, Multiply(longValue, interval),
-      MultiplyInterval(interval, longValue))
-    ruleTest(dateTimeOperations, Divide(interval, longValue),
-      DivideInterval(interval, longValue))
+    Seq(
+      Literal(10.toByte, ByteType),
+      Literal(10.toShort, ShortType),
+      Literal(10, IntegerType),
+      Literal(10L, LongType),
+      Literal(Decimal(10), DecimalType.SYSTEM_DEFAULT),
+      Literal(10.5.toFloat, FloatType),
+      Literal(10.5, DoubleType)).foreach { num =>
+      ruleTest(dateTimeOperations, Multiply(interval, num),
+        MultiplyInterval(interval, num))
+      ruleTest(dateTimeOperations, Multiply(num, interval),
+        MultiplyInterval(interval, num))
+      ruleTest(dateTimeOperations, Divide(interval, num),
+        DivideInterval(interval, num))
+    }
   }
 }
 

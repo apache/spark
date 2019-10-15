@@ -355,15 +355,15 @@ public final class CalendarInterval implements Serializable {
     return new CalendarInterval(months, microseconds);
   }
 
-  public CalendarInterval multiply(long num) {
-    int months = Math.toIntExact(Math.multiplyExact(this.months, num));
-    long microseconds = Math.multiplyExact(this.microseconds, num);
+  public CalendarInterval multiply(double num) {
+    int months = Math.toIntExact((long)(num * this.months));
+    long microseconds = (long)(num * this.microseconds);
     return new CalendarInterval(months, microseconds);
   }
 
-  public CalendarInterval divide(long num) {
-    int months = Math.toIntExact(this.months / num);
-    long microseconds = this.microseconds / num;
+  public CalendarInterval divide(double num) {
+    int months = Math.toIntExact((long)(this.months / num));
+    long microseconds = (long)(this.microseconds / num);
     return new CalendarInterval(months, microseconds);
   }
 

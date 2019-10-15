@@ -302,13 +302,17 @@ public class CalendarIntervalSuite {
   @Test
   public void multiplyTest() {
     CalendarInterval interval = new CalendarInterval(0, 0);
-    assertEquals(interval.multiply(0), interval);
+    assertEquals(interval, interval.multiply(0));
 
     interval = new CalendarInterval(123, 456);
-    assertEquals(interval.multiply(42), new CalendarInterval(123 * 42, 456 * 42));
+    assertEquals(new CalendarInterval(123 * 42, 456 * 42), interval.multiply(42));
 
     interval = new CalendarInterval(-123, -456);
-    assertEquals(interval.multiply(42), new CalendarInterval(-123 * 42, -456 * 42));
+    assertEquals(new CalendarInterval(-123 * 42, -456 * 42), interval.multiply(42));
+
+    assertEquals(
+      new CalendarInterval((-123 * 3) / 2, (-456 * 3) / 2),
+      interval.multiply(1.5));
 
     try {
       interval = new CalendarInterval(2, 0);
@@ -317,33 +321,27 @@ public class CalendarIntervalSuite {
     } catch (java.lang.ArithmeticException e) {
       assertTrue(e.getMessage().contains("overflow"));
     }
-
-    try {
-      interval = new CalendarInterval(0, 2);
-      interval.multiply(Long.MAX_VALUE);
-      fail("Expected to throw an exception on microseconds overflow");
-    } catch (java.lang.ArithmeticException e) {
-      assertTrue(e.getMessage().contains("overflow"));
-    }
   }
 
     @Test
     public void divideTest() {
       CalendarInterval interval = new CalendarInterval(0, 0);
-      assertEquals(interval.divide(10), interval);
+      assertEquals(interval, interval.divide(10));
 
       interval = new CalendarInterval(10, 100);
-      assertEquals(interval.divide(3), new CalendarInterval(3, 33));
+      assertEquals(new CalendarInterval(3, 33), interval.divide(3));
+      assertEquals(new CalendarInterval(20, 200), interval.divide(0.5));
 
       interval = new CalendarInterval(-10, -100);
-      assertEquals(interval.divide(3), new CalendarInterval(-3, -33));
+      assertEquals(new CalendarInterval(-3, -33), interval.divide(3));
+      assertEquals(new CalendarInterval(-6, -66), interval.divide(1.5));
 
       try {
         interval = new CalendarInterval(123, 456);
         interval.divide(0);
         fail("Expected to throw an exception on divide by zero");
       } catch (java.lang.ArithmeticException e) {
-        assertTrue(e.getMessage().contains("by zero"));
+        assertTrue(e.getMessage().contains("overflow"));
       }
     }
 }

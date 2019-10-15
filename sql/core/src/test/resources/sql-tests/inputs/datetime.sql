@@ -39,5 +39,5 @@ select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
 
 -- interval operations
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15');
-select interval 1 month 2 weeks 3 microseconds * 2;
-select (3 * (timestamp'2019-10-15' - timestamp'2019-10-14')) / 2;
+select interval 4 month 2 weeks 3 microseconds * 1.5;
+select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5;

@@ -150,22 +150,22 @@ interval -12 weeks -2 days -14 hours -48 minutes -47 seconds -654 milliseconds -
 -- !query 17
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15')
 -- !query 17 schema
-struct<multiply_interval(timestampdiff(TIMESTAMP('2019-10-15 10:11:12.001002'), CAST(DATE '2019-10-15' AS TIMESTAMP)), CAST(3 AS BIGINT)):interval>
+struct<multiply_interval(timestampdiff(TIMESTAMP('2019-10-15 10:11:12.001002'), CAST(DATE '2019-10-15' AS TIMESTAMP)), CAST(3 AS DOUBLE)):interval>
 -- !query 17 output
 interval 1 days 6 hours 33 minutes 36 seconds 3 milliseconds 6 microseconds
 
 
 -- !query 18
-select interval 1 month 2 weeks 3 microseconds * 2
+select interval 4 month 2 weeks 3 microseconds * 1.5
 -- !query 18 schema
-struct<multiply_interval(interval 1 months 2 weeks 3 microseconds, CAST(2 AS BIGINT)):interval>
+struct<multiply_interval(interval 4 months 2 weeks 3 microseconds, CAST(1.5 AS DOUBLE)):interval>
 -- !query 18 output
-interval 2 months 4 weeks 6 microseconds
+interval 6 months 3 weeks 4 microseconds
 
 
 -- !query 19
-select (3 * (timestamp'2019-10-15' - timestamp'2019-10-14')) / 2
+select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5
 -- !query 19 schema
-struct<divide_interval(multiply_interval(timestampdiff(TIMESTAMP('2019-10-15 00:00:00'), TIMESTAMP('2019-10-14 00:00:00')), CAST(3 AS BIGINT)), CAST(2 AS BIGINT)):interval>
+struct<divide_interval(timestampdiff(TIMESTAMP('2019-10-15 00:00:00'), TIMESTAMP('2019-10-14 00:00:00')), CAST(1.5 AS DOUBLE)):interval>
 -- !query 19 output
-interval 1 days 12 hours
+interval 16 hours
