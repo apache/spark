@@ -316,6 +316,8 @@ object FunctionRegistry {
     expression[EveryAgg]("every"),
     expression[AnyAgg]("any"),
     expression[SomeAgg]("some"),
+    expression[BoolAnd]("bool_and"),
+    expression[BoolOr]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),

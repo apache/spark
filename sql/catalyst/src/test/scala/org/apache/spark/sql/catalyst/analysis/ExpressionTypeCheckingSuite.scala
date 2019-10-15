@@ -147,6 +147,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(new EveryAgg('booleanField))
     assertSuccess(new AnyAgg('booleanField))
     assertSuccess(new SomeAgg('booleanField))
+    assertSuccess(BoolOr('booleanField))
+    assertSuccess(BoolAnd('booleanField))
 
     assertError(Min('mapField), "min does not support ordering on type")
     assertError(Max('mapField), "max does not support ordering on type")

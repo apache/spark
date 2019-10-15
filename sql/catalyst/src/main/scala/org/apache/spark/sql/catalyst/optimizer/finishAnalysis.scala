@@ -50,6 +50,8 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
     case SomeAgg(arg) => Max(arg)
     case AnyAgg(arg) => Max(arg)
     case EveryAgg(arg) => Min(arg)
+    case BoolOr(arg) => Max(arg)
+    case BoolAnd(arg) => Min(arg)
   }
 }
 
