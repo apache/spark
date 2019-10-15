@@ -21,8 +21,8 @@ from abc import abstractmethod, ABCMeta
 from pyspark import since, keyword_only
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol, \
-    HasFeaturesCol, HasWeightCol
+from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasProbabilityCol, \
+    HasRawPredictionCol, HasFeaturesCol, HasWeightCol
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 
@@ -314,15 +314,14 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
 
 @inherit_doc
 class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeightCol,
-                                        JavaMLReadable, JavaMLWritable):
+                                        HasProbabilityCol, JavaMLReadable, JavaMLWritable):
     """
-    Evaluator for Multiclass Classification, which expects two input
-    columns: prediction and label.
+    Evaluator for Multiclass Classification, which expects input
+    columns: prediction, label, weight(optional) and probabilityCol(only for log-loss).
 
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
-    ...
     >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction")
     >>> evaluator.evaluate(dataset)
     0.66...
@@ -340,13 +339,23 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     ...     (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (1.0, 1.0, 1.0), (1.0, 1.0, 1.0),
     ...     (2.0, 2.0, 1.0), (2.0, 0.0, 1.0)]
     >>> dataset = spark.createDataFrame(scoreAndLabelsAndWeight, ["prediction", "label", "weight"])
-    ...
     >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction",
     ...     weightCol="weight")
     >>> evaluator.evaluate(dataset)
     0.66...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
     0.66...
+    >>> predictionAndLabelsWithProbabilities = sc.parallelize([
+    ...      (1.0, 1.0, 1.0, [0.1, 0.8, 0.1]), (0.0, 2.0, 1.0, [0.9, 0.05, 0.05]),
+    ...      (0.0, 0.0, 1.0, [0.8, 0.2, 0.0]), (1.0, 1.0, 1.0, [0.3, 0.65, 0.05])])
+    >>> dataset = spark.createDataFrame(predictionAndLabelsWithProbabilities, ["prediction",
+    ...     "label", "weight", "probability"])
+    >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction",
+    ...     probabilityCol="probability")
+    >>> evaluator.setMetricName("logloss")
+    MulticlassClassificationEvaluator...
+    >>> evaluator.evaluate(dataset)
+    0.9682...
 
     .. versionadded:: 1.5.0
     """
@@ -354,7 +363,8 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                        "metric name in evaluation "
                        "(f1|accuracy|weightedPrecision|weightedRecall|weightedTruePositiveRate|"
                        "weightedFalsePositiveRate|weightedFMeasure|truePositiveRateByLabel|"
-                       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel)",
+                       "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel|"
+                       "logloss)",
                        typeConverter=TypeConverters.toString)
     metricLabel = Param(Params._dummy(), "metricLabel",
                         "The class whose metric will be computed in truePositiveRateByLabel|"
@@ -365,18 +375,25 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                  "The beta value used in weightedFMeasure|fMeasureByLabel."
                  " Must be > 0. The default value is 1.",
                  typeConverter=TypeConverters.toFloat)
+    eps = Param(Params._dummy(), "eps",
+                "Log loss is undefined for p=0 or p=1, so probabilities are clipped to "
+                "max(eps, min(1 - eps, p)). "
+                "Must be in range (0, 0.5). The default value is 1e-15.",
+                 typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
-                 metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0):
+                 metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0,
+                 probabilityCol="probability", eps=1e-15):
         """
         __init__(self, predictionCol="prediction", labelCol="label", \
-                 metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0)
+                 metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0, \
+                 probabilityCol="probability", eps=1e-15)
         """
         super(MulticlassClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid)
-        self._setDefault(metricName="f1", metricLabel=0.0, beta=1.0)
+        self._setDefault(metricName="f1", metricLabel=0.0, beta=1.0, eps=1e-15)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -422,13 +439,29 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         """
         return self.getOrDefault(self.beta)
 
+    @since("3.0.0")
+    def setEps(self, value):
+        """
+        Sets the value of :py:attr:`eps`.
+        """
+        return self._set(eps=value)
+
+    @since("3.0.0")
+    def getEps(self):
+        """
+        Gets the value of eps or its default value.
+        """
+        return self.getOrDefault(self.eps)
+
     @keyword_only
     @since("1.5.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
-                  metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0):
+                  metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0,
+                  probabilityCol="probability", eps=1e-15):
         """
         setParams(self, predictionCol="prediction", labelCol="label", \
-                  metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0)
+                  metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0, \
+                  probabilityCol="probability", eps=1e-15)
         Sets params for multiclass classification evaluator.
         """
         kwargs = self._input_kwargs

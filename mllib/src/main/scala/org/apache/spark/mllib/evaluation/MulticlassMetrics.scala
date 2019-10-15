@@ -28,8 +28,8 @@ import org.apache.spark.sql.{DataFrame, Row}
 /**
  * Evaluator for multiclass classification.
  *
- * @param predictionAndLabels an RDD of (prediction, label, weight) or
- *                         (prediction, label) tuples.
+ * @param predictionAndLabels an RDD of (prediction, label, weight, probability) or
+ *                            (prediction, label, weight) or (prediction, label) tuples.
  */
 @Since("1.1.0")
 class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product]) {
@@ -39,17 +39,18 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
    * @param predictionAndLabels a DataFrame with two double columns: prediction and label
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
-    this(predictionAndLabels.rdd.map {
-      case Row(prediction: Double, label: Double, weight: Double) =>
-        (prediction, label, weight)
-      case Row(prediction: Double, label: Double) =>
-        (prediction, label, 1.0)
-      case other =>
-        throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
+    this(predictionAndLabels.rdd.map { r =>
+      r.size match {
+        case 2 => (r.getDouble(0), r.getDouble(1), 1.0, null)
+        case 3 => (r.getDouble(0), r.getDouble(1), r.getDouble(2), null)
+        case 4 => (r.getDouble(0), r.getDouble(1), r.getDouble(2), r.getSeq[Double](3).toArray)
+        case _ => throw new IllegalArgumentException(s"Expected Row of tuples, got $r")
+      }
     })
 
-
-  private val confusions = predictionAndLabels.map {
+  private lazy val confusions = predictionAndLabels.map {
+    case (prediction: Double, label: Double, weight: Double, _) =>
+      ((label, prediction), weight)
     case (prediction: Double, label: Double, weight: Double) =>
       ((label, prediction), weight)
     case (prediction: Double, label: Double) =>
@@ -237,4 +238,38 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
    */
   @Since("1.1.0")
   lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted
+
+  /**
+   * Returns the log-loss, aka logistic loss or cross-entropy loss.
+   * @param eps Log loss is undefined for p=0 or p=1, so probabilities are
+   *            clipped to max(eps, min(1 - eps, p)).
+   */
+  @Since("3.0.0")
+  def logloss(eps: Double = 1e-15): Double = {
+    require(eps > 0 && eps < 0.5, s"eps must be in range (0, 0.5), but got $eps")
+    val loss1 = - math.log(eps)
+    val loss2 = - math.log(1 - eps)
+
+    val (lossSum, weightSum) = predictionAndLabels.map {
+      case (prediction: Double, label: Double, weight: Double, probability: Array[Double]) =>
+        require(label.toInt == label && label >= 0, s"Invalid label $label")
+        require(probability != null, "probability of each class can not be null")
+        val p = probability(label.toInt)
+        val loss = if (p < eps) {
+          loss1
+        } else if (p > 1 - eps) {
+          loss2
+        } else {
+          - math.log(p)
+        }
+        (loss * weight, weight)
+
+      case other =>
+        throw new IllegalArgumentException(s"Expected quadruples, got $other")
+    }.treeReduce { case ((l1, w1), (l2, w2)) =>
+      (l1 + l2, w1 + w2)
+    }
+
+    lossSum / weightSum
+  }
 }
