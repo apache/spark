@@ -200,7 +200,7 @@
     <commons-crypto.version>1.0.0</commons-crypto.version>
     <!--
     If you are changing Arrow version specification, please check ./python/pyspark/sql/utils.py,
-    ./python/run-tests.py and ./python/setup.py too.
+    and ./python/setup.py too.
     -->
     <arrow.version>0.15.0</arrow.version>
 

@@ -105,7 +105,7 @@ if (in_spark):
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 _minimum_pandas_version = "0.23.2"
-_minimum_pyarrow_version = "0.12.1"
+_minimum_pyarrow_version = "0.15.0"
 
 try:
     # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
