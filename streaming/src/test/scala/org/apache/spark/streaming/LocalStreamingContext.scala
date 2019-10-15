@@ -32,7 +32,7 @@ trait LocalStreamingContext extends BeforeAndAfterEach { self: Suite =>
   @transient var ssc: StreamingContext = _
   @transient var stopSparkContext: Boolean = true
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       resetStreamingContext()
     } finally {

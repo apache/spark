@@ -66,3 +66,5 @@ select date_part('secs', c) from t;
 select date_part('not_supported', c) from t;
 
 select date_part(c, c) from t;
+
+select date_part(null, c) from t;

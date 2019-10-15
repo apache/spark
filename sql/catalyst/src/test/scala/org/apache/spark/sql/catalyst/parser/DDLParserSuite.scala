@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -408,7 +408,7 @@ class DDLParserSuite extends AnalysisTest {
   private def testCreateOrReplaceDdl(
       sqlStatement: String,
       tableSpec: TableSpec,
-      expectedIfNotExists: Boolean) {
+      expectedIfNotExists: Boolean): Unit = {
     val parsedPlan = parsePlan(sqlStatement)
     val newTableToken = sqlStatement.split(" ")(0).trim.toUpperCase(Locale.ROOT)
     parsedPlan match {
@@ -789,6 +789,48 @@ class DDLParserSuite extends AnalysisTest {
     assert(exc.getMessage.contains("Columns aliases is not allowed in DELETE."))
   }
 
+  test("update table: basic") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl
+        |SET t.a='Robert', t.b=32
+      """.stripMargin,
+      UpdateTableStatement(
+        Seq("testcat", "ns1", "ns2", "tbl"),
+        None,
+        Seq(Seq("t", "a"), Seq("t", "b")),
+        Seq(Literal("Robert"), Literal(32)),
+        None))
+  }
+
+  test("update table: with alias and where clause") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl AS t
+        |SET t.a='Robert', t.b=32
+        |WHERE t.c=2
+      """.stripMargin,
+      UpdateTableStatement(
+        Seq("testcat", "ns1", "ns2", "tbl"),
+        Some("t"),
+        Seq(Seq("t", "a"), Seq("t", "b")),
+        Seq(Literal("Robert"), Literal(32)),
+        Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
+  }
+
+  test("update table: columns aliases is not allowed") {
+    val exc = intercept[ParseException] {
+      parsePlan(
+        """
+          |UPDATE testcat.ns1.ns2.tbl AS t(a,b,c,d)
+          |SET b='Robert', c=32
+          |WHERE d=2
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("Columns aliases is not allowed in UPDATE."))
+  }
+
   test("show tables") {
     comparePlans(
       parsePlan("SHOW TABLES"),
@@ -802,6 +844,25 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
+  }
+
+  test("show databases: basic") {
+    comparePlans(
+      parsePlan("SHOW DATABASES"),
+      ShowNamespacesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW DATABASES LIKE 'defau*'"),
+      ShowNamespacesStatement(None, Some("defau*")))
+  }
+
+  test("show databases: FROM/IN operator is not allowed") {
+    def verify(sql: String): Unit = {
+      val exc = intercept[ParseException] { parsePlan(sql) }
+      assert(exc.getMessage.contains("FROM/IN operator is not allowed in SHOW DATABASES"))
+    }
+
+    verify("SHOW DATABASES FROM testcat.ns1.ns2")
+    verify("SHOW DATABASES IN testcat.ns1.ns2")
   }
 
   test("show namespaces") {

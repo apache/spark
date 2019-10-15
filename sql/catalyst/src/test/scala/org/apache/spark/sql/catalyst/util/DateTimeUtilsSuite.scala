@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{LocalDateTime, LocalTime, ZoneId}
+import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
@@ -37,7 +37,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
 
   test("nanoseconds truncation") {
     val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
-    def checkStringToTimestamp(originalTime: String, expectedParsedTime: String) {
+    def checkStringToTimestamp(originalTime: String, expectedParsedTime: String): Unit = {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(originalTime), defaultZoneId)
       assert(parsedTimestampOp.isDefined, "timestamp with nanoseconds was not parsed correctly")
@@ -120,28 +120,32 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
+  private def toDate(s: String, zoneId: ZoneId = ZoneOffset.UTC): Option[SQLDate] = {
+    stringToDate(UTF8String.fromString(s), zoneId)
+  }
+
   test("string to date") {
-    assert(stringToDate(UTF8String.fromString("2015-01-28")).get === days(2015, 1, 28))
-    assert(stringToDate(UTF8String.fromString("2015")).get === days(2015, 1, 1))
-    assert(stringToDate(UTF8String.fromString("0001")).get === days(1, 1, 1))
-    assert(stringToDate(UTF8String.fromString("2015-03")).get === days(2015, 3, 1))
+    assert(toDate("2015-01-28").get === days(2015, 1, 28))
+    assert(toDate("2015").get === days(2015, 1, 1))
+    assert(toDate("0001").get === days(1, 1, 1))
+    assert(toDate("2015-03").get === days(2015, 3, 1))
     Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18 123142",
       "2015-03-18T123123", "2015-03-18T").foreach { s =>
-      assert(stringToDate(UTF8String.fromString(s)).get === days(2015, 3, 18))
+      assert(toDate(s).get === days(2015, 3, 18))
     }
 
-    assert(stringToDate(UTF8String.fromString("2015-03-18X")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("2015/03/18")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("2015.03.18")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("20150318")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("2015-031-8")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("02015-03-18")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("015-03-18")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("015")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("02015")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("1999 08 01")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("1999-08 01")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("1999 08")).isEmpty)
+    assert(toDate("2015-03-18X").isEmpty)
+    assert(toDate("2015/03/18").isEmpty)
+    assert(toDate("2015.03.18").isEmpty)
+    assert(toDate("20150318").isEmpty)
+    assert(toDate("2015-031-8").isEmpty)
+    assert(toDate("02015-03-18").isEmpty)
+    assert(toDate("015-03-18").isEmpty)
+    assert(toDate("015").isEmpty)
+    assert(toDate("02015").isEmpty)
+    assert(toDate("1999 08 01").isEmpty)
+    assert(toDate("1999-08 01").isEmpty)
+    assert(toDate("1999 08").isEmpty)
   }
 
   private def toTimestamp(str: String, zoneId: ZoneId): Option[SQLTimestamp] = {
@@ -264,12 +268,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
 
   test("SPARK-15379: special invalid date string") {
     // Test stringToDate
-    assert(stringToDate(
-      UTF8String.fromString("2015-02-29 00:00:00")).isEmpty)
-    assert(stringToDate(
-      UTF8String.fromString("2015-04-31 00:00:00")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("2015-02-29")).isEmpty)
-    assert(stringToDate(UTF8String.fromString("2015-04-31")).isEmpty)
+    assert(toDate("2015-02-29 00:00:00").isEmpty)
+    assert(toDate("2015-04-31 00:00:00").isEmpty)
+    assert(toDate("2015-02-29").isEmpty)
+    assert(toDate("2015-04-31").isEmpty)
 
 
     // Test stringToTimestamp
@@ -584,6 +586,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
       toTimestamp(" Yesterday", zoneId).get should be (today - MICROS_PER_DAY +- tolerance)
       toTimestamp("Today ", zoneId).get should be (today +- tolerance)
       toTimestamp(" tomorrow CET ", zoneId).get should be (today + MICROS_PER_DAY +- tolerance)
+    }
+  }
+
+  test("special date values") {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      assert(toDate("epoch", zoneId).get === 0)
+      val today = localDateToDays(LocalDate.now(zoneId))
+      assert(toDate("YESTERDAY", zoneId).get === today - 1)
+      assert(toDate(" Now ", zoneId).get === today)
+      assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
+      assert(toDate("today", zoneId).get === today)
+      assert(toDate("tomorrow CET ", zoneId).get === today + 1)
     }
   }
 }

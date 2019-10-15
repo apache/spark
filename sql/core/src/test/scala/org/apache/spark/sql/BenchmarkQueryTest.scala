@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -43,12 +43,12 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
     }
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     RuleExecutor.resetMetrics()
   }
 
-  protected def checkGeneratedCode(plan: SparkPlan): Unit = {
+  protected def checkGeneratedCode(plan: SparkPlan, checkMethodCodeSize: Boolean = true): Unit = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
     plan foreach {
       case s: WholeStageCodegenExec =>
@@ -57,7 +57,7 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
     }
     codegenSubtrees.toSeq.foreach { subtree =>
       val code = subtree.doCodeGen()._2
-      try {
+      val (_, ByteCodeStats(maxMethodCodeSize, _, _)) = try {
         // Just check the generated code can be properly compiled
         CodeGenerator.compile(code)
       } catch {
@@ -72,6 +72,11 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
              """.stripMargin
           throw new Exception(msg, e)
       }
+
+      assert(!checkMethodCodeSize ||
+          maxMethodCodeSize <= CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT,
+        s"too long generated codes found in the WholeStageCodegenExec subtree (id=${subtree.id}) " +
+          s"and JIT optimization might not work:\n${subtree.treeString}")
     }
   }
 }

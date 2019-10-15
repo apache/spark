@@ -435,6 +435,6 @@ interval 3 years 1 hours
 -- !query 45
 select interval '3 year 1 hour'
 -- !query 45 schema
-struct<CAST(NULL AS INTERVAL):interval>
+struct<interval 3 years 1 hours:interval>
 -- !query 45 output
-NULL
+interval 3 years 1 hours
