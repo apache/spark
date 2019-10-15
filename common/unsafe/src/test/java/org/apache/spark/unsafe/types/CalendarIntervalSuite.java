@@ -307,6 +307,9 @@ public class CalendarIntervalSuite {
     interval = new CalendarInterval(123, 456);
     assertEquals(interval.multiply(42), new CalendarInterval(123 * 42, 456 * 42));
 
+    interval = new CalendarInterval(-123, -456);
+    assertEquals(interval.multiply(42), new CalendarInterval(-123 * 42, -456 * 42));
+
     try {
       interval = new CalendarInterval(2, 0);
       interval.multiply(Int.MaxValue());
@@ -323,4 +326,24 @@ public class CalendarIntervalSuite {
       assertTrue(e.getMessage().contains("overflow"));
     }
   }
+
+    @Test
+    public void divideTest() {
+      CalendarInterval interval = new CalendarInterval(0, 0);
+      assertEquals(interval.divide(10), interval);
+
+      interval = new CalendarInterval(10, 100);
+      assertEquals(interval.divide(3), new CalendarInterval(3, 33));
+
+      interval = new CalendarInterval(-10, -100);
+      assertEquals(interval.divide(3), new CalendarInterval(-3, -33));
+
+      try {
+        interval = new CalendarInterval(123, 456);
+        interval.divide(0);
+        fail("Expected to throw an exception on divide by zero");
+      } catch (java.lang.ArithmeticException e) {
+        assertTrue(e.getMessage().contains("by zero"));
+      }
+    }
 }
