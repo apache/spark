@@ -53,7 +53,7 @@ object SimpleExample {
         |RETURN a, r""".stripMargin)
 
     // Print the result
-    result.df.show()
+    result.ds.show()
 
 
     spark.stop()

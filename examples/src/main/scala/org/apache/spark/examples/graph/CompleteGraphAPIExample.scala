@@ -48,17 +48,17 @@ object CompleteGraphAPIExample {
     val cypherSession = SparkCypherSession.create(spark)
 
     // Create Node- and RelationshipFrames
-    val moviesNodeFrame = cypherSession.buildNodeFrame(moviesData)
+    val moviesNodeFrame = cypherSession.buildNodeDataset(moviesData)
       .idColumn("id")
       .labelSet(Array("Movie"))
       .properties(Map("title" -> "title"))
       .build()
-    val personsNodeFrame = cypherSession.buildNodeFrame(personsData)
+    val personsNodeFrame = cypherSession.buildNodeDataset(personsData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
       .build()
-    val actedInRelationshipFrame = cypherSession.buildRelationshipFrame(actedInData)
+    val actedInRelationshipFrame = cypherSession.buildRelationshipDataset(actedInData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
@@ -75,8 +75,8 @@ object CompleteGraphAPIExample {
     println()
     StdIn.readLine("Press Enter to continue: ")
 
-    val businessNodes = graph.nodeFrame(Array("Movie"))
-    businessNodes.df.show()
+    val businessNodes = graph.nodeDataset(Array("Movie"))
+    businessNodes.ds.show()
     StdIn.readLine("Press Enter to continue: ")
 
     // Run parameterised cypher query
@@ -86,7 +86,7 @@ object CompleteGraphAPIExample {
         |MATCH (p:Person {name: $name})-[:ACTED_IN]->(movie)
         |RETURN p.name, movie.title""".stripMargin, parameters)
     println(s"Movies with ${parameters.get("name")}")
-    result.df.show()
+    result.ds.show()
 
     // Store the PropertyGraph
     val savePath = "examples/src/main/resources/exampleGraph/"
