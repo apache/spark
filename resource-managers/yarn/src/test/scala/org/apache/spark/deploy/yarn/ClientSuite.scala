@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.net.URI
 import java.util.Properties
+import java.util.zip.ZipFile
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
@@ -329,6 +330,32 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val client = createClient(sparkConf)
     client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
+  }
+
+  test("exclude local spark jars when specified") {
+    val temp = Utils.createTempDir()
+    val jarsDir = new File(temp, "jars")
+    assert(jarsDir.mkdir())
+
+    val jarInclude = new File(jarsDir, "include.jar")
+    val jarExclude = new File(jarsDir, "exclude.jar")
+    new FileOutputStream(jarInclude).close()
+    new FileOutputStream(jarExclude).close()
+
+    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> temp.getAbsolutePath()))
+    sparkConf.set("spark.yarn.jars.exclusionRegex", ".*exclude.*")
+
+    val client = createClient(sparkConf)
+    client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
+
+    val outputZipFile = new ZipFile(
+      temp
+        .listFiles()
+        .filter(fl => fl.getName.matches("__spark_libs__.*zip"))(0)
+    )
+
+    outputZipFile.getEntry(jarInclude.getName) should not be (null)
+    outputZipFile.getEntry(jarExclude.getName) should be (null)
   }
 
   test("ignore same name jars") {

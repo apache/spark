@@ -560,7 +560,11 @@ private[spark] class Client(
           try {
             jarsStream.setLevel(0)
             jarsDir.listFiles().foreach { f =>
-              if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
+              if (f.isFile
+                && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar")
+                && f.canRead
+                && !f.getName.matches(sparkConf.get("spark.yarn.jars.exclusionRegex", "")))
+              {
                 jarsStream.putNextEntry(new ZipEntry(f.getName))
                 Files.copy(f, jarsStream)
                 jarsStream.closeEntry()
