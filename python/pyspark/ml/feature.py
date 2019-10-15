@@ -91,6 +91,7 @@ class Binarizer(JavaTransformer, HasThreshold, HasThresholds, HasInputCol, HasOu
     >>> df2 = spark.createDataFrame([(0.5, 0.3)], ["values1", "values2"])
     >>> binarizer2 = Binarizer(thresholds=[0.0, 1.0])
     >>> binarizer2.setInputCols(["values1", "values2"]).setOutputCols(["output1", "output2"])
+    Binarizer...
     >>> binarizer2.transform(df2).show()
     +-------+-------+-------+-------+
     |values1|values2|output1|output2|
