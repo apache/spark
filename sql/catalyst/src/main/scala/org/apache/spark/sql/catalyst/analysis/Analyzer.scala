@@ -2502,9 +2502,9 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case append @ AppendData(table, query, _, isByName)
           if table.resolved && query.resolved && !append.outputResolved =>
+        validateStoreAssignmentPolicy()
         val projection =
-          TableOutputResolver.resolveOutputColumns(
-            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
+          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
 
         if (projection != query) {
           append.copy(query = projection)
@@ -2514,9 +2514,9 @@ class Analyzer(
 
       case overwrite @ OverwriteByExpression(table, _, query, _, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
+        validateStoreAssignmentPolicy()
         val projection =
-          TableOutputResolver.resolveOutputColumns(
-            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
+          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
 
         if (projection != query) {
           overwrite.copy(query = projection)
@@ -2526,9 +2526,9 @@ class Analyzer(
 
       case overwrite @ OverwritePartitionsDynamic(table, query, _, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
+        validateStoreAssignmentPolicy()
         val projection =
-          TableOutputResolver.resolveOutputColumns(
-            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
+          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
 
         if (projection != query) {
           overwrite.copy(query = projection)
@@ -2538,16 +2538,14 @@ class Analyzer(
     }
   }
 
-  private def storeAssignmentPolicy: StoreAssignmentPolicy.Value = {
-    val policy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.STRICT)
+  private def validateStoreAssignmentPolicy(): Unit = {
     // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
-    if (policy == StoreAssignmentPolicy.LEGACY) {
+    if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
       val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
       throw new AnalysisException(s"""
         |"LEGACY" store assignment policy is disallowed in Spark data source V2.
         |Please set the configuration $configKey to other values.""".stripMargin)
     }
-    policy
   }
 
   private def commonNaturalJoinProcessing(
