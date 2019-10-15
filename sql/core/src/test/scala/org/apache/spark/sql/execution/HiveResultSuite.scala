@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 
-class HiveResultSuite extends SparkFunSuite with SharedSQLContext {
+class HiveResultSuite extends SharedSparkSession {
   import testImplicits._
 
   test("date formatting in hive result") {

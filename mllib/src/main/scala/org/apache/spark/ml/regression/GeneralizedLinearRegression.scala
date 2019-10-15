@@ -24,7 +24,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.attribute.AttributeGroup
@@ -221,8 +221,6 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
 }
 
 /**
- * :: Experimental ::
- *
  * Fit a Generalized Linear Model
  * (see <a href="https://en.wikipedia.org/wiki/Generalized_linear_model">
  * Generalized linear model (Wikipedia)</a>)
@@ -238,7 +236,6 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
  *  - "tweedie"  : power link function specified through "linkPower". The default link power in
  *  the tweedie family is 1 - variancePower.
  */
-@Experimental
 @Since("2.0.0")
 class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val uid: String)
   extends Regressor[Vector, GeneralizedLinearRegression, GeneralizedLinearRegressionModel]
@@ -971,9 +968,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[regression] object CLogLog extends Link("cloglog") {
 
-    override def link(mu: Double): Double = math.log(-1.0 * math.log(1 - mu))
+    override def link(mu: Double): Double = math.log(-math.log1p(-mu))
 
-    override def deriv(mu: Double): Double = 1.0 / ((mu - 1.0) * math.log(1.0 - mu))
+    override def deriv(mu: Double): Double = 1.0 / ((mu - 1.0) * math.log1p(-mu))
 
     override def unlink(eta: Double): Double = 1.0 - math.exp(-1.0 * math.exp(eta))
   }
@@ -991,10 +988,8 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 }
 
 /**
- * :: Experimental ::
  * Model produced by [[GeneralizedLinearRegression]].
  */
-@Experimental
 @Since("2.0.0")
 class GeneralizedLinearRegressionModel private[ml] (
     @Since("2.0.0") override val uid: String,
@@ -1041,18 +1036,33 @@ class GeneralizedLinearRegressionModel private[ml] (
   }
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val predictUDF = udf { (features: Vector, offset: Double) => predict(features, offset) }
-    val predictLinkUDF = udf { (features: Vector, offset: Double) => predictLink(features, offset) }
-
     val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)
-    var output = dataset
-    if ($(predictionCol).nonEmpty) {
-      output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol)), offset))
-    }
+    var outputData = dataset
+    var numColsOutput = 0
+
     if (hasLinkPredictionCol) {
-      output = output.withColumn($(linkPredictionCol), predictLinkUDF(col($(featuresCol)), offset))
+      val predLinkUDF = udf((features: Vector, offset: Double) => predictLink(features, offset))
+      outputData = outputData
+        .withColumn($(linkPredictionCol), predLinkUDF(col($(featuresCol)), offset))
+      numColsOutput += 1
     }
-    output.toDF()
+
+    if ($(predictionCol).nonEmpty) {
+      if (hasLinkPredictionCol) {
+        val predUDF = udf((eta: Double) => familyAndLink.fitted(eta))
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(linkPredictionCol))))
+      } else {
+        val predUDF = udf((features: Vector, offset: Double) => predict(features, offset))
+        outputData = outputData.withColumn($(predictionCol), predUDF(col($(featuresCol)), offset))
+      }
+      numColsOutput += 1
+    }
+
+    if (numColsOutput == 0) {
+      this.logWarning(s"$uid: GeneralizedLinearRegressionModel.transform() does nothing" +
+        " because no output columns were set.")
+    }
+    outputData.toDF
   }
 
   /**
@@ -1142,7 +1152,6 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
 }
 
 /**
- * :: Experimental ::
  * Summary of [[GeneralizedLinearRegression]] model and predictions.
  *
  * @param dataset Dataset to be summarized.
@@ -1150,7 +1159,6 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
  *                  model which cannot be modified from outside.
  */
 @Since("2.0.0")
-@Experimental
 class GeneralizedLinearRegressionSummary private[regression] (
     dataset: Dataset[_],
     origModel: GeneralizedLinearRegressionModel) extends Serializable {
@@ -1370,7 +1378,6 @@ class GeneralizedLinearRegressionSummary private[regression] (
 }
 
 /**
- * :: Experimental ::
  * Summary of [[GeneralizedLinearRegression]] fitting and model.
  *
  * @param dataset Dataset to be summarized.
@@ -1381,7 +1388,6 @@ class GeneralizedLinearRegressionSummary private[regression] (
  * @param solver the solver algorithm used for model training
  */
 @Since("2.0.0")
-@Experimental
 class GeneralizedLinearRegressionTrainingSummary private[regression] (
     dataset: Dataset[_],
     origModel: GeneralizedLinearRegressionModel,

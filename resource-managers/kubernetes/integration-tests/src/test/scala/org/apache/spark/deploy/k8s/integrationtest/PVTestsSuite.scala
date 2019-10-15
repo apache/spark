@@ -56,7 +56,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
                 .withMatchExpressions(new NodeSelectorRequirementBuilder()
                   .withKey("kubernetes.io/hostname")
                   .withOperator("In")
-                  .withValues("minikube").build()).build())
+                  .withValues("minikube", "docker-for-desktop", "docker-desktop").build()).build())
             .endRequired()
           .endNodeAffinity()
       .endSpec()

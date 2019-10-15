@@ -75,6 +75,7 @@ class PythonEvalType(object):
     SQL_WINDOW_AGG_PANDAS_UDF = 203
     SQL_SCALAR_PANDAS_ITER_UDF = 204
     SQL_MAP_PANDAS_ITER_UDF = 205
+    SQL_COGROUPED_MAP_PANDAS_UDF = 206
 
 
 def portable_hash(x):
@@ -693,7 +694,7 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
-        memory = _parse_memory(self.ctx._conf.get("spark.python.worker.memory", "512m"))
+        memory = self._memory_limit()
         serializer = self._jrdd_deserializer
 
         def sortPartition(iterator):
@@ -1832,8 +1833,7 @@ class RDD(object):
         # grouped into chunks.
         outputSerializer = self.ctx._unbatched_serializer
 
-        limit = (_parse_memory(self.ctx._conf.get(
-            "spark.python.worker.memory", "512m")) / 2)
+        limit = (self._memory_limit() / 2)
 
         def add_shuffle_key(split, iterator):
 
@@ -2371,8 +2371,6 @@ class RDD(object):
 
     def countApprox(self, timeout, confidence=0.95):
         """
-        .. note:: Experimental
-
         Approximate version of count() that returns a potentially incomplete
         result within a timeout, even if not all tasks have finished.
 
@@ -2385,8 +2383,6 @@ class RDD(object):
 
     def sumApprox(self, timeout, confidence=0.95):
         """
-        .. note:: Experimental
-
         Approximate operation to return the sum within a timeout
         or meet the confidence.
 
@@ -2402,8 +2398,6 @@ class RDD(object):
 
     def meanApprox(self, timeout, confidence=0.95):
         """
-        .. note:: Experimental
-
         Approximate operation to return the mean within a timeout
         or meet the confidence.
 
@@ -2419,8 +2413,6 @@ class RDD(object):
 
     def countApproxDistinct(self, relativeSD=0.05):
         """
-        .. note:: Experimental
-
         Return approximate number of distinct elements in the RDD.
 
         The algorithm used is based on streamlib's implementation of
@@ -2445,17 +2437,23 @@ class RDD(object):
         hashRDD = self.map(lambda x: portable_hash(x) & 0xFFFFFFFF)
         return hashRDD._to_java_object_rdd().countApproxDistinct(relativeSD)
 
-    def toLocalIterator(self):
+    def toLocalIterator(self, prefetchPartitions=False):
         """
         Return an iterator that contains all of the elements in this RDD.
         The iterator will consume as much memory as the largest partition in this RDD.
+        With prefetch it may consume up to the memory of the 2 largest partitions.
+
+        :param prefetchPartitions: If Spark should pre-fetch the next partition
+                                   before it is needed.
 
         >>> rdd = sc.parallelize(range(10))
         >>> [x for x in rdd.toLocalIterator()]
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
         with SCCallSiteSync(self.context) as css:
-            sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
+            sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(
+                self._jrdd.rdd(),
+                prefetchPartitions)
         return _local_iterator_from_socket(sock_info, self._jrdd_deserializer)
 
     def barrier(self):

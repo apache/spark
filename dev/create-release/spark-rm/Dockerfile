@@ -21,7 +21,7 @@
 # * Java 8
 # * Ivy
 # * Python/PyPandoc (2.7.15/3.6.7)
-# * R-base/R-base-dev (3.5.0+)
+# * R-base/R-base-dev (3.6.1)
 # * Ruby 2.3 build utilities
 
 FROM ubuntu:18.04
@@ -44,7 +44,7 @@ ARG PIP_PKGS="pyopenssl pypandoc numpy pygments sphinx"
 # the most current package versions (instead of potentially using old versions cached by docker).
 RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/' >> /etc/apt/sources.list && \
-  gpg --keyserver keyserver.ubuntu.com --recv-key E084DAB9 && \
+  gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
   gpg -a --export E084DAB9 | apt-key add - && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
@@ -78,7 +78,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   Rscript -e "devtools::install_github('jimhester/lintr')" && \
   # Install tools needed to build the documentation.
   $APT_INSTALL ruby2.3 ruby2.3-dev mkdocs && \
-  gem install jekyll --no-rdoc --no-ri && \
+  gem install jekyll --no-rdoc --no-ri -v 3.8.6 && \
   gem install jekyll-redirect-from && \
   gem install pygments.rb
 

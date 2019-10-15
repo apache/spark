@@ -85,6 +85,7 @@ class ContinuousSuiteBase extends StreamTest {
 }
 
 class ContinuousSuite extends ContinuousSuiteBase {
+  import IntegratedUDFTestUtils._
   import testImplicits._
 
   test("basic") {
@@ -251,6 +252,26 @@ class ContinuousSuite extends ContinuousSuiteBase {
     val results = spark.read.table("noharness").collect()
     assert(expected.map(Row(_)).subsetOf(results.toSet),
       s"Result set ${results.toSet} are not a superset of $expected!")
+  }
+
+  Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).foreach { udf =>
+    test(s"continuous mode with various UDFs - ${udf.prettyName}") {
+      assume(
+        shouldTestScalarPandasUDFs && udf.isInstanceOf[TestScalarPandasUDF] ||
+        shouldTestPythonUDFs && udf.isInstanceOf[TestPythonUDF] ||
+        udf.isInstanceOf[TestScalaUDF])
+
+      val input = ContinuousMemoryStream[Int]
+      val df = input.toDF()
+
+      testStream(df.select(udf(df("value")).cast("int")))(
+        AddData(input, 0, 1, 2),
+        CheckAnswer(0, 1, 2),
+        StopStream,
+        AddData(input, 3, 4, 5),
+        StartStream(),
+        CheckAnswer(0, 1, 2, 3, 4, 5))
+    }
   }
 }
 

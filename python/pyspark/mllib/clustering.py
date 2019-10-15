@@ -304,7 +304,7 @@ class KMeans(object):
 
     @classmethod
     @since('0.9.0')
-    def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
+    def train(cls, rdd, k, maxIterations=100, initializationMode="k-means||",
               seed=None, initializationSteps=2, epsilon=1e-4, initialModel=None):
         """
         Train a k-means clustering model.
@@ -317,8 +317,6 @@ class KMeans(object):
         :param maxIterations:
           Maximum number of iterations allowed.
           (default: 100)
-        :param runs:
-          This param has no effect since Spark 2.0.0.
         :param initializationMode:
           The initialization algorithm. This can be either "random" or
           "k-means||".
@@ -342,8 +340,6 @@ class KMeans(object):
           rather than using the random or k-means|| initializationModel.
           (default: None)
         """
-        if runs != 1:
-            warnings.warn("The param `runs` has no effect since Spark 2.0.0.")
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):
@@ -351,7 +347,7 @@ class KMeans(object):
                                 "to be of <type 'KMeansModel'>")
             clusterInitialModel = [_convert_to_vector(c) for c in initialModel.clusterCenters]
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
-                              runs, initializationMode, seed, initializationSteps, epsilon,
+                              initializationMode, seed, initializationSteps, epsilon,
                               clusterInitialModel)
         centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
@@ -383,11 +379,11 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> model.predict([-0.1,-0.05])
     0
     >>> softPredicted = model.predictSoft([-0.1,-0.05])
-    >>> abs(softPredicted[0] - 1.0) < 0.001
+    >>> abs(softPredicted[0] - 1.0) < 0.03
     True
-    >>> abs(softPredicted[1] - 0.0) < 0.001
+    >>> abs(softPredicted[1] - 0.0) < 0.03
     True
-    >>> abs(softPredicted[2] - 0.0) < 0.001
+    >>> abs(softPredicted[2] - 0.0) < 0.03
     True
 
     >>> path = tempfile.mkdtemp()

@@ -61,12 +61,18 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       // If not all leaf nodes are query stages, it's not safe to reduce the number of
       // shuffle partitions, because we may break the assumption that all children of a spark plan
       // have same number of output partitions.
+      return plan
+    }
+
+    val shuffleStages = plan.collect {
+      case stage: ShuffleQueryStageExec => stage
+      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => stage
+    }
+    // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
+    // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
+    if (!shuffleStages.forall(_.plan.canChangeNumPartitions)) {
       plan
     } else {
-      val shuffleStages = plan.collect {
-        case stage: ShuffleQueryStageExec => stage
-        case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => stage
-      }
       val shuffleMetrics = shuffleStages.map { stage =>
         val metricsFuture = stage.mapOutputStatisticsFuture
         assert(metricsFuture.isCompleted, "ShuffleQueryStageExec should already be ready")
@@ -76,11 +82,11 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       // `ShuffleQueryStageExec` gives null mapOutputStatistics when the input RDD has 0 partitions,
       // we should skip it when calculating the `partitionStartIndices`.
       val validMetrics = shuffleMetrics.filter(_ != null)
-      // We may get different pre-shuffle partition number if user calls repartition manually.
-      // We don't reduce shuffle partition number in that case.
+      // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
+      // in that case. For example when we union fully aggregated data (data is arranged to a single
+      // partition) and a result of a SortMergeJoin (multiple partitions).
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
-
       if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
         val partitionStartIndices = estimatePartitionStartIndices(validMetrics.toArray)
         // This transformation adds new nodes, so we must use `transformUp` here.

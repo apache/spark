@@ -4,8 +4,6 @@
 --SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
 
 -- This test file was converted from natural-join.sql.
--- Note that currently registered UDF returns a string. So there are some differences, for instance
--- in string cast within UDF in Scala and Python.
 
 create temporary view nt1 as select * from values
   ("one", 1),

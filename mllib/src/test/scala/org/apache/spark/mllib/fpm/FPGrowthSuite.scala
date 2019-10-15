@@ -18,6 +18,7 @@ package org.apache.spark.mllib.fpm
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -172,7 +173,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
       .collect()
 
     assert(rules.size === 23)
-    assert(rules.count(rule => math.abs(rule.confidence - 1.0D) < 1e-6) == 23)
+    assert(rules.count(rule => rule.confidence ~= 1.0D absTol 1e-6) == 23)
   }
 
   test("FP-Growth using Int type") {

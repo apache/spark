@@ -347,7 +347,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Applies a function f to all elements of this RDD.
    */
-  def foreach(f: VoidFunction[T]) {
+  def foreach(f: VoidFunction[T]): Unit = {
     rdd.foreach(x => f.call(x))
   }
 

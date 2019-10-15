@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
@@ -359,7 +359,6 @@ object KMeans extends DefaultParamsReadable[KMeans] {
 }
 
 /**
- * :: Experimental ::
  * Summary of KMeans.
  *
  * @param predictions  `DataFrame` produced by `KMeansModel.transform()`.
@@ -371,7 +370,6 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  *                     points in the training dataset). This is equivalent to sklearn's inertia.
  */
 @Since("2.0.0")
-@Experimental
 class KMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,

@@ -440,7 +440,8 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(TASK_FPGA_ID.amountConf, "1")
     var taskResourceRequirement =
-      parseTaskResourceRequirements(conf).map(req => (req.resourceName, req.amount)).toMap
+      parseResourceRequirements(conf, SPARK_TASK_PREFIX)
+        .map(req => (req.resourceName, req.amount)).toMap
 
     assert(taskResourceRequirement.size == 2)
     assert(taskResourceRequirement(GPU) == 2)
@@ -450,7 +451,8 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     // Ignore invalid prefix
     conf.set(ResourceID("spark.invalid.prefix", FPGA).amountConf, "1")
     taskResourceRequirement =
-      parseTaskResourceRequirements(conf).map(req => (req.resourceName, req.amount)).toMap
+      parseResourceRequirements(conf, SPARK_TASK_PREFIX)
+        .map(req => (req.resourceName, req.amount)).toMap
     assert(taskResourceRequirement.size == 1)
     assert(taskResourceRequirement.get(FPGA).isEmpty)
   }
@@ -461,7 +463,7 @@ class Class2 {}
 class Class3 {}
 
 class CustomRegistrator extends KryoRegistrator {
-  def registerClasses(kryo: Kryo) {
+  def registerClasses(kryo: Kryo): Unit = {
     kryo.register(classOf[Class2])
   }
 }

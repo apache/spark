@@ -40,7 +40,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::
-      Batch("Join Reorder", Once,
+      Batch("Join Reorder", FixedPoint(1),
         CostBasedJoinReorder) :: Nil
   }
 

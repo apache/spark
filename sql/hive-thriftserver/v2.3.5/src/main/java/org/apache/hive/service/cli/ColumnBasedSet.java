@@ -23,9 +23,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.serde2.thrift.ColumnBuffer;
-import org.apache.hadoop.hive.serde2.thrift.Type;
 import org.apache.hive.service.rpc.thrift.TColumn;
 import org.apache.hive.service.rpc.thrift.TRow;
 import org.apache.hive.service.rpc.thrift.TRowSet;
@@ -105,12 +103,7 @@ public class ColumnBasedSet implements RowSet {
     } else {
       for (int i = 0; i < fields.length; i++) {
         TypeDescriptor descriptor = descriptors[i];
-        Object field = fields[i];
-        if (field != null && descriptor.getType() == Type.DECIMAL_TYPE) {
-          int scale = descriptor.getDecimalDigits();
-          field = ((HiveDecimal) field).toFormatString(scale);
-        }
-        columns.get(i).addValue(descriptor.getType(), field);
+        columns.get(i).addValue(descriptor.getType(), fields[i]);
       }
     }
     return this;

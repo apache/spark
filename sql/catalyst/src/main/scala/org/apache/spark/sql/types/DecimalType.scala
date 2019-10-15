@@ -62,6 +62,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   private[sql] val ordering = Decimal.DecimalIsFractional
   private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
 
+  override private[sql] def exactNumeric = DecimalExactNumeric
+
   override def typeName: String = s"decimal($precision,$scale)"
 
   override def toString: String = s"DecimalType($precision,$scale)"

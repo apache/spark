@@ -92,7 +92,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
         spark.internalCreateDataFrame(spark.sparkContext.emptyRDD, schema, isStreaming = true)
       }
 
-      override def stop() {}
+      override def stop(): Unit = {}
     }
   }
 

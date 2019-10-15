@@ -22,10 +22,13 @@ import java.nio.file.Files
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.JobContext
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.execution.DataSourceScanExec
@@ -389,7 +392,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           var bytesWritten: Long = 0L
           try {
             spark.sparkContext.addSparkListener(new SparkListener() {
-              override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+              override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
                 val outputMetrics = taskEnd.taskMetrics.outputMetrics
                 recordsWritten += outputMetrics.recordsWritten
                 bytesWritten += outputMetrics.bytesWritten
@@ -473,14 +476,84 @@ abstract class FileStreamSinkSuite extends StreamTest {
       assert(outputFiles.toList.isEmpty, "Incomplete files should be cleaned up.")
     }
   }
+
+  testQuietly("cleanup complete but invalid output for aborted job") {
+    withSQLConf(("spark.sql.streaming.commitProtocolClass",
+      classOf[PendingCommitFilesTrackingManifestFileCommitProtocol].getCanonicalName)) {
+      withTempDir { tempDir =>
+        val checkpointDir = new File(tempDir, "chk")
+        val outputDir = new File(tempDir, "output @#output")
+        val inputData = MemoryStream[Int]
+        inputData.addData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+        val q = inputData.toDS()
+          .repartition(10)
+          .map { value =>
+            // we intend task failure after some tasks succeeds
+            if (value == 5) {
+              // put some delay to let other task commits before this task fails
+              Thread.sleep(100)
+              value / 0
+            } else {
+              value
+            }
+          }
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .format("parquet")
+          .start(outputDir.getCanonicalPath)
+
+        intercept[StreamingQueryException] {
+          try {
+            q.processAllAvailable()
+          } finally {
+            q.stop()
+          }
+        }
+
+        import PendingCommitFilesTrackingManifestFileCommitProtocol._
+        val outputFileNames = Files.walk(outputDir.toPath).iterator().asScala
+          .filter(_.toString.endsWith(".parquet"))
+          .map(_.getFileName.toString)
+          .toSet
+        val trackingFileNames = tracking.map(new Path(_).getName).toSet
+
+        // there would be possible to have race condition:
+        // - some tasks complete while abortJob is being called
+        // we can't delete complete files for these tasks (it's OK since this is a best effort)
+        assert(outputFileNames.intersect(trackingFileNames).isEmpty,
+          "abortJob should clean up files reported as successful.")
+      }
+    }
+  }
+}
+
+object PendingCommitFilesTrackingManifestFileCommitProtocol {
+  val tracking: ArrayBuffer[String] = new ArrayBuffer[String]()
+
+  def cleanPendingCommitFiles(): Unit = tracking.clear()
+  def addPendingCommitFiles(paths: Seq[String]): Unit = tracking ++= paths
+}
+
+class PendingCommitFilesTrackingManifestFileCommitProtocol(jobId: String, path: String)
+  extends ManifestFileCommitProtocol(jobId, path) {
+  import PendingCommitFilesTrackingManifestFileCommitProtocol._
+
+  override def setupJob(jobContext: JobContext): Unit = {
+    super.setupJob(jobContext)
+    cleanPendingCommitFiles()
+  }
+
+  override def onTaskCommit(taskCommit: FileCommitProtocol.TaskCommitMessage): Unit = {
+    super.onTaskCommit(taskCommit)
+    addPendingCommitFiles(taskCommit.obj.asInstanceOf[Seq[SinkFileStatus]].map(_.path))
+  }
 }
 
 class FileStreamSinkV1Suite extends FileStreamSinkSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "csv,json,orc,text,parquet")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "csv,json,orc,text,parquet")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "csv,json,orc,text,parquet")
 
   override def checkQueryExecution(df: DataFrame): Unit = {
     // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
@@ -530,8 +603,7 @@ class FileStreamSinkV2Suite extends FileStreamSinkSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   override def checkQueryExecution(df: DataFrame): Unit = {
     // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has

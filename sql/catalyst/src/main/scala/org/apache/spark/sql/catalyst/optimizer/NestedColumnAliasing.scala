@@ -54,7 +54,7 @@ object NestedColumnAliasing {
   /**
    * Return a replaced project list.
    */
-  private def getNewProjectList(
+  def getNewProjectList(
       projectList: Seq[NamedExpression],
       nestedFieldToAlias: Map[ExtractValue, Alias]): Seq[NamedExpression] = {
     projectList.map(_.transform {
@@ -66,7 +66,7 @@ object NestedColumnAliasing {
   /**
    * Return a plan with new children replaced with aliases.
    */
-  private def replaceChildrenWithAliases(
+  def replaceChildrenWithAliases(
       plan: LogicalPlan,
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
     plan.withNewChildren(plan.children.map { plan =>
@@ -107,10 +107,10 @@ object NestedColumnAliasing {
    * 1. ExtractValue -> Alias: A new alias is created for each nested field.
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
    */
-  private def getAliasSubMap(projectList: Seq[NamedExpression])
+  def getAliasSubMap(exprList: Seq[Expression])
     : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = {
     val (nestedFieldReferences, otherRootReferences) =
-      projectList.flatMap(collectRootReferenceAndExtractValue).partition {
+      exprList.flatMap(collectRootReferenceAndExtractValue).partition {
         case _: ExtractValue => true
         case _ => false
       }
@@ -154,5 +154,16 @@ object NestedColumnAliasing {
     case ArrayType(elementType, _) => totalFieldNum(elementType)
     case MapType(keyType, valueType, _) => totalFieldNum(keyType) + totalFieldNum(valueType)
     case _ => 1 // UDT and others
+  }
+
+  /**
+   * This is a while-list for pruning nested fields at `Generator`.
+   */
+  def canPruneGenerator(g: Generator): Boolean = g match {
+    case _: Explode => true
+    case _: Stack => true
+    case _: PosExplode => true
+    case _: Inline => true
+    case _ => false
   }
 }

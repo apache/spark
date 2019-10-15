@@ -33,6 +33,7 @@ SERVICE_ACCOUNT=
 CONTEXT=
 INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
+JAVA_VERSION="8"
 MVN="$TEST_ROOT_DIR/build/mvn"
 
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
@@ -99,6 +100,10 @@ while (( "$#" )); do
       R_IMAGE_NAME="$2"
       shift
       ;;
+    --java-version)
+      JAVA_VERSION="$2"
+      shift
+      ;;
     *)
       break
       ;;
@@ -107,6 +112,7 @@ while (( "$#" )); do
 done
 
 properties=(
+  -Djava.version=$JAVA_VERSION \
   -Dspark.kubernetes.test.sparkTgz=$SPARK_TGZ \
   -Dspark.kubernetes.test.imageTag=$IMAGE_TAG \
   -Dspark.kubernetes.test.imageRepo=$IMAGE_REPO \

@@ -84,7 +84,7 @@ $ PRODUCTION=1 jekyll build
 
 ## API Docs (Scaladoc, Javadoc, Sphinx, roxygen2, MkDocs)
 
-You can build just the Spark scaladoc and javadoc by running `build/sbt unidoc` from the `$SPARK_HOME` directory.
+You can build just the Spark scaladoc and javadoc by running `./build/sbt unidoc` from the `$SPARK_HOME` directory.
 
 Similarly, you can build just the PySpark docs by running `make html` from the
 `$SPARK_HOME/python/docs` directory. Documentation is only generated for classes that are listed as
@@ -94,7 +94,7 @@ after [building Spark](https://github.com/apache/spark#building-spark) first.
 
 When you run `jekyll build` in the `docs` directory, it will also copy over the scaladoc and javadoc for the various
 Spark subprojects into the `docs` directory (and then also into the `_site` directory). We use a
-jekyll plugin to run `build/sbt unidoc` before building the site so if you haven't run it (recently) it
+jekyll plugin to run `./build/sbt unidoc` before building the site so if you haven't run it (recently) it
 may take some time as it generates all of the scaladoc and javadoc using [Unidoc](https://github.com/sbt/sbt-unidoc).
 The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-doc.org/), SparkR docs
 using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs

@@ -20,9 +20,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -43,11 +43,10 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
 
   protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
     val objectMapper = new ObjectMapper()
-    Option(map.get("paths")).map { pathStr =>
+    val paths = Option(map.get("paths")).map { pathStr =>
       objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
-    }.getOrElse {
-      Option(map.get("path")).toSeq
-    }
+    }.getOrElse(Seq.empty)
+    paths ++ Option(map.get("path")).toSeq
   }
 
   protected def getTableName(paths: Seq[String]): String = {

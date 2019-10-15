@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class ExplainSuite extends QueryTest with SharedSQLContext {
+class ExplainSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   /**
@@ -31,6 +32,19 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
     val output = new java.io.ByteArrayOutputStream()
     Console.withOut(output) {
       df.explain(extended = extended)
+    }
+    val normalizedOutput = output.toString.replaceAll("#\\d+", "#x")
+    f(normalizedOutput)
+  }
+
+  /**
+   * Get the explain by running the sql. The explain mode should be part of the
+   * sql text itself.
+   */
+  private def withNormalizedExplain(queryText: String)(f: String => Unit) = {
+    val output = new java.io.ByteArrayOutputStream()
+    Console.withOut(output) {
+      sql(queryText).show(false)
     }
     val normalizedOutput = output.toString.replaceAll("#\\d+", "#x")
     f(normalizedOutput)
@@ -197,6 +211,41 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
       val df = sql("create table temptable using parquet as select * from range(2)")
       withNormalizedExplain(df, extended = false) { normalizedOutput =>
         assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 1)
+      }
+    }
+  }
+
+  test("explain formatted - check presence of subquery in case of DPP") {
+    withTable("df1", "df2") {
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
+        withTable("df1", "df2") {
+          spark.range(1000).select(col("id"), col("id").as("k"))
+            .write
+            .partitionBy("k")
+            .format("parquet")
+            .mode("overwrite")
+            .saveAsTable("df1")
+
+          spark.range(100)
+            .select(col("id"), col("id").as("k"))
+            .write
+            .partitionBy("k")
+            .format("parquet")
+            .mode("overwrite")
+            .saveAsTable("df2")
+
+          val sqlText =
+            """
+              |EXPLAIN FORMATTED SELECT df1.id, df2.k
+              |FROM df1 JOIN df2 ON df1.k = df2.k AND df2.id < 2
+              |""".stripMargin
+
+          val expected_pattern = "Subquery:1 Hosting operator id = 1 Hosting Expression = k#x"
+          withNormalizedExplain(sqlText) { normalizedOutput =>
+            assert(expected_pattern.r.findAllMatchIn(normalizedOutput).length == 1)
+          }
+        }
       }
     }
   }
