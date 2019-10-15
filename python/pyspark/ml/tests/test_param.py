@@ -224,6 +224,10 @@ class ParamTests(SparkSessionTestCase):
         testParams.setMaxIter(100)
         self.assertTrue(testParams.isSet(maxIter))
         self.assertEqual(testParams.getMaxIter(), 100)
+        testParams.clear(maxIter)
+        self.assertFalse(testParams.isSet(maxIter))
+        self.assertEqual(testParams.getMaxIter(), 10)
+        testParams.setMaxIter(100)
 
         self.assertTrue(testParams.hasParam(inputCol.name))
         self.assertFalse(testParams.hasDefault(inputCol))
