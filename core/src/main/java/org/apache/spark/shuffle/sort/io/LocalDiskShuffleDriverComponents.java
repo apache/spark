@@ -17,30 +17,33 @@
 
 package org.apache.spark.shuffle.sort.io;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.shuffle.api.ShuffleDataIO;
+import java.util.Collections;
+import java.util.Map;
+
+import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.api.ShuffleDriverComponents;
-import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
+import org.apache.spark.storage.BlockManagerMaster;
 
-/**
- * Implementation of the {@link ShuffleDataIO} plugin system that replicates the local shuffle
- * storage and index file functionality that has historically been used from Spark 2.4 and earlier.
- */
-public class LocalDiskShuffleDataIO implements ShuffleDataIO {
+public class LocalDiskShuffleDriverComponents implements ShuffleDriverComponents {
 
-  private final SparkConf sparkConf;
+  private BlockManagerMaster blockManagerMaster;
 
-  public LocalDiskShuffleDataIO(SparkConf sparkConf) {
-    this.sparkConf = sparkConf;
+  @Override
+  public Map<String, String> initializeApplication() {
+    blockManagerMaster = SparkEnv.get().blockManager().master();
+    return Collections.emptyMap();
   }
 
   @Override
-  public ShuffleExecutorComponents executor() {
-    return new LocalDiskShuffleExecutorComponents(sparkConf);
+  public void cleanupApplication() {
+    // nothing to clean up
   }
 
   @Override
-  public ShuffleDriverComponents driver() {
-    return new LocalDiskShuffleDriverComponents();
+  public void removeShuffle(int shuffleId, boolean blocking) {
+    if (blockManagerMaster == null) {
+      throw new IllegalStateException("Driver components must be initialized before using");
+    }
+    blockManagerMaster.removeShuffle(shuffleId, blocking);
   }
 }
