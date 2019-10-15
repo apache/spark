@@ -21,8 +21,12 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.types.{AbstractDataType, CalendarIntervalType, DataType, LongType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
-case class MultiplyInterval(interval: Expression, num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+abstract class IntervalNumOperation(
+    interval: Expression,
+    num: Expression,
+    operation: (CalendarInterval, Long) => CalendarInterval,
+    operationName: String)
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -33,7 +37,7 @@ case class MultiplyInterval(interval: Expression, num: Expression)
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     try {
-      interval.asInstanceOf[CalendarInterval].multiply(num.asInstanceOf[Long])
+      operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Long])
     } catch {
       case _: java.lang.ArithmeticException => null
     }
@@ -43,11 +47,27 @@ case class MultiplyInterval(interval: Expression, num: Expression)
     nullSafeCodeGen(ctx, ev, (interval, num) => {
       s"""
         try {
-          ${ev.value} = $interval.multiply($num);
+          ${ev.value} = $interval.$operationName($num);
         } catch (java.lang.ArithmeticException e) {
           ${ev.isNull} = true;
         }
       """
     })
   }
+
+  override def prettyName: String = operationName + "_interval"
 }
+
+case class MultiplyInterval(interval: Expression, num: Expression)
+  extends IntervalNumOperation(
+    interval,
+    num,
+    (i: CalendarInterval, n: Long) => i.multiply(n),
+    "multiply")
+
+case class DivideInterval(interval: Expression, num: Expression)
+  extends IntervalNumOperation(
+    interval,
+    num,
+    (i: CalendarInterval, n: Long) => i.divide(n),
+    "divide")
