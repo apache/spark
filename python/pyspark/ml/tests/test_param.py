@@ -27,8 +27,8 @@ from pyspark import keyword_only
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.feature import Binarizer, Bucketizer, ElementwiseProduct, IndexToString, \
-    VectorSlicer, Word2Vec
-from pyspark.ml.linalg import DenseVector, SparseVector
+    MaxAbsScaler, VectorSlicer, Word2Vec
+from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
 from pyspark.ml.wrapper import JavaParams
@@ -251,6 +251,18 @@ class ParamTests(SparkSessionTestCase):
             "\n".join(["inputCol: input column name. (undefined)",
                        "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
                        "seed: random seed. (default: 41, current: 43)"]))
+
+    def test_clear_param(self):
+        df = self.spark.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
+        maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
+        model = maScaler.fit(df)
+        self.assertTrue(model.isSet(model.outputCol))
+        self.assertEqual(model.getOutputCol(), "scaled")
+        model.clear(model.outputCol)
+        self.assertFalse(model.isSet(model.outputCol))
+        self.assertEqual(model.getOutputCol()[:12], 'MaxAbsScaler')
+        output = model.transform(df)
+        self.assertEqual(model.getOutputCol(), output.schema.names[1])
 
     def test_kmeans_param(self):
         algo = KMeans()
