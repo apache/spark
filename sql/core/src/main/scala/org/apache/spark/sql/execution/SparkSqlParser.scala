@@ -156,17 +156,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[ShowDatabasesCommand]] logical plan.
-   * Example SQL:
-   * {{{
-   *   SHOW (DATABASES|SCHEMAS) [LIKE 'identifier_with_wildcards'];
-   * }}}
-   */
-  override def visitShowDatabases(ctx: ShowDatabasesContext): LogicalPlan = withOrigin(ctx) {
-    ShowDatabasesCommand(Option(ctx.pattern).map(string))
-  }
-
-  /**
    * A command for users to list the properties for a table. If propertyKey is specified, the value
    * for the propertyKey is returned. If propertyKey is not specified, all the keys and their
    * corresponding values are returned.

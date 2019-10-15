@@ -846,6 +846,25 @@ class DDLParserSuite extends AnalysisTest {
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
   }
 
+  test("show databases: basic") {
+    comparePlans(
+      parsePlan("SHOW DATABASES"),
+      ShowNamespacesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW DATABASES LIKE 'defau*'"),
+      ShowNamespacesStatement(None, Some("defau*")))
+  }
+
+  test("show databases: FROM/IN operator is not allowed") {
+    def verify(sql: String): Unit = {
+      val exc = intercept[ParseException] { parsePlan(sql) }
+      assert(exc.getMessage.contains("FROM/IN operator is not allowed in SHOW DATABASES"))
+    }
+
+    verify("SHOW DATABASES FROM testcat.ns1.ns2")
+    verify("SHOW DATABASES IN testcat.ns1.ns2")
+  }
+
   test("show namespaces") {
     comparePlans(
       parsePlan("SHOW NAMESPACES"),

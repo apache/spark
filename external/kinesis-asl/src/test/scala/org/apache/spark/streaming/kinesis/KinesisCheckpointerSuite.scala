@@ -52,7 +52,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
   private var kinesisCheckpointer: KinesisCheckpointer = _
   private var clock: ManualClock = _
 
-  private val checkpoint = PrivateMethod[Unit]('checkpoint)
+  private val checkpoint = PrivateMethod[Unit](Symbol("checkpoint"))
 
   override def beforeEach(): Unit = {
     receiverMock = mock[KinesisReceiver[Array[Byte]]]

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.util.concurrent.Semaphore
 
 import scala.collection.JavaConverters._
@@ -228,8 +228,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
     stageInfo.rddInfos.exists(_.name == "Target RDD") should be {true}
     stageInfo.numTasks should be {4}
-    stageInfo.submissionTime should be ('defined)
-    stageInfo.completionTime should be ('defined)
+    stageInfo.submissionTime should be (Symbol("defined"))
+    stageInfo.completionTime should be (Symbol("defined"))
     taskInfoMetrics.length should be {4}
   }
 

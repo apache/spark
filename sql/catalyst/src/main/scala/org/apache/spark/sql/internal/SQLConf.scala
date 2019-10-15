@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
@@ -89,11 +90,16 @@ object SQLConf {
   }
 
   def withExistingConf[T](conf: SQLConf)(f: => T): T = {
+    val old = existingConf.get()
     existingConf.set(conf)
     try {
       f
     } finally {
-      existingConf.remove()
+      if (old != null) {
+        existingConf.set(old)
+      } else {
+        existingConf.remove()
+      }
     }
   }
 
@@ -833,7 +839,7 @@ object SQLConf {
       .createWithDefault(10000)
 
   val IGNORE_DATA_LOCALITY =
-    buildConf("spark.sql.sources.ignore.datalocality")
+    buildConf("spark.sql.sources.ignoreDataLocality.enabled")
       .doc("If true, Spark will not fetch the block locations for each file on " +
         "listing files. This speeds up file listing, but the scheduler cannot " +
         "schedule tasks to take advantage of data locality. It can be particularly " +
@@ -1865,7 +1871,7 @@ object SQLConf {
     .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
       "The size function returns null for null input if the flag is disabled.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
@@ -1976,11 +1982,14 @@ object SQLConf {
     .stringConf
     .createOptional
 
-  val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
-      .doc("A catalog implementation that will be used in place of the Spark built-in session " +
-        "catalog for v2 operations. The implementation may extend `CatalogExtension` to be " +
-        "passed the Spark built-in session catalog, so that it may delegate calls to the " +
-        "built-in session catalog.")
+  val V2_SESSION_CATALOG_IMPLEMENTATION =
+    buildConf(s"spark.sql.catalog.$SESSION_CATALOG_NAME")
+      .doc("A catalog implementation that will be used as the v2 interface to Spark's built-in " +
+        s"v1 catalog: $SESSION_CATALOG_NAME. This catalog shares its identifier namespace with " +
+        s"the $SESSION_CATALOG_NAME and must be consistent with it; for example, if a table can " +
+        s"be loaded by the $SESSION_CATALOG_NAME, this catalog must also return the table " +
+        s"metadata. To delegate operations to the $SESSION_CATALOG_NAME, implementations can " +
+        "extend 'CatalogExtension'.")
       .stringConf
       .createOptional
 

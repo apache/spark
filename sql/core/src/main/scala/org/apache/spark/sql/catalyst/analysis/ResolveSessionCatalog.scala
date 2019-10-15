@@ -256,15 +256,6 @@ class ResolveSessionCatalog(
     case DropViewStatement(SessionCatalog(catalog, viewName), ifExists) =>
       DropTableCommand(viewName.asTableIdentifier, ifExists, isView = true, purge = false)
 
-    case ShowNamespacesStatement(Some(SessionCatalog(catalog, nameParts)), pattern) =>
-      throw new AnalysisException(
-        "SHOW NAMESPACES is not supported with the session catalog.")
-
-    // TODO (SPARK-29014): we should check if the current catalog is session catalog here.
-    case ShowNamespacesStatement(None, pattern) if defaultCatalog.isEmpty =>
-      throw new AnalysisException(
-        "SHOW NAMESPACES is not supported with the session catalog.")
-
     case ShowTablesStatement(Some(SessionCatalog(catalog, nameParts)), pattern) =>
       if (nameParts.length != 1) {
         throw new AnalysisException(

@@ -25,8 +25,9 @@ import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -138,13 +139,13 @@ private[connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Session
   protected val catalogClassName: String = classOf[InMemoryTableSessionCatalog].getName
 
   before {
-    spark.conf.set(V2_SESSION_CATALOG.key, catalogClassName)
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION.key, catalogClassName)
   }
 
   override def afterEach(): Unit = {
     super.afterEach()
-    catalog("session").asInstanceOf[Catalog].clearTables()
-    spark.conf.unset(V2_SESSION_CATALOG.key)
+    catalog(SESSION_CATALOG_NAME).asInstanceOf[Catalog].clearTables()
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
   }
 
   protected def verifyTable(tableName: String, expected: DataFrame): Unit
