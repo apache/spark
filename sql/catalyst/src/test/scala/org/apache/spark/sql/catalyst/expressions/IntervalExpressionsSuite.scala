@@ -29,13 +29,26 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkEvaluation(multiply("0 seconds", 10), fromString("0 seconds"))
     checkEvaluation(multiply("10 hours", 0), fromString("0 hours"))
-    checkEvaluation(
-      multiply("12 months 1 microseconds", 2),
-      fromString("2 years 2 microseconds"))
-    checkEvaluation(
-      multiply("-5 year 3 seconds", 3),
-      fromString("-15 years 9 seconds"))
+    checkEvaluation(multiply("12 months 1 microseconds", 2), fromString("2 years 2 microseconds"))
+    checkEvaluation(multiply("-5 year 3 seconds", 3), fromString("-15 years 9 seconds"))
     checkEvaluation(multiply("2 months", Int.MaxValue), null)
     checkEvaluation(multiply("2 days", Long.MaxValue), null)
+  }
+
+  test("divide") {
+    def divide(interval: String, num: Long): Expression = {
+      DivideInterval(Literal(fromString(interval)), Literal(num))
+    }
+    checkEvaluation(divide("0 seconds", 10), fromString("0 seconds"))
+    checkEvaluation(
+      divide("12 months 3 milliseconds", 2),
+      fromString("6 months 1 milliseconds 500 microseconds"))
+    checkEvaluation(
+      divide("-5 year 3 seconds", 3),
+      fromString("-1 years -8 months 1 seconds"))
+    checkEvaluation(
+      divide("6 years -7 seconds", 3),
+      fromString("2 years -2 seconds -333 milliseconds -333 microseconds"))
+    checkEvaluation(divide("2 months", 0), null)
   }
 }
