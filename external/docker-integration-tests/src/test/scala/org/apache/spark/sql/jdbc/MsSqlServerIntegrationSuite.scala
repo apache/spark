@@ -206,23 +206,34 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("SPARK-28151 Test write table with BYTETYPE") {
-    val tableSchema = StructType(Seq(StructField("serialNum", ByteType, true)))
-    val tableData = Seq(Row(10))
-    val df1 = spark.createDataFrame(
-      spark.sparkContext.parallelize(tableData),
-      tableSchema)
-
-    df1.write
+    val df : DataFrame = {
+      val schema = StructType(Seq(
+        StructField("a", ByteType, true)
+      ))
+      val data = Seq(
+        Row(-127.toByte),
+        Row(0.toByte),
+        Row(1.toByte),
+        Row(38.toByte),
+        Row(128.toByte)
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+    val tablename = "bytetable"
+    df.write
       .format("jdbc")
       .mode("overwrite")
       .option("url", jdbcUrl)
-      .option("dbtable", "testTable")
+      .option("dbtable", tablename)
       .save()
-    val df2 = spark.read
+    val df_copy = spark.read
       .format("jdbc")
       .option("url", jdbcUrl)
-      .option("dbtable", "byteTable")
+      .option("dbtable", tablename)
       .load()
-    df2.show()
+    assert(df.count == df_copy.count)
+    val rows = df_copy.collect()
+    val colType = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(colType(0) == "class java.lang.Byte")
   }
 }
