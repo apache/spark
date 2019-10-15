@@ -40,7 +40,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   private val appId = conf.appId
 
-  @volatile private var podCompleted = false
+  private var podCompleted = false
 
   private var pod = Option.empty[Pod]
 
@@ -73,16 +73,19 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
     phase == "Succeeded" || phase == "Failed"
   }
 
-  private def closeWatch(): Unit = {
+  private def closeWatch(): Unit = synchronized {
     podCompleted = true
+    this.notifyAll()
   }
 
   override def watchOrStop(sId: String): Unit = if (conf.get(WAIT_FOR_APP_COMPLETION)) {
     logInfo(s"Waiting for application ${conf.appName} with submission ID $sId to finish...")
     val interval = conf.get(REPORT_INTERVAL)
-    while (!podCompleted) {
-      Thread.sleep(interval)
-      logInfo(s"Application status for $appId (phase: $phase)")
+    synchronized {
+      while (!podCompleted) {
+        wait(interval)
+        logInfo(s"Application status for $appId (phase: $phase)")
+      }
     }
     logInfo(
       pod.map { p => s"Container final statuses:\n\n${containersDescription(p)}" }
