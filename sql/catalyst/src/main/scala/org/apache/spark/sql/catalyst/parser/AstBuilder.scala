@@ -378,8 +378,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     } else {
       None
     }
-    val (attrs, values) = ctx.setClause().assign().asScala.map {
-      kv => visitMultipartIdentifier(kv.key) -> expression(kv.value)
+    val (attrs, values) = ctx.setClause().assignmentList().assignment().asScala.map {
+      kv => visitQualifiedName(kv.key) -> expression(kv.value)
     }.unzip
     val predicate = if (ctx.whereClause() != null) {
       Some(expression(ctx.whereClause().booleanExpression()))
@@ -393,6 +393,120 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       attrs,
       values,
       predicate)
+  }
+
+  private def withAssignments(
+      assignCtx: SqlBaseParser.AssignmentListContext): (Seq[Seq[String]], Seq[Expression]) =
+    withOrigin(assignCtx) {
+      assignCtx.assignment().asScala.map { assign =>
+        (visitQualifiedName(assign.key), expression(assign.value))
+      }.foldLeft(Seq[Seq[String]](), Seq[Expression]()) {
+        case (a, b) => (a._1 :+ b._1, a._2 :+ b._2)
+      }
+    }
+
+  override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
+    val targetTableId = visitMultipartIdentifier(ctx.target)
+    val targetTableAlias = if (ctx.targetAlias != null) {
+      val ident = ctx.targetAlias.strictIdentifier()
+      // We do not allow columns aliases after table alias.
+      if (ctx.targetAlias.identifierList() != null) {
+        throw new ParseException("Columns aliases is not allowed in MERGE.",
+          ctx.targetAlias.identifierList())
+      }
+      if (ident != null) Some(ident.getText) else None
+    } else {
+      None
+    }
+    val sourceTableId = if (ctx.source != null) {
+      Some(visitMultipartIdentifier(ctx.source))
+    } else {
+      None
+    }
+    val sourceQuery = if (ctx.sourceQuery != null) {
+      Some(visitQuery(ctx.sourceQuery))
+    } else {
+      None
+    }
+    val sourceTableAlias = if (ctx.sourceAlias != null) {
+      val ident = ctx.sourceAlias.strictIdentifier()
+      // We do not allow columns aliases after table alias.
+      if (ctx.sourceAlias.identifierList() != null) {
+        throw new ParseException("Columns aliases is not allowed in MERGE.",
+          ctx.sourceAlias.identifierList())
+      }
+      if (ident != null) Some(ident.getText) else None
+    } else {
+      None
+    }
+    val mergeCondition = expression(ctx.mergeCondition)
+
+    val matchedClauses = ctx.matchedClause()
+    if (matchedClauses.size() > 2) {
+      throw new ParseException("There should be at most 2 'WHEN MATCHED' clauses.",
+        matchedClauses.get(2))
+    }
+    val matched = matchedClauses.asScala.map {
+      clause => {
+        if (clause.matchedAction().DELETE() != null) {
+          DeleteClause(
+            if (clause.matchedCond != null) Some(expression(clause.matchedCond)) else None)
+        } else if (clause.matchedAction().UPDATE() != null) {
+          val (setColumns, setValues): (Seq[Seq[String]], Seq[Expression]) =
+            if (clause.matchedAction().ASTERISK() != null) {
+              (Seq(Seq(clause.matchedAction().ASTERISK().getText)), Seq(UnresolvedStar(None)))
+            } else {
+              withAssignments(clause.matchedAction().assignmentList())
+            }
+          UpdateClause(
+            if (clause.matchedCond != null) Some(expression(clause.matchedCond)) else None,
+            setColumns,
+            setValues)
+        } else {
+          // It should not be here.
+          throw new ParseException(
+            s"Unrecognized matched action: ${clause.matchedAction().getText}",
+            clause.matchedAction())
+        }
+      }
+    }
+    val notMatchedClauses = ctx.notMatchedClause()
+    if (notMatchedClauses.size() > 1) {
+      throw new ParseException("There should be at most 1 'WHEN NOT MATCHED' clause.",
+        notMatchedClauses.get(1))
+    }
+    val notMatched = notMatchedClauses.asScala.map {
+      clause => {
+        if (clause.notMatchedAction().INSERT() != null) {
+          val (setColumns, setValues): (Seq[Seq[String]], Seq[Expression]) =
+            if (clause.notMatchedAction().ASTERISK() != null) {
+              (Seq(Seq(clause.notMatchedAction().ASTERISK().getText)), Seq(UnresolvedStar(None)))
+            } else {
+              (clause.notMatchedAction().columns.qualifiedName().asScala.map(visitQualifiedName),
+                  clause.notMatchedAction().values.expression().asScala.map(expression))
+            }
+          InsertClause(
+            if (clause.notMatchedCond != null) Some(expression(clause.notMatchedCond)) else None,
+            setColumns,
+            setValues)
+        } else {
+          // It should not be here.
+          throw new ParseException(
+            s"Unrecognized not matched action: ${clause.notMatchedAction().getText}",
+            clause.notMatchedAction())
+        }
+      }
+    }
+
+    MergeIntoStatement(
+      targetTableId,
+      targetTableAlias,
+      sourceTableId,
+      sourceQuery,
+      sourceTableAlias,
+      mergeCondition,
+      matched,
+      notMatched)
   }
 
   /**

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.NamedRelation
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, Star}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
@@ -294,6 +294,44 @@ case class UpdateTable(
     values: Seq[Expression],
     condition: Option[Expression]) extends Command with SupportsSubquery {
   override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the MERGE INTO command that works for v2 tables.
+ */
+case class MergeIntoTable(
+    targetTable: LogicalPlan,
+    sourceTable: LogicalPlan,
+    mergeCondition: Expression,
+    matchedActions: Seq[MergeAction],
+    notMatchedActions: Seq[MergeAction]) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] =
+    Seq(targetTable, sourceTable) ++ Nil
+  override def output: Seq[Attribute] = Seq.empty
+  override lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved &&
+      matchedActions.forall(_.resolved) && notMatchedActions.forall(_.resolved)
+}
+
+sealed abstract class MergeAction(
+    condition: Option[Expression]) {
+  def children: Seq[Expression] = condition.toSeq
+  lazy val resolved: Boolean = children.isEmpty || children.forall(_.resolved)
+}
+
+case class DeleteAction(deleteCondition: Option[Expression]) extends MergeAction(deleteCondition)
+
+case class UpdateAction(
+    updateCondition: Option[Expression],
+    columns: Seq[Expression],
+    values: Seq[Expression]) extends MergeAction(updateCondition) {
+  override def children: Seq[Expression] = updateCondition.toSeq ++ columns ++ values
+}
+
+case class InsertAction(
+    insertCondition: Option[Expression],
+    columns: Seq[Expression],
+    values: Seq[Expression]) extends MergeAction(insertCondition) {
+  override def children: Seq[Expression] = insertCondition.toSeq ++ columns ++ values
 }
 
 /**

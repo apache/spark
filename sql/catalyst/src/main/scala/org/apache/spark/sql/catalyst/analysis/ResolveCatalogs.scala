@@ -106,6 +106,55 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val columns = u.columns.map(UnresolvedAttribute(_))
       UpdateTable(aliased, columns, u.values, u.condition)
 
+    case m @ MergeIntoStatement(
+        targetNameParts @ CatalogAndIdentifierParts(targetCatalog, targetTableName), _,
+        maybeSourceNameParts, maybeSourceQuery, _, _, _, _) =>
+      val target = UnresolvedV2Relation(targetNameParts,
+        targetCatalog.asTableCatalog, targetTableName.asIdentifier)
+      val aliasedTarget = m.targetTableAlias.map(SubqueryAlias(_, target)).getOrElse(target)
+      val source = maybeSourceNameParts match {
+        case Some(sourceNameParts @ CatalogAndIdentifierParts(sourceCatalog, sourceTableName)) =>
+          UnresolvedV2Relation(sourceNameParts,
+            sourceCatalog.asTableCatalog, sourceTableName.asIdentifier)
+        case None =>
+          maybeSourceQuery.getOrElse(throw new AnalysisException("Cannot resolve the source plan."))
+      }
+      val aliasedSource = m.sourceTableAlias.map(SubqueryAlias(_, source)).getOrElse(source)
+      val matchedActions = m.matchedClauses.map {
+        case DeleteClause(deleteCondition) =>
+          DeleteAction(deleteCondition)
+        case UpdateClause(updateCondition, columns, values) =>
+          val colAttrs = columns.map {
+            case Seq("*") => UnresolvedStar(None)
+            case o => UnresolvedAttribute(o)
+          }
+          UpdateAction(
+            updateCondition,
+            colAttrs,
+            values)
+        case _ =>
+          throw new AnalysisException("There should not be InsertAction in matched clause.")
+      }
+      val notMatchedActions = m.notMatchedClauses.map {
+        case InsertClause(insertCondition, columns, values) =>
+          val colAttrs = columns.map {
+            case Seq("*") => UnresolvedStar(None)
+            case o => UnresolvedAttribute(o)
+          }
+          InsertAction(
+            insertCondition,
+            colAttrs,
+            values)
+        case _ =>
+          throw new AnalysisException(
+            "There should not be DeleteAction/UpdateAction in matched clause.")
+      }
+      MergeIntoTable(aliasedTarget,
+        aliasedSource,
+        m.mergeCondition,
+        matchedActions,
+        notMatchedActions)
+
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {

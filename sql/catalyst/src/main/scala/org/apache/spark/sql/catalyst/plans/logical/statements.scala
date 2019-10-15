@@ -289,6 +289,31 @@ case class UpdateTableStatement(
     condition: Option[Expression]) extends ParsedStatement
 
 /**
+ * A MERGE INTO tbl_name statement, as parsed from SQL.
+ */
+case class MergeIntoStatement(
+    targetTableName: Seq[String],
+    targetTableAlias: Option[String],
+    sourceTableName: Option[Seq[String]],
+    sourceQuery: Option[LogicalPlan],
+    sourceTableAlias: Option[String],
+    mergeCondition: Expression,
+    matchedClauses: Seq[MergeClause],
+    notMatchedClauses: Seq[MergeClause]) extends ParsedStatement
+
+sealed abstract class MergeClause(condition: Option[Expression])
+
+case class DeleteClause(deleteCondition: Option[Expression]) extends MergeClause(deleteCondition)
+
+case class UpdateClause(updateCondition: Option[Expression],
+    columns: Seq[Seq[String]],
+    values: Seq[Expression]) extends MergeClause(updateCondition)
+
+case class InsertClause(insertCondition: Option[Expression],
+    columns: Seq[Seq[String]],
+    values: Seq[Expression]) extends MergeClause(insertCondition)
+
+/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
