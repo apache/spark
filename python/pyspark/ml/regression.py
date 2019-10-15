@@ -2200,14 +2200,14 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, miniBatchFraction=1.0,
-                 initStd=0.01, maxIter=100, stepSize=1.0, tol=1e-6, solver="adamW",
-                 loss="logisticLoss", verbose=False):
+                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                 tol=1e-6, solver="adamW", loss="logisticLoss", verbose=False):
         """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, miniBatchFraction=1.0,
-                 initStd=0.01, maxIter=100, stepSize=1.0, tol=1e-6, solver="adamW",
-                 loss="logisticLoss", verbose=False)
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
+                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
+                 tol=1e-6, solver="adamW", loss="logisticLoss", verbose=False)
         """
         super(FactorizationMachines, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -2221,14 +2221,14 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
     @keyword_only
     @since("3.0.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, miniBatchFraction=1.0,
-                  initStd=0.01, maxIter=100, stepSize=1.0, tol=1e-6, solver="adamW",
-                  loss="logisticLoss", verbose=False):
+                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                  tol=1e-6, solver="adamW", loss="logisticLoss", verbose=False):
         """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, miniBatchFraction=1.0,
-                  initStd=0.01, maxIter=100, stepSize=1.0, tol=1e-6, solver="adamW",
-                  loss="logisticLoss", verbose=False):
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
+                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
+                  tol=1e-6, solver="adamW", loss="logisticLoss", verbose=False)
         Sets Params for Factorization Machines.
         """
         kwargs = self._input_kwargs
@@ -2291,11 +2291,13 @@ class FactorizationMachinesModel(JavaPredictionModel, JavaMLWritable, JavaMLRead
     @since("3.0.0")
     def coefficients(self):
         """
-        Model coefficients
-        coefficients concat from 2-way coefficients, 1-way coefficients, global bias
-        index 0 ~ numFeatures*numFactors is 2-way coefficients,
-            [i * numFactors + f] denotes i-th feature and f-th factor
-        Following indices are 1-way coefficients and global bias.
+        Model coefficients.
+
+        coefficients concat from 2-way coefficients, 1-way coefficients, global bias.
+
+        Index 0 ~ numFeatures*numFactors is 2-way coefficients,
+        coefficients(i * numFactors + f) denotes i-th feature and f-th factor,
+        following indices are 1-way coefficients and global bias.
         """
         return self._call_java("coefficients")
 
