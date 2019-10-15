@@ -22,8 +22,9 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -67,7 +68,8 @@ class DataSourceV2SQLSuite
     spark.conf.set(
         "spark.sql.catalog.testcat_atomic", classOf[StagingInMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set(V2_SESSION_CATALOG.key, classOf[InMemoryTableSessionCatalog].getName)
+    spark.conf.set(
+      V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -149,7 +151,7 @@ class DataSourceV2SQLSuite
   test("CreateTable: use v2 plan and session catalog when provider is v2") {
     spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING $v2Source")
 
-    val testCatalog = catalog("session").asTableCatalog
+    val testCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "default.table_name")
@@ -408,7 +410,7 @@ class DataSourceV2SQLSuite
   test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {
     spark.sql(s"CREATE TABLE table_name USING $v2Source AS SELECT id, data FROM source")
 
-    val testCatalog = catalog("session").asTableCatalog
+    val testCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "default.table_name")
@@ -510,7 +512,7 @@ class DataSourceV2SQLSuite
 
   test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
     // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG.key)
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -520,7 +522,7 @@ class DataSourceV2SQLSuite
     checkAnswer(sql(s"TABLE default.table_name"), spark.table("source"))
     // The fact that the following line doesn't throw an exception means, the session catalog
     // can load the table.
-    val t = catalog("session").asTableCatalog
+    val t = catalog(SESSION_CATALOG_NAME).asTableCatalog
       .loadTable(Identifier.of(Array.empty, "table_name"))
     assert(t.isInstanceOf[V1Table], "V1 table wasn't returned as an unresolved table")
   }
@@ -848,7 +850,7 @@ class DataSourceV2SQLSuite
     val catalogManager = spark.sessionState.catalogManager
 
     // Validate the initial current catalog and namespace.
-    assert(catalogManager.currentCatalog.name() == "session")
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
     assert(catalogManager.currentNamespace === Array("default"))
 
     // The following implicitly creates namespaces.
@@ -885,7 +887,7 @@ class DataSourceV2SQLSuite
 
   test("Use: set v2 catalog as a current catalog") {
     val catalogManager = spark.sessionState.catalogManager
-    assert(catalogManager.currentCatalog.name() == "session")
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
 
     sql("USE testcat")
     assert(catalogManager.currentCatalog.name() == "testcat")
@@ -907,7 +909,7 @@ class DataSourceV2SQLSuite
 
   test("tableCreation: partition column case insensitive resolution") {
     val testCatalog = catalog("testcat").asTableCatalog
-    val sessionCatalog = catalog("session").asTableCatalog
+    val sessionCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
 
     def checkPartitioning(cat: TableCatalog, partition: String): Unit = {
       val table = cat.loadTable(Identifier.of(Array.empty, "tbl"))

@@ -77,7 +77,7 @@ class PlanResolutionSuite extends AnalysisTest {
           throw new NoSuchTableException(name)
       }
     })
-    when(newCatalog.name()).thenReturn("session")
+    when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
     newCatalog
   }
 
@@ -477,7 +477,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case create: CreateV2Table =>
-        assert(create.catalog.name == "session")
+        assert(create.catalog.name == CatalogManager.SESSION_CATALOG_NAME)
         assert(create.tableName == Identifier.of(Array("mydb"), "page_view"))
         assert(create.tableSchema == new StructType()
             .add("id", LongType)
@@ -581,7 +581,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == "session")
+        assert(ctas.catalog.name == CatalogManager.SESSION_CATALOG_NAME)
         assert(ctas.tableName == Identifier.of(Array("mydb"), "page_view"))
         assert(ctas.properties == expectedProperties)
         assert(ctas.writeOptions.isEmpty)
