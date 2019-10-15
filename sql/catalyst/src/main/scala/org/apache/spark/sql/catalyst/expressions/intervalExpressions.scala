@@ -27,16 +27,27 @@ case class MultiplyInterval(interval: Expression, num: Expression)
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, LongType)
-
   override def dataType: DataType = CalendarIntervalType
 
+  override def nullable: Boolean = true
+
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    interval.asInstanceOf[CalendarInterval].multiply(num.asInstanceOf[Long])
+    try {
+      interval.asInstanceOf[CalendarInterval].multiply(num.asInstanceOf[Long])
+    } catch {
+      case _: java.lang.ArithmeticException => null
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (interval, num) => {
-      s"""${ev.value} = $interval.multiply($num);"""
+      s"""
+        try {
+          ${ev.value} = $interval.multiply($num);
+        } catch (java.lang.ArithmeticException e) {
+          ${ev.isNull} = true;
+        }
+      """
     })
   }
 }
