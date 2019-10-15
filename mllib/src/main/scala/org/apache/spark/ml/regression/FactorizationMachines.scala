@@ -767,7 +767,6 @@ private[ml] class FactorizationMachinesUpdater extends Updater with Logging {
     // w' = w - thisIterStepSize * (gradient + regParam * w)
     // w' = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
     val thisIterStepSize = stepSize / math.sqrt(iter)
-//    val thisIterStepSize = stepSize
     val brzWeights: BV[Double] = weightsOld.asBreeze.toDenseVector
     brzWeights :*= (1.0 - thisIterStepSize * regParam)
     brzAxpy(-thisIterStepSize, gradient.asBreeze, brzWeights)
