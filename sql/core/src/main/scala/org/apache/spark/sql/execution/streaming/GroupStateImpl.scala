@@ -160,12 +160,12 @@ private[sql] class GroupStateImpl[S] private(
 
   private def parseDuration(duration: String): Long = {
     val cal = CalendarInterval.fromCaseInsensitiveString(duration)
-    if (cal.milliseconds < 0 || cal.months < 0) {
+    if (cal.milliseconds < 0 || cal.days < 0 || cal.months < 0) {
       throw new IllegalArgumentException(s"Provided duration ($duration) is not positive")
     }
 
-    val millisPerMonth = TimeUnit.MICROSECONDS.toMillis(CalendarInterval.MICROS_PER_DAY) * 31
-    cal.milliseconds + cal.months * millisPerMonth
+    val millisPerDay = TimeUnit.MICROSECONDS.toMillis(CalendarInterval.MICROS_PER_DAY)
+    cal.milliseconds + cal.days * millisPerDay + cal.months * millisPerDay * 31
   }
 
   private def checkTimeoutTimestampAllowed(): Unit = {

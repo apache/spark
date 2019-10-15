@@ -1321,7 +1321,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       Decimal("1234.23456"),
       DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")),
       DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")),
-      new CalendarInterval(1, 0),
+      new CalendarInterval(1, 0, 0),
       new GenericArrayData(Array(1, 2, 3, 4, null)),
       new GenericInternalRow(Array[Any](5.asInstanceOf[Any], 10)),
       mapBuilder.build()
@@ -1342,7 +1342,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       Decimal("0.01000"),
       DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("1875-12-12")),
       DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("1880-01-05 12:45:21.321")),
-      new CalendarInterval(-10, -100),
+      new CalendarInterval(-10, -50, -100),
       new GenericArrayData(Array(5, 10, -100)),
       new GenericInternalRow(Array[Any](20.asInstanceOf[Any], null)),
       mapBuilder.build()
@@ -1434,8 +1434,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(10).isNullAt(2))
 
       assert(columns(11).dataType() == CalendarIntervalType)
-      assert(columns(11).getInterval(0) == new CalendarInterval(1, 0))
-      assert(columns(11).getInterval(1) == new CalendarInterval(-10, -100))
+      assert(columns(11).getInterval(0) == new CalendarInterval(1, 0, 0))
+      assert(columns(11).getInterval(1) == new CalendarInterval(-10, -50, -100))
       assert(columns(11).isNullAt(2))
 
       assert(columns(12).dataType() == ArrayType(IntegerType))

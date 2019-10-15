@@ -219,11 +219,11 @@ SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
 -- !query 24 schema
 struct<54:string,diff:interval>
 -- !query 24 output
-	interval -1409 weeks -8 hours
+	interval -236720 hours
 	interval 0 microseconds
-	interval 246 weeks 2 days 17 hours 19 minutes 20 seconds
+	interval 41393 hours 19 minutes 20 seconds
 	interval 3 hours 4 minutes 5 seconds
-	interval 5 weeks 4 days 17 hours 32 minutes 1 seconds
+	interval 953 hours 32 minutes 1 seconds
 
 
 -- !query 25
@@ -242,11 +242,11 @@ SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
 -- !query 26 schema
 struct<54:string,diff:interval>
 -- !query 26 output
-	interval -1409 weeks -8 hours
+	interval -236720 hours
 	interval 0 microseconds
-	interval 246 weeks 2 days 17 hours 19 minutes 20 seconds
+	interval 41393 hours 19 minutes 20 seconds
 	interval 3 hours 4 minutes 5 seconds
-	interval 5 weeks 4 days 17 hours 32 minutes 1 seconds
+	interval 953 hours 32 minutes 1 seconds
 
 
 -- !query 27

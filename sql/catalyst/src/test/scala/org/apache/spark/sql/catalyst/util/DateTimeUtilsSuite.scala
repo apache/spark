@@ -373,13 +373,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
   test("timestamp add months") {
     val ts1 = date(1997, 2, 28, 10, 30, 0)
     val ts2 = date(2000, 2, 28, 10, 30, 0, 123000)
-    assert(timestampAddInterval(ts1, 36, 123000, defaultZoneId) === ts2)
+    assert(timestampAddInterval(ts1, 36, 0, 123000, defaultZoneId) === ts2)
 
     val ts3 = date(1997, 2, 27, 16, 0, 0, 0, TimeZonePST)
     val ts4 = date(2000, 2, 27, 16, 0, 0, 123000, TimeZonePST)
     val ts5 = date(2000, 2, 28, 0, 0, 0, 123000, TimeZoneGMT)
-    assert(timestampAddInterval(ts3, 36, 123000, TimeZonePST.toZoneId) === ts4)
-    assert(timestampAddInterval(ts3, 36, 123000, TimeZoneGMT.toZoneId) === ts5)
+    assert(timestampAddInterval(ts3, 36, 0, 123000, TimeZonePST.toZoneId) === ts4)
+    assert(timestampAddInterval(ts3, 36, 0, 123000, TimeZoneGMT.toZoneId) === ts5)
   }
 
   test("timestamp add days") {

@@ -355,18 +355,18 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         .select(
           ($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
     testStream(aggregated, Complete)(
-      StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime("240 hour"), triggerClock = clock),
       // advance clock to 10 days, should retain all keys
       AddData(inputData, 0L, 5L, 5L, 10L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_HOUR * 240),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
       // advance clock to 20 days, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_HOUR * 240),
       CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
       // advance clock to 30 days, should retain keys >= 20
       AddData(inputData, 85L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_HOUR * 240),
       CheckLastBatch((20L, 1), (85L, 1)),
 
       // bounce stream and ensure correct batch timestamp is used
@@ -376,16 +376,16 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         q.sink.asInstanceOf[MemorySink].clear()
         q.commitLog.purge(3)
         // advance by 60 days i.e., 90 days total
-        clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
+        clock.advance(DateTimeUtils.MILLIS_PER_HOUR * 24 * 60)
         true
       },
-      StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime("240 hour"), triggerClock = clock),
       // Commit log blown, causing a re-run of the last batch
       CheckLastBatch((20L, 1), (85L, 1)),
 
       // advance clock to 100 days, should retain keys >= 90
       AddData(inputData, 85L, 90L, 100L, 105L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_HOUR * 240),
       CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
     )
   }
