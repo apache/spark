@@ -116,7 +116,8 @@ object CypherSession {
     val relProperties = propertyColumns.map(col => col -> col).toMap
     relTypeColumns.map { relTypeColumn =>
       val predicate = relationships.col(relTypeColumn)
-
+      // TODO: Make sure that each row represents a single relationship type
+      // see https://issues.apache.org/jira/browse/SPARK-29480
       RelationshipDataset(
         relationships.filter(predicate),
         ID_COLUMN,
