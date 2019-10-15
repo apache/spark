@@ -20,6 +20,20 @@ package org.apache.spark.graph.api
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row}
 
+object RelationshipDataset {
+
+  /**
+   * Returns a [[RelationshipDatasetBuilder]] that can be used to construct
+   * a [[RelationshipDataset]].
+   *
+   * @param ds Dataset containing a single relationship in each row
+   * @since 3.0.0
+   */
+  def builder(ds: Dataset[Row]): RelationshipDatasetBuilder =
+    new RelationshipDatasetBuilder(ds)
+
+}
+
 /**
  * Describes how to map a Dataset to relationships.
  *

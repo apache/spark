@@ -19,7 +19,7 @@ package org.apache.spark.examples.graph
 // $example on$
 
 import org.apache.spark.cypher.SparkCypherSession
-import org.apache.spark.graph.api.PropertyGraph
+import org.apache.spark.graph.api.{NodeDataset, PropertyGraph, RelationshipDataset}
 import org.apache.spark.sql.{SaveMode, SparkSession}
 
 import scala.io.StdIn
@@ -48,17 +48,17 @@ object CompleteGraphAPIExample {
     val cypherSession = SparkCypherSession.create(spark)
 
     // Create Node- and RelationshipFrames
-    val moviesNodeFrame = cypherSession.buildNodeDataset(moviesData)
+    val moviesNodeFrame = NodeDataset.builder(moviesData)
       .idColumn("id")
       .labelSet(Array("Movie"))
       .properties(Map("title" -> "title"))
       .build()
-    val personsNodeFrame = cypherSession.buildNodeDataset(personsData)
+    val personsNodeFrame = NodeDataset.builder(personsData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
       .build()
-    val actedInRelationshipFrame = cypherSession.buildRelationshipDataset(actedInData)
+    val actedInRelationshipFrame = RelationshipDataset.builder(actedInData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")

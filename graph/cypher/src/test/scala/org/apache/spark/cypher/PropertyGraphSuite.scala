@@ -76,7 +76,7 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
 
   test("create graph from NodeDataset") {
     val nodeData = spark.createDataFrame(Seq(0L -> "Alice", 1L -> "Bob")).toDF("id", "name")
-    val nodeDataset = cypherSession.buildNodeDataset(nodeData)
+    val nodeDataset = NodeDataset.builder(nodeData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
@@ -92,7 +92,7 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
 
   test("create graph from NodeDataset and RelationshipDataset") {
     val nodeData = spark.createDataFrame(Seq(0L -> "Alice", 1L -> "Bob")).toDF("id", "name")
-    val nodeDataset = cypherSession.buildNodeDataset(nodeData)
+    val nodeDataset = NodeDataset.builder(nodeData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
@@ -100,7 +100,7 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
     val relationshipData = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))
       .toDF("id", "source", "target", "since")
-    val relationshipDataset = cypherSession.buildRelationshipDataset(relationshipData)
+    val relationshipDataset = RelationshipDataset.builder(relationshipData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
@@ -130,13 +130,13 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
       .createDataFrame(Seq((2L, "Eve", "CS")))
       .toDF("id", "name", "subject")
 
-    val studentNodeDataset = cypherSession.buildNodeDataset(studentDF)
+    val studentNodeDataset = NodeDataset.builder(studentDF)
         .idColumn("id")
         .labelSet(Array("Person", "Student"))
         .properties(Map("name" -> "name", "age" -> "age"))
         .build()
 
-    val teacherNodeDataset = cypherSession.buildNodeDataset(teacherDF)
+    val teacherNodeDataset = NodeDataset.builder(teacherDF)
       .idColumn("id")
       .labelSet(Array("Person", "Teacher"))
       .properties(Map("name" -> "name", "subject" -> "subject"))
@@ -149,14 +149,14 @@ class PropertyGraphSuite extends QueryTest with SharedSparkSession with Matchers
       .createDataFrame(Seq((1L, 2L, 1L)))
       .toDF("id", "source", "target")
 
-    val knowsRelationshipDataset = cypherSession.buildRelationshipDataset(knowsDF)
+    val knowsRelationshipDataset = RelationshipDataset.builder(knowsDF)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("KNOWS")
       .properties(Map("since" -> "since"))
       .build()
-    val teachesRelationshipDataset = cypherSession.buildRelationshipDataset(teachesDF)
+    val teachesRelationshipDataset = RelationshipDataset.builder(teachesDF)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")

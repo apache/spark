@@ -288,23 +288,4 @@ trait CypherSession {
    */
   def read: PropertyGraphReader
 
-  /**
-   * Returns a [[NodeDatasetBuilder]] that can be used to construct a [[NodeDataset]].
-   *
-   * @param ds Dataset containing a single node in each row
-   * @since 3.0.0
-   */
-  def buildNodeDataset(ds: Dataset[Row]): NodeDatasetBuilder =
-    new NodeDatasetBuilder(ds)
-
-  /**
-   * Returns a [[RelationshipDatasetBuilder]] that can be used to construct
-   * a [[RelationshipDataset]].
-   *
-   * @param ds Dataset containing a single relationship in each row
-   * @since 3.0.0
-   */
-  def buildRelationshipDataset(ds: Dataset[Row]): RelationshipDatasetBuilder =
-    new RelationshipDatasetBuilder(ds)
-
 }

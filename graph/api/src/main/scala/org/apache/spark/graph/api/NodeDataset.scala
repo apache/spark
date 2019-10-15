@@ -20,6 +20,19 @@ package org.apache.spark.graph.api
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.{Dataset, Row}
 
+object NodeDataset {
+
+  /**
+   * Returns a [[NodeDatasetBuilder]] that can be used to construct a [[NodeDataset]].
+   *
+   * @param ds Dataset containing a single node in each row
+   * @since 3.0.0
+   */
+  def builder(ds: Dataset[Row]): NodeDatasetBuilder =
+    new NodeDatasetBuilder(ds)
+
+}
+
 /**
  * Describes how to map a Dataset to nodes.
  *

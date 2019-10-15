@@ -19,7 +19,7 @@ package org.apache.spark.examples.graph
 // $example on$
 
 import org.apache.spark.cypher.SparkCypherSession
-import org.apache.spark.graph.api.PropertyGraph
+import org.apache.spark.graph.api.{NodeDataset, PropertyGraph, RelationshipDataset}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 
@@ -60,50 +60,50 @@ object AdvancedQueriesExample {
     val cypherSession = SparkCypherSession.create(spark)
 
     // Create Node- and RelationshipFrames
-    val moviesNodeFrame = cypherSession.buildNodeDataset(moviesData)
+    val moviesNodeFrame = NodeDataset.builder(moviesData)
       .idColumn("id")
       .labelSet(Array("Movie"))
       .properties(Map("title" -> "title"))
       .build()
-    val personsNodeFrame = cypherSession.buildNodeDataset(personsData)
+    val personsNodeFrame = NodeDataset.builder(personsData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
       .build()
 
-    val actedInRelationshipFrame = cypherSession.buildRelationshipDataset(actedInData)
+    val actedInRelationshipFrame = RelationshipDataset.builder(actedInData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("ACTED_IN")
       .properties(Map("roles" -> "roles"))
       .build()
-    val directedRelationshipFrame = cypherSession.buildRelationshipDataset(directedData)
+    val directedRelationshipFrame = RelationshipDataset.builder(directedData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("DIRECTED")
       .build()
-    val followsRelationshipFrame  = cypherSession.buildRelationshipDataset(followsData)
+    val followsRelationshipFrame  = RelationshipDataset.builder(followsData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("FOLLOWS")
       .build()
-    val producedRelationshipFrame = cypherSession.buildRelationshipDataset(producedData)
+    val producedRelationshipFrame = RelationshipDataset.builder(producedData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("PRODUCED")
       .build()
-    val reviewedRelationshipFrame = cypherSession.buildRelationshipDataset(reviewedData)
+    val reviewedRelationshipFrame = RelationshipDataset.builder(reviewedData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("REVIEWED")
       .properties(Map("rating" -> "rating"))
       .build()
-    val wroteRelationshipFrame    = cypherSession.buildRelationshipDataset(wroteData)
+    val wroteRelationshipFrame    = RelationshipDataset.builder(wroteData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
