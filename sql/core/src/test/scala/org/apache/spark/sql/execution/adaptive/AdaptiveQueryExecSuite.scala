@@ -230,8 +230,7 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 2)
       val ex = findReusedExchange(adaptivePlan)
-      // The ReusedExchange is hidden in LocalShuffleReaderExec
-      assert(ex.size == 0)
+      assert(ex.size == 1)
     }
   }
 
@@ -365,8 +364,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("Change merge join to broadcast join and optimize the shuffle" +
-    " reader to local shuffle reader") {
+  test("Change merge join to broadcast join without local shuffle reader") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED.key -> "true",

@@ -684,7 +684,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /**
-   * Return the locations where the Mapper(s) ran. The locations each includes both a host and an
+   * Return the location where the Mapper ran. The locations each includes both a host and an
    * executor id on that host.
    *
    * @param dep shuffle dependency object
@@ -984,53 +984,28 @@ private[spark] object MapOutputTracker extends Logging {
       mapId : Option[Int] = None): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     assert (statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
-    mapId match {
-      case (Some(mapId)) =>
-        for ((status, mapIndex) <- statuses.iterator.zipWithIndex.filter(_._2 == mapId)) {
-          if (status == null) {
-            val errorMessage = s"Missing an output location for shuffle $shuffleId"
-            logError(errorMessage)
-            throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
-          } else {
-            for (part <- startPartition until endPartition) {
-              val size = status.getSizeForBlock(part)
-              if (size != 0) {
-                if (useOldFetchProtocol) {
-                  // While we use the old shuffle fetch protocol, we use mapIndex as mapId in the
-                  // ShuffleBlockId.
-                  splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                    ((ShuffleBlockId(shuffleId, mapIndex, part), size, mapIndex))
-                } else {
-                  splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                    ((ShuffleBlockId(shuffleId, status.mapTaskId, part), size, mapIndex))
-                }
-              }
+    val iter = statuses.iterator.zipWithIndex
+    for ((status, mapIndex) <- mapId.map(id => iter.filter(_._2 == id)).getOrElse(iter)) {
+      if (status == null) {
+        val errorMessage = s"Missing an output location for shuffle $shuffleId"
+        logError(errorMessage)
+        throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
+      } else {
+        for (part <- startPartition until endPartition) {
+          val size = status.getSizeForBlock(part)
+          if (size != 0) {
+            if (useOldFetchProtocol) {
+              // While we use the old shuffle fetch protocol, we use mapIndex as mapId in the
+              // ShuffleBlockId.
+              splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
+                ((ShuffleBlockId(shuffleId, mapIndex, part), size, mapIndex))
+            } else {
+              splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
+                ((ShuffleBlockId(shuffleId, status.mapTaskId, part), size, mapIndex))
             }
           }
         }
-      case None =>
-        for ((status, mapIndex) <- statuses.iterator.zipWithIndex) {
-          if (status == null) {
-            val errorMessage = s"Missing an output location for shuffle $shuffleId"
-            logError(errorMessage)
-            throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
-          } else {
-            for (part <- startPartition until endPartition) {
-              val size = status.getSizeForBlock(part)
-              if (size != 0) {
-                if (useOldFetchProtocol) {
-                  // While we use the old shuffle fetch protocol, we use mapIndex as mapId in the
-                  // ShuffleBlockId.
-                  splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                    ((ShuffleBlockId(shuffleId, mapIndex, part), size, mapIndex))
-                } else {
-                  splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                    ((ShuffleBlockId(shuffleId, status.mapTaskId, part), size, mapIndex))
-                }
-              }
-            }
-          }
-        }
+      }
     }
 
     splitsByAddress.iterator
