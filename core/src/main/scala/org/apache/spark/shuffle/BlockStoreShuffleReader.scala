@@ -36,18 +36,33 @@ private[spark] class BlockStoreShuffleReader[K, C](
     readMetrics: ShuffleReadMetricsReporter,
     serializerManager: SerializerManager = SparkEnv.get.serializerManager,
     blockManager: BlockManager = SparkEnv.get.blockManager,
-    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
+    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker,
+    mapId: Option[Int] = None)
   extends ShuffleReader[K, C] with Logging {
 
   private val dep = handle.dependency
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
+    val blocksByAddress = mapId match {
+      case (Some(mapId)) => mapOutputTracker.getMapSizesByExecutorId(
+        handle.shuffleId,
+        startPartition,
+        endPartition,
+        mapId)
+      case (None) => mapOutputTracker.getMapSizesByExecutorId(
+        handle.shuffleId,
+        startPartition,
+        endPartition)
+      case (_) => throw new IllegalArgumentException(
+        "mapId should be both set or unset")
+    }
+
     val wrappedStreams = new ShuffleBlockFetcherIterator(
       context,
       blockManager.blockStoreClient,
       blockManager,
-      mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
+      blocksByAddress,
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.get(config.REDUCER_MAX_SIZE_IN_FLIGHT) * 1024 * 1024,
