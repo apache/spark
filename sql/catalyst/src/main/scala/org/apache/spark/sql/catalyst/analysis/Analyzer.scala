@@ -1696,8 +1696,6 @@ class Analyzer(
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q.children)
-      case d: DeleteFromTable if d.childrenResolved =>
-        resolveSubQueries(d, d.children)
       case j: Join if j.childrenResolved =>
         resolveSubQueries(j, Seq(j, j.left, j.right))
       case s: SupportsSubquery if s.childrenResolved =>
