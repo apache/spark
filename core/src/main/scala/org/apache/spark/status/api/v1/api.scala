@@ -197,7 +197,7 @@ class RDDDataDistribution private[spark](
     @JsonDeserialize(contentAs = classOf[JLong])
     val offHeapMemoryRemaining: Option[Long]) {
 
-  def toLiveRDDDistribution(executors: scala.collection.Map[String, LiveExecutor])
+  private[spark] def toLiveRDDDistribution(executors: scala.collection.Map[String, LiveExecutor])
   : LiveRDDDistribution = {
     val exec = executors.get(executorId).get
     val liveRDDDistribution = new LiveRDDDistribution(exec)
