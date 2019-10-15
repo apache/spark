@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import org.junit.Test;
+import scala.Int;
 
 import java.util.Arrays;
 
@@ -296,5 +297,30 @@ public class CalendarIntervalSuite {
 
     assertNull(fromString("INTERVAL"));
     assertNull(fromString("  Interval "));
+  }
+
+  @Test
+  public void multiplyTest() {
+    CalendarInterval interval = new CalendarInterval(0, 0);
+    assertEquals(interval.multiply(0), interval);
+
+    interval = new CalendarInterval(123, 456);
+    assertEquals(interval.multiply(42), new CalendarInterval(123 * 42, 456 * 42));
+
+    try {
+      interval = new CalendarInterval(2, 0);
+      interval.multiply(Int.MaxValue());
+      fail("Expected to throw an exception on months overflow");
+    } catch (java.lang.ArithmeticException e) {
+      assertTrue(e.getMessage().contains("overflow"));
+    }
+
+    try {
+      interval = new CalendarInterval(0, 2);
+      interval.multiply(Long.MAX_VALUE);
+      fail("Expected to throw an exception on microseconds overflow");
+    } catch (java.lang.ArithmeticException e) {
+      assertTrue(e.getMessage().contains("overflow"));
+    }
   }
 }
