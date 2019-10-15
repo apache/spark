@@ -205,7 +205,8 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       fileSinkConf = fileSinkConf,
       outputLocation = tmpLocation.toString,
-      partitionAttributes = partitionAttributes)
+      partitionAttributes = partitionAttributes,
+      numDynamicPartitions = numDynamicPartitions)
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {

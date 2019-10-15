@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveVersion
+import org.apache.spark.sql.internal.SQLConf
 
 // Base trait from which all hive insert statement physical execution extends.
 private[hive] trait SaveAsHiveFile extends DataWritingCommand {
@@ -52,7 +53,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
-      partitionAttributes: Seq[Attribute] = Nil): Set[String] = {
+      partitionAttributes: Seq[Attribute] = Nil,
+      numDynamicPartitions: Int = 0): Set[String] = {
 
     val isCompressed =
       fileSinkConf.getTableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
@@ -78,10 +80,43 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         .foreach { case (compression, codec) => hadoopConf.set(compression, codec) }
     }
 
-    val committer = FileCommitProtocol.instantiate(
-      sparkSession.sessionState.conf.fileCommitProtocolClass,
-      jobId = java.util.UUID.randomUUID().toString,
-      outputPath = outputLocation)
+    val committer = if (numDynamicPartitions > 0) {
+      val perTaskRestriction = SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key -> (
+        Option(hadoopConf.get("hive.exec.max.dynamic.partitions.pernode")) match {
+          case Some(num) => num.toInt
+          case None => sparkSession.sessionState.conf.maxDynamicPartitionsPerTask
+        })
+
+      val totalRestriction = SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key -> (
+        Option(hadoopConf.get("hive.exec.max.dynamic.partitions")) match {
+          case Some(num) => num.toInt
+          case None => sparkSession.sessionState.conf.maxDynamicPartitions
+        })
+
+      val fileRestriction = SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key -> (
+        Option(hadoopConf.get("hive.exec.max.created.files")) match {
+          case Some(num) => num.toInt
+          case None => sparkSession.sessionState.conf.maxCreatedFilesInDynamicPartition
+        })
+
+      val dynamicPartitionRestrictions: Map[String, _] = Map(
+        totalRestriction,
+        perTaskRestriction,
+        fileRestriction
+      )
+
+      FileCommitProtocol.instantiate(
+        sparkSession.sessionState.conf.fileCommitProtocolClass,
+        jobId = java.util.UUID.randomUUID().toString,
+        outputPath = outputLocation,
+        dynamicPartitionOverwrite = true,
+        restrictions = dynamicPartitionRestrictions)
+    } else {
+      FileCommitProtocol.instantiate(
+        sparkSession.sessionState.conf.fileCommitProtocolClass,
+        jobId = java.util.UUID.randomUUID().toString,
+        outputPath = outputLocation)
+    }
 
     FileFormatWriter.write(
       sparkSession = sparkSession,

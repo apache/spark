@@ -823,4 +823,71 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
     }
   }
+
+  test("SPARK-29166: dynamic partition overwrite with limitation for hive") {
+    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
+      withTable("hive_dynamic_partition", "hive_dynamic_partition_bucket") {
+        sql(
+          """
+            |create table hive_dynamic_partition(i int) stored as parquet
+            |partitioned by (part1 int, part2 int)
+          """.stripMargin)
+
+        // no restriction
+        sql("insert overwrite table hive_dynamic_partition partition(part1=2, part2)" +
+          " select 2, explode(array(2, 3, 4, 5))")
+        checkAnswer(spark.table("hive_dynamic_partition"),
+          Seq(Row(2, 2, 2), Row(2, 2, 3), Row(2, 2, 4), Row(2, 2, 5)))
+
+        // task level restriction
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key -> "2") {
+          val e1 = intercept[SparkException] {
+            sql("insert overwrite table hive_dynamic_partition partition(part1=2, part2)" +
+              " select 2, explode(array(2, 3, 4, 5))")
+          }
+          assert(Utils.findFirstCause(e1).getMessage.contains("To solve this " +
+            s"try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS_PER_TASK.key}"))
+        }
+
+        // total partitions restriction
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key -> "3") {
+          val e2 = intercept[SparkException] {
+            sql("insert overwrite table hive_dynamic_partition partition(part1=2, part2)" +
+              " select 2, explode(array(2, 3, 4, 5))")
+          }
+          assert(Utils.findFirstCause(e2).getMessage.contains("To solve this " +
+            s"try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key}"))
+        }
+
+        // total partitions restriction with multiple tasks
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key -> "3") {
+          val e2 = intercept[SparkException] {
+            sql("insert overwrite table hive_dynamic_partition partition(part1=2, part2)" +
+              " select 2, explode(array(2, 3, 4, 5)) as id distribute by id")
+          }
+          assert(Utils.findFirstCause(e2).getMessage.contains("To solve this " +
+            s"try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key}"))
+        }
+
+        // total files restriction
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_MAX_PARTITIONS.key -> "3",
+          SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key -> "3") {
+          sql(
+            """
+              |create table hive_dynamic_partition_bucket(i int) stored as parquet
+              |partitioned by (part1 int, part2 int)
+              |clustered by (i) into 3 buckets
+            """.stripMargin)
+          val e3 = intercept[SparkException] {
+            // we use same partition (part1=2/part2=2) to make total partitions less then 3
+            sql("insert overwrite table hive_dynamic_partition_bucket partition(part1=2, part2)" +
+              "select cast(substring(rand(), 3, 4) as int) as id, " +
+              "explode(array(2, 2, 2, 2, 2, 2)) distribute by id")
+          }
+          assert(Utils.findFirstCause(e3).getMessage.contains("To solve this " +
+            s"try to increase ${SQLConf.DYNAMIC_PARTITION_MAX_CREATED_FILES.key}"))
+        }
+      }
+    }
+  }
 }
