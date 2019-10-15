@@ -89,7 +89,7 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
   val sourceArchiveDir: Option[String] = parameters.get("sourceArchiveDir")
 
   /**
-   * Defines how to clean up completed files. Available options are "archive", "delete", "no_op".
+   * Defines how to clean up completed files. Available options are "archive", "delete", "off".
    */
   val cleanSource: CleanSourceMode.Value = {
     val matchedMode = CleanSourceMode.fromString(parameters.get("cleanSource"))
@@ -114,21 +114,12 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
 }
 
 object CleanSourceMode extends Enumeration {
-  val ARCHIVE, DELETE, NO_OP = Value
+  val ARCHIVE, DELETE, OFF = Value
 
-  def fromString(value: String): CleanSourceMode.Value = {
-    val matchedModeOpt = CleanSourceMode.values.find(_.toString == value.toUpperCase(Locale.ROOT))
-    matchedModeOpt match {
-      case None =>
-        throw new IllegalArgumentException(s"Invalid mode for clean source option $value." +
-          s" Must be one of ${CleanSourceMode.values.mkString(",")}")
-      case Some(matchedMode) =>
-        matchedMode
-    }
-  }
-
-  def fromString(value: Option[String]): CleanSourceMode.Value = value match {
-    case Some(mode) => fromString(mode)
-    case None => NO_OP
-  }
+  def fromString(value: Option[String]): CleanSourceMode.Value = value.map { v =>
+    CleanSourceMode.values.find(_.toString == v.toUpperCase(Locale.ROOT))
+      .getOrElse(throw new IllegalArgumentException(
+        s"Invalid mode for clean source option $value." +
+        s" Must be one of ${CleanSourceMode.values.mkString(",")}"))
+  }.getOrElse(OFF)
 }

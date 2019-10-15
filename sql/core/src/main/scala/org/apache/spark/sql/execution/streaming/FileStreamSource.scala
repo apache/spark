@@ -266,7 +266,7 @@ class FileStreamSource(
   override def commit(end: Offset): Unit = {
     val logOffset = FileStreamSourceOffset(end).logOffset
 
-    if (sourceOptions.cleanSource != CleanSourceMode.NO_OP) {
+    if (sourceOptions.cleanSource != CleanSourceMode.OFF) {
       val files = metadataLog.get(Some(logOffset), Some(logOffset)).flatMap(_._2)
       val validFileEntities = files.filter(_.batchId == logOffset)
       logDebug(s"completed file entries: ${validFileEntities.mkString(",")}")
@@ -408,14 +408,7 @@ object FileStreamSource {
 
     private def buildArchiveFilePath(pathUri: URI): Path = {
       require(baseArchivePathString.isDefined)
-      val baseArchivePathStr = baseArchivePathString.get
-      val normalizedBaseArchiveDirPath = if (baseArchivePathStr.endsWith("/")) {
-        baseArchivePathStr.substring(0, baseArchivePathStr.length - 1)
-      } else {
-        baseArchivePathStr
-      }
-
-      new Path(normalizedBaseArchiveDirPath + pathUri.getPath)
+      new Path(baseArchivePathString.get.stripSuffix("/") + pathUri.getPath)
     }
 
     private def isArchiveFileMatchedAgainstSourcePattern(archiveFile: Path): Boolean = {

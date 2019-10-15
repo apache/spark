@@ -1402,7 +1402,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       firstBatch: String,
       secondBatch: String,
       maxFileAge: Option[String] = None,
-      cleanSource: CleanSourceMode.Value = CleanSourceMode.NO_OP,
+      cleanSource: CleanSourceMode.Value = CleanSourceMode.OFF,
       archiveDir: Option[String] = None): Unit = {
     val srcOptions = Map("latestFirst" -> latestFirst.toString, "maxFilesPerTrigger" -> "1") ++
       maxFileAge.map("maxFileAge" -> _) ++
