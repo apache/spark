@@ -322,7 +322,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
     val supportConcurrent = commitProtocol.isInstanceOf[HadoopMapReduceCommitProtocol] &&
       commitProtocol.asInstanceOf[HadoopMapReduceCommitProtocol].supportConcurrent
-    if (supportConcurrent && fs.exists(outputPath) && fs.isDirectory(outputPath)) {
+    if (supportConcurrent && fs.isDirectory(outputPath)) {
 
       val insertStagingPath = ".spark-staging-" + staticPartitionKVs.size
       val checkedPath = new Path(outputPath, Array(insertStagingPath,
