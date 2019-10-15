@@ -53,7 +53,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
 
-  protected TransportClientFactory clientFactory;
+  protected volatile TransportClientFactory clientFactory;
   protected String appId;
 
   /**
