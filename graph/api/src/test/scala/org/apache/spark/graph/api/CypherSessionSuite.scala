@@ -28,7 +28,7 @@ abstract class CypherSessionSuite extends QueryTest with SharedSparkSession with
 
   test("save and loads a property graph") {
     val nodeData = spark.createDataFrame(Seq(0L -> "Alice", 1L -> "Bob")).toDF("id", "name")
-    val nodeDataset = cypherSession.buildNodeDataset(nodeData)
+    val nodeDataset = NodeDataset.builder(nodeData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
@@ -37,7 +37,7 @@ abstract class CypherSessionSuite extends QueryTest with SharedSparkSession with
     val relationshipData = spark
       .createDataFrame(Seq((0L, 0L, 1L, 1984)))
       .toDF("id", "source", "target", "since")
-    val relationshipDataset = cypherSession.buildRelationshipDataset(relationshipData)
+    val relationshipDataset = RelationshipDataset.builder(relationshipData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
