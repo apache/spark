@@ -850,12 +850,7 @@ object TypeCoercion {
       case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
       case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
       case Subtract(l @ DateType(), r @ IntegerType()) => DateSub(l, r)
-      case Subtract(l @ DateType(), r @ DateType()) =>
-        if (SQLConf.get.getConf(SQLConf.LEGACY_DATES_SUBTRACTION)) {
-          DateDiff(l, r)
-        } else {
-          SubtractDates(l, r)
-        }
+      case Subtract(l @ DateType(), r @ DateType()) => SubtractDates(l, r)
       case Subtract(l @ TimestampType(), r @ TimestampType()) =>
         SubtractTimestamps(l, r)
       case Subtract(l @ TimestampType(), r @ DateType()) =>
