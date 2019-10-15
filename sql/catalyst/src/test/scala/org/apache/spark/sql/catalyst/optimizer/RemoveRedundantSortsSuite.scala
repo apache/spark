@@ -28,13 +28,21 @@ class RemoveRedundantSortsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
+      Batch("Limit PushDown", Once,
+        LimitPushDown) ::
       Batch("Remove Redundant Sorts", Once,
         RemoveRedundantSorts) ::
       Batch("Collapse Project", Once,
         CollapseProject) :: Nil
   }
 
+  object PushDownOptimizer extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Limit PushDown", FixedPoint(10), LimitPushDown) :: Nil
+  }
+
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelationB = LocalRelation('d.int)
 
   test("remove redundant order by") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
@@ -96,7 +104,7 @@ class RemoveRedundantSortsSuite extends PlanTest {
   }
 
   test("sort should not be removed when there is a node which doesn't guarantee any order") {
-    val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc)
+    val orderedPlan = testRelation.select('a, 'b)
     val groupedAndResorted = orderedPlan.groupBy('a)(sum('a)).orderBy('a.asc)
     val optimized = Optimize.execute(groupedAndResorted.analyze)
     val correctAnswer = groupedAndResorted.analyze
@@ -134,5 +142,97 @@ class RemoveRedundantSortsSuite extends PlanTest {
     val correctAnswerThrice = testRelation.select('b).where('b > Literal(0))
       .select(('b + 1).as('c)).orderBy('c.asc).analyze
     comparePlans(optimizedThrice, correctAnswerThrice)
+  }
+
+  test("remove orderBy in groupBy clause with count aggs") {
+    val projectPlan = testRelation.select('a, 'b)
+    val unnecessaryOrderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(count(1))
+    val optimized = Optimize.execute(groupByPlan.analyze)
+    val correctAnswer = projectPlan.groupBy('a)(count(1)).analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("remove orderBy in groupBy clause with sum aggs") {
+    val projectPlan = testRelation.select('a, 'b)
+    val unnecessaryOrderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(sum('a))
+    val optimized = Optimize.execute(groupByPlan.analyze)
+    val correctAnswer = projectPlan.groupBy('a)(sum('a)).analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("remove orderBy in groupBy clause with first aggs") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val groupByPlan = orderByPlan.groupBy('a)(first('a))
+    val optimized = Optimize.execute(groupByPlan.analyze)
+    val correctAnswer = groupByPlan.analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("remove orderBy in groupBy clause with first and count aggs") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val groupByPlan = orderByPlan.groupBy('a)(first('a), count(1))
+    val optimized = Optimize.execute(groupByPlan.analyze)
+    val correctAnswer = groupByPlan.analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("should not remove orderBy with limit in groupBy clause") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc).limit(10)
+    val groupByPlan = orderByPlan.groupBy('a)(count(1))
+    val optimized = Optimize.execute(groupByPlan.analyze)
+    val correctAnswer = groupByPlan.analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("remove orderBy in join clause") {
+    val projectPlan = testRelation.select('a, 'b)
+    val unnecessaryOrderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val projectPlanB = testRelationB.select('d)
+    val joinPlan = unnecessaryOrderByPlan.join(projectPlanB).select('a, 'd)
+    val optimized = Optimize.execute(joinPlan.analyze)
+    val correctAnswer = projectPlan.join(projectPlanB).select('a, 'd).analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("should not remove orderBy with limit in join clause") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc).limit(10)
+    val projectPlanB = testRelationB.select('d)
+    val joinPlan = orderByPlan.join(projectPlanB).select('a, 'd)
+    val optimized = Optimize.execute(joinPlan.analyze)
+    val correctAnswer = joinPlan.analyze
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("should not remove orderBy in left join clause if there is an outer limit") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val projectPlanB = testRelationB.select('d)
+    val joinPlan = orderByPlan
+      .join(projectPlanB, LeftOuter)
+      .limit(10)
+    val optimized = Optimize.execute(joinPlan.analyze)
+    val correctAnswer = PushDownOptimizer.execute(joinPlan.analyze)
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+  }
+
+  test("remove orderBy in right join clause event if there is an outer limit") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val projectPlanB = testRelationB.select('d)
+    val joinPlan = orderByPlan
+      .join(projectPlanB, RightOuter)
+      .limit(10)
+    val optimized = Optimize.execute(joinPlan.analyze)
+    val noOrderByPlan = projectPlan
+      .join(projectPlanB, RightOuter)
+      .limit(10)
+    val correctAnswer = PushDownOptimizer.execute(noOrderByPlan.analyze)
+    comparePlans(Optimize.execute(optimized), correctAnswer)
   }
 }

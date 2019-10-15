@@ -175,8 +175,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder) :+
     Batch("Remove Redundant Sorts", Once,
-      RemoveRedundantSorts,
-      RemoveSortInSubquery) :+
+      RemoveRedundantSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
@@ -968,12 +967,18 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * Removes redundant Sort operation. This can happen:
  * 1) if the child is already sorted
  * 2) if there is another Sort operator separated by 0...n Project/Filter operators
+ * 3) if the Sort operator is within Join and without Limit
+ * 4) if the Sort operator is within GroupBy and the aggregate function is order irrelevant
  */
 object RemoveRedundantSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case Sort(orders, true, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
       child
     case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
+    case j @ Join(originLeft, originRight, _, _, _) =>
+      j.copy(left = recursiveRemoveSort(originLeft), right = recursiveRemoveSort(originRight))
+    case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
+      g.copy(child = recursiveRemoveSort(originChild))
   }
 
   def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = plan match {
@@ -987,6 +992,16 @@ object RemoveRedundantSorts extends Rule[LogicalPlan] {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
     case _ => false
+  }
+
+  def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
+    val aggExpressions = aggs.flatMap { e =>
+      e.collect {
+        case ae: AggregateExpression => ae
+      }
+    }
+
+    aggExpressions.forall(_.aggregateFunction.isInstanceOf[OrderIrrelevantAggs])
   }
 }
 
