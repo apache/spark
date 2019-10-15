@@ -830,7 +830,7 @@ object TypeCoercion {
    *    to TimeAdd/TimeSub.
    * 2. Turns Add/Subtract of DateType/IntegerType and IntegerType/DateType
    *    to DateAdd/DateSub/DateDiff.
-   * 3. Turns Multiply/Divide of CalendarIntervalType and IntegralType
+   * 3. Turns Multiply/Divide of CalendarIntervalType and NumericType
    *    to MultiplyInterval/DivideInterval
    */
   object DateTimeOperations extends Rule[LogicalPlan] {
