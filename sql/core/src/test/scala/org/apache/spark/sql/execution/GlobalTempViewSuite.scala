@@ -123,6 +123,19 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("CREATE TABLE LIKE USING provider for view") {
+    withTable("cloned") {
+      withGlobalTempView("src") {
+        sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 AS a, '2' AS b")
+        sql(s"CREATE TABLE cloned LIKE $globalTempDB.src USING orc")
+        val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier("cloned"))
+        assert(tableMeta.schema == new StructType()
+          .add("a", "int", false).add("b", "string", false))
+        assert(tableMeta.provider == Some(spark.sessionState.conf.defaultDataSourceName))
+      }
+    }
+  }
+
   test("list global temp views") {
     try {
       sql("CREATE GLOBAL TEMP VIEW v1 AS SELECT 3, 4")

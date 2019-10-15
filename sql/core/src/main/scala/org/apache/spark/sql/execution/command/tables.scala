@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.{URI, URISyntaxException}
+import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -43,7 +44,7 @@ import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -63,16 +64,15 @@ import org.apache.spark.sql.util.SchemaUtils
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name [locationSpec]
- *   [STORED AS file_format | USING file_format]
+ *   LIKE [other_db_name.]existing_table_name [locationSpec] [USING provider]
  * }}}
  */
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
     location: Option[String],
-    fileFormat: Option[HiveSerDe],
-    ifNotExists: Boolean) extends RunnableCommand {
+    ifNotExists: Boolean,
+    provider: Option[String]) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -80,6 +80,12 @@ case class CreateTableLikeCommand(
 
     val newProvider = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
       Some(sparkSession.sessionState.conf.defaultDataSourceName)
+    } else if (provider.isDefined) {
+      val providerWithLowerCase = provider.get.toLowerCase(Locale.ROOT)
+      // check the validation of provider input, invalid provider will throw
+      // AnalysisException or ClassNotFoundException or NoSuchMethodException
+      DataSource.lookupDataSourceV2(providerWithLowerCase, sparkSession.sessionState.conf)
+      Some(providerWithLowerCase)
     } else {
       sourceTableDesc.provider
     }
@@ -88,23 +94,12 @@ case class CreateTableLikeCommand(
     // Otherwise create a managed table.
     val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
 
-    val newStorage = fileFormat match {
-      case Some(f) =>
-        sourceTableDesc.storage.copy(
-          inputFormat = f.inputFormat,
-          outputFormat = f.outputFormat,
-          serde = f.serde,
-          locationUri = location.map(CatalogUtils.stringToURI(_)))
-      case None =>
-        sourceTableDesc.storage.copy(
-          locationUri = location.map(CatalogUtils.stringToURI(_)))
-    }
-
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
-        storage = newStorage,
+        storage = sourceTableDesc.storage.copy(
+          locationUri = location.map(CatalogUtils.stringToURI(_))),
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
