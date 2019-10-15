@@ -66,7 +66,7 @@ object CypherSession {
    */
   def extractNodeDatasets(nodes: Dataset[Row]): Array[NodeDataset] = {
     val labelColumns = nodes.columns.filter(_.startsWith(LABEL_COLUMN_PREFIX)).toSet
-    validateTypeColumns(nodes.schema, labelColumns, LABEL_COLUMN_PREFIX)
+    validateLabelOrRelTypeColumns(nodes.schema, labelColumns, LABEL_COLUMN_PREFIX)
 
     val nodeProperties = (nodes.columns.toSet - ID_COLUMN -- labelColumns)
       .map(col => col -> col)
@@ -110,7 +110,7 @@ object CypherSession {
   def extractRelationshipDatasets(relationships: Dataset[Row]): Array[RelationshipDataset] = {
     val relColumns = relationships.columns.toSet
     val relTypeColumns = relColumns.filter(_.startsWith(REL_TYPE_COLUMN_PREFIX))
-    validateTypeColumns(relationships.schema, relTypeColumns, REL_TYPE_COLUMN_PREFIX)
+    validateLabelOrRelTypeColumns(relationships.schema, relTypeColumns, REL_TYPE_COLUMN_PREFIX)
     val idColumns = Set(ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN)
     val propertyColumns = relColumns -- idColumns -- relTypeColumns
     val relProperties = propertyColumns.map(col => col -> col).toMap
@@ -127,7 +127,18 @@ object CypherSession {
     }.toArray
   }
 
-  private def validateTypeColumns(
+  /**
+   * Validates if the given columns fulfil specific constraints for
+   * representing node labels or relationship types.
+   *
+   * In particular, we check if the columns store boolean values and that
+   * the column name represents a single node label or relationship type.
+   *
+   * @param schema  Dataset schema
+   * @param columns columns to validate
+   * @param prefix  node label or relationship type prefix
+   */
+  private def validateLabelOrRelTypeColumns(
       schema: StructType,
       columns: Set[String],
       prefix: String): Unit = {
