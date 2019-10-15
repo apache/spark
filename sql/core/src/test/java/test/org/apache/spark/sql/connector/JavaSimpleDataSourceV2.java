@@ -23,6 +23,8 @@ import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
+import java.util.Map;
+
 public class JavaSimpleDataSourceV2 extends TestingV2Source {
 
   class MyScanBuilder extends JavaSimpleScanBuilder {
@@ -37,7 +39,7 @@ public class JavaSimpleDataSourceV2 extends TestingV2Source {
   }
 
   @Override
-  public Table getTable(CaseInsensitiveStringMap options) {
+  public Table getTable(Map<String, String> properties) {
     return new JavaSimpleBatchTable() {
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {

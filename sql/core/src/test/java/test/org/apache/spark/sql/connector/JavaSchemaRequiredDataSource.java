@@ -74,7 +74,7 @@ public class JavaSchemaRequiredDataSource implements TableProvider {
   }
 
   @Override
-  public Table getTable(CaseInsensitiveStringMap options) {
+  public Table getTable(Map<String, String> properties) {
     throw new IllegalArgumentException("requires a user-supplied schema");
   }
 }

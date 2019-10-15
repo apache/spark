@@ -37,7 +37,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class TextSocketSourceProvider extends TableProvider with DataSourceRegister with Logging {
 
-  private def checkParameters(params: CaseInsensitiveStringMap): Unit = {
+  private def checkParameters(params: util.Map[String, String]): Unit = {
     logWarning("The socket source should not be used for production applications! " +
       "It does not support recovery.")
     if (!params.containsKey("host")) {
@@ -47,7 +47,7 @@ class TextSocketSourceProvider extends TableProvider with DataSourceRegister wit
       throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
     }
     Try {
-      params.getBoolean("includeTimestamp", false)
+      Option(params.get("includeTimestamp")).foreach(_.toBoolean)
     } match {
       case Success(_) =>
       case Failure(_) =>
@@ -55,13 +55,15 @@ class TextSocketSourceProvider extends TableProvider with DataSourceRegister wit
     }
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    checkParameters(options)
+  override def getTable(properties: util.Map[String, String]): Table = {
+    checkParameters(properties)
     new TextSocketTable(
-      options.get("host"),
-      options.getInt("port", -1),
-      options.getInt("numPartitions", SparkSession.active.sparkContext.defaultParallelism),
-      options.getBoolean("includeTimestamp", false))
+      properties.get("host"),
+      Option(properties.get("port")).map(_.toInt).getOrElse(-1),
+      Option(properties.get("numPartitions")).map(_.toInt).getOrElse {
+        SparkSession.active.sparkContext.defaultParallelism
+      },
+      Option(properties.get("includeTimestamp")).map(_.toBoolean).getOrElse(false))
   }
 
   override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {

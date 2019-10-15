@@ -49,14 +49,14 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class RateStreamProvider extends TableProvider with DataSourceRegister {
   import RateStreamProvider._
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    val rowsPerSecond = options.getLong(ROWS_PER_SECOND, 1)
+  override def getTable(properties: util.Map[String, String]): Table = {
+    val rowsPerSecond = Option(properties.get(ROWS_PER_SECOND)).map(_.toLong).getOrElse(1L)
     if (rowsPerSecond <= 0) {
       throw new IllegalArgumentException(
         s"Invalid value '$rowsPerSecond'. The option 'rowsPerSecond' must be positive")
     }
 
-    val rampUpTimeSeconds = Option(options.get(RAMP_UP_TIME))
+    val rampUpTimeSeconds = Option(properties.get(RAMP_UP_TIME))
       .map(JavaUtils.timeStringAsSec)
       .getOrElse(0L)
     if (rampUpTimeSeconds < 0) {
@@ -64,8 +64,9 @@ class RateStreamProvider extends TableProvider with DataSourceRegister {
         s"Invalid value '$rampUpTimeSeconds'. The option 'rampUpTime' must not be negative")
     }
 
-    val numPartitions = options.getInt(
-      NUM_PARTITIONS, SparkSession.active.sparkContext.defaultParallelism)
+    val numPartitions = Option(properties.get(NUM_PARTITIONS)).map(_.toInt).getOrElse {
+      SparkSession.active.sparkContext.defaultParallelism
+    }
     if (numPartitions <= 0) {
       throw new IllegalArgumentException(
         s"Invalid value '$numPartitions'. The option 'numPartitions' must be positive")

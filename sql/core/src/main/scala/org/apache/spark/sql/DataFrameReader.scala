@@ -215,8 +215,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
       val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-      val table = DataSourceV2Utils.loadTableFromTableProvider(
-        provider, source, userSpecifiedSchema, dsOptions)
+      val table = userSpecifiedSchema match {
+        case Some(schema) => provider.getTable(schema, dsOptions)
+        case _ => provider.getTable(dsOptions)
+      }
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       table match {
         case _: SupportsRead if table.supports(BATCH_READ) =>

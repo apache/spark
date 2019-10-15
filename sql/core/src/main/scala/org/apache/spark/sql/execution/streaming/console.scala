@@ -40,7 +40,7 @@ class ConsoleSinkProvider extends TableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def getTable(properties: util.Map[String, String]): Table = {
     ConsoleTable
   }
 

@@ -23,6 +23,7 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
@@ -77,10 +78,29 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
       case provider =>
         val table = provider.getTable(v1Table.schema, v1Table.partitioning, v1Table.properties)
-        DataSourceV2Utils.validateTableSchemaAndPartitioning(
+        validateTableSchemaAndPartitioning(
           providerName, table, v1Table.schema, v1Table.partitioning)
         table
     }.getOrElse(v1Table)
+  }
+
+  private def validateTableSchemaAndPartitioning(
+      providerName: String,
+      table: Table,
+      metaStoreSchema: StructType,
+      metaStorePartitioning: Array[Transform]): Unit = {
+    if (table.schema() != metaStoreSchema) {
+      throw new AnalysisException(s"Table provider '$providerName' reports a different data " +
+        "schema from the one in Spark meta-store:\n" +
+        s"Schema in Spark meta-store:  $metaStoreSchema\n" +
+        s"Actual data schema:          ${table.schema}")
+    }
+    if (!table.partitioning().sameElements(metaStorePartitioning)) {
+      throw new AnalysisException(s"Table provider '$providerName' reports a different data " +
+        "partitioning from the one in Spark meta-store:\n" +
+        s"Partitioning in Spark meta-store::  ${metaStorePartitioning.mkString(", ")}\n" +
+        s"Actual data partitioning:           ${table.partitioning().mkString(", ")}")
+    }
   }
 
   override def loadTable(ident: Identifier): Table = {
@@ -121,7 +141,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
     } else {
       // The schema/partitioning is specified in `CREATE TABLE ... USING`, validate it.
       val table = provider.getTable(schema, partitions, properties)
-      DataSourceV2Utils.validateTableSchemaAndPartitioning(
+      validateTableSchemaAndPartitioning(
         providerName, table, schema, partitions)
       schema -> partitions
     }

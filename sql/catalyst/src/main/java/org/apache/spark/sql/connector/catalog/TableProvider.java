@@ -42,16 +42,15 @@ public interface TableProvider {
    * Return a {@link Table} instance with the user-specified table properties to do read/write.
    * Implementations should infer the table schema and partitioning.
    *
-   * @param options The user-specified table properties that can identify a table, e.g. file path,
-   *                Kafka topic name, etc. It's an immutable case-insensitive string-to-string map.
+   * @param properties The user-specified table properties that can identify a table, e.g. file
+   *                   path, Kafka topic name, etc. The properties map may be
+   *                   {@link CaseInsensitiveStringMap}.
    */
-  // TODO: this should take a Map<String, String> as table properties.
-  Table getTable(CaseInsensitiveStringMap options);
+  Table getTable(Map<String, String> properties);
 
   /**
    * Return a {@link Table} instance with the user-specified table schema and properties to do
-   * read/write. Implementations should infer the table partitioning. The returned table must report
-   * the same schema with the user-specified one, or Spark will fail the operation.
+   * read/write. Implementations should infer the table partitioning.
    *
    * @param schema The user-specified table schema.
    * @param properties The user-specified table properties that can identify a table, e.g. file

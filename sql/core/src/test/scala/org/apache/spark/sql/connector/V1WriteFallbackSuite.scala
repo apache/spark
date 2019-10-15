@@ -177,15 +177,14 @@ class InMemoryV1Provider
   with DataSourceRegister
   with CreatableRelationProvider {
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def getTable(properties: util.Map[String, String]): Table = {
 
-    InMemoryV1Provider.tables.getOrElse(options.get("name"), {
+    InMemoryV1Provider.tables.getOrElse(properties.get("name"), {
       new InMemoryTableWithV1Fallback(
         "InMemoryTableWithV1Fallback",
         new StructType(),
         Array.empty,
-        options.asCaseSensitiveMap()
-      )
+        properties)
     })
   }
 

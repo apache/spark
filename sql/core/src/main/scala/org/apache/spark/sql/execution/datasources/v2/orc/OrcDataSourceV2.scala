@@ -31,10 +31,10 @@ class OrcDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "orc"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    val paths = getPaths(options)
+  override def getTable(properties: util.Map[String, String]): Table = {
+    val paths = getPaths(properties)
     val tableName = getTableName(paths)
-    OrcTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+    OrcTable(tableName, sparkSession, properties, paths, None, fallbackFileFormat)
   }
 
   override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {

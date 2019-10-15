@@ -31,10 +31,10 @@ class ParquetDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "parquet"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    val paths = getPaths(options)
+  override def getTable(properties: util.Map[String, String]): Table = {
+    val paths = getPaths(properties)
     val tableName = getTableName(paths)
-    ParquetTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+    ParquetTable(tableName, sparkSession, properties, paths, None, fallbackFileFormat)
   }
 
   override def getTable(schema: StructType, properties: util.Map[String, String]): Table = {

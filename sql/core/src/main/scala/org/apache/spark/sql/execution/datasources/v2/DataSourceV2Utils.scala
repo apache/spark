@@ -20,12 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.regex.Pattern
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, Table, TableProvider}
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, TableProvider}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private[sql] object DataSourceV2Utils extends Logging {
 
@@ -59,44 +55,6 @@ private[sql] object DataSourceV2Utils extends Logging {
         }
 
       case _ => Map.empty
-    }
-  }
-
-  def loadTableFromTableProvider(
-      provider: TableProvider,
-      providerName: String,
-      userSpecifiedSchema: Option[StructType],
-      options: CaseInsensitiveStringMap): Table = {
-    userSpecifiedSchema match {
-      case Some(schema) =>
-        val table = provider.getTable(schema, options)
-        validateTableSchemaAndPartitioning(providerName, table, schema, table.partitioning())
-        table
-
-      case _ =>
-        provider.getTable(options)
-
-      // TODO: `DataFrameReader`/`DataStreamReader` should have an API to set user-specified
-      //       partitioning.
-    }
-  }
-
-  def validateTableSchemaAndPartitioning(
-      providerName: String,
-      table: Table,
-      expectedSchema: StructType,
-      expectedPartitioning: Array[Transform]): Unit = {
-    if (table.schema() != expectedSchema) {
-      throw new AnalysisException(s"Table provider '$providerName' returns a table " +
-        "which has inappropriate schema:\n" +
-        s"Expected Schema:  $expectedSchema\n" +
-        s"Actual Schema:    ${table.schema}")
-    }
-    if (!table.partitioning().sameElements(expectedPartitioning)) {
-      throw new AnalysisException(s"Table provider '$providerName' returns a table " +
-        "which has inappropriate partitioning:\n" +
-        s"Expected Partitioning:  ${expectedPartitioning.mkString(", ")}\n" +
-        s"Actual Partitioning:    ${table.partitioning().mkString(", ")}")
     }
   }
 }

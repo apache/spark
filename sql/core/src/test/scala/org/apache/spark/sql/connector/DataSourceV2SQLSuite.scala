@@ -1178,7 +1178,7 @@ class DataSourceV2SQLSuite
 
 /** Used as a V2 DataSource for V2SessionCatalog DDL */
 class FakeV2Provider extends TableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def getTable(properties: util.Map[String, String]): Table = {
     throw new UnsupportedOperationException()
   }
 

@@ -187,8 +187,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
           source = provider, conf = sparkSession.sessionState.conf)
         val options = sessionOptions ++ extraOptions
         val dsOptions = new CaseInsensitiveStringMap(options.asJava)
-        val table = DataSourceV2Utils.loadTableFromTableProvider(
-          provider, source, userSpecifiedSchema, dsOptions)
+        val table = userSpecifiedSchema match {
+          case Some(schema) => provider.getTable(schema, dsOptions)
+          case _ => provider.getTable(dsOptions)
+        }
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
           case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
