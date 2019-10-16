@@ -136,12 +136,14 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assertNoSuchTable(s"ALTER TABLE $viewName SET SERDE 'whatever'")
       assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
       assertNoSuchTable(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
-      assertNoSuchTable(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
       assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'")
       assertNoSuchTable(s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
       assertNoSuchTable(s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')")
       assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
       assertNoSuchTable(s"ALTER TABLE $viewName RECOVER PARTITIONS")
+
+      // For v2 ALTER TABLE statements, we have better error message saying view is not supported.
+      assertViewNotSupported(s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'")
     }
   }
 
@@ -173,6 +175,11 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     intercept[NoSuchTableException] {
       sql(query)
     }
+  }
+
+  private def assertViewNotSupported(query: String): Unit = {
+    val e = intercept[AnalysisException](sql(query))
+    assert(e.message.contains("'testView' is a view not a table"))
   }
 
   test("error handling: insert/load/truncate table commands against a view") {
@@ -707,6 +714,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("USE db2")
           checkAnswer(spark.table("default.v1"), Row(1))
         }
+      }
+    }
+  }
+
+  test("SPARK-23519 view should be created even when query output contains duplicate col name") {
+    withTable("t23519") {
+      withView("v23519") {
+        sql("CREATE TABLE t23519 USING parquet AS SELECT 1 AS c1")
+        sql("CREATE VIEW v23519 (c1, c2) AS SELECT c1, c1 FROM t23519")
+        checkAnswer(sql("SELECT * FROM v23519"), Row(1, 1))
       }
     }
   }

@@ -354,14 +354,12 @@ class AvroV1LogicalTypeSuite extends AvroLogicalTypeSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "avro")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "avro")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 }
 
 class AvroV2LogicalTypeSuite extends AvroLogicalTypeSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

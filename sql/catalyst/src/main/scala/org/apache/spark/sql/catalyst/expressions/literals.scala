@@ -234,6 +234,16 @@ object IntegerLiteral {
 }
 
 /**
+ * Extractor for retrieving String literals.
+ */
+object StringLiteral {
+  def unapply(a: Any): Option[String] = a match {
+    case Literal(s: UTF8String, StringType) => Some(s.toString)
+    case _ => None
+  }
+}
+
+/**
  * Extractor for and other utility methods for decimal literals.
  */
 object DecimalLiteral {
@@ -371,7 +381,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ => v + "D"
       }
     case (v: Decimal, t: DecimalType) => v + "BD"
-    case (v: Int, DateType) => s"DATE '${DateFormatter().format(v)}'"
+    case (v: Int, DateType) =>
+      val formatter = DateFormatter(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"DATE '${formatter.format(v)}'"
     case (v: Long, TimestampType) =>
       val formatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))

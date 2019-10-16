@@ -45,6 +45,23 @@ case class SortMergeJoinExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
+  override def simpleStringWithNodeId(): String = {
+    val opId = ExplainUtils.getOpId(this)
+    s"$nodeName $joinType ($opId)".trim
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val joinCondStr = if (condition.isDefined) {
+      s"${condition.get}"
+    } else "None"
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Left keys : ${leftKeys}
+       |Right keys: ${rightKeys}
+       |Join condition : ${joinCondStr}
+     """.stripMargin
+  }
+
   override def output: Seq[Attribute] = {
     joinType match {
       case _: InnerLike =>

@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.util.concurrent.TimeUnit
+
 import scala.collection.mutable
 
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -64,7 +66,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   private def post(event: SparkListenerEvent): Unit = {
     listenerBus.post(event)
-    listenerBus.waitUntilEmpty(1000)
+    listenerBus.waitUntilEmpty()
   }
 
   test("initialize dynamic allocation in SparkContext") {
@@ -541,7 +543,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addTime(manager) === NOT_SET)
     onSchedulerBacklogged(manager)
     val firstAddTime = addTime(manager)
-    assert(firstAddTime === clock.getTimeMillis + schedulerBacklogTimeout * 1000)
+    assert(firstAddTime === clock.nanoTime() + TimeUnit.SECONDS.toNanos(schedulerBacklogTimeout))
     clock.advance(100L)
     onSchedulerBacklogged(manager)
     assert(addTime(manager) === firstAddTime) // timer is already started
@@ -555,7 +557,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addTime(manager) === NOT_SET)
     onSchedulerBacklogged(manager)
     val secondAddTime = addTime(manager)
-    assert(secondAddTime === clock.getTimeMillis + schedulerBacklogTimeout * 1000)
+    assert(secondAddTime === clock.nanoTime() + TimeUnit.SECONDS.toNanos(schedulerBacklogTimeout))
     clock.advance(100L)
     onSchedulerBacklogged(manager)
     assert(addTime(manager) === secondAddTime) // timer is already started
@@ -936,7 +938,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       clock.getTimeMillis(), "executor-1", new ExecutorInfo("host1", 1, Map.empty, Map.empty)))
     post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
     clock.advance(1000)
-    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.getTimeMillis())
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager) === 2)
     val taskInfo0 = createTaskInfo(0, 0, "executor-1")
     post(SparkListenerTaskStart(0, 0, taskInfo0))
@@ -952,7 +954,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(maxNumExecutorsNeeded(manager) === 1)
     assert(numExecutorsTarget(manager) === 2)
     clock.advance(1000)
-    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.getTimeMillis())
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTarget(manager) === 1)
     verify(client, never).killExecutors(any(), any(), any(), any())
 
@@ -1076,21 +1078,23 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
    | Helper methods for accessing private methods and fields |
    * ------------------------------------------------------- */
 
-  private val _numExecutorsToAdd = PrivateMethod[Int]('numExecutorsToAdd)
-  private val _numExecutorsTarget = PrivateMethod[Int]('numExecutorsTarget)
-  private val _maxNumExecutorsNeeded = PrivateMethod[Int]('maxNumExecutorsNeeded)
-  private val _addTime = PrivateMethod[Long]('addTime)
-  private val _schedule = PrivateMethod[Unit]('schedule)
-  private val _addExecutors = PrivateMethod[Int]('addExecutors)
+  private val _numExecutorsToAdd = PrivateMethod[Int](Symbol("numExecutorsToAdd"))
+  private val _numExecutorsTarget = PrivateMethod[Int](Symbol("numExecutorsTarget"))
+  private val _maxNumExecutorsNeeded = PrivateMethod[Int](Symbol("maxNumExecutorsNeeded"))
+  private val _addTime = PrivateMethod[Long](Symbol("addTime"))
+  private val _schedule = PrivateMethod[Unit](Symbol("schedule"))
+  private val _addExecutors = PrivateMethod[Int](Symbol("addExecutors"))
   private val _updateAndSyncNumExecutorsTarget =
-    PrivateMethod[Int]('updateAndSyncNumExecutorsTarget)
-  private val _removeExecutors = PrivateMethod[Seq[String]]('removeExecutors)
-  private val _onSchedulerBacklogged = PrivateMethod[Unit]('onSchedulerBacklogged)
-  private val _onSchedulerQueueEmpty = PrivateMethod[Unit]('onSchedulerQueueEmpty)
-  private val _localityAwareTasks = PrivateMethod[Int]('localityAwareTasks)
-  private val _hostToLocalTaskCount = PrivateMethod[Map[String, Int]]('hostToLocalTaskCount)
-  private val _onSpeculativeTaskSubmitted = PrivateMethod[Unit]('onSpeculativeTaskSubmitted)
-  private val _totalRunningTasks = PrivateMethod[Int]('totalRunningTasks)
+    PrivateMethod[Int](Symbol("updateAndSyncNumExecutorsTarget"))
+  private val _removeExecutors = PrivateMethod[Seq[String]](Symbol("removeExecutors"))
+  private val _onSchedulerBacklogged = PrivateMethod[Unit](Symbol("onSchedulerBacklogged"))
+  private val _onSchedulerQueueEmpty = PrivateMethod[Unit](Symbol("onSchedulerQueueEmpty"))
+  private val _localityAwareTasks = PrivateMethod[Int](Symbol("localityAwareTasks"))
+  private val _hostToLocalTaskCount =
+    PrivateMethod[Map[String, Int]](Symbol("hostToLocalTaskCount"))
+  private val _onSpeculativeTaskSubmitted =
+    PrivateMethod[Unit](Symbol("onSpeculativeTaskSubmitted"))
+  private val _totalRunningTasks = PrivateMethod[Int](Symbol("totalRunningTasks"))
 
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsToAdd()

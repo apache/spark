@@ -388,7 +388,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
       data.write.format("json").save(file.getAbsolutePath)
-      sparkContext.listenerBus.waitUntilEmpty(10000)
+      sparkContext.listenerBus.waitUntilEmpty()
       val executionIds = currentExecutionIds().diff(previousExecutionIds)
       assert(executionIds.size === 1)
       val executionId = executionIds.head
@@ -437,7 +437,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
 
     // TODO: test file source V2 as well when its statistics is correctly computed.
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempDir { tempDir =>
         val dir = new File(tempDir, "pqS").getCanonicalPath
 

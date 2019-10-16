@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.{EOFException, InputStream, IOException}
 
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
@@ -54,7 +54,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       sourceName: String,
       maybeTruncated: Boolean = false,
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
-    val lines = Source.fromInputStream(logData).getLines()
+    val lines = Source.fromInputStream(logData)(Codec.UTF8).getLines()
     replay(lines, sourceName, maybeTruncated, eventsFilter)
   }
 

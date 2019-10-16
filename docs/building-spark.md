@@ -27,14 +27,14 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.6.1 and Java 8.
+Building Spark using Maven requires Maven 3.6.2 and Java 8.
 Spark requires Scala 2.12; support for Scala 2.11 was removed in Spark 3.0.0.
 
 ### Setting up Maven's Memory Usage
 
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
-    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
+    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g"
 
 (The `ReservedCodeCacheSize` setting is optional but recommended.)
 If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
@@ -82,7 +82,7 @@ Example:
 ## Building With Hive and JDBC Support
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
-add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
+add the `-Phive` and `-Phive-thriftserver` profiles to your existing build options.
 By default, Spark will use Hive 1.2.1 with the `hadoop-2.7` profile, and Hive 2.3.6 with the `hadoop-3.2` profile.
 
     # With Hive 1.2.1 support
@@ -160,7 +160,7 @@ prompt.
 Configure the JVM options for SBT in `.jvmopts` at the project root, for example:
 
     -Xmx2g
-    -XX:ReservedCodeCacheSize=512m
+    -XX:ReservedCodeCacheSize=1g
 
 For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](https://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
 

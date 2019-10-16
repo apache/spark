@@ -25,7 +25,6 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -556,7 +555,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     val inputPath = new Path("/tmp/b/c")
     var stagingDir = "tmp/b"
     val saveHiveFile = InsertIntoHiveTable(null, Map.empty, null, false, false, null)
-    val getStagingDir = PrivateMethod[Path]('getStagingDir)
+    val getStagingDir = PrivateMethod[Path](Symbol("getStagingDir"))
     var path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
     assert(path.toString.indexOf("/tmp/b_hive_") != -1)
 

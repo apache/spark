@@ -22,9 +22,9 @@ import java.io.File
 import scala.util.Random
 
 import org.apache.spark.SparkConf
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -43,18 +43,23 @@ import org.apache.spark.sql.types._
  * This is in `sql/hive` module in order to compare `sql/core` and `sql/hive` ORC data sources.
  */
 // scalastyle:off line.size.limit
-object OrcReadBenchmark extends BenchmarkBase with SQLHelper {
-  val conf = new SparkConf()
-  conf.set("orc.compression", "snappy")
+object OrcReadBenchmark extends SqlBasedBenchmark {
 
-  private val spark = SparkSession.builder()
-    .master("local[1]")
-    .appName("OrcReadBenchmark")
-    .config(conf)
-    .getOrCreate()
+  override def getSparkSession: SparkSession = {
+    val conf = new SparkConf()
+    conf.set("orc.compression", "snappy")
 
-  // Set default configs. Individual cases will change them if necessary.
-  spark.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
+    val sparkSession = SparkSession.builder()
+      .master("local[1]")
+      .appName("OrcReadBenchmark")
+      .config(conf)
+      .getOrCreate()
+
+    // Set default configs. Individual cases will change them if necessary.
+    sparkSession.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
+
+    sparkSession
+  }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)

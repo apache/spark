@@ -109,7 +109,7 @@ class ColumnPruningSuite extends PlanTest {
         replacedGenerator: Seq[String] => Generator,
         aliasedExprs: Seq[String] => Seq[Expression],
         unrequiredChildIndex: Seq[Int],
-        generatorOutputNames: Seq[String]) {
+        generatorOutputNames: Seq[String]): Unit = {
       withSQLConf(SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> "true") {
         val structType = StructType.fromDDL("d double, e array<string>, f double, g double, " +
           "h array<struct<h1: int, h2: double>>")

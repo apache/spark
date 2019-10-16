@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
@@ -89,11 +90,16 @@ object SQLConf {
   }
 
   def withExistingConf[T](conf: SQLConf)(f: => T): T = {
+    val old = existingConf.get()
     existingConf.set(conf)
     try {
       f
     } finally {
-      existingConf.remove()
+      if (old != null) {
+        existingConf.set(old)
+      } else {
+        existingConf.remove()
+      }
     }
   }
 
@@ -115,7 +121,9 @@ object SQLConf {
    * Returns the active config object within the current scope. If there is an active SparkSession,
    * the proper SQLConf associated with the thread's active session is used. If it's called from
    * tasks in the executor side, a SQLConf will be created from job local properties, which are set
-   * and propagated from the driver side.
+   * and propagated from the driver side, unless a `SQLConf` has been set in the scope by
+   * `withExistingConf` as done for propagating SQLConf for operations performed on RDDs created
+   * from DataFrames.
    *
    * The way this works is a little bit convoluted, due to the fact that config was added initially
    * only for physical plans (and as a result not in sql/catalyst module).
@@ -129,10 +137,16 @@ object SQLConf {
    */
   def get: SQLConf = {
     if (TaskContext.get != null) {
-      new ReadOnlySQLConf(TaskContext.get())
+      val conf = existingConf.get()
+      if (conf != null) {
+        conf
+      } else {
+        new ReadOnlySQLConf(TaskContext.get())
+      }
     } else {
       val isSchedulerEventLoopThread = SparkContext.getActive
-        .map(_.dagScheduler.eventProcessLoop.eventThread)
+        .flatMap { sc => Option(sc.dagScheduler) }
+        .map(_.eventProcessLoop.eventThread)
         .exists(_.getId == Thread.currentThread().getId)
       if (isSchedulerEventLoopThread) {
         // DAGScheduler event loop thread does not have an active SparkSession, the `confGetter`
@@ -215,6 +229,39 @@ object SQLConf {
         "it's more likely to hit codegen cache.")
     .booleanConf
     .createWithDefault(true)
+
+  val DYNAMIC_PARTITION_PRUNING_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
+      .doc("When true, we will generate predicate for partition column when it's used as join key")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DYNAMIC_PARTITION_PRUNING_USE_STATS =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.useStats")
+      .internal()
+      .doc("When true, distinct count statistics will be used for computing the data size of the " +
+        "partitioned table after dynamic partition pruning, in order to evaluate if it is worth " +
+        "adding an extra subquery as the pruning filter if broadcast reuse is not applicable.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO = buildConf(
+    "spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio")
+    .internal()
+    .doc("When statistics are not available or configured not to be used, this config will be " +
+      "used as the fallback filter ratio for computing the data size of the partitioned table " +
+      "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
+      "subquery as the pruning filter if broadcast reuse is not applicable.")
+    .doubleConf
+    .createWithDefault(0.5)
+
+  val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcast")
+      .internal()
+      .doc("When true, dynamic partition pruning will seek to reuse the broadcast results from " +
+        "a broadcast hash join operation.")
+      .booleanConf
+      .createWithDefault(true)
 
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
@@ -313,6 +360,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
+    buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
+      .doc("The relation with a non-empty partition ratio lower than this config will not be " +
+        "considered as the build side of a broadcast-hash join in adaptive execution regardless " +
+        "of its size.")
+      .doubleConf
+      .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
+      .createWithDefault(0.2)
+
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.reducePostShufflePartitions.enabled")
     .doc("When true and adaptive execution is enabled, this enables reducing the number of " +
@@ -338,6 +394,14 @@ object SQLConf {
         "must be a positive integer.")
       .createOptional
 
+  val OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED =
+    buildConf("spark.sql.adaptive.optimizedLocalShuffleReader.enabled")
+    .doc("When true and adaptive execution is enabled, this enables the optimization of" +
+      " converting the shuffle reader to local shuffle reader for the shuffle exchange" +
+      " of the broadcast hash join in probe side.")
+    .booleanConf
+    .createWithDefault(true)
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()
@@ -360,12 +424,6 @@ object SQLConf {
       "aliases) which might negatively impact overall runtime.")
     .booleanConf
     .createWithDefault(true)
-
-  val ANSI_SQL_PARSER =
-    buildConf("spark.sql.parser.ansi.enabled")
-      .doc("When true, tries to conform to ANSI SQL syntax.")
-      .booleanConf
-      .createWithDefault(false)
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
@@ -731,10 +789,11 @@ object SQLConf {
     .createWithDefault(100000)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
+    .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
         "explicit CROSS JOIN syntax.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
@@ -786,6 +845,17 @@ object SQLConf {
       .internal()
       .intConf
       .createWithDefault(10000)
+
+  val IGNORE_DATA_LOCALITY =
+    buildConf("spark.sql.sources.ignoreDataLocality.enabled")
+      .doc("If true, Spark will not fetch the block locations for each file on " +
+        "listing files. This speeds up file listing, but the scheduler cannot " +
+        "schedule tasks to take advantage of data locality. It can be particularly " +
+        "useful if data is read from a remote cluster so the scheduler could never " +
+        "take advantage of locality anyway.")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
 
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
@@ -1046,6 +1116,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val CODEGEN_SPLIT_AGGREGATE_FUNC =
+    buildConf("spark.sql.codegen.aggregate.splitAggregateFunc.enabled")
+      .internal()
+      .doc("When true, the code generator would split aggregate code into individual methods " +
+        "instead of a single big method. This can be used to avoid oversized function that " +
+        "can miss the opportunity of JIT optimization.")
+      .booleanConf
+      .createWithDefault(true)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
@@ -1215,12 +1294,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS = buildConf("spark.sql.statistics.fallBackToHdfs")
-    .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
-      " This is useful in determining if a table is small enough to use auto broadcast joins.")
-    .booleanConf
-    .createWithDefault(false)
-
   val DEFAULT_SIZE_IN_BYTES = buildConf("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
@@ -1229,6 +1302,16 @@ object SQLConf {
       "knows for sure its size is small enough.")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(Long.MaxValue)
+
+  val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS = buildConf("spark.sql.statistics.fallBackToHdfs")
+    .doc("When true, it will fall back to HDFS if the table statistics are not available from " +
+      "table metadata. This is useful in determining if a table is small enough to use " +
+      "broadcast joins. This flag is effective only for non-partitioned Hive tables. " +
+      "For non-partitioned data source tables, it will be automatically recalculated if table " +
+      "statistics are not available. For partitioned data source and partitioned Hive tables, " +
+      s"It is '${DEFAULT_SIZE_IN_BYTES.key}' if table statistics are not available.")
+    .booleanConf
+    .createWithDefault(false)
 
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
@@ -1493,16 +1576,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DECIMAL_OPERATIONS_NULL_ON_OVERFLOW =
-    buildConf("spark.sql.decimalOperations.nullOnOverflow")
-      .internal()
-      .doc("When true (default), if an overflow on a decimal occurs, then NULL is returned. " +
-        "Spark's older versions and Hive behave in this way. If turned to false, SQL ANSI 2011 " +
-        "specification will be followed instead: an arithmetic exception is thrown, as most " +
-        "of the SQL databases do.")
-      .booleanConf
-      .createWithDefault(true)
-
   val LITERAL_PICK_MINIMUM_PRECISION =
     buildConf("spark.sql.legacy.literal.pickMinimumPrecision")
       .internal()
@@ -1541,12 +1614,22 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
-    .internal()
-    .doc("When true, will perform integral division with the / operator " +
-      "if both sides are integral types. This is for PostgreSQL test cases only.")
-    .booleanConf
-    .createWithDefault(false)
+  object Dialect extends Enumeration {
+    val SPARK, POSTGRESQL = Value
+  }
+
+  val DIALECT =
+    buildConf("spark.sql.dialect")
+      .doc("The specific features of the SQL language to be adopted, which are available when " +
+        "accessing the given database. Currently, Spark supports two database dialects, `Spark` " +
+        "and `PostgreSQL`. With `PostgreSQL` dialect, Spark will: " +
+        "1. perform integral division with the / operator if both sides are integral types; " +
+        "2. accept \"true\", \"yes\", \"1\", \"false\", \"no\", \"0\", and unique prefixes as " +
+        "input and trim input for the boolean data type.")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(Dialect.values.map(_.toString))
+      .createWithDefault(Dialect.SPARK.toString)
 
   val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
     buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
@@ -1589,21 +1672,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
-  val USE_V1_SOURCE_READER_LIST = buildConf("spark.sql.sources.read.useV1SourceList")
+  val USE_V1_SOURCE_LIST = buildConf("spark.sql.sources.useV1SourceList")
     .internal()
-    .doc("A comma-separated list of data source short names or fully qualified data source" +
-      " register class names for which data source V2 read paths are disabled. Reads from these" +
-      " sources will fall back to the V1 sources.")
+    .doc("A comma-separated list of data source short names or fully qualified data source " +
+      "implementation class names for which Data Source V2 code path is disabled. These data " +
+      "sources will fallback to Data Source V1 code path.")
     .stringConf
-    .createWithDefault("")
-
-  val USE_V1_SOURCE_WRITER_LIST = buildConf("spark.sql.sources.write.useV1SourceList")
-    .internal()
-    .doc("A comma-separated list of data source short names or fully qualified data source" +
-      " register class names for which data source V2 write paths are disabled. Writes from these" +
-      " sources will fall back to the V1 sources.")
-    .stringConf
-    .createWithDefault("csv,json,orc,text,parquet")
+    .createWithDefault("kafka")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -1644,22 +1719,36 @@ object SQLConf {
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
 
   object StoreAssignmentPolicy extends Enumeration {
-    val LEGACY, STRICT = Value
+    val ANSI, LEGACY, STRICT = Value
   }
 
   val STORE_ASSIGNMENT_POLICY =
     buildConf("spark.sql.storeAssignmentPolicy")
       .doc("When inserting a value into a column with different data type, Spark will perform " +
-        "type coercion. Currently we support 2 policies for the type coercion rules: legacy and " +
-        "strict. With legacy policy, Spark allows casting any value to any data type. " +
-        "The legacy policy is the only behavior in Spark 2.x and it is compatible with Hive. " +
+        "type coercion. Currently, we support 3 policies for the type coercion rules: ANSI, " +
+        "legacy and strict. With ANSI policy, Spark performs the type coercion as per ANSI SQL. " +
+        "In practice, the behavior is mostly the same as PostgreSQL. " +
+        "It disallows certain unreasonable type conversions such as converting " +
+        "`string` to `int` or `double` to `boolean`. " +
+        "With legacy policy, Spark allows the type coercion as long as it is a valid `Cast`, " +
+        "which is very loose. e.g. converting `string` to `int` or `double` to `boolean` is " +
+        "allowed. It is also the only behavior in Spark 2.x and it is compatible with Hive. " +
         "With strict policy, Spark doesn't allow any possible precision loss or data truncation " +
-        "in type coercion, e.g. `int` to `long` and `float` to `double` are not allowed."
+        "in type coercion, e.g. converting `double` to `int` or `decimal` to `double` is " +
+        "not allowed."
       )
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
-      .createOptional
+      .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
+
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
+      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
+      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser.")
+    .booleanConf
+    .createWithDefault(false)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -1790,7 +1879,7 @@ object SQLConf {
     .doc("If it is set to true, size of null returns -1. This behavior was inherited from Hive. " +
       "The size function returns null for null input if the flag is disabled.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
@@ -1823,15 +1912,6 @@ object SQLConf {
         "output ordering, which is expensive and may make the planning quite slow.")
     .booleanConf
     .createWithDefault(false)
-
-  val FAIL_ON_INTEGRAL_TYPE_OVERFLOW =
-    buildConf("spark.sql.failOnIntegralTypeOverflow")
-      .doc("If it is set to true, all operations on integral fields throw an " +
-        "exception if an overflow occurs. If it is false (default), in case of overflow a wrong " +
-        "result is returned.")
-      .internal()
-      .booleanConf
-      .createWithDefault(false)
 
   val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
     buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
@@ -1910,10 +1990,16 @@ object SQLConf {
     .stringConf
     .createOptional
 
-  val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
-      .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+  val V2_SESSION_CATALOG_IMPLEMENTATION =
+    buildConf(s"spark.sql.catalog.$SESSION_CATALOG_NAME")
+      .doc("A catalog implementation that will be used as the v2 interface to Spark's built-in " +
+        s"v1 catalog: $SESSION_CATALOG_NAME. This catalog shares its identifier namespace with " +
+        s"the $SESSION_CATALOG_NAME and must be consistent with it; for example, if a table can " +
+        s"be loaded by the $SESSION_CATALOG_NAME, this catalog must also return the table " +
+        s"metadata. To delegate operations to the $SESSION_CATALOG_NAME, implementations can " +
+        "extend 'CatalogExtension'.")
       .stringConf
-      .createWithDefault("org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog")
+      .createOptional
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
     .doc("When true, the upcast will be loose and allows string to atomic types.")
@@ -1931,6 +2017,15 @@ object SQLConf {
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
       .createWithDefault(true)
+
+  val ADDITIONAL_REMOTE_REPOSITORIES =
+    buildConf("spark.sql.additionalRemoteRepositories")
+      .doc("A comma-delimited string config of the optional additional remote Maven mirror " +
+        "repositories. This is only used for downloading Hive jars in IsolatedClientLoader " +
+        "if the default Maven Central repo is unreachable.")
+      .stringConf
+      .createWithDefault(
+        "https://maven-central.storage-download.googleapis.com/repos/central/data/")
 }
 
 /**
@@ -1966,6 +2061,16 @@ class SQLConf extends Serializable with Logging {
   def optimizerPlanChangeRules: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_RULES)
 
   def optimizerPlanChangeBatches: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_BATCHES)
+
+  def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
+
+  def dynamicPartitionPruningUseStats: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_USE_STATS)
+
+  def dynamicPartitionPruningFallbackFilterRatio: Double =
+    getConf(DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO)
+
+  def dynamicPartitionPruningReuseBroadcast: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
@@ -2037,6 +2142,9 @@ class SQLConf extends Serializable with Logging {
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def nonEmptyPartitionRatioForBroadcastJoin: Double =
+    getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
   def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
 
@@ -2116,8 +2224,6 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
-
-  def ansiParserEnabled: Boolean = getConf(ANSI_SQL_PARSER)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
@@ -2307,6 +2413,8 @@ class SQLConf extends Serializable with Logging {
   def cartesianProductExecBufferSpillThreshold: Int =
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
 
+  def codegenSplitAggregateFunc: Boolean = getConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC)
+
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
@@ -2338,10 +2446,6 @@ class SQLConf extends Serializable with Logging {
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 
-  def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
-
-  def failOnIntegralTypeOverflow: Boolean = getConf(FAIL_ON_INTEGRAL_TYPE_OVERFLOW)
-
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
   def continuousStreamingEpochBacklogQueueSize: Int =
@@ -2352,10 +2456,6 @@ class SQLConf extends Serializable with Logging {
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
-  def useV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
-
-  def useV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
-
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 
   def disabledV2StreamingMicroBatchReaders: String =
@@ -2365,8 +2465,6 @@ class SQLConf extends Serializable with Logging {
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
-  def preferIntegralDivision: Boolean = getConf(PREFER_INTEGRAL_DIVISION)
-
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
@@ -2375,8 +2473,12 @@ class SQLConf extends Serializable with Logging {
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
-  def storeAssignmentPolicy: Option[StoreAssignmentPolicy.Value] =
-    getConf(STORE_ASSIGNMENT_POLICY).map(StoreAssignmentPolicy.withName)
+  def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
+    StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
+
+  def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
+
+  def usePostgreSQLDialect: Boolean = getConf(DIALECT) == Dialect.POSTGRESQL.toString()
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
@@ -2419,6 +2521,8 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
+
+  def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
 
   /** ********************** SQLConf functionality methods ************ */
 

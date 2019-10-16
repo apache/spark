@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -179,6 +180,20 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
+  override def simpleStringWithNodeId(): String = {
+    val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
+    s"$nodeName ($operatorId)".trim
+  }
+
+  def verboseStringWithOperatorId(): String = {
+    val codegenIdStr =
+      getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s"[codegen id : $id]").getOrElse("")
+    val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
+    s"""
+       |($operatorId) $nodeName $codegenIdStr
+     """.stripMargin
+  }
+
   /**
    * All the subqueries of current plan.
    */
@@ -204,7 +219,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     subqueries ++ subqueries.flatMap(_.subqueriesAll)
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = subqueries
+  override def innerChildren: Seq[QueryPlan[_]] = subqueries
 
   /**
    * A private mutable variable to indicate whether this plan is the result of canonicalization.
@@ -289,6 +304,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 }
 
 object QueryPlan extends PredicateHelper {
+  val OP_ID_TAG = TreeNodeTag[Int]("operatorId")
+  val CODEGEN_ID_TAG = new TreeNodeTag[Int]("wholeStageCodegenId")
+
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
    * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
@@ -335,9 +353,10 @@ object QueryPlan extends PredicateHelper {
       append: String => Unit,
       verbose: Boolean,
       addSuffix: Boolean,
-      maxFields: Int = SQLConf.get.maxToStringFields): Unit = {
+      maxFields: Int = SQLConf.get.maxToStringFields,
+      printOperatorId: Boolean = false): Unit = {
     try {
-      plan.treeString(append, verbose, addSuffix, maxFields)
+      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
     } catch {
       case e: AnalysisException => append(e.toString)
     }

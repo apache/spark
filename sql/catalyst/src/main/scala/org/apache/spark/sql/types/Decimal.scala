@@ -239,7 +239,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def toByte: Byte = toLong.toByte
 
   private def overflowException(dataType: String) =
-    throw new ArithmeticException(s"Casting $this to $dataType causes overflow.")
+    throw new ArithmeticException(s"Casting $this to $dataType causes overflow")
 
   /**
    * @return the Byte value that is equal to the rounded decimal.

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.sql.Date
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
@@ -547,7 +548,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("Throw exception on unsafe cast with strict casting policy") {
     withSQLConf(
-      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
@@ -578,6 +579,111 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         // Insert into table successfully.
         sql("insert into t select 1, 2.0D")
         checkAnswer(sql("select * from t"), Row(1, 2.0D))
+      }
+    }
+  }
+
+  test("Throw exception on unsafe cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        var msg = intercept[AnalysisException] {
+          sql("insert into t values('a', 'b')")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+        msg = intercept[AnalysisException] {
+          sql("insert into t values(now(), now())")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': TimestampType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': TimestampType to DoubleType"))
+        msg = intercept[AnalysisException] {
+          sql("insert into t values(true, false)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+      }
+    }
+  }
+
+  test("Allow on writing any numeric value to numeric type with ANSI policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, d float) using parquet")
+        sql("insert into t values(1L, 2.0)")
+        sql("insert into t values(3.0, 4)")
+        sql("insert into t values(5.0, 6L)")
+        checkAnswer(sql("select * from t"), Seq(Row(1, 2.0F), Row(3, 4.0F), Row(5, 6.0F)))
+      }
+    }
+  }
+
+  test("Allow on writing timestamp value to date type with ANSI policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i date) using parquet")
+        sql("insert into t values(TIMESTAMP('2010-09-02 14:10:10'))")
+        checkAnswer(sql("select * from t"), Seq(Row(Date.valueOf("2010-09-02"))))
+      }
+    }
+  }
+
+  test("Throw exceptions on inserting out-of-range int value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b int) using parquet")
+        val outOfRangeValue1 = (Int.MaxValue + 1L).toString
+        var msg = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue1)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue1 to int causes overflow"))
+
+        val outOfRangeValue2 = (Int.MinValue - 1L).toString
+        msg = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue2)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue2 to int causes overflow"))
+      }
+    }
+  }
+
+  test("Throw exceptions on inserting out-of-range long value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b long) using parquet")
+        val outOfRangeValue1 = Math.nextUp(Long.MaxValue)
+        var msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue1}D)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue1 to long causes overflow"))
+
+        val outOfRangeValue2 = Math.nextDown(Long.MinValue)
+        msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue2}D)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue2 to long causes overflow"))
+      }
+    }
+  }
+
+  test("Throw exceptions on inserting out-of-range decimal value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b decimal(3,2)) using parquet")
+        val outOfRangeValue = "123.45"
+        val msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue})")
+        }.getCause.getMessage
+        assert(msg.contains("cannot be represented as Decimal(3, 2)"))
       }
     }
   }
@@ -623,7 +729,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       spark.sessionState.catalog.createTable(newTable, false)
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      sql("INSERT INTO TABLE test_table SELECT 2, null")
+      val msg = intercept[AnalysisException] {
+        sql("INSERT INTO TABLE test_table SELECT 2, null")
+      }.getMessage
+      assert(msg.contains("Cannot write nullable values to non-null column 's'"))
     }
   }
 }

@@ -328,11 +328,11 @@ NULL
 
 
 -- !query 39
-set spark.sql.decimalOperations.nullOnOverflow=false
+set spark.sql.ansi.enabled=true
 -- !query 39 schema
 struct<key:string,value:string>
 -- !query 39 output
-spark.sql.decimalOperations.nullOnOverflow	false
+spark.sql.ansi.enabled	true
 
 
 -- !query 40

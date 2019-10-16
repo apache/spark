@@ -743,7 +743,7 @@ class JDBCSuite extends QueryTest
   }
 
   test("compile filters") {
-    val compileFilter = PrivateMethod[Option[String]]('compileFilter)
+    val compileFilter = PrivateMethod[Option[String]](Symbol("compileFilter"))
     def doCompileFilter(f: Filter): String =
       JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
     assert(doCompileFilter(EqualTo("col0", 3)) === """"col0" = 3""")
@@ -1031,8 +1031,10 @@ class JDBCSuite extends QueryTest
   }
 
   test("Hide credentials in show create table") {
+    val userName = "testUser"
     val password = "testPass"
     val tableName = "tab1"
+    val dbTable = "TEST.PEOPLE"
     withTable(tableName) {
       sql(
         s"""
@@ -1040,18 +1042,30 @@ class JDBCSuite extends QueryTest
            |USING org.apache.spark.sql.jdbc
            |OPTIONS (
            | url '$urlWithUserAndPass',
-           | dbtable 'TEST.PEOPLE',
-           | user 'testUser',
+           | dbtable '$dbTable',
+           | user '$userName',
            | password '$password')
          """.stripMargin)
 
       val show = ShowCreateTableCommand(TableIdentifier(tableName))
       spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
         assert(!r.toString.contains(password))
+        assert(r.toString.contains(dbTable))
+        assert(r.toString.contains(userName))
       }
 
       sql(s"SHOW CREATE TABLE $tableName").collect().foreach { r =>
-        assert(!r.toString().contains(password))
+        assert(!r.toString.contains(password))
+        assert(r.toString.contains(dbTable))
+        assert(r.toString.contains(userName))
+      }
+
+      withSQLConf(SQLConf.SQL_OPTIONS_REDACTION_PATTERN.key -> "(?i)dbtable|user") {
+        spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+          assert(!r.toString.contains(password))
+          assert(!r.toString.contains(dbTable))
+          assert(!r.toString.contains(userName))
+        }
       }
     }
   }

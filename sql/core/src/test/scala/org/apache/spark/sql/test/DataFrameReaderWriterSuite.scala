@@ -277,7 +277,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         .format(classOf[NoopDataSource].getName)
         .mode(SaveMode.Append)
         .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(plan.isInstanceOf[AppendData])
 
       // overwrite mode creates `OverwriteByExpression`
@@ -285,22 +285,24 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         .format(classOf[NoopDataSource].getName)
         .mode(SaveMode.Overwrite)
         .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(plan.isInstanceOf[OverwriteByExpression])
 
       // By default the save mode is `ErrorIfExists` for data source v2.
-      spark.range(10).write
-        .format(classOf[NoopDataSource].getName)
-        .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
-      assert(plan.isInstanceOf[AppendData])
+      val e = intercept[AnalysisException] {
+        spark.range(10).write
+          .format(classOf[NoopDataSource].getName)
+          .save()
+      }
+      assert(e.getMessage.contains("ErrorIfExists"))
 
-      spark.range(10).write
-        .format(classOf[NoopDataSource].getName)
-        .mode("default")
-        .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
-      assert(plan.isInstanceOf[AppendData])
+      val e2 = intercept[AnalysisException] {
+        spark.range(10).write
+          .format(classOf[NoopDataSource].getName)
+          .mode("default")
+          .save()
+      }
+      assert(e2.getMessage.contains("ErrorIfExists"))
     } finally {
       spark.listenerManager.unregister(listener)
     }
@@ -308,7 +310,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
   test("Throw exception on unsafe table insertion with strict casting policy") {
     withSQLConf(
-      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
@@ -323,6 +325,28 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         // The API `saveAsTable` matches the fields by name.
         Seq((4.0, 3)).toDF("d", "i").write.mode("append").saveAsTable("t")
         checkAnswer(sql("select * from t"), Seq(Row(1, 2.0), Row(3, 4.0)))
+      }
+    }
+  }
+
+  test("Throw exception on unsafe cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        // Calling `saveAsTable` to an existing table with append mode results in table insertion.
+        var msg = intercept[AnalysisException] {
+          Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+
+        msg = intercept[AnalysisException] {
+          Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
       }
     }
   }
@@ -1036,7 +1060,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           checkDatasetUnorderly(
             spark.read.parquet(dir.getCanonicalPath).as[(Long, Long)],
             0L -> 0L, 1L -> 1L, 2L -> 2L)
-          sparkContext.listenerBus.waitUntilEmpty(10000)
+          sparkContext.listenerBus.waitUntilEmpty()
           assert(jobDescriptions.asScala.toList.exists(
             _.contains("Listing leaf files and directories for 3 paths")))
         } finally {

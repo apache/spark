@@ -41,7 +41,7 @@ class NettyBlockTransferServiceSuite
   private var service0: NettyBlockTransferService = _
   private var service1: NettyBlockTransferService = _
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       if (service0 != null) {
         service0.close()

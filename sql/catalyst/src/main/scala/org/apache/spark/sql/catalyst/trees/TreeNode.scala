@@ -27,13 +27,13 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.IdentifierWithDatabase
 import org.apache.spark.sql.catalyst.ScalaReflection._
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -530,9 +530,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param maxFields Maximum number of fields that will be converted to strings.
    *                  Any elements beyond the limit will be dropped.
    */
-  def simpleString(maxFields: Int): String = {
-    s"$nodeName ${argString(maxFields)}".trim
-  }
+  def simpleString(maxFields: Int): String = s"$nodeName ${argString(maxFields)}".trim
+
+  /**
+   * ONE line description of this node containing the node identifier.
+   * @return
+   */
+  def simpleStringWithNodeId(): String
 
   /** ONE line description of this node with more information */
   def verboseString(maxFields: Int): String
@@ -548,10 +552,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   final def treeString(
       verbose: Boolean,
       addSuffix: Boolean = false,
-      maxFields: Int = SQLConf.get.maxToStringFields): String = {
+      maxFields: Int = SQLConf.get.maxToStringFields,
+      printOperatorId: Boolean = false): String = {
     val concat = new PlanStringConcat()
-
-    treeString(concat.append, verbose, addSuffix, maxFields)
+    treeString(concat.append, verbose, addSuffix, maxFields, printOperatorId)
     concat.toString
   }
 
@@ -559,8 +563,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       append: String => Unit,
       verbose: Boolean,
       addSuffix: Boolean,
-      maxFields: Int): Unit = {
-    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields)
+      maxFields: Int,
+      printOperatorId: Boolean): Unit = {
+    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, printOperatorId)
   }
 
   /**
@@ -609,7 +614,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * All the nodes that should be shown as a inner nested tree of this node.
    * For example, this can be used to show sub-queries.
    */
-  protected def innerChildren: Seq[TreeNode[_]] = Seq.empty
+  def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
   /**
    * Appends the string representation of this node and its children to the given Writer.
@@ -627,7 +632,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Unit = {
+      maxFields: Int,
+      printNodeId: Boolean): Unit = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -639,7 +645,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val str = if (verbose) {
       if (addSuffix) verboseStringWithSuffix(maxFields) else verboseString(maxFields)
     } else {
-      simpleString(maxFields)
+      if (printNodeId) {
+        simpleStringWithNodeId()
+      } else {
+        simpleString(maxFields)
+      }
     }
     append(prefix)
     append(str)
@@ -648,17 +658,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ false, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields))
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId))
       innerChildren.last.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ true, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields)
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId)
     }
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix, maxFields))
+        depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix,
+        maxFields, printNodeId = printNodeId)
+      )
       children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, append, verbose, prefix, addSuffix, maxFields)
+        depth + 1, lastChildren :+ true, append, verbose, prefix,
+        addSuffix, maxFields, printNodeId = printNodeId)
     }
   }
 
@@ -766,9 +779,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   private def shouldConvertToJson(product: Product): Boolean = product match {
     case exprId: ExprId => true
     case field: StructField => true
-    case id: TableIdentifier => true
+    case id: IdentifierWithDatabase => true
     case join: JoinType => true
-    case id: FunctionIdentifier => true
     case spec: BucketSpec => true
     case catalog: CatalogTable => true
     case partition: Partitioning => true

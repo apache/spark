@@ -1749,7 +1749,7 @@ class HiveDDLSuite
   test("create hive serde table with Catalog") {
     withTable("t") {
       withTempDir { dir =>
-        val df = spark.catalog.createExternalTable(
+        val df = spark.catalog.createTable(
           "t",
           "hive",
           new StructType().add("i", "int"),
@@ -1828,10 +1828,10 @@ class HiveDDLSuite
         .write.format("hive").mode("append").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Nil)
 
-      Seq("c" -> 3).toDF("i", "j")
+      Seq(3.5 -> 3).toDF("i", "j")
         .write.format("hive").mode("append").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c")
-        :: Row(null, "3") :: Nil)
+        :: Row(3, "3") :: Nil)
 
       Seq(4 -> "d").toDF("i", "j").write.saveAsTable("t1")
 
@@ -2366,10 +2366,11 @@ class HiveDDLSuite
             checkAnswer(spark.table("t"), Row(1))
             val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
 
-            val reader = getReader(maybeFile.head.getCanonicalPath)
-            assert(reader.getCompressionKind.name === "ZLIB")
-            assert(reader.getCompressionSize == 1001)
-            assert(reader.getRowIndexStride == 2002)
+            Utils.tryWithResource(getReader(maybeFile.head.getCanonicalPath)) { reader =>
+              assert(reader.getCompressionKind.name === "ZLIB")
+              assert(reader.getCompressionSize == 1001)
+              assert(reader.getRowIndexStride == 2002)
+            }
           }
         }
       }
@@ -2435,7 +2436,7 @@ class HiveDDLSuite
         .select("data_type")
       // check if the last access time doesnt have the default date of year
       // 1970 as its a wrong access time
-      assert(!(desc.first.toString.contains("1970")))
+      assert((desc.first.toString.contains("UNKNOWN")))
     }
   }
 

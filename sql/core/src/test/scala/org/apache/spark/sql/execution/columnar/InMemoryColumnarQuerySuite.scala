@@ -38,7 +38,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
 
   setupTestData()
 
-  private def cachePrimitiveTest(data: DataFrame, dataType: String) {
+  private def cachePrimitiveTest(data: DataFrame, dataType: String): Unit = {
     data.createOrReplaceTempView(s"testData$dataType")
     val storageLevel = MEMORY_ONLY
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
@@ -507,7 +507,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
       withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
         SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "orc",
-        SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
         withTempPath { workDir =>
           withTable("table1") {
             val workDirPath = workDir.getAbsolutePath

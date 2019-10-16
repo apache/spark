@@ -72,7 +72,7 @@ object ScalaReflection extends ScalaReflection {
   /**
    * Synchronize to prevent concurrent usage of `<:<` operator.
    * This operator is not thread safe in any current version of scala; i.e.
-   * (2.11.12, 2.12.8, 2.13.0-M5).
+   * (2.11.12, 2.12.10, 2.13.0-M5).
    *
    * See https://github.com/scala/bug/issues/10766
    */
@@ -906,7 +906,18 @@ trait ScalaReflection extends Logging {
    * only defines a constructor via `apply` method.
    */
   private def getCompanionConstructor(tpe: Type): Symbol = {
-    tpe.typeSymbol.asClass.companion.asTerm.typeSignature.member(universe.TermName("apply"))
+    def throwUnsupportedOperation = {
+      throw new UnsupportedOperationException(s"Unable to find constructor for $tpe. " +
+        s"This could happen if $tpe is an interface, or a trait without companion object " +
+        "constructor.")
+    }
+    tpe.typeSymbol.asClass.companion match {
+      case NoSymbol => throwUnsupportedOperation
+      case sym => sym.asTerm.typeSignature.member(universe.TermName("apply")) match {
+        case NoSymbol => throwUnsupportedOperation
+        case constructorSym => constructorSym
+      }
+    }
   }
 
   protected def constructParams(tpe: Type): Seq[Symbol] = {

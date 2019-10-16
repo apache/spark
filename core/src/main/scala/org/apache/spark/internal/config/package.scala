@@ -106,6 +106,11 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val DRIVER_LOG_ALLOW_EC =
+    ConfigBuilder("spark.driver.log.allowErasureCoding")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EVENT_LOG_ENABLED = ConfigBuilder("spark.eventLog.enabled")
     .booleanConf
     .createWithDefault(false)
@@ -243,7 +248,8 @@ package object config {
     .createWithDefault(false)
 
   private[spark] val MEMORY_OFFHEAP_SIZE = ConfigBuilder("spark.memory.offHeap.size")
-    .doc("The absolute amount of memory in bytes which can be used for off-heap allocation. " +
+    .doc("The absolute amount of memory which can be used for off-heap allocation, " +
+      " in bytes unless otherwise specified. " +
       "This setting has no impact on heap memory usage, so if your executors' total memory " +
       "consumption must fit within some hard limit then be sure to shrink your JVM heap size " +
       "accordingly. This must be set to a positive value when spark.memory.offHeap.enabled=true.")
@@ -777,6 +783,17 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME =
+    ConfigBuilder("spark.rdd.checkpoint.cachePreferredLocsExpireTime")
+      .internal()
+      .doc("Expire time in minutes for caching preferred locations of checkpointed RDD." +
+        "Caching preferred locations can relieve query loading to DFS and save the query " +
+        "time. The drawback is that the cached locations can be possibly outdated and " +
+        "lose data locality. If this config is not specified or is 0, it will not cache.")
+      .timeConf(TimeUnit.MINUTES)
+      .checkValue(_ > 0, "The expire time for caching preferred locations cannot be non-positive.")
+      .createOptional
+
   private[spark] val SHUFFLE_ACCURATE_BLOCK_THRESHOLD =
     ConfigBuilder("spark.shuffle.accurateBlockThreshold")
       .doc("Threshold in bytes above which the size of shuffle blocks in " +
@@ -1026,7 +1043,7 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val SHUFFLE_UNDAFE_FAST_MERGE_ENABLE =
+  private[spark] val SHUFFLE_UNSAFE_FAST_MERGE_ENABLE =
     ConfigBuilder("spark.shuffle.unsafe.fastMergeEnabled")
       .doc("Whether to perform a fast spill merge.")
       .booleanConf
@@ -1046,6 +1063,14 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
+
+  private[spark] val SHUFFLE_USE_OLD_FETCH_PROTOCOL =
+    ConfigBuilder("spark.shuffle.useOldFetchProtocol")
+      .doc("Whether to use the old protocol while doing the shuffle block fetching. " +
+        "It is only enabled while we need the compatibility in the scenario of new Spark " +
+        "version job fetching shuffle blocks from old version external shuffle service.")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val MEMORY_MAP_LIMIT_FOR_TESTS =
     ConfigBuilder("spark.storage.memoryMapLimitForTests")

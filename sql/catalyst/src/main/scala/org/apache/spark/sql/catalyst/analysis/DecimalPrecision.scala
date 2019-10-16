@@ -82,7 +82,7 @@ object DecimalPrecision extends TypeCoercionRule {
     PromotePrecision(Cast(e, dataType))
   }
 
-  private def nullOnOverflow: Boolean = SQLConf.get.decimalOperationsNullOnOverflow
+  private def nullOnOverflow: Boolean = !SQLConf.get.ansiEnabled
 
   override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // fix decimal precision for expressions

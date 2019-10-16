@@ -223,7 +223,7 @@ object SparkBuild extends PomBuild {
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.13",
+    unidocGenjavadocVersion := "0.14",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -474,7 +474,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
     "org.apache.spark.ml.classification.LinearSVCSuite",
-    "org.apache.spark.sql.SQLQueryTestSuite"
+    "org.apache.spark.sql.SQLQueryTestSuite",
+    "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
@@ -979,7 +980,8 @@ object TestSettings {
     javaOptions in Test ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
-    javaOptions in Test ++= "-Xmx4g -Xss4m"
+    // SPARK-29282 This is for consistency between JDK8 and JDK11.
+    javaOptions in Test ++= "-Xmx4g -Xss4m -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
     // Exclude tags defined in a system property

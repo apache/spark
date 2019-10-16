@@ -107,7 +107,7 @@ package object client {
 
     // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
     // Since HIVE-14496, Hive.java uses calcite-core
-    case object v3_1 extends HiveVersion("3.1.1",
+    case object v3_1 extends HiveVersion("3.1.2",
       extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
         "org.apache.derby:derby:10.14.1.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",

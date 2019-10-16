@@ -133,7 +133,7 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
     // This test case is only for file source V1. As the rule OptimizeMetadataOnlyQuery is disabled
     // by default, we can skip testing file source v2 in current stage.
     withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true",
-      SQLConf.USE_V1_SOURCE_READER_LIST.key -> "json") {
+      SQLConf.USE_V1_SOURCE_LIST.key -> "json") {
       withTempPath { path =>
         val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
         Seq(("a", "b", "c", "d", "e")).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")

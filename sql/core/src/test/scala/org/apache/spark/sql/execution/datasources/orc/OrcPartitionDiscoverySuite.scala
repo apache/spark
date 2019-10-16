@@ -256,8 +256,7 @@ class OrcV1PartitionDiscoverySuite extends OrcPartitionDiscoveryTest with Shared
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "orc")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 
   test("read partitioned table - partition key included in orc file") {
     withTempDir { base =>

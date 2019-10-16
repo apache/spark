@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasSeed
@@ -29,8 +29,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: Experimental ::
- *
  * Model produced by [[MinHashLSH]], where multiple hash functions are stored. Each hash function
  * is picked from the following family of hash functions, where a_i and b_i are randomly chosen
  * integers less than prime:
@@ -44,7 +42,6 @@ import org.apache.spark.sql.types.StructType
  *
  * @param randCoefficients Pairs of random coefficients. Each pair is used by one hash function.
  */
-@Experimental
 @Since("2.1.0")
 class MinHashLSHModel private[ml](
     override val uid: String,
@@ -102,8 +99,6 @@ class MinHashLSHModel private[ml](
 }
 
 /**
- * :: Experimental ::
- *
  * LSH class for Jaccard distance.
  *
  * The input can be dense or sparse vectors, but it is more efficient if it is sparse. For example,
@@ -115,7 +110,6 @@ class MinHashLSHModel private[ml](
  * References:
  * <a href="https://en.wikipedia.org/wiki/MinHash">Wikipedia on MinHash</a>
  */
-@Experimental
 @Since("2.1.0")
 class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with HasSeed {
 

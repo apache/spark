@@ -347,7 +347,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
             msg.toLowerCase(Locale.ROOT).contains(msg2))
         }
 
-        withSQLConf(SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> useV1List) {
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
           // write path
           Seq("csv", "json", "parquet", "orc").foreach { format =>
             val msg = intercept[AnalysisException] {
@@ -388,8 +388,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
       def errorMessage(format: String): String = {
         s"$format data source does not support null data type."
       }
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1List,
-        SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> useV1List) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
         withTempDir { dir =>
           val tempDir = new File(dir, "files").getCanonicalPath
 
@@ -476,20 +475,20 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-25237 compute correct input metrics in FileScanRDD") {
     // TODO: Test CSV V2 as well after it implements [[SupportsReportStatistics]].
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "csv") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "csv") {
       withTempPath { p =>
         val path = p.getAbsolutePath
         spark.range(1000).repartition(1).write.csv(path)
         val bytesReads = new mutable.ArrayBuffer[Long]()
         val bytesReadListener = new SparkListener() {
-          override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+          override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
             bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
           }
         }
         sparkContext.addSparkListener(bytesReadListener)
         try {
           spark.read.csv(path).limit(1).collect()
-          sparkContext.listenerBus.waitUntilEmpty(1000L)
+          sparkContext.listenerBus.waitUntilEmpty()
           assert(bytesReads.sum === 7860)
         } finally {
           sparkContext.removeSparkListener(bytesReadListener)
@@ -500,7 +499,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
 
   test("Do not use cache on overwrite") {
     Seq("", "orc").foreach { useV1SourceReaderList =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
         withTempDir { dir =>
           val path = dir.toString
           spark.range(1000).write.mode("overwrite").orc(path)
@@ -516,7 +515,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
 
   test("Do not use cache on append") {
     Seq("", "orc").foreach { useV1SourceReaderList =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
         withTempDir { dir =>
           val path = dir.toString
           spark.range(1000).write.mode("append").orc(path)
@@ -532,7 +531,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
 
   test("UDF input_file_name()") {
     Seq("", "orc").foreach { useV1SourceReaderList =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
         withTempPath { dir =>
           val path = dir.getCanonicalPath
           spark.range(10).write.orc(path)
@@ -660,7 +659,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
 
   test("sizeInBytes should be the total size of all files") {
     Seq("orc", "").foreach { useV1SourceReaderList =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
         withTempDir { dir =>
           dir.delete()
           spark.range(1000).write.orc(dir.toString)
@@ -711,7 +710,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("File table location should include both values of option `path` and `paths`") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPaths(3) { paths =>
         paths.zipWithIndex.foreach { case (path, index) =>
           Seq(index).toDF("a").write.mode("overwrite").parquet(path.getCanonicalPath)

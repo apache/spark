@@ -36,8 +36,7 @@ class ParquetV1SchemaPruningSuite extends ParquetSchemaPruningSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "parquet")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "parquet")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
 class ParquetV2SchemaPruningSuite extends ParquetSchemaPruningSuite {
@@ -45,7 +44,7 @@ class ParquetV2SchemaPruningSuite extends ParquetSchemaPruningSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   override def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =

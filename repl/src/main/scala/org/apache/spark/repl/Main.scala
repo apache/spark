@@ -53,7 +53,7 @@ object Main extends Logging {
     // scalastyle:on println
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     isShellSession = true
     doMain(args, new SparkILoop)
   }

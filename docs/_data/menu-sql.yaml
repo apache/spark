@@ -64,20 +64,14 @@
     - text: Usage Notes
       url: sql-pyspark-pandas-with-arrow.html#usage-notes
 - text: Migration Guide
-  url: sql-migration-guide.html
-  subitems:
-    - text: Spark SQL Upgrading Guide
-      url: sql-migration-guide-upgrade.html
-    - text: Compatibility with Apache Hive
-      url: sql-migration-guide-hive-compatibility.html
-    - text: SQL Reserved/Non-Reserved Keywords
-      url: sql-reserved-and-non-reserved-keywords.html
-
+  url: sql-migration-old.html
 - text: SQL Reference
   url: sql-ref.html
   subitems:
     - text: Data Types
       url: sql-ref-datatypes.html
+    - text: Null Semantics
+      url: sql-ref-null-semantics.html
     - text: NaN Semantics
       url: sql-ref-nan-semantics.html
     - text: SQL Syntax
@@ -139,6 +133,8 @@
                   url: sql-ref-syntax-qry-select-limit.html
                 - text: Set operations
                   url: sql-ref-syntax-qry-select-setops.html
+                - text: USE database
+                  url: sql-ref-syntax-qry-select-usedb.html
                 - text: Common Table Expression(CTE)
                   url: sql-ref-syntax-qry-select-cte.html
                 - text: Subqueries
@@ -170,6 +166,8 @@
                   url: sql-ref-syntax-aux-cache-uncache-table.html
                 - text: CLEAR CACHE
                   url: sql-ref-syntax-aux-cache-clear-cache.html
+                - text: REFRESH TABLE
+                  url: sql-ref-syntax-aux-refresh-table.html
             - text: Describe Commands
               url: sql-ref-syntax-aux-describe.html
               subitems:
@@ -214,6 +212,10 @@
                   url: sql-ref-syntax-aux-resource-mgmt-add-file.html
                 - text: ADD JAR
                   url: sql-ref-syntax-aux-resource-mgmt-add-jar.html
+                - text: LIST FILE
+                  url: sql-ref-syntax-aux-resource-mgmt-list-file.html
+                - text: LIST JAR
+                  url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
     - text: Functions
       url: sql-ref-functions.html
       subitems:
