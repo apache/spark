@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit._
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * Helper functions for converting between internal and external date and time representations.
@@ -949,5 +949,21 @@ object DateTimeUtils {
     } else {
       None
     }
+  }
+
+  /**
+   * Subtracts two dates.
+   * @param endDate - the end date, exclusive
+   * @param startDate - the start date, inclusive
+   * @return an interval between two dates. The interval can be negative
+   *         if the end date is before the start date.
+   */
+  def subtractDates(endDate: SQLDate, startDate: SQLDate): CalendarInterval = {
+    val period = Period.between(
+      LocalDate.ofEpochDay(startDate),
+      LocalDate.ofEpochDay(endDate))
+    val months = period.getMonths + 12 * period.getYears
+    val microseconds = period.getDays * MICROS_PER_DAY
+    new CalendarInterval(months, microseconds)
   }
 }
