@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort.io;
 
+import java.util.Map;
 import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -50,7 +51,7 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
   }
 
   @Override
-  public void initializeExecutor(String appId, String execId) {
+  public void initializeExecutor(String appId, String execId, Map<String, String> extraConfigs) {
     blockManager = SparkEnv.get().blockManager();
     if (blockManager == null) {
       throw new IllegalStateException("No blockManager available from the SparkEnv.");
@@ -61,22 +62,20 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
   @Override
   public ShuffleMapOutputWriter createMapOutputWriter(
       int shuffleId,
-      int mapId,
-      long mapTaskAttemptId,
+      long mapTaskId,
       int numPartitions) {
     if (blockResolver == null) {
       throw new IllegalStateException(
           "Executor components must be initialized before getting writers.");
     }
     return new LocalDiskShuffleMapOutputWriter(
-        shuffleId, mapId, numPartitions, blockResolver, sparkConf);
+        shuffleId, mapTaskId, numPartitions, blockResolver, sparkConf);
   }
 
   @Override
   public Optional<SingleSpillShuffleMapOutputWriter> createSingleFileMapOutputWriter(
       int shuffleId,
-      int mapId,
-      long mapTaskAttemptId) {
+      long mapId) {
     if (blockResolver == null) {
       throw new IllegalStateException(
           "Executor components must be initialized before getting writers.");

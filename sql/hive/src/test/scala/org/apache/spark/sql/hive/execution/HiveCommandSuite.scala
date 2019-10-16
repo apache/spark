@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
@@ -289,7 +290,29 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       }
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '1'"),
-        sql("SELECT * FROM non_part_table").collect())
+        sql("SELECT * FROM non_part_table"))
+    }
+  }
+
+  test("SPARK-28084 case insensitive names of static partitioning in INSERT commands") {
+    withTable("part_table") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql("CREATE TABLE part_table (price int, qty int) partitioned by (year int, month int)")
+        sql("INSERT INTO part_table PARTITION(YEar = 2015, month = 1) SELECT 1, 1")
+        checkAnswer(sql("SELECT * FROM part_table"), Row(1, 1, 2015, 1))
+      }
+    }
+  }
+
+  test("SPARK-28084 case insensitive names of dynamic partitioning in INSERT commands") {
+    withTable("part_table") {
+      withSQLConf(
+        SQLConf.CASE_SENSITIVE.key -> "false",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql("CREATE TABLE part_table (price int) partitioned by (year int)")
+        sql("INSERT INTO part_table PARTITION(YEar) SELECT 1, 2019")
+        checkAnswer(sql("SELECT * FROM part_table"), Row(1, 2019))
+      }
     }
   }
 

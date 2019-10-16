@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 
@@ -37,6 +36,11 @@ private[sql] trait LookupCatalog extends Logging {
    * be used.
    */
   def defaultCatalog: Option[CatalogPlugin] = catalogManager.defaultCatalog
+
+  /**
+   * Returns the current catalog set.
+   */
+  def currentCatalog: CatalogPlugin = catalogManager.currentCatalog
 
   /**
    * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
@@ -80,20 +84,19 @@ private[sql] trait LookupCatalog extends Logging {
     }
   }
 
-  type CatalogNamespace = (Option[CatalogPlugin], Seq[String])
-
   /**
-   * Extract catalog and namespace from a multi-part identifier with the default catalog if needed.
+   * Extract catalog and namespace from a multi-part identifier with the current catalog if needed.
    * Catalog name takes precedence over namespaces.
    */
-  object CatalogNamespace {
-    def unapply(parts: Seq[String]): Some[CatalogNamespace] = parts match {
+  object CatalogAndNamespace {
+    def unapply(parts: Seq[String]): Some[(CatalogPlugin, Option[Seq[String]])] = parts match {
       case Seq(catalogName, tail @ _*) =>
         try {
-          Some((Some(catalogManager.catalog(catalogName)), tail))
+          Some(
+            (catalogManager.catalog(catalogName), if (tail.isEmpty) { None } else { Some(tail) }))
         } catch {
           case _: CatalogNotFoundException =>
-            Some((defaultCatalog, parts))
+            Some((currentCatalog, Some(parts)))
         }
     }
   }
@@ -130,6 +133,22 @@ private[sql] trait LookupCatalog extends Logging {
         Some(TableIdentifier(table, Some(database)))
       case _ =>
         None
+    }
+  }
+
+  /**
+   * Extract catalog and the rest name parts from a multi-part identifier.
+   */
+  object CatalogAndIdentifierParts {
+    def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = {
+      assert(nameParts.nonEmpty)
+      try {
+        Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+      } catch {
+        case _: CatalogNotFoundException =>
+          // TODO (SPARK-29014): use current catalog here.
+          Some((defaultCatalog.getOrElse(sessionCatalog), nameParts))
+      }
     }
   }
 }

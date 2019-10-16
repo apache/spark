@@ -194,9 +194,9 @@ abstract class OrcQueryTest extends OrcTest {
 
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
-      val reader = OrcFile.createReader(orcFilePath, conf)
-      assert("ZLIB" === reader.getCompressionKind.name)
-      reader.close()
+      Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
+        assert("ZLIB" === reader.getCompressionKind.name)
+      }
     }
 
     // `compression` overrides `orc.compress`.
@@ -211,9 +211,9 @@ abstract class OrcQueryTest extends OrcTest {
 
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
-      val reader = OrcFile.createReader(orcFilePath, conf)
-      assert("ZLIB" === reader.getCompressionKind.name)
-      reader.close()
+      Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
+        assert("ZLIB" === reader.getCompressionKind.name)
+      }
     }
   }
 
@@ -229,9 +229,9 @@ abstract class OrcQueryTest extends OrcTest {
 
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
-      val reader = OrcFile.createReader(orcFilePath, conf)
-      assert("ZLIB" === reader.getCompressionKind.name)
-      reader.close()
+      Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
+        assert("ZLIB" === reader.getCompressionKind.name)
+      }
     }
 
     withTempPath { file =>
@@ -244,9 +244,9 @@ abstract class OrcQueryTest extends OrcTest {
 
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
-      val reader = OrcFile.createReader(orcFilePath, conf)
-      assert("SNAPPY" === reader.getCompressionKind.name)
-      reader.close()
+      Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
+        assert("SNAPPY" === reader.getCompressionKind.name)
+      }
     }
 
     withTempPath { file =>
@@ -259,9 +259,9 @@ abstract class OrcQueryTest extends OrcTest {
 
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
-      val reader = OrcFile.createReader(orcFilePath, conf)
-      assert("NONE" === reader.getCompressionKind.name)
-      reader.close()
+      Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
+        assert("NONE" === reader.getCompressionKind.name)
+      }
     }
   }
 
@@ -645,9 +645,9 @@ class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
-      val reader = OrcFile.createReader(orcFilePath, conf)
-      assert("LZO" === reader.getCompressionKind.name)
-      reader.close()
+      Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
+        assert("LZO" === reader.getCompressionKind.name)
+      }
     }
   }
 

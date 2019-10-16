@@ -23,6 +23,7 @@ license: |
 {:toc}
 
 ## Upgrading from Spark SQL 2.4 to 3.0
+  - Since Spark 3.0, when inserting a value into a table column with a different data type, the type coercion is performed as per ANSI SQL standard. Certain unreasonable type conversions such as converting `string` to `int` and `double` to `boolean` are disallowed. A runtime exception will be thrown if the value is out-of-range for the data type of the column. In Spark version 2.4 and earlier, type conversions during table insertion are allowed as long as they are valid `Cast`. When inserting an out-of-range value to a integral field, the low-order bits of the value is inserted(the same as Java/Scala numeric type casting). For example, if 257 is inserted to a field of byte type, the result is 1. The behavior is controlled by the option `spark.sql.storeAssignmentPolicy`, with a default value as "ANSI". Setting the option as "Legacy" restores the previous behavior.
 
   - In Spark 3.0, the deprecated methods `SQLContext.createExternalTable` and `SparkSession.createExternalTable` have been removed in favor of its replacement, `createTable`.
 
@@ -200,6 +201,22 @@ license: |
           </td>
         </tr>
     </table>
+
+  - Since Spark 3.0, special values are supported in conversion from strings to dates and timestamps. Those values are simply notational shorthands that will be converted to ordinary date or timestamp values when read. The following string values are supported for dates:
+    - `epoch [zoneId]` - 1970-01-01
+    - `today [zoneId]` - the current date in the time zone specified by `spark.sql.session.timeZone`
+    - `yesterday [zoneId]` - the current date - 1
+    - `tomorrow [zoneId]` - the current date + 1
+    - `now` - the date of running the current query. It has the same notion as today
+  For example `SELECT date 'tomorrow' - date 'yesterday';` should output `2`. Here are special timestamp values:
+    - `epoch [zoneId]` - 1970-01-01 00:00:00+00 (Unix system time zero)
+    - `today [zoneId]` - midnight today
+    - `yesterday [zoneId]` - midnight yesterday
+    - `tomorrow [zoneId]` - midnight tomorrow
+    - `now` - current query start time
+  For example `SELECT timestamp 'tomorrow';`.
+
+  - Since Spark 3.0, the `size` function returns `NULL` for the `NULL` input. In Spark version 2.4 and earlier, this function gives `-1` for the same input. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.sizeOfNull` to `true`.
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 

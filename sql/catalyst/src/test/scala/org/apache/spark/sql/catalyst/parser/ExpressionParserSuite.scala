@@ -432,8 +432,9 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("timestamP '2016-33-11 20:54:00.000'")
 
     // Interval.
-    assertEqual("InterVal 'interval 3 month 1 hour'",
-      Literal(CalendarInterval.fromString("interval 3 month 1 hour")))
+    val intervalLiteral = Literal(CalendarInterval.fromString("interval 3 month 1 hour"))
+    assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
+    assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
     assertEqual("Interval 'interval 3 monthsss 1 hoursss'",
       Literal(null, CalendarIntervalType))
 
@@ -605,7 +606,7 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual(s"interval $intervalValue", expected)
 
       // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
-      withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         assertEqual(intervalValue, expected)
       }
     }
@@ -682,12 +683,12 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("SPARK-23264 Interval Compatibility tests") {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         assertEqual(intervalValue, expected)
       }
 
       // Compatibility tests: If ANSI SQL disabled, `intervalValue` should be parsed as an alias
-      withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "false") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
         val aliases = defaultParser.parseExpression(intervalValue).collect {
           case a @ Alias(_: Literal, name)
             if intervalUnits.exists { unit => name.startsWith(unit) } => a
@@ -785,12 +786,12 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("current date/timestamp braceless expressions") {
-    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
     }
 
-    withSQLConf(SQLConf.ANSI_SQL_PARSER.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
     }

@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.scalacheck.Gen
 import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.exceptions.TestFailedException
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
  */
-trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBase {
+trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestBase {
   self: SparkFunSuite =>
 
   protected def create_row(values: Any*): InternalRow = {

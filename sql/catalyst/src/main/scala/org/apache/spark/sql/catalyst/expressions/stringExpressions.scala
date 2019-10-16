@@ -847,7 +847,7 @@ object StringTrimLeft {
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
 
-    _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string
+    _FUNC_(str, trimStr) - Removes the leading string contains the characters from the trim string
   """,
   arguments = """
     Arguments:
@@ -858,7 +858,7 @@ object StringTrimLeft {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('Sp', 'SSparkSQLS');
+      > SELECT _FUNC_('SparkSQLS', 'Sp');
        arkSQLS
   """,
   since = "1.5.0")
@@ -949,7 +949,7 @@ object StringTrimRight {
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
 
-    _FUNC_(trimStr, str) - Removes the trailing string which contains the characters from the trim string from the `str`
+    _FUNC_(str, trimStr) - Removes the trailing string which contains the characters from the trim string from the `str`
   """,
   arguments = """
     Arguments:
@@ -960,7 +960,7 @@ object StringTrimRight {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('LQSa', 'SSparkSQLS');
+      > SELECT _FUNC_('SSparkSQLS', 'SQLS');
        SSpark
   """,
   since = "1.5.0")
@@ -1299,11 +1299,11 @@ object ParseUrl {
   usage = "_FUNC_(url, partToExtract[, key]) - Extracts a part from a URL.",
   examples = """
     Examples:
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST');
        spark.apache.org
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY');
        query=1
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query')
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query');
        1
   """,
   since = "2.0.0")

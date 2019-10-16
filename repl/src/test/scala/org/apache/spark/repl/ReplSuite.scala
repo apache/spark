@@ -72,13 +72,13 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
   def runInterpreterInPasteMode(master: String, input: String): String =
     runInterpreter(master, ":paste\n" + input + 4.toChar) // 4 is the ascii code of CTRL + D
 
-  def assertContains(message: String, output: String) {
+  def assertContains(message: String, output: String): Unit = {
     val isContain = output.contains(message)
     assert(isContain,
       "Interpreter output did not contain '" + message + "':\n" + output)
   }
 
-  def assertDoesNotContain(message: String, output: String) {
+  def assertDoesNotContain(message: String, output: String): Unit = {
     val isContain = output.contains(message)
     assert(!isContain,
       "Interpreter output contained '" + message + "':\n" + output)

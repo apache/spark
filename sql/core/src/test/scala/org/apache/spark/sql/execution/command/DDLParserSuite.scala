@@ -184,6 +184,15 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       containsThesePhrases = Seq("key_without_value"))
   }
 
+  test("alter database set location") {
+    // ALTER (DATABASE|SCHEMA) database_name SET LOCATION
+    val sql1 = "ALTER DATABASE database_name SET LOCATION '/home/user/db'"
+    val parsed1 = parser.parsePlan(sql1)
+
+    val expected1 = AlterDatabaseSetLocationCommand("database_name", "/home/user/db")
+    comparePlans(parsed1, expected1)
+  }
+
   test("describe database") {
     // DESCRIBE DATABASE [EXTENDED] db_name;
     val sql1 = "DESCRIBE DATABASE EXTENDED db_name"
@@ -800,17 +809,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
        |ALTER TABLE table_name REPLACE COLUMNS (new_col1 INT
        |COMMENT 'test_comment', new_col2 LONG COMMENT 'test_comment2') RESTRICT
       """.stripMargin)
-  }
-
-  test("show databases") {
-    val sql1 = "SHOW DATABASES"
-    val sql2 = "SHOW DATABASES LIKE 'defau*'"
-    val parsed1 = parser.parsePlan(sql1)
-    val expected1 = ShowDatabasesCommand(None)
-    val parsed2 = parser.parsePlan(sql2)
-    val expected2 = ShowDatabasesCommand(Some("defau*"))
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
   }
 
   test("show tblproperties") {

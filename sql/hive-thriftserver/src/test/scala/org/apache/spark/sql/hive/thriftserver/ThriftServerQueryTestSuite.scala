@@ -18,19 +18,21 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.sql.{DriverManager, SQLException, Statement, Timestamp}
-import java.util.Locale
+import java.sql.{DriverManager, Statement, Timestamp}
+import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.{Random, Try}
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.HiveSQLException
-import org.scalatest.Ignore
 
-import org.apache.spark.sql.{AnalysisException, SQLQueryTestSuite}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.SQLQueryTestSuite
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -43,12 +45,12 @@ import org.apache.spark.sql.types._
  *   2. Support DESC command.
  *   3. Support SHOW command.
  */
-@Ignore
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
   private var hiveServer2: HiveThriftServer2 = _
 
-  override def beforeEach(): Unit = {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     // Chooses a random port between 10000 and 19999
     var listeningPort = 10000 + Random.nextInt(10000)
 
@@ -65,9 +67,18 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     logInfo("HiveThriftServer2 started successfully")
   }
 
-  override def afterEach(): Unit = {
-    hiveServer2.stop()
+  override def afterAll(): Unit = {
+    try {
+      hiveServer2.stop()
+    } finally {
+      super.afterAll()
+    }
   }
+
+  override def sparkConf: SparkConf = super.sparkConf
+    // Hive Thrift server should not executes SQL queries in an asynchronous way
+    // because we may set session configuration.
+    .set(HiveUtils.HIVE_THRIFT_SERVER_ASYNC, false)
 
   override val isTestWithConfigSets = false
 
@@ -75,26 +86,32 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   override def blackList: Set[String] = Set(
     "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
     // Missing UDF
-    "pgSQL/boolean.sql",
-    "pgSQL/case.sql",
+    "postgreSQL/boolean.sql",
+    "postgreSQL/case.sql",
     // SPARK-28624
     "date.sql",
-    // SPARK-28619
-    "pgSQL/aggregates_part1.sql",
-    "group-by.sql",
     // SPARK-28620
-    "pgSQL/float4.sql",
+    "postgreSQL/float4.sql",
+    // SPARK-28885 String value is not allowed to be stored as numeric type with
+    // ANSI store assignment policy.
+    "postgreSQL/numeric.sql",
+    "postgreSQL/int2.sql",
+    "postgreSQL/int4.sql",
+    "postgreSQL/int8.sql",
+    "postgreSQL/float8.sql",
+    // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
+    // ANSI store assignment policy.
+    "postgreSQL/date.sql",
+    "postgreSQL/timestamp.sql",
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
     "subquery/scalar-subquery/scalar-subquery-predicate.sql",
     "subquery/in-subquery/in-limit.sql",
+    "subquery/in-subquery/in-group-by.sql",
     "subquery/in-subquery/simple-in.sql",
     "subquery/in-subquery/in-order-by.sql",
-    "subquery/in-subquery/in-set-operations.sql",
-    // SPARK-28637
-    "cast.sql",
-    "ansi/interval.sql"
+    "subquery/in-subquery/in-set-operations.sql"
   )
 
   override def runQueries(
@@ -110,14 +127,14 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
         case _: PgSQLTest =>
           // PostgreSQL enabled cartesian product by default.
           statement.execute(s"SET ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
-          statement.execute(s"SET ${SQLConf.ANSI_SQL_PARSER.key} = true")
-          statement.execute(s"SET ${SQLConf.PREFER_INTEGRAL_DIVISION.key} = true")
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
+          statement.execute(s"SET ${SQLConf.DIALECT.key} = ${SQLConf.Dialect.POSTGRESQL.toString}")
         case _ =>
       }
 
       // Run the SQL queries preparing them for comparison.
       val outputs: Seq[QueryOutput] = queries.map { sql =>
-        val output = getNormalizedResult(statement, sql)
+        val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
         // We might need to do some query canonicalization in the future.
         QueryOutput(
           sql = sql,
@@ -136,8 +153,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
             "Try regenerate the result files.")
         Seq.tabulate(outputs.size) { i =>
           val sql = segments(i * 3 + 1).trim
+          val schema = segments(i * 3 + 2).trim
           val originalOut = segments(i * 3 + 3)
-          val output = if (isNeedSort(sql)) {
+          val output = if (schema != emptySchema && isNeedSort(sql)) {
             originalOut.split("\n").sorted.mkString("\n")
           } else {
             originalOut
@@ -166,19 +184,42 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
             || d.sql.toUpperCase(Locale.ROOT).startsWith("DESC\n")
             || d.sql.toUpperCase(Locale.ROOT).startsWith("DESCRIBE ")
             || d.sql.toUpperCase(Locale.ROOT).startsWith("DESCRIBE\n") =>
+
           // Skip show command, see HiveResult.hiveResultString
           case s if s.sql.toUpperCase(Locale.ROOT).startsWith("SHOW ")
             || s.sql.toUpperCase(Locale.ROOT).startsWith("SHOW\n") =>
-          // AnalysisException should exactly match.
-          // SQLException should not exactly match. We only assert the result contains Exception.
-          case _ if output.output.startsWith(classOf[SQLException].getName) =>
+
+          case _ if output.output.startsWith(classOf[NoSuchTableException].getPackage.getName) =>
+            assert(expected.output.startsWith(classOf[NoSuchTableException].getPackage.getName),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
+          case _ if output.output.startsWith(classOf[SparkException].getName) &&
+            output.output.contains("overflow") =>
+            assert(expected.output.contains(classOf[ArithmeticException].getName) &&
+              expected.output.contains("overflow"),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
+          case _ if output.output.startsWith(classOf[RuntimeException].getName) =>
             assert(expected.output.contains("Exception"),
               s"Exception did not match for query #$i\n${expected.sql}, " +
                 s"expected: ${expected.output}, but got: ${output.output}")
-          // HiveSQLException is usually a feature that our ThriftServer cannot support.
-          // Please add SQL to blackList.
-          case _ if output.output.startsWith(classOf[HiveSQLException].getName) =>
-            assert(false, s"${output.output} for query #$i\n${expected.sql}")
+
+          case _ if output.output.startsWith(classOf[ArithmeticException].getName) &&
+            output.output.contains("causes overflow") =>
+            assert(expected.output.contains(classOf[ArithmeticException].getName) &&
+              expected.output.contains("causes overflow"),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
+          case _ if output.output.startsWith(classOf[MissingFormatArgumentException].getName) &&
+            output.output.contains("Format specifier") =>
+            assert(expected.output.contains(classOf[MissingFormatArgumentException].getName) &&
+              expected.output.contains("Format specifier"),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
           case _ =>
             assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
               output.output
@@ -209,7 +250,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
       if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
         Seq.empty
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
@@ -225,31 +266,30 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  private def getNormalizedResult(statement: Statement, sql: String): Seq[String] = {
-    try {
-      val rs = statement.executeQuery(sql)
-      val cols = rs.getMetaData.getColumnCount
-      val buildStr = () => (for (i <- 1 to cols) yield {
-        getHiveResult(rs.getObject(i))
-      }).mkString("\t")
-
-      val answer = Iterator.continually(rs.next()).takeWhile(identity).map(_ => buildStr()).toSeq
-        .map(replaceNotIncludedMsg)
-      if (isNeedSort(sql)) {
-        answer.sorted
-      } else {
-        answer
+  /** ThriftServer wraps the root exception, so it needs to be extracted. */
+  override def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
+    super.handleExceptions {
+      try {
+        result
+      } catch {
+        case NonFatal(e) => throw ExceptionUtils.getRootCause(e)
       }
-    } catch {
-      case a: AnalysisException =>
-        // Do not output the logical plan tree which contains expression IDs.
-        // Also implement a crude way of masking expression IDs in the error message
-        // with a generic pattern "###".
-        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")).sorted
-      case NonFatal(e) =>
-        // If there is an exception, put the exception class followed by the message.
-        Seq(e.getClass.getName, e.getMessage)
+    }
+  }
+
+  private def getNormalizedResult(statement: Statement, sql: String): (String, Seq[String]) = {
+    val rs = statement.executeQuery(sql)
+    val cols = rs.getMetaData.getColumnCount
+    val buildStr = () => (for (i <- 1 to cols) yield {
+      getHiveResult(rs.getObject(i))
+    }).mkString("\t")
+
+    val answer = Iterator.continually(rs.next()).takeWhile(identity).map(_ => buildStr()).toSeq
+      .map(replaceNotIncludedMsg)
+    if (isNeedSort(sql)) {
+      ("", answer.sorted)
+    } else {
+      ("", answer)
     }
   }
 
@@ -260,7 +300,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
   }
 
-  private def withJdbcStatement(fs: (Statement => Unit)*) {
+  private def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
     val user = System.getProperty("user.name")
 
     val serverPort = hiveServer2.getHiveConf.get(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname)
@@ -337,7 +377,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     upperCase.startsWith("SELECT ") || upperCase.startsWith("SELECT\n") ||
       upperCase.startsWith("WITH ") || upperCase.startsWith("WITH\n") ||
       upperCase.startsWith("VALUES ") || upperCase.startsWith("VALUES\n") ||
-      // pgSQL/union.sql
+      // postgreSQL/union.sql
       upperCase.startsWith("(")
   }
 

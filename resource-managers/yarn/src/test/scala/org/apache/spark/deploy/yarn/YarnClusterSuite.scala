@@ -333,7 +333,7 @@ private[spark] class SaveExecutorInfo extends SparkListener {
   var driverLogs: Option[collection.Map[String, String]] = None
   var driverAttributes: Option[collection.Map[String, String]] = None
 
-  override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
+  override def onExecutorAdded(executor: SparkListenerExecutorAdded): Unit = {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
   }
 

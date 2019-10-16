@@ -21,11 +21,13 @@ import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION
+import org.apache.hadoop.minikdc.MiniKdc
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.security.HadoopDelegationTokenProvider
+import org.apache.spark.util.Utils
 
 private class ExceptionThrowingDelegationTokenProvider extends HadoopDelegationTokenProvider {
   ExceptionThrowingDelegationTokenProvider.constructed = true
@@ -80,11 +82,19 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
     // how it's run, so force its initialization.
     SparkHadoopUtil.get
 
-    val krbConf = new Configuration()
-    krbConf.set(HADOOP_SECURITY_AUTHENTICATION, "kerberos")
-
-    UserGroupInformation.setConfiguration(krbConf)
+    var kdc: MiniKdc = null
     try {
+      // UserGroupInformation.setConfiguration needs default kerberos realm which can be set in
+      // krb5.conf. MiniKdc sets "java.security.krb5.conf" in start and removes it when stop called.
+      val kdcDir = Utils.createTempDir()
+      val kdcConf = MiniKdc.createConf()
+      kdc = new MiniKdc(kdcConf, kdcDir)
+      kdc.start()
+
+      val krbConf = new Configuration()
+      krbConf.set(HADOOP_SECURITY_AUTHENTICATION, "kerberos")
+
+      UserGroupInformation.setConfiguration(krbConf)
       val manager = new HadoopDelegationTokenManager(new SparkConf(false), krbConf, null)
       val testImpl = new PrivilegedExceptionAction[Unit] {
         override def run(): Unit = {
@@ -103,6 +113,9 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
         Array.empty)
       proxyUser.doAs(testImpl)
     } finally {
+      if (kdc != null) {
+        kdc.stop()
+      }
       UserGroupInformation.reset()
     }
   }

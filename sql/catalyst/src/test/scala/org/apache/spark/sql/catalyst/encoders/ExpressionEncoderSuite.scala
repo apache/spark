@@ -432,16 +432,16 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   }
 
   private def testOverflowingBigNumeric[T: TypeTag](bigNumeric: T, testName: String): Unit = {
-    Seq(true, false).foreach { allowNullOnOverflow =>
+    Seq(true, false).foreach { ansiEnabled =>
       testAndVerifyNotLeakingReflectionObjects(
-        s"overflowing $testName, allowNullOnOverflow=$allowNullOnOverflow") {
+        s"overflowing $testName, ansiEnabled=$ansiEnabled") {
         withSQLConf(
-          SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> allowNullOnOverflow.toString
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString
         ) {
           // Need to construct Encoder here rather than implicitly resolving it
           // so that SQLConf changes are respected.
           val encoder = ExpressionEncoder[T]()
-          if (allowNullOnOverflow) {
+          if (!ansiEnabled) {
             val convertedBack = encoder.resolveAndBind().fromRow(encoder.toRow(bigNumeric))
             assert(convertedBack === null)
           } else {
@@ -553,7 +553,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     r
   }
 
-  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any) {
+  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any): Unit = {
     test(testName) {
       verifyNotLeakingReflectionObjects(testFun)
     }

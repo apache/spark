@@ -187,7 +187,7 @@ class CoGroupedRDD[K: ClassTag](
       createCombiner, mergeValue, mergeCombiners)
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdds = null
   }
