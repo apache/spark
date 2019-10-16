@@ -42,7 +42,7 @@ case class InsertAdaptiveSparkPlan(
   private val conf = session.sessionState.conf
 
   // Subquery-reuse is shared across the entire query.
-  private val subqueryCache = new TrieMap[SparkPlan, BaseSubqueryExec]()
+  private val subqueryCache = ReuseSubquery.newConcurrentSameSchemaSubqueries
 
   // Exchange-reuse is shared across the entire query, including sub-queries.
   private val stageCache = new TrieMap[SparkPlan, QueryStageExec]()

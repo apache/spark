@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 
 import org.apache.spark.broadcast.Broadcast
@@ -203,7 +204,12 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
  */
 case class ReuseSubquery(
     conf: SQLConf,
-    subqueryMap: mutable.Map[SparkPlan, BaseSubqueryExec] = mutable.Map.empty
+    // To avoid costly canonicalization of a subquery:
+    // - we use its schema first to check if it can be replaced to a reused subquery at all
+    // - we insert a subquery into the map of canonicalized plans only when at least 2 subquery have
+    //   the same schema
+    @transient sameSchemaSubqueries: ReuseSubquery.SameSchemaSubqueries,
+    @transient sameResultSubqueriesGenerator: () => ReuseSubquery.SameResultSubqueries
   ) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.subqueryReuseEnabled) {
@@ -211,15 +217,41 @@ case class ReuseSubquery(
     }
 
     def reuse[T <: SparkPlan](plan: T): T = plan.transformAllExpressions {
-      case sub: ExecSubqueryExpression =>
-        val newSub = subqueryMap.getOrElseUpdate(sub.plan.canonicalized, sub.plan)
-        if (newSub.ne(sub.plan)) {
-          sub.withNewPlan(ReusedSubqueryExec(newSub))
+      case subqueryExpression: ExecSubqueryExpression =>
+        val subquery = subqueryExpression.plan
+        val (firstSameSchemaSubquery, sameResultSubqueries) =
+          sameSchemaSubqueries.getOrElseUpdate(subquery.schema,
+            (subquery, sameResultSubqueriesGenerator()))
+        if (firstSameSchemaSubquery.ne(subquery)) {
+          if (sameResultSubqueries.isEmpty) {
+            sameResultSubqueries += firstSameSchemaSubquery.canonicalized -> firstSameSchemaSubquery
+          }
+          val sameResultSubquery =
+            sameResultSubqueries.getOrElseUpdate(subquery.canonicalized, subquery)
+          if (sameResultSubquery.ne(subquery)) {
+            subqueryExpression.withNewPlan(ReusedSubqueryExec(sameResultSubquery))
+          } else {
+            subqueryExpression.withNewPlan(reuse(subquery))
+          }
         } else {
-          sub.withNewPlan(reuse(sub.plan))
+          subqueryExpression.withNewPlan(reuse(subquery))
         }
     }
 
     reuse(plan)
+  }
+}
+
+object ReuseSubquery {
+  type SameResultSubqueries = mutable.Map[SparkPlan, BaseSubqueryExec]
+  type SameSchemaSubqueries = mutable.Map[StructType, (BaseSubqueryExec, SameResultSubqueries)]
+
+  def newSameSchemaSubqueries: SameSchemaSubqueries = mutable.HashMap()
+  def newSameResultSubqueriesGenerator: () => SameResultSubqueries = () => mutable.HashMap()
+  def newConcurrentSameSchemaSubqueries: SameSchemaSubqueries = TrieMap()
+  def newConcurrentSameResultSubqueriesGenerator: () => SameResultSubqueries = () => TrieMap()
+
+  def apply(conf: SQLConf): ReuseSubquery = {
+    ReuseSubquery(conf, newSameSchemaSubqueries, newSameResultSubqueriesGenerator)
   }
 }
