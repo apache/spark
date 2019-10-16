@@ -172,10 +172,6 @@ case class DropFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
 
-    if (FunctionsCommand.virtualOperators.contains(functionName.toLowerCase(Locale.ROOT))) {
-      throw new AnalysisException(s"Cannot drop virtual function '$functionName'")
-    }
-
     if (isTemp) {
       if (databaseName.isDefined) {
         throw new AnalysisException(s"Specifying a database in DROP TEMPORARY FUNCTION " +
@@ -243,7 +239,6 @@ case class ShowFunctionsCommand(
 
 object FunctionsCommand {
   // operators that do not have corresponding functions.
-  // They should be handled `DescribeFunctionCommand`,
-  // `DropFunctionCommand` and `ShowFunctionsCommand`
+  // They should be handled `DescribeFunctionCommand`, `ShowFunctionsCommand`
   val virtualOperators = Seq("!=", "<>", "between", "case")
 }
