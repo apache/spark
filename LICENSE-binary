@@ -544,6 +544,7 @@ Eclipse Distribution License (EDL) 1.0
 --------------------------------------
 
 org.glassfish.jaxb:jaxb-runtime
+jakarta.activation:jakarta.activation-api
 jakarta.xml.bind:jakarta.xml.bind-api
 com.sun.istack:istack-commons-runtime
 
