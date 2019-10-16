@@ -605,7 +605,7 @@ trait CheckAnalysis extends PredicateHelper {
           case _: Filter | _: SupportsSubquery | _: Join => // Ok
           case _ =>
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
-                s" Filter and a few commands: $plan")
+                s" Filter/SupportsSubquery/Join and a few commands: $plan")
         }
     }
 
