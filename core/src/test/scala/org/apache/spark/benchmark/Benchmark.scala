@@ -166,7 +166,7 @@ private[spark] class Benchmark(
     val stdev = if (runTimes.size > 1) {
       math.sqrt(runTimes.map(time => (time - avg) * (time - avg)).sum / (runTimes.size - 1))
     } else 0
-    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0, stdev / 1000000.0)
+    Result(avg / 1E6, num / (best / 1E3), best / 1E6, stdev / 1E6)
   }
 }
 
