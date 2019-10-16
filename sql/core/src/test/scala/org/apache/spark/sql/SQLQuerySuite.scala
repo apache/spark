@@ -113,27 +113,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     checkKeywordsExist(sql("describe functioN abcadf"), "Function: abcadf not found.")
   }
 
-  test("drop virtual functions") {
-    val e1 = intercept[AnalysisException] {
-      sql(
-        "drop function case")
-    }
-    assert(e1.message == "Cannot drop virtual function 'case'")
-    val e2 = intercept[AnalysisException] {
-      sql(
-        "drop function `!=`")
-    }
-    assert(e2.message == "Cannot drop virtual function '!='")
-  }
-
-  test("SPARK-14415: All functions should have own descriptions") {
-    for (f <- spark.sessionState.functionRegistry.listFunction()) {
-      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
-        checkKeywordsNotExist(sql(s"describe function `$f`"), "N/A.")
-      }
-    }
-  }
-
   test("using _FUNC_ instead of function names in examples") {
     val exampleRe = "(>.*;)".r
     val setStmtRe = "(?i)^(>\\s+set\\s+).+".r
