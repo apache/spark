@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -363,17 +364,18 @@ public final class CalendarInterval implements Serializable {
   }
 
   @Override
-  public boolean equals(Object other) {
-    if (this == other) return true;
-    if (other == null || !(other instanceof CalendarInterval)) return false;
-
-    CalendarInterval o = (CalendarInterval) other;
-    return this.months == o.months && this.days == o.days && this.microseconds == o.microseconds;
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    CalendarInterval that = (CalendarInterval) o;
+    return months == that.months &&
+      days == that.days &&
+      microseconds == that.microseconds;
   }
 
   @Override
   public int hashCode() {
-    return 31 * (31 * months + days) + (int) microseconds;
+    return Objects.hash(months, days, microseconds);
   }
 
   @Override

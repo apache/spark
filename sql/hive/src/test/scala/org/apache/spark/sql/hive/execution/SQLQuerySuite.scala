@@ -1215,7 +1215,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("select interval '-100' day"),
       Row(CalendarInterval.fromString("interval -14 weeks -2 days")))
     checkAnswer(sql("select interval '40' hour"),
-      Row(CalendarInterval.fromString("interval 1 days 16 hours")))
+      Row(CalendarInterval.fromString("interval 40 hours")))
     checkAnswer(sql("select interval '80' minute"),
       Row(CalendarInterval.fromString("interval 1 hour 20 minutes")))
     checkAnswer(sql("select interval '299.889987299' second"),
