@@ -42,8 +42,12 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def this() = this(Identifiable.randomUID("mcEval"))
 
   /**
-   * param for metric name in evaluation (supports `"f1"` (default), `"weightedPrecision"`,
-   * `"weightedRecall"`, `"accuracy"`)
+   * param for metric name in evaluation (supports `"f1"` (default), `"accuracy"`,
+   * `"weightedPrecision"`, `"weightedRecall"`, `"weightedTruePositiveRate"`,
+   * `"weightedFalsePositiveRate"`, `"weightedFMeasure"`, `"truePositiveRateByLabel"`,
+   * `"falsePositiveRateByLabel"`, `"precisionByLabel"`, `"recallByLabel"`,
+   * `"fMeasureByLabel"`, `"logloss"`)
+   *
    * @group param
    */
   @Since("1.5.0")

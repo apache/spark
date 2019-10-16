@@ -36,7 +36,8 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
 
   /**
    * An auxiliary constructor taking a DataFrame.
-   * @param predictionAndLabels a DataFrame with two double columns: prediction and label
+   * @param predictionAndLabels a DataFrame with columns: prediction, label, weight(optional)
+   *                            and probability(only for logloss)
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
     this(predictionAndLabels.rdd.map { r =>
@@ -251,7 +252,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
     val loss2 = - math.log(1 - eps)
 
     val (lossSum, weightSum) = predictionAndLabels.map {
-      case (prediction: Double, label: Double, weight: Double, probability: Array[Double]) =>
+      case (_, label: Double, weight: Double, probability: Array[Double]) =>
         require(label.toInt == label && label >= 0, s"Invalid label $label")
         require(probability != null, "probability of each class can not be null")
         val p = probability(label.toInt)
