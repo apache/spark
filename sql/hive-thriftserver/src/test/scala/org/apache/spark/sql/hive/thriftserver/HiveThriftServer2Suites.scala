@@ -72,6 +72,46 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     try f(client) finally transport.close()
   }
 
+  test("jar in sync mode") {
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+
+      Seq(s"ADD JAR $jarFile",
+        "CREATE TABLE smallKV(key INT, val STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV")
+        .foreach(query => client.executeStatement(sessionHandle, query, confOverlay))
+
+      client.executeStatement(sessionHandle,
+        """CREATE TABLE addJar(key string)
+          |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
+        """.stripMargin, confOverlay)
+
+      client.executeStatement(sessionHandle,
+        "INSERT INTO TABLE addJar SELECT 'k1' as key FROM smallKV limit 1", confOverlay)
+
+
+      val operationHandle = client.executeStatement(
+        sessionHandle,
+        "SELECT key FROM addJar",
+        confOverlay)
+
+      // Fetch result first time
+      assertResult(1, "Fetching result first time from next row") {
+
+        val rows_next = client.fetchResults(
+          operationHandle,
+          FetchOrientation.FETCH_NEXT,
+          1000,
+          FetchType.QUERY_OUTPUT)
+
+        rows_next.numRows()
+      }
+    }
+  }
+
   test("GetInfo Thrift API") {
     withCLIServiceClient { client =>
       val user = System.getProperty("user.name")
