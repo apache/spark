@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.util.concurrent.Semaphore
 
 import scala.collection.JavaConverters._
@@ -37,9 +37,6 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   with ResetSystemProperties {
 
   import LiveListenerBus._
-
-  /** Length of time to wait while draining listener events. */
-  val WAIT_TIMEOUT_MILLIS = 10000
 
   val jobCompletionTime = 1421191296660L
 
@@ -65,7 +62,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     sc.listenerBus.addToSharedQueue(listener)
     sc.listenerBus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     sc.stop()
 
     assert(listener.sparkExSeen)
@@ -97,7 +94,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Starting listener bus should flush all buffered events
     bus.start(mockSparkContext, mockMetricsSystem)
     Mockito.verify(mockMetricsSystem).registerSource(bus.metrics)
-    bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    bus.waitUntilEmpty()
     assert(counter.count === 5)
     assert(sharedQueueSize(bus) === 0)
     assert(eventProcessingTimeCount(bus) === 5)
@@ -159,7 +156,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(!drained)
 
     new Thread("ListenerBusStopper") {
-      override def run() {
+      override def run(): Unit = {
         stopperStarted.release()
         // stop() will block until notify() is called below
         bus.stop()
@@ -223,7 +220,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     rdd2.setName("Target RDD")
     rdd2.count()
 
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
 
     listener.stageInfos.size should be {1}
     val (stageInfo, taskInfoMetrics) = listener.stageInfos.head
@@ -231,8 +228,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
     stageInfo.rddInfos.exists(_.name == "Target RDD") should be {true}
     stageInfo.numTasks should be {4}
-    stageInfo.submissionTime should be ('defined)
-    stageInfo.completionTime should be ('defined)
+    stageInfo.submissionTime should be (Symbol("defined"))
+    stageInfo.completionTime should be (Symbol("defined"))
     taskInfoMetrics.length should be {4}
   }
 
@@ -248,7 +245,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     rdd3.setName("Trois")
 
     rdd1.count()
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     listener.stageInfos.size should be {1}
     val stageInfo1 = listener.stageInfos.keys.find(_.stageId == 0).get
     stageInfo1.rddInfos.size should be {1} // ParallelCollectionRDD
@@ -257,7 +254,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     listener.stageInfos.clear()
 
     rdd2.count()
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     listener.stageInfos.size should be {1}
     val stageInfo2 = listener.stageInfos.keys.find(_.stageId == 1).get
     stageInfo2.rddInfos.size should be {3}
@@ -266,7 +263,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     listener.stageInfos.clear()
 
     rdd3.count()
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     listener.stageInfos.size should be {2} // Shuffle map stage + result stage
     val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 3).get
     stageInfo3.rddInfos.size should be {1} // ShuffledRDD
@@ -282,7 +279,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val rdd2 = rdd1.map(_.toString)
     sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1))
 
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
 
     listener.stageInfos.size should be {1}
     val (stageInfo, _) = listener.stageInfos.head
@@ -310,7 +307,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val numSlices = 16
     val d = sc.parallelize(0 to 10000, numSlices).map(w)
     d.count()
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     listener.stageInfos.size should be (1)
 
     val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
@@ -321,7 +318,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     d4.setName("A Cogroup")
     d4.collectAsMap()
 
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     listener.stageInfos.size should be (4)
     listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
       /**
@@ -372,7 +369,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       .reduce { case (x, y) => x }
     assert(result === 1.to(maxRpcMessageSize).toArray)
 
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     val TASK_INDEX = 0
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.contains(TASK_INDEX))
@@ -388,7 +385,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val result = sc.parallelize(Seq(1), 1).map(2 * _).reduce { case (x, y) => x }
     assert(result === 2)
 
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    sc.listenerBus.waitUntilEmpty()
     val TASK_INDEX = 0
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.isEmpty)
@@ -443,7 +440,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     // Post events to all listeners, and wait until the queue is drained
     (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
-    bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    bus.waitUntilEmpty()
 
     // The exception should be caught, and the event should be propagated to other listeners
     assert(jobCounter1.count === 5)
@@ -513,7 +510,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       // after we post one event, both interrupting listeners should get removed, and the
       // event log queue should be removed
       bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-      bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      bus.waitUntilEmpty()
       assert(bus.activeQueues() === Set(SHARED_QUEUE, APP_STATUS_QUEUE))
       assert(bus.findListenersByClass[BasicJobCounter]().size === 2)
       assert(bus.findListenersByClass[InterruptingListener]().size === 0)
@@ -522,7 +519,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
       // posting more events should be fine, they'll just get processed from the OK queue.
       (0 until 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
-      bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      bus.waitUntilEmpty()
       assert(counter1.count === 6)
       assert(counter2.count === 6)
 
@@ -563,7 +560,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   /**
    * Assert that the given list of numbers has an average that is greater than zero.
    */
-  private def checkNonZeroAvg(m: Iterable[Long], msg: String) {
+  private def checkNonZeroAvg(m: Iterable[Long], msg: String): Unit = {
     assert(m.sum / m.size.toDouble > 0.0, msg)
   }
 
@@ -574,7 +571,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val stageInfos = mutable.Map[StageInfo, Seq[(TaskInfo, TaskMetrics)]]()
     var taskInfoMetrics = mutable.Buffer[(TaskInfo, TaskMetrics)]()
 
-    override def onTaskEnd(task: SparkListenerTaskEnd) {
+    override def onTaskEnd(task: SparkListenerTaskEnd): Unit = {
       val info = task.taskInfo
       val metrics = task.taskMetrics
       if (info != null && metrics != null) {
@@ -582,7 +579,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       }
     }
 
-    override def onStageCompleted(stage: SparkListenerStageCompleted) {
+    override def onStageCompleted(stage: SparkListenerStageCompleted): Unit = {
       stageInfos(stage.stageInfo) = taskInfoMetrics
       taskInfoMetrics = mutable.Buffer.empty
     }
@@ -606,7 +603,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       notify()
     }
 
-    override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult) {
+    override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult): Unit = {
       startedGettingResultTasks += taskGettingResult.taskInfo.index
     }
   }

@@ -112,6 +112,7 @@
                                 <li><a href="job-scheduling.html">Job Scheduling</a></li>
                                 <li><a href="security.html">Security</a></li>
                                 <li><a href="hardware-provisioning.html">Hardware Provisioning</a></li>
+                                <li><a href="migration-guide.html">Migration Guide</a></li>
                                 <li class="divider"></li>
                                 <li><a href="building-spark.html">Building Spark</a></li>
                                 <li><a href="https://spark.apache.org/contributing.html">Contributing to Spark</a></li>
@@ -126,8 +127,10 @@
 
         <div class="container-wrapper">
 
-            {% if page.url contains "/ml" or page.url contains "/sql" %}
-                {% if page.url contains "/ml" %}
+            {% if page.url contains "/ml" or page.url contains "/sql" or page.url contains "migration-guide.html" %}
+                {% if page.url contains "migration-guide.html" %}
+                    {% include nav-left-wrapper-migration.html nav-migration=site.data.menu-migration %}
+                {% elsif page.url contains "/ml" %}
                     {% include nav-left-wrapper-ml.html nav-mllib=site.data.menu-mllib nav-ml=site.data.menu-ml %}
                 {% else %}
                     {% include nav-left-wrapper-sql.html nav-sql=site.data.menu-sql %}

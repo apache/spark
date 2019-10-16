@@ -124,7 +124,7 @@ public class KVTypeInfo {
 
     Object get(Object instance) throws ReflectiveOperationException;
 
-    Class getType();
+    Class<?> getType();
   }
 
   private class FieldAccessor implements Accessor {
@@ -141,7 +141,7 @@ public class KVTypeInfo {
     }
 
     @Override
-    public Class getType() {
+    public Class<?> getType() {
       return field.getType();
     }
   }
@@ -160,7 +160,7 @@ public class KVTypeInfo {
     }
 
     @Override
-    public Class getType() {
+    public Class<?> getType() {
       return method.getReturnType();
     }
   }

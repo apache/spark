@@ -110,8 +110,6 @@ class JavaEvaluator(JavaParams, Evaluator):
 class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol, HasWeightCol,
                                     JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Evaluator for binary classification, which expects two input columns: rawPrediction and label.
     The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
     1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
@@ -141,6 +139,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     0.70...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
     0.82...
+    >>> evaluator.getNumBins()
+    1000
 
     .. versionadded:: 1.4.0
     """
@@ -149,17 +149,22 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
                        "metric name in evaluation (areaUnderROC|areaUnderPR)",
                        typeConverter=TypeConverters.toString)
 
+    numBins = Param(Params._dummy(), "numBins", "Number of bins to down-sample the curves "
+                    "(ROC curve, PR curve) in area computation. If 0, no down-sampling will "
+                    "occur. Must be >= 0.",
+                    typeConverter=TypeConverters.toInt)
+
     @keyword_only
     def __init__(self, rawPredictionCol="rawPrediction", labelCol="label",
-                 metricName="areaUnderROC", weightCol=None):
+                 metricName="areaUnderROC", weightCol=None, numBins=1000):
         """
         __init__(self, rawPredictionCol="rawPrediction", labelCol="label", \
-                 metricName="areaUnderROC", weightCol=None)
+                 metricName="areaUnderROC", weightCol=None, numBins=1000)
         """
         super(BinaryClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator", self.uid)
-        self._setDefault(metricName="areaUnderROC")
+        self._setDefault(metricName="areaUnderROC", numBins=1000)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -177,13 +182,27 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         """
         return self.getOrDefault(self.metricName)
 
+    @since("3.0.0")
+    def setNumBins(self, value):
+        """
+        Sets the value of :py:attr:`numBins`.
+        """
+        return self._set(numBins=value)
+
+    @since("3.0.0")
+    def getNumBins(self):
+        """
+        Gets the value of numBins or its default value.
+        """
+        return self.getOrDefault(self.numBins)
+
     @keyword_only
     @since("1.4.0")
     def setParams(self, rawPredictionCol="rawPrediction", labelCol="label",
-                  metricName="areaUnderROC", weightCol=None):
+                  metricName="areaUnderROC", weightCol=None, numBins=1000):
         """
         setParams(self, rawPredictionCol="rawPrediction", labelCol="label", \
-                  metricName="areaUnderROC", weightCol=None)
+                  metricName="areaUnderROC", weightCol=None, numBins=1000)
         Sets params for binary classification evaluator.
         """
         kwargs = self._input_kwargs
@@ -194,8 +213,6 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
 class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeightCol,
                           JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Evaluator for Regression, which expects input columns prediction, label
     and an optional weight column.
 
@@ -222,6 +239,8 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
     >>> evaluator = RegressionEvaluator(predictionCol="raw", weightCol="weight")
     >>> evaluator.evaluate(dataset)
     2.740...
+    >>> evaluator.getThroughOrigin()
+    False
 
     .. versionadded:: 1.4.0
     """
@@ -230,20 +249,25 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
                        rmse - root mean squared error (default)
                        mse - mean squared error
                        r2 - r^2 metric
-                       mae - mean absolute error.""",
+                       mae - mean absolute error
+                       var - explained variance.""",
                        typeConverter=TypeConverters.toString)
+
+    throughOrigin = Param(Params._dummy(), "throughOrigin",
+                          "whether the regression is through the origin.",
+                          typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
-                 metricName="rmse", weightCol=None):
+                 metricName="rmse", weightCol=None, throughOrigin=False):
         """
         __init__(self, predictionCol="prediction", labelCol="label", \
-                 metricName="rmse", weightCol=None)
+                 metricName="rmse", weightCol=None, throughOrigin=False)
         """
         super(RegressionEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RegressionEvaluator", self.uid)
-        self._setDefault(metricName="rmse")
+        self._setDefault(metricName="rmse", throughOrigin=False)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -261,13 +285,27 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
         """
         return self.getOrDefault(self.metricName)
 
+    @since("3.0.0")
+    def setThroughOrigin(self, value):
+        """
+        Sets the value of :py:attr:`throughOrigin`.
+        """
+        return self._set(throughOrigin=value)
+
+    @since("3.0.0")
+    def getThroughOrigin(self):
+        """
+        Gets the value of throughOrigin or its default value.
+        """
+        return self.getOrDefault(self.throughOrigin)
+
     @keyword_only
     @since("1.4.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
-                  metricName="rmse", weightCol=None):
+                  metricName="rmse", weightCol=None, throughOrigin=False):
         """
         setParams(self, predictionCol="prediction", labelCol="label", \
-                  metricName="rmse", weightCol=None)
+                  metricName="rmse", weightCol=None, throughOrigin=False)
         Sets params for regression evaluator.
         """
         kwargs = self._input_kwargs
@@ -278,8 +316,6 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
 class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeightCol,
                                         JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Evaluator for Multiclass Classification, which expects two input
     columns: prediction and label.
 
@@ -497,8 +533,6 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
                           JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Evaluator for Clustering results, which expects two input
     columns: prediction and features. The metric computes the Silhouette
     measure using the squared Euclidean distance.

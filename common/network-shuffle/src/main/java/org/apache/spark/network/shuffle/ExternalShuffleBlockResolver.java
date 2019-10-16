@@ -172,7 +172,7 @@ public class ExternalShuffleBlockResolver {
       String appId,
       String execId,
       int shuffleId,
-      int mapId,
+      long mapId,
       int reduceId) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
@@ -296,7 +296,7 @@ public class ExternalShuffleBlockResolver {
    * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
-    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId) {
+    ExecutorShuffleInfo executor, int shuffleId, long mapId, int reduceId) {
     File indexFile = ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "shuffle_" + shuffleId + "_" + mapId + "_0.index");
 

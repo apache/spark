@@ -21,11 +21,15 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.rule.CoalescedShuffleReaderExec
 import org.apache.spark.sql.execution.exchange.Exchange
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
+class AdaptiveQueryExecSuite
+  extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
+
   import testImplicits._
 
   setupTestData()
@@ -50,34 +54,34 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
   }
 
   private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
-    plan.collect {
-      case j: BroadcastHashJoinExec => Seq(j)
-      case s: QueryStageExec => findTopLevelBroadcastHashJoin(s.plan)
-    }.flatten
+    collect(plan) {
+      case j: BroadcastHashJoinExec => j
+    }
   }
 
   private def findTopLevelSortMergeJoin(plan: SparkPlan): Seq[SortMergeJoinExec] = {
-    plan.collect {
-      case j: SortMergeJoinExec => Seq(j)
-      case s: QueryStageExec => findTopLevelSortMergeJoin(s.plan)
-    }.flatten
+    collect(plan) {
+      case j: SortMergeJoinExec => j
+    }
   }
 
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedQueryStageExec] = {
-    plan.collect {
-      case e: ReusedQueryStageExec => Seq(e)
-      case a: AdaptiveSparkPlanExec => findReusedExchange(a.executedPlan)
-      case s: QueryStageExec => findReusedExchange(s.plan)
-      case p: SparkPlan => p.subqueries.flatMap(findReusedExchange)
-    }.flatten
+    collectInPlanAndSubqueries(plan) {
+      case e: ReusedQueryStageExec => e
+    }
   }
 
   private def findReusedSubquery(plan: SparkPlan): Seq[ReusedSubqueryExec] = {
-    plan.collect {
-      case e: ReusedSubqueryExec => Seq(e)
-      case s: QueryStageExec => findReusedSubquery(s.plan)
-      case p: SparkPlan => p.subqueries.flatMap(findReusedSubquery)
-    }.flatten
+    collectInPlanAndSubqueries(plan) {
+      case e: ReusedSubqueryExec => e
+    }
+  }
+
+  private def checkNumLocalShuffleReaders(plan: SparkPlan, expected: Int): Unit = {
+    val localReaders = plan.collect {
+      case reader: LocalShuffleReaderExec => reader
+    }
+    assert(localReaders.length === expected)
   }
 
   test("Change merge join to broadcast join") {
@@ -90,6 +94,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -106,14 +111,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
 
-      val shuffleReaders = adaptivePlan.collect {
-        case reader: CoalescedShuffleReaderExec => reader
-      }
-      assert(shuffleReaders.length === 1)
-      // The pre-shuffle partition size is [0, 72, 0, 72, 126]
-      shuffleReaders.foreach { reader =>
-        assert(reader.outputPartitioning.numPartitions === 2)
-      }
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -128,6 +126,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -142,6 +141,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -163,6 +164,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
+
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -186,6 +189,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
+
+      checkNumLocalShuffleReaders(adaptivePlan, 0)
     }
   }
 
@@ -209,6 +214,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
+      checkNumLocalShuffleReaders(adaptivePlan, 0)
     }
   }
 
@@ -355,6 +361,53 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       assert(smj.size == 2)
       val smj2 = findTopLevelSortMergeJoin(adaptivePlan)
       assert(smj2.size == 2, origPlan.toString)
+    }
+  }
+
+  test("Change merge join to broadcast join without local shuffle reader") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "30") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT * FROM testData t1 join testData2 t2
+          |ON t1.key = t2.a join testData3 t3 on t2.a = t3.a
+          |where t1.value = 1
+        """.stripMargin
+      )
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 2)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      // additional shuffle exchange introduced, so revert OptimizeLocalShuffleReader rule.
+      checkNumLocalShuffleReaders(adaptivePlan, 0)
+    }
+  }
+
+  test("Avoid changing merge join to broadcast join if too many empty partitions on build plan") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
+      // `testData` is small enough to be broadcast but has empty partition ratio over the config.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.isEmpty)
+      }
+      // It is still possible to broadcast `testData2`.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.size == 1)
+        assert(bhj.head.buildSide == BuildRight)
+      }
     }
   }
 }

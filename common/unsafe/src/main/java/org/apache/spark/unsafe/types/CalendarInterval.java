@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -49,7 +48,8 @@ public final class CalendarInterval implements Serializable {
 
   private static Pattern p = Pattern.compile("interval" + unitRegex("year") + unitRegex("month") +
     unitRegex("week") + unitRegex("day") + unitRegex("hour") + unitRegex("minute") +
-    unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"));
+    unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"),
+    Pattern.CASE_INSENSITIVE);
 
   private static Pattern yearMonthPattern =
     Pattern.compile("^(?:['|\"])?([+|-])?(\\d+)-(\\d+)(?:['|\"])?$");
@@ -69,47 +69,56 @@ public final class CalendarInterval implements Serializable {
 
   /**
    * Convert a string to CalendarInterval. Return null if the input string is not a valid interval.
-   * This method is case-sensitive and all characters in the input string should be in lower case.
+   * This method is case-insensitive.
    */
   public static CalendarInterval fromString(String s) {
-    if (s == null) {
+    try {
+      return fromCaseInsensitiveString(s);
+    } catch (IllegalArgumentException e) {
       return null;
-    }
-    s = s.trim();
-    Matcher m = p.matcher(s);
-    if (!m.matches() || s.equals("interval")) {
-      return null;
-    } else {
-      long months = toLong(m.group(1)) * 12 + toLong(m.group(2));
-      long microseconds = toLong(m.group(3)) * MICROS_PER_WEEK;
-      microseconds += toLong(m.group(4)) * MICROS_PER_DAY;
-      microseconds += toLong(m.group(5)) * MICROS_PER_HOUR;
-      microseconds += toLong(m.group(6)) * MICROS_PER_MINUTE;
-      microseconds += toLong(m.group(7)) * MICROS_PER_SECOND;
-      microseconds += toLong(m.group(8)) * MICROS_PER_MILLI;
-      microseconds += toLong(m.group(9));
-      return new CalendarInterval((int) months, microseconds);
     }
   }
 
   /**
-   * Convert a string to CalendarInterval. Unlike fromString, this method is case-insensitive and
-   * will throw IllegalArgumentException when the input string is not a valid interval.
+   * Convert a string to CalendarInterval. This method can handle
+   * strings without the `interval` prefix and throws IllegalArgumentException
+   * when the input string is not a valid interval.
    *
    * @throws IllegalArgumentException if the string is not a valid internal.
    */
   public static CalendarInterval fromCaseInsensitiveString(String s) {
-    if (s == null || s.trim().isEmpty()) {
-      throw new IllegalArgumentException("Interval cannot be null or blank.");
+    if (s == null) {
+      throw new IllegalArgumentException("Interval cannot be null");
     }
-    String sInLowerCase = s.trim().toLowerCase(Locale.ROOT);
-    String interval =
-      sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
-    CalendarInterval cal = fromString(interval);
-    if (cal == null) {
+    String trimmed = s.trim();
+    if (trimmed.isEmpty()) {
+      throw new IllegalArgumentException("Interval cannot be blank");
+    }
+    String prefix = "interval";
+    String intervalStr = trimmed;
+    // Checks the given interval string does not start with the `interval` prefix
+    if (!intervalStr.regionMatches(true, 0, prefix, 0, prefix.length())) {
+      // Prepend `interval` if it does not present because
+      // the regular expression strictly require it.
+      intervalStr = prefix + " " + trimmed;
+    } else if (intervalStr.length() == prefix.length()) {
+      throw new IllegalArgumentException("Interval string must have time units");
+    }
+
+    Matcher m = p.matcher(intervalStr);
+    if (!m.matches()) {
       throw new IllegalArgumentException("Invalid interval: " + s);
     }
-    return cal;
+
+    long months = toLong(m.group(1)) * 12 + toLong(m.group(2));
+    long microseconds = toLong(m.group(3)) * MICROS_PER_WEEK;
+    microseconds += toLong(m.group(4)) * MICROS_PER_DAY;
+    microseconds += toLong(m.group(5)) * MICROS_PER_HOUR;
+    microseconds += toLong(m.group(6)) * MICROS_PER_MINUTE;
+    microseconds += toLong(m.group(7)) * MICROS_PER_SECOND;
+    microseconds += toLong(m.group(8)) * MICROS_PER_MILLI;
+    microseconds += toLong(m.group(9));
+    return new CalendarInterval((int) months, microseconds);
   }
 
   public static long toLongWithRange(String fieldName,

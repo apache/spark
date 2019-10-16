@@ -26,7 +26,7 @@ import org.apache.spark.mllib.linalg.Vectors
 
 object KMeansExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("KMeansExample")
     val sc = new SparkContext(conf)

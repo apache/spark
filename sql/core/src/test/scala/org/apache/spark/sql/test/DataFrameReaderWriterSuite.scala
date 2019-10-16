@@ -277,7 +277,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         .format(classOf[NoopDataSource].getName)
         .mode(SaveMode.Append)
         .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(plan.isInstanceOf[AppendData])
 
       // overwrite mode creates `OverwriteByExpression`
@@ -285,22 +285,24 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         .format(classOf[NoopDataSource].getName)
         .mode(SaveMode.Overwrite)
         .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(plan.isInstanceOf[OverwriteByExpression])
 
       // By default the save mode is `ErrorIfExists` for data source v2.
-      spark.range(10).write
-        .format(classOf[NoopDataSource].getName)
-        .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
-      assert(plan.isInstanceOf[AppendData])
+      val e = intercept[AnalysisException] {
+        spark.range(10).write
+          .format(classOf[NoopDataSource].getName)
+          .save()
+      }
+      assert(e.getMessage.contains("ErrorIfExists"))
 
-      spark.range(10).write
-        .format(classOf[NoopDataSource].getName)
-        .mode("default")
-        .save()
-      sparkContext.listenerBus.waitUntilEmpty(1000)
-      assert(plan.isInstanceOf[AppendData])
+      val e2 = intercept[AnalysisException] {
+        spark.range(10).write
+          .format(classOf[NoopDataSource].getName)
+          .mode("default")
+          .save()
+      }
+      assert(e2.getMessage.contains("ErrorIfExists"))
     } finally {
       spark.listenerManager.unregister(listener)
     }
@@ -1058,7 +1060,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           checkDatasetUnorderly(
             spark.read.parquet(dir.getCanonicalPath).as[(Long, Long)],
             0L -> 0L, 1L -> 1L, 2L -> 2L)
-          sparkContext.listenerBus.waitUntilEmpty(10000)
+          sparkContext.listenerBus.waitUntilEmpty()
           assert(jobDescriptions.asScala.toList.exists(
             _.contains("Listing leaf files and directories for 3 paths")))
         } finally {

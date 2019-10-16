@@ -367,7 +367,7 @@ class KMeansClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     for (initMode <- Seq(KMeans.RANDOM, KMeans.K_MEANS_PARALLEL)) {
       // If we serialize data directly in the task closure, the size of the serialized task would be
       // greater than 1MB and hence Spark would throw an error.
-      val model = KMeans.train(points, 2, 2, 1, initMode)
+      val model = KMeans.train(points, 2, 2, initMode)
       val predictions = model.predict(points).collect()
       val cost = model.computeCost(points)
     }

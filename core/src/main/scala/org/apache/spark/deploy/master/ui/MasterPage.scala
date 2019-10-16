@@ -27,7 +27,6 @@ import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateRe
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master._
-import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 

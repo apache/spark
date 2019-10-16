@@ -31,7 +31,6 @@ import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
 
 import com.google.common.collect.MapMaker
-import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
@@ -59,6 +58,8 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
+import org.apache.spark.shuffle.ShuffleDataIOUtils
+import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage._
@@ -218,6 +219,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
   private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
+  private var _shuffleDriverComponents: ShuffleDriverComponents = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -320,6 +322,8 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = ds
   }
 
+  private[spark] def shuffleDriverComponents: ShuffleDriverComponents = _shuffleDriverComponents
+
   /**
    * A unique identifier for the Spark application.
    * Its format depends on the scheduler implementation.
@@ -346,7 +350,7 @@ class SparkContext(config: SparkConf) extends Logging {
     override protected def childValue(parent: Properties): Properties = {
       // Note: make a clone such that changes in the parent properties aren't reflected in
       // the those of the children threads, which has confusing semantics (SPARK-10563).
-      SerializationUtils.clone(parent)
+      Utils.cloneProperties(parent)
     }
     override protected def initialValue(): Properties = new Properties()
   }
@@ -367,7 +371,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param logLevel The desired log level as a string.
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    */
-  def setLogLevel(logLevel: String) {
+  def setLogLevel(logLevel: String): Unit = {
     // let's allow lowercase or mixed case too
     val upperCased = logLevel.toUpperCase(Locale.ROOT)
     require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
@@ -525,6 +529,11 @@ class SparkContext(config: SparkConf) extends Logging {
     executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
 
+    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
+    _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
+      _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
+    }
+
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
@@ -577,7 +586,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _cleaner =
       if (_conf.get(CLEANER_REFERENCE_TRACKING)) {
-        Some(new ContextCleaner(this))
+        Some(new ContextCleaner(this, _shuffleDriverComponents))
       } else {
         None
       }
@@ -662,7 +671,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def getLocalProperties: Properties = localProperties.get()
 
-  private[spark] def setLocalProperties(props: Properties) {
+  private[spark] def setLocalProperties(props: Properties): Unit = {
     localProperties.set(props)
   }
 
@@ -677,7 +686,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * implementation of thread pools have worker threads spawn other worker threads.
    * As a result, local properties may propagate unpredictably.
    */
-  def setLocalProperty(key: String, value: String) {
+  def setLocalProperty(key: String, value: String): Unit = {
     if (value == null) {
       localProperties.get.remove(key)
     } else {
@@ -693,7 +702,7 @@ class SparkContext(config: SparkConf) extends Logging {
     Option(localProperties.get).map(_.getProperty(key)).orNull
 
   /** Set a human readable description of the current job. */
-  def setJobDescription(value: String) {
+  def setJobDescription(value: String): Unit = {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
   }
 
@@ -721,7 +730,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * are actually stopped in a timely manner, but is off by default due to HDFS-1208, where HDFS
    * may respond to Thread.interrupt() by marking nodes as dead.
    */
-  def setJobGroup(groupId: String, description: String, interruptOnCancel: Boolean = false) {
+  def setJobGroup(groupId: String,
+      description: String, interruptOnCancel: Boolean = false): Unit = {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, description)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
     // Note: Specifying interruptOnCancel in setJobGroup (rather than cancelJobGroup) avoids
@@ -732,7 +742,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** Clear the current thread's job group ID and its description. */
-  def clearJobGroup() {
+  def clearJobGroup(): Unit = {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
     setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, null)
@@ -1560,7 +1570,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Register a listener to receive up-calls from events that happen during execution.
    */
   @DeveloperApi
-  def addSparkListener(listener: SparkListenerInterface) {
+  def addSparkListener(listener: SparkListenerInterface): Unit = {
     listenerBus.addToSharedQueue(listener)
   }
 
@@ -1789,14 +1799,14 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Register an RDD to be persisted in memory and/or disk storage
    */
-  private[spark] def persistRDD(rdd: RDD[_]) {
+  private[spark] def persistRDD(rdd: RDD[_]): Unit = {
     persistentRdds(rdd.id) = rdd
   }
 
   /**
    * Unpersist an RDD from memory and/or disk storage
    */
-  private[spark] def unpersistRDD(rddId: Int, blocking: Boolean) {
+  private[spark] def unpersistRDD(rddId: Int, blocking: Boolean): Unit = {
     env.blockManager.master.removeRdd(rddId, blocking)
     persistentRdds.remove(rddId)
     listenerBus.post(SparkListenerUnpersistRDD(rddId))
@@ -1812,7 +1822,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addJar(path: String) {
+  def addJar(path: String): Unit = {
     def addLocalJarFile(file: File): String = {
       try {
         if (!file.exists()) {
@@ -1975,6 +1985,11 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       _heartbeater = null
     }
+    if (_shuffleDriverComponents != null) {
+      Utils.tryLogNonFatalError {
+        _shuffleDriverComponents.cleanupApplication()
+      }
+    }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {
         env.rpcEnv.stop(_heartbeatReceiver)
@@ -2019,7 +2034,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Set the thread-local property for overriding the call sites
    * of actions and RDDs.
    */
-  def setCallSite(shortCallSite: String) {
+  def setCallSite(shortCallSite: String): Unit = {
     setLocalProperty(CallSite.SHORT_FORM, shortCallSite)
   }
 
@@ -2027,7 +2042,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Set the thread-local property for overriding the call sites
    * of actions and RDDs.
    */
-  private[spark] def setCallSite(callSite: CallSite) {
+  private[spark] def setCallSite(callSite: CallSite): Unit = {
     setLocalProperty(CallSite.SHORT_FORM, callSite.shortForm)
     setLocalProperty(CallSite.LONG_FORM, callSite.longForm)
   }
@@ -2036,7 +2051,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Clear the thread-local property for overriding the call sites
    * of actions and RDDs.
    */
-  def clearCallSite() {
+  def clearCallSite(): Unit = {
     setLocalProperty(CallSite.SHORT_FORM, null)
     setLocalProperty(CallSite.LONG_FORM, null)
   }
@@ -2156,8 +2171,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def runJob[T, U: ClassTag](
     rdd: RDD[T],
     processPartition: (TaskContext, Iterator[T]) => U,
-    resultHandler: (Int, U) => Unit)
-  {
+    resultHandler: (Int, U) => Unit): Unit = {
     runJob[T, U](rdd, processPartition, 0 until rdd.partitions.length, resultHandler)
   }
 
@@ -2171,8 +2185,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,
-      resultHandler: (Int, U) => Unit)
-  {
+      resultHandler: (Int, U) => Unit): Unit = {
     val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
     runJob[T, U](rdd, processFunc, 0 until rdd.partitions.length, resultHandler)
   }
@@ -2257,13 +2270,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
    * for more information.
    */
-  def cancelJobGroup(groupId: String) {
+  def cancelJobGroup(groupId: String): Unit = {
     assertNotStopped()
     dagScheduler.cancelJobGroup(groupId)
   }
 
   /** Cancel all jobs that have been scheduled or are running.  */
-  def cancelAllJobs() {
+  def cancelAllJobs(): Unit = {
     assertNotStopped()
     dagScheduler.cancelAllJobs()
   }
@@ -2351,7 +2364,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param directory path to the directory where checkpoint files will be stored
    * (must be HDFS path if running in cluster)
    */
-  def setCheckpointDir(directory: String) {
+  def setCheckpointDir(directory: String): Unit = {
 
     // If we are running on a cluster, log a warning if the directory is local.
     // Otherwise, the driver may attempt to reconstruct the checkpointed RDD from
@@ -2423,7 +2436,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** Post the application start event */
-  private def postApplicationStart() {
+  private def postApplicationStart(): Unit = {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
@@ -2433,12 +2446,12 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** Post the application end event */
-  private def postApplicationEnd() {
+  private def postApplicationEnd(): Unit = {
     listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
   }
 
   /** Post the environment update event once the task scheduler is ready */
-  private def postEnvironmentUpdate() {
+  private def postEnvironmentUpdate(): Unit = {
     if (taskScheduler != null) {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq

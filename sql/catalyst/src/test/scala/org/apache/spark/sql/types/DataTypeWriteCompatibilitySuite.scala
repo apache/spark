@@ -76,6 +76,14 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
       assert(err.contains("Cannot safely cast"))
     }
   }
+
+  test("Check NullType is incompatible with all other types") {
+    allNonNullTypes.foreach { t =>
+      assertSingleError(NullType, t, "nulls", s"Should not allow writing None to type $t") { err =>
+        assert(err.contains(s"incompatible with $t"))
+      }
+    }
+  }
 }
 
 class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBaseSuite {
@@ -133,6 +141,24 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
       assert(err.contains("Cannot safely cast"))
     }
   }
+
+  test("Conversions between timestamp and long are not allowed") {
+    assertSingleError(LongType, TimestampType, "longToTimestamp",
+      "Should not allow long to timestamp") { err =>
+      assert(err.contains("Cannot safely cast 'longToTimestamp': LongType to TimestampType"))
+    }
+
+    assertSingleError(TimestampType, LongType, "timestampToLong",
+      "Should not allow timestamp to long") { err =>
+      assert(err.contains("Cannot safely cast 'timestampToLong': TimestampType to LongType"))
+    }
+  }
+
+  test("Check NullType is compatible with all other types") {
+    allNonNullTypes.foreach { t =>
+      assertAllowed(NullType, t, "nulls", s"Should allow writing None to type $t")
+    }
+  }
 }
 
 abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
@@ -163,16 +189,8 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
   private val nestedContainerTypes = Seq(ArrayType(point2, containsNull = false),
     MapType(StringType, point3, valueContainsNull = false))
 
-  private val allNonNullTypes = Seq(
+  protected val allNonNullTypes = Seq(
     atomicTypes, simpleContainerTypes, nestedContainerTypes, Seq(CalendarIntervalType)).flatten
-
-  test("Check NullType is incompatible with all other types") {
-    allNonNullTypes.foreach { t =>
-      assertSingleError(NullType, t, "nulls", s"Should not allow writing None to type $t") { err =>
-        assert(err.contains(s"incompatible with $t"))
-      }
-    }
-  }
 
   test("Check each type with itself") {
     allNonNullTypes.foreach { t =>

@@ -22,16 +22,18 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * End-to-end test cases for SQL queries.
@@ -102,6 +104,7 @@ import org.apache.spark.sql.types.StructType
  * Therefore, UDF test cases should have single input and output files but executed by three
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
  */
+@ExtendedSQLTest
 class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   import IntegratedUDFTestUtils._
@@ -131,9 +134,27 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
 
+  protected val emptySchema = StructType(Seq.empty).catalogString
+
+  protected override def sparkConf: SparkConf = super.sparkConf
+    // Fewer shuffle partitions to speed up testing.
+    .set(SQLConf.SHUFFLE_PARTITIONS, 4)
+
   /** List of test cases to ignore, in lower cases. */
   protected def blackList: Set[String] = Set(
-    "blacklist.sql"   // Do NOT remove this one. It is here to test the blacklist functionality.
+    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
+    // SPARK-28885 String value is not allowed to be stored as numeric type with
+    // ANSI store assignment policy.
+    "postgreSQL/numeric.sql",
+    "postgreSQL/int2.sql",
+    "postgreSQL/int4.sql",
+    "postgreSQL/int8.sql",
+    "postgreSQL/float4.sql",
+    "postgreSQL/float8.sql",
+    // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
+    // ANSI store assignment policy.
+    "postgreSQL/date.sql",
+    "postgreSQL/timestamp.sql"
   )
 
   // Create all the test cases.
@@ -289,10 +310,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
     testCase match {
       case udfTestCase: UDFTest =>
-        // In Python UDF tests, the number of shuffle partitions matters considerably in
-        // the testing time because it requires to fork and communicate between external
-        // processes.
-        localSparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 4)
         registerTestUDF(udfTestCase.udf, localSparkSession)
       case _ =>
     }
@@ -306,8 +323,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.udf.register("vol", (s: String) => s)
         // PostgreSQL enabled cartesian product by default.
         localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
-        localSparkSession.conf.set(SQLConf.ANSI_SQL_PARSER.key, true)
-        localSparkSession.conf.set(SQLConf.PREFER_INTEGRAL_DIVISION.key, true)
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
+        localSparkSession.conf.set(SQLConf.DIALECT.key, SQLConf.Dialect.POSTGRESQL.toString)
       case _ =>
     }
 
@@ -319,11 +336,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     }
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryOutput] = queries.map { sql =>
-      val (schema, output) = getNormalizedResult(localSparkSession, sql)
+      val (schema, output) = handleExceptions(getNormalizedResult(localSparkSession, sql))
       // We might need to do some query canonicalization in the future.
       QueryOutput(
         sql = sql,
-        schema = schema.catalogString,
+        schema = schema,
         output = output.mkString("\n").replaceAll("\\s+$", ""))
     }
 
@@ -342,45 +359,78 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       stringToFile(resultFile, goldenOutput)
     }
 
-    // Read back the golden file.
-    val expectedOutputs: Seq[QueryOutput] = {
-      val goldenOutput = fileToString(new File(testCase.resultFile))
-      val segments = goldenOutput.split("-- !query.+\n")
+    // This is a temporary workaround for SPARK-28894. The test names are truncated after
+    // the last dot due to a bug in SBT. This makes easier to debug via Jenkins test result
+    // report. See SPARK-28894.
+    withClue(s"${testCase.name}${System.lineSeparator()}") {
+      // Read back the golden file.
+      val expectedOutputs: Seq[QueryOutput] = {
+        val goldenOutput = fileToString(new File(testCase.resultFile))
+        val segments = goldenOutput.split("-- !query.+\n")
 
-      // each query has 3 segments, plus the header
-      assert(segments.size == outputs.size * 3 + 1,
-        s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
-        s"Try regenerate the result files.")
-      Seq.tabulate(outputs.size) { i =>
-        QueryOutput(
-          sql = segments(i * 3 + 1).trim,
-          schema = segments(i * 3 + 2).trim,
-          output = segments(i * 3 + 3).replaceAll("\\s+$", "")
-        )
+        // each query has 3 segments, plus the header
+        assert(segments.size == outputs.size * 3 + 1,
+          s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
+            s"Try regenerate the result files.")
+        Seq.tabulate(outputs.size) { i =>
+          QueryOutput(
+            sql = segments(i * 3 + 1).trim,
+            schema = segments(i * 3 + 2).trim,
+            output = segments(i * 3 + 3).replaceAll("\\s+$", "")
+          )
+        }
       }
-    }
 
-    // Compare results.
-    assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
-      outputs.size
-    }
+      // Compare results.
+      assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
+        outputs.size
+      }
 
-    outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
-      assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
-        output.sql
-      }
-      assertResult(expected.schema,
-        s"Schema did not match for query #$i\n${expected.sql}: $output") {
-        output.schema
-      }
-      assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
-        output.output
+      outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
+        assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
+          output.sql
+        }
+        assertResult(expected.schema,
+          s"Schema did not match for query #$i\n${expected.sql}: $output") {
+          output.schema
+        }
+        assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
+          output.output
+        }
       }
     }
   }
 
+  /**
+   * This method handles exceptions occurred during query execution as they may need special care
+   * to become comparable to the expected output.
+   *
+   * @param result a function that returns a pair of schema and output
+   */
+  protected def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
+    try {
+      result
+    } catch {
+      case a: AnalysisException =>
+        // Do not output the logical plan tree which contains expression IDs.
+        // Also implement a crude way of masking expression IDs in the error message
+        // with a generic pattern "###".
+        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
+        (emptySchema, Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
+      case s: SparkException if s.getCause != null =>
+        // For a runtime exception, it is hard to match because its message contains
+        // information of stage, task ID, etc.
+        // To make result matching simpler, here we match the cause of the exception if it exists.
+        val cause = s.getCause
+        (emptySchema, Seq(cause.getClass.getName, cause.getMessage))
+      case NonFatal(e) =>
+        // If there is an exception, put the exception class followed by the message.
+        (emptySchema, Seq(e.getClass.getName, e.getMessage))
+    }
+  }
+
   /** Executes a query and returns the result as (schema of the output, normalized output). */
-  private def getNormalizedResult(session: SparkSession, sql: String): (StructType, Seq[String]) = {
+  private def getNormalizedResult(session: SparkSession, sql: String): (String, Seq[String]) = {
     // Returns true if the plan is supposed to be sorted.
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
@@ -392,26 +442,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       case _ => plan.children.iterator.exists(isSorted)
     }
 
-    try {
-      val df = session.sql(sql)
-      val schema = df.schema
-      // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-      val answer = hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
-
-      // If the output is not pre-sorted, sort it.
-      if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
-
-    } catch {
-      case a: AnalysisException =>
-        // Do not output the logical plan tree which contains expression IDs.
-        // Also implement a crude way of masking expression IDs in the error message
-        // with a generic pattern "###".
-        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        (StructType(Seq.empty), Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
-      case NonFatal(e) =>
-        // If there is an exception, put the exception class followed by the message.
-        (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))
+    val df = session.sql(sql)
+    val schema = df.schema.catalogString
+    // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
+    val answer = SQLExecution.withNewExecutionId(session, df.queryExecution, Some(sql)) {
+      hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
     }
+
+    // If the output is not pre-sorted, sort it.
+    if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
   }
 
   protected def replaceNotIncludedMsg(line: String): String = {
@@ -433,7 +472,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
       if (file.getAbsolutePath.startsWith(
-        s"$inputFilePath${File.separator}udf${File.separator}pgSQL")) {
+        s"$inputFilePath${File.separator}udf${File.separator}postgreSQL")) {
         Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
           UDFPgSQLTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
@@ -443,7 +482,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
           UDFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil

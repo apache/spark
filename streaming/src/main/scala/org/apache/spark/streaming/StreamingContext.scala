@@ -26,7 +26,6 @@ import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
@@ -34,7 +33,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 
 import org.apache.spark._
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.internal.Logging
@@ -222,7 +221,7 @@ class StreamingContext private[streaming] (
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
    */
-  def remember(duration: Duration) {
+  def remember(duration: Duration): Unit = {
     graph.remember(duration)
   }
 
@@ -232,7 +231,7 @@ class StreamingContext private[streaming] (
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored.
    *                  Note that this must be a fault-tolerant file system like HDFS.
    */
-  def checkpoint(directory: String) {
+  def checkpoint(directory: String): Unit = {
     if (directory != null) {
       val path = new Path(directory)
       val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
@@ -505,7 +504,7 @@ class StreamingContext private[streaming] (
    * Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
    * receiving system events related to streaming.
    */
-  def addStreamingListener(streamingListener: StreamingListener) {
+  def addStreamingListener(streamingListener: StreamingListener): Unit = {
     scheduler.listenerBus.addListener(streamingListener)
   }
 
@@ -513,7 +512,7 @@ class StreamingContext private[streaming] (
     scheduler.listenerBus.removeListener(streamingListener)
   }
 
-  private def validate() {
+  private def validate(): Unit = {
     assert(graph != null, "Graph is null")
     graph.validate()
 
@@ -586,7 +585,7 @@ class StreamingContext private[streaming] (
               sparkContext.setCallSite(startSite.get)
               sparkContext.clearJobGroup()
               sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
-              savedProperties.set(SerializationUtils.clone(sparkContext.localProperties.get()))
+              savedProperties.set(Utils.cloneProperties(sparkContext.localProperties.get()))
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE
@@ -621,7 +620,7 @@ class StreamingContext private[streaming] (
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    */
-  def awaitTermination() {
+  def awaitTermination(): Unit = {
     waiter.waitForStopOrError()
   }
 
@@ -772,11 +771,8 @@ object StreamingContext extends Logging {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Get the currently active context, if there is one. Active means started but not stopped.
    */
-  @Experimental
   def getActive(): Option[StreamingContext] = {
     ACTIVATION_LOCK.synchronized {
       Option(activeContext.get())
@@ -784,13 +780,10 @@ object StreamingContext extends Logging {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Either return the "active" StreamingContext (that is, started but not stopped), or create a
    * new StreamingContext that is
    * @param creatingFunc   Function to create a new StreamingContext
    */
-  @Experimental
   def getActiveOrCreate(creatingFunc: () => StreamingContext): StreamingContext = {
     ACTIVATION_LOCK.synchronized {
       getActive().getOrElse { creatingFunc() }
@@ -798,8 +791,6 @@ object StreamingContext extends Logging {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Either get the currently active StreamingContext (that is, started but not stopped),
    * OR recreate a StreamingContext from checkpoint data in the given path. If checkpoint data
    * does not exist in the provided, then create a new StreamingContext by calling the provided
@@ -813,7 +804,6 @@ object StreamingContext extends Logging {
    *                       error in reading checkpoint data. By default, an exception will be
    *                       thrown on error.
    */
-  @Experimental
   def getActiveOrCreate(
       checkpointPath: String,
       creatingFunc: () => StreamingContext,

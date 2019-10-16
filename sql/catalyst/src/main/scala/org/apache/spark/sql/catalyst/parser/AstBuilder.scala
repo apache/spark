@@ -28,8 +28,6 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2
-import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
@@ -38,8 +36,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowTablesStatement}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -344,12 +342,52 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
     val tableAlias = if (ctx.tableAlias() != null) {
       val ident = ctx.tableAlias().strictIdentifier()
-      if (ident != null) { Some(ident.getText) } else { None }
+      // We do not allow columns aliases after table alias.
+      if (ctx.tableAlias().identifierList() != null) {
+        throw new ParseException("Columns aliases is not allowed in DELETE.",
+          ctx.tableAlias().identifierList())
+      }
+      if (ident != null) Some(ident.getText) else None
+    } else {
+      None
+    }
+    val predicate = if (ctx.whereClause() != null) {
+      Some(expression(ctx.whereClause().booleanExpression()))
     } else {
       None
     }
 
-    DeleteFromStatement(tableId, tableAlias, expression(ctx.whereClause().booleanExpression()))
+    DeleteFromStatement(tableId, tableAlias, predicate)
+  }
+
+  override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
+    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val tableAlias = if (ctx.tableAlias() != null) {
+      val ident = ctx.tableAlias().strictIdentifier()
+      // We do not allow columns aliases after table alias.
+      if (ctx.tableAlias().identifierList() != null) {
+        throw new ParseException("Columns aliases is not allowed in UPDATE.",
+          ctx.tableAlias().identifierList())
+      }
+      if (ident != null) Some(ident.getText) else None
+    } else {
+      None
+    }
+    val (attrs, values) = ctx.setClause().assign().asScala.map {
+      kv => visitMultipartIdentifier(kv.key) -> expression(kv.value)
+    }.unzip
+    val predicate = if (ctx.whereClause() != null) {
+      Some(expression(ctx.whereClause().booleanExpression()))
+    } else {
+      None
+    }
+
+    UpdateTableStatement(
+      tableId,
+      tableAlias,
+      attrs,
+      values,
+      predicate)
   }
 
   /**
@@ -1354,7 +1392,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   override def visitCurrentDatetime(ctx: CurrentDatetimeContext): Expression = withOrigin(ctx) {
-    if (conf.ansiParserEnabled) {
+    if (conf.ansiEnabled) {
       ctx.name.getType match {
         case SqlBaseParser.CURRENT_DATE =>
           CurrentDate()
@@ -1409,48 +1447,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Extract expression.
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
-    ctx.field.getText.toUpperCase(Locale.ROOT) match {
-      case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" =>
-        Millennium(expression(ctx.source))
-      case "CENTURY" | "CENTURIES" | "C" | "CENT" =>
-        Century(expression(ctx.source))
-      case "DECADE" | "DECADES" | "DEC" | "DECS" =>
-        Decade(expression(ctx.source))
-      case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" =>
-        Year(expression(ctx.source))
-      case "ISOYEAR" =>
-        IsoYear(expression(ctx.source))
-      case "QUARTER" | "QTR" =>
-        Quarter(expression(ctx.source))
-      case "MONTH" | "MON" | "MONS" | "MONTHS" =>
-        Month(expression(ctx.source))
-      case "WEEK" | "W" | "WEEKS" =>
-        WeekOfYear(expression(ctx.source))
-      case "DAY" | "D" | "DAYS" =>
-        DayOfMonth(expression(ctx.source))
-      case "DAYOFWEEK" =>
-        DayOfWeek(expression(ctx.source))
-      case "DOW" =>
-        Subtract(DayOfWeek(expression(ctx.source)), Literal(1))
-      case "ISODOW" =>
-        Add(WeekDay(expression(ctx.source)), Literal(1))
-      case "DOY" =>
-        DayOfYear(expression(ctx.source))
-      case "HOUR" | "H" | "HOURS" | "HR" | "HRS" =>
-        Hour(expression(ctx.source))
-      case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" =>
-        Minute(expression(ctx.source))
-      case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" =>
-        Second(expression(ctx.source))
-      case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
-        Milliseconds(expression(ctx.source))
-      case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
-        Microseconds(expression(ctx.source))
-      case "EPOCH" =>
-        Epoch(expression(ctx.source))
-      case other =>
-        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
-    }
+    val fieldStr = ctx.field.getText
+    val source = expression(ctx.source)
+    val extractField = DatePart.parseExtractField(fieldStr, source, {
+      throw new ParseException(s"Literals of type '$fieldStr' are currently not supported.", ctx)
+    })
+    new DatePart(Literal(fieldStr), expression(ctx.source), extractField)
   }
 
   /**
@@ -1761,7 +1763,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     try {
       valueType match {
-        case "DATE" => toLiteral(stringToDate, DateType)
+        case "DATE" =>
+          toLiteral(stringToDate(_, getZoneId(SQLConf.get.sessionLocalTimeZone)), DateType)
         case "TIMESTAMP" =>
           val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
@@ -2213,7 +2216,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitTransformList(ctx: TransformListContext): Seq[Transform] = withOrigin(ctx) {
     def getFieldReference(
         ctx: ApplyTransformContext,
-        arg: v2.expressions.Expression): FieldReference = {
+        arg: V2Expression): FieldReference = {
       lazy val name: String = ctx.identifier.getText
       arg match {
         case ref: FieldReference =>
@@ -2226,7 +2229,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     def getSingleFieldReference(
         ctx: ApplyTransformContext,
-        arguments: Seq[v2.expressions.Expression]): FieldReference = {
+        arguments: Seq[V2Expression]): FieldReference = {
       lazy val name: String = ctx.identifier.getText
       if (arguments.size > 1) {
         throw new ParseException(s"Too many arguments for transform $name", ctx)
@@ -2283,7 +2286,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Parse an argument to a transform. An argument may be a field reference (qualified name) or
    * a value literal.
    */
-  override def visitTransformArgument(ctx: TransformArgumentContext): v2.expressions.Expression = {
+  override def visitTransformArgument(ctx: TransformArgumentContext): V2Expression = {
     withOrigin(ctx) {
       val reference = Option(ctx.qualifiedName)
           .map(typedVisit[Seq[String]])
@@ -2294,6 +2297,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       reference.orElse(literal)
           .getOrElse(throw new ParseException(s"Invalid transform argument", ctx))
     }
+  }
+
+  /**
+   * Create a [[ShowNamespacesStatement]] command.
+   */
+  override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.DATABASES != null && ctx.multipartIdentifier != null) {
+      throw new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
+    }
+
+    ShowNamespacesStatement(
+      Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
+      Option(ctx.pattern).map(string))
   }
 
   /**
@@ -2447,6 +2463,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     DropViewStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier()),
       ctx.EXISTS != null)
+  }
+
+  /**
+   * Create a [[UseStatement]] logical plan.
+   */
+  override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+    UseStatement(ctx.NAMESPACE != null, nameParts)
   }
 
   /**

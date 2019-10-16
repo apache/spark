@@ -19,4 +19,20 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+Reset all the properties specific to the current session to their default values. After RESET command, executing SET command will output empty.
+
+### Syntax
+{% highlight sql %}
+RESET
+{% endhighlight %}
+
+
+### Examples
+{% highlight sql %}
+-- Reset all the properties specific to the current session to their default values.
+RESET;
+{% endhighlight %}
+
+### Related Statements
+- [SET](sql-ref-syntax-aux-conf-mgmt-set.html)

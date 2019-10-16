@@ -546,7 +546,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)(fakeClassTag)
 
   /** Shut down the SparkContext. */
-  def stop() {
+  def stop(): Unit = {
     sc.stop()
   }
 
@@ -567,7 +567,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    *
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addFile(path: String) {
+  def addFile(path: String): Unit = {
     sc.addFile(path)
   }
 
@@ -593,7 +593,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    *
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addJar(path: String) {
+  def addJar(path: String): Unit = {
     sc.addJar(path)
   }
 
@@ -609,9 +609,9 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   /**
    * Set the directory under which RDDs are going to be checkpointed. The directory must
-   * be a HDFS path if running on a cluster.
+   * be an HDFS path if running on a cluster.
    */
-  def setCheckpointDir(dir: String) {
+  def setCheckpointDir(dir: String): Unit = {
     sc.setCheckpointDir(dir)
   }
 
@@ -631,14 +631,14 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * Pass-through to SparkContext.setCallSite.  For API support only.
    */
-  def setCallSite(site: String) {
+  def setCallSite(site: String): Unit = {
     sc.setCallSite(site)
   }
 
   /**
    * Pass-through to SparkContext.setCallSite.  For API support only.
    */
-  def clearCallSite() {
+  def clearCallSite(): Unit = {
     sc.clearCallSite()
   }
 
@@ -669,7 +669,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @param logLevel The desired log level as a string.
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    */
-  def setLogLevel(logLevel: String) {
+  def setLogLevel(logLevel: String): Unit = {
     sc.setLogLevel(logLevel)
   }
 

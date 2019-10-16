@@ -480,58 +480,6 @@ object KMeans {
   }
 
   /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data Training points as an `RDD` of `Vector` types.
-   * @param k Number of clusters to create.
-   * @param maxIterations Maximum number of iterations allowed.
-   * @param runs This param has no effect since Spark 2.0.0.
-   * @param initializationMode The initialization algorithm. This can either be "random" or
-   *                           "k-means||". (default: "k-means||")
-   * @param seed Random seed for cluster initialization. Default is to generate seed based
-   *             on system time.
-   */
-  @Since("1.3.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String,
-      seed: Long): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setInitializationMode(initializationMode)
-      .setSeed(seed)
-      .run(data)
-  }
-
-  /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data Training points as an `RDD` of `Vector` types.
-   * @param k Number of clusters to create.
-   * @param maxIterations Maximum number of iterations allowed.
-   * @param runs This param has no effect since Spark 2.0.0.
-   * @param initializationMode The initialization algorithm. This can either be "random" or
-   *                           "k-means||". (default: "k-means||")
-   */
-  @Since("0.8.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setInitializationMode(initializationMode)
-      .run(data)
-  }
-
-  /**
    * Trains a k-means model using specified parameters and the default values for unspecified.
    */
   @Since("0.8.0")
@@ -539,21 +487,6 @@ object KMeans {
       data: RDD[Vector],
       k: Int,
       maxIterations: Int): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .run(data)
-  }
-
-  /**
-   * Trains a k-means model using specified parameters and the default values for unspecified.
-   */
-  @Since("0.8.0")
-  @deprecated("Use train method without 'runs'", "2.1.0")
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .run(data)

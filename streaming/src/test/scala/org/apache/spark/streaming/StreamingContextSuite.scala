@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.{Assertions, PrivateMethodTester}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
@@ -44,7 +44,11 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.{ManualClock, Utils}
 
 
-class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits with Logging {
+class StreamingContextSuite
+  extends SparkFunSuite
+  with LocalStreamingContext
+  with TimeLimits
+  with Logging {
 
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val signaler: Signaler = ThreadSignaler
@@ -55,20 +59,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
   val sparkHome = "someDir"
   val envPair = "key" -> "value"
   val conf = new SparkConf().setMaster(master).setAppName(appName)
-
-  var sc: SparkContext = null
-  var ssc: StreamingContext = null
-
-  after {
-    if (ssc != null) {
-      ssc.stop()
-      ssc = null
-    }
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
-  }
 
   test("from no conf constructor") {
     ssc = new StreamingContext(master, appName, batchDuration)
@@ -95,7 +85,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
   }
 
   test("from existing SparkContext") {
-    sc = new SparkContext(master, appName)
+    val sc = new SparkContext(master, appName)
     ssc = new StreamingContext(sc, batchDuration)
   }
 
@@ -272,7 +262,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
 
     // Explicitly do not stop SparkContext
     ssc = new StreamingContext(conf, batchDuration)
-    sc = ssc.sparkContext
+    var sc = ssc.sparkContext
     addInputStream(ssc).register()
     ssc.start()
     ssc.stop(stopSparkContext = false)
@@ -306,7 +296,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
   test("stop gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("spark.dummyTimeConfig", "3600s")
-    sc = new SparkContext(conf)
+    val sc = new SparkContext(conf)
     for (i <- 1 to 4) {
       logInfo("==================================\n\n\n")
       ssc = new StreamingContext(sc, Milliseconds(100))
@@ -338,7 +328,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     // This is not a deterministic unit. But if this unit test is flaky, then there is definitely
     // something wrong. See SPARK-5681
     val conf = new SparkConf().setMaster(master).setAppName(appName)
-    sc = new SparkContext(conf)
+    val sc = new SparkContext(conf)
     ssc = new StreamingContext(sc, Milliseconds(100))
     val input = ssc.receiverStream(new TestReceiver)
     input.foreachRDD(_ => {})
@@ -352,11 +342,10 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
   test("stop slow receiver gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("spark.streaming.gracefulStopTimeout", "20000s")
-    sc = new SparkContext(conf)
+    val sc = new SparkContext(conf)
     logInfo("==================================\n\n\n")
     ssc = new StreamingContext(sc, Milliseconds(100))
     var runningCount = 0
-    SlowTestReceiver.receivedAllRecords = false
     // Create test receiver that sleeps in onStop()
     val totalNumRecords = 15
     val recordsPerSecond = 1
@@ -368,6 +357,9 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     }
     ssc.start()
     ssc.awaitTerminationOrTimeout(500)
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(SlowTestReceiver.initialized)
+    }
     ssc.stop(stopSparkContext = false, stopGracefully = true)
     logInfo("Running count = " + runningCount)
     assert(runningCount > 0)
@@ -445,7 +437,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     // test whether wait exits if context is stopped
     failAfter(10.seconds) { // 10 seconds because spark takes a long time to shutdown
       t = new Thread() {
-        override def run() {
+        override def run(): Unit = {
           Thread.sleep(500)
           ssc.stop()
         }
@@ -512,7 +504,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     // test whether awaitTerminationOrTimeout() return true if context is stopped
     failAfter(10.seconds) { // 10 seconds because spark takes a long time to shutdown
       t = new Thread() {
-        override def run() {
+        override def run(): Unit = {
           Thread.sleep(500)
           ssc.stop()
         }
@@ -591,7 +583,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
 
     // getOrCreate should recover StreamingContext with existing SparkContext
     testGetOrCreate {
-      sc = new SparkContext(conf)
+      val sc = new SparkContext(conf)
       ssc = StreamingContext.getOrCreate(checkpointPath, () => creatingFunction())
       assert(ssc != null, "no context created")
       assert(!newContextCreated, "old context not recovered")
@@ -603,7 +595,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     require(StreamingContext.getActive().isEmpty, "context exists from before")
     var newContextCreated = false
 
-    def creatingFunc(): StreamingContext = {
+    def creatingFunc(sc: SparkContext)(): StreamingContext = {
       newContextCreated = true
       val newSsc = new StreamingContext(sc, batchDuration)
       val input = addInputStream(newSsc)
@@ -627,8 +619,8 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     // getActiveOrCreate should create new context and getActive should return it only
     // after starting the context
     testGetActiveOrCreate {
-      sc = new SparkContext(conf)
-      ssc = StreamingContext.getActiveOrCreate(creatingFunc _)
+      val sc = new SparkContext(conf)
+      ssc = StreamingContext.getActiveOrCreate(creatingFunc(sc))
       assert(ssc != null, "no context created")
       assert(newContextCreated, "new context not created")
       assert(StreamingContext.getActive().isEmpty,
@@ -636,25 +628,25 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
       ssc.start()
       assert(StreamingContext.getActive() === Some(ssc),
         "active context not returned")
-      assert(StreamingContext.getActiveOrCreate(creatingFunc _) === ssc,
+      assert(StreamingContext.getActiveOrCreate(creatingFunc(sc)) === ssc,
         "active context not returned")
       ssc.stop()
       assert(StreamingContext.getActive().isEmpty,
         "inactive context returned")
-      assert(StreamingContext.getActiveOrCreate(creatingFunc _) !== ssc,
+      assert(StreamingContext.getActiveOrCreate(creatingFunc(sc)) !== ssc,
         "inactive context returned")
     }
 
     // getActiveOrCreate and getActive should return independently created context after activating
     testGetActiveOrCreate {
-      sc = new SparkContext(conf)
-      ssc = creatingFunc()  // Create
+      val sc = new SparkContext(conf)
+      ssc = creatingFunc(sc)  // Create
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")
       ssc.start()
       assert(StreamingContext.getActive() === Some(ssc),
         "active context not returned")
-      assert(StreamingContext.getActiveOrCreate(creatingFunc _) === ssc,
+      assert(StreamingContext.getActiveOrCreate(creatingFunc(sc)) === ssc,
         "active context not returned")
       ssc.stop()
       assert(StreamingContext.getActive().isEmpty,
@@ -736,7 +728,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
   }
 
   test("multiple streaming contexts") {
-    sc = new SparkContext(
+    val sc = new SparkContext(
       conf.clone.set("spark.streaming.clock", "org.apache.spark.util.ManualClock"))
     ssc = new StreamingContext(sc, Seconds(1))
     val input = addInputStream(ssc)
@@ -930,9 +922,9 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
 
   var receivingThreadOption: Option[Thread] = None
 
-  def onStart() {
+  def onStart(): Unit = {
     val thread = new Thread() {
-      override def run() {
+      override def run(): Unit = {
         logInfo("Receiving started")
         while (!isStopped) {
           store(TestReceiver.counter.getAndIncrement)
@@ -944,7 +936,7 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
     thread.start()
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     // no clean to be done, the receiving thread should stop on it own, so just wait for it.
     receivingThreadOption.foreach(_.join())
   }
@@ -959,26 +951,28 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
 
   var receivingThreadOption: Option[Thread] = None
+  @volatile var receivedAllRecords = false
 
-  def onStart() {
+  def onStart(): Unit = {
     val thread = new Thread() {
-      override def run() {
+      override def run(): Unit = {
         logInfo("Receiving started")
         for(i <- 1 to totalRecords) {
           Thread.sleep(1000 / recordsPerSecond)
           store(i)
         }
-        SlowTestReceiver.receivedAllRecords = true
+        receivedAllRecords = true
         logInfo(s"Received all $totalRecords records")
       }
     }
     receivingThreadOption = Some(thread)
     thread.start()
+    SlowTestReceiver.initialized = true
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     // Simulate slow receiver by waiting for all records to be produced
-    while (!SlowTestReceiver.receivedAllRecords) {
+    while (!receivedAllRecords) {
       Thread.sleep(100)
     }
     // no clean to be done, the receiving thread should stop on it own
@@ -986,12 +980,12 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
 }
 
 object SlowTestReceiver {
-  var receivedAllRecords = false
+  var initialized = false
 }
 
 /** Streaming application for testing DStream and RDD creation sites */
 package object testPackage extends Assertions {
-  def test() {
+  def test(): Unit = {
     val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
     val ssc = new StreamingContext(conf, Milliseconds(100))
     try {
@@ -1032,11 +1026,11 @@ package object testPackage extends Assertions {
  * This includes methods to access private methods and fields in StreamingContext and MetricsSystem
  */
 private object StreamingContextSuite extends PrivateMethodTester {
-  private val _sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+  private val _sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
   private def getSources(metricsSystem: MetricsSystem): ArrayBuffer[Source] = {
     metricsSystem.invokePrivate(_sources())
   }
-  private val _streamingSource = PrivateMethod[StreamingSource]('streamingSource)
+  private val _streamingSource = PrivateMethod[StreamingSource](Symbol("streamingSource"))
   private def getStreamingSource(streamingContext: StreamingContext): StreamingSource = {
     streamingContext.invokePrivate(_streamingSource())
   }

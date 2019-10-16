@@ -34,13 +34,13 @@ class ExecutionListenerManagerSuite extends SparkFunSuite with LocalSparkSession
     spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
 
     spark.sql("select 1").collect()
-    spark.sparkContext.listenerBus.waitUntilEmpty(1000)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
     assert(INSTANCE_COUNT.get() === 1)
     assert(CALLBACK_COUNT.get() === 1)
 
     val cloned = spark.cloneSession()
     cloned.sql("select 1").collect()
-    spark.sparkContext.listenerBus.waitUntilEmpty(1000)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
     assert(INSTANCE_COUNT.get() === 1)
     assert(CALLBACK_COUNT.get() === 2)
   }

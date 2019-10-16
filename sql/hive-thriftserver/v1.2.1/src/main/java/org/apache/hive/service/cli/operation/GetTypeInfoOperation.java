@@ -73,7 +73,7 @@ public class GetTypeInfoOperation extends MetadataOperation {
   .addPrimitiveColumn("NUM_PREC_RADIX", Type.INT_TYPE,
       "Usually 2 or 10");
 
-  private final RowSet rowSet;
+  protected final RowSet rowSet;
 
   protected GetTypeInfoOperation(HiveSession parentSession) {
     super(parentSession, OperationType.GET_TYPE_INFO);

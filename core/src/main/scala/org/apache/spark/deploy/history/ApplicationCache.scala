@@ -209,9 +209,8 @@ private[history] class ApplicationCache(
 
   /**
    * Register a filter for the web UI which checks for updates to the given app/attempt
-   * @param ui Spark UI to attach filters to
-   * @param appId application ID
-   * @param attemptId attempt ID
+   * @param key consisted of appId and attemptId
+   * @param loadedUI Spark UI to attach filters to
    */
   private def registerFilter(key: CacheKey, loadedUI: LoadedAppUI): Unit = {
     require(loadedUI != null)
@@ -231,7 +230,7 @@ private[history] class ApplicationCache(
 /**
  * An entry in the cache.
  *
- * @param ui Spark UI
+ * @param loadedUI Spark UI
  * @param completed Flag to indicated that the application has completed (and so
  *                 does not need refreshing).
  */

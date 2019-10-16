@@ -101,7 +101,7 @@ public class ExternalBlockHandlerSuite {
     when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(blockMarkers[1]);
 
     FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
-      "app0", "exec1", 0, new int[] { 0 }, new int[][] {{ 0, 1 }});
+      "app0", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 1 }});
     checkOpenBlocksReceive(fetchShuffleBlocks, blockMarkers);
 
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);

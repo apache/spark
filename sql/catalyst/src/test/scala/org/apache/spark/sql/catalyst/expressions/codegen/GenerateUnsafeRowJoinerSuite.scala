@@ -105,7 +105,8 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
     }
   }
 
-  private def testConcatOnce(numFields1: Int, numFields2: Int, candidateTypes: Seq[DataType]) {
+  private def testConcatOnce(numFields1: Int, numFields2: Int,
+      candidateTypes: Seq[DataType]): Unit = {
     info(s"schema size $numFields1, $numFields2")
     val random = new Random()
     val schema1 = RandomDataGenerator.randomSchema(random, numFields1, candidateTypes)
@@ -129,7 +130,7 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
       schema1: StructType,
       row1: UnsafeRow,
       schema2: StructType,
-      row2: UnsafeRow) {
+      row2: UnsafeRow): Unit = {
 
     // Run the joiner.
     val mergedSchema = StructType(schema1 ++ schema2)

@@ -18,20 +18,21 @@
 package org.apache.spark.deploy.master
 
 import scala.collection.mutable
-import scala.reflect.ClassTag
 
-import org.apache.spark.deploy.StandaloneResourceUtils.MutableResourceInfo
 import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String])
-  extends ResourceAllocator(name, addresses) {
+  extends ResourceAllocator {
+
+  override protected def resourceName = this.name
+  override protected def resourceAddresses = this.addresses
 
   def acquire(amount: Int): ResourceInformation = {
     val allocated = availableAddrs.take(amount)
     acquire(allocated)
-    new ResourceInformation(name, allocated.toArray)
+    new ResourceInformation(resourceName, allocated.toArray)
   }
 }
 
@@ -90,7 +91,7 @@ private[spark] class WorkerInfo(
     init()
   }
 
-  private def init() {
+  private def init(): Unit = {
     executors = new mutable.HashMap
     drivers = new mutable.HashMap
     state = WorkerState.ALIVE
@@ -104,13 +105,13 @@ private[spark] class WorkerInfo(
     host + ":" + port
   }
 
-  def addExecutor(exec: ExecutorDesc) {
+  def addExecutor(exec: ExecutorDesc): Unit = {
     executors(exec.fullId) = exec
     coresUsed += exec.cores
     memoryUsed += exec.memory
   }
 
-  def removeExecutor(exec: ExecutorDesc) {
+  def removeExecutor(exec: ExecutorDesc): Unit = {
     if (executors.contains(exec.fullId)) {
       executors -= exec.fullId
       coresUsed -= exec.cores
@@ -123,13 +124,13 @@ private[spark] class WorkerInfo(
     executors.values.exists(_.application == app)
   }
 
-  def addDriver(driver: DriverInfo) {
+  def addDriver(driver: DriverInfo): Unit = {
     drivers(driver.id) = driver
     memoryUsed += driver.desc.mem
     coresUsed += driver.desc.cores
   }
 
-  def removeDriver(driver: DriverInfo) {
+  def removeDriver(driver: DriverInfo): Unit = {
     drivers -= driver.id
     memoryUsed -= driver.desc.mem
     coresUsed -= driver.desc.cores
