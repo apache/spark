@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.DoubleType
 
 /**
  * Evaluator for multiclass classification, which expects input columns: prediction, label,
- * weight(optional) and probabilityCol(only for log-loss).
+ * weight(optional) and probability(only for logLoss).
  */
 @Since("1.5.0")
 class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") override val uid: String)
@@ -46,7 +46,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
    * `"weightedPrecision"`, `"weightedRecall"`, `"weightedTruePositiveRate"`,
    * `"weightedFalsePositiveRate"`, `"weightedFMeasure"`, `"truePositiveRateByLabel"`,
    * `"falsePositiveRateByLabel"`, `"precisionByLabel"`, `"recallByLabel"`,
-   * `"fMeasureByLabel"`, `"logloss"`)
+   * `"fMeasureByLabel"`, `"logLoss"`)
    *
    * @group param
    */
@@ -116,7 +116,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   @Since("3.0.0")
   final val eps: DoubleParam = new DoubleParam(this, "eps",
-    "Log loss is undefined for p=0 or p=1, so probabilities are clipped to " +
+    "LogLoss is undefined for p=0 or p=1, so probabilities are clipped to " +
       "max(eps, min(1 - eps, p)).",
     ParamValidators.inRange(0, 0.5, false, false))
 
@@ -142,7 +142,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       lit(1.0)
     }
 
-    val rdd = if ($(metricName) == "logloss") {
+    val rdd = if ($(metricName) == "logLoss") {
       // probabilityCol is only needed to compute logloss
       require(isDefined(probabilityCol) && $(probabilityCol).nonEmpty)
       val p = DatasetUtils.columnToVector(dataset, $(probabilityCol))
@@ -172,7 +172,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       case "precisionByLabel" => metrics.precision($(metricLabel))
       case "recallByLabel" => metrics.recall($(metricLabel))
       case "fMeasureByLabel" => metrics.fMeasure($(metricLabel), $(beta))
-      case "logloss" => metrics.logloss($(eps))
+      case "logLoss" => metrics.logLoss($(eps))
     }
   }
 
@@ -193,7 +193,7 @@ object MulticlassClassificationEvaluator
   private val supportedMetricNames = Array("f1", "accuracy", "weightedPrecision", "weightedRecall",
     "weightedTruePositiveRate", "weightedFalsePositiveRate", "weightedFMeasure",
     "truePositiveRateByLabel", "falsePositiveRateByLabel", "precisionByLabel", "recallByLabel",
-    "fMeasureByLabel", "logloss")
+    "fMeasureByLabel", "logLoss")
 
   @Since("1.6.0")
   override def load(path: String): MulticlassClassificationEvaluator = super.load(path)

@@ -77,7 +77,7 @@ class MulticlassClassificationEvaluatorSuite
     }.toDF("prediction", "label", "probability")
 
     val evaluator = new MulticlassClassificationEvaluator()
-      .setMetricName("logloss")
+      .setMetricName("logLoss")
     assert(evaluator.evaluate(df) ~== 0.9682005730687164 absTol 1e-5)
   }
 }

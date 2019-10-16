@@ -244,7 +244,7 @@ class MulticlassMetrics(JavaModelWrapper):
     ...      (1.0, 1.0, 1.0, [0.1, 0.8, 0.1]), (0.0, 2.0, 1.0, [0.9, 0.05, 0.05]),
     ...      (0.0, 0.0, 1.0, [0.8, 0.2, 0.0]), (1.0, 1.0, 1.0, [0.3, 0.65, 0.05])])
     >>> metrics = MulticlassMetrics(predictionAndLabelsWithProbabilities)
-    >>> metrics.logloss()
+    >>> metrics.logLoss()
     0.9682...
 
     .. versionadded:: 1.4.0
@@ -366,11 +366,11 @@ class MulticlassMetrics(JavaModelWrapper):
             return self.call("weightedFMeasure", beta)
 
     @since('3.0.0')
-    def logloss(self, eps=1e-15):
+    def logLoss(self, eps=1e-15):
         """
-        Returns weighted log-loss.
+        Returns weighted logLoss.
         """
-        return self.call("logloss", eps)
+        return self.call("logLoss", eps)
 
 
 class RankingMetrics(JavaModelWrapper):

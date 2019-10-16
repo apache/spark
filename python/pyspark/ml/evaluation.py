@@ -317,7 +317,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                                         HasProbabilityCol, JavaMLReadable, JavaMLWritable):
     """
     Evaluator for Multiclass Classification, which expects input
-    columns: prediction, label, weight(optional) and probabilityCol(only for log-loss).
+    columns: prediction, label, weight(optional) and probabilityCol(only for logLoss).
 
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
@@ -352,7 +352,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     ...     "label", "weight", "probability"])
     >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction",
     ...     probabilityCol="probability")
-    >>> evaluator.setMetricName("logloss")
+    >>> evaluator.setMetricName("logLoss")
     MulticlassClassificationEvaluator...
     >>> evaluator.evaluate(dataset)
     0.9682...
@@ -364,7 +364,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                        "(f1|accuracy|weightedPrecision|weightedRecall|weightedTruePositiveRate|"
                        "weightedFalsePositiveRate|weightedFMeasure|truePositiveRateByLabel|"
                        "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel|"
-                       "logloss)",
+                       "logLoss)",
                        typeConverter=TypeConverters.toString)
     metricLabel = Param(Params._dummy(), "metricLabel",
                         "The class whose metric will be computed in truePositiveRateByLabel|"
@@ -376,7 +376,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                  " Must be > 0. The default value is 1.",
                  typeConverter=TypeConverters.toFloat)
     eps = Param(Params._dummy(), "eps",
-                "Log loss is undefined for p=0 or p=1, so probabilities are clipped to "
+                "LogLoss is undefined for p=0 or p=1, so probabilities are clipped to "
                 "max(eps, min(1 - eps, p)). "
                 "Must be in range (0, 0.5). The default value is 1e-15.",
                 typeConverter=TypeConverters.toFloat)

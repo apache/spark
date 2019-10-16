@@ -23,7 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.DataFrame
 
 /**
  * Evaluator for multiclass classification.
@@ -37,7 +37,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
   /**
    * An auxiliary constructor taking a DataFrame.
    * @param predictionAndLabels a DataFrame with columns: prediction, label, weight(optional)
-   *                            and probability(only for logloss)
+   *                            and probability(only for logLoss)
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
     this(predictionAndLabels.rdd.map { r =>
@@ -241,12 +241,12 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
   lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted
 
   /**
-   * Returns the log-loss, aka logistic loss or cross-entropy loss.
-   * @param eps Log loss is undefined for p=0 or p=1, so probabilities are
+   * Returns the logLoss, aka logistic loss or cross-entropy loss.
+   * @param eps LogLoss is undefined for p=0 or p=1, so probabilities are
    *            clipped to max(eps, min(1 - eps, p)).
    */
   @Since("3.0.0")
-  def logloss(eps: Double = 1e-15): Double = {
+  def logLoss(eps: Double = 1e-15): Double = {
     require(eps > 0 && eps < 0.5, s"eps must be in range (0, 0.5), but got $eps")
     val loss1 = - math.log(eps)
     val loss2 = - math.log(1 - eps)

@@ -206,14 +206,14 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
         (prediction, label, weight, probability)
     }
     val metrics = new MulticlassMetrics(rdd)
-    assert(metrics.logloss() ~== 0.16145936283256573 relTol delta)
+    assert(metrics.logLoss() ~== 0.16145936283256573 relTol delta)
 
     val rdd2 = rdd.map {
       case (prediction: Double, label: Double, weight: Double, probability: Array[Double]) =>
         (prediction, label, 1.0, probability)
     }
     val metrics2 = new MulticlassMetrics(rdd2)
-    assert(metrics2.logloss() ~== 0.21616187468057912 relTol delta)
+    assert(metrics2.logLoss() ~== 0.21616187468057912 relTol delta)
   }
 
   test("MulticlassMetrics supports multi-class log-loss") {
@@ -245,13 +245,13 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
         (prediction, label, weight, probability)
     }
     val metrics = new MulticlassMetrics(rdd)
-    assert(metrics.logloss() ~== 1.3529429766879466 relTol delta)
+    assert(metrics.logLoss() ~== 1.3529429766879466 relTol delta)
 
     val rdd2 = rdd.map {
       case (prediction: Double, label: Double, weight: Double, probability: Array[Double]) =>
         (prediction, label, 1.0, probability)
     }
     val metrics2 = new MulticlassMetrics(rdd2)
-    assert(metrics2.logloss() ~== 0.9682005730687164 relTol delta)
+    assert(metrics2.logLoss() ~== 0.9682005730687164 relTol delta)
   }
 }
