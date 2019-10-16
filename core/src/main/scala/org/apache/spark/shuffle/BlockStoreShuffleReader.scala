@@ -44,7 +44,8 @@ private[spark] class BlockStoreShuffleReader[K, C](
   private def fetchContinuousBlocksInBatch: Boolean = {
     val conf = SparkEnv.get.conf
     val compressed = conf.get(config.SHUFFLE_COMPRESS)
-    val featureEnabled = conf.get(config.SHUFFLE_FETCH_CONTINUOUS_BLOCKS_IN_BATCH)
+    val featureEnabled = TaskContext.get().getLocalProperty(
+      BlockStoreShuffleReader.FETCH_CONTINUOUS_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY) == "true"
     val serializerRelocatable = dep.serializer.supportsRelocationOfSerializedObjects
     val codecConcatenation = if (compressed) {
       CompressionCodec.supportsConcatenationOfSerializedStreams(CompressionCodec.createCodec(conf))
@@ -55,7 +56,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
     val res = featureEnabled && fetchMultiPartitions &&
       serializerRelocatable && (!compressed || codecConcatenation)
     if (featureEnabled && !res) {
-      logWarning("The feature tag of continuous shuffle block fetching is set to true, but " +
+      logDebug("The feature tag of continuous shuffle block fetching is set to true, but " +
         "we can not enable the feature because other conditions are not satisfied. " +
         s"Shuffle compress: $compressed, serializer relocatable: $serializerRelocatable, " +
         s"codec concatenation: $codecConcatenation, fetch multi-partitions: $fetchMultiPartitions")
@@ -145,4 +146,10 @@ private[spark] class BlockStoreShuffleReader[K, C](
         new InterruptibleIterator[Product2[K, C]](context, resultIter)
     }
   }
+}
+
+private[spark] object BlockStoreShuffleReader {
+  // The local property key for continuous shuffle block fetching feature
+  val FETCH_CONTINUOUS_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY =
+    "__fetch_continuous_blocks_in_batch_enabled"
 }
