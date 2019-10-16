@@ -19,7 +19,6 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileOutputStream, IOException}
 import java.net.URI
-import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
 import scala.io.Source
@@ -300,29 +299,45 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
       val conf = getLoggingConf(testDirPath, codecShortName)
       conf.set(EVENT_LOG_ENABLE_ROLLING, true)
-      conf.set(EVENT_LOG_ROLLED_LOG_MAX_FILE_SIZE.key, "1k")
+      conf.set(EVENT_LOG_ROLLING_MAX_FILE_SIZE.key, "10m")
 
       val writer = createWriter(appId, attemptId, testDirPath.toUri, conf,
         SparkHadoopUtil.get.newConfiguration(conf))
 
       writer.start()
 
-      // write log more than 2k (intended to roll over to 3 files)
-      val expectedLines = writeTestEvents(writer, "dummy", 1024 * 2)
+      // write log more than 20m (intended to roll over to 3 files)
+      val dummyStr = "dummy" * 1024
+      val expectedLines = writeTestEvents(writer, dummyStr, 1024 * 1024 * 21)
 
       val logDirPath = getAppEventLogDirPath(testDirPath.toUri, appId, attemptId)
 
       val eventLogFiles = listEventLogFiles(logDirPath)
-      assertEventLogFilesIndex(eventLogFiles, 3, 1024 * 1024)
+      assertEventLogFilesIndex(eventLogFiles, 3, 1024 * 1024 * 10)
 
       writer.stop()
 
       val eventLogFiles2 = listEventLogFiles(logDirPath)
-      assertEventLogFilesIndex(eventLogFiles2, 3, 1024 * 1024)
+      assertEventLogFilesIndex(eventLogFiles2, 3, 1024 * 1024 * 10)
 
       verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri,
         codecShortName, expectedLines)
     }
+  }
+
+  test(s"rolling event log files - the max size of event log file size less than lower limit") {
+    val appId = getUniqueApplicationId
+    val attemptId = None
+
+    val conf = getLoggingConf(testDirPath, None)
+    conf.set(EVENT_LOG_ENABLE_ROLLING, true)
+    conf.set(EVENT_LOG_ROLLING_MAX_FILE_SIZE.key, "9m")
+
+    val e = intercept[IllegalArgumentException] {
+      createWriter(appId, attemptId, testDirPath.toUri, conf,
+        SparkHadoopUtil.get.newConfiguration(conf))
+    }
+    assert(e.getMessage.contains("should be configured to be at least"))
   }
 
   override protected def createWriter(

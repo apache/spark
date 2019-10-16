@@ -234,14 +234,16 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
 
       val conf = getLoggingConf(testDirPath, codecShortName)
       conf.set(EVENT_LOG_ENABLE_ROLLING, true)
-      conf.set(EVENT_LOG_ROLLED_LOG_MAX_FILE_SIZE.key, "1k")
+      conf.set(EVENT_LOG_ROLLING_MAX_FILE_SIZE.key, "10m")
 
       val writer = createWriter(appId, attemptId, testDirPath.toUri, conf,
         SparkHadoopUtil.get.newConfiguration(conf))
 
       writer.start()
 
-      writeTestEvents(writer, "dummy", 1024 * 2)
+      // write log more than 20m (intended to roll over to 3 files)
+      val dummyStr = "dummy" * 1024
+      writeTestEvents(writer, dummyStr, 1024 * 1024 * 20)
 
       val logPathIncompleted = getCurrentLogPath(writer.logPath, isCompleted = false)
       val readerOpt = EventLogFileReader(fileSystem,
