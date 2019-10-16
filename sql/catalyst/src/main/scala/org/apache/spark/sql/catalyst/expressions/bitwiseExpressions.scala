@@ -127,9 +127,6 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
       > SELECT _FUNC_ 0;
        -1
   """)
-/**
- * A function that calculates bitwise not(~) of a number.
- */
 case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
@@ -164,7 +161,7 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
   examples = """
     Examples:
       > SELECT _FUNC_(0);
-       -1
+       0
   """)
 case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
@@ -185,7 +182,6 @@ case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsI
     case ShortType => java.lang.Long.bitCount(input.asInstanceOf[Short])
     case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
     case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
-
   }
 
   override def sql: String = s"bit_count(${child.sql})"
