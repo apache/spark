@@ -70,6 +70,7 @@ public class FetchShuffleBlocks extends BlockTransferMessage {
       .add("shuffleId", shuffleId)
       .add("mapIds", Arrays.toString(mapIds))
       .add("reduceIds", Arrays.deepToString(reduceIds))
+      .add("batchFetchEnabled", batchFetchEnabled)
       .toString();
   }
 

@@ -26,8 +26,7 @@ import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
 /**
- * Fetches and reads the partitions in range [startPartition, endPartition) from a shuffle by
- * requesting them from other nodes' block stores.
+ * Fetches and reads the blocks from a shuffle by requesting them from other nodes' block stores.
  */
 private[spark] class BlockStoreShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
@@ -36,7 +35,8 @@ private[spark] class BlockStoreShuffleReader[K, C](
     readMetrics: ShuffleReadMetricsReporter,
     serializerManager: SerializerManager = SparkEnv.get.serializerManager,
     blockManager: BlockManager = SparkEnv.get.blockManager,
-    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
+    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker,
+    fetchMultiPartitions: Boolean)
   extends ShuffleReader[K, C] with Logging {
 
   private val dep = handle.dependency
@@ -46,10 +46,21 @@ private[spark] class BlockStoreShuffleReader[K, C](
     val compressed = conf.get(config.SHUFFLE_COMPRESS)
     val featureEnabled = conf.get(config.SHUFFLE_FETCH_CONTINUOUS_BLOCKS_IN_BATCH)
     val serializerRelocatable = dep.serializer.supportsRelocationOfSerializedObjects
+    val codecConcatenation = if (compressed) {
+      CompressionCodec.supportsConcatenationOfSerializedStreams(CompressionCodec.createCodec(conf))
+    } else {
+      true
+    }
 
-    featureEnabled && endPartition - startPartition > 1 &&
-      serializerRelocatable && (!compressed || CompressionCodec
-        .supportsConcatenationOfSerializedStreams(CompressionCodec.createCodec(conf)))
+    val res = featureEnabled && fetchMultiPartitions &&
+      serializerRelocatable && (!compressed || codecConcatenation)
+    if (featureEnabled && !res) {
+      logWarning("The feature tag of continuous shuffle block fetching is set to true, but " +
+        "we can not enable the feature because other conditions are not satisfied. " +
+        s"Shuffle compress: $compressed, serializer relocatable: $serializerRelocatable, " +
+        s"codec concatenation: $codecConcatenation, fetch multi-partitions: $fetchMultiPartitions")
+    }
+    res
   }
 
   /** Read the combined key-values for this reduce task */

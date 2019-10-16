@@ -48,10 +48,17 @@ public class ShuffleIndexInformation {
    */
   public int getSize() {
     return size;
-  }core/src/main/scala/org/apache/spark/shuffle/BlockStoreShuffleReader.scala
+  }
 
   /**
    * Get index offset for a particular reducer.
+   */
+  public ShuffleIndexRecord getIndex(int reduceId) {
+    return getIndex(reduceId, reduceId + 1);
+  }
+
+  /**
+   * Get index offset for the reducer range of [startReduceId, endReduceId).
    */
   public ShuffleIndexRecord getIndex(int startReduceId, int endReduceId) {
     long offset = offsets.get(startReduceId);
