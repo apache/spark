@@ -379,7 +379,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                 "Log loss is undefined for p=0 or p=1, so probabilities are clipped to "
                 "max(eps, min(1 - eps, p)). "
                 "Must be in range (0, 0.5). The default value is 1e-15.",
-                 typeConverter=TypeConverters.toFloat)
+                typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
