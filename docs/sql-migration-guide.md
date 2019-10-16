@@ -218,6 +218,32 @@ license: |
 
   - Since Spark 3.0, the `size` function returns `NULL` for the `NULL` input. In Spark version 2.4 and earlier, this function gives `-1` for the same input. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.sizeOfNull` to `true`.
 
+  - Since Spark 3.0, we pad decimal numbers with trailing zeros to the scale of the column for Hive result, for example:
+    <table class="table">
+        <tr>
+          <th>
+            <b>Query</b>
+          </th>
+          <th>
+            <b>Spark 2.4 or Prior or Hive</b>
+          </th>
+          <th>
+            <b>Spark 3.0</b>
+          </th>
+        </tr>
+        <tr>
+          <td>
+            <code>SELECT CAST(1 AS decimal(38, 18));</code>
+          </td>
+          <td>
+            <code>1</code>
+          </td>
+          <td>
+            <code>1.000000000000000000</code>
+          </td>
+        </tr>
+    </table>
+
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was
