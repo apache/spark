@@ -37,7 +37,6 @@ object AdvancedQueriesExample {
     val sc = spark.sparkContext
     sc.setLogLevel("ERROR")
 
-
     val csvConfig = Map("header" -> "true", "delimiter" -> ",", "inferSchema" -> "true")
     val resourcePath = "examples/src/main/resources/movies"
 
@@ -45,7 +44,6 @@ object AdvancedQueriesExample {
     val moviesData = spark.read.options(csvConfig).csv(s"$resourcePath/movies.csv")
     val personsData = spark.read.options(csvConfig).csv(s"$resourcePath/persons.csv")
 
-    // TODO: beautify string column converter & also apply in CompleteGraphAPIExample
     // Load edge dfs
     val actedInDF = spark.read.options(csvConfig).csv(s"$resourcePath/acted_in.csv")
     val stringToArrayColumn = split(regexp_replace(actedInDF.col("roles"), "\\[|\\]|\"", " "), ",")
@@ -60,60 +58,62 @@ object AdvancedQueriesExample {
     val cypherSession = SparkCypherSession.create(spark)
 
     // Create Node- and RelationshipFrames
-    val moviesNodeFrame = NodeDataset.builder(moviesData)
+    val movieNodes: NodeDataset = NodeDataset.builder(moviesData)
       .idColumn("id")
       .labelSet(Array("Movie"))
       .properties(Map("title" -> "title"))
       .build()
-    val personsNodeFrame = NodeDataset.builder(personsData)
+    val personNodes: NodeDataset = NodeDataset.builder(personsData)
       .idColumn("id")
       .labelSet(Array("Person"))
       .properties(Map("name" -> "name"))
       .build()
 
-    val actedInRelationshipFrame = RelationshipDataset.builder(actedInData)
+    val actedInRelationships: RelationshipDataset = RelationshipDataset.builder(actedInData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("ACTED_IN")
       .properties(Map("roles" -> "roles"))
       .build()
-    val directedRelationshipFrame = RelationshipDataset.builder(directedData)
+    val directedRelationships: RelationshipDataset = RelationshipDataset.builder(directedData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("DIRECTED")
       .build()
-    val followsRelationshipFrame  = RelationshipDataset.builder(followsData)
+    val followsRelationships: RelationshipDataset = RelationshipDataset.builder(followsData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("FOLLOWS")
       .build()
-    val producedRelationshipFrame = RelationshipDataset.builder(producedData)
+    val producedRelationships: RelationshipDataset = RelationshipDataset.builder(producedData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("PRODUCED")
       .build()
-    val reviewedRelationshipFrame = RelationshipDataset.builder(reviewedData)
+    val reviewedRelationships: RelationshipDataset = RelationshipDataset.builder(reviewedData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("REVIEWED")
       .properties(Map("rating" -> "rating"))
       .build()
-    val wroteRelationshipFrame    = RelationshipDataset.builder(wroteData)
+    val wroteRelationships: RelationshipDataset = RelationshipDataset.builder(wroteData)
       .idColumn("id")
       .sourceIdColumn("source")
       .targetIdColumn("target")
       .relationshipType("WROTE")
       .build()
-    val relationshipFrames = Array(actedInRelationshipFrame, directedRelationshipFrame, followsRelationshipFrame,
-      producedRelationshipFrame, reviewedRelationshipFrame, wroteRelationshipFrame)
+    val relationships = Array(
+      actedInRelationships, directedRelationships, followsRelationships,
+      producedRelationships, reviewedRelationships, wroteRelationships
+    )
 
     // Create a PropertyGraph
-    val graph: PropertyGraph = cypherSession.createGraph(Array(moviesNodeFrame, personsNodeFrame), relationshipFrames)
+    val graph: PropertyGraph = cypherSession.createGraph(Array(movieNodes, personNodes), relationships)
 
     val bestMovies = graph.cypher(
       """

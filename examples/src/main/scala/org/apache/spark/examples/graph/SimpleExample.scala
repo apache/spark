@@ -19,7 +19,7 @@ package org.apache.spark.examples.graph
 // $example on$
 
 import org.apache.spark.cypher.SparkCypherSession
-import org.apache.spark.graph.api.CypherSession
+import org.apache.spark.graph.api.{CypherResult, CypherSession, PropertyGraph}
 // $example off$
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
@@ -32,29 +32,30 @@ object SimpleExample {
       .appName(s"${this.getClass.getSimpleName}")
       .config("spark.master", "local[*]")
       .getOrCreate()
-    val sc = spark.sparkContext
 
     // Create node df and edge df
-    val nodeData: DataFrame = spark.createDataFrame(Seq((0, "Alice", true), (1, "Bob", true)))
+    val nodeData: DataFrame = spark
+      .createDataFrame(Seq((0, "Alice", true), (1, "Bob", true)))
       .toDF(CypherSession.ID_COLUMN, "name", ":Person")
-    val relationshipData: DataFrame = spark.createDataFrame(Seq((0, 0, 1, true)))
+    val relationshipData: DataFrame = spark
+      .createDataFrame(Seq((0, 0, 1, true)))
       .toDF(CypherSession.ID_COLUMN, CypherSession.SOURCE_ID_COLUMN, CypherSession.TARGET_ID_COLUMN, ":KNOWS")
 
     // Initialise a GraphSession
     val cypherSession = SparkCypherSession.create(spark)
 
     // Create a PropertyGraph
-    val graph = cypherSession.createGraph(nodeData, relationshipData)
+    val graph: PropertyGraph = cypherSession.createGraph(nodeData, relationshipData)
 
     // Run our first query
-    val result = graph.cypher(
+    val result: CypherResult = graph.cypher(
       """
         |MATCH (a:Person)-[r:KNOWS]->(:Person)
-        |RETURN a, r""".stripMargin)
+        |RETURN a, r
+      """.stripMargin)
 
     // Print the result
     result.ds.show()
-
 
     spark.stop()
   }

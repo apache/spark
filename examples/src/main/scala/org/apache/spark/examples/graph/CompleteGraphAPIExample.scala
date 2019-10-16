@@ -41,8 +41,14 @@ object CompleteGraphAPIExample {
     // Load node dfs and edge df
     val moviesData = spark.read.options(csvConfig).csv(s"$resourcePath/movies.csv")
     val personsData = spark.read.options(csvConfig).csv(s"$resourcePath/persons.csv")
-    // TODO: get persons.roles as array type (is not infered correctly)
     val actedInData = spark.read.options(csvConfig).csv(s"$resourcePath/acted_in.csv")
+
+    println("Movies")
+    moviesData.show(2, truncate = false)
+    println("Acted IN")
+    actedInData.show(2, truncate = false)
+
+    StdIn.readLine("Press Enter to continue: ")
 
     // Initialise a GraphSession
     val cypherSession = SparkCypherSession.create(spark)
@@ -65,9 +71,11 @@ object CompleteGraphAPIExample {
       .relationshipType("ACTED_IN")
       .build()
 
-
     // Create a PropertyGraph
-    val graph: PropertyGraph = cypherSession.createGraph(Array(moviesNodeFrame, personsNodeFrame), Array(actedInRelationshipFrame))
+    val graph: PropertyGraph = cypherSession.createGraph(
+      Array(moviesNodeFrame, personsNodeFrame),
+      Array(actedInRelationshipFrame)
+    )
 
     // Get existing node labels
     val labelSet = graph.schema.labels
@@ -84,7 +92,8 @@ object CompleteGraphAPIExample {
     val result = graph.cypher(
       """
         |MATCH (p:Person {name: $name})-[:ACTED_IN]->(movie)
-        |RETURN p.name, movie.title""".stripMargin, parameters)
+        |RETURN p.name, movie.title
+      """.stripMargin, parameters)
     println(s"Movies with ${parameters.get("name")}")
     result.ds.show()
 

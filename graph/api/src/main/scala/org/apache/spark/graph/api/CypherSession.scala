@@ -150,7 +150,9 @@ object CypherSession {
     })
     columns.foreach(typeColumn => {
       if (typeColumn.sliding(prefix.length).count(_ == prefix) != 1) {
-        throw new IllegalArgumentException(s"Type column $typeColumn must contain exactly one type.")
+        throw new IllegalArgumentException(
+          s"Type column $typeColumn must contain exactly one type."
+        )
       }
     })
   }
