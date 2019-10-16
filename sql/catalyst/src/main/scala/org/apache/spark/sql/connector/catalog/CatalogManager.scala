@@ -34,13 +34,11 @@ import org.apache.spark.sql.internal.SQLConf
  * namespace in both `SessionCatalog` and `CatalogManger`, we let `CatalogManager` to set/get
  * current database of `SessionCatalog` when the current catalog is the session catalog.
  */
-// TODO: all commands should look up table from the current catalog. The `SessionCatalog` doesn't
-//       need to track current database at all.
 private[sql]
 class CatalogManager(
     conf: SQLConf,
     defaultSessionCatalog: CatalogPlugin,
-    val v1SessionCatalog: SessionCatalog) extends Logging {
+    v1SessionCatalog: SessionCatalog) extends Logging {
   import CatalogManager.SESSION_CATALOG_NAME
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
@@ -53,7 +51,7 @@ class CatalogManager(
     }
   }
 
-  def defaultCatalog: Option[CatalogPlugin] = {
+  private def defaultCatalog: Option[CatalogPlugin] = {
     conf.defaultV2Catalog.flatMap { catalogName =>
       try {
         Some(catalog(catalogName))
@@ -74,9 +72,16 @@ class CatalogManager(
     }
   }
 
-  // If the V2_SESSION_CATALOG config is specified, we try to instantiate the user-specified v2
-  // session catalog. Otherwise, return the default session catalog.
-  def v2SessionCatalog: CatalogPlugin = {
+  /**
+   * If the V2_SESSION_CATALOG config is specified, we try to instantiate the user-specified v2
+   * session catalog. Otherwise, return the default session catalog.
+   *
+   * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
+   * session catalog is responsible for an identifier, but the source requires the v2 catalog API.
+   * This happens when the source implementation extends the v2 TableProvider API and is not listed
+   * in the fallback configuration, spark.sql.sources.write.useV1SourceList
+   */
+  private def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG).map { customV2SessionCatalog =>
       try {
         catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())

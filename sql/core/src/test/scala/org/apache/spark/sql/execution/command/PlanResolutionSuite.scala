@@ -97,9 +97,6 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.currentCatalog).thenReturn(testCat)
-    when(manager.defaultCatalog).thenReturn(Some(testCat))
-    when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
-    when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
 
@@ -114,9 +111,6 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.currentCatalog).thenReturn(v2SessionCatalog)
-    when(manager.defaultCatalog).thenReturn(None)
-    when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
-    when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
 
@@ -126,7 +120,7 @@ class PlanResolutionSuite extends AnalysisTest {
     } else {
       catalogManagerWithoutDefault
     }
-    val analyzer = new Analyzer(catalogManager, conf)
+    val analyzer = new Analyzer(catalogManager, v1SessionCatalog, conf)
     val rules = Seq(
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),
