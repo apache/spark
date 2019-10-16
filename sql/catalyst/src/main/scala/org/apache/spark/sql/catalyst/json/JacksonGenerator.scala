@@ -184,7 +184,7 @@ private[sql] class JacksonGenerator(
       if (!row.isNullAt(i)) {
         gen.writeFieldName(field.name)
         fieldWriters(i).apply(row, i)
-      } else if (!options.structIngoreNull) {
+      } else if (!options.ignoreNullFields) {
         gen.writeFieldName(field.name)
         gen.writeNull()
       }

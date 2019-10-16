@@ -40,12 +40,12 @@ class JacksonGeneratorSuite extends SparkFunSuite {
   }
 
   test("SPARK-29444: initial with StructType and write out an empty row " +
-      "with structIngoreNull=false") {
+      "with ignoreNullFields=false") {
     val dataType = StructType(StructField("a", IntegerType) :: Nil)
     val input = InternalRow(null)
     val writer = new CharArrayWriter()
     val allowNullOption =
-      new JSONOptions(Map("structIngoreNull" -> "false"), gmtId)
+      new JSONOptions(Map("ignoreNullFields" -> "false"), gmtId)
     val gen = new JacksonGenerator(dataType, writer, allowNullOption)
     gen.write(input)
     gen.flush()
@@ -53,13 +53,13 @@ class JacksonGeneratorSuite extends SparkFunSuite {
   }
 
   test("SPARK-29444: initial with StructType field and write out a row " +
-    "with structIngoreNull=false and struct inner null") {
+    "with ignoreNullFields=false and struct inner null") {
     val fieldType = StructType(StructField("b", IntegerType) :: Nil)
     val dataType = StructType(StructField("a", fieldType) :: Nil)
     val input = InternalRow(InternalRow(null))
     val writer = new CharArrayWriter()
     val allowNullOption =
-      new JSONOptions(Map("structIngoreNull" -> "false"), gmtId)
+      new JSONOptions(Map("ignoreNullFields" -> "false"), gmtId)
     val gen = new JacksonGenerator(dataType, writer, allowNullOption)
     gen.write(input)
     gen.flush()
