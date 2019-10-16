@@ -520,10 +520,10 @@ class InMemoryCatalog(
       db: String,
       table: String,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = synchronized {
-    if (!partitionExists(db, table, spec)) {
-      None
-    } else {
+    if (partitionExists(db, table, spec)) {
       Option(catalog(db).tables(table).partitions(spec))
+    } else {
+      None
     }
   }
 
