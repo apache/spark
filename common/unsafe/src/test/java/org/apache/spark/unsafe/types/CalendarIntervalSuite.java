@@ -221,7 +221,7 @@ public class CalendarIntervalSuite {
     assertEquals(fromSingleUnitString("day", input), i);
 
     input = "1999.38888";
-    i = new CalendarInterval(0, 1999 * MICROS_PER_SECOND + 38);
+    i = new CalendarInterval(0, 0, 1999 * MICROS_PER_SECOND + 38);
     assertEquals(fromSingleUnitString("second", input), i);
 
     try {
@@ -280,23 +280,15 @@ public class CalendarIntervalSuite {
       new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR));
   }
 
-  private static void testSingleUnit(String unit, int number, int months, long microseconds) {
+  private static void testSingleUnit(
+      String unit, int number, int months, int days, long microseconds) {
     Arrays.asList("interval ", "").forEach(prefix -> {
       String input1 = prefix + number + " " + unit;
       String input2 = prefix + number + " " + unit + "s";
-      CalendarInterval result = new CalendarInterval(months, microseconds);
+      CalendarInterval result = new CalendarInterval(months, days, microseconds);
       assertEquals(fromString(input1), result);
       assertEquals(fromString(input2), result);
     });
-  }
-
-  private static void testSingleUnit(
-      String unit, int number, int months, int days, long microseconds) {
-    String input1 = "interval " + number + " " + unit;
-    String input2 = "interval " + number + " " + unit + "s";
-    CalendarInterval result = new CalendarInterval(months, days, microseconds);
-    assertEquals(fromString(input1), result);
-    assertEquals(fromString(input2), result);
   }
 
   @Test

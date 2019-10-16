@@ -141,16 +141,16 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("interval arithmetic") {
-    val interval = Literal(new CalendarInterval(0, CalendarInterval.MICROS_PER_DAY))
+    val interval = Literal(new CalendarInterval(0, 0, CalendarInterval.MICROS_PER_HOUR))
 
     checkSQL(
       TimeAdd('a, interval),
-      "`a` + interval 1 days"
+      "`a` + interval 1 hours"
     )
 
     checkSQL(
       TimeSub('a, interval),
-      "`a` - interval 1 days"
+      "`a` - interval 1 hours"
     )
   }
 }

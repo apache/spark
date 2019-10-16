@@ -221,8 +221,8 @@ struct<54:string,diff:interval>
 -- !query 24 output
 	interval -236720 hours
 	interval 0 microseconds
-	interval 41393 hours 19 minutes 20 seconds
 	interval 3 hours 4 minutes 5 seconds
+	interval 41393 hours 19 minutes 20 seconds
 	interval 953 hours 32 minutes 1 seconds
 
 
@@ -244,8 +244,8 @@ struct<54:string,diff:interval>
 -- !query 26 output
 	interval -236720 hours
 	interval 0 microseconds
-	interval 41393 hours 19 minutes 20 seconds
 	interval 3 hours 4 minutes 5 seconds
+	interval 41393 hours 19 minutes 20 seconds
 	interval 953 hours 32 minutes 1 seconds
 
 
