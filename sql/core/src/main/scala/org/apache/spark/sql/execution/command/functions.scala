@@ -73,11 +73,6 @@ case class CreateFunctionCommand(
       s"is not allowed: '${databaseName.get}'")
   }
 
-  // Redefine a virtual function is not allowed
-  if (FunctionsCommand.virtualOperators.contains(functionName.toLowerCase(Locale.ROOT))) {
-    throw new AnalysisException(s"It's not allowed to redefine virtual function '$functionName'")
-  }
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
@@ -248,7 +243,7 @@ case class ShowFunctionsCommand(
 
 object FunctionsCommand {
   // operators that do not have corresponding functions.
-  // They should be handled in `CreateFunctionCommand`, `DescribeFunctionCommand`,
+  // They should be handled `DescribeFunctionCommand`,
   // `DropFunctionCommand` and `ShowFunctionsCommand`
   val virtualOperators = Seq("!=", "<>", "between", "case")
 }
