@@ -1883,12 +1883,12 @@ class Dataset[T] private[sql](
   *           // Trigger alert
   *         }
   *       }
-  *      }
+  *     }
   *   })
   * }}}
   *
   * @group typedrel
-  * @since DBR-6.0
+  * @since 3.0.0
   */
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan)
