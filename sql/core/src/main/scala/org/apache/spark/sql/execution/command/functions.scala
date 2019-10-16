@@ -171,7 +171,6 @@ case class DropFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-
     if (isTemp) {
       if (databaseName.isDefined) {
         throw new AnalysisException(s"Specifying a database in DROP TEMPORARY FUNCTION " +
