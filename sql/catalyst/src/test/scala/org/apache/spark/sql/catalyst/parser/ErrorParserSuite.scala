@@ -53,11 +53,6 @@ class ErrorParserSuite extends AnalysisTest {
     }
   }
 
-  test("no viable input") {
-    intercept("select ((r + 1) ", 1, 16, 16,
-      "no viable alternative at input", "----------------^^^")
-  }
-
   test("extraneous input") {
     intercept("select 1 1", 1, 9, 10, "extraneous input '1' expecting", "---------^^^")
     intercept("select *\nfrom r as q t", 2, 12, 13, "extraneous input", "------------^^^")
@@ -207,5 +202,16 @@ class ErrorParserSuite extends AnalysisTest {
         |SELECT a
         |SELECT b
       """.stripMargin, 2, 9, 10, msg + " test-table")
+  }
+
+  test("SPARK-27903: unbalanced parentheses") {
+    val extraLeftMsg = "Unbalanced parentheses (extra left)"
+    val extraRightMsg = "Unbalanced parentheses (extra right)"
+
+    intercept("select ((r + 1) ", 1, 7, 7, extraLeftMsg)
+    intercept("select (r + 1)) ", 1, 14, 14, extraRightMsg)
+    intercept("select a * (b + 1)), c from tbl", 1, 18, 18, extraRightMsg)
+    intercept("select (a * (b + 1))), c from tbl", 1, 19, 19, extraRightMsg)
+    intercept("select * from (select 1 AS a from src limit 3))", 1, 46, 46, extraRightMsg)
   }
 }

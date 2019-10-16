@@ -188,7 +188,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * This is only used for Common Table Expressions.
    */
   override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
-    val subQuery: LogicalPlan = plan(ctx.query).optionalMap(ctx.columnAliases)(
+    val subQuery: LogicalPlan = plan(ctx.parenthesizedQuery.query).optionalMap(ctx.columnAliases)(
       (columnAliases, plan) =>
         UnresolvedSubqueryColumnAliases(visitIdentifierList(columnAliases), plan)
     )
@@ -1036,7 +1036,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a logical plan for a sub-query.
    */
   override def visitSubquery(ctx: SubqueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.query)
+    plan(ctx.parenthesizedQuery.query)
   }
 
   /**
@@ -1111,7 +1111,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitAliasedRelation(ctx: AliasedRelationContext): LogicalPlan = withOrigin(ctx) {
-    val relation = plan(ctx.relation).optionalMap(ctx.sample)(withSample)
+    val relation = plan(ctx.relation).optionalMap(
+      ctx.sample)(withSample)
     mayApplyAliasPlan(ctx.tableAlias, relation)
   }
 
@@ -1124,15 +1125,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    val relation = plan(ctx.query).optionalMap(ctx.sample)(withSample)
-    if (ctx.tableAlias.strictIdentifier == null) {
+    val relation = plan(ctx.aliasedQueryRule.parenthesizedQuery.query).optionalMap(
+      ctx.aliasedQueryRule.sample)(withSample)
+    if (ctx.aliasedQueryRule.tableAlias.strictIdentifier == null) {
       // For un-aliased subqueries, use a default alias name that is not likely to conflict with
       // normal subquery names, so that parent operators can only access the columns in subquery by
       // unqualified names. Users can still use this special qualifier to access columns if they
       // know it, but that's not recommended.
       SubqueryAlias("__auto_generated_subquery_name", relation)
     } else {
-      mayApplyAliasPlan(ctx.tableAlias, relation)
+      mayApplyAliasPlan(ctx.aliasedQueryRule.tableAlias, relation)
     }
   }
 
@@ -1301,7 +1303,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a filtering correlated sub-query (EXISTS).
    */
   override def visitExists(ctx: ExistsContext): Expression = {
-    Exists(plan(ctx.query))
+    Exists(plan(ctx.parenthesizedQuery.query))
   }
 
   /**
@@ -1382,8 +1384,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         invertIfNotDefined(And(
           GreaterThanOrEqual(e, expression(ctx.lower)),
           LessThanOrEqual(e, expression(ctx.upper))))
-      case SqlBaseParser.IN if ctx.query != null =>
-        invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
+      case SqlBaseParser.IN if ctx.parenthesizedQuery != null
+          && ctx.parenthesizedQuery.query != null =>
+        invertIfNotDefined(InSubquery(getValueExpressions(e),
+          ListQuery(plan(ctx.parenthesizedQuery.query))))
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
@@ -1736,7 +1740,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitSubqueryExpression(
       ctx: SubqueryExpressionContext): Expression = withOrigin(ctx) {
-    ScalarSubquery(plan(ctx.query))
+    ScalarSubquery(plan(ctx.parenthesizedQuery.query))
   }
 
   /**
@@ -1840,7 +1844,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitParenthesizedExpression(
      ctx: ParenthesizedExpressionContext): Expression = withOrigin(ctx) {
-    expression(ctx.expression)
+    expression(ctx.parenthesizedExprRule.expression)
   }
 
   /**

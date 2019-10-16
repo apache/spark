@@ -306,4 +306,17 @@ case object PostProcessor extends SqlBaseBaseListener {
       token.getStopIndex - stripMargins)
     parent.addChild(new TerminalNodeImpl(f(newToken)))
   }
+
+  def throwUnbalancedParenError(right: Boolean, ctx: ParserRuleContext): Nothing = {
+    val kind = if (right) "right" else "left"
+    throw new ParseException(s"Unbalanced parentheses (extra $kind)", ctx)
+  }
+
+  override def exitDanglingLeftParen(ctx: SqlBaseParser.DanglingLeftParenContext): Unit = {
+    throwUnbalancedParenError(false, ctx)
+  }
+
+  override def exitDanglingRightParen(ctx: SqlBaseParser.DanglingRightParenContext): Unit = {
+    throwUnbalancedParenError(true, ctx)
+  }
 }

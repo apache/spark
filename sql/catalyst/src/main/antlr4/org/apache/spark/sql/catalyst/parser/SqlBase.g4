@@ -356,7 +356,7 @@ ctes
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? '(' query ')'
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? parenthesizedQuery
     ;
 
 tableProvider
@@ -459,7 +459,7 @@ queryPrimary
     | fromStatement                                                         #fromStmt
     | TABLE multipartIdentifier                                             #table
     | inlineTable                                                           #inlineTableDefault1
-    | '(' query ')'                                                         #subquery
+    | parenthesizedQuery                                                    #subquery
     ;
 
 sortItem
@@ -661,11 +661,18 @@ identifierComment
 
 relationPrimary
     : multipartIdentifier sample? tableAlias  #tableName
-    | '(' query ')' sample? tableAlias        #aliasedQuery
+    | danglingLeftParen aliasedQueryRule      #extraLeftAliasedQuery
+    | aliasedQueryRule danglingRightParen     #extraRightAliasedQuery
+    | aliasedQueryRule                        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
     | functionTable                           #tableValuedFunction
     ;
+
+aliasedQueryRule
+    : parenthesizedQuery sample? tableAlias
+    ;
+
 
 inlineTable
     : VALUES expression (',' expression)* tableAlias
@@ -734,7 +741,7 @@ expression
 
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
-    | EXISTS '(' query ')'                                         #exists
+    | EXISTS parenthesizedQuery                                    #exists
     | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
@@ -743,7 +750,7 @@ booleanExpression
 predicate
     : NOT? kind=BETWEEN lower=valueExpression AND upper=valueExpression
     | NOT? kind=IN '(' expression (',' expression)* ')'
-    | NOT? kind=IN '(' query ')'
+    | NOT? kind=IN parenthesizedQuery
     | NOT? kind=RLIKE pattern=valueExpression
     | NOT? kind=LIKE pattern=valueExpression (ESCAPE escapeChar=STRING)?
     | IS NOT? kind=NULL
@@ -775,7 +782,7 @@ primaryExpression
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
-    | '(' query ')'                                                                            #subqueryExpression
+    | parenthesizedQuery                                                                       #subqueryExpression
     | functionName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (FILTER '(' WHERE where=booleanExpression ')')? (OVER windowSpec)?                      #functionCall
     | identifier '->' expression                                                               #lambda
@@ -783,7 +790,9 @@ primaryExpression
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
-    | '(' expression ')'                                                                       #parenthesizedExpression
+    | danglingLeftParen parenthesizedExprRule                                                  #unbalParenExtraLeft
+    | parenthesizedExprRule danglingRightParen                                                 #unbalParenExtraRight
+    | parenthesizedExprRule                                                                    #parenthesizedExpression
     | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
     | (SUBSTR | SUBSTRING) '(' str=valueExpression (FROM | ',') pos=valueExpression
       ((FOR | ',') len=valueExpression)? ')'                                                   #substring
@@ -791,6 +800,22 @@ primaryExpression
        FROM srcStr=valueExpression ')'                                                         #trim
     | OVERLAY '(' input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? ')'                          #overlay
+    ;
+
+parenthesizedQuery
+    : '(' query ')'
+    ;
+
+parenthesizedExprRule
+    : '(' expression ')'
+    ;
+
+danglingLeftParen
+    : '('
+    ;
+
+danglingRightParen
+    : ')'
     ;
 
 constant
