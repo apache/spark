@@ -44,7 +44,7 @@ class AvroOptions(
    * Optional Avro schema (in JSON format) that was used to serialize the data.
    * This should be set if the schema provided for deserialization is compatible
    * with - but not the same as - the one used to originally convert the data to Avro.
-   * See https://github.com/apache/spark/pull/24405 for more details.
+   * See SPARK-27506 for more details.
    */
   val writerSchema: Option[String] = parameters.get("writerSchema")
 
