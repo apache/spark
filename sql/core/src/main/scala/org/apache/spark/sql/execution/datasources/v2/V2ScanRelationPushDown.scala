@@ -21,10 +21,13 @@ import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpressi
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] {
   import DataSourceV2Implicits._
+
+  val PUSHED_FILTERS_TAG = TreeNodeTag[Array[org.apache.spark.sql.sources.Filter]]("pushed_filters")
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
@@ -55,6 +58,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
          """.stripMargin)
 
       val scanRelation = DataSourceV2ScanRelation(relation.table, scan, output)
+      scanRelation.setTagValue(PUSHED_FILTERS_TAG, pushedFilters)
 
       val projectionOverSchema = ProjectionOverSchema(output.toStructType)
       val projectionFunc = (expr: Expression) => expr transformDown {

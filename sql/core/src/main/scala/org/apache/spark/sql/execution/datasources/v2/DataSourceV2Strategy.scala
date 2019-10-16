@@ -19,34 +19,68 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, Strategy}
+import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.sources.TableScan
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-object DataSourceV2Strategy extends Strategy with PredicateHelper {
+class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
 
   import DataSourceV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    // projection and filters were already pushed down in the optimizer.
+    // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
+    // not support columnar, a projection is added to convert the rows to UnsafeRow.
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
-      // projection and filters were already pushed down in the optimizer.
-      // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
-      // not support columnar, a projection is added to convert the rows to UnsafeRow.
-      val batchExec = BatchScanExec(relation.output, relation.scan)
+      val output = relation.output
+      val pushedFilters = relation.getTagValue(V2ScanRelationPushDown.PUSHED_FILTERS_TAG)
+        .getOrElse(Array.empty)
+
+      val (scanExec, needsUnsafeConversion) = relation.scan match {
+        case v1Scan: V1Scan =>
+          val v1Relation = v1Scan.toV1Relation()
+          if (v1Relation.schema != v1Scan.readSchema()) {
+            throw new IllegalArgumentException(
+              "The fallback v1 relation reports inconsistent schema:\n" +
+                "Schema of v2 scan:     " + v1Scan.readSchema() + "\n" +
+                "Schema of v1 relation: " + v1Relation.schema)
+          }
+          val rdd = v1Relation match {
+            case s: TableScan => s.buildScan()
+            case _ =>
+              throw new IllegalArgumentException(
+                "`V1Scan.toV1Relation` must return a `TableScan` instance.")
+          }
+          val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+          val dsScan = RowDataSourceScanExec(
+            output,
+            pushedFilters.toSet,
+            pushedFilters.toSet,
+            unsafeRowRDD,
+            v1Relation,
+            tableIdentifier = None)
+          (dsScan, false)
+        case _ =>
+          val batchScan = BatchScanExec(output, relation.scan)
+          (batchScan, !batchScan.supportsColumnar)
+      }
+
 
       val filterCondition = filters.reduceLeftOption(And)
-      val withFilter = filterCondition.map(FilterExec(_, batchExec)).getOrElse(batchExec)
+      val withFilter = filterCondition.map(FilterExec(_, scanExec)).getOrElse(scanExec)
 
-      val withProjection = if (withFilter.output != project || !batchExec.supportsColumnar) {
+      val withProjection = if (withFilter.output != project || needsUnsafeConversion) {
         ProjectExec(project, withFilter)
       } else {
         withFilter
