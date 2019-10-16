@@ -293,7 +293,7 @@ struct<>
 -- !query 31
 SELECT every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE 1 = 0
 -- !query 31 schema
-struct<every(v):boolean,some(v):boolean,any(v):boolean,bool_and(v):boolean,bool_or(v):boolean>
+struct<every(v):boolean,any(v):boolean,any(v):boolean,every(v):boolean,any(v):boolean>
 -- !query 31 output
 NULL	NULL	NULL	NULL	NULL
 
@@ -301,7 +301,7 @@ NULL	NULL	NULL	NULL	NULL
 -- !query 32
 SELECT every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE k = 4
 -- !query 32 schema
-struct<every(v):boolean,some(v):boolean,any(v):boolean,bool_and(v):boolean,bool_or(v):boolean>
+struct<every(v):boolean,any(v):boolean,any(v):boolean,every(v):boolean,any(v):boolean>
 -- !query 32 output
 NULL	NULL	NULL	NULL	NULL
 
@@ -309,7 +309,7 @@ NULL	NULL	NULL	NULL	NULL
 -- !query 33
 SELECT every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE k = 5
 -- !query 33 schema
-struct<every(v):boolean,some(v):boolean,any(v):boolean,bool_and(v):boolean,bool_or(v):boolean>
+struct<every(v):boolean,any(v):boolean,any(v):boolean,every(v):boolean,any(v):boolean>
 -- !query 33 output
 false	true	true	false	true
 
@@ -317,7 +317,7 @@ false	true	true	false	true
 -- !query 34
 SELECT k, every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg GROUP BY k
 -- !query 34 schema
-struct<k:int,every(v):boolean,some(v):boolean,any(v):boolean,bool_and(v):boolean,bool_or(v):boolean>
+struct<k:int,every(v):boolean,any(v):boolean,any(v):boolean,every(v):boolean,any(v):boolean>
 -- !query 34 output
 1	false	true	true	false	true
 2	true	true	true	true	true
@@ -389,7 +389,7 @@ SELECT some(1S)
 struct<>
 -- !query 40 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'some(1S)' due to data type mismatch: Input to function 'some' should have been boolean, but it's [smallint].; line 1 pos 7
+cannot resolve 'any(1S)' due to data type mismatch: Input to function 'any' should have been boolean, but it's [smallint].; line 1 pos 7
 
 
 -- !query 41
@@ -416,7 +416,7 @@ SELECT bool_and(1.0)
 struct<>
 -- !query 43 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_and(1.0BD)' due to data type mismatch: Input to function 'bool_and' should have been boolean, but it's [decimal(2,1)].; line 1 pos 7
+cannot resolve 'every(1.0BD)' due to data type mismatch: Input to function 'every' should have been boolean, but it's [decimal(2,1)].; line 1 pos 7
 
 
 -- !query 44
@@ -425,7 +425,7 @@ SELECT bool_or(1.0D)
 struct<>
 -- !query 44 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_or(1.0D)' due to data type mismatch: Input to function 'bool_or' should have been boolean, but it's [double].; line 1 pos 7
+cannot resolve 'any(1.0D)' due to data type mismatch: Input to function 'any' should have been boolean, but it's [double].; line 1 pos 7
 
 
 -- !query 45
@@ -448,7 +448,7 @@ struct<k:int,v:boolean,every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST 
 -- !query 46
 SELECT k, v, some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query 46 schema
-struct<k:int,v:boolean,some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query 46 output
 1	false	false
 1	true	true
@@ -482,7 +482,7 @@ struct<k:int,v:boolean,any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RA
 -- !query 48
 SELECT k, v, bool_and(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query 48 schema
-struct<k:int,v:boolean,bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query 48 output
 1	false	false
 1	true	false
@@ -499,7 +499,7 @@ struct<k:int,v:boolean,bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIR
 -- !query 49
 SELECT k, v, bool_or(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query 49 schema
-struct<k:int,v:boolean,bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query 49 output
 1	false	false
 1	true	true
