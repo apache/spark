@@ -345,9 +345,9 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     0.66...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
     0.66...
-    >>> predictionAndLabelsWithProbabilities = sc.parallelize([
+    >>> predictionAndLabelsWithProbabilities = [
     ...      (1.0, 1.0, 1.0, [0.1, 0.8, 0.1]), (0.0, 2.0, 1.0, [0.9, 0.05, 0.05]),
-    ...      (0.0, 0.0, 1.0, [0.8, 0.2, 0.0]), (1.0, 1.0, 1.0, [0.3, 0.65, 0.05])])
+    ...      (0.0, 0.0, 1.0, [0.8, 0.2, 0.0]), (1.0, 1.0, 1.0, [0.3, 0.65, 0.05])]
     >>> dataset = spark.createDataFrame(predictionAndLabelsWithProbabilities, ["prediction",
     ...     "label", "weight", "probability"])
     >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction",
