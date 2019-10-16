@@ -224,6 +224,26 @@ object NonNullLiteral {
 }
 
 /**
+ * Extractor for retrieving Float literals.
+ */
+object FloatLiteral {
+  def unapply(a: Any): Option[Float] = a match {
+    case Literal(a: Float, FloatType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Double literals.
+ */
+object DoubleLiteral {
+  def unapply(a: Any): Option[Double] = a match {
+    case Literal(a: Double, DoubleType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
  * Extractor for retrieving Int literals.
  */
 object IntegerLiteral {
@@ -370,7 +390,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ if v.isNaN => "'NaN'"
         case Float.PositiveInfinity => "'Infinity'"
         case Float.NegativeInfinity => "'-Infinity'"
-        case _ => v
+        case _ => s"'$v'"
       }
       s"CAST($castedValue AS ${FloatType.sql})"
     case (v: Double, DoubleType) =>

@@ -2099,7 +2099,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
  * is set to 0 and the `microseconds` field is initialized to the microsecond difference
  * between the given timestamps.
  */
-case class TimestampDiff(endTimestamp: Expression, startTimestamp: Expression)
+case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def left: Expression = endTimestamp
@@ -2116,3 +2116,25 @@ case class TimestampDiff(endTimestamp: Expression, startTimestamp: Expression)
       s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
   }
 }
+
+/**
+ * Returns the interval from the `left` date (inclusive) to the `right` date (exclusive).
+ */
+case class SubtractDates(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
+  override def dataType: DataType = CalendarIntervalType
+
+  override def nullSafeEval(leftDays: Any, rightDays: Any): Any = {
+    DateTimeUtils.subtractDates(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (leftDays, rightDays) => {
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      s"$dtu.subtractDates($leftDays, $rightDays)"
+    })
+  }
+}
+

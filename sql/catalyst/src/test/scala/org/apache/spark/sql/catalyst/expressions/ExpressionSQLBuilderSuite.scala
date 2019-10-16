@@ -15,19 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.catalyst.expressions
 
 import java.time.LocalDateTime
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{FloatType, TimestampType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
+class ExpressionSQLBuilderSuite extends SparkFunSuite {
+  import org.apache.spark.sql.catalyst.parser.CatalystSqlParser._
+
   protected def checkSQL(e: Expression, expectedSQL: String): Unit = {
     val actualSQL = e.sql
     try {
@@ -42,6 +44,24 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
              |$cause
            """.stripMargin)
     }
+
+    // For literals, check that the SQL evaluates to the same value. Excludes timestamp type which
+    // currently doesn't have a round-trippable format.
+    if (e.isInstanceOf[Literal] && e.dataType != TimestampType) {
+      val roundTrippedValue = parseExpression(actualSQL).eval()
+
+      e match {
+        // NaNs don't compare equal so we need special checks.
+        case FloatLiteral(f) if f.isNaN =>
+          assert(roundTrippedValue.isInstanceOf[Float])
+          assert(roundTrippedValue.asInstanceOf[Float].isNaN)
+        case DoubleLiteral(d) if d.isNaN =>
+          assert(roundTrippedValue.isInstanceOf[Double])
+          assert(roundTrippedValue.asInstanceOf[Double].isNaN)
+        case lit: Literal =>
+          assert(lit.value === roundTrippedValue)
+      }
+    }
   }
 
   test("literal") {
@@ -52,20 +72,24 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
     checkSQL(Literal(2: Short), "2S")
     checkSQL(Literal(4: Int), "4")
     checkSQL(Literal(8: Long), "8L")
-    checkSQL(Literal(1.5F), "CAST(1.5 AS FLOAT)")
+    checkSQL(Literal(1.5F), "CAST('1.5' AS FLOAT)")
     checkSQL(Literal(Float.PositiveInfinity), "CAST('Infinity' AS FLOAT)")
     checkSQL(Literal(Float.NegativeInfinity), "CAST('-Infinity' AS FLOAT)")
     checkSQL(Literal(Float.NaN), "CAST('NaN' AS FLOAT)")
+    checkSQL(Literal(Float.MinPositiveValue), "CAST('1.4E-45' AS FLOAT)")
     checkSQL(Literal(2.5D), "2.5D")
     checkSQL(Literal(Double.PositiveInfinity), "CAST('Infinity' AS DOUBLE)")
     checkSQL(Literal(Double.NegativeInfinity), "CAST('-Infinity' AS DOUBLE)")
     checkSQL(Literal(Double.NaN), "CAST('NaN' AS DOUBLE)")
+    checkSQL(Literal(Double.MinPositiveValue), "4.9E-324D")
     checkSQL(Literal(BigDecimal("10.0000000").underlying), "10.0000000BD")
     checkSQL(Literal(Array(0x01, 0xA3).map(_.toByte)), "X'01A3'")
-    val timestamp = LocalDateTime.of(2016, 1, 1, 0, 0, 0)
+
+    // Nanos are truncated, but micros should not be
+    val timestamp = LocalDateTime.of(2016, 1, 1, 0, 0, 0, 987654321)
       .atZone(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       .toInstant
-    checkSQL(Literal(timestamp), "TIMESTAMP('2016-01-01 00:00:00')")
+    checkSQL(Literal(timestamp), "TIMESTAMP('2016-01-01 00:00:00.987654')")
     // TODO tests for decimals
   }
 
