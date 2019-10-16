@@ -316,7 +316,7 @@ abstract class BaseSessionStateBuilder(
       () => analyzer,
       () => optimizer,
       planner,
-      streamingQueryManager,
+      () => streamingQueryManager,
       listenerManager,
       () => resourceLoader,
       createQueryExecution,

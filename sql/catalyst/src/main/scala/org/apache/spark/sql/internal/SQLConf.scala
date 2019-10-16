@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
@@ -392,6 +393,14 @@ object SQLConf {
       .checkValue(_ > 0, "The maximum shuffle partition number " +
         "must be a positive integer.")
       .createOptional
+
+  val OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED =
+    buildConf("spark.sql.adaptive.optimizedLocalShuffleReader.enabled")
+    .doc("When true and adaptive execution is enabled, this enables the optimization of" +
+      " converting the shuffle reader to local shuffle reader for the shuffle exchange" +
+      " of the broadcast hash join in probe side.")
+    .booleanConf
+    .createWithDefault(true)
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
@@ -1731,7 +1740,7 @@ object SQLConf {
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
-      .createOptional
+      .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
     .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
@@ -1981,11 +1990,14 @@ object SQLConf {
     .stringConf
     .createOptional
 
-  val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
-      .doc("A catalog implementation that will be used in place of the Spark built-in session " +
-        "catalog for v2 operations. The implementation may extend `CatalogExtension` to be " +
-        "passed the Spark built-in session catalog, so that it may delegate calls to the " +
-        "built-in session catalog.")
+  val V2_SESSION_CATALOG_IMPLEMENTATION =
+    buildConf(s"spark.sql.catalog.$SESSION_CATALOG_NAME")
+      .doc("A catalog implementation that will be used as the v2 interface to Spark's built-in " +
+        s"v1 catalog: $SESSION_CATALOG_NAME. This catalog shares its identifier namespace with " +
+        s"the $SESSION_CATALOG_NAME and must be consistent with it; for example, if a table can " +
+        s"be loaded by the $SESSION_CATALOG_NAME, this catalog must also return the table " +
+        s"metadata. To delegate operations to the $SESSION_CATALOG_NAME, implementations can " +
+        "extend 'CatalogExtension'.")
       .stringConf
       .createOptional
 
@@ -2461,8 +2473,8 @@ class SQLConf extends Serializable with Logging {
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
-  def storeAssignmentPolicy: Option[StoreAssignmentPolicy.Value] =
-    getConf(STORE_ASSIGNMENT_POLICY).map(StoreAssignmentPolicy.withName)
+  def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
+    StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 

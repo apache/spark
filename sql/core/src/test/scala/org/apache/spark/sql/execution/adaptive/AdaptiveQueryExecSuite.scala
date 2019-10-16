@@ -77,6 +77,13 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  private def checkNumLocalShuffleReaders(plan: SparkPlan, expected: Int): Unit = {
+    val localReaders = plan.collect {
+      case reader: LocalShuffleReaderExec => reader
+    }
+    assert(localReaders.length === expected)
+  }
+
   test("Change merge join to broadcast join") {
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -87,6 +94,7 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -103,14 +111,7 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
 
-      val shuffleReaders = adaptivePlan.collect {
-        case reader: CoalescedShuffleReaderExec => reader
-      }
-      assert(shuffleReaders.length === 1)
-      // The pre-shuffle partition size is [0, 72, 0, 72, 126]
-      shuffleReaders.foreach { reader =>
-        assert(reader.outputPartitioning.numPartitions === 2)
-      }
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -125,6 +126,7 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -139,6 +141,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -160,6 +164,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
+
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -183,6 +189,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
+
+      checkNumLocalShuffleReaders(adaptivePlan, 0)
     }
   }
 
@@ -206,6 +214,7 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
+      checkNumLocalShuffleReaders(adaptivePlan, 0)
     }
   }
 
@@ -352,6 +361,27 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 2)
       val smj2 = findTopLevelSortMergeJoin(adaptivePlan)
       assert(smj2.size == 2, origPlan.toString)
+    }
+  }
+
+  test("Change merge join to broadcast join without local shuffle reader") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "30") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT * FROM testData t1 join testData2 t2
+          |ON t1.key = t2.a join testData3 t3 on t2.a = t3.a
+          |where t1.value = 1
+        """.stripMargin
+      )
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 2)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      // additional shuffle exchange introduced, so revert OptimizeLocalShuffleReader rule.
+      checkNumLocalShuffleReaders(adaptivePlan, 0)
     }
   }
 

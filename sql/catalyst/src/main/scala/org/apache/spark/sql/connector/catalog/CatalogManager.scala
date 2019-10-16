@@ -82,7 +82,7 @@ class CatalogManager(
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
   private def v2SessionCatalog: CatalogPlugin = {
-    conf.getConf(SQLConf.V2_SESSION_CATALOG).map { customV2SessionCatalog =>
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
       try {
         catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
       } catch {
@@ -151,5 +151,5 @@ class CatalogManager(
 }
 
 private[sql] object CatalogManager {
-  val SESSION_CATALOG_NAME: String = "session"
+  val SESSION_CATALOG_NAME: String = "spark_catalog"
 }

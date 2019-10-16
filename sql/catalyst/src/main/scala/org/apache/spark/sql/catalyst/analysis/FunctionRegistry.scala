@@ -314,8 +314,10 @@ object FunctionRegistry {
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
     expression[EveryAgg]("every"),
+    expression[EveryAgg]("bool_and"),
     expression[AnyAgg]("any"),
-    expression[SomeAgg]("some"),
+    expression[AnyAgg]("some"),
+    expression[AnyAgg]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),

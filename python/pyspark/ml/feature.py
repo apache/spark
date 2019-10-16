@@ -65,9 +65,14 @@ __all__ = ['Binarizer',
 
 
 @inherit_doc
-class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class Binarizer(JavaTransformer, HasThreshold, HasThresholds, HasInputCol, HasOutputCol,
+                HasInputCols, HasOutputCols, JavaMLReadable, JavaMLWritable):
     """
-    Binarize a column of continuous features given a threshold.
+    Binarize a column of continuous features given a threshold. Since 3.0.0,
+    :py:class:`Binarize` can map multiple columns at once by setting the :py:attr:`inputCols`
+    parameter. Note that when both the :py:attr:`inputCol` and :py:attr:`inputCols` parameters
+    are set, an Exception will be thrown. The :py:attr:`threshold` parameter is used for
+    single column usage, and :py:attr:`thresholds` is for multiple columns.
 
     >>> df = spark.createDataFrame([(0.5,)], ["values"])
     >>> binarizer = Binarizer(threshold=1.0, inputCol="values", outputCol="features")
@@ -83,6 +88,17 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
     >>> loadedBinarizer = Binarizer.load(binarizerPath)
     >>> loadedBinarizer.getThreshold() == binarizer.getThreshold()
     True
+    >>> df2 = spark.createDataFrame([(0.5, 0.3)], ["values1", "values2"])
+    >>> binarizer2 = Binarizer(thresholds=[0.0, 1.0])
+    >>> binarizer2.setInputCols(["values1", "values2"]).setOutputCols(["output1", "output2"])
+    Binarizer...
+    >>> binarizer2.transform(df2).show()
+    +-------+-------+-------+-------+
+    |values1|values2|output1|output2|
+    +-------+-------+-------+-------+
+    |    0.5|    0.3|    1.0|    0.0|
+    +-------+-------+-------+-------+
+    ...
 
     .. versionadded:: 1.4.0
     """
@@ -92,11 +108,19 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
                       "The features greater than the threshold will be binarized to 1.0. " +
                       "The features equal to or less than the threshold will be binarized to 0.0",
                       typeConverter=TypeConverters.toFloat)
+    thresholds = Param(Params._dummy(), "thresholds",
+                       "Param for array of threshold used to binarize continuous features. " +
+                       "This is for multiple columns input. If transforming multiple columns " +
+                       "and thresholds is not set, but threshold is set, then threshold will " +
+                       "be applied across all columns.",
+                       typeConverter=TypeConverters.toListFloat)
 
     @keyword_only
-    def __init__(self, threshold=0.0, inputCol=None, outputCol=None):
+    def __init__(self, threshold=0.0, inputCol=None, outputCol=None, thresholds=None,
+                 inputCols=None, outputCols=None):
         """
-        __init__(self, threshold=0.0, inputCol=None, outputCol=None)
+        __init__(self, threshold=0.0, inputCol=None, outputCol=None, thresholds=None, \
+                 inputCols=None, outputCols=None)
         """
         super(Binarizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Binarizer", self.uid)
@@ -106,9 +130,11 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, threshold=0.0, inputCol=None, outputCol=None):
+    def setParams(self, threshold=0.0, inputCol=None, outputCol=None, thresholds=None,
+                  inputCols=None, outputCols=None):
         """
-        setParams(self, threshold=0.0, inputCol=None, outputCol=None)
+        setParams(self, threshold=0.0, inputCol=None, outputCol=None, thresholds=None, \
+                  inputCols=None, outputCols=None)
         Sets params for this Binarizer.
         """
         kwargs = self._input_kwargs
@@ -121,12 +147,12 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         """
         return self._set(threshold=value)
 
-    @since("1.4.0")
-    def getThreshold(self):
+    @since("3.0.0")
+    def setThresholds(self, value):
         """
-        Gets the value of threshold or its default value.
+        Sets the value of :py:attr:`thresholds`.
         """
-        return self.getOrDefault(self.threshold)
+        return self._set(thresholds=value)
 
 
 class _LSHParams(HasInputCol, HasOutputCol):
