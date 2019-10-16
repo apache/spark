@@ -243,11 +243,11 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
 
       for (evalLossType <- GBTRegressor.supportedLossTypes) {
         val evalArr = model3.evaluateEachIteration(validationData.toDF, evalLossType)
-        val lossErr1 = GradientBoostedTrees.computeError(validationData.map(_.toInstance),
+        val lossErr1 = GradientBoostedTrees.computeWeightedError(validationData.map(_.toInstance),
           model1.trees, model1.treeWeights, model1.convertToOldLossType(evalLossType))
-        val lossErr2 = GradientBoostedTrees.computeError(validationData.map(_.toInstance),
+        val lossErr2 = GradientBoostedTrees.computeWeightedError(validationData.map(_.toInstance),
           model2.trees, model2.treeWeights, model2.convertToOldLossType(evalLossType))
-        val lossErr3 = GradientBoostedTrees.computeError(validationData.map(_.toInstance),
+        val lossErr3 = GradientBoostedTrees.computeWeightedError(validationData.map(_.toInstance),
           model3.trees, model3.treeWeights, model3.convertToOldLossType(evalLossType))
 
         assert(evalArr(0) ~== lossErr1 relTol 1E-3)
@@ -278,11 +278,11 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       // early stop
       assert(modelWithValidation.numTrees < numIter)
 
-      val errorWithoutValidation = GradientBoostedTrees.computeError(
+      val errorWithoutValidation = GradientBoostedTrees.computeWeightedError(
         validationData.map(_.toInstance),
         modelWithoutValidation.trees, modelWithoutValidation.treeWeights,
         modelWithoutValidation.getOldLossType)
-      val errorWithValidation = GradientBoostedTrees.computeError(
+      val errorWithValidation = GradientBoostedTrees.computeWeightedError(
         validationData.map(_.toInstance),
         modelWithValidation.trees, modelWithValidation.treeWeights,
         modelWithValidation.getOldLossType)

@@ -169,7 +169,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * @param loss evaluation metric.
    * @return Measure of model error on data
    */
-  def computeError(
+  def computeWeightedError(
       data: RDD[Instance],
       trees: Array[DecisionTreeRegressionModel],
       treeWeights: Array[Double],
@@ -179,7 +179,7 @@ private[spark] object GradientBoostedTrees extends Logging {
         updatePrediction(features, acc, model, weight)
       }
       (loss.computeError(predicted, label) * weight, weight)
-    }.treeReduce{ case ((err1, weight1), (err2, weight2)) =>
+    }.treeReduce { case ((err1, weight1), (err2, weight2)) =>
         (err1 + err2, weight1 + weight2)
     }
     errSum / weightSum
@@ -191,13 +191,13 @@ private[spark] object GradientBoostedTrees extends Logging {
    * @param predError Prediction and error.
    * @return Measure of model error on data
    */
-  def computeError(
+  def computeWeightedError(
       data: RDD[Instance],
       predError: RDD[(Double, Double)]): Double = {
     val (errSum, weightSum) = data.zip(predError).map {
       case (Instance(_, weight, _), (_, err)) =>
         (err * weight, weight)
-    }.treeReduce{ case ((err1, weight1), (err2, weight2)) =>
+    }.treeReduce { case ((err1, weight1), (err2, weight2)) =>
       (err1 + err2, weight1 + weight2)
     }
     errSum / weightSum
@@ -220,24 +220,18 @@ private[spark] object GradientBoostedTrees extends Logging {
       treeWeights: Array[Double],
       loss: OldLoss,
       algo: OldAlgo.Value): Array[Double] = {
-
-    val sc = data.sparkContext
     val remappedData = algo match {
       case OldAlgo.Classification =>
         data.map(x => Instance((x.label * 2) - 1, x.weight, x.features))
       case _ => data
     }
 
-    val broadcastTrees = sc.broadcast(trees)
-    val localTreeWeights = treeWeights
     val numTrees = trees.length
-
     val (errSum, weightSum) = remappedData.mapPartitions { iter =>
-      val trees = broadcastTrees.value
       iter.map { case Instance(label, weight, features) =>
         val pred = Array.tabulate(numTrees) { i =>
           trees(i).rootNode.predictImpl(features)
-            .prediction * localTreeWeights(i)
+            .prediction * treeWeights(i)
         }
         val err = pred.scanLeft(0.0)(_ + _).drop(1)
           .map(p => loss.computeError(p, label) * weight)
@@ -248,7 +242,6 @@ private[spark] object GradientBoostedTrees extends Logging {
       (err1, weight1 + weight2)
     }
 
-    broadcastTrees.destroy()
     errSum.map(_ / weightSum)
   }
 
@@ -298,8 +291,10 @@ private[spark] object GradientBoostedTrees extends Logging {
     }
 
     // Prepare periodic checkpointers
+    // Note: this is checkpointing the unweighted training error
     val predErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
       treeStrategy.getCheckpointInterval, input.sparkContext)
+    // Note: this is checkpointing the unweighted validation error
     val validatePredErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
       treeStrategy.getCheckpointInterval, input.sparkContext)
 
@@ -319,7 +314,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     var predError = computeInitialPredictionAndError(input, firstTreeWeight, firstTreeModel, loss)
     predErrorCheckpointer.update(predError)
-    logDebug("error of gbt = " + computeError(input, predError))
+    logDebug("error of gbt = " + computeWeightedError(input, predError))
 
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
@@ -327,7 +322,11 @@ private[spark] object GradientBoostedTrees extends Logging {
     var validatePredError =
       computeInitialPredictionAndError(validationInput, firstTreeWeight, firstTreeModel, loss)
     if (validate) validatePredErrorCheckpointer.update(validatePredError)
-    var bestValidateError = if (validate) computeError(validationInput, validatePredError) else 0.0
+    var bestValidateError = if (validate) {
+      computeWeightedError(validationInput, validatePredError)
+    } else {
+      0.0
+    }
     var bestM = 1
 
     var m = 1
@@ -356,7 +355,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       predError = updatePredictionError(
         input, predError, baseLearnerWeights(m), baseLearners(m), loss)
       predErrorCheckpointer.update(predError)
-      logDebug("error of gbt = " + computeError(input, predError))
+      logDebug("error of gbt = " + computeWeightedError(input, predError))
 
       if (validate) {
         // Stop training early if
@@ -367,7 +366,7 @@ private[spark] object GradientBoostedTrees extends Logging {
         validatePredError = updatePredictionError(
           validationInput, validatePredError, baseLearnerWeights(m), baseLearners(m), loss)
         validatePredErrorCheckpointer.update(validatePredError)
-        val currentValidateError = computeError(validationInput, validatePredError)
+        val currentValidateError = computeWeightedError(validationInput, validatePredError)
         if (bestValidateError - currentValidateError < validationTol * Math.max(
           currentValidateError, 0.01)) {
           doneLearning = true
