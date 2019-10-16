@@ -20,7 +20,7 @@ package org.apache.spark.shuffle
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.SerializerManager
-import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
+import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -30,34 +30,18 @@ import org.apache.spark.util.collection.ExternalSorter
  */
 private[spark] class BlockStoreShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
-    startPartition: Int,
-    endPartition: Int,
+    blocksByAddress: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])],
     context: TaskContext,
     readMetrics: ShuffleReadMetricsReporter,
     serializerManager: SerializerManager = SparkEnv.get.serializerManager,
     blockManager: BlockManager = SparkEnv.get.blockManager,
-    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker,
-    mapId: Option[Int] = None)
+    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
   extends ShuffleReader[K, C] with Logging {
 
   private val dep = handle.dependency
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val blocksByAddress = mapId match {
-      case (Some(mapId)) => mapOutputTracker.getMapSizesByExecutorId(
-        handle.shuffleId,
-        startPartition,
-        endPartition,
-        mapId)
-      case (None) => mapOutputTracker.getMapSizesByExecutorId(
-        handle.shuffleId,
-        startPartition,
-        endPartition)
-      case (_) => throw new IllegalArgumentException(
-        "mapId should be both set or unset")
-    }
-
     val wrappedStreams = new ShuffleBlockFetcherIterator(
       context,
       blockManager.blockStoreClient,

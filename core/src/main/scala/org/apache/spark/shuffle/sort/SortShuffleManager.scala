@@ -124,30 +124,23 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
+    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(
+      handle.shuffleId, startPartition, endPartition)
     new BlockStoreShuffleReader(
-      handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
-      startPartition, endPartition, context, metrics)
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics)
   }
 
-  /**
-   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive) to
-   * read from mapId.
-   * Called on executors by reduce tasks.
-   */
-  override def getMapReader[K, C](
+  override def getReaderForOneMapper[K, C](
       handle: ShuffleHandle,
+      mapIndex: Int,
       startPartition: Int,
       endPartition: Int,
       context: TaskContext,
-      metrics: ShuffleReadMetricsReporter,
-      mapId: Int): ShuffleReader[K, C] = {
+      metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
+    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByMapIndex(
+      handle.shuffleId, mapIndex, startPartition, endPartition)
     new BlockStoreShuffleReader(
-      handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
-      startPartition,
-      endPartition,
-      context,
-      metrics,
-      mapId = Some(mapId))
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics)
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */

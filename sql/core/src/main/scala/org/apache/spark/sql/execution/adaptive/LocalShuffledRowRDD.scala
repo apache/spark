@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsRe
  * (identified by `preShufflePartitionIndex`) contains a range of post-shuffle partitions
  * (`startPostShufflePartitionIndex` to `endPostShufflePartitionIndex - 1`, inclusive).
  */
-private final class LocalShuffleRowRDDPartition(
+private final class LocalShuffledRowRDDPartition(
     val preShufflePartitionIndex: Int) extends Partition {
   override val index: Int = preShufflePartitionIndex
 }
@@ -63,7 +63,7 @@ class LocalShuffledRowRDD(
   override def getPartitions: Array[Partition] = {
 
     Array.tabulate[Partition](numMappers) { i =>
-      new LocalShuffleRowRDDPartition(i)
+      new LocalShuffledRowRDDPartition(i)
     }
   }
 
@@ -73,20 +73,20 @@ class LocalShuffledRowRDD(
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
-    val localRowPartition = split.asInstanceOf[LocalShuffleRowRDDPartition]
-    val mapId = localRowPartition.index
+    val localRowPartition = split.asInstanceOf[LocalShuffledRowRDDPartition]
+    val mapIndex = localRowPartition.index
     val tempMetrics = context.taskMetrics().createTempShuffleReadMetrics()
     // `SQLShuffleReadMetricsReporter` will update its own metrics for SQL exchange operator,
     // as well as the `tempMetrics` for basic shuffle metrics.
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
 
-    val reader = SparkEnv.get.shuffleManager.getMapReader(
+    val reader = SparkEnv.get.shuffleManager.getReaderForOneMapper(
       dependency.shuffleHandle,
+      mapIndex,
       0,
       numReducers,
       context,
-      sqlMetricsReporter,
-      mapId)
+      sqlMetricsReporter)
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
   }
 
