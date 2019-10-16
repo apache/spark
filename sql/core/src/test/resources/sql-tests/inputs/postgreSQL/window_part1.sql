@@ -134,18 +134,14 @@ SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s
 -- mixture of agg/wfunc in the same window
 SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
 
--- strict aggs
--- Temporarily turns off the ANSI mode because of compatibility issues between
--- keywords related to date (in this case, year)
-SET spark.sql.parser.ansi.enabled=false;
-SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
-SELECT *,
-  CASE WHEN enroll_date < '2008-01-01' THEN 2008 - extract(year FROM enroll_date) END * 500 AS bonus,
-  CASE WHEN
-    AVG(salary) OVER (PARTITION BY depname) < salary
-    THEN 200 END AS depadj FROM empsalary
-  )s;
-SET spark.sql.parser.ansi.enabled=true;
+-- Cannot safely cast 'enroll_date': StringType to DateType;
+-- SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
+-- SELECT *,
+--   CASE WHEN enroll_date < '2008-01-01' THEN 2008 - extract(year FROM enroll_date) END * 500 AS bonus,
+--   CASE WHEN
+--     AVG(salary) OVER (PARTITION BY depname) < salary
+--     THEN 200 END AS depadj FROM empsalary
+--   )s;
 
 create temporary view int4_tbl as select * from values
   (0),
