@@ -355,9 +355,8 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(64 * 1024 * 1024)
 
-
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED =
-    buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch.enabled")
+    buildConf("spark.sql.adaptive.shuffle.fetchShuffleBlocksInBatch.enabled")
       .doc("Whether to fetch the continuous shuffle blocks in batch. Instead of fetching blocks " +
         "one by one, fetching continuous shuffle blocks for the same map task in batch can " +
         "reduce IO and improve performance. Note, this feature also depends on a relocatable " +
@@ -371,7 +370,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
-    buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
+    buildConf("spark.sql.adaptive.shuffle.nonEmptyPartitionRatioForBroadcastJoin")
       .doc("The relation with a non-empty partition ratio lower than this config will not be " +
         "considered as the build side of a broadcast-hash join in adaptive execution regardless " +
         "of its size.")
@@ -380,14 +379,14 @@ object SQLConf {
       .createWithDefault(0.2)
 
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
-    buildConf("spark.sql.adaptive.reducePostShufflePartitions.enabled")
+    buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled")
     .doc("When true and adaptive execution is enabled, this enables reducing the number of " +
       "post-shuffle partitions based on map output statistics.")
     .booleanConf
     .createWithDefault(true)
 
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
-    buildConf("spark.sql.adaptive.minNumPostShufflePartitions")
+    buildConf("spark.sql.adaptive.shuffle.minNumPostShufflePartitions")
       .doc("The advisory minimum number of post-shuffle partitions used in adaptive execution.")
       .intConf
       .checkValue(_ > 0, "The minimum shuffle partition number " +
@@ -395,7 +394,7 @@ object SQLConf {
       .createWithDefault(1)
 
   val SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS =
-    buildConf("spark.sql.adaptive.maxNumPostShufflePartitions")
+    buildConf("spark.sql.adaptive.shuffle.maxNumPostShufflePartitions")
       .doc("The advisory maximum number of post-shuffle partitions used in adaptive execution. " +
         "This is used as the initial number of pre-shuffle partitions. By default it equals to " +
         "spark.sql.shuffle.partitions")
@@ -405,7 +404,7 @@ object SQLConf {
       .createOptional
 
   val OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED =
-    buildConf("spark.sql.adaptive.optimizedLocalShuffleReader.enabled")
+    buildConf("spark.sql.adaptive.shuffle.optimizedLocalShuffleReader.enabled")
     .doc("When true and adaptive execution is enabled, this enables the optimization of" +
       " converting the shuffle reader to local shuffle reader for the shuffle exchange" +
       " of the broadcast hash join in probe side.")
@@ -2148,11 +2147,9 @@ class SQLConf extends Serializable with Logging {
 
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
-  def targetPostShuffleInputSize: Long =
-    getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
+  def targetPostShuffleInputSize: Long = getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
-  def fetchShuffleBlocksInBatchEnabled: Boolean =
-    getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED)
+  def fetchShuffleBlocksInBatchEnabled: Boolean = getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
@@ -2161,8 +2158,7 @@ class SQLConf extends Serializable with Logging {
 
   def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
 
-  def minNumPostShufflePartitions: Int =
-    getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
+  def minNumPostShufflePartitions: Int = getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
 
   def maxNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS).getOrElse(numShufflePartitions)
