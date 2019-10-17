@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.types;
 
 import org.junit.Test;
-import scala.Int;
 
 import java.util.Arrays;
 
@@ -311,12 +310,12 @@ public class CalendarIntervalSuite {
     assertEquals(new CalendarInterval(-123 * 42, -456 * 42), interval.multiply(42));
 
     assertEquals(
-      new CalendarInterval((-123 * 3) / 2, (-456 * 3) / 2),
-      interval.multiply(1.5));
+      fromString("interval 1 month 22 days 12 hours"),
+      fromString("interval 1 month 5 days").multiply(1.5));
 
     try {
       interval = new CalendarInterval(2, 0);
-      interval.multiply(Int.MaxValue());
+      interval.multiply(Integer.MAX_VALUE);
       fail("Expected to throw an exception on months overflow");
     } catch (java.lang.ArithmeticException e) {
       assertTrue(e.getMessage().contains("overflow"));
@@ -328,13 +327,13 @@ public class CalendarIntervalSuite {
       CalendarInterval interval = new CalendarInterval(0, 0);
       assertEquals(interval, interval.divide(10));
 
-      interval = new CalendarInterval(10, 100);
-      assertEquals(new CalendarInterval(3, 33), interval.divide(3));
-      assertEquals(new CalendarInterval(20, 200), interval.divide(0.5));
+      interval = fromString("1 month 30 seconds");
+      assertEquals(fromString("15 days 15 seconds"), interval.divide(2));
+      assertEquals(fromString("2 months 1 minute"), interval.divide(0.5));
 
-      interval = new CalendarInterval(-10, -100);
-      assertEquals(new CalendarInterval(-3, -33), interval.divide(3));
-      assertEquals(new CalendarInterval(-6, -66), interval.divide(1.5));
+      interval = fromString("-1 month -30 seconds");
+      assertEquals(fromString("-15 days -15 seconds"), interval.divide(2));
+      assertEquals(fromString("-2 months -1 minute"), interval.divide(0.5));
 
       try {
         interval = new CalendarInterval(123, 456);

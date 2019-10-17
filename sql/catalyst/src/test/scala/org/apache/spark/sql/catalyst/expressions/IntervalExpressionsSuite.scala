@@ -36,6 +36,9 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       multiply("2 months 4 seconds", -0.5),
       fromString("-1 months -2 seconds"))
+    checkEvaluation(
+      multiply("1 month 2 microseconds", 1.5),
+      fromString("1 months 15 days 3 microseconds"))
     checkEvaluation(multiply("2 months", Int.MaxValue), null)
   }
 
@@ -59,6 +62,9 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       divide("-1 month 2 microseconds", -0.25),
       fromString("4 months -8 microseconds"))
+    checkEvaluation(
+      divide("1 month 3 microsecond", 1.5),
+      fromString("20 days 2 microseconds"))
     checkEvaluation(divide("2 months", 0), null)
   }
 }
