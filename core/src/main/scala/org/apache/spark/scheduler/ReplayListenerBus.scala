@@ -48,12 +48,14 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
    * @param eventsFilter Filter function to select JSON event strings in the log data stream that
    *        should be parsed and replayed. When not specified, all event strings in the log data
    *        are parsed and replayed.
+   * @return whether it succeeds to replay the log file entirely without error including
+   *         HaltReplayException. false otherwise.
    */
   def replay(
       logData: InputStream,
       sourceName: String,
       maybeTruncated: Boolean = false,
-      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
+      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Boolean = {
     val lines = Source.fromInputStream(logData)(Codec.UTF8).getLines()
     replay(lines, sourceName, maybeTruncated, eventsFilter)
   }
@@ -66,7 +68,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       lines: Iterator[String],
       sourceName: String,
       maybeTruncated: Boolean,
-      eventsFilter: ReplayEventsFilter): Unit = {
+      eventsFilter: ReplayEventsFilter): Boolean = {
     var currentLine: String = null
     var lineNumber: Int = 0
     val unrecognizedEvents = new scala.collection.mutable.HashSet[String]
@@ -114,15 +116,18 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
             }
         }
       }
+      true
     } catch {
       case e: HaltReplayException =>
         // Just stop replay.
-      case _: EOFException if maybeTruncated =>
+        false
+      case _: EOFException if maybeTruncated => false
       case ioe: IOException =>
         throw ioe
       case e: Exception =>
         logError(s"Exception parsing Spark event log: $sourceName", e)
         logError(s"Malformed line #$lineNumber: $currentLine\n")
+        false
     }
   }
 
