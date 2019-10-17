@@ -554,7 +554,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   }
 
   test("replace column using withColumns") {
-    val df2 = sparkContext.parallelize(Array((1, 2), (2, 3), (3, 4))).toDF("x", "y")
+    val df2 = sparkContext.parallelize(Seq((1, 2), (2, 3), (3, 4))).toDF("x", "y")
     val df3 = df2.withColumns(Seq("x", "newCol1", "newCol2"),
       Seq(df2("x") + 1, df2("y"), df2("y") + 1))
     checkAnswer(
@@ -2202,5 +2202,13 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         """== Physical Plan ==
           |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
     }
+  }
+
+  test("SPARK-29442 Set `default` mode should override the existing mode") {
+    val df = Seq(Tuple1(1)).toDF()
+    val writer = df.write.mode("overwrite").mode("default")
+    val modeField = classOf[DataFrameWriter[Tuple1[Int]]].getDeclaredField("mode")
+    modeField.setAccessible(true)
+    assert(SaveMode.ErrorIfExists === modeField.get(writer).asInstanceOf[SaveMode])
   }
 }

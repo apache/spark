@@ -74,12 +74,13 @@ class KafkaDataConsumerSuite
     super.beforeEach()
 
     fetchedDataPool = {
-      val fetchedDataPoolMethod = PrivateMethod[FetchedDataPool]('fetchedDataPool)
+      val fetchedDataPoolMethod = PrivateMethod[FetchedDataPool](Symbol("fetchedDataPool"))
       KafkaDataConsumer.invokePrivate(fetchedDataPoolMethod())
     }
 
     consumerPool = {
-      val internalKafkaConsumerPoolMethod = PrivateMethod[InternalKafkaConsumerPool]('consumerPool)
+      val internalKafkaConsumerPoolMethod =
+        PrivateMethod[InternalKafkaConsumerPool](Symbol("consumerPool"))
       KafkaDataConsumer.invokePrivate(internalKafkaConsumerPoolMethod())
     }
 
@@ -89,7 +90,7 @@ class KafkaDataConsumerSuite
 
   test("SPARK-19886: Report error cause correctly in reportDataLoss") {
     val cause = new Exception("D'oh!")
-    val reportDataLoss = PrivateMethod[Unit]('reportDataLoss0)
+    val reportDataLoss = PrivateMethod[Unit](Symbol("reportDataLoss0"))
     val e = intercept[IllegalStateException] {
       KafkaDataConsumer.invokePrivate(reportDataLoss(true, "message", cause))
     }

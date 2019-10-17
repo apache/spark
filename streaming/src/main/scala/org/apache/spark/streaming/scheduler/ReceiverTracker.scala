@@ -613,7 +613,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       ssc.sparkContext.setCallSite(Option(ssc.getStartSite()).getOrElse(Utils.getCallSite()))
 
       val future = ssc.sparkContext.submitJob[Receiver[_], Unit, Unit](
-        receiverRDD, startReceiverFunc, Seq(0), (_, _) => Unit, ())
+        receiverRDD, startReceiverFunc, Seq(0), (_, _) => (), ())
       // We will keep restarting the receiver job until ReceiverTracker is stopped
       future.onComplete {
         case Success(_) =>

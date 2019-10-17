@@ -649,12 +649,13 @@ private[sql] class TestHiveSessionStateBuilder(
 }
 
 private[hive] object HiveTestJars {
-  private val repository = SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.defaultValueString
+  private val repository = SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.defaultValueString.split(",")(0)
   private val hiveTestJarsDir = Utils.createTempDir()
 
   def getHiveContribJar(version: String = HiveUtils.builtinHiveVersion): File =
     getJarFromUrl(s"${repository}org/apache/hive/hive-contrib/" +
       s"$version/hive-contrib-$version.jar")
+
   def getHiveHcatalogCoreJar(version: String = HiveUtils.builtinHiveVersion): File =
     getJarFromUrl(s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
       s"$version/hive-hcatalog-core-$version.jar")

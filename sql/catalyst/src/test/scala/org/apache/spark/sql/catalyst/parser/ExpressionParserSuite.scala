@@ -432,8 +432,9 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("timestamP '2016-33-11 20:54:00.000'")
 
     // Interval.
-    assertEqual("InterVal 'interval 3 month 1 hour'",
-      Literal(CalendarInterval.fromString("interval 3 month 1 hour")))
+    val intervalLiteral = Literal(CalendarInterval.fromString("interval 3 month 1 hour"))
+    assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
+    assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
     assertEqual("Interval 'interval 3 monthsss 1 hoursss'",
       Literal(null, CalendarIntervalType))
 

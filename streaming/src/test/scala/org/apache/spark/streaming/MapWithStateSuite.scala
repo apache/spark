@@ -436,7 +436,8 @@ class MapWithStateSuite extends SparkFunSuite with LocalStreamingContext
   }
 
   test("mapWithState - checkpoint durations") {
-    val privateMethod = PrivateMethod[InternalMapWithStateDStream[_, _, _, _]]('internalStream)
+    val privateMethod =
+      PrivateMethod[InternalMapWithStateDStream[_, _, _, _]](Symbol("internalStream"))
 
     def testCheckpointDuration(
         batchDuration: Duration,

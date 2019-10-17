@@ -93,8 +93,7 @@ statement
         SET locationSpec                                               #setDatabaseLocation
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
-    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
-    | SHOW NAMESPACES ((FROM | IN) multipartIdentifier)?
+    | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
@@ -910,7 +909,7 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// When `spark.sql.parser.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
+// When `spark.sql.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
 //     function, alias, etc.
@@ -1107,9 +1106,9 @@ ansiNonReserved
     | YEARS
     ;
 
-// When `spark.sql.parser.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
+// When `spark.sql.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
 // - Non-reserved keywords:
-//     Same definition as the one when `spark.sql.parser.ansi.enabled=true`.
+//     Same definition as the one when `spark.sql.ansi.enabled=true`.
 // - Strict-non-reserved keywords:
 //     A strict version of non-reserved keywords, which can not be used as table alias.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.

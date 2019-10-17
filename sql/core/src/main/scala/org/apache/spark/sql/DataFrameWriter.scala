@@ -26,8 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
-import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsWrite, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -87,10 +86,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case "overwrite" => mode(SaveMode.Overwrite)
       case "append" => mode(SaveMode.Append)
       case "ignore" => mode(SaveMode.Ignore)
-      case "error" | "errorifexists" => mode(SaveMode.ErrorIfExists)
-      case "default" => this
-      case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
-        "Accepted save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists'.")
+      case "error" | "errorifexists" | "default" => mode(SaveMode.ErrorIfExists)
+      case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. Accepted " +
+        "save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists', 'default'.")
     }
   }
 

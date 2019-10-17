@@ -23,8 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -844,6 +843,25 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
+  }
+
+  test("show databases: basic") {
+    comparePlans(
+      parsePlan("SHOW DATABASES"),
+      ShowNamespacesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW DATABASES LIKE 'defau*'"),
+      ShowNamespacesStatement(None, Some("defau*")))
+  }
+
+  test("show databases: FROM/IN operator is not allowed") {
+    def verify(sql: String): Unit = {
+      val exc = intercept[ParseException] { parsePlan(sql) }
+      assert(exc.getMessage.contains("FROM/IN operator is not allowed in SHOW DATABASES"))
+    }
+
+    verify("SHOW DATABASES FROM testcat.ns1.ns2")
+    verify("SHOW DATABASES IN testcat.ns1.ns2")
   }
 
   test("show namespaces") {

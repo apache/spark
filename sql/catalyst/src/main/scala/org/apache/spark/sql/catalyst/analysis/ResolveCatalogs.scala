@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange}
 
@@ -96,8 +95,12 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val aliased = tableAlias.map(SubqueryAlias(_, r)).getOrElse(r)
       DeleteFromTable(aliased, condition)
 
-    case update: UpdateTableStatement =>
-      throw new AnalysisException(s"UPDATE TABLE is not supported temporarily.")
+    case u @ UpdateTableStatement(
+         nameParts @ CatalogAndIdentifierParts(catalog, tableName), _, _, _, _) =>
+      val r = UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier)
+      val aliased = u.tableAlias.map(SubqueryAlias(_, r)).getOrElse(r)
+      val columns = u.columns.map(UnresolvedAttribute(_))
+      UpdateTable(aliased, columns, u.values, u.condition)
 
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
@@ -165,13 +168,11 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${viewName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
-    case ShowNamespacesStatement(Some(NonSessionCatalog(catalog, nameParts)), pattern) =>
-      val namespace = if (nameParts.isEmpty) None else Some(nameParts)
+    case ShowNamespacesStatement(Some(CatalogAndNamespace(catalog, namespace)), pattern) =>
       ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)
 
-    // TODO (SPARK-29014): we should check if the current catalog is not session catalog here.
-    case ShowNamespacesStatement(None, pattern) if defaultCatalog.isDefined =>
-      ShowNamespaces(defaultCatalog.get.asNamespaceCatalog, None, pattern)
+    case ShowNamespacesStatement(None, pattern) =>
+      ShowNamespaces(currentCatalog.asNamespaceCatalog, None, pattern)
 
     case ShowTablesStatement(Some(NonSessionCatalog(catalog, nameParts)), pattern) =>
       ShowTables(catalog.asTableCatalog, nameParts, pattern)
@@ -184,9 +185,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       if (isNamespaceSet) {
         SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
       } else {
-        val CurrentCatalogAndNamespace(catalog, namespace) = nameParts
-        val ns = if (namespace.isEmpty) { None } else { Some(namespace) }
-        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), ns)
+        val CatalogAndNamespace(catalog, namespace) = nameParts
+        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
       }
   }
 

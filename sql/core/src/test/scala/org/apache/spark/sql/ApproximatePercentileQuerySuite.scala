@@ -124,20 +124,24 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
   test("percentile_approx, with different accuracies") {
 
     withTempView(table) {
-      (1 to 1000).toDF("col").createOrReplaceTempView(table)
+      val tableCount = 1000
+      (1 to tableCount).toDF("col").createOrReplaceTempView(table)
 
       // With different accuracies
-      val expectedPercentile = 250D
       val accuracies = Array(1, 10, 100, 1000, 10000)
-      val errors = accuracies.map { accuracy =>
-        val df = spark.sql(s"SELECT percentile_approx(col, 0.25, $accuracy) FROM $table")
-        val approximatePercentile = df.collect().head.getInt(0)
-        val error = Math.abs(approximatePercentile - expectedPercentile)
-        error
+      val expectedPercentiles = Array(100D, 200D, 250D, 314D, 777D)
+      for (accuracy <- accuracies) {
+        for (expectedPercentile <- expectedPercentiles) {
+          val df = spark.sql(
+            s"""SELECT
+               | percentile_approx(col, $expectedPercentile/$tableCount, $accuracy)
+               |FROM $table
+             """.stripMargin)
+          val approximatePercentile = df.collect().head.getInt(0)
+          val error = Math.abs(approximatePercentile - expectedPercentile)
+          assert(error <= math.floor(tableCount.toDouble / accuracy.toDouble))
+        }
       }
-
-      // The larger accuracy value we use, the smaller error we get
-      assert(errors.sorted.sameElements(errors.reverse))
     }
   }
 

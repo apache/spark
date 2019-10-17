@@ -22,8 +22,9 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -67,7 +68,8 @@ class DataSourceV2SQLSuite
     spark.conf.set(
         "spark.sql.catalog.testcat_atomic", classOf[StagingInMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set(V2_SESSION_CATALOG.key, classOf[InMemoryTableSessionCatalog].getName)
+    spark.conf.set(
+      V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -149,7 +151,7 @@ class DataSourceV2SQLSuite
   test("CreateTable: use v2 plan and session catalog when provider is v2") {
     spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING $v2Source")
 
-    val testCatalog = catalog("session").asTableCatalog
+    val testCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "default.table_name")
@@ -408,7 +410,7 @@ class DataSourceV2SQLSuite
   test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {
     spark.sql(s"CREATE TABLE table_name USING $v2Source AS SELECT id, data FROM source")
 
-    val testCatalog = catalog("session").asTableCatalog
+    val testCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "default.table_name")
@@ -510,7 +512,7 @@ class DataSourceV2SQLSuite
 
   test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
     // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG.key)
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -520,7 +522,7 @@ class DataSourceV2SQLSuite
     checkAnswer(sql(s"TABLE default.table_name"), spark.table("source"))
     // The fact that the following line doesn't throw an exception means, the session catalog
     // can load the table.
-    val t = catalog("session").asTableCatalog
+    val t = catalog(SESSION_CATALOG_NAME).asTableCatalog
       .loadTable(Identifier.of(Array.empty, "table_name"))
     assert(t.isInstanceOf[V1Table], "V1 table wasn't returned as an unresolved table")
   }
@@ -781,12 +783,8 @@ class DataSourceV2SQLSuite
   test("ShowNamespaces: default v2 catalog is not set") {
     spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
 
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES")
-    }
-
-    assert(exception.getMessage.contains(
-      "SHOW NAMESPACES is not supported with the session catalog"))
+    // The current catalog is resolved to a v2 session catalog.
+    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
   }
 
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
@@ -814,13 +812,28 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("does not support namespaces"))
   }
 
-  test("ShowNamespaces: session catalog") {
+  test("ShowNamespaces: session catalog is used and namespace doesn't exist") {
     val exception = intercept[AnalysisException] {
       sql("SHOW NAMESPACES in dummy")
     }
 
-    assert(exception.getMessage.contains(
-      "SHOW NAMESPACES is not supported with the session catalog"))
+    assert(exception.getMessage.contains("Namespace 'dummy' not found"))
+  }
+
+  test("ShowNamespaces: change catalog and namespace with USE statements") {
+    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
+
+    // Initially, the current catalog is a v2 session catalog.
+    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
+
+    // Update the current catalog to 'testcat'.
+    sql("USE testcat")
+    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
+
+    // Update the current namespace to 'ns1'.
+    sql("USE ns1")
+    // 'SHOW NAMESPACES' is not affected by the current namespace and lists root namespaces.
+    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
   }
 
   private def testShowNamespaces(
@@ -837,7 +850,7 @@ class DataSourceV2SQLSuite
     val catalogManager = spark.sessionState.catalogManager
 
     // Validate the initial current catalog and namespace.
-    assert(catalogManager.currentCatalog.name() == "session")
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
     assert(catalogManager.currentNamespace === Array("default"))
 
     // The following implicitly creates namespaces.
@@ -874,7 +887,7 @@ class DataSourceV2SQLSuite
 
   test("Use: set v2 catalog as a current catalog") {
     val catalogManager = spark.sessionState.catalogManager
-    assert(catalogManager.currentCatalog.name() == "session")
+    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
 
     sql("USE testcat")
     assert(catalogManager.currentCatalog.name() == "testcat")
@@ -896,7 +909,7 @@ class DataSourceV2SQLSuite
 
   test("tableCreation: partition column case insensitive resolution") {
     val testCatalog = catalog("testcat").asTableCatalog
-    val sessionCatalog = catalog("session").asTableCatalog
+    val sessionCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog
 
     def checkPartitioning(cat: TableCatalog, partition: String): Unit = {
       val table = cat.loadTable(Identifier.of(Array.empty, "tbl"))
@@ -938,19 +951,19 @@ class DataSourceV2SQLSuite
     val errorMsg = "Found duplicate column(s) in the table definition of `t`"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
@@ -962,19 +975,19 @@ class DataSourceV2SQLSuite
     val errorMsg = "Found duplicate column(s) in the table definition of `t`"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
@@ -984,20 +997,20 @@ class DataSourceV2SQLSuite
 
   test("tableCreation: bucket column names not in table definition") {
     val errorMsg = "Couldn't find column c in"
-    testCreateAnalysisError(
+    assertAnalysisError(
       s"CREATE TABLE tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
     )
-    testCreateAnalysisError(
+    assertAnalysisError(
       s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
     )
-    testCreateAnalysisError(
+    assertAnalysisError(
       s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source " +
         "CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
     )
-    testCreateAnalysisError(
+    assertAnalysisError(
       s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source " +
         "CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
@@ -1008,19 +1021,19 @@ class DataSourceV2SQLSuite
     val errorMsg = "Found duplicate column(s) in the partitioning"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
@@ -1032,22 +1045,22 @@ class DataSourceV2SQLSuite
     val errorMsg = "Found duplicate column(s) in the bucket definition"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
         )
-        testCreateAnalysisError(
+        assertAnalysisError(
           s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
@@ -1120,7 +1133,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("Update: basic - update all") {
+  test("UPDATE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(
@@ -1129,23 +1142,29 @@ class DataSourceV2SQLSuite
            |USING foo
            |PARTITIONED BY (id, p)
          """.stripMargin)
-      sql(
-        s"""
-           |INSERT INTO $t
-           |VALUES (1L, 'Herry', 26, 1),
-           |(2L, 'Jack', 31, 2),
-           |(3L, 'Lisa', 28, 3),
-           |(4L, 'Frank', 33, 3)
-         """.stripMargin)
+
+      // UPDATE non-existing table
+      assertAnalysisError(
+        "UPDATE dummy SET name='abc'",
+        "Table not found")
+
+      // UPDATE non-existing column
+      assertAnalysisError(
+        s"UPDATE $t SET dummy='abc'",
+        "cannot resolve")
+      assertAnalysisError(
+        s"UPDATE $t SET name='abc' WHERE dummy=1",
+        "cannot resolve")
+
+      // UPDATE is not implemented yet.
+      val e = intercept[UnsupportedOperationException] {
+        sql(s"UPDATE $t SET name='Robert', age=32 WHERE p=1")
+      }
+      assert(e.getMessage.contains("UPDATE TABLE is not supported temporarily"))
     }
-    val errMsg = "UPDATE TABLE is not supported temporarily"
-    testCreateAnalysisError(
-      s"UPDATE $t SET name='Robert', age=32",
-      errMsg
-    )
   }
 
-  private def testCreateAnalysisError(sqlStatement: String, expectedError: String): Unit = {
+  private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
     val errMsg = intercept[AnalysisException] {
       sql(sqlStatement)
     }.getMessage

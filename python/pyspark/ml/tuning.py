@@ -122,7 +122,7 @@ class ParamGridBuilder(object):
         return [dict(to_key_value_pairs(keys, prod)) for prod in itertools.product(*grid_values)]
 
 
-class ValidatorParams(HasSeed):
+class _ValidatorParams(HasSeed):
     """
     Common params for TrainValidationSplit and CrossValidator.
     """
@@ -133,36 +133,21 @@ class ValidatorParams(HasSeed):
         Params._dummy(), "evaluator",
         "evaluator used to select hyper-parameters that maximize the validator metric")
 
-    def setEstimator(self, value):
-        """
-        Sets the value of :py:attr:`estimator`.
-        """
-        return self._set(estimator=value)
-
+    @since("2.0.0")
     def getEstimator(self):
         """
         Gets the value of estimator or its default value.
         """
         return self.getOrDefault(self.estimator)
 
-    def setEstimatorParamMaps(self, value):
-        """
-        Sets the value of :py:attr:`estimatorParamMaps`.
-        """
-        return self._set(estimatorParamMaps=value)
-
+    @since("2.0.0")
     def getEstimatorParamMaps(self):
         """
         Gets the value of estimatorParamMaps or its default value.
         """
         return self.getOrDefault(self.estimatorParamMaps)
 
-    def setEvaluator(self, value):
-        """
-        Sets the value of :py:attr:`evaluator`.
-        """
-        return self._set(evaluator=value)
-
+    @since("2.0.0")
     def getEvaluator(self):
         """
         Gets the value of evaluator or its default value.
@@ -199,7 +184,25 @@ class ValidatorParams(HasSeed):
         return java_estimator, java_epms, java_evaluator
 
 
-class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubModels,
+class _CrossValidatorParams(_ValidatorParams):
+    """
+    Params for :py:class:`CrossValidator` and :py:class:`CrossValidatorModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
+                     typeConverter=TypeConverters.toInt)
+
+    @since("1.4.0")
+    def getNumFolds(self):
+        """
+        Gets the value of numFolds or its default value.
+        """
+        return self.getOrDefault(self.numFolds)
+
+
+class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollectSubModels,
                      MLReadable, MLWritable):
     """
 
@@ -227,6 +230,8 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
     >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
     ...     parallelism=2)
     >>> cvModel = cv.fit(dataset)
+    >>> cvModel.getNumFolds()
+    3
     >>> cvModel.avgMetrics[0]
     0.5
     >>> import tempfile
@@ -241,9 +246,6 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
 
     .. versionadded:: 1.4.0
     """
-
-    numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
-                     typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
@@ -269,19 +271,33 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    @since("2.0.0")
+    def setEstimator(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        return self._set(estimator=value)
+
+    @since("2.0.0")
+    def setEstimatorParamMaps(self, value):
+        """
+        Sets the value of :py:attr:`estimatorParamMaps`.
+        """
+        return self._set(estimatorParamMaps=value)
+
+    @since("2.0.0")
+    def setEvaluator(self, value):
+        """
+        Sets the value of :py:attr:`evaluator`.
+        """
+        return self._set(evaluator=value)
+
     @since("1.4.0")
     def setNumFolds(self, value):
         """
         Sets the value of :py:attr:`numFolds`.
         """
         return self._set(numFolds=value)
-
-    @since("1.4.0")
-    def getNumFolds(self):
-        """
-        Gets the value of numFolds or its default value.
-        """
-        return self.getOrDefault(self.numFolds)
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
@@ -395,7 +411,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
         return _java_obj
 
 
-class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
+class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     """
 
     CrossValidatorModel contains the model with the highest average cross-validation
@@ -414,6 +430,27 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         self.avgMetrics = avgMetrics
         #: sub model list from cross validation
         self.subModels = subModels
+
+    @since("2.0.0")
+    def setEstimator(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        return self._set(estimator=value)
+
+    @since("2.0.0")
+    def setEstimatorParamMaps(self, value):
+        """
+        Sets the value of :py:attr:`estimatorParamMaps`.
+        """
+        return self._set(estimatorParamMaps=value)
+
+    @since("2.0.0")
+    def setEvaluator(self, value):
+        """
+        Sets the value of :py:attr:`evaluator`.
+        """
+        return self._set(evaluator=value)
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -494,8 +531,26 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         return _java_obj
 
 
-class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollectSubModels,
-                           MLReadable, MLWritable):
+class _TrainValidationSplitParams(_ValidatorParams):
+    """
+    Params for :py:class:`TrainValidationSplit` and :py:class:`TrainValidationSplitModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    trainRatio = Param(Params._dummy(), "trainRatio", "Param for ratio between train and\
+     validation data. Must be between 0 and 1.", typeConverter=TypeConverters.toFloat)
+
+    @since("2.0.0")
+    def getTrainRatio(self):
+        """
+        Gets the value of trainRatio or its default value.
+        """
+        return self.getOrDefault(self.trainRatio)
+
+
+class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelism,
+                           HasCollectSubModels, MLReadable, MLWritable):
     """
     Validation for hyper-parameter tuning. Randomly splits the input dataset into train and
     validation sets, and uses evaluation metric on the validation set to select the best model.
@@ -518,6 +573,8 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
     >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
     ...     parallelism=1, seed=42)
     >>> tvsModel = tvs.fit(dataset)
+    >>> tvsModel.getTrainRatio()
+    0.75
     >>> tvsModel.validationMetrics
     [0.5, ...
     >>> import tempfile
@@ -532,9 +589,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
 
     .. versionadded:: 2.0.0
     """
-
-    trainRatio = Param(Params._dummy(), "trainRatio", "Param for ratio between train and\
-     validation data. Must be between 0 and 1.", typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
@@ -561,18 +615,32 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
         return self._set(**kwargs)
 
     @since("2.0.0")
+    def setEstimator(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        return self._set(estimator=value)
+
+    @since("2.0.0")
+    def setEstimatorParamMaps(self, value):
+        """
+        Sets the value of :py:attr:`estimatorParamMaps`.
+        """
+        return self._set(estimatorParamMaps=value)
+
+    @since("2.0.0")
+    def setEvaluator(self, value):
+        """
+        Sets the value of :py:attr:`evaluator`.
+        """
+        return self._set(evaluator=value)
+
+    @since("2.0.0")
     def setTrainRatio(self, value):
         """
         Sets the value of :py:attr:`trainRatio`.
         """
         return self._set(trainRatio=value)
-
-    @since("2.0.0")
-    def getTrainRatio(self):
-        """
-        Gets the value of trainRatio or its default value.
-        """
-        return self.getOrDefault(self.trainRatio)
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
@@ -680,7 +748,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
         return _java_obj
 
 
-class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
+class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, MLWritable):
     """
     Model from train validation split.
 
@@ -695,6 +763,27 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         self.validationMetrics = validationMetrics
         #: sub models from train validation split
         self.subModels = subModels
+
+    @since("2.0.0")
+    def setEstimator(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        return self._set(estimator=value)
+
+    @since("2.0.0")
+    def setEstimatorParamMaps(self, value):
+        """
+        Sets the value of :py:attr:`estimatorParamMaps`.
+        """
+        return self._set(estimatorParamMaps=value)
+
+    @since("2.0.0")
+    def setEvaluator(self, value):
+        """
+        Sets the value of :py:attr:`evaluator`.
+        """
+        return self._set(evaluator=value)
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)

@@ -908,7 +908,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
            """.stripMargin
           )
 
-          val errorMsg = "data type mismatch: cannot cast decimal(2,1) to binary"
+          val errorMsg = "Cannot safely cast 'f0': DecimalType(2,1) to BinaryType"
 
           if (isPartitioned) {
             val insertStmt = s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1.3"

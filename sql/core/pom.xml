@@ -38,7 +38,6 @@
     <dependency>
       <groupId>com.univocity</groupId>
       <artifactId>univocity-parsers</artifactId>
-      <version>2.7.3</version>
       <type>jar</type>
     </dependency>
     <dependency>
