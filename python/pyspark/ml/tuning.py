@@ -22,7 +22,7 @@ import numpy as np
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
-from pyspark.ml.common import _py2java
+from pyspark.ml.common import _py2java, _java2py
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
 from pyspark.ml.util import *
@@ -228,6 +228,11 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
     >>> cvModel = cv.fit(dataset)
     >>> cvModel.avgMetrics[0]
     0.5
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model_path = path + "/model"
+    >>> cvModel.write().save(model_path)
+    >>> CrossValidatorModel.read().load(model_path)
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
 
@@ -446,8 +451,9 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         Given a Java CrossValidatorModel, create and return a Python wrapper of it.
         Used for ML persistence.
         """
+        sc = SparkContext._active_spark_context
         bestModel = JavaParams._from_java(java_stage.bestModel())
-        avgMetrics = java_stage.avgMetrics()
+        avgMetrics = _java2py(sc, java_stage.avgMetrics())
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
 
         py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics).setEstimator(estimator)
@@ -468,7 +474,6 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         :return: Java object equivalent to this instance.
         """
 
-        sc = SparkContext._active_spark_context
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel",
                                              self.uid,
                                              self.bestModel._to_java(),
@@ -720,11 +725,14 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         """
 
         # Load information from java_stage to the instance.
+        sc = SparkContext._active_spark_context
         bestModel = JavaParams._from_java(java_stage.bestModel())
+        validationMetrics = _java2py(sc, java_stage.validationMetrics())
         estimator, epms, evaluator = super(TrainValidationSplitModel,
                                            cls)._from_java_impl(java_stage)
         # Create a new instance of this stage.
-        py_stage = cls(bestModel=bestModel).setEstimator(estimator)
+        py_stage = cls(bestModel=bestModel,
+                       validationMetrics=validationMetrics).setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
 
         if java_stage.hasSubModels():
@@ -740,13 +748,11 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         :return: Java object equivalent to this instance.
         """
 
-        sc = SparkContext._active_spark_context
-        # TODO: persst validation metrics as well
         _java_obj = JavaParams._new_java_obj(
             "org.apache.spark.ml.tuning.TrainValidationSplitModel",
             self.uid,
             self.bestModel._to_java(),
-            _py2java(sc, []))
+            self.validationMetrics)
         estimator, epms, evaluator = super(TrainValidationSplitModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)
