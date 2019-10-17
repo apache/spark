@@ -25,6 +25,7 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
@@ -77,7 +78,8 @@ private[sql] class JSONOptions(
   val dropFieldIfAllNull = parameters.get("dropFieldIfAllNull").map(_.toBoolean).getOrElse(false)
 
   // Whether to ignore null fields during json generating
-  val ignoreNullFields = parameters.getOrElse("ignoreNullFields", "true").toBoolean
+  val ignoreNullFields = parameters.getOrElse("ignoreNullFields",
+    SQLConf.get.jsonGeneratorIgnoreNullFields).toBoolean
 
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)

@@ -3170,12 +3170,11 @@ class Dataset[T] private[sql](
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
     val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
-    val ignoreNullFields = sparkSession.sessionState.conf.jsonGeneratorIgnoreNullFields.toString
     mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JacksonGenerator(rowSchema, writer,
-        new JSONOptions(Map("ignoreNullFields" -> ignoreNullFields), sessionLocalTimeZone))
+        new JSONOptions(Map.empty[String, String], sessionLocalTimeZone))
 
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext

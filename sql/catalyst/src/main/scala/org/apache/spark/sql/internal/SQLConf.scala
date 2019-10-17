@@ -1154,10 +1154,10 @@ object SQLConf {
     .createWithDefault(true)
 
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
-    buildConf("spark.sql.jsonGenerator.nullFields.ignore")
+    buildConf("spark.sql.jsonGenerator.ignoreNullFields")
       .doc("If false, JacksonGenerator will generate null for null fields in Struct.")
-      .booleanConf
-      .createWithDefault(true)
+      .stringConf
+      .createWithDefault("true")
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -2329,7 +2329,7 @@ class SQLConf extends Serializable with Logging {
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
-  def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
+  def jsonGeneratorIgnoreNullFields: String = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
