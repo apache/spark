@@ -1769,7 +1769,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
-          Literal(CalendarInterval.fromString(value), CalendarIntervalType)
+          val interval = try {
+            CalendarInterval.fromCaseInsensitiveString(value)
+          } catch {
+            case e: IllegalArgumentException =>
+              val ex = new ParseException(e.getMessage, ctx)
+              ex.setStackTrace(e.getStackTrace)
+              throw ex
+          }
+          Literal(interval, CalendarIntervalType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))

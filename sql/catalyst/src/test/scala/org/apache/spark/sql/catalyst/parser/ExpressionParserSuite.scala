@@ -435,8 +435,7 @@ class ExpressionParserSuite extends AnalysisTest {
     val intervalLiteral = Literal(CalendarInterval.fromString("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
-    assertEqual("Interval 'interval 3 monthsss 1 hoursss'",
-      Literal(null, CalendarIntervalType))
+    intercept("Interval 'interval 3 monthsss 1 hoursss'")
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
