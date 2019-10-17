@@ -215,30 +215,32 @@ case class InsertIntoHiveTable(
           // exists or not before copying files. So if users drop the partition, and then do
           // insert overwrite to the same partition, the partition will have both old and new
           // data. We construct partition path. If the path exists, we delete it manually.
-          val dpMap = writtenParts.flatMap(_.split("/")).map { part =>
-            val splitPart = part.split("=")
-            assert(splitPart.size == 2, s"Invalid written partition path: $part")
-            ExternalCatalogUtils.unescapePathName(splitPart(0)) ->
-              ExternalCatalogUtils.unescapePathName(splitPart(1))
-          }.toMap
+          writtenParts.foreach { partPath =>
+            val dpMap = partPath.split("/").map { part =>
+              val splitPart = part.split("=")
+              assert(splitPart.size == 2, s"Invalid written partition path: $part")
+              ExternalCatalogUtils.unescapePathName(splitPart(0)) ->
+                ExternalCatalogUtils.unescapePathName(splitPart(1))
+            }.toMap
 
-          val updatedPartitionSpec = partition.map {
-            case (key, Some(value)) => key -> value
-            case (key, None) if dpMap.contains(key) => key -> dpMap(key)
-            case (key, _) =>
-              throw new SparkException(s"Dynamic partition key $key is not among " +
-                "written partition paths.")
-          }
-          val partitionColumnNames = table.partitionColumnNames
-          val tablePath = new Path(table.location)
-          val partitionPath = ExternalCatalogUtils.generatePartitionPath(updatedPartitionSpec,
-            partitionColumnNames, tablePath)
+            val updatedPartitionSpec = partition.map {
+              case (key, Some(value)) => key -> value
+              case (key, None) if dpMap.contains(key) => key -> dpMap(key)
+              case (key, _) =>
+                throw new SparkException(s"Dynamic partition key $key is not among " +
+                  "written partition paths.")
+            }
+            val partitionColumnNames = table.partitionColumnNames
+            val tablePath = new Path(table.location)
+            val partitionPath = ExternalCatalogUtils.generatePartitionPath(updatedPartitionSpec,
+              partitionColumnNames, tablePath)
 
-          val fs = partitionPath.getFileSystem(hadoopConf)
-          if (fs.exists(partitionPath)) {
-            if (!fs.delete(partitionPath, true)) {
-              throw new RuntimeException(
-                "Cannot remove partition directory '" + partitionPath.toString)
+            val fs = partitionPath.getFileSystem(hadoopConf)
+            if (fs.exists(partitionPath)) {
+              if (!fs.delete(partitionPath, true)) {
+                throw new RuntimeException(
+                  "Cannot remove partition directory '" + partitionPath.toString)
+              }
             }
           }
         }

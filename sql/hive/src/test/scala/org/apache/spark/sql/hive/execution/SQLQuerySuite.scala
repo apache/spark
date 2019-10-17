@@ -2441,11 +2441,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
           withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet,
             "hive.exec.dynamic.partition.mode" -> "nonstrict") {
-            sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 1, 'n2'")
-            sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='n2')")
-            sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 2, 'n2'")
+            sql(
+              """
+                |INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2)
+                |SELECT * FROM VALUES (1, 'n2'), (2, 'n3') AS t(id, p2)
+              """.stripMargin)
             checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n2' ORDER BY id"),
+              Array(Row(1)))
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n3' ORDER BY id"),
               Array(Row(2)))
+
+            sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 4, 'n4'")
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n4' ORDER BY id"),
+              Array(Row(4)))
+
+            sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='n2')")
+            sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='n3')")
+
+            sql(
+              """
+                |INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2)
+                |SELECT * FROM VALUES (5, 'n2'), (6, 'n3') AS t(id, p2)
+              """.stripMargin)
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n2' ORDER BY id"),
+              Array(Row(5)))
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n3' ORDER BY id"),
+              Array(Row(6)))
+            // Partition not overwritten should not be deleted.
+            checkAnswer(sql("SELECT id FROM test WHERE p1 = 'n1' and p2 = 'n4' ORDER BY id"),
+              Array(Row(4)))
           }
         }
       }
@@ -2457,6 +2481,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
           withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertParquet,
             "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+            // We should unescape partition value.
             sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 1, '/'")
             sql("ALTER TABLE test DROP PARTITION(p1='n1',p2='/')")
             sql("INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2) SELECT 2, '/'")
