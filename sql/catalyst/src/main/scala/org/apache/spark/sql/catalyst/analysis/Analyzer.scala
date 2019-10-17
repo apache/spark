@@ -54,20 +54,13 @@ object SimpleAnalyzer extends Analyzer(
   new CatalogManager(
     new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true),
     FakeV2SessionCatalog,
-    SimpleAnalyzerHelper.createFakeV1SessionCatalog),
-  SimpleAnalyzerHelper.createFakeV1SessionCatalog,
-  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
-
-object SimpleAnalyzerHelper {
-  def createFakeV1SessionCatalog: SessionCatalog = {
     new SessionCatalog(
       new InMemoryCatalog,
       EmptyFunctionRegistry,
       new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
-    }
-  }
-}
+    }),
+  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
 object FakeV2SessionCatalog extends TableCatalog {
   private def fail() = throw new UnsupportedOperationException
@@ -128,10 +121,11 @@ object AnalysisContext {
  */
 class Analyzer(
     override val catalogManager: CatalogManager,
-    v1SessionCatalog: SessionCatalog,
     conf: SQLConf,
     maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
+
+  private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)
 
@@ -139,13 +133,12 @@ class Analyzer(
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(
       new CatalogManager(conf, FakeV2SessionCatalog, catalog),
-      catalog,
       conf,
       conf.optimizerMaxIterations)
   }
 
-  def this(catalogManager: CatalogManager, catalog: SessionCatalog, conf: SQLConf) = {
-    this(catalogManager, catalog, conf, conf.optimizerMaxIterations)
+  def this(catalogManager: CatalogManager, conf: SQLConf) = {
+    this(catalogManager, conf, conf.optimizerMaxIterations)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {

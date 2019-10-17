@@ -120,7 +120,7 @@ class PlanResolutionSuite extends AnalysisTest {
     } else {
       catalogManagerWithoutDefault
     }
-    val analyzer = new Analyzer(catalogManager, v1SessionCatalog, conf)
+    val analyzer = new Analyzer(catalogManager, conf)
     val rules = Seq(
       new ResolveCatalogs(catalogManager),
       new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v")),

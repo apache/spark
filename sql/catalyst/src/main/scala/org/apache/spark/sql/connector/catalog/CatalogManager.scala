@@ -34,11 +34,12 @@ import org.apache.spark.sql.internal.SQLConf
  * namespace in both `SessionCatalog` and `CatalogManger`, we let `CatalogManager` to set/get
  * current database of `SessionCatalog` when the current catalog is the session catalog.
  */
-private[sql]
+// TODO: all commands should look up table from the current catalog. The `SessionCatalog` doesn't
+//       need to track current database at all.
 class CatalogManager(
     conf: SQLConf,
     defaultSessionCatalog: CatalogPlugin,
-    v1SessionCatalog: SessionCatalog) extends Logging {
+    val v1SessionCatalog: SessionCatalog) extends Logging {
   import CatalogManager.SESSION_CATALOG_NAME
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
