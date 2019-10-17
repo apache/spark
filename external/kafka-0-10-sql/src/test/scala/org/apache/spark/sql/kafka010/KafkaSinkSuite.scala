@@ -33,7 +33,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BinaryType, DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, StringType, StructField, StructType}
 
 abstract class KafkaSinkSuiteBase extends QueryTest with SharedSparkSession with KafkaTest {
   protected var testUtils: KafkaTestUtils = _
@@ -293,6 +293,21 @@ class KafkaSinkStreamingSuite extends KafkaSinkSuiteBase with StreamTest {
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       "key attribute type must be a string or binary"))
+
+    try {
+      ex = intercept[StreamingQueryException] {
+        /* partition field wrong type */
+        writer = createKafkaWriter(input.toDF())(
+          withSelectExpr = s"'$topic' as topic", "value", "value as partition"
+        )
+        input.addData("1", "2", "3", "4", "5")
+        writer.processAllAvailable()
+      }
+    } finally {
+      writer.stop()
+    }
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
+      "partition attribute type must be an int"))
   }
 
   test("streaming - write to non-existing topic") {
@@ -369,31 +384,32 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
 
   test("batch - write to kafka") {
     val topic = newTopic()
-    testUtils.createTopic(topic)
+    testUtils.createTopic(topic, 4)
     val data = Seq(
       Row(topic, "1", Seq(
         Row("a", "b".getBytes(UTF_8))
-      )),
+      ), 0),
       Row(topic, "2", Seq(
         Row("c", "d".getBytes(UTF_8)),
         Row("e", "f".getBytes(UTF_8))
-      )),
+      ), 1),
       Row(topic, "3", Seq(
         Row("g", "h".getBytes(UTF_8)),
         Row("g", "i".getBytes(UTF_8))
-      )),
-      Row(topic, "4", null),
+      ), 2),
+      Row(topic, "4", null, 3),
       Row(topic, "5", Seq(
         Row("j", "k".getBytes(UTF_8)),
         Row("j", "l".getBytes(UTF_8)),
         Row("m", "n".getBytes(UTF_8))
-      ))
+      ), 0)
     )
 
     val df = spark.createDataFrame(
       spark.sparkContext.parallelize(data),
       StructType(Seq(StructField("topic", StringType), StructField("value", StringType),
-        StructField("headers", KafkaRecordToRowConverter.headersType)))
+        StructField("headers", KafkaRecordToRowConverter.headersType),
+        StructField("partition", IntegerType)))
     )
 
     df.write
@@ -404,18 +420,83 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
       .save()
     checkAnswer(
       createKafkaReader(topic, includeHeaders = true).selectExpr(
-        "CAST(value as STRING) value", "headers"
+        "CAST(value as STRING) value", "headers", "partition"
       ),
-      Row("1", Seq(Row("a", "b".getBytes(UTF_8)))) ::
-        Row("2", Seq(Row("c", "d".getBytes(UTF_8)), Row("e", "f".getBytes(UTF_8)))) ::
-        Row("3", Seq(Row("g", "h".getBytes(UTF_8)), Row("g", "i".getBytes(UTF_8)))) ::
-        Row("4", null) ::
+      Row("1", Seq(Row("a", "b".getBytes(UTF_8))), 0) ::
+        Row("2", Seq(Row("c", "d".getBytes(UTF_8)), Row("e", "f".getBytes(UTF_8))), 1) ::
+        Row("3", Seq(Row("g", "h".getBytes(UTF_8)), Row("g", "i".getBytes(UTF_8))), 2) ::
+        Row("4", null, 3) ::
         Row("5", Seq(
           Row("j", "k".getBytes(UTF_8)),
           Row("j", "l".getBytes(UTF_8)),
-          Row("m", "n".getBytes(UTF_8)))) ::
+          Row("m", "n".getBytes(UTF_8))), 0) ::
         Nil
     )
+  }
+
+  test("batch - partition column vs default Kafka partitioner") {
+    val fixedKey = "fixed_key"
+    val nrPartitions = 100
+
+    // default Kafka partitioner calculate partition deterministically based on the key
+    val keyTopic = newTopic()
+    testUtils.createTopic(keyTopic, nrPartitions)
+
+    Seq((keyTopic, fixedKey, "value"))
+      .toDF("topic", "key", "value")
+      .write
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("topic", keyTopic)
+      .mode("append")
+      .save()
+
+    // getting the partition corresponding to the fixed key
+    val keyPartition = createKafkaReader(keyTopic).select("partition")
+      .map(_.getInt(0)).collect().toList.head
+
+    val topic = newTopic()
+    testUtils.createTopic(topic, nrPartitions)
+
+    // even values use default kafka partitioner, odd use 'n'
+    val df = (0 until 100)
+      .map(n => (topic, fixedKey, s"$n", if (n % 2 == 0) None else Some(n)))
+      .toDF("topic", "key", "value", "partition")
+
+    df.write
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("topic", topic)
+      .mode("append")
+      .save()
+
+    checkAnswer(
+      createKafkaReader(topic).selectExpr(
+        "CAST(key as STRING) key", "CAST(value as STRING) value", "partition"
+      ),
+      (0 until 100)
+        .map(n => (fixedKey, s"$n", if (n % 2 == 0) keyPartition else n))
+        .toDF("key", "value", "partition")
+    )
+  }
+
+  test("batch - non-existing partitions trigger standard Kafka exception") {
+    val topic = newTopic()
+    val producerTimeout = "1000"
+    testUtils.createTopic(topic, 4)
+    val df = Seq((topic, "1", 5)).toDF("topic", "value", "partition")
+
+    val ex = intercept[SparkException] {
+      df.write
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.max.block.ms", producerTimeout) // default (60000 ms) would be too slow
+        .option("topic", topic)
+        .mode("append")
+        .save()
+    }
+    TestUtils.assertExceptionMsg(
+      ex, s"Topic $topic not present in metadata after $producerTimeout ms")
   }
 
   test("batch - null topic field value, and no topic option") {
