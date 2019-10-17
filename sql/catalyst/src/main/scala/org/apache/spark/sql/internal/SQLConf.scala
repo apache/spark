@@ -349,6 +349,11 @@ object SQLConf {
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
     .createWithDefault(200)
 
+  val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
+    .doc("When true, enable adaptive query execution.")
+    .booleanConf
+    .createWithDefault(false)
+
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
       .doc("The target post-shuffle input size in bytes of a task.")
@@ -363,20 +368,6 @@ object SQLConf {
         "serializer and the concatenation support codec in use.")
       .booleanConf
       .createWithDefault(true)
-
-  val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
-    .doc("When true, enable adaptive query execution.")
-    .booleanConf
-    .createWithDefault(false)
-
-  val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
-    buildConf("spark.sql.adaptive.shuffle.nonEmptyPartitionRatioForBroadcastJoin")
-      .doc("The relation with a non-empty partition ratio lower than this config will not be " +
-        "considered as the build side of a broadcast-hash join in adaptive execution regardless " +
-        "of its size.")
-      .doubleConf
-      .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
-      .createWithDefault(0.2)
 
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.shuffle.reducePostShufflePartitions.enabled")
@@ -410,6 +401,15 @@ object SQLConf {
       " of the broadcast hash join in probe side.")
     .booleanConf
     .createWithDefault(true)
+
+  val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
+    buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
+      .doc("The relation with a non-empty partition ratio lower than this config will not be " +
+        "considered as the build side of a broadcast-hash join in adaptive execution regardless " +
+        "of its size.")
+      .doubleConf
+      .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
+      .createWithDefault(0.2)
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
@@ -2147,11 +2147,11 @@ class SQLConf extends Serializable with Logging {
 
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
+  def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
   def targetPostShuffleInputSize: Long = getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   def fetchShuffleBlocksInBatchEnabled: Boolean = getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED)
-
-  def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
   def nonEmptyPartitionRatioForBroadcastJoin: Double =
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
