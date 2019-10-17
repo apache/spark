@@ -453,6 +453,83 @@ class SparkSubmitSuite
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
   }
 
+  /**
+   * Helper function for testing main class resolution on remote JAR files.
+   *
+   * @param tempDir path to temporary directory
+   * @param deployMode either "client" or "cluster"
+   * @return a pair of the JAR file and the 4-tuple returned by
+   *         [[org.apache.spark.deploy.SparkSubmit#prepareSubmitEnvironment]]
+   */
+  private def testResolveMainClassOnRemoteJar(
+    tempDir: File,
+    deployMode: String
+  ): (File, (Seq[String], Seq[String], SparkConf, String)) = {
+    val excFile = TestUtils.createCompiledClass("SomeMainClass", tempDir, "", null, Seq.empty)
+    val jarFile = new File(tempDir, "s3-mainClass-test-%s.jar".format(System.currentTimeMillis()))
+    val jarUrl = TestUtils.createJar(
+      Seq(excFile),
+      jarFile,
+      directoryPrefix = Some(tempDir.toString),
+      mainClass = Some("SomeMainClass"))
+
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+
+    val clArgs = Seq(
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", deployMode,
+      "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
+      "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true",
+      s"s3a://${jarUrl.getPath}",
+      "arg1", "arg2")
+
+    val appArgs = new SparkSubmitArguments(clArgs)
+    (jarFile, submit.prepareSubmitEnvironment(appArgs, conf = Some(hadoopConf)))
+  }
+
+  test("automatically sets mainClass if primary resource is S3 JAR in client mode") {
+    withTempDir { tempDir =>
+      val (jarFile, (childArgs, classpaths, _, mainClass_)) = testResolveMainClassOnRemoteJar(
+        tempDir, "client"
+      )
+
+      mainClass_ should be ("SomeMainClass")
+      classpaths should have length 1
+      classpaths.head should endWith (jarFile.getName)
+      childArgs.mkString(" ") should be ("arg1 arg2")
+    }
+  }
+
+  test("automatically sets mainClass if primary resource is S3 JAR in cluster mode") {
+    withTempDir { tempDir =>
+      val (jarFile, (childArgs, classpaths, _, mainClass_)) = testResolveMainClassOnRemoteJar(
+        tempDir, "cluster"
+      )
+
+      mainClass_ should be (YARN_CLUSTER_SUBMIT_CLASS)
+      classpaths should have length 1
+      classpaths.head should endWith (jarFile.getName)
+      childArgs.mkString(" ") should include ("--class SomeMainClass")
+      childArgs.mkString(" ") should endWith ("--arg arg1 --arg arg2")
+    }
+  }
+
+  test("error informatively when mainClass isn't set and S3 JAR doesn't exist") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+
+    val clArgs = Seq(
+      "--name", "testApp",
+      "--master", "yarn",
+      "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
+      "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true",
+      s"s3a:///does-not-exist.jar")
+
+    testPrematureExit(clArgs.toArray, "File /does-not-exist.jar does not exist")
+  }
+
   test("handles confs with flag equivalents") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",
