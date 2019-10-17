@@ -376,7 +376,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                  " Must be > 0. The default value is 1.",
                  typeConverter=TypeConverters.toFloat)
     eps = Param(Params._dummy(), "eps",
-                "LogLoss is undefined for p=0 or p=1, so probabilities are clipped to "
+                "log-loss is undefined for p=0 or p=1, so probabilities are clipped to "
                 "max(eps, min(1 - eps, p)). "
                 "Must be in range (0, 0.5). The default value is 1e-15.",
                 typeConverter=TypeConverters.toFloat)

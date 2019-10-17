@@ -116,7 +116,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   @Since("3.0.0")
   final val eps: DoubleParam = new DoubleParam(this, "eps",
-    "LogLoss is undefined for p=0 or p=1, so probabilities are clipped to " +
+    "log-loss is undefined for p=0 or p=1, so probabilities are clipped to " +
       "max(eps, min(1 - eps, p)).",
     ParamValidators.inRange(0, 0.5, false, false))
 
@@ -178,7 +178,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   @Since("1.5.0")
   override def isLargerBetter: Boolean = $(metricName) match {
-    case "weightedFalsePositiveRate" | "falsePositiveRateByLabel" | "logloss" => false
+    case "weightedFalsePositiveRate" | "falsePositiveRateByLabel" | "logLoss" => false
     case _ => true
   }
 

@@ -241,15 +241,15 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
   lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted
 
   /**
-   * Returns the logLoss, aka logistic loss or cross-entropy loss.
-   * @param eps LogLoss is undefined for p=0 or p=1, so probabilities are
+   * Returns the log-loss, aka logistic loss or cross-entropy loss.
+   * @param eps log-loss is undefined for p=0 or p=1, so probabilities are
    *            clipped to max(eps, min(1 - eps, p)).
    */
   @Since("3.0.0")
   def logLoss(eps: Double = 1e-15): Double = {
     require(eps > 0 && eps < 0.5, s"eps must be in range (0, 0.5), but got $eps")
     val loss1 = - math.log(eps)
-    val loss2 = - math.log(1 - eps)
+    val loss2 = - math.log1p(-eps)
 
     val (lossSum, weightSum) = predictionAndLabels.map {
       case (_, label: Double, weight: Double, probability: Array[Double]) =>
