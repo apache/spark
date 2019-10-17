@@ -213,6 +213,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml.tuning import CrossValidatorModel
     >>> dataset = spark.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
     ...      (Vectors.dense([0.4]), 1.0),
@@ -232,7 +233,9 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
     >>> path = tempfile.mkdtemp()
     >>> model_path = path + "/model"
     >>> cvModel.write().save(model_path)
-    >>> CrossValidatorModel.read().load(model_path)
+    >>> cvModelRead = CrossValidatorModel.read().load(model_path)
+    >>> cvModelRead.avgMetrics
+    [0.5, ...
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
 
@@ -501,6 +504,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml.tuning import TrainValidationSplitModel
     >>> dataset = spark.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
     ...      (Vectors.dense([0.4]), 1.0),
@@ -514,6 +518,15 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
     >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
     ...     parallelism=1, seed=42)
     >>> tvsModel = tvs.fit(dataset)
+    >>> tvsModel.validationMetrics
+    [0.5, ...
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model_path = path + "/model"
+    >>> tvsModel.write().save(model_path)
+    >>> tvsModelRead = TrainValidationSplitModel.read().load(model_path)
+    >>> tvsModelRead.validationMetrics
+    [0.5, ...
     >>> evaluator.evaluate(tvsModel.transform(dataset))
     0.833...
 
