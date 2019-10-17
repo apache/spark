@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 case class TimeWindow(
     timeColumn: Expression,
@@ -102,7 +102,7 @@ object TimeWindow {
    *         precision.
    */
   private def getIntervalInMicroSeconds(interval: String): Long = {
-    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
+    val cal = IntervalUtils.fromString(interval)
     if (cal.months > 0) {
       throw new IllegalArgumentException(
         s"Intervals greater than a month is not supported ($interval).")

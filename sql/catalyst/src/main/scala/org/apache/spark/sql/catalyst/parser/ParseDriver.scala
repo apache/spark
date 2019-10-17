@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Base SQL parsing infrastructure.
@@ -38,6 +39,10 @@ abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Log
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
+  }
+
+  override def parseInterval(sqlText: String): CalendarInterval = parse(sqlText) { parser =>
+    astBuilder.visitSingleInterval(parser.singleInterval())
   }
 
   /** Creates Expression for a given SQL string. */
