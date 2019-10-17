@@ -128,7 +128,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       handle.shuffleId, startPartition, endPartition)
     new BlockStoreShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
-      fetchMultiPartitions = endPartition - startPartition > 1)
+      shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
   }
 
   override def getReaderForOneMapper[K, C](
@@ -142,7 +142,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       handle.shuffleId, mapIndex, startPartition, endPartition)
     new BlockStoreShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
-      fetchMultiPartitions = endPartition - startPartition > 1)
+      shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
@@ -203,9 +203,25 @@ private[spark] object SortShuffleManager extends Logging {
    * The maximum number of shuffle output partitions that SortShuffleManager supports when
    * buffering map outputs in a serialized form. This is an extreme defensive programming measure,
    * since it's extremely unlikely that a single shuffle produces over 16 million output partitions.
-   * */
+   */
   val MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE =
     PackedRecordPointer.MAXIMUM_PARTITION_ID + 1
+
+  /**
+   * The local property key for continuous shuffle block fetching feature.
+   */
+  val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY =
+    "__fetch_continuous_blocks_in_batch_enabled"
+
+  /**
+   * Helper method for determining whether a shuffle reader should fetch the continuous blocks
+   * in batch.
+   */
+  def canUseBatchFetch(startPartition: Int, endPartition: Int, context: TaskContext): Boolean = {
+    val fetchMultiPartitions = endPartition - startPartition > 1
+    fetchMultiPartitions &&
+      context.getLocalProperty(FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY) == "true"
+  }
 
   /**
    * Helper method for determining whether a shuffle should use an optimized serialized shuffle

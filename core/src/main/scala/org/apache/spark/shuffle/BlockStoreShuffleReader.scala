@@ -36,32 +36,30 @@ private[spark] class BlockStoreShuffleReader[K, C](
     serializerManager: SerializerManager = SparkEnv.get.serializerManager,
     blockManager: BlockManager = SparkEnv.get.blockManager,
     mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker,
-    fetchMultiPartitions: Boolean)
+    shouldBatchFetch: Boolean)
   extends ShuffleReader[K, C] with Logging {
 
   private val dep = handle.dependency
 
   private def fetchContinuousBlocksInBatch: Boolean = {
     val conf = SparkEnv.get.conf
-    val compressed = conf.get(config.SHUFFLE_COMPRESS)
-    val featureEnabled = TaskContext.get().getLocalProperty(
-      BlockStoreShuffleReader.FETCH_CONTINUOUS_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY) == "true"
     val serializerRelocatable = dep.serializer.supportsRelocationOfSerializedObjects
+    val compressed = conf.get(config.SHUFFLE_COMPRESS)
     val codecConcatenation = if (compressed) {
       CompressionCodec.supportsConcatenationOfSerializedStreams(CompressionCodec.createCodec(conf))
     } else {
       true
     }
 
-    val res = featureEnabled && fetchMultiPartitions &&
-      serializerRelocatable && (!compressed || codecConcatenation)
-    if (featureEnabled && !res) {
+    val doBatchFetch = shouldBatchFetch && serializerRelocatable &&
+      (!compressed || codecConcatenation)
+    if (shouldBatchFetch && !doBatchFetch) {
       logDebug("The feature tag of continuous shuffle block fetching is set to true, but " +
         "we can not enable the feature because other conditions are not satisfied. " +
         s"Shuffle compress: $compressed, serializer relocatable: $serializerRelocatable, " +
-        s"codec concatenation: $codecConcatenation, fetch multi-partitions: $fetchMultiPartitions")
+        s"codec concatenation: $codecConcatenation.")
     }
-    res
+    doBatchFetch
   }
 
   /** Read the combined key-values for this reduce task */
@@ -146,10 +144,4 @@ private[spark] class BlockStoreShuffleReader[K, C](
         new InterruptibleIterator[Product2[K, C]](context, resultIter)
     }
   }
-}
-
-private[spark] object BlockStoreShuffleReader {
-  // The local property key for continuous shuffle block fetching feature
-  val FETCH_CONTINUOUS_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY =
-    "__fetch_continuous_blocks_in_batch_enabled"
 }

@@ -62,8 +62,8 @@ import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
  * @param detectCorrupt whether to detect any corruption in fetched blocks.
  * @param shuffleMetrics used to report shuffle metrics.
- * @param fetchContinuousShuffleBlocksInBatch fetch continuous shuffle blocks from same executor in
- *                                            batch if the server side supports.
+ * @param doBatchFetch fetch continuous shuffle blocks from same executor in batch if the server
+ *                     side supports.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
@@ -79,7 +79,7 @@ final class ShuffleBlockFetcherIterator(
     detectCorrupt: Boolean,
     detectCorruptUseExtraMemory: Boolean,
     shuffleMetrics: ShuffleReadMetricsReporter,
-    fetchContinuousShuffleBlocksInBatch: Boolean)
+    doBatchFetch: Boolean)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
@@ -356,7 +356,7 @@ final class ShuffleBlockFetcherIterator(
         toBeMerged.head.mapIndex)
     }
 
-    val result = if (fetchContinuousShuffleBlocksInBatch) {
+    val result = if (doBatchFetch) {
       var curBlocks = new ArrayBuffer[FetchBlockInfo]
       val mergedBlockInfo = new ArrayBuffer[FetchBlockInfo]
       val iter = blocks.iterator

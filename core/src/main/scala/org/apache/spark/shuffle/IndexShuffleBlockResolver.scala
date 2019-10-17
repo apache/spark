@@ -213,9 +213,9 @@ private[spark] class IndexShuffleBlockResolver(
     channel.position(startReduceId * 8L)
     val in = new DataInputStream(Channels.newInputStream(channel))
     try {
-      val offset = in.readLong()
+      val startOffset = in.readLong()
       channel.position(endReduceId * 8L)
-      val nextOffset = in.readLong()
+      val endOffset = in.readLong()
       val actualPosition = channel.position()
       val expectedPosition = endReduceId * 8L + 8
       if (actualPosition != expectedPosition) {
@@ -225,8 +225,8 @@ private[spark] class IndexShuffleBlockResolver(
       new FileSegmentManagedBuffer(
         transportConf,
         getDataFile(shuffleId, mapId),
-        offset,
-        nextOffset - offset)
+        startOffset,
+        endOffset - startOffset)
     } finally {
       in.close()
     }

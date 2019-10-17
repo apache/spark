@@ -21,7 +21,7 @@ import java.util.Arrays
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.shuffle.BlockStoreShuffleReader
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
@@ -119,9 +119,9 @@ class ShuffledRowRDD(
     specifiedPartitionStartIndices: Option[Array[Int]] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
-  if (SQLConf.get.fetchContinuousShuffleBlocksInBatchEnabled) {
+  if (SQLConf.get.fetchShuffleBlocksInBatchEnabled) {
     dependency.rdd.context.setLocalProperty(
-      BlockStoreShuffleReader.FETCH_CONTINUOUS_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY, "true")
+      SortShuffleManager.FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY, "true")
   }
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions

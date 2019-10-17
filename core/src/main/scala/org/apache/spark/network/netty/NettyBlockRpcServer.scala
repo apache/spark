@@ -82,11 +82,10 @@ class NettyBlockRpcServer(
           }
         }
 
-        val reduceIdsNum = fetchShuffleBlocks.reduceIds.map(_.length).sum
-        val numBlockIds = if (!fetchShuffleBlocks.batchFetchEnabled) {
-          reduceIdsNum
+        val numBlockIds = if (fetchShuffleBlocks.batchFetchEnabled) {
+          fetchShuffleBlocks.mapIds.length
         } else {
-          reduceIdsNum / 2
+          fetchShuffleBlocks.reduceIds.map(_.length).sum
         }
 
         val streamId = streamManager.registerStream(appId, blocks.iterator.asJava,
