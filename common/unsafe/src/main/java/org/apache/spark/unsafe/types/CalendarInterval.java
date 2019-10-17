@@ -356,11 +356,11 @@ public final class CalendarInterval implements Serializable {
   }
 
   private static CalendarInterval fromDoubles(double months, double microseconds) {
-    long roundedMonths = (long)(months);
+    long truncatedMonths = (long)(months);
     // Using 30 days per month as PostgreSQL does.
-    double microsInMonth = 30 * MICROS_PER_DAY * (months - roundedMonths);
-    long roundedMicroseconds = (long)(microseconds + microsInMonth);
-    return new CalendarInterval(Math.toIntExact(roundedMonths), roundedMicroseconds);
+    double microsInMonth = 30 * MICROS_PER_DAY * (months - truncatedMonths);
+    long truncatedMicroseconds = (long)(microseconds + microsInMonth);
+    return new CalendarInterval(Math.toIntExact(truncatedMonths), truncatedMicroseconds);
   }
 
   public CalendarInterval multiply(double num) {
