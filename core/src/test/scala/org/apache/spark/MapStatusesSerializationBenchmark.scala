@@ -27,10 +27,10 @@ import org.apache.spark.storage.BlockManagerId
  * {{{
  *   To run this benchmark:
  *   1. without sbt: bin/spark-submit --class <this class>
- *        --jars <catalyst test jar>,<core test jar>,<spark-avro jar> <avro test jar>
- *   2. build/sbt "avro/test:runMain <this class>"
+ *        --jars <catalyst test jar>,<core test jar>
+ *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
- *      Results will be written to "benchmarks/AvroReadBenchmark-results.txt".
+ *      Results will be written to "benchmarks/MapStatusesSerializationBenchmark-results.txt".
  * }}}
  */
 object MapStatusesSerializationBenchmark extends BenchmarkBase {
