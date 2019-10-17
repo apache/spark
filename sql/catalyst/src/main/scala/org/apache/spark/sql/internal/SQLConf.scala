@@ -355,6 +355,16 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(64 * 1024 * 1024)
 
+
+  val FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED =
+    buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch.enabled")
+      .doc("Whether to fetch the continuous shuffle blocks in batch. Instead of fetching blocks " +
+        "one by one, fetching continuous shuffle blocks for the same map task in batch can " +
+        "reduce IO and improve performance. Note, this feature also depends on a relocatable " +
+        "serializer and the concatenation support codec in use.")
+      .booleanConf
+      .createWithDefault(true)
+
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution.")
     .booleanConf
@@ -2140,6 +2150,9 @@ class SQLConf extends Serializable with Logging {
 
   def targetPostShuffleInputSize: Long =
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
+
+  def fetchShuffleBlocksInBatchEnabled: Boolean =
+    getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
