@@ -21,16 +21,17 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, Strategy}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowNamespaces, ShowTables}
 import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Strategy extends Strategy with PredicateHelper {
@@ -83,31 +84,24 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
   /**
    * Applies column pruning to the data source, w.r.t. the references of the given expressions.
    *
-   * @return the created `ScanConfig`(since column pruning is the last step of operator pushdown),
-   *         and new output attributes after column pruning.
+   * @return the pruned schema if column pruning is applied.
    */
   // TODO: nested column pruning.
   private def pruneColumns(
       scanBuilder: ScanBuilder,
       relation: DataSourceV2Relation,
-      exprs: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
+      exprs: Seq[Expression]): Option[StructType] = {
     scanBuilder match {
       case r: SupportsPushDownRequiredColumns =>
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
         if (neededOutput != relation.output) {
-          r.pruneColumns(neededOutput.toStructType)
-          val scan = r.build()
-          val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
-          scan -> scan.readSchema().toAttributes.map {
-            // We have to keep the attribute id during transformation.
-            a => a.withExprId(nameToAttr(a.name).exprId)
-          }
+          Some(r.pruneColumns(neededOutput.toStructType))
         } else {
-          r.build() -> relation.output
+          None
         }
 
-      case _ => scanBuilder.build() -> relation.output
+      case _ => None
     }
   }
 
@@ -127,7 +121,17 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       val (pushedFilters, postScanFiltersWithoutSubquery) =
         pushFilters(scanBuilder, normalizedFilters)
       val postScanFilters = postScanFiltersWithoutSubquery ++ withSubquery
-      val (scan, output) = pruneColumns(scanBuilder, relation, project ++ postScanFilters)
+
+      val maybePrunedSchema = pruneColumns(scanBuilder, relation, project ++ postScanFilters)
+      val output = maybePrunedSchema match {
+        case Some(prunedSchema) =>
+          val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
+          prunedSchema.toAttributes.map {
+            a => a.withExprId(nameToAttr(a.name).exprId)
+          }
+        case _ => relation.output
+      }
+
       logInfo(
         s"""
            |Pushing operators to ${relation.name}
@@ -136,6 +140,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
            |Output: ${output.mkString(", ")}
          """.stripMargin)
 
+      val scan = scanBuilder.build()
       val batchExec = BatchScanExec(output, scan)
 
       val filterCondition = postScanFilters.reduceLeftOption(And)

@@ -84,8 +84,6 @@ class InMemoryTable(
   }
 
   class InMemoryBatchScan(data: Array[InputPartition]) extends Scan with Batch {
-    override def readSchema(): StructType = schema
-
     override def toBatch: Batch = this
 
     override def planInputPartitions(): Array[InputPartition] = data

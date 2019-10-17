@@ -133,9 +133,6 @@ abstract class FileScan(
 
   override def toBatch: Batch = this
 
-  override def readSchema(): StructType =
-    StructType(readDataSchema.fields ++ readPartitionSchema.fields)
-
   // Returns whether the two given arrays of [[Filter]]s are equivalent.
   protected def equivalentFilters(a: Array[Filter], b: Array[Filter]): Boolean = {
     a.sortBy(_.hashCode()).sameElements(b.sortBy(_.hashCode()))

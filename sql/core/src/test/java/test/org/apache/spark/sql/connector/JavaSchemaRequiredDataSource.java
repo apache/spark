@@ -27,18 +27,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 public class JavaSchemaRequiredDataSource implements TableProvider {
 
   class MyScanBuilder extends JavaSimpleScanBuilder {
-
-    private StructType schema;
-
-    MyScanBuilder(StructType schema) {
-      this.schema = schema;
-    }
-
-    @Override
-    public StructType readSchema() {
-      return schema;
-    }
-
     @Override
     public InputPartition[] planInputPartitions() {
       return new InputPartition[0];
@@ -56,7 +44,7 @@ public class JavaSchemaRequiredDataSource implements TableProvider {
 
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-        return new MyScanBuilder(schema);
+        return new MyScanBuilder();
       }
     };
   }

@@ -29,14 +29,11 @@ import org.apache.spark.sql.types.StructType;
 public interface SupportsPushDownRequiredColumns extends ScanBuilder {
 
   /**
-   * Applies column pruning w.r.t. the given requiredSchema.
+   * Applies column pruning w.r.t. the given `requiredSchema`, and returns the pruned schema.
    *
    * Implementation should try its best to prune the unnecessary columns or nested fields, but it's
    * also OK to do the pruning partially, e.g., a data source may not be able to prune nested
    * fields, and only prune top-level columns.
-   *
-   * Note that, {@link Scan#readSchema()} implementation should take care of the column
-   * pruning applied here.
    */
-  void pruneColumns(StructType requiredSchema);
+  StructType pruneColumns(StructType requiredSchema);
 }

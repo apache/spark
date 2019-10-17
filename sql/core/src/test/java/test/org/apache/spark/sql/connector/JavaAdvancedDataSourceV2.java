@@ -49,12 +49,8 @@ public class JavaAdvancedDataSourceV2 implements TableProvider {
     private Filter[] filters = new Filter[0];
 
     @Override
-    public void pruneColumns(StructType requiredSchema) {
+    public StructType pruneColumns(StructType requiredSchema) {
       this.requiredSchema = requiredSchema;
-    }
-
-    @Override
-    public StructType readSchema() {
       return requiredSchema;
     }
 

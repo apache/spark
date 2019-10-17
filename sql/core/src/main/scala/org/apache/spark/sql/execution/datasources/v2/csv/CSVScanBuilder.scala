@@ -33,6 +33,6 @@ case class CSVScanBuilder(
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
 
   override def build(): Scan = {
-    CSVScan(sparkSession, fileIndex, dataSchema, readDataSchema(), readPartitionSchema(), options)
+    CSVScan(sparkSession, fileIndex, dataSchema, readDataSchema, readPartitionSchema, options)
   }
 }

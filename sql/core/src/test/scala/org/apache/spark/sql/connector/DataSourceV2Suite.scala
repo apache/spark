@@ -431,8 +431,6 @@ abstract class SimpleScanBuilder extends ScanBuilder
 
   override def toBatch: Batch = this
 
-  override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
-
   override def createReaderFactory(): PartitionReaderFactory = SimpleReaderFactory
 }
 
@@ -483,11 +481,10 @@ class AdvancedScanBuilder extends ScanBuilder
   var requiredSchema = new StructType().add("i", "int").add("j", "int")
   var filters = Array.empty[Filter]
 
-  override def pruneColumns(requiredSchema: StructType): Unit = {
+  override def pruneColumns(requiredSchema: StructType): StructType = {
     this.requiredSchema = requiredSchema
+    requiredSchema
   }
-
-  override def readSchema(): StructType = requiredSchema
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     val (supported, unsupported) = filters.partition {
@@ -562,8 +559,6 @@ class SchemaRequiredDataSource extends TableProvider {
 
   class MyScanBuilder(schema: StructType) extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = Array.empty
-
-    override def readSchema(): StructType = schema
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {

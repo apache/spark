@@ -20,13 +20,11 @@ package org.apache.spark.sql.connector.read;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.read.streaming.ContinuousStream;
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream;
-import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
 
 /**
- * A logical representation of a data source scan. This interface is used to provide logical
- * information, like what the actual read schema is.
+ * A logical representation of a data source scan.
  * <p>
  * This logical representation is shared between batch scan, micro-batch streaming scan and
  * continuous streaming scan. Data sources must implement the corresponding methods in this
@@ -39,15 +37,9 @@ import org.apache.spark.sql.connector.catalog.TableCapability;
 public interface Scan {
 
   /**
-   * Returns the actual schema of this data source scan, which may be different from the physical
-   * schema of the underlying storage, as column pruning or other optimizations may happen.
-   */
-  StructType readSchema();
-
-  /**
    * A description string of this scan, which may includes information like: what filters are
    * configured for this scan, what's the value of some important options like path, etc. The
-   * description doesn't need to include {@link #readSchema()}, as Spark already knows it.
+   * description doesn't need to include the schema, as Spark already knows it.
    * <p>
    * By default this returns the class name of the implementation. Please override it to provide a
    * meaningful description.

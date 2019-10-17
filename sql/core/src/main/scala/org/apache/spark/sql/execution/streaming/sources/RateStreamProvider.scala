@@ -93,8 +93,6 @@ class RateStreamTable(
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
-    override def readSchema(): StructType = RateStreamProvider.SCHEMA
-
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
       new RateStreamMicroBatchStream(
         rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)

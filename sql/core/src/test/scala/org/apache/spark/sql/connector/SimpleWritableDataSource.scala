@@ -42,8 +42,6 @@ import org.apache.spark.util.SerializableConfiguration
  */
 class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
 
-  private val tableSchema = new StructType().add("i", "long").add("j", "long")
-
   override def keyPrefix: String = "simpleWritableDataSource"
 
   class MyScanBuilder(path: String, conf: Configuration) extends SimpleScanBuilder {
@@ -66,8 +64,6 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
       val serializableConf = new SerializableConfiguration(conf)
       new CSVReaderFactory(serializableConf)
     }
-
-    override def readSchema(): StructType = tableSchema
   }
 
   class MyWriteBuilder(path: String) extends WriteBuilder with SupportsTruncate {
@@ -137,7 +133,9 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     private val path = options.get("path")
     private val conf = SparkContext.getActive.get.hadoopConfiguration
 
-    override def schema(): StructType = tableSchema
+    override def schema(): StructType = {
+      new StructType().add("i", "long").add("j", "long")
+    }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(new Path(path).toUri.toString, conf)

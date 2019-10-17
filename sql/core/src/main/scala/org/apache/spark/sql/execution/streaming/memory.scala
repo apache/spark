@@ -121,8 +121,6 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
 
   override def description(): String = "MemoryStreamDataSource"
 
-  override def readSchema(): StructType = stream.fullSchema()
-
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
     stream.asInstanceOf[MicroBatchStream]
   }

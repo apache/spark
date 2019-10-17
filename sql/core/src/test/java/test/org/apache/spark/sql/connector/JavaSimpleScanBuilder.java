@@ -21,7 +21,6 @@ import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.ScanBuilder;
-import org.apache.spark.sql.types.StructType;
 
 abstract class JavaSimpleScanBuilder implements ScanBuilder, Scan, Batch {
 
@@ -33,11 +32,6 @@ abstract class JavaSimpleScanBuilder implements ScanBuilder, Scan, Batch {
   @Override
   public Batch toBatch() {
     return this;
-  }
-
-  @Override
-  public StructType readSchema() {
-    return new StructType().add("i", "int").add("j", "int");
   }
 
   @Override

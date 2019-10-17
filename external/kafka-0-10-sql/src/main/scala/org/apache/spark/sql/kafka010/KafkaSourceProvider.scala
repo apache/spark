@@ -420,10 +420,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   class KafkaScan(options: CaseInsensitiveStringMap) extends Scan {
     val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
 
-    override def readSchema(): StructType = {
-      KafkaRecordToRowConverter.kafkaSchema(includeHeaders)
-    }
-
     override def toBatch(): Batch = {
       val caseInsensitiveOptions = CaseInsensitiveMap(options.asScala.toMap)
       validateBatchOptions(caseInsensitiveOptions)

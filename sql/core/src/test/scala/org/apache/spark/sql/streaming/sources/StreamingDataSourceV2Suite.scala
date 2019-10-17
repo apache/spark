@@ -61,7 +61,6 @@ class FakeDataStream extends MicroBatchStream with ContinuousStream {
 
 class FakeScanBuilder extends ScanBuilder with Scan {
   override def build(): Scan = this
-  override def readSchema(): StructType = StructType(Seq())
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = new FakeDataStream
   override def toContinuousStream(checkpointLocation: String): ContinuousStream = new FakeDataStream
 }

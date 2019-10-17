@@ -31,6 +31,6 @@ class AvroScanBuilder (
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
   override def build(): Scan = {
-    AvroScan(sparkSession, fileIndex, dataSchema, readDataSchema(), readPartitionSchema(), options)
+    AvroScan(sparkSession, fileIndex, dataSchema, readDataSchema, readPartitionSchema, options)
   }
 }
