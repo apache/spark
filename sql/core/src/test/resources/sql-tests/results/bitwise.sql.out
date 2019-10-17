@@ -131,17 +131,17 @@ struct<bit_count(-1):int>
 
 
 -- !query 16
-select 9223372036854775807L + 1L
+select bit_count(9223372036854775807L)
 -- !query 16 schema
-struct<(9223372036854775807 + 1):bigint>
+struct<bit_count(9223372036854775807):int>
 -- !query 16 output
--9223372036854775808
+63
 
 
 -- !query 17
-select bit_count(9223372036854775807L + 1L)
+select bit_count(-9223372036854775808L)
 -- !query 17 schema
-struct<bit_count((9223372036854775807 + 1)):int>
+struct<bit_count(-9223372036854775808):int>
 -- !query 17 output
 1
 
