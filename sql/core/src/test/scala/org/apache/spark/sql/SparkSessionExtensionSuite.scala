@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
@@ -168,6 +169,31 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(result(0).getLong(0) == 102L) // Check that broken columnar Add was used.
       assert(result(1).getLong(0) == 202L)
       assert(result(2).getLong(0) == 302L)
+    }
+  }
+
+  test("reset column vectors") {
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config(COLUMN_BATCH_SIZE.key, 2)
+      .withExtensions{ extensions =>
+        extensions.injectColumnar(session =>
+          MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())) }
+      .getOrCreate()
+
+    try {
+      assert(session.sessionState.columnarRules.contains(
+        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      import session.sqlContext.implicits._
+
+      val input = Seq((100L), (200L), (300L))
+      val data = input.toDF("vals").repartition(1)
+      val df = data.selectExpr("vals + 1")
+
+      val result = df.collect()
+      assert(result sameElements input.map(x => Row(x + 2)))
+    } finally {
+      stop(session)
     }
   }
 
