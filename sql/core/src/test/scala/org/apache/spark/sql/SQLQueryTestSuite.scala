@@ -434,8 +434,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   protected def replaceNotIncludedMsg(line: String): String = {
     line.replaceAll("#\\d+", "#x")
       .replaceAll(
-        s"Location.*/sql/core/spark-warehouse/$clsName/",
-        s"Location ${notIncludedMsg}sql/core/spark-warehouse/")
+        s"Location.*$clsName/",
+        s"Location ${notIncludedMsg}/{warehouse_dir}/")
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
