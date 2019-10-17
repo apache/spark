@@ -214,7 +214,7 @@ case class InsertIntoHiveTable(
           // partition does not exist, Hive will not check if the external partition directory
           // exists or not before copying files. So if users drop the partition, and then do
           // insert overwrite to the same partition, the partition will have both old and new
-          // data.
+          // data. We construct partition path. If the path exists, we delete it manually.
           val dpMap = writtenParts.flatMap(_.split("/")).map { part =>
             val splitPart = part.split("=")
             assert(splitPart.size == 2, s"Invalid written partition path: $part")
@@ -229,10 +229,18 @@ case class InsertIntoHiveTable(
               throw new SparkException(s"Dynamic partition key $key is not among " +
                 "written partition paths.")
           }
+          val partitionColumnNames = table.partitionColumnNames
+          val tablePath = new Path(table.location)
+          val partitionPath = ExternalCatalogUtils.generatePartitionPath(updatedPartitionSpec,
+            partitionColumnNames, tablePath)
 
-          AlterTableAddPartitionCommand(
-            table.identifier, Seq((updatedPartitionSpec, None)), ifNotExists = true)
-            .run(sparkSession)
+          val fs = partitionPath.getFileSystem(hadoopConf)
+          if (fs.exists(partitionPath)) {
+            if (!fs.delete(partitionPath, true)) {
+              throw new RuntimeException(
+                "Cannot remove partition directory '" + partitionPath.toString)
+            }
+          }
         }
 
         externalCatalog.loadDynamicPartitions(
@@ -260,31 +268,28 @@ case class InsertIntoHiveTable(
           // partition does not exist, Hive will not check if the external partition directory
           // exists or not before copying files. So if users drop the partition, and then do
           // insert overwrite to the same partition, the partition will have both old and new
-          // data.
-          val updatedPart = if (oldPart.isEmpty && overwrite
+          // data. We construct partition path. If the path exists, we delete it manually.
+          val partitionPath = if (oldPart.isEmpty && overwrite
               && table.tableType == CatalogTableType.EXTERNAL) {
-            AlterTableAddPartitionCommand(
-              table.identifier, Seq((partitionSpec, None)), ifNotExists = true).run(sparkSession)
-            externalCatalog.getPartitionOption(
-              table.database,
-              table.identifier.table,
-              partitionSpec)
+            val partitionColumnNames = table.partitionColumnNames
+            val tablePath = new Path(table.location)
+            Some(ExternalCatalogUtils.generatePartitionPath(partitionSpec,
+              partitionColumnNames, tablePath))
           } else {
-            oldPart
+            oldPart.flatMap(_.storage.locationUri.map(uri => new Path(uri)))
           }
 
           // SPARK-18107: Insert overwrite runs much slower than hive-client.
           // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
           // version and we may not want to catch up new Hive version every time. We delete the
           // Hive partition first and then load data file into the Hive partition.
-          if (updatedPart.nonEmpty && overwrite) {
-            updatedPart.get.storage.locationUri.foreach { uri =>
-              val partitionPath = new Path(uri)
-              val fs = partitionPath.getFileSystem(hadoopConf)
-              if (fs.exists(partitionPath)) {
-                if (!fs.delete(partitionPath, true)) {
+          if (partitionPath.nonEmpty && overwrite) {
+            partitionPath.foreach { path =>
+              val fs = path.getFileSystem(hadoopConf)
+              if (fs.exists(path)) {
+                if (!fs.delete(path, true)) {
                   throw new RuntimeException(
-                    "Cannot remove partition directory '" + partitionPath.toString)
+                    "Cannot remove partition directory '" + path.toString)
                 }
                 // Don't let Hive do overwrite operation since it is slower.
                 doHiveOverwrite = false
