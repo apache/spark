@@ -71,9 +71,6 @@ trait DataSourceScanExec extends LeafExecNode {
       case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
       case (_, _) => false
     }.map {
-      case (key, value) if (key.equals("Location")) =>
-        val abbreviatedLoaction = StringUtils.abbreviate(redact(value), 100)
-        s"$key: $abbreviatedLoaction"
       case (key, value) => s"$key: ${redact(value)}"
     }
 
@@ -87,7 +84,7 @@ trait DataSourceScanExec extends LeafExecNode {
   /**
    * Shorthand for calling redactString() without specifying redacting rules
    */
-  private def redact(text: String): String = {
+  protected def redact(text: String): String = {
     Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
   }
 
@@ -359,6 +356,31 @@ case class FileSourceScanExec(
     }
 
     withSelectedBucketsCount
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val metadataStr = metadata.toSeq.sorted.filterNot {
+      case (_, value) if (value.isEmpty || value.equals("[]")) => true
+      case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
+      case (_, _) => false
+    }.map {
+      case (key, _) if (key.equals("Location")) =>
+        val location = relation.location
+        val numPaths = location.rootPaths.length
+        val abbreviatedLoaction = if (numPaths <= 1) {
+          location.rootPaths.mkString("[", ", ", "]")
+        } else {
+          "[" + location.rootPaths.head + s", ... ${numPaths - 1} entries]"
+        }
+        s"$key: ${location.getClass.getSimpleName} ${redact(abbreviatedLoaction)}"
+      case (key, value) => s"$key: ${redact(value)}"
+    }
+
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+       |${metadataStr.mkString("\n")}
+     """.stripMargin
   }
 
   lazy val inputRDD: RDD[InternalRow] = {
