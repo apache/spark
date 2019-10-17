@@ -1257,6 +1257,66 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Approximate version of count() that returns a approximate result
+   * using partly partitions to get approximate count, but will faster.
+   *
+   * Compare to `countApprox(timeout, confidence)`, this method will stopped
+   * when get result.
+   *
+   * The confidence is the probability that the error bounds of the result will
+   * contain the true value. That is, if countApprox were called repeatedly
+   * with confidence 0.9, we would expect 90% of the results to contain the
+   * true count. The confidence must be in the range [0,1] or an exception will
+   * be thrown.
+   *
+   * @param confidence the desired statistical confidence in the result
+   * @param samplePartitions maximum partitions to sampled for the job
+   * @return a approximate result, with error bounds
+   */
+  def countApprox(
+      confidence: Double,
+      samplePartitions: Int): PartialResult[BoundedDouble] = withScope {
+    require(0 < samplePartitions, s"samplePartitions ($samplePartitions) must more than 0")
+    require(0.0 <= confidence && confidence <= 1.0, s"confidence ($confidence) must be in [0,1]")
+    val totalPartitions = this.partitions.length
+    var partitions = samplePartitions
+    if (samplePartitions > totalPartitions) {
+      // In this case, same to rdd.count()
+      partitions = totalPartitions
+    }
+    val sampleCount = sc.runJob(this, Utils.getIteratorSize _, 0 until partitions).sum
+    val p = partitions.toDouble / totalPartitions
+    if (p < 1.0) {
+      new PartialResult(CountEvaluator.bound(confidence, sampleCount, p), true)
+    } else {
+      new PartialResult(new BoundedDouble(sampleCount, confidence, sampleCount, sampleCount), true)
+    }
+  }
+
+  /**
+   * Approximate version of count() that returns a approximate result
+   * using partly partitions to get approximate count, but will faster.
+   *
+   * @param confidence the desired statistical confidence in the result
+   * @param samplePercent sample percent
+   * @return a approximate result, with error bounds
+   */
+  def countApprox(
+      confidence: Double,
+      samplePercent: Double): PartialResult[BoundedDouble] = withScope {
+    require(0.0 < samplePercent && samplePercent <= 1.0,
+      s"samplePercent ($samplePercent) must be in (0,1]")
+    require(0.0 <= confidence && confidence <= 1.0,
+      s"confidence ($confidence) must be in [0,1]")
+    val totalPartitions = this.partitions.length
+    var samplePartitions = (totalPartitions * samplePercent).toInt
+    if (samplePartitions < 10) {
+      samplePartitions = 10
+    }
+    countApprox(confidence, samplePartitions)
+  }
+
+  /**
    * Return the count of each unique value in this RDD as a local map of (value, count) pairs.
    *
    * @note This method should only be used if the resulting map is expected to be small, as

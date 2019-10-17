@@ -45,7 +45,7 @@ private[spark] class CountEvaluator(totalOutputs: Int, confidence: Double)
   }
 }
 
-private[partial] object CountEvaluator {
+private[spark] object CountEvaluator {
 
   def bound(confidence: Double, sum: Long, p: Double): BoundedDouble = {
     // "sum" elements have been observed having scanned a fraction
