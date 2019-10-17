@@ -886,14 +886,53 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ToNumber(Literal("1-2,454.8"), Literal("9S9,999D9")), "-12454.8")
     checkEvaluation(ToNumber(Literal("00,454.8-"), Literal("99G999.9S")), "-454.8")
     // Test 'L'
-    checkEvaluation(ToNumber(Literal("CNY234234.4350"), Literal("L999999.0000")), "234234.435")
+    checkEvaluation(ToNumber(Literal("CNY234234.4350"), Literal("L999999.0000")),
+      "234234.435")
     checkEvaluation(ToNumber(Literal("RMB34234.4350"), Literal("L99999.0000")), "34234.435")
     checkEvaluation(ToNumber(Literal("RY34234.4350"), Literal("L99999.0000")), "34234.435")
     checkEvaluation(ToNumber(Literal("R34234.4350"), Literal("L99999.0000")), "34234.435")
 
+    checkEvaluation(ToNumber(Literal("-34,338,492"), Literal("99G999G999")), "-34338492")
+    checkEvaluation(ToNumber(Literal("-34,338,492.654,878"), Literal("99G999G999D999G999")),
+      "-34338492.654878")
+    checkEvaluation(ToNumber(Literal("<564646.654564>"), Literal("999999.999999PR")),
+      "-564646.654564")
+    checkEvaluation(ToNumber(Literal("0.00001-"), Literal("9.999999S")), "-0.00001")
+    checkEvaluation(ToNumber(Literal("5.01-"), Literal("FM9.999999S")), "-5.01")
+    checkEvaluation(ToNumber(Literal("5.01-"), Literal("FM9.999999MI")), "-5.01")
+    checkEvaluation(ToNumber(Literal("5 4 4 4 4 8 . 7 8"), Literal("9 9 9 9 9 9 . 9 9")),
+      "544448.78")
+    checkEvaluation(ToNumber(Literal(".01"), Literal("FM9.99")), "0.01")
+    checkEvaluation(ToNumber(Literal(".0"), Literal("99999999.99999999")), "0")
+    checkEvaluation(ToNumber(Literal("0"), Literal("99.99")), "0")
+    checkEvaluation(ToNumber(Literal(".-01"), Literal("S99.99")), "-0.01")
+    checkEvaluation(ToNumber(Literal(".01-"), Literal("99.99S")), "-0.01")
+    checkEvaluation(ToNumber(Literal(" . 0 1-"), Literal(" 9 9 . 9 9 S")), "-0.01")
+    checkEvaluation(ToNumber(Literal("34,50"), Literal("999,99")), "3450")
+    checkEvaluation(ToNumber(Literal("123,000"), Literal("999G")), "123")
+    checkEvaluation(ToNumber(Literal("123456"), Literal("999G999")), "123456")
+    checkEvaluation(ToNumber(Literal("$1234.56"), Literal("L9,999.99")), "1234.56")
+    checkEvaluation(ToNumber(Literal("$1234.56"), Literal("L99,999.99")), "1234.56")
+    checkEvaluation(ToNumber(Literal("$1,234.56"), Literal("L99,999.99")), "1234.56")
+    checkEvaluation(ToNumber(Literal("1234.56"), Literal("L99,999.99")), "1234.56")
+    checkEvaluation(ToNumber(Literal("1,234.56"), Literal("L99,999.99")), "1234.56")
+    checkEvaluation(ToNumber(Literal("42nd"), Literal("99th")), "42")
+
     ToNumber(Literal("454.3.2"), Literal("999D9D9")).checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckFailure(msg) =>
         assert(msg.contains("Multiple decimal points in"))
+    }
+    ToNumber(Literal("4543.2-"), Literal("9999D9SS")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Cannot use 'S' twice."))
+    }
+    ToNumber(Literal("4543.2-"), Literal("9999D9SPR")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Cannot use 'S' and 'PR' together."))
+    }
+    ToNumber(Literal("4543.2-"), Literal("9999D9SMI")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Cannot use 'S' and 'MI' together."))
     }
   }
 
