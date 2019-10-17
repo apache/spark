@@ -1060,10 +1060,10 @@ when running in local mode.
   - hiveClientCalls.count
   - sourceCodeSize (histogram)
 
-- namespace=<Executor Plugin Class Name>
-  - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and 
-  configured using the Spark executor plugin infrastructure.
-  See also the configuration parameter `spark.executor.plugins`
+- namespace=<Plugin Class Name>
+  - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
+  configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
+  custom plugins into Spark.
 
 ### Source = JVM Source 
 Notes: 
@@ -1141,3 +1141,17 @@ can provide fine-grained profiling on individual nodes.
 * JVM utilities such as `jstack` for providing stack traces, `jmap` for creating heap-dumps,
 `jstat` for reporting time-series statistics and `jconsole` for visually exploring various JVM
 properties are useful for those comfortable with JVM internals.
+
+Spark also provides a plugin API so that custom instrumentation code can be added to Spark
+applications. There are two configuration available for loading plugins into Spark:
+
+- <code>spark.plugins</code>
+- <code>spark.plugins.static</code>
+
+Both do the same thing: they take a comma-separated list of class names that implement the
+<code>org.apache.spark.api.plugin.SparkPlugin</code> interface. The two names exist so that
+it's possible for one "static" list to be placed in the Spark default config file, allowing
+users to easily add other plugins from the command line option without overwriting the
+"static" list.
+
+Duplicate plugins are ignored.
