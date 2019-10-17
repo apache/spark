@@ -614,6 +614,10 @@ The Dataframe being written to Kafka should have the following columns in schema
   <td>topic (*optional)</td>
   <td>string</td>
 </tr>
+<tr>
+  <td>partition (optional)</td>
+  <td>int</td>
+</tr>
 </table>
 \* The topic column is required if the "topic" configuration option is not specified.<br>
 
@@ -622,6 +626,10 @@ a ```null``` valued key column will be automatically added (see Kafka semantics 
 how ```null``` valued key values are handled). If a topic column exists then its value
 is used as the topic when writing the given row to Kafka, unless the "topic" configuration
 option is set i.e., the "topic" configuration option overrides the topic column.
+If a partition column is not specified then the partition is calculated by the Kafka producer
+(using ```org.apache.kafka.clients.producer.internals.DefaultPartitioner```).
+This can be overridden in Spark by setting the ```kafka.partitioner.class``` option.
+
 
 The following options must be set for the Kafka sink
 for both batch and streaming queries.
