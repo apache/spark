@@ -195,7 +195,6 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
         withClue(cls.getName) {
           val df = spark.read.format(cls.getName).load()
           val logical = df.queryExecution.optimizedPlan.collect {
-            case d: DataSourceV2Relation => d
             case d: DataSourceV2ScanRelation => d
           }.head
 

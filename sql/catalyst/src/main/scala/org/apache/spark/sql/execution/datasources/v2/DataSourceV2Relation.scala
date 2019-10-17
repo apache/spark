@@ -51,20 +51,16 @@ case class DataSourceV2Relation(
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
-  def newScanBuilder(): ScanBuilder = {
-    table.asReadable.newScanBuilder(options)
-  }
-
   override def computeStats(): Statistics = {
     if (Utils.isTesting) {
       // when testing, throw an exception if this computeStats method is called because stats should
       // not be accessed before pushing the projection and filters to create a scan. otherwise, the
       // stats are not accurate because they are based on a full table scan of all columns.
-      throw new UnsupportedOperationException(
+      throw new IllegalStateException(
         s"BUG: computeStats called before pushdown on DSv2 relation: $name")
     } else {
       // when not testing, return stats because bad stats are better than failing a query
-      newScanBuilder() match {
+      table.asReadable.newScanBuilder(options) match {
         case r: SupportsReportStatistics =>
           val statistics = r.estimateStatistics()
           DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)

@@ -24,9 +24,11 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] {
+  import DataSourceV2Implicits._
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
-      val scanBuilder = relation.newScanBuilder()
+      val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
 
       val (withSubquery, withoutSubquery) = filters.partition(SubqueryExpression.hasSubquery)
       val normalizedFilters = DataSourceStrategy.normalizeFilters(

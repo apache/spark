@@ -29,9 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
@@ -722,8 +720,6 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
           .option("path", paths.head.getCanonicalPath)
           .parquet(paths(1).getCanonicalPath, paths(2).getCanonicalPath)
         df.queryExecution.optimizedPlan match {
-          case PhysicalOperation(_, _, DataSourceV2Relation(table: ParquetTable, _, _)) =>
-            assert(table.paths.toSet == paths.map(_.getCanonicalPath).toSet)
           case PhysicalOperation(_, _, DataSourceV2ScanRelation(table: ParquetTable, _, _)) =>
             assert(table.paths.toSet == paths.map(_.getCanonicalPath).toSet)
           case _ =>

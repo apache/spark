@@ -69,7 +69,8 @@ class SparkOptimizer(
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
     ExtractPythonUDFFromJoinCondition.ruleName :+
     ExtractPythonUDFFromAggregate.ruleName :+ ExtractGroupingPythonUDFFromAggregate.ruleName :+
-    ExtractPythonUDFs.ruleName
+    ExtractPythonUDFs.ruleName :+
+    V2ScanRelationPushDown.ruleName
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before

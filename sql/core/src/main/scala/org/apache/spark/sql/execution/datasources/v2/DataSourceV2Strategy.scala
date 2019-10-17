@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, Strategy}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateNamespace, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeTable, DropNamespace, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, RefreshTable, Repartition, ReplaceTable, ReplaceTableAsSelect, SetCatalogAndNamespace, ShowNamespaces, ShowTables}
-import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{StagingTableCatalog, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -42,42 +42,6 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       val batchExec = BatchScanExec(relation.output, relation.scan)
 
       val filterCondition = filters.reduceLeftOption(And)
-      val withFilter = filterCondition.map(FilterExec(_, batchExec)).getOrElse(batchExec)
-
-      val withProjection = if (withFilter.output != project || !batchExec.supportsColumnar) {
-        ProjectExec(project, withFilter)
-      } else {
-        withFilter
-      }
-
-      withProjection :: Nil
-
-    case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
-      val scanBuilder = relation.newScanBuilder()
-
-      val (withSubquery, withoutSubquery) = filters.partition(SubqueryExpression.hasSubquery)
-      val normalizedFilters = DataSourceStrategy.normalizeFilters(
-        withoutSubquery, relation.output)
-
-      // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
-      // `postScanFilters` need to be evaluated after the scan.
-      // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
-        scanBuilder, normalizedFilters)
-      val postScanFilters = postScanFiltersWithoutSubquery ++ withSubquery
-      val (scan, output) = PushDownUtils.pruneColumns(
-        scanBuilder, relation, project ++ postScanFilters)
-      logInfo(
-        s"""
-           |Pushing operators to ${relation.name}
-           |Pushed Filters: ${pushedFilters.mkString(", ")}
-           |Post-Scan Filters: ${postScanFilters.mkString(",")}
-           |Output: ${output.mkString(", ")}
-         """.stripMargin)
-
-      val batchExec = BatchScanExec(output, scan)
-
-      val filterCondition = postScanFilters.reduceLeftOption(And)
       val withFilter = filterCondition.map(FilterExec(_, batchExec)).getOrElse(batchExec)
 
       val withProjection = if (withFilter.output != project || !batchExec.supportsColumnar) {
@@ -193,7 +157,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       OverwritePartitionsDynamicExec(
         r.table.asWritable, writeOptions.asOptions, planLater(query)) :: Nil
 
-    case DeleteFromTable(V2TableRelation(table, output), condition) =>
+    case DeleteFromTable(DataSourceV2ScanRelation(table, _, output), condition) =>
       if (condition.exists(SubqueryExpression.hasSubquery)) {
         throw new AnalysisException(
           s"Delete by condition with subquery is not supported: $condition")
@@ -222,7 +186,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         Nil
       }
 
-    case desc @ DescribeTable(V2TableRelation(table, _), isExtended) =>
+    case desc @ DescribeTable(DataSourceV2Relation(table, _, _), isExtended) =>
       DescribeTableExec(desc.output, table, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>
@@ -247,16 +211,5 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       SetCatalogAndNamespaceExec(catalogManager, catalogName, namespace) :: Nil
 
     case _ => Nil
-  }
-
-  private object V2TableRelation {
-    def unapply(plan: LogicalPlan): Option[(Table, Seq[AttributeReference])] = plan match {
-      case r: DataSourceV2Relation =>
-        Some((r.table, r.output))
-      case r: DataSourceV2ScanRelation =>
-        Some((r.table, r.output))
-      case _ =>
-        None
-    }
   }
 }

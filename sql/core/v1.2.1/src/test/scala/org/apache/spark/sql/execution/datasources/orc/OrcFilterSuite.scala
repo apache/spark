@@ -29,9 +29,8 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
-import org.apache.spark.sql.execution.datasources.v2.orc.{OrcScan, OrcTable}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -54,16 +53,6 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters, DataSourceV2Relation(orcTable: OrcTable, _, options)) =>
-        assert(filters.nonEmpty, "No filter is analyzed from the given query")
-        val scanBuilder = orcTable.newScanBuilder(options)
-        scanBuilder.pushFilters(filters.flatMap(DataSourceStrategy.translateFilter).toArray)
-        val pushedFilters = scanBuilder.pushedFilters()
-        assert(pushedFilters.nonEmpty, "No filter is pushed down")
-        val maybeFilter = OrcFilters.createFilter(query.schema, pushedFilters)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pushedFilters")
-        checker(maybeFilter.get)
-
       case PhysicalOperation(_, filters,
           DataSourceV2ScanRelation(_, OrcScan(_, _, _, _, _, _, _, pushedFilters), _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
