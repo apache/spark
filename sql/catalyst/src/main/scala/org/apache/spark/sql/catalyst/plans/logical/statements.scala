@@ -283,6 +283,16 @@ case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[S
   extends ParsedStatement
 
 /**
+ * A CREATE NAMESPACE statement, as parsed from SQL.
+ */
+case class CreateNamespaceStatement(
+  namespace: Seq[String],
+  ifNotExists: Boolean,
+  comment: Option[String],
+  location: Option[String],
+  properties: Map[String, String]) extends ParsedStatement
+
+/**
  * A SHOW NAMESPACES statement, as parsed from SQL.
  */
 case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])

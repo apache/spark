@@ -83,10 +83,10 @@ statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE NAMESPACE? multipartIdentifier                               #use
-    | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
+    | CREATE (DATABASE | NAMESPACE) (IF NOT EXISTS)? multipartIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
-         (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
+         (WITH DBPROPERTIES tablePropertyList))*                       #createNamespace
     | ALTER database db=errorCapturingIdentifier
         SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
     | ALTER database db=errorCapturingIdentifier

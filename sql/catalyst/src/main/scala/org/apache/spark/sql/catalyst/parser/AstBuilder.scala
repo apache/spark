@@ -2300,6 +2300,37 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[CreateDatabaseCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE DATABASE [IF NOT EXISTS] database_name
+   *     create_database_clauses;
+   *
+   *   create_database_clauses (order insensitive):
+   *     [COMMENT database_comment]
+   *     [LOCATION path]
+   *     [WITH DBPROPERTIES (key1=val1, key2=val2, ...)]
+   * }}}
+   */
+  override def visitCreateNamespace(ctx: CreateNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
+    checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
+
+    if (ctx.DATABASE != null && ctx.multipartIdentifier != null) {
+      throw new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
+    }
+
+    CreateNamespaceStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.EXISTS != null,
+      Option(ctx.comment).map(string),
+      ctx.locationSpec.asScala.headOption.map(visitLocationSpec),
+      ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues).getOrElse(Map.empty))
+  }
+
+  /**
    * Create a [[ShowNamespacesStatement]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
