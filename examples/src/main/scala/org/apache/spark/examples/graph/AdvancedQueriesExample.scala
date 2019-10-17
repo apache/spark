@@ -19,7 +19,8 @@ package org.apache.spark.examples.graph
 // $example on$
 
 import org.apache.spark.cypher.SparkCypherSession
-import org.apache.spark.graph.api.{NodeDataset, PropertyGraph, RelationshipDataset}
+import org.apache.spark.cypher.adapters.SchemaAdapter
+import org.apache.spark.graph.api.{NodeDataset, PropertyGraph, PropertyGraphSchema, RelationshipDataset}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 
@@ -114,13 +115,15 @@ object AdvancedQueriesExample {
 
     // Create a PropertyGraph
     val graph: PropertyGraph = cypherSession.createGraph(Array(movieNodes, personNodes), relationships)
+    print(graph.schema)
+    StdIn.readLine("Press Enter to continue: ")
 
     val bestMovies = graph.cypher(
       """
         |MATCH (:Person)-[r:REVIEWED]->(m:Movie)
-        |WITH DISTINCT id(m) AS id, m.title AS title, round(avg(r.rating)) AS rating
-        |RETURN title, rating
-        |ORDER BY rating DESC""".stripMargin)
+        |WITH DISTINCT id(m) AS id, m.title AS title, round(avg(r.rating)) AS avgRating
+        |RETURN title, avgRating
+        |ORDER BY avgRating DESC""".stripMargin)
 
     println("Best rated movies")
     bestMovies.ds.show()
@@ -130,7 +133,7 @@ object AdvancedQueriesExample {
       """
         |MATCH (p:Person)-[r:ACTED_IN]->(m:Movie)
         |WHERE size(r.roles) > 1
-        |RETURN p.name as actor, m.title as movie, r.roles AS roles
+        |RETURN p.name AS actor, m.title AS movie, r.roles AS roles
         |ORDER BY size(roles) DESC
         |""".stripMargin)
 
@@ -138,17 +141,20 @@ object AdvancedQueriesExample {
     multiActor.ds.show(false)
     StdIn.readLine("Press Enter to continue: ")
 
-    // TODO: Does this query take too long?
-    //  -- yes :/
     val nearKevinBacon = graph.cypher(
       """
-        |MATCH (bacon:Person {name:"Kevin Bacon"})-[*1..2]-(hollywood)
-        |RETURN DISTINCT hollywood""".stripMargin)
+        |MATCH (bacon:Person {name: 'Kevin Bacon'})-[*1..3]-(hollywood)
+        |RETURN DISTINCT hollywood
+      """.stripMargin)
 
-    println("""Movies and actors up to 2 "hops" away from Kevin Bacon""")
+    println("""Movies and actors up to 3 hops away from Kevin Bacon""")
     nearKevinBacon.ds.show()
 
     spark.stop()
+  }
+
+  private def print(schema: PropertyGraphSchema): Unit = {
+    println(schema.asInstanceOf[SchemaAdapter].schema.pretty)
   }
 }
 
