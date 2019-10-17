@@ -1856,6 +1856,7 @@ class Dataset[T] private[sql](
   *   point. A completion point is either the end of a query (batch mode) or the end of a streaming
   *   epoch. The value of the aggregates only reflects the data processed since the previous
   *   completion point.
+  * Please note that continuous execution is currently not supported.
   *
   * The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
   * more aggregate functions (e.g. sum(a) or sum(a + b) + avg(c) - lit(1)). Expressions that
