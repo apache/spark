@@ -2535,6 +2535,19 @@ class RDDBarrier(object):
             return f(iterator)
         return PipelinedRDD(self.rdd, func, preservesPartitioning, isFromBarrier=True)
 
+    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+        """
+        .. note:: Experimental
+
+        Returns a new RDD by applying a function to each partition of the wrapped RDD,
+        where tasks are launched together in a barrier stage.
+        The interface is the same as :func:`RDD.mapPartitionsWithIndex`.
+        Please see the API doc there.
+
+        .. versionadded:: 2.4.0
+        """
+        return PipelinedRDD(self.rdd, f, preservesPartitioning, isFromBarrier=True)
+
 
 class PipelinedRDD(RDD):
 

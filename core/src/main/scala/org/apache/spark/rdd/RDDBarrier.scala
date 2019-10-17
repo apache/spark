@@ -54,5 +54,27 @@ class RDDBarrier[T: ClassTag] private[spark] (rdd: RDD[T]) {
     )
   }
 
+  /**
+   * :: Experimental ::
+   * Returns a new RDD by applying a function to each partition of the wrapped RDD,
+   * where tasks are launched together in a barrier stage.
+   * The interface is the same as [[org.apache.spark.rdd.RDD#mapPartitionsWithIndex]].
+   * Please see the API doc there.
+   * @see [[org.apache.spark.BarrierTaskContext]]
+   */
+  @Experimental
+  @Since("2.4.0")
+  def mapPartitionsWithIndex[S: ClassTag](
+      f: (Int, Iterator[T]) => Iterator[S],
+      preservesPartitioning: Boolean = false): RDD[S] = rdd.withScope {
+    val cleanedF = rdd.sparkContext.clean(f)
+    new MapPartitionsRDD(
+      rdd,
+      (_: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(index, iter),
+      preservesPartitioning,
+      isFromBarrier = true
+    )
+  }
+
   // TODO: [SPARK-25247] add extra conf to RDDBarrier, e.g., timeout.
 }
