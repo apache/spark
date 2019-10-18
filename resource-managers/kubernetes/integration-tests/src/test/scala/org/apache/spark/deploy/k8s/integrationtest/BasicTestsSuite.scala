@@ -18,6 +18,7 @@ package org.apache.spark.deploy.k8s.integrationtest
 
 import io.fabric8.kubernetes.api.model.Pod
 
+import org.apache.spark.internal.config.KILL_ON_OOM_ERROR
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
@@ -103,6 +104,28 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
     runSparkRemoteCheckAndVerifyCompletion(appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
   }
+
+  test("Run SparkPi without the default exit on OOM error flag", k8sTestTag) {
+    sparkAppConf
+      .set("spark.driver.extraJavaOptions", "-Dspark.test.foo=spark.test.bar")
+      .set("spark.kubernetes.driverEnv.DRIVER_VERBOSE", "true")
+      .set(KILL_ON_OOM_ERROR.key, "false")
+    val output = Seq("Pi is roughly 3",
+      "(spark.driver.extraJavaOptions,-Dspark.test.foo=spark.test.bar)")
+
+    runSparkPiAndVerifyCompletion(expectedLogOnCompletion = output)
+  }
+
+  test("Run SparkPi with the default exit on OOM error flag set", k8sTestTag) {
+    sparkAppConf
+      .set("spark.driver.extraJavaOptions", "-Dspark.test.foo=spark.test.bar")
+      .set("spark.kubernetes.driverEnv.DRIVER_VERBOSE", "true")
+
+    val output = Seq("Pi is roughly 3",
+      "(spark.driver.extraJavaOptions,-Dspark.test.foo=spark.test.bar " +
+        "-XX:OnOutOfMemoryError=\"kill -9 %p\")")
+    runSparkPiAndVerifyCompletion(expectedLogOnCompletion = output)
+  }
 }
 
 private[spark] object BasicTestsSuite {
@@ -114,3 +137,4 @@ private[spark] object BasicTestsSuite {
     "https://storage.googleapis.com/spark-k8s-integration-tests/files/pagerank_data.txt"
   val REMOTE_PAGE_RANK_FILE_NAME = "pagerank_data.txt"
 }
+

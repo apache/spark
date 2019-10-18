@@ -787,6 +787,14 @@ private[spark] class SparkSubmit extends Logging {
     }
     sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
+    // set oom error handling in cluster mode
+    if (sparkConf.get(KILL_ON_OOM_ERROR) && deployMode == CLUSTER) {
+      val driverJavaOptions = sparkConf.getOption(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
+        .map( _ + " ")
+        .getOrElse("") + "-XX:OnOutOfMemoryError=\"kill -9 %p\""
+      sparkConf.set(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, driverJavaOptions)
+    }
+
     (childArgs, childClasspath, sparkConf, childMainClass)
   }
 

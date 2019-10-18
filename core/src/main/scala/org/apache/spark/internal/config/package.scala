@@ -111,6 +111,10 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val KILL_ON_OOM_ERROR = ConfigBuilder("spark.driver.killOnOOMError")
+    .doc("Whether to kill the driver on an oom error in cluster mode.")
+    .booleanConf.createWithDefault(true)
+
   private[spark] val EVENT_LOG_ENABLED = ConfigBuilder("spark.eventLog.enabled")
     .booleanConf
     .createWithDefault(false)
@@ -1431,5 +1435,4 @@ package object config {
     .doc("The amount of memory used per page in bytes")
     .bytesConf(ByteUnit.BYTE)
     .createOptional
-
 }

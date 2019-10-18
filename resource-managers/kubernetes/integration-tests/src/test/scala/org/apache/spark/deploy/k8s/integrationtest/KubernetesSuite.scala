@@ -161,13 +161,14 @@ class KubernetesSuite extends SparkFunSuite
       appResource: String = containerLocalSparkDistroExamplesJar,
       driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
       executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
+      expectedLogOnCompletion: Seq[String] = Seq("Pi is roughly 3"),
       appArgs: Array[String] = Array.empty[String],
       appLocator: String = appLocator,
       isJVM: Boolean = true ): Unit = {
     runSparkApplicationAndVerifyCompletion(
       appResource,
       SPARK_PI_MAIN_CLASS,
-      Seq("Pi is roughly 3"),
+      expectedLogOnCompletion,
       appArgs,
       driverPodChecker,
       executorPodChecker,

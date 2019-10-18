@@ -60,11 +60,24 @@ if ! [ -z ${HADOOP_CONF_DIR+x} ]; then
   SPARK_CLASSPATH="$HADOOP_CONF_DIR:$SPARK_CLASSPATH";
 fi
 
+DRIVER_VERBOSE=${DRIVER_VERBOSE:-false}
+
+function get_verbose_flag()
+{
+  if [[ $DRIVER_VERBOSE == "true" ]]; then
+    echo "--verbose"
+  else
+    echo ""
+  fi
+}
+
 case "$1" in
   driver)
     shift 1
+    VERBOSE_FLAG=$(get_verbose_flag)
     CMD=(
       "$SPARK_HOME/bin/spark-submit"
+      $VERBOSE_FLAG
       --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
       --deploy-mode client
       "$@"
