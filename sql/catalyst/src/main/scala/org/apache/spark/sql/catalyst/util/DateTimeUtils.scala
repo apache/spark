@@ -378,7 +378,7 @@ object DateTimeUtils {
             i += 1
           }
         } else {
-          if (b == ':' || b == ' ') {
+          if (i < 9 && (b == ':' || b == ' ')) {
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
