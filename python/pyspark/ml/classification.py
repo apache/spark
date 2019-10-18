@@ -149,10 +149,23 @@ class JavaProbabilisticClassificationModel(JavaClassificationModel,
         return self._set(thresholds=value)
 
 
+class _LinearSVCParams(_JavaClassifierParams, HasRegParam, HasMaxIter, HasFitIntercept, HasTol,
+                       HasStandardization, HasWeightCol, HasAggregationDepth, HasThreshold):
+    """
+    Params for :py:class:`LinearSVC` and :py:class:`LinearSVCModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    threshold = Param(Params._dummy(), "threshold",
+                      "The threshold in binary classification applied to the linear model"
+                      " prediction.  This threshold can be any real number, where Inf will make"
+                      " all predictions 0.0 and -Inf will make all predictions 1.0.",
+                      typeConverter=TypeConverters.toFloat)
+
+
 @inherit_doc
-class LinearSVC(JavaClassifier, HasMaxIter, HasRegParam, HasTol,
-                HasFitIntercept, HasStandardization, HasWeightCol, HasAggregationDepth,
-                HasThreshold, JavaMLWritable, JavaMLReadable):
+class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable):
     """
     `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
 
@@ -170,6 +183,10 @@ class LinearSVC(JavaClassifier, HasMaxIter, HasRegParam, HasTol,
     LinearSVC...
     >>> model.getPredictionCol()
     'newPrediction'
+    >>> model.setThreshold(0.5)
+    LinearSVC...
+    >>> model.getThreshold()
+    0.5
     >>> model.coefficients
     DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
@@ -201,12 +218,6 @@ class LinearSVC(JavaClassifier, HasMaxIter, HasRegParam, HasTol,
 
     .. versionadded:: 2.2.0
     """
-
-    threshold = Param(Params._dummy(), "threshold",
-                      "The threshold in binary classification applied to the linear model"
-                      " prediction.  This threshold can be any real number, where Inf will make"
-                      " all predictions 0.0 and -Inf will make all predictions 1.0.",
-                      typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -247,7 +258,7 @@ class LinearSVC(JavaClassifier, HasMaxIter, HasRegParam, HasTol,
         return LinearSVCModel(java_model)
 
 
-class LinearSVCModel(JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+class LinearSVCModel(JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by LinearSVC.
 
@@ -271,74 +282,14 @@ class LinearSVCModel(JavaClassificationModel, JavaMLWritable, JavaMLReadable):
         return self._call_java("intercept")
 
 
-@inherit_doc
-class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, HasTol,
-                         HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
-                         HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
+class _LogisticRegressionParams(_JavaProbabilisticClassifierParams, HasRegParam,
+                                HasElasticNetParam, HasMaxIter, HasFitIntercept, HasTol,
+                                HasStandardization, HasWeightCol, HasAggregationDepth,
+                                HasThreshold):
     """
-    Logistic regression.
-    This class supports multinomial logistic (softmax) and binomial logistic regression.
+    Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
 
-    >>> from pyspark.sql import Row
-    >>> from pyspark.ml.linalg import Vectors
-    >>> bdf = sc.parallelize([
-    ...     Row(label=1.0, weight=1.0, features=Vectors.dense(0.0, 5.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.dense(1.0, 2.0)),
-    ...     Row(label=1.0, weight=3.0, features=Vectors.dense(2.0, 1.0)),
-    ...     Row(label=0.0, weight=4.0, features=Vectors.dense(3.0, 3.0))]).toDF()
-    >>> blor = LogisticRegression(regParam=0.01, weightCol="weight")
-    >>> blorModel = blor.fit(bdf)
-    >>> blorModel.setFeaturesCol("features")
-    LogisticRegressionModel...
-    >>> blorModel.setProbabilityCol("newProbability")
-    LogisticRegressionModel...
-    >>> blorModel.getProbabilityCol()
-    'newProbability'
-    >>> blorModel.coefficients
-    DenseVector([-1.080..., -0.646...])
-    >>> blorModel.intercept
-    3.112...
-    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
-    >>> mdf = spark.read.format("libsvm").load(data_path)
-    >>> mlor = LogisticRegression(regParam=0.1, elasticNetParam=1.0, family="multinomial")
-    >>> mlorModel = mlor.fit(mdf)
-    >>> mlorModel.coefficientMatrix
-    SparseMatrix(3, 4, [0, 1, 2, 3], [3, 2, 1], [1.87..., -2.75..., -0.50...], 1)
-    >>> mlorModel.interceptVector
-    DenseVector([0.04..., -0.42..., 0.37...])
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 1.0))]).toDF()
-    >>> blorModel.predict(test0.head().features)
-    1.0
-    >>> result = blorModel.transform(test0).head()
-    >>> result.prediction
-    1.0
-    >>> result.newProbability
-    DenseVector([0.02..., 0.97...])
-    >>> result.rawPrediction
-    DenseVector([-3.54..., 3.54...])
-    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
-    >>> blorModel.transform(test1).head().prediction
-    1.0
-    >>> blor.setParams("vector")
-    Traceback (most recent call last):
-        ...
-    TypeError: Method setParams forces keyword arguments.
-    >>> lr_path = temp_path + "/lr"
-    >>> blor.save(lr_path)
-    >>> lr2 = LogisticRegression.load(lr_path)
-    >>> lr2.getRegParam()
-    0.01
-    >>> model_path = temp_path + "/lr_model"
-    >>> blorModel.save(model_path)
-    >>> model2 = LogisticRegressionModel.load(model_path)
-    >>> blorModel.coefficients[0] == model2.coefficients[0]
-    True
-    >>> blorModel.intercept == model2.intercept
-    True
-    >>> model2
-    LogisticRegressionModel: uid = ..., numClasses = 2, numFeatures = 2
-
-    .. versionadded:: 1.3.0
+    .. versionadded:: 3.0.0
     """
 
     threshold = Param(Params._dummy(), "threshold",
@@ -383,61 +334,6 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
                                     "equal with 1 for binomial regression, or the number of "
                                     "classes for multinomial regression.",
                                     typeConverter=TypeConverters.toVector)
-
-    @keyword_only
-    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                 threshold=0.5, thresholds=None, probabilityCol="probability",
-                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
-                 aggregationDepth=2, family="auto",
-                 lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
-                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
-
-        """
-        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 threshold=0.5, thresholds=None, probabilityCol="probability", \
-                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                 aggregationDepth=2, family="auto", \
-                 lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
-                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
-        If the threshold and thresholds Params are both set, they must be equivalent.
-        """
-        super(LogisticRegression, self).__init__()
-        self._java_obj = self._new_java_obj(
-            "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto")
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
-        self._checkThresholdConsistency()
-
-    @keyword_only
-    @since("1.3.0")
-    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                  threshold=0.5, thresholds=None, probabilityCol="probability",
-                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
-                  aggregationDepth=2, family="auto",
-                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
-                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
-        """
-        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  threshold=0.5, thresholds=None, probabilityCol="probability", \
-                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                  aggregationDepth=2, family="auto", \
-                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
-                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
-        Sets params for logistic regression.
-        If the threshold and thresholds Params are both set, they must be equivalent.
-        """
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
-        self._checkThresholdConsistency()
-        return self
-
-    def _create_model(self, java_model):
-        return LogisticRegressionModel(java_model)
 
     @since("1.4.0")
     def setThreshold(self, value):
@@ -509,25 +405,11 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
 
     @since("2.1.0")
-    def setFamily(self, value):
-        """
-        Sets the value of :py:attr:`family`.
-        """
-        return self._set(family=value)
-
-    @since("2.1.0")
     def getFamily(self):
         """
         Gets the value of :py:attr:`family` or its default value.
         """
         return self.getOrDefault(self.family)
-
-    @since("2.3.0")
-    def setLowerBoundsOnCoefficients(self, value):
-        """
-        Sets the value of :py:attr:`lowerBoundsOnCoefficients`
-        """
-        return self._set(lowerBoundsOnCoefficients=value)
 
     @since("2.3.0")
     def getLowerBoundsOnCoefficients(self):
@@ -537,25 +419,11 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
         return self.getOrDefault(self.lowerBoundsOnCoefficients)
 
     @since("2.3.0")
-    def setUpperBoundsOnCoefficients(self, value):
-        """
-        Sets the value of :py:attr:`upperBoundsOnCoefficients`
-        """
-        return self._set(upperBoundsOnCoefficients=value)
-
-    @since("2.3.0")
     def getUpperBoundsOnCoefficients(self):
         """
         Gets the value of :py:attr:`upperBoundsOnCoefficients`
         """
         return self.getOrDefault(self.upperBoundsOnCoefficients)
-
-    @since("2.3.0")
-    def setLowerBoundsOnIntercepts(self, value):
-        """
-        Sets the value of :py:attr:`lowerBoundsOnIntercepts`
-        """
-        return self._set(lowerBoundsOnIntercepts=value)
 
     @since("2.3.0")
     def getLowerBoundsOnIntercepts(self):
@@ -565,13 +433,6 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
         return self.getOrDefault(self.lowerBoundsOnIntercepts)
 
     @since("2.3.0")
-    def setUpperBoundsOnIntercepts(self, value):
-        """
-        Sets the value of :py:attr:`upperBoundsOnIntercepts`
-        """
-        return self._set(upperBoundsOnIntercepts=value)
-
-    @since("2.3.0")
     def getUpperBoundsOnIntercepts(self):
         """
         Gets the value of :py:attr:`upperBoundsOnIntercepts`
@@ -579,8 +440,172 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
         return self.getOrDefault(self.upperBoundsOnIntercepts)
 
 
-class LogisticRegressionModel(JavaProbabilisticClassificationModel, JavaMLWritable, JavaMLReadable,
-                              HasTrainingSummary):
+@inherit_doc
+class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams, JavaMLWritable,
+                         JavaMLReadable):
+    """
+    Logistic regression.
+    This class supports multinomial logistic (softmax) and binomial logistic regression.
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.ml.linalg import Vectors
+    >>> bdf = sc.parallelize([
+    ...     Row(label=1.0, weight=1.0, features=Vectors.dense(0.0, 5.0)),
+    ...     Row(label=0.0, weight=2.0, features=Vectors.dense(1.0, 2.0)),
+    ...     Row(label=1.0, weight=3.0, features=Vectors.dense(2.0, 1.0)),
+    ...     Row(label=0.0, weight=4.0, features=Vectors.dense(3.0, 3.0))]).toDF()
+    >>> blor = LogisticRegression(regParam=0.01, weightCol="weight")
+    >>> blorModel = blor.fit(bdf)
+    >>> blorModel.setFeaturesCol("features")
+    LogisticRegressionModel...
+    >>> blorModel.setProbabilityCol("newProbability")
+    LogisticRegressionModel...
+    >>> blorModel.getProbabilityCol()
+    'newProbability'
+    >>> blorModel.setThreshold(0.1)
+    LogisticRegressionModel...
+    >>> blorModel.getThreshold()
+    0.1
+    >>> blorModel.coefficients
+    DenseVector([-1.080..., -0.646...])
+    >>> blorModel.intercept
+    3.112...
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> mdf = spark.read.format("libsvm").load(data_path)
+    >>> mlor = LogisticRegression(regParam=0.1, elasticNetParam=1.0, family="multinomial")
+    >>> mlorModel = mlor.fit(mdf)
+    >>> mlorModel.coefficientMatrix
+    SparseMatrix(3, 4, [0, 1, 2, 3], [3, 2, 1], [1.87..., -2.75..., -0.50...], 1)
+    >>> mlorModel.interceptVector
+    DenseVector([0.04..., -0.42..., 0.37...])
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 1.0))]).toDF()
+    >>> blorModel.predict(test0.head().features)
+    1.0
+    >>> result = blorModel.transform(test0).head()
+    >>> result.prediction
+    1.0
+    >>> result.newProbability
+    DenseVector([0.02..., 0.97...])
+    >>> result.rawPrediction
+    DenseVector([-3.54..., 3.54...])
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
+    >>> blorModel.transform(test1).head().prediction
+    1.0
+    >>> blor.setParams("vector")
+    Traceback (most recent call last):
+        ...
+    TypeError: Method setParams forces keyword arguments.
+    >>> lr_path = temp_path + "/lr"
+    >>> blor.save(lr_path)
+    >>> lr2 = LogisticRegression.load(lr_path)
+    >>> lr2.getRegParam()
+    0.01
+    >>> model_path = temp_path + "/lr_model"
+    >>> blorModel.save(model_path)
+    >>> model2 = LogisticRegressionModel.load(model_path)
+    >>> blorModel.coefficients[0] == model2.coefficients[0]
+    True
+    >>> blorModel.intercept == model2.intercept
+    True
+    >>> model2
+    LogisticRegressionModel: uid = ..., numClasses = 2, numFeatures = 2
+
+    .. versionadded:: 1.3.0
+    """
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                 threshold=0.5, thresholds=None, probabilityCol="probability",
+                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
+                 aggregationDepth=2, family="auto",
+                 lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
+                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
+
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                 threshold=0.5, thresholds=None, probabilityCol="probability", \
+                 rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
+                 aggregationDepth=2, family="auto", \
+                 lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
+                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
+        If the threshold and thresholds Params are both set, they must be equivalent.
+        """
+        super(LogisticRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.LogisticRegression", self.uid)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto")
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+        self._checkThresholdConsistency()
+
+    @keyword_only
+    @since("1.3.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                  threshold=0.5, thresholds=None, probabilityCol="probability",
+                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
+                  aggregationDepth=2, family="auto",
+                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
+                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                  threshold=0.5, thresholds=None, probabilityCol="probability", \
+                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
+                  aggregationDepth=2, family="auto", \
+                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
+                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
+        Sets params for logistic regression.
+        If the threshold and thresholds Params are both set, they must be equivalent.
+        """
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
+        self._checkThresholdConsistency()
+        return self
+
+    def _create_model(self, java_model):
+        return LogisticRegressionModel(java_model)
+
+    @since("2.1.0")
+    def setFamily(self, value):
+        """
+        Sets the value of :py:attr:`family`.
+        """
+        return self._set(family=value)
+
+    @since("2.3.0")
+    def setLowerBoundsOnCoefficients(self, value):
+        """
+        Sets the value of :py:attr:`lowerBoundsOnCoefficients`
+        """
+        return self._set(lowerBoundsOnCoefficients=value)
+
+    @since("2.3.0")
+    def setUpperBoundsOnCoefficients(self, value):
+        """
+        Sets the value of :py:attr:`upperBoundsOnCoefficients`
+        """
+        return self._set(upperBoundsOnCoefficients=value)
+
+    @since("2.3.0")
+    def setLowerBoundsOnIntercepts(self, value):
+        """
+        Sets the value of :py:attr:`lowerBoundsOnIntercepts`
+        """
+        return self._set(lowerBoundsOnIntercepts=value)
+
+    @since("2.3.0")
+    def setUpperBoundsOnIntercepts(self, value):
+        """
+        Sets the value of :py:attr:`upperBoundsOnIntercepts`
+        """
+        return self._set(upperBoundsOnIntercepts=value)
+
+
+class LogisticRegressionModel(JavaProbabilisticClassificationModel, _LogisticRegressionParams,
+                              JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by LogisticRegression.
 
@@ -1647,8 +1672,36 @@ class GBTClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassification
         return self._call_java("evaluateEachIteration", dataset)
 
 
+class _NaiveBayesParams(_JavaPredictorParams, HasWeightCol):
+    """
+    Params for :py:class:`NaiveBayes` and :py:class:`NaiveBayesModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
+                      "default is 1.0", typeConverter=TypeConverters.toFloat)
+    modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
+                      "(case-sensitive). Supported options: multinomial (default) and bernoulli.",
+                      typeConverter=TypeConverters.toString)
+
+    @since("1.5.0")
+    def getSmoothing(self):
+        """
+        Gets the value of smoothing or its default value.
+        """
+        return self.getOrDefault(self.smoothing)
+
+    @since("1.5.0")
+    def getModelType(self):
+        """
+        Gets the value of modelType or its default value.
+        """
+        return self.getOrDefault(self.modelType)
+
+
 @inherit_doc
-class NaiveBayes(JavaProbabilisticClassifier, HasThresholds, HasWeightCol,
+class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, HasWeightCol,
                  JavaMLWritable, JavaMLReadable):
     """
     Naive Bayes Classifiers.
@@ -1674,6 +1727,8 @@ class NaiveBayes(JavaProbabilisticClassifier, HasThresholds, HasWeightCol,
     NaiveBayes_...
     >>> model.getLabelCol()
     'newLabel'
+    >>> model.getSmoothing()
+    1.0
     >>> model.pi
     DenseVector([-0.81..., -0.58...])
     >>> model.theta
@@ -1711,12 +1766,6 @@ class NaiveBayes(JavaProbabilisticClassifier, HasThresholds, HasWeightCol,
 
     .. versionadded:: 1.5.0
     """
-
-    smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
-                      "default is 1.0", typeConverter=TypeConverters.toFloat)
-    modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
-                      "(case-sensitive). Supported options: multinomial (default) and bernoulli.",
-                      typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -1759,28 +1808,15 @@ class NaiveBayes(JavaProbabilisticClassifier, HasThresholds, HasWeightCol,
         return self._set(smoothing=value)
 
     @since("1.5.0")
-    def getSmoothing(self):
-        """
-        Gets the value of smoothing or its default value.
-        """
-        return self.getOrDefault(self.smoothing)
-
-    @since("1.5.0")
     def setModelType(self, value):
         """
         Sets the value of :py:attr:`modelType`.
         """
         return self._set(modelType=value)
 
-    @since("1.5.0")
-    def getModelType(self):
-        """
-        Gets the value of modelType or its default value.
-        """
-        return self.getOrDefault(self.modelType)
 
-
-class NaiveBayesModel(JavaProbabilisticClassificationModel, JavaMLWritable, JavaMLReadable):
+class NaiveBayesModel(JavaProbabilisticClassificationModel, _NaiveBayesParams, JavaMLWritable,
+                      JavaMLReadable):
     """
     Model fitted by NaiveBayes.
 
@@ -1804,9 +1840,60 @@ class NaiveBayesModel(JavaProbabilisticClassificationModel, JavaMLWritable, Java
         return self._call_java("theta")
 
 
+class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, HasMaxIter,
+                                  HasTol, HasStepSize, HasSolver):
+    """
+    Params for :py:class:`MultilayerPerceptronClassifier`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
+                   "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
+                   "neurons and output layer of 10 neurons.",
+                   typeConverter=TypeConverters.toListInt)
+    blockSize = Param(Params._dummy(), "blockSize", "Block size for stacking input data in " +
+                      "matrices. Data is stacked within partitions. If block size is more than " +
+                      "remaining data in a partition then it is adjusted to the size of this " +
+                      "data. Recommended size is between 10 and 1000, default is 128.",
+                      typeConverter=TypeConverters.toInt)
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: l-bfgs, gd.", typeConverter=TypeConverters.toString)
+    initialWeights = Param(Params._dummy(), "initialWeights", "The initial weights of the model.",
+                           typeConverter=TypeConverters.toVector)
+
+    @since("1.6.0")
+    def getLayers(self):
+        """
+        Gets the value of layers or its default value.
+        """
+        return self.getOrDefault(self.layers)
+
+    @since("1.6.0")
+    def getBlockSize(self):
+        """
+        Gets the value of blockSize or its default value.
+        """
+        return self.getOrDefault(self.blockSize)
+
+    @since("2.0.0")
+    def getStepSize(self):
+        """
+        Gets the value of stepSize or its default value.
+        """
+        return self.getOrDefault(self.stepSize)
+
+    @since("2.0.0")
+    def getInitialWeights(self):
+        """
+        Gets the value of initialWeights or its default value.
+        """
+        return self.getOrDefault(self.initialWeights)
+
+
 @inherit_doc
-class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, HasMaxIter, HasTol, HasSeed,
-                                     HasStepSize, HasSolver, JavaMLWritable, JavaMLReadable):
+class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPerceptronParams,
+                                     JavaMLWritable, JavaMLReadable):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -1862,20 +1949,6 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, HasMaxIter, Ha
     .. versionadded:: 1.6.0
     """
 
-    layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
-                   "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
-                   "neurons and output layer of 10 neurons.",
-                   typeConverter=TypeConverters.toListInt)
-    blockSize = Param(Params._dummy(), "blockSize", "Block size for stacking input data in " +
-                      "matrices. Data is stacked within partitions. If block size is more than " +
-                      "remaining data in a partition then it is adjusted to the size of this " +
-                      "data. Recommended size is between 10 and 1000, default is 128.",
-                      typeConverter=TypeConverters.toInt)
-    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
-                   "options: l-bfgs, gd.", typeConverter=TypeConverters.toString)
-    initialWeights = Param(Params._dummy(), "initialWeights", "The initial weights of the model.",
-                           typeConverter=TypeConverters.toVector)
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
@@ -1921,25 +1994,11 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, HasMaxIter, Ha
         return self._set(layers=value)
 
     @since("1.6.0")
-    def getLayers(self):
-        """
-        Gets the value of layers or its default value.
-        """
-        return self.getOrDefault(self.layers)
-
-    @since("1.6.0")
     def setBlockSize(self, value):
         """
         Sets the value of :py:attr:`blockSize`.
         """
         return self._set(blockSize=value)
-
-    @since("1.6.0")
-    def getBlockSize(self):
-        """
-        Gets the value of blockSize or its default value.
-        """
-        return self.getOrDefault(self.blockSize)
 
     @since("2.0.0")
     def setStepSize(self, value):
@@ -1949,25 +2008,11 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, HasMaxIter, Ha
         return self._set(stepSize=value)
 
     @since("2.0.0")
-    def getStepSize(self):
-        """
-        Gets the value of stepSize or its default value.
-        """
-        return self.getOrDefault(self.stepSize)
-
-    @since("2.0.0")
     def setInitialWeights(self, value):
         """
         Sets the value of :py:attr:`initialWeights`.
         """
         return self._set(initialWeights=value)
-
-    @since("2.0.0")
-    def getInitialWeights(self):
-        """
-        Gets the value of initialWeights or its default value.
-        """
-        return self.getOrDefault(self.initialWeights)
 
 
 class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationModel, JavaMLWritable,
