@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
-import org.apache.spark.storage.BlockManagerMessages.{BlockManagerHeartbeat, RegisterBlockManager, RemoveExecutor, UpdateBlockInfo}
+import org.apache.spark.storage.BlockManagerMessages.{BlockManagerHeartbeat, RegisterBlockManager, RemoveExecutor, StopBlockManagerMaster, UpdateBlockInfo}
 
 /**
  * Separate heartbeat out of BlockManagerMasterEndpoint due to performance consideration.
@@ -37,6 +37,10 @@ private[spark] class BlockManagerMasterHeartbeatEndpoint(
   // Mapping from executor ID to block manager ID.
   private val blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId]
 
+  // Use BlockManagerId -> Long to manage the heartbeat last seen, so the events which to handle
+  // in this class due to whether or not the block manager id and last seen will be changed.
+  // `RegisterBlockManager` and `RemoveExecutor` updates the BlockManagerId
+  // and `UpdateBlockInfo` and `BlockManagerHeartbeat` updates the last seen time.
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterBlockManager(blockManagerId, _, _, _, _) =>
       updateLastSeenMs(blockManagerId)
@@ -54,6 +58,12 @@ private[spark] class BlockManagerMasterHeartbeatEndpoint(
 
     case BlockManagerHeartbeat(blockManagerId) =>
       context.reply(heartbeatReceived(blockManagerId))
+
+    case StopBlockManagerMaster =>
+      context.reply(true)
+      stop()
+
+    case _ => // do nothing for unexpected events
   }
 
   /**

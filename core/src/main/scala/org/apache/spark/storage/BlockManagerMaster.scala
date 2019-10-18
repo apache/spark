@@ -38,9 +38,7 @@ class BlockManagerMaster(
   val timeout = RpcUtils.askRpcTimeout(conf)
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
-
   def removeExecutor(execId: String): Unit = {
-    driverHeartbeatEndPoint.askSync[Boolean](RemoveExecutor(execId))
     tell(RemoveExecutor(execId))
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
@@ -48,7 +46,6 @@ class BlockManagerMaster(
   /** Request removal of a dead executor from the driver endpoint.
    *  This is only called on the driver side. Non-blocking
    */
-
   def removeExecutorAsync(execId: String): Unit = {
     driverHeartbeatEndPoint.ask[Boolean](RemoveExecutor(execId))
     driverEndpoint.ask[Boolean](RemoveExecutor(execId))
@@ -243,8 +240,12 @@ class BlockManagerMaster(
     }
   }
 
-  /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
-  private def tell(message: Any): Unit = {
+  /**
+   * Send a one-way message to the master endpoint and heartbeat endpoint,
+   * to which we expect it to reply with true. Use async way to ask heartbeat endpoint.
+   */
+  private def tell(message: ToBlockManagerMaster): Unit = {
+    driverHeartbeatEndPoint.ask[Boolean](message)
     if (!driverEndpoint.askSync[Boolean](message)) {
       throw new SparkException("BlockManagerMasterEndpoint returned false, expected true.")
     }

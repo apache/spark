@@ -85,6 +85,9 @@ class BlockManagerMasterEndpoint(
   private val externalShuffleServiceRddFetchEnabled: Boolean = externalBlockStoreClient.isDefined
   private val externalShuffleServicePort: Int = StorageUtils.externalShuffleServicePort(conf)
 
+  // SPARK-29298 separates heartbeat endpoint from driver endpoint.
+  // Keep in mind that if the block manager id is changed here, the related event needs to be send
+  // to `BlockManagerMasterHeartbeatEndpoint` as well.
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint) =>
       context.reply(register(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
