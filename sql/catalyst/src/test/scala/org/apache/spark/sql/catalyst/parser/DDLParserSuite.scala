@@ -845,6 +845,63 @@ class DDLParserSuite extends AnalysisTest {
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
   }
 
+  test("create namespace") {
+    val sql =
+      """
+        |CREATE DATABASE IF NOT EXISTS database_name
+        |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
+        |COMMENT 'database_comment' LOCATION '/home/user/db'
+      """.stripMargin
+    comparePlans(
+      parsePlan(sql),
+      CreateNamespaceStatement(
+        Seq("database_name"),
+        ifNotExists = true,
+        Some("database_comment"),
+        Some("/home/user/db"),
+        Map("a" -> "a", "b" -> "b", "c" -> "c")))
+  }
+
+  test("create namespace -- check duplicates") {
+    def createDatabase(duplicateClause: String): String = {
+      s"""
+         |CREATE DATABASE IF NOT EXISTS database_name
+         |$duplicateClause
+         |$duplicateClause
+      """.stripMargin
+    }
+    val sql1 = createDatabase("COMMENT 'database_comment'")
+    val sql2 = createDatabase("LOCATION '/home/user/db'")
+    val sql3 = createDatabase("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: LOCATION")
+    intercept(sql3, "Found duplicate clauses: WITH DBPROPERTIES")
+  }
+
+  test("create namespace - property values must be set") {
+    assertUnsupported(
+      sql = "CREATE DATABASE my_db WITH DBPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+  }
+
+  test("create namespace - support for other types in DBPROPERTIES") {
+    val sql =
+      """
+        |CREATE DATABASE database_name
+        |LOCATION '/home/user/db'
+        |WITH DBPROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE)
+      """.stripMargin
+    comparePlans(
+      parsePlan(sql),
+      CreateNamespaceStatement(
+        Seq("database_name"),
+        ifNotExists = false,
+        None,
+        Some("/home/user/db"),
+        Map("a" -> "1", "b" -> "0.1", "c" -> "true")))
+  }
+
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),

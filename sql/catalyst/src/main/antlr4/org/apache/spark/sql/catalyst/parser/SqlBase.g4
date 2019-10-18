@@ -83,7 +83,7 @@ statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE NAMESPACE? multipartIdentifier                               #use
-    | CREATE (DATABASE | NAMESPACE) (IF NOT EXISTS)? multipartIdentifier
+    | CREATE (database | NAMESPACE) (IF NOT EXISTS)? multipartIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
          (WITH DBPROPERTIES tablePropertyList))*                       #createNamespace

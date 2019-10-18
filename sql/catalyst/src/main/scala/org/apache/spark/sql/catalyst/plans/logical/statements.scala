@@ -289,7 +289,7 @@ case class CreateNamespaceStatement(
   namespace: Seq[String],
   ifNotExists: Boolean,
   comment: Option[String],
-  location: Option[String],
+  locationSpec: Option[String],
   properties: Map[String, String]) extends ParsedStatement
 
 /**

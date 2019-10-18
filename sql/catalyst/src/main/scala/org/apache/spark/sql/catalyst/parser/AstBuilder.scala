@@ -2300,15 +2300,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[CreateDatabaseCommand]] command.
+   * Create a [[CreateNamespaceStatement]] command.
    *
    * For example:
    * {{{
-   *   CREATE DATABASE [IF NOT EXISTS] database_name
-   *     create_database_clauses;
+   *   CREATE NAMESPACE [IF NOT EXISTS] ns1.ns2.ns3
+   *     create_namespace_clauses;
    *
-   *   create_database_clauses (order insensitive):
-   *     [COMMENT database_comment]
+   *   create_namespace_clauses (order insensitive):
+   *     [COMMENT namespace_comment]
    *     [LOCATION path]
    *     [WITH DBPROPERTIES (key1=val1, key2=val2, ...)]
    * }}}
@@ -2317,10 +2317,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
-
-    if (ctx.DATABASE != null && ctx.multipartIdentifier != null) {
-      throw new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
-    }
 
     CreateNamespaceStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),

@@ -747,6 +747,14 @@ class DataSourceV2SQLSuite
     assert(expected === df.collect())
   }
 
+  test("CreateNameSpace: session catalog") {
+    sql("CREATE NAMESPACE ns")
+    testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
+
+    sql("CREATE NAMESPACE testcat.ns1.ns2")
+    testShowNamespaces("SHOW NAMESPACES testcat", Seq("ns1"))
+  }
+
   test("ShowNamespaces: show root namespaces with default v2 catalog") {
     spark.conf.set("spark.sql.default.catalog", "testcat")
 
