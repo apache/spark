@@ -248,6 +248,10 @@ class RelationalGroupedDataset protected[sql](
     aggregateNumericColumns(colNames : _*)(Average)
   }
 
+  def mean(col: Column, cols: Column*): DataFrame = {
+    mean(col.toString +: cols.map(col => col.toString) : _*)
+  }
+
   /**
    * Compute the max value for each numeric columns for each group.
    * The resulting `DataFrame` will also contain the grouping columns.
@@ -258,6 +262,10 @@ class RelationalGroupedDataset protected[sql](
   @scala.annotation.varargs
   def max(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Max)
+  }
+
+  def max(col: Column, cols: Column*): DataFrame = {
+    max(col.toString +: cols.map(col => col.toString) : _*)
   }
 
   /**
@@ -272,6 +280,10 @@ class RelationalGroupedDataset protected[sql](
     aggregateNumericColumns(colNames : _*)(Average)
   }
 
+  def avg(col: Column, cols: Column*): DataFrame = {
+    avg(col.toString +: cols.map(col => col.toString) : _*)
+  }
+
   /**
    * Compute the min value for each numeric column for each group.
    * The resulting `DataFrame` will also contain the grouping columns.
@@ -284,6 +296,10 @@ class RelationalGroupedDataset protected[sql](
     aggregateNumericColumns(colNames : _*)(Min)
   }
 
+  def min(col: Column, cols: Column*): DataFrame = {
+    min(col.toString +: cols.map(col => col.toString) : _*)
+  }
+
   /**
    * Compute the sum for each numeric columns for each group.
    * The resulting `DataFrame` will also contain the grouping columns.
@@ -294,6 +310,10 @@ class RelationalGroupedDataset protected[sql](
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Sum)
+  }
+
+  def sum(col: Column, cols: Column*): DataFrame = {
+    sum(col.toString +: cols.map(col => col.toString) : _*)
   }
 
   /**
