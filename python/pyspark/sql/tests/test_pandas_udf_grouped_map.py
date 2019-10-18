@@ -539,7 +539,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             pdf['result'] = [pdf['id']] * len(pdf)
             return pdf
 
-        result = df.groupby('group', window('ts', '5 days')).apply(f)\
+        result = df.groupby('group', window('ts', '120 hours')).apply(f)\
             .select('id', 'result').collect()
         for r in result:
             self.assertListEqual(expected[r[0]], r[1])
@@ -583,7 +583,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                                                    expected[id][1] == window_range))
             return pdf.assign(result=is_expected)
 
-        result = df.groupby('group', window('ts', '5 days')).apply(f).select('result').collect()
+        result = df.groupby('group', window('ts', '120 hours')).apply(f).select('result').collect()
 
         # Check that all group and window_range values from udf matched expected
         self.assertTrue(all([r[0] for r in result]))
