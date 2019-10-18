@@ -154,11 +154,12 @@ private[client] sealed abstract class Shim {
       purge: Boolean): Unit
 
   def getDatabaseOwnerName(db: Database): String
+
   def setDatabaseOwnerName(db: Database, owner: String): Unit
 
   def getDatabaseOwnerType(db: Database): String
-  def setDatabaseOwnerType(db: Database, ownerType: String): Unit
 
+  def setDatabaseOwnerType(db: Database, ownerType: String): Unit
 
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)

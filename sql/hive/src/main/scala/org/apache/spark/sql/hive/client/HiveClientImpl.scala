@@ -978,7 +978,6 @@ private[hive] class HiveClientImpl(
 }
 
 private[hive] object HiveClientImpl {
-
   val DB_OWNER_NAME_PROP: String = "ownerName"
   val DB_OWNER_TYPE_PROP: String = "ownerType"
 
