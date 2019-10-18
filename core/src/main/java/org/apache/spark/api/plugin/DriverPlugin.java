@@ -44,7 +44,9 @@ public interface DriverPlugin {
    * preferrably performing expensive operations in a separate thread, or postponing them until
    * the application has fully started.
    *
-   * @param context Information about the Spark application where the plugin is running.
+   * @param sc The SparkContext loading the plugin.
+   * @param pluginContext Additional plugin-specific about the Spark application where the plugin
+   *                      is running.
    * @return A map containing configuration data for the executor-side component of the plugin.
    *         This map will be provided to the {@link ExecutorPlugin}'s initialization method.
    */
