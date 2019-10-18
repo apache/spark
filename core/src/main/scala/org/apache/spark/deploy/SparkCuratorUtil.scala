@@ -24,6 +24,7 @@ import org.apache.curator.retry.ExponentialBackoffRetry
 import org.apache.zookeeper.KeeperException
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.master.ZookeeperSuspensionTolerantErrorPolicy
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Deploy.ZOOKEEPER_URL
 
@@ -38,9 +39,13 @@ private[spark] object SparkCuratorUtil extends Logging {
       conf: SparkConf,
       zkUrlConf: String = ZOOKEEPER_URL.key): CuratorFramework = {
     val ZK_URL = conf.get(zkUrlConf)
-    val zk = CuratorFrameworkFactory.newClient(ZK_URL,
-      ZK_SESSION_TIMEOUT_MILLIS, ZK_CONNECTION_TIMEOUT_MILLIS,
-      new ExponentialBackoffRetry(RETRY_WAIT_MILLIS, MAX_RECONNECT_ATTEMPTS))
+    val zk = CuratorFrameworkFactory.builder()
+            .connectString(ZK_URL)
+            .sessionTimeoutMs(ZK_SESSION_TIMEOUT_MILLIS)
+            .connectionTimeoutMs(ZK_CONNECTION_TIMEOUT_MILLIS)
+            .retryPolicy(new ExponentialBackoffRetry(RETRY_WAIT_MILLIS, MAX_RECONNECT_ATTEMPTS))
+            .connectionStateErrorPolicy(new ZookeeperSuspensionTolerantErrorPolicy())
+            .build()
     zk.start()
     zk
   }
