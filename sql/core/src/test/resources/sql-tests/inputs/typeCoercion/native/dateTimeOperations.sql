@@ -58,3 +58,15 @@ select cast('1' as binary) - interval 2 day;
 select cast(1 as boolean) - interval 2 day;
 select cast('2017-12-11 09:30:00.0' as timestamp) - interval 2 day;
 select cast('2017-12-11 09:30:00' as date) - interval 2 day;
+
+select interval 1 month - '2 seconds';
+
+select '1 month' + date'2019-10-01';
+select '1 month 1 second' + timestamp'2019-10-18 10:11:12';
+select date'2019-10-01' + '1 month';
+select timestamp'2019-10-18 10:11:12' + '1 month 1 second';
+
+select timestamp'2019-10-18 10:11:12' - '2019-10-18';
+select date'2019-10-18' - '2019-10-01';
+select '2019-10-18 10:11:12' - timestamp'2019-10-18 00:00:00';
+select '2019-10-18 10:11:12' - date'2019-10-18';
