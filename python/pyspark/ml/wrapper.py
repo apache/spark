@@ -280,6 +280,14 @@ class JavaParams(JavaWrapper, Params):
             that._transfer_params_to_java()
         return that
 
+    def clear(self, param):
+        """
+        Clears a param from the param map if it has been explicitly set.
+        """
+        super(JavaParams, self).clear(param)
+        java_param = self._java_obj.getParam(param.name)
+        self._java_obj.clear(java_param)
+
 
 @inherit_doc
 class JavaEstimator(JavaParams, Estimator):

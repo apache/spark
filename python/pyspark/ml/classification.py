@@ -446,7 +446,7 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
         Clears value of :py:attr:`thresholds` if it has been set.
         """
         self._set(threshold=value)
-        self._clear(self.thresholds)
+        self.clear(self.thresholds)
         return self
 
     @since("1.4.0")
@@ -477,7 +477,7 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
         Clears value of :py:attr:`threshold` if it has been set.
         """
         self._set(thresholds=value)
-        self._clear(self.threshold)
+        self.clear(self.threshold)
         return self
 
     @since("1.5.0")
