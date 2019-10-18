@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.rule.CoalescedShuffleReaderExec
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -78,7 +77,7 @@ class AdaptiveQueryExecSuite
   }
 
   private def checkNumLocalShuffleReaders(plan: SparkPlan, expected: Int): Unit = {
-    val localReaders = plan.collect {
+    val localReaders = collect(plan) {
       case reader: LocalShuffleReaderExec => reader
     }
     assert(localReaders.length === expected)
@@ -164,7 +163,7 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
-
+      // additional shuffle exchange introduced, only one shuffle reader to local shuffle reader.
       checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
@@ -189,8 +188,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
-
-      checkNumLocalShuffleReaders(adaptivePlan, 0)
+      // additional shuffle exchange introduced, only one shuffle reader to local shuffle reader.
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -214,7 +213,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
-      checkNumLocalShuffleReaders(adaptivePlan, 0)
+      // additional shuffle exchange introduced, only one shuffle reader to local shuffle reader.
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
 
@@ -229,7 +229,7 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 2)
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 2)
       // Even with local shuffle reader, the query statge reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.size == 1)
@@ -247,6 +247,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      // Even with local shuffle reader, the query statge reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.size == 1)
     }
@@ -265,6 +267,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      // Even with local shuffle reader, the query statge reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.nonEmpty)
       val sub = findReusedSubquery(adaptivePlan)
@@ -284,6 +288,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      // Even with local shuffle reader, the query statge reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.isEmpty)
       val sub = findReusedSubquery(adaptivePlan)
@@ -306,6 +312,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      // Even with local shuffle reader, the query statge reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.nonEmpty)
       assert(ex.head.plan.isInstanceOf[BroadcastQueryStageExec])
