@@ -2708,4 +2708,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         tableName, Option(visitIdentifierSeq(ctx.identifierSeq())), allColumns = false)
     }
   }
+
+  /**
+   * Create a [[RepairTableStatement]].
+   *
+   * For example:
+   * {{{
+   *   MSCK REPAIR TABLE multi_part_name
+   * }}}
+   */
+  override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
+    RepairTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+  }
 }
