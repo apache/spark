@@ -22,12 +22,16 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito._
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec}
+import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
@@ -1038,5 +1042,51 @@ class JoinSuite extends QueryTest with SharedSparkSession {
     assert(filterExec.isEmpty)
 
     checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
+  }
+}
+
+class JoinWithResourceCleanSuite extends JoinSuite with BeforeAndAfterAll {
+  import testImplicits._
+  import scala.collection.mutable.ArrayBuffer
+
+  private def checkCleanupResourceTriggered(plan: SparkPlan) : ArrayBuffer[SortExec] = {
+    // Check cleanupResources are finally triggered in SortExec node
+    val sorts = new ArrayBuffer[SortExec]()
+    plan.foreachUp {
+      case s: SortExec => sorts += s
+      case _ =>
+    }
+    sorts.foreach { sort =>
+      val sortExec = spy(sort)
+      verify(sortExec, atLeastOnce).cleanupResources()
+      verify(sortExec.rowSorter, atLeastOnce).cleanupResources()
+    }
+    sorts
+  }
+
+  override def checkAnswer(df: => DataFrame, rows: Seq[Row]): Unit = {
+    withSQLConf(
+      SQLConf.SORT_MERGE_JOIN_EXEC_EAGER_CLEANUP_RESOURCES.key -> "true") {
+      checkCleanupResourceTriggered(df.queryExecution.sparkPlan)
+      super.checkAnswer(df, rows)
+    }
+  }
+
+  test("cleanupResource in code generation") {
+    withSQLConf(
+      SQLConf.SORT_MERGE_JOIN_EXEC_EAGER_CLEANUP_RESOURCES.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(0, 10, 1, 2)
+      val df2 = spark.range(10).select($"id".as("b1"), (- $"id").as("b2"))
+      val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2").select($"b1", $"b2", $"id")
+
+      val sorts = checkCleanupResourceTriggered(res.queryExecution.sparkPlan)
+      // Make sure SortExec did the code generation
+      sorts.foreach { sort =>
+        verify(spy(sort), atLeastOnce).doProduce(any())
+      }
+      checkAnswer(res, Row(0, 0, 0))
+    }
   }
 }

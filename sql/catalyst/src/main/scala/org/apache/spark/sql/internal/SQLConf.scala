@@ -1437,6 +1437,14 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
+  val SORT_MERGE_JOIN_EXEC_EAGER_CLEANUP_RESOURCES =
+    buildConf("spark.sql.sortMergeJoinExec.eagerCleanupResources")
+      .internal()
+      .doc("When true, the SortMergeJoinExec will trigger all upstream resources cleanup right " +
+        "after it finishes computing.")
+      .booleanConf
+      .createWithDefault(true)
+
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
       .internal()
