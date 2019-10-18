@@ -23,8 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -846,6 +845,25 @@ class DDLParserSuite extends AnalysisTest {
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
   }
 
+  test("show databases: basic") {
+    comparePlans(
+      parsePlan("SHOW DATABASES"),
+      ShowNamespacesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW DATABASES LIKE 'defau*'"),
+      ShowNamespacesStatement(None, Some("defau*")))
+  }
+
+  test("show databases: FROM/IN operator is not allowed") {
+    def verify(sql: String): Unit = {
+      val exc = intercept[ParseException] { parsePlan(sql) }
+      assert(exc.getMessage.contains("FROM/IN operator is not allowed in SHOW DATABASES"))
+    }
+
+    verify("SHOW DATABASES FROM testcat.ns1.ns2")
+    verify("SHOW DATABASES IN testcat.ns1.ns2")
+  }
+
   test("show namespaces") {
     comparePlans(
       parsePlan("SHOW NAMESPACES"),
@@ -859,6 +877,82 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
       ShowNamespacesStatement(Some(Seq("testcat", "ns1")), Some("*pattern*")))
+  }
+
+  test("analyze table statistics") {
+    comparePlans(parsePlan("analyze table a.b.c compute statistics"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map.empty, noScan = false))
+    comparePlans(parsePlan("analyze table a.b.c compute statistics noscan"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map.empty, noScan = true))
+    comparePlans(parsePlan("analyze table a.b.c partition (a) compute statistics nOscAn"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("a" -> None), noScan = true))
+
+    // Partitions specified
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS"),
+      AnalyzeTableStatement(
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = false))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan"),
+      AnalyzeTableStatement(
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = true))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09")), noScan = true))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS"),
+      AnalyzeTableStatement(
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = false))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan"),
+      AnalyzeTableStatement(
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = true))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr=11) COMPUTE STATISTICS noscan"),
+      AnalyzeTableStatement(
+        Seq("a", "b", "c"), Map("ds" -> None, "hr" -> Some("11")), noScan = true))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> None, "hr" -> None), noScan = false))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS noscan"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> None, "hr" -> None), noScan = true))
+
+    intercept("analyze table a.b.c compute statistics xxxx",
+      "Expected `NOSCAN` instead of `xxxx`")
+    intercept("analyze table a.b.c partition (a) compute statistics xxxx",
+      "Expected `NOSCAN` instead of `xxxx`")
+  }
+
+  test("analyze table column statistics") {
+    intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS", "")
+
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS key, value"),
+      AnalyzeColumnStatement(Seq("a", "b", "c"), Option(Seq("key", "value")), allColumns = false))
+
+    // Partition specified - should be ignored
+    comparePlans(
+      parsePlan(
+        s"""
+           |ANALYZE TABLE a.b.c PARTITION(ds='2017-06-10')
+           |COMPUTE STATISTICS FOR COLUMNS key, value
+         """.stripMargin),
+      AnalyzeColumnStatement(Seq("a", "b", "c"), Option(Seq("key", "value")), allColumns = false))
+
+    // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
+    comparePlans(
+      parsePlan(
+        s"""
+           |ANALYZE TABLE a.b.c PARTITION(ds='2017-06-10')
+           |COMPUTE STATISTICS FOR ALL COLUMNS
+         """.stripMargin),
+      AnalyzeColumnStatement(Seq("a", "b", "c"), None, allColumns = true))
+
+    intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
+      "mismatched input 'key' expecting <EOF>")
+    intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL",
+      "missing 'COLUMNS' at '<EOF>'")
   }
 
   private case class TableSpec(

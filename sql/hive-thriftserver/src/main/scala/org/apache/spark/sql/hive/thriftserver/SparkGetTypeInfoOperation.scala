@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.UUID
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli.{HiveSQLException, OperationState}
 import org.apache.hive.service.cli.operation.GetTypeInfoOperation
@@ -92,11 +93,20 @@ private[hive] class SparkGetTypeInfoOperation(
       })
       setState(OperationState.FINISHED)
     } catch {
-      case e: HiveSQLException =>
+      case e: Throwable =>
+        logError(s"Error executing get type info with $statementId", e)
         setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        throw e
+        e match {
+          case hiveException: HiveSQLException =>
+            HiveThriftServer2.listener.onStatementError(
+              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+            throw hiveException
+          case _ =>
+            val root = ExceptionUtils.getRootCause(e)
+            HiveThriftServer2.listener.onStatementError(
+              statementId, root.getMessage, SparkUtils.exceptionString(root))
+            throw new HiveSQLException("Error getting type info: " + root.toString, root)
+        }
     }
     HiveThriftServer2.listener.onStatementFinish(statementId)
   }

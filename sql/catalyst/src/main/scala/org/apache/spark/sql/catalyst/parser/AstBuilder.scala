@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement, UseStatement}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
@@ -2304,6 +2303,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a [[ShowNamespacesStatement]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.DATABASES != null && ctx.multipartIdentifier != null) {
+      throw new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
+    }
+
     ShowNamespacesStatement(
       Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
       Option(ctx.pattern).map(string))
@@ -2655,6 +2658,54 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         visitMultipartIdentifier(ctx.multipartIdentifier()),
         partitionSpec,
         isExtended)
+    }
+  }
+
+  /**
+   * Create an [[AnalyzeTableStatement]], or an [[AnalyzeColumnStatement]].
+   * Example SQL for analyzing a table or a set of partitions :
+   * {{{
+   *   ANALYZE TABLE multi_part_name [PARTITION (partcol1[=val1], partcol2[=val2], ...)]
+   *   COMPUTE STATISTICS [NOSCAN];
+   * }}}
+   *
+   * Example SQL for analyzing columns :
+   * {{{
+   *   ANALYZE TABLE multi_part_name COMPUTE STATISTICS FOR COLUMNS column1, column2;
+   * }}}
+   *
+   * Example SQL for analyzing all columns of a table:
+   * {{{
+   *   ANALYZE TABLE multi_part_name COMPUTE STATISTICS FOR ALL COLUMNS;
+   * }}}
+   */
+  override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
+    def checkPartitionSpec(): Unit = {
+      if (ctx.partitionSpec != null) {
+        logWarning("Partition specification is ignored when collecting column statistics: " +
+          ctx.partitionSpec.getText)
+      }
+    }
+    if (ctx.identifier != null &&
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
+    }
+
+    val tableName = visitMultipartIdentifier(ctx.multipartIdentifier())
+    if (ctx.ALL() != null) {
+      checkPartitionSpec()
+      AnalyzeColumnStatement(tableName, None, allColumns = true)
+    } else if (ctx.identifierSeq() == null) {
+      val partitionSpec = if (ctx.partitionSpec != null) {
+        visitPartitionSpec(ctx.partitionSpec)
+      } else {
+        Map.empty[String, Option[String]]
+      }
+      AnalyzeTableStatement(tableName, partitionSpec, noScan = ctx.identifier != null)
+    } else {
+      checkPartitionSpec()
+      AnalyzeColumnStatement(
+        tableName, Option(visitIdentifierSeq(ctx.identifierSeq())), allColumns = false)
     }
   }
 }

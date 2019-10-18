@@ -30,7 +30,6 @@ import scala.reflect.ClassTag
 import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
 import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify, when}
-import org.mockito.invocation.InvocationOnMock
 import org.scalatest._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
@@ -148,7 +147,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         new BlockManagerMasterEndpoint(rpcEnv, true, conf,
           new LiveListenerBus(conf), None)), conf, true))
 
-    val initialize = PrivateMethod[Unit]('initialize)
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
     SizeEstimator invokePrivate initialize()
   }
 
@@ -570,7 +569,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     when(bmMaster.getLocations(mc.any[BlockId])).thenReturn(Seq(bmId1, bmId2, bmId3))
 
     val blockManager = makeBlockManager(128, "exec", bmMaster)
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]]('sortLocations)
+    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
     val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost))
   }
@@ -593,7 +592,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockManager = makeBlockManager(128, "exec", bmMaster)
     blockManager.blockManagerId =
       BlockManagerId(SparkContext.DRIVER_IDENTIFIER, localHost, 1, Some(localRack))
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]]('sortLocations)
+    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
     val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost, otherHost, otherHost))
     assert(locations.flatMap(_.topologyInfo)

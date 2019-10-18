@@ -21,13 +21,12 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, Table, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowTablesCommand}
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowTablesCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
 
@@ -256,15 +255,6 @@ class ResolveSessionCatalog(
     case DropViewStatement(SessionCatalog(catalog, viewName), ifExists) =>
       DropTableCommand(viewName.asTableIdentifier, ifExists, isView = true, purge = false)
 
-    case ShowNamespacesStatement(Some(SessionCatalog(catalog, nameParts)), pattern) =>
-      throw new AnalysisException(
-        "SHOW NAMESPACES is not supported with the session catalog.")
-
-    // TODO (SPARK-29014): we should check if the current catalog is session catalog here.
-    case ShowNamespacesStatement(None, pattern) if defaultCatalog.isEmpty =>
-      throw new AnalysisException(
-        "SHOW NAMESPACES is not supported with the session catalog.")
-
     case ShowTablesStatement(Some(SessionCatalog(catalog, nameParts)), pattern) =>
       if (nameParts.length != 1) {
         throw new AnalysisException(
@@ -272,9 +262,26 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(Some(nameParts.head), pattern)
 
-    // TODO (SPARK-29014): we should check if the current catalog is session catalog here.
-    case ShowTablesStatement(None, pattern) if defaultCatalog.isEmpty =>
+    case ShowTablesStatement(None, pattern) if isSessionCatalog(currentCatalog) =>
       ShowTablesCommand(None, pattern)
+
+    case AnalyzeTableStatement(tableName, partitionSpec, noScan) =>
+      val CatalogAndIdentifierParts(catalog, parts) = tableName
+      if (!isSessionCatalog(catalog)) {
+        throw new AnalysisException("ANALYZE TABLE is only supported with v1 tables.")
+      }
+      if (partitionSpec.isEmpty) {
+        AnalyzeTableCommand(parts.asTableIdentifier, noScan)
+      } else {
+        AnalyzePartitionCommand(parts.asTableIdentifier, partitionSpec, noScan)
+      }
+
+    case AnalyzeColumnStatement(tableName, columnNames, allColumns) =>
+      val CatalogAndIdentifierParts(catalog, parts) = tableName
+      if (!isSessionCatalog(catalog)) {
+        throw new AnalysisException("ANALYZE TABLE is only supported with v1 tables.")
+      }
+      AnalyzeColumnCommand(parts.asTableIdentifier, columnNames, allColumns)
   }
 
   private def buildCatalogTable(

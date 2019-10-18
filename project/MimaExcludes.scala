@@ -59,6 +59,9 @@ object MimaExcludes {
     // [SPARK-27366][CORE] Support GPU Resources in Spark job scheduling
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.resources"),
 
+    // [SPARK-29417][CORE] Resource Scheduling - add TaskContext.resource java api
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.resourcesJMap"),
+
     // [SPARK-27410][MLLIB] Remove deprecated / no-op mllib.KMeans getRuns, setRuns
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.getRuns"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.setRuns"),
