@@ -1164,6 +1164,23 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("ANALYZE TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      val e = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $t COMPUTE STATISTICS")
+      }
+      assert(e.message.contains("ANALYZE TABLE is only supported with v1 tables"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
+      }
+      assert(e2.message.contains("ANALYZE TABLE is only supported with v1 tables"))
+    }
+  }
+
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
     val errMsg = intercept[AnalysisException] {
       sql(sqlStatement)
