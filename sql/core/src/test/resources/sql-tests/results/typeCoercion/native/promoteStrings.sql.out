@@ -95,19 +95,17 @@ cannot resolve '(CAST('1' AS DOUBLE) + CAST(1 AS BOOLEAN))' due to data type mis
 -- !query 11
 SELECT '1' + cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query 11 schema
-struct<>
+struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + CAST(1 AS INTERVAL):timestamp>
 -- !query 11 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) + CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) + CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (double and timestamp).; line 1 pos 7
+NULL
 
 
 -- !query 12
 SELECT '1' + cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query 12 schema
-struct<>
+struct<CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP) + CAST(1 AS INTERVAL):timestamp>
 -- !query 12 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) + CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) + CAST('2017-12-11 09:30:00' AS DATE))' (double and date).; line 1 pos 7
+NULL
 
 
 -- !query 13
@@ -195,19 +193,17 @@ cannot resolve '(CAST('1' AS DOUBLE) - CAST(1 AS BOOLEAN))' due to data type mis
 -- !query 23
 SELECT '1' - cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query 23 schema
-struct<>
+struct<subtracttimestamps(CAST(1 AS TIMESTAMP), CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)):interval>
 -- !query 23 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) - CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) - CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (double and timestamp).; line 1 pos 7
+NULL
 
 
 -- !query 24
 SELECT '1' - cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query 24 schema
-struct<>
+struct<subtracttimestamps(CAST(1 AS TIMESTAMP), CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP)):interval>
 -- !query 24 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) - CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) - CAST('2017-12-11 09:30:00' AS DATE))' (double and date).; line 1 pos 7
+NULL
 
 
 -- !query 25
@@ -298,7 +294,7 @@ SELECT '1' * cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query 35 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) * CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) * CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (double and timestamp).; line 1 pos 7
+cannot resolve '('1' * CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '('1' * CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (string and timestamp).; line 1 pos 7
 
 
 -- !query 36
@@ -307,7 +303,7 @@ SELECT '1' * cast('2017-12-11 09:30:00' as date)        FROM t
 struct<>
 -- !query 36 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) * CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) * CAST('2017-12-11 09:30:00' AS DATE))' (double and date).; line 1 pos 7
+cannot resolve '('1' * CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '('1' * CAST('2017-12-11 09:30:00' AS DATE))' (string and date).; line 1 pos 7
 
 
 -- !query 37
@@ -398,7 +394,7 @@ SELECT '1' / cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query 47 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) / CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) / CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (double and timestamp).; line 1 pos 7
+cannot resolve '('1' / CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '('1' / CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (string and timestamp).; line 1 pos 7
 
 
 -- !query 48
@@ -407,7 +403,7 @@ SELECT '1' / cast('2017-12-11 09:30:00' as date)        FROM t
 struct<>
 -- !query 48 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) / CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) / CAST('2017-12-11 09:30:00' AS DATE))' (double and date).; line 1 pos 7
+cannot resolve '('1' / CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '('1' / CAST('2017-12-11 09:30:00' AS DATE))' (string and date).; line 1 pos 7
 
 
 -- !query 49
@@ -498,7 +494,7 @@ SELECT '1' % cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query 59 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) % CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) % CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (double and timestamp).; line 1 pos 7
+cannot resolve '('1' % CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '('1' % CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (string and timestamp).; line 1 pos 7
 
 
 -- !query 60
@@ -507,7 +503,7 @@ SELECT '1' % cast('2017-12-11 09:30:00' as date)        FROM t
 struct<>
 -- !query 60 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS DOUBLE) % CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST('1' AS DOUBLE) % CAST('2017-12-11 09:30:00' AS DATE))' (double and date).; line 1 pos 7
+cannot resolve '('1' % CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '('1' % CAST('2017-12-11 09:30:00' AS DATE))' (string and date).; line 1 pos 7
 
 
 -- !query 61
@@ -598,7 +594,7 @@ SELECT pmod('1', cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 struct<>
 -- !query 71 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'pmod(CAST('1' AS DOUBLE), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in 'pmod(CAST('1' AS DOUBLE), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (double and timestamp).; line 1 pos 7
+cannot resolve 'pmod('1', CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in 'pmod('1', CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (string and timestamp).; line 1 pos 7
 
 
 -- !query 72
@@ -607,7 +603,7 @@ SELECT pmod('1', cast('2017-12-11 09:30:00' as date))        FROM t
 struct<>
 -- !query 72 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'pmod(CAST('1' AS DOUBLE), CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in 'pmod(CAST('1' AS DOUBLE), CAST('2017-12-11 09:30:00' AS DATE))' (double and date).; line 1 pos 7
+cannot resolve 'pmod('1', CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in 'pmod('1', CAST('2017-12-11 09:30:00' AS DATE))' (string and date).; line 1 pos 7
 
 
 -- !query 73
@@ -687,19 +683,17 @@ cannot resolve '(CAST(1 AS BOOLEAN) + CAST('1' AS DOUBLE))' due to data type mis
 -- !query 82
 SELECT cast('2017-12-11 09:30:00.0' as timestamp) + '1' FROM t
 -- !query 82 schema
-struct<>
+struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + CAST(1 AS INTERVAL):timestamp>
 -- !query 82 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) + CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) + CAST('1' AS DOUBLE))' (timestamp and double).; line 1 pos 7
+NULL
 
 
 -- !query 83
 SELECT cast('2017-12-11 09:30:00' as date)        + '1' FROM t
 -- !query 83 schema
-struct<>
+struct<CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP) + CAST(1 AS INTERVAL):timestamp>
 -- !query 83 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) + CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) + CAST('1' AS DOUBLE))' (date and double).; line 1 pos 7
+NULL
 
 
 -- !query 84
@@ -779,19 +773,17 @@ cannot resolve '(CAST(1 AS BOOLEAN) - CAST('1' AS DOUBLE))' due to data type mis
 -- !query 93
 SELECT cast('2017-12-11 09:30:00.0' as timestamp) - '1' FROM t
 -- !query 93 schema
-struct<>
+struct<subtracttimestamps(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP), CAST(1 AS TIMESTAMP)):interval>
 -- !query 93 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) - CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) - CAST('1' AS DOUBLE))' (timestamp and double).; line 1 pos 7
+NULL
 
 
 -- !query 94
 SELECT cast('2017-12-11 09:30:00' as date)        - '1' FROM t
 -- !query 94 schema
-struct<>
+struct<subtracttimestamps(CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP), CAST(1 AS TIMESTAMP)):interval>
 -- !query 94 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) - CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) - CAST('1' AS DOUBLE))' (date and double).; line 1 pos 7
+NULL
 
 
 -- !query 95
@@ -874,7 +866,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) * '1' FROM t
 struct<>
 -- !query 104 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) * CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) * CAST('1' AS DOUBLE))' (timestamp and double).; line 1 pos 7
+cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) * '1')' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) * '1')' (timestamp and string).; line 1 pos 7
 
 
 -- !query 105
@@ -883,7 +875,7 @@ SELECT cast('2017-12-11 09:30:00' as date)        * '1' FROM t
 struct<>
 -- !query 105 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) * CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) * CAST('1' AS DOUBLE))' (date and double).; line 1 pos 7
+cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) * '1')' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) * '1')' (date and string).; line 1 pos 7
 
 
 -- !query 106
@@ -966,7 +958,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) / '1' FROM t
 struct<>
 -- !query 115 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) / CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) / CAST('1' AS DOUBLE))' (timestamp and double).; line 1 pos 7
+cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) / '1')' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) / '1')' (timestamp and string).; line 1 pos 7
 
 
 -- !query 116
@@ -975,7 +967,7 @@ SELECT cast('2017-12-11 09:30:00' as date)        / '1' FROM t
 struct<>
 -- !query 116 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) / CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) / CAST('1' AS DOUBLE))' (date and double).; line 1 pos 7
+cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) / '1')' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) / '1')' (date and string).; line 1 pos 7
 
 
 -- !query 117
@@ -1058,7 +1050,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) % '1' FROM t
 struct<>
 -- !query 126 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) % CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) % CAST('1' AS DOUBLE))' (timestamp and double).; line 1 pos 7
+cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) % '1')' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) % '1')' (timestamp and string).; line 1 pos 7
 
 
 -- !query 127
@@ -1067,7 +1059,7 @@ SELECT cast('2017-12-11 09:30:00' as date)        % '1' FROM t
 struct<>
 -- !query 127 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) % CAST('1' AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) % CAST('1' AS DOUBLE))' (date and double).; line 1 pos 7
+cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) % '1')' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) % '1')' (date and string).; line 1 pos 7
 
 
 -- !query 128
@@ -1150,7 +1142,7 @@ SELECT pmod(cast('2017-12-11 09:30:00.0' as timestamp), '1') FROM t
 struct<>
 -- !query 137 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'pmod(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP), CAST('1' AS DOUBLE))' due to data type mismatch: differing types in 'pmod(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP), CAST('1' AS DOUBLE))' (timestamp and double).; line 1 pos 7
+cannot resolve 'pmod(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP), '1')' due to data type mismatch: differing types in 'pmod(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP), '1')' (timestamp and string).; line 1 pos 7
 
 
 -- !query 138
@@ -1159,7 +1151,7 @@ SELECT pmod(cast('2017-12-11 09:30:00' as date), '1')        FROM t
 struct<>
 -- !query 138 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'pmod(CAST('2017-12-11 09:30:00' AS DATE), CAST('1' AS DOUBLE))' due to data type mismatch: differing types in 'pmod(CAST('2017-12-11 09:30:00' AS DATE), CAST('1' AS DOUBLE))' (date and double).; line 1 pos 7
+cannot resolve 'pmod(CAST('2017-12-11 09:30:00' AS DATE), '1')' due to data type mismatch: differing types in 'pmod(CAST('2017-12-11 09:30:00' AS DATE), '1')' (date and string).; line 1 pos 7
 
 
 -- !query 139
