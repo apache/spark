@@ -217,6 +217,7 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.tuning import CrossValidatorModel
+    >>> import tempfile
     >>> dataset = spark.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
     ...      (Vectors.dense([0.4]), 1.0),
@@ -234,7 +235,6 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     3
     >>> cvModel.avgMetrics[0]
     0.5
-    >>> import tempfile
     >>> path = tempfile.mkdtemp()
     >>> model_path = path + "/model"
     >>> cvModel.write().save(model_path)
@@ -560,6 +560,7 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.tuning import TrainValidationSplitModel
+    >>> import tempfile
     >>> dataset = spark.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
     ...      (Vectors.dense([0.4]), 1.0),
@@ -577,7 +578,6 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     0.75
     >>> tvsModel.validationMetrics
     [0.5, ...
-    >>> import tempfile
     >>> path = tempfile.mkdtemp()
     >>> model_path = path + "/model"
     >>> tvsModel.write().save(model_path)
