@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Functio
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.execution.command.LoadDataCommand
+import org.apache.spark.sql.execution.command.{FunctionsCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -192,6 +192,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     allBuiltinFunctions.foreach { f =>
       assert(allFunctions.contains(f))
     }
+
+    FunctionsCommand.virtualOperators.foreach { f =>
+      assert(allFunctions.contains(f))
+    }
+
     withTempDatabase { db =>
       def createFunction(names: Seq[String]): Unit = {
         names.foreach { name =>
