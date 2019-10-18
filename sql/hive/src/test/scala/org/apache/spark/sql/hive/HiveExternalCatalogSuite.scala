@@ -116,23 +116,16 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
   test("SPARK-29498 CatalogTable to HiveTable should not change the table's ownership") {
     val catalog = newBasicCatalog()
-    val identifier = TableIdentifier("spark_29498", Some("default"))
     val owner = "SPARK-29498"
-    val newTable = CatalogTable(
-      identifier,
+    val hiveTable = CatalogTable(
+      identifier = TableIdentifier("spark_29498", Some("db1")),
       tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat(
-        locationUri = None,
-        inputFormat = None,
-        outputFormat = None,
-        serde = None,
-        compressed = false,
-        properties = Map.empty),
+      storage = storageFormat,
       owner = owner,
       schema = new StructType().add("i", "int"),
       provider = Some("hive"))
 
-    catalog.createTable(newTable, false)
-    assert(catalog.getTable("default", "spark_29498").owner === owner)
+    catalog.createTable(hiveTable, ignoreIfExists = false)
+    assert(catalog.getTable("db1", "spark_29498").owner === owner)
   }
 }
