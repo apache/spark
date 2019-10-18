@@ -26,8 +26,7 @@ import org.apache.spark.storage.BlockManagerId
  * Benchmark for MapStatuses serialization & deserialization performance.
  * {{{
  *   To run this benchmark:
- *   1. without sbt: bin/spark-submit --class <this class>
- *        --jars <catalyst test jar>,<core test jar>
+ *   1. without sbt: bin/spark-submit --class <this class> --jars <core test jar>
  *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
  *      Results will be written to "benchmarks/MapStatusesSerDeserBenchmark-results.txt".
@@ -89,7 +88,7 @@ object MapStatusesSerDeserBenchmark extends BenchmarkBase {
     import org.apache.commons.io.FileUtils
     benchmark.out.println("Compressed Serialized MapStatus sizes: " +
       FileUtils.byteCountToDisplaySize(serializedMapStatusSizes))
-    benchmark.out.println(s"Compressed Serialized Broadcast MapStatus sizes: " +
+    benchmark.out.println("Compressed Serialized Broadcast MapStatus sizes: " +
       FileUtils.byteCountToDisplaySize(serializedBroadcastSizes) + "\n\n")
     // scalastyle:on
 
