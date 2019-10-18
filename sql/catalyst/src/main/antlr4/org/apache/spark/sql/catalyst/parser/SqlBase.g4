@@ -124,7 +124,7 @@ statement
         (COMMENT comment=STRING) |
         (TBLPROPERTIES tableProps=tablePropertyList))*
         (AS? query)?                                                   #replaceTable
-    | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
+    | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)

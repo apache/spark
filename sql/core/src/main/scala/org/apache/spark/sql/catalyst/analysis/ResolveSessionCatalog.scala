@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowTablesCommand}
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowTablesCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
@@ -269,9 +269,26 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(Some(nameParts.head), pattern)
 
-    // TODO (SPARK-29014): we should check if the current catalog is session catalog here.
-    case ShowTablesStatement(None, pattern) if defaultCatalog.isEmpty =>
+    case ShowTablesStatement(None, pattern) if isSessionCatalog(currentCatalog) =>
       ShowTablesCommand(None, pattern)
+
+    case AnalyzeTableStatement(tableName, partitionSpec, noScan) =>
+      val CatalogAndIdentifierParts(catalog, parts) = tableName
+      if (!isSessionCatalog(catalog)) {
+        throw new AnalysisException("ANALYZE TABLE is only supported with v1 tables.")
+      }
+      if (partitionSpec.isEmpty) {
+        AnalyzeTableCommand(parts.asTableIdentifier, noScan)
+      } else {
+        AnalyzePartitionCommand(parts.asTableIdentifier, partitionSpec, noScan)
+      }
+
+    case AnalyzeColumnStatement(tableName, columnNames, allColumns) =>
+      val CatalogAndIdentifierParts(catalog, parts) = tableName
+      if (!isSessionCatalog(catalog)) {
+        throw new AnalysisException("ANALYZE TABLE is only supported with v1 tables.")
+      }
+      AnalyzeColumnCommand(parts.asTableIdentifier, columnNames, allColumns)
   }
 
   private def buildCatalogTable(

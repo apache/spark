@@ -573,8 +573,9 @@ private[hive] class HiveClientImpl(
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
     verifyColumnDataType(table.dataSchema)
+    val owner = Option(table.owner).filter(_.nonEmpty).getOrElse(userName)
     val hiveTable = toHiveTable(
-      table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
+      table.copy(properties = table.ignoredProperties ++ table.properties), Some(owner))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"$dbName.$tableName"
     shim.alterTable(client, qualifiedTableName, hiveTable)

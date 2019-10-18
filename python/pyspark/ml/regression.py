@@ -24,7 +24,7 @@ from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _HasVarianceImpurity, _TreeRegressorParams
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
-    JavaPredictor, JavaPredictionModel, JavaWrapper
+    JavaPredictor, JavaPredictionModel, _JavaPredictorParams, JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 
@@ -40,10 +40,35 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'RandomForestRegressor', 'RandomForestRegressionModel']
 
 
+class _LinearRegressionParams(_JavaPredictorParams, HasRegParam, HasElasticNetParam, HasMaxIter,
+                              HasTol, HasFitIntercept, HasStandardization, HasWeightCol, HasSolver,
+                              HasAggregationDepth, HasLoss):
+    """
+    Params for :py:class:`LinearRegression` and :py:class:`LinearRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: auto, normal, l-bfgs.", typeConverter=TypeConverters.toString)
+
+    loss = Param(Params._dummy(), "loss", "The loss function to be optimized. Supported " +
+                 "options: squaredError, huber.", typeConverter=TypeConverters.toString)
+
+    epsilon = Param(Params._dummy(), "epsilon", "The shape parameter to control the amount of " +
+                    "robustness. Must be > 1.0. Only valid when loss is huber",
+                    typeConverter=TypeConverters.toFloat)
+
+    @since("2.3.0")
+    def getEpsilon(self):
+        """
+        Gets the value of epsilon or its default value.
+        """
+        return self.getOrDefault(self.epsilon)
+
+
 @inherit_doc
-class LinearRegression(JavaPredictor, HasMaxIter, HasRegParam, HasTol, HasElasticNetParam,
-                       HasFitIntercept, HasStandardization, HasSolver, HasWeightCol,
-                       HasAggregationDepth, HasLoss, JavaMLWritable, JavaMLReadable):
+class LinearRegression(JavaPredictor, _LinearRegressionParams, JavaMLWritable, JavaMLReadable):
     """
     Linear regression.
 
@@ -73,6 +98,8 @@ class LinearRegression(JavaPredictor, HasMaxIter, HasRegParam, HasTol, HasElasti
     LinearRegression...
     >>> model.setPredictionCol("newPrediction")
     LinearRegression...
+    >>> model.getMaxIter()
+    5
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.predict(test0.head().features) - (-1.0)) < 0.001
     True
@@ -107,16 +134,6 @@ class LinearRegression(JavaPredictor, HasMaxIter, HasRegParam, HasTol, HasElasti
 
     .. versionadded:: 1.4.0
     """
-
-    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
-                   "options: auto, normal, l-bfgs.", typeConverter=TypeConverters.toString)
-
-    loss = Param(Params._dummy(), "loss", "The loss function to be optimized. Supported " +
-                 "options: squaredError, huber.", typeConverter=TypeConverters.toString)
-
-    epsilon = Param(Params._dummy(), "epsilon", "The shape parameter to control the amount of " +
-                    "robustness. Must be > 1.0. Only valid when loss is huber",
-                    typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -162,16 +179,9 @@ class LinearRegression(JavaPredictor, HasMaxIter, HasRegParam, HasTol, HasElasti
         """
         return self._set(epsilon=value)
 
-    @since("2.3.0")
-    def getEpsilon(self):
-        """
-        Gets the value of epsilon or its default value.
-        """
-        return self.getOrDefault(self.epsilon)
 
-
-class LinearRegressionModel(JavaPredictionModel, GeneralJavaMLWritable, JavaMLReadable,
-                            HasTrainingSummary):
+class LinearRegressionModel(JavaPredictionModel, _LinearRegressionParams, GeneralJavaMLWritable,
+                            JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by :class:`LinearRegression`.
 
@@ -468,7 +478,7 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
         return self._call_java("totalIterations")
 
 
-class _IsotonicRegressionBase(HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol):
+class _IsotonicRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol):
     """
     Params for :py:class:`IsotonicRegression` and :py:class:`IsotonicRegressionModel`.
 
@@ -498,7 +508,7 @@ class _IsotonicRegressionBase(HasFeaturesCol, HasLabelCol, HasPredictionCol, Has
 
 
 @inherit_doc
-class IsotonicRegression(JavaEstimator, _IsotonicRegressionBase, HasWeightCol,
+class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
                          JavaMLWritable, JavaMLReadable):
     """
     Currently implemented using parallelized pool adjacent violators algorithm.
@@ -577,8 +587,8 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionBase, HasWeightCol,
         return self._set(featureIndex=value)
 
 
-class IsotonicRegressionModel(JavaModel, _IsotonicRegressionBase,
-                              JavaMLWritable, JavaMLReadable):
+class IsotonicRegressionModel(JavaModel, _IsotonicRegressionParams, JavaMLWritable,
+                              JavaMLReadable):
     """
     Model fitted by :class:`IsotonicRegression`.
 
@@ -1460,9 +1470,85 @@ class AFTSurvivalRegressionModel(JavaModel, _AFTSurvivalRegressionParams,
         return self._call_java("predict", features)
 
 
+class _GeneralizedLinearRegressionParams(_JavaPredictorParams, HasFitIntercept, HasMaxIter,
+                                         HasTol, HasRegParam, HasWeightCol, HasSolver):
+    """
+    Params for :py:class:`GeneralizedLinearRegression` and
+    :py:class:`GeneralizedLinearRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    family = Param(Params._dummy(), "family", "The name of family which is a description of " +
+                   "the error distribution to be used in the model. Supported options: " +
+                   "gaussian (default), binomial, poisson, gamma and tweedie.",
+                   typeConverter=TypeConverters.toString)
+    link = Param(Params._dummy(), "link", "The name of link function which provides the " +
+                 "relationship between the linear predictor and the mean of the distribution " +
+                 "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
+                 "and sqrt.", typeConverter=TypeConverters.toString)
+    linkPredictionCol = Param(Params._dummy(), "linkPredictionCol", "link prediction (linear " +
+                              "predictor) column name", typeConverter=TypeConverters.toString)
+    variancePower = Param(Params._dummy(), "variancePower", "The power in the variance function " +
+                          "of the Tweedie distribution which characterizes the relationship " +
+                          "between the variance and mean of the distribution. Only applicable " +
+                          "for the Tweedie family. Supported values: 0 and [1, Inf).",
+                          typeConverter=TypeConverters.toFloat)
+    linkPower = Param(Params._dummy(), "linkPower", "The index in the power link function. " +
+                      "Only applicable to the Tweedie family.",
+                      typeConverter=TypeConverters.toFloat)
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: irls.", typeConverter=TypeConverters.toString)
+    offsetCol = Param(Params._dummy(), "offsetCol", "The offset column name. If this is not set " +
+                      "or empty, we treat all instance offsets as 0.0",
+                      typeConverter=TypeConverters.toString)
+
+    @since("2.0.0")
+    def getFamily(self):
+        """
+        Gets the value of family or its default value.
+        """
+        return self.getOrDefault(self.family)
+
+    @since("2.0.0")
+    def getLinkPredictionCol(self):
+        """
+        Gets the value of linkPredictionCol or its default value.
+        """
+        return self.getOrDefault(self.linkPredictionCol)
+
+    @since("2.0.0")
+    def getLink(self):
+        """
+        Gets the value of link or its default value.
+        """
+        return self.getOrDefault(self.link)
+
+    @since("2.2.0")
+    def getVariancePower(self):
+        """
+        Gets the value of variancePower or its default value.
+        """
+        return self.getOrDefault(self.variancePower)
+
+    @since("2.2.0")
+    def getLinkPower(self):
+        """
+        Gets the value of linkPower or its default value.
+        """
+        return self.getOrDefault(self.linkPower)
+
+    @since("2.3.0")
+    def getOffsetCol(self):
+        """
+        Gets the value of offsetCol or its default value.
+        """
+        return self.getOrDefault(self.offsetCol)
+
+
 @inherit_doc
-class GeneralizedLinearRegression(JavaPredictor, HasFitIntercept, HasMaxIter, HasTol, HasRegParam,
-                                  HasWeightCol, HasSolver, JavaMLWritable, JavaMLReadable):
+class GeneralizedLinearRegression(JavaPredictor, _GeneralizedLinearRegressionParams,
+                                  JavaMLWritable, JavaMLReadable):
     """
     Generalized Linear Regression.
 
@@ -1494,6 +1580,8 @@ class GeneralizedLinearRegression(JavaPredictor, HasFitIntercept, HasMaxIter, Ha
     >>> model = glr.fit(df)
     >>> model.setFeaturesCol("features")
     GeneralizedLinearRegression...
+    >>> model.getMaxIter()
+    25
     >>> transformed = model.transform(df)
     >>> abs(transformed.head().prediction - 1.5) < 0.001
     True
@@ -1520,30 +1608,6 @@ class GeneralizedLinearRegression(JavaPredictor, HasFitIntercept, HasMaxIter, Ha
 
     .. versionadded:: 2.0.0
     """
-
-    family = Param(Params._dummy(), "family", "The name of family which is a description of " +
-                   "the error distribution to be used in the model. Supported options: " +
-                   "gaussian (default), binomial, poisson, gamma and tweedie.",
-                   typeConverter=TypeConverters.toString)
-    link = Param(Params._dummy(), "link", "The name of link function which provides the " +
-                 "relationship between the linear predictor and the mean of the distribution " +
-                 "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
-                 "and sqrt.", typeConverter=TypeConverters.toString)
-    linkPredictionCol = Param(Params._dummy(), "linkPredictionCol", "link prediction (linear " +
-                              "predictor) column name", typeConverter=TypeConverters.toString)
-    variancePower = Param(Params._dummy(), "variancePower", "The power in the variance function " +
-                          "of the Tweedie distribution which characterizes the relationship " +
-                          "between the variance and mean of the distribution. Only applicable " +
-                          "for the Tweedie family. Supported values: 0 and [1, Inf).",
-                          typeConverter=TypeConverters.toFloat)
-    linkPower = Param(Params._dummy(), "linkPower", "The index in the power link function. " +
-                      "Only applicable to the Tweedie family.",
-                      typeConverter=TypeConverters.toFloat)
-    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
-                   "options: irls.", typeConverter=TypeConverters.toString)
-    offsetCol = Param(Params._dummy(), "offsetCol", "The offset column name. If this is not set " +
-                      "or empty, we treat all instance offsets as 0.0",
-                      typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
@@ -1592,13 +1656,6 @@ class GeneralizedLinearRegression(JavaPredictor, HasFitIntercept, HasMaxIter, Ha
         return self._set(family=value)
 
     @since("2.0.0")
-    def getFamily(self):
-        """
-        Gets the value of family or its default value.
-        """
-        return self.getOrDefault(self.family)
-
-    @since("2.0.0")
     def setLinkPredictionCol(self, value):
         """
         Sets the value of :py:attr:`linkPredictionCol`.
@@ -1606,25 +1663,11 @@ class GeneralizedLinearRegression(JavaPredictor, HasFitIntercept, HasMaxIter, Ha
         return self._set(linkPredictionCol=value)
 
     @since("2.0.0")
-    def getLinkPredictionCol(self):
-        """
-        Gets the value of linkPredictionCol or its default value.
-        """
-        return self.getOrDefault(self.linkPredictionCol)
-
-    @since("2.0.0")
     def setLink(self, value):
         """
         Sets the value of :py:attr:`link`.
         """
         return self._set(link=value)
-
-    @since("2.0.0")
-    def getLink(self):
-        """
-        Gets the value of link or its default value.
-        """
-        return self.getOrDefault(self.link)
 
     @since("2.2.0")
     def setVariancePower(self, value):
@@ -1634,25 +1677,11 @@ class GeneralizedLinearRegression(JavaPredictor, HasFitIntercept, HasMaxIter, Ha
         return self._set(variancePower=value)
 
     @since("2.2.0")
-    def getVariancePower(self):
-        """
-        Gets the value of variancePower or its default value.
-        """
-        return self.getOrDefault(self.variancePower)
-
-    @since("2.2.0")
     def setLinkPower(self, value):
         """
         Sets the value of :py:attr:`linkPower`.
         """
         return self._set(linkPower=value)
-
-    @since("2.2.0")
-    def getLinkPower(self):
-        """
-        Gets the value of linkPower or its default value.
-        """
-        return self.getOrDefault(self.linkPower)
 
     @since("2.3.0")
     def setOffsetCol(self, value):
@@ -1661,16 +1690,9 @@ class GeneralizedLinearRegression(JavaPredictor, HasFitIntercept, HasMaxIter, Ha
         """
         return self._set(offsetCol=value)
 
-    @since("2.3.0")
-    def getOffsetCol(self):
-        """
-        Gets the value of offsetCol or its default value.
-        """
-        return self.getOrDefault(self.offsetCol)
 
-
-class GeneralizedLinearRegressionModel(JavaPredictionModel, JavaMLWritable,
-                                       JavaMLReadable, HasTrainingSummary):
+class GeneralizedLinearRegressionModel(JavaPredictionModel, _GeneralizedLinearRegressionParams,
+                                       JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by :class:`GeneralizedLinearRegression`.
 
