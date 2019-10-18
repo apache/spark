@@ -134,8 +134,6 @@ private[sql] class SharedState(
       SessionCatalog.DEFAULT_DATABASE,
       "default database",
       CatalogUtils.stringToURI(warehousePath),
-      sparkContext.sparkUser,
-      "USER",
       Map())
     // Create default database if it doesn't exist
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {

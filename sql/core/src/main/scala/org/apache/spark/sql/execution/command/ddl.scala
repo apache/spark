@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
+import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog._
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
@@ -75,8 +76,6 @@ case class CreateDatabaseCommand(
         databaseName,
         comment.getOrElse(""),
         path.map(CatalogUtils.stringToURI).getOrElse(catalog.getDefaultDBPath(databaseName)),
-        sparkSession.sparkContext.sparkUser,
-        "USER",
         props),
       ifNotExists)
     Seq.empty[Row]

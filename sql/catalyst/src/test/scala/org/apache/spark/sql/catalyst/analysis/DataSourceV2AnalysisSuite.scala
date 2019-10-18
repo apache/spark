@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 class V2AppendDataANSIAnalysisSuite extends DataSourceV2ANSIAnalysisSuite {
   override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
@@ -208,7 +207,7 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
     val conf = getSQLConf(caseSensitive)
     val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
     catalog.createDatabase(
-      CatalogDatabase("default", "", new URI("loc"), Utils.getCurrentUserName(), "USER", Map.empty),
+      CatalogDatabase("default", "", new URI("loc"), Map.empty),
       ignoreIfExists = false)
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules = EliminateSubqueryAliases :: Nil

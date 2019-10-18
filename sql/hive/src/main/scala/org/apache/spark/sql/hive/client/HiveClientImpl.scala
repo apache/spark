@@ -354,13 +354,16 @@ private[hive] class HiveClientImpl(
   override def createDatabase(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
+    val props = database.properties
+    val dbOwner = props.getOrElse(DB_OWNER_NAME_PROP, userName)
+    val dbOwnerType = props.getOrElse(DB_OWNER_TYPE_PROP, "USER")
     val hiveDb = new HiveDatabase(
       database.name,
       database.description,
       CatalogUtils.URIToString(database.locationUri),
-      Option(database.properties).map(_.asJava).orNull)
-    hiveDb.setOwnerName(database.ownerName)
-    hiveDb.setOwnerType(PrincipalType.valueOf(database.ownerType))
+      (props -- Seq(DB_OWNER_NAME_PROP, DB_OWNER_TYPE_PROP)).asJava)
+    shim.setDatabaseOwnerName(hiveDb, dbOwner)
+    shim.setDatabaseOwnerType(hiveDb, dbOwnerType)
     client.createDatabase(hiveDb, ignoreIfExists)
   }
 
@@ -379,25 +382,31 @@ private[hive] class HiveClientImpl(
           s"Hive ${version.fullVersion} does not support altering database location")
       }
     }
+    val props = database.properties
+    val dbOwner = props.get(DB_OWNER_NAME_PROP).filter(_.isEmpty).getOrElse(userName)
+    val dbOwnerType = props.get(DB_OWNER_TYPE_PROP).filter(_.isEmpty).getOrElse("USER")
+
     val hiveDb = new HiveDatabase(
       database.name,
       database.description,
       CatalogUtils.URIToString(database.locationUri),
-      Option(database.properties).map(_.asJava).orNull)
-    hiveDb.setOwnerName(database.ownerName)
-    hiveDb.setOwnerType(PrincipalType.valueOf(database.ownerType))
+      (props -- Seq(DB_OWNER_NAME_PROP, DB_OWNER_TYPE_PROP)).asJava)
+    shim.setDatabaseOwnerName(hiveDb, dbOwner)
+    shim.setDatabaseOwnerType(hiveDb, dbOwnerType)
     client.alterDatabase(database.name, hiveDb)
   }
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
+      val paras = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
+        Map(DB_OWNER_NAME_PROP -> shim.getDatabaseOwnerName(d),
+          DB_OWNER_NAME_PROP -> shim.getDatabaseOwnerType(d))
+
       CatalogDatabase(
         name = d.getName,
         description = Option(d.getDescription).getOrElse(""),
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
-        ownerName = d.getOwnerName,
-        ownerType = d.getOwnerType.name(),
-        properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
+        properties = paras)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
   }
 
@@ -969,6 +978,10 @@ private[hive] class HiveClientImpl(
 }
 
 private[hive] object HiveClientImpl {
+
+  val DB_OWNER_NAME_PROP: String = "ownerName"
+  val DB_OWNER_TYPE_PROP: String = "ownerType"
+
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
     val typeString = if (c.metadata.contains(HIVE_TYPE_STRING)) {

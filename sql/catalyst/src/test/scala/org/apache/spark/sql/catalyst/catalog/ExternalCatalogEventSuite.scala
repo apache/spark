@@ -25,7 +25,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 /**
  * Test Suite for external catalog events
@@ -48,8 +47,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
   }
 
   private def createDbDefinition(uri: URI): CatalogDatabase = {
-    CatalogDatabase(name = "db5", description = "", locationUri = uri, Utils.getCurrentUserName(),
-      "USER", Map.empty)
+    CatalogDatabase(name = "db5", description = "", locationUri = uri, Map.empty)
   }
 
   private def createDbDefinition(): CatalogDatabase = {
