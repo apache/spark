@@ -1408,6 +1408,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val interval = Literal(new CalendarInterval(0, 0))
     val str = Literal("2015-01-01")
     val intValue = Literal(0, IntegerType)
+    val strInterval = Literal("1 day")
 
     ruleTest(dateTimeOperations, Add(date, interval), Cast(TimeAdd(date, interval), DateType))
     ruleTest(dateTimeOperations, Add(interval, date), Cast(TimeAdd(date, interval), DateType))
@@ -1422,6 +1423,8 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(dateTimeOperations, Subtract(timestamp, interval),
       Cast(TimeSub(timestamp, interval), TimestampType))
     ruleTest(dateTimeOperations, Subtract(str, interval), Cast(TimeSub(str, interval), StringType))
+    ruleTest(dateTimeOperations, Subtract(interval, strInterval),
+      Subtract(interval, Cast(strInterval, CalendarIntervalType)))
 
     // interval operations should not be effected
     ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
@@ -1437,6 +1440,20 @@ class TypeCoercionSuite extends AnalysisTest {
       SubtractTimestamps(timestamp, Cast(date, TimestampType)))
     ruleTest(dateTimeOperations, Subtract(date, timestamp),
       SubtractTimestamps(Cast(date, TimestampType), timestamp))
+
+    ruleTest(dateTimeOperations, Add(timestamp, str), TimeAdd(timestamp, str))
+    ruleTest(dateTimeOperations, Add(date, str), TimeAdd(date, str))
+    ruleTest(dateTimeOperations, Add(str, timestamp), TimeAdd(timestamp, str))
+    ruleTest(dateTimeOperations, Add(str, date), TimeAdd(date, str))
+
+    ruleTest(dateTimeOperations, Subtract(timestamp, str),
+      SubtractTimestamps(timestamp, Cast(str, TimestampType)))
+    ruleTest(dateTimeOperations, Subtract(date, str),
+      SubtractTimestamps(date, Cast(str, TimestampType)))
+    ruleTest(dateTimeOperations, Subtract(str, timestamp),
+      SubtractTimestamps(Cast(str, TimestampType), timestamp))
+    ruleTest(dateTimeOperations, Subtract(str, date),
+      SubtractTimestamps(Cast(str, TimestampType), date))
   }
 
   /**

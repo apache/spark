@@ -846,6 +846,8 @@ object TypeCoercion {
         Cast(TimeAdd(l, r), l.dataType)
       case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
         Cast(TimeSub(l, r), l.dataType)
+      case Subtract(l @ CalendarIntervalType(), r @ StringType()) =>
+        Subtract(l, Cast(r, CalendarIntervalType))
 
       case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
       case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
@@ -858,6 +860,15 @@ object TypeCoercion {
         SubtractTimestamps(l, Cast(r, TimestampType))
       case Subtract(l @ DateType(), r @ TimestampType()) =>
         SubtractTimestamps(Cast(l, TimestampType), r)
+
+      // Cast StringType to CalendarIntervalType
+      case Add(l @ StringType(), r @ (TimestampType() | DateType())) => TimeAdd(r, l)
+      case Add(l @ (TimestampType() | DateType()), r @ StringType()) => TimeAdd(l, r)
+      // Cast StringType to TimestampType
+      case Subtract(l @ StringType(), r @ (TimestampType() | DateType())) =>
+        SubtractTimestamps(Cast(l, TimestampType), r)
+      case Subtract(l @ (TimestampType() | DateType()), r @ StringType()) =>
+        SubtractTimestamps(l, Cast(r, TimestampType))
     }
   }
 
