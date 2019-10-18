@@ -216,68 +216,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("DESCRIBE " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
   }
 
-  test("analyze table statistics") {
-    assertEqual("analyze table t compute statistics",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
-    assertEqual("analyze table t compute statistics noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
-    assertEqual("analyze table t partition (a) compute statistics nOscAn",
-      AnalyzePartitionCommand(TableIdentifier("t"), Map("a" -> None), noscan = true))
-
-    // Partitions specified
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> Some("2008-04-09"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
-    assertEqual("ANALYZE TABLE t PARTITION(ds, hr=11) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> None, "hr" -> Some("11"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> None, "hr" -> None)))
-    assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> None, "hr" -> None)))
-
-    intercept("analyze table t compute statistics xxxx",
-      "Expected `NOSCAN` instead of `xxxx`")
-    intercept("analyze table t partition (a) compute statistics xxxx",
-      "Expected `NOSCAN` instead of `xxxx`")
-  }
-
-  test("analyze table column statistics") {
-    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS", "")
-
-    assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
-
-    // Partition specified - should be ignored
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
-      "COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
-
-    // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
-      "COMPUTE STATISTICS FOR ALL COLUMNS",
-      AnalyzeColumnCommand(TableIdentifier("t"), None, allColumns = true))
-
-    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL COLUMNS key, value",
-      "mismatched input 'key' expecting <EOF>")
-    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL",
-      "missing 'COLUMNS' at '<EOF>'")
-  }
-
   test("query organization") {
     // Test all valid combinations of order by/sort by/distribute by/cluster by/limit/windows
     val baseSql = "select * from t"

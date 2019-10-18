@@ -71,19 +71,3 @@ case class EveryAgg(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
 case class AnyAgg(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   override def nodeName: String = "Any"
 }
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns true if at least one value of `expr` is true.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col) FROM VALUES (true), (false), (false) AS tab(col);
-       true
-      > SELECT _FUNC_(col) FROM VALUES (NULL), (true), (false) AS tab(col);
-       true
-      > SELECT _FUNC_(col) FROM VALUES (false), (false), (NULL) AS tab(col);
-       false
-  """,
-  since = "3.0.0")
-case class SomeAgg(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
-  override def nodeName: String = "Some"
-}

@@ -149,10 +149,23 @@ class JavaProbabilisticClassificationModel(JavaClassificationModel,
         return self._set(thresholds=value)
 
 
+class _LinearSVCParams(_JavaClassifierParams, HasRegParam, HasMaxIter, HasFitIntercept, HasTol,
+                       HasStandardization, HasWeightCol, HasAggregationDepth, HasThreshold):
+    """
+    Params for :py:class:`LinearSVC` and :py:class:`LinearSVCModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    threshold = Param(Params._dummy(), "threshold",
+                      "The threshold in binary classification applied to the linear model"
+                      " prediction.  This threshold can be any real number, where Inf will make"
+                      " all predictions 0.0 and -Inf will make all predictions 1.0.",
+                      typeConverter=TypeConverters.toFloat)
+
+
 @inherit_doc
-class LinearSVC(JavaClassifier, HasMaxIter, HasRegParam, HasTol,
-                HasFitIntercept, HasStandardization, HasWeightCol, HasAggregationDepth,
-                HasThreshold, JavaMLWritable, JavaMLReadable):
+class LinearSVC(JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadable):
     """
     `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
 
@@ -170,6 +183,10 @@ class LinearSVC(JavaClassifier, HasMaxIter, HasRegParam, HasTol,
     LinearSVC...
     >>> model.getPredictionCol()
     'newPrediction'
+    >>> model.setThreshold(0.5)
+    LinearSVC...
+    >>> model.getThreshold()
+    0.5
     >>> model.coefficients
     DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
@@ -201,12 +218,6 @@ class LinearSVC(JavaClassifier, HasMaxIter, HasRegParam, HasTol,
 
     .. versionadded:: 2.2.0
     """
-
-    threshold = Param(Params._dummy(), "threshold",
-                      "The threshold in binary classification applied to the linear model"
-                      " prediction.  This threshold can be any real number, where Inf will make"
-                      " all predictions 0.0 and -Inf will make all predictions 1.0.",
-                      typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -247,7 +258,7 @@ class LinearSVC(JavaClassifier, HasMaxIter, HasRegParam, HasTol,
         return LinearSVCModel(java_model)
 
 
-class LinearSVCModel(JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+class LinearSVCModel(JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by LinearSVC.
 
@@ -271,10 +282,167 @@ class LinearSVCModel(JavaClassificationModel, JavaMLWritable, JavaMLReadable):
         return self._call_java("intercept")
 
 
+class _LogisticRegressionParams(_JavaProbabilisticClassifierParams, HasRegParam,
+                                HasElasticNetParam, HasMaxIter, HasFitIntercept, HasTol,
+                                HasStandardization, HasWeightCol, HasAggregationDepth,
+                                HasThreshold):
+    """
+    Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    threshold = Param(Params._dummy(), "threshold",
+                      "Threshold in binary classification prediction, in range [0, 1]." +
+                      " If threshold and thresholds are both set, they must match." +
+                      "e.g. if threshold is p, then thresholds must be equal to [1-p, p].",
+                      typeConverter=TypeConverters.toFloat)
+
+    family = Param(Params._dummy(), "family",
+                   "The name of family which is a description of the label distribution to " +
+                   "be used in the model. Supported options: auto, binomial, multinomial",
+                   typeConverter=TypeConverters.toString)
+
+    lowerBoundsOnCoefficients = Param(Params._dummy(), "lowerBoundsOnCoefficients",
+                                      "The lower bounds on coefficients if fitting under bound "
+                                      "constrained optimization. The bound matrix must be "
+                                      "compatible with the shape "
+                                      "(1, number of features) for binomial regression, or "
+                                      "(number of classes, number of features) "
+                                      "for multinomial regression.",
+                                      typeConverter=TypeConverters.toMatrix)
+
+    upperBoundsOnCoefficients = Param(Params._dummy(), "upperBoundsOnCoefficients",
+                                      "The upper bounds on coefficients if fitting under bound "
+                                      "constrained optimization. The bound matrix must be "
+                                      "compatible with the shape "
+                                      "(1, number of features) for binomial regression, or "
+                                      "(number of classes, number of features) "
+                                      "for multinomial regression.",
+                                      typeConverter=TypeConverters.toMatrix)
+
+    lowerBoundsOnIntercepts = Param(Params._dummy(), "lowerBoundsOnIntercepts",
+                                    "The lower bounds on intercepts if fitting under bound "
+                                    "constrained optimization. The bounds vector size must be"
+                                    "equal with 1 for binomial regression, or the number of"
+                                    "lasses for multinomial regression.",
+                                    typeConverter=TypeConverters.toVector)
+
+    upperBoundsOnIntercepts = Param(Params._dummy(), "upperBoundsOnIntercepts",
+                                    "The upper bounds on intercepts if fitting under bound "
+                                    "constrained optimization. The bound vector size must be "
+                                    "equal with 1 for binomial regression, or the number of "
+                                    "classes for multinomial regression.",
+                                    typeConverter=TypeConverters.toVector)
+
+    @since("1.4.0")
+    def setThreshold(self, value):
+        """
+        Sets the value of :py:attr:`threshold`.
+        Clears value of :py:attr:`thresholds` if it has been set.
+        """
+        self._set(threshold=value)
+        self.clear(self.thresholds)
+        return self
+
+    @since("1.4.0")
+    def getThreshold(self):
+        """
+        Get threshold for binary classification.
+
+        If :py:attr:`thresholds` is set with length 2 (i.e., binary classification),
+        this returns the equivalent threshold:
+        :math:`\\frac{1}{1 + \\frac{thresholds(0)}{thresholds(1)}}`.
+        Otherwise, returns :py:attr:`threshold` if set or its default value if unset.
+        """
+        self._checkThresholdConsistency()
+        if self.isSet(self.thresholds):
+            ts = self.getOrDefault(self.thresholds)
+            if len(ts) != 2:
+                raise ValueError("Logistic Regression getThreshold only applies to" +
+                                 " binary classification, but thresholds has length != 2." +
+                                 "  thresholds: " + ",".join(ts))
+            return 1.0/(1.0 + ts[0]/ts[1])
+        else:
+            return self.getOrDefault(self.threshold)
+
+    @since("1.5.0")
+    def setThresholds(self, value):
+        """
+        Sets the value of :py:attr:`thresholds`.
+        Clears value of :py:attr:`threshold` if it has been set.
+        """
+        self._set(thresholds=value)
+        self.clear(self.threshold)
+        return self
+
+    @since("1.5.0")
+    def getThresholds(self):
+        """
+        If :py:attr:`thresholds` is set, return its value.
+        Otherwise, if :py:attr:`threshold` is set, return the equivalent thresholds for binary
+        classification: (1-threshold, threshold).
+        If neither are set, throw an error.
+        """
+        self._checkThresholdConsistency()
+        if not self.isSet(self.thresholds) and self.isSet(self.threshold):
+            t = self.getOrDefault(self.threshold)
+            return [1.0-t, t]
+        else:
+            return self.getOrDefault(self.thresholds)
+
+    def _checkThresholdConsistency(self):
+        if self.isSet(self.threshold) and self.isSet(self.thresholds):
+            ts = self.getOrDefault(self.thresholds)
+            if len(ts) != 2:
+                raise ValueError("Logistic Regression getThreshold only applies to" +
+                                 " binary classification, but thresholds has length != 2." +
+                                 " thresholds: {0}".format(str(ts)))
+            t = 1.0/(1.0 + ts[0]/ts[1])
+            t2 = self.getOrDefault(self.threshold)
+            if abs(t2 - t) >= 1E-5:
+                raise ValueError("Logistic Regression getThreshold found inconsistent values for" +
+                                 " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
+
+    @since("2.1.0")
+    def getFamily(self):
+        """
+        Gets the value of :py:attr:`family` or its default value.
+        """
+        return self.getOrDefault(self.family)
+
+    @since("2.3.0")
+    def getLowerBoundsOnCoefficients(self):
+        """
+        Gets the value of :py:attr:`lowerBoundsOnCoefficients`
+        """
+        return self.getOrDefault(self.lowerBoundsOnCoefficients)
+
+    @since("2.3.0")
+    def getUpperBoundsOnCoefficients(self):
+        """
+        Gets the value of :py:attr:`upperBoundsOnCoefficients`
+        """
+        return self.getOrDefault(self.upperBoundsOnCoefficients)
+
+    @since("2.3.0")
+    def getLowerBoundsOnIntercepts(self):
+        """
+        Gets the value of :py:attr:`lowerBoundsOnIntercepts`
+        """
+        return self.getOrDefault(self.lowerBoundsOnIntercepts)
+
+    @since("2.3.0")
+    def getUpperBoundsOnIntercepts(self):
+        """
+        Gets the value of :py:attr:`upperBoundsOnIntercepts`
+        """
+        return self.getOrDefault(self.upperBoundsOnIntercepts)
+
+
 @inherit_doc
-class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, HasTol,
-                         HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
-                         HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
+class LogisticRegression(JavaProbabilisticClassifier, _LogisticRegressionParams, JavaMLWritable,
+                         JavaMLReadable):
     """
     Logistic regression.
     This class supports multinomial logistic (softmax) and binomial logistic regression.
@@ -294,6 +462,10 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
     LogisticRegressionModel...
     >>> blorModel.getProbabilityCol()
     'newProbability'
+    >>> blorModel.setThreshold(0.1)
+    LogisticRegressionModel...
+    >>> blorModel.getThreshold()
+    0.1
     >>> blorModel.coefficients
     DenseVector([-1.080..., -0.646...])
     >>> blorModel.intercept
@@ -340,49 +512,6 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
 
     .. versionadded:: 1.3.0
     """
-
-    threshold = Param(Params._dummy(), "threshold",
-                      "Threshold in binary classification prediction, in range [0, 1]." +
-                      " If threshold and thresholds are both set, they must match." +
-                      "e.g. if threshold is p, then thresholds must be equal to [1-p, p].",
-                      typeConverter=TypeConverters.toFloat)
-
-    family = Param(Params._dummy(), "family",
-                   "The name of family which is a description of the label distribution to " +
-                   "be used in the model. Supported options: auto, binomial, multinomial",
-                   typeConverter=TypeConverters.toString)
-
-    lowerBoundsOnCoefficients = Param(Params._dummy(), "lowerBoundsOnCoefficients",
-                                      "The lower bounds on coefficients if fitting under bound "
-                                      "constrained optimization. The bound matrix must be "
-                                      "compatible with the shape "
-                                      "(1, number of features) for binomial regression, or "
-                                      "(number of classes, number of features) "
-                                      "for multinomial regression.",
-                                      typeConverter=TypeConverters.toMatrix)
-
-    upperBoundsOnCoefficients = Param(Params._dummy(), "upperBoundsOnCoefficients",
-                                      "The upper bounds on coefficients if fitting under bound "
-                                      "constrained optimization. The bound matrix must be "
-                                      "compatible with the shape "
-                                      "(1, number of features) for binomial regression, or "
-                                      "(number of classes, number of features) "
-                                      "for multinomial regression.",
-                                      typeConverter=TypeConverters.toMatrix)
-
-    lowerBoundsOnIntercepts = Param(Params._dummy(), "lowerBoundsOnIntercepts",
-                                    "The lower bounds on intercepts if fitting under bound "
-                                    "constrained optimization. The bounds vector size must be"
-                                    "equal with 1 for binomial regression, or the number of"
-                                    "lasses for multinomial regression.",
-                                    typeConverter=TypeConverters.toVector)
-
-    upperBoundsOnIntercepts = Param(Params._dummy(), "upperBoundsOnIntercepts",
-                                    "The upper bounds on intercepts if fitting under bound "
-                                    "constrained optimization. The bound vector size must be "
-                                    "equal with 1 for binomial regression, or the number of "
-                                    "classes for multinomial regression.",
-                                    typeConverter=TypeConverters.toVector)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -439,88 +568,12 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
     def _create_model(self, java_model):
         return LogisticRegressionModel(java_model)
 
-    @since("1.4.0")
-    def setThreshold(self, value):
-        """
-        Sets the value of :py:attr:`threshold`.
-        Clears value of :py:attr:`thresholds` if it has been set.
-        """
-        self._set(threshold=value)
-        self._clear(self.thresholds)
-        return self
-
-    @since("1.4.0")
-    def getThreshold(self):
-        """
-        Get threshold for binary classification.
-
-        If :py:attr:`thresholds` is set with length 2 (i.e., binary classification),
-        this returns the equivalent threshold:
-        :math:`\\frac{1}{1 + \\frac{thresholds(0)}{thresholds(1)}}`.
-        Otherwise, returns :py:attr:`threshold` if set or its default value if unset.
-        """
-        self._checkThresholdConsistency()
-        if self.isSet(self.thresholds):
-            ts = self.getOrDefault(self.thresholds)
-            if len(ts) != 2:
-                raise ValueError("Logistic Regression getThreshold only applies to" +
-                                 " binary classification, but thresholds has length != 2." +
-                                 "  thresholds: " + ",".join(ts))
-            return 1.0/(1.0 + ts[0]/ts[1])
-        else:
-            return self.getOrDefault(self.threshold)
-
-    @since("1.5.0")
-    def setThresholds(self, value):
-        """
-        Sets the value of :py:attr:`thresholds`.
-        Clears value of :py:attr:`threshold` if it has been set.
-        """
-        self._set(thresholds=value)
-        self._clear(self.threshold)
-        return self
-
-    @since("1.5.0")
-    def getThresholds(self):
-        """
-        If :py:attr:`thresholds` is set, return its value.
-        Otherwise, if :py:attr:`threshold` is set, return the equivalent thresholds for binary
-        classification: (1-threshold, threshold).
-        If neither are set, throw an error.
-        """
-        self._checkThresholdConsistency()
-        if not self.isSet(self.thresholds) and self.isSet(self.threshold):
-            t = self.getOrDefault(self.threshold)
-            return [1.0-t, t]
-        else:
-            return self.getOrDefault(self.thresholds)
-
-    def _checkThresholdConsistency(self):
-        if self.isSet(self.threshold) and self.isSet(self.thresholds):
-            ts = self.getOrDefault(self.thresholds)
-            if len(ts) != 2:
-                raise ValueError("Logistic Regression getThreshold only applies to" +
-                                 " binary classification, but thresholds has length != 2." +
-                                 " thresholds: {0}".format(str(ts)))
-            t = 1.0/(1.0 + ts[0]/ts[1])
-            t2 = self.getOrDefault(self.threshold)
-            if abs(t2 - t) >= 1E-5:
-                raise ValueError("Logistic Regression getThreshold found inconsistent values for" +
-                                 " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
-
     @since("2.1.0")
     def setFamily(self, value):
         """
         Sets the value of :py:attr:`family`.
         """
         return self._set(family=value)
-
-    @since("2.1.0")
-    def getFamily(self):
-        """
-        Gets the value of :py:attr:`family` or its default value.
-        """
-        return self.getOrDefault(self.family)
 
     @since("2.3.0")
     def setLowerBoundsOnCoefficients(self, value):
@@ -530,25 +583,11 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
         return self._set(lowerBoundsOnCoefficients=value)
 
     @since("2.3.0")
-    def getLowerBoundsOnCoefficients(self):
-        """
-        Gets the value of :py:attr:`lowerBoundsOnCoefficients`
-        """
-        return self.getOrDefault(self.lowerBoundsOnCoefficients)
-
-    @since("2.3.0")
     def setUpperBoundsOnCoefficients(self, value):
         """
         Sets the value of :py:attr:`upperBoundsOnCoefficients`
         """
         return self._set(upperBoundsOnCoefficients=value)
-
-    @since("2.3.0")
-    def getUpperBoundsOnCoefficients(self):
-        """
-        Gets the value of :py:attr:`upperBoundsOnCoefficients`
-        """
-        return self.getOrDefault(self.upperBoundsOnCoefficients)
 
     @since("2.3.0")
     def setLowerBoundsOnIntercepts(self, value):
@@ -558,29 +597,15 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
         return self._set(lowerBoundsOnIntercepts=value)
 
     @since("2.3.0")
-    def getLowerBoundsOnIntercepts(self):
-        """
-        Gets the value of :py:attr:`lowerBoundsOnIntercepts`
-        """
-        return self.getOrDefault(self.lowerBoundsOnIntercepts)
-
-    @since("2.3.0")
     def setUpperBoundsOnIntercepts(self, value):
         """
         Sets the value of :py:attr:`upperBoundsOnIntercepts`
         """
         return self._set(upperBoundsOnIntercepts=value)
 
-    @since("2.3.0")
-    def getUpperBoundsOnIntercepts(self):
-        """
-        Gets the value of :py:attr:`upperBoundsOnIntercepts`
-        """
-        return self.getOrDefault(self.upperBoundsOnIntercepts)
 
-
-class LogisticRegressionModel(JavaProbabilisticClassificationModel, JavaMLWritable, JavaMLReadable,
-                              HasTrainingSummary):
+class LogisticRegressionModel(JavaProbabilisticClassificationModel, _LogisticRegressionParams,
+                              JavaMLWritable, JavaMLReadable, HasTrainingSummary):
     """
     Model fitted by LogisticRegression.
 
@@ -1647,8 +1672,36 @@ class GBTClassificationModel(_TreeEnsembleModel, JavaProbabilisticClassification
         return self._call_java("evaluateEachIteration", dataset)
 
 
+class _NaiveBayesParams(_JavaPredictorParams, HasWeightCol):
+    """
+    Params for :py:class:`NaiveBayes` and :py:class:`NaiveBayesModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
+                      "default is 1.0", typeConverter=TypeConverters.toFloat)
+    modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
+                      "(case-sensitive). Supported options: multinomial (default) and bernoulli.",
+                      typeConverter=TypeConverters.toString)
+
+    @since("1.5.0")
+    def getSmoothing(self):
+        """
+        Gets the value of smoothing or its default value.
+        """
+        return self.getOrDefault(self.smoothing)
+
+    @since("1.5.0")
+    def getModelType(self):
+        """
+        Gets the value of modelType or its default value.
+        """
+        return self.getOrDefault(self.modelType)
+
+
 @inherit_doc
-class NaiveBayes(JavaProbabilisticClassifier, HasThresholds, HasWeightCol,
+class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, HasWeightCol,
                  JavaMLWritable, JavaMLReadable):
     """
     Naive Bayes Classifiers.
@@ -1674,6 +1727,8 @@ class NaiveBayes(JavaProbabilisticClassifier, HasThresholds, HasWeightCol,
     NaiveBayes_...
     >>> model.getLabelCol()
     'newLabel'
+    >>> model.getSmoothing()
+    1.0
     >>> model.pi
     DenseVector([-0.81..., -0.58...])
     >>> model.theta
@@ -1711,12 +1766,6 @@ class NaiveBayes(JavaProbabilisticClassifier, HasThresholds, HasWeightCol,
 
     .. versionadded:: 1.5.0
     """
-
-    smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
-                      "default is 1.0", typeConverter=TypeConverters.toFloat)
-    modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
-                      "(case-sensitive). Supported options: multinomial (default) and bernoulli.",
-                      typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -1759,28 +1808,15 @@ class NaiveBayes(JavaProbabilisticClassifier, HasThresholds, HasWeightCol,
         return self._set(smoothing=value)
 
     @since("1.5.0")
-    def getSmoothing(self):
-        """
-        Gets the value of smoothing or its default value.
-        """
-        return self.getOrDefault(self.smoothing)
-
-    @since("1.5.0")
     def setModelType(self, value):
         """
         Sets the value of :py:attr:`modelType`.
         """
         return self._set(modelType=value)
 
-    @since("1.5.0")
-    def getModelType(self):
-        """
-        Gets the value of modelType or its default value.
-        """
-        return self.getOrDefault(self.modelType)
 
-
-class NaiveBayesModel(JavaProbabilisticClassificationModel, JavaMLWritable, JavaMLReadable):
+class NaiveBayesModel(JavaProbabilisticClassificationModel, _NaiveBayesParams, JavaMLWritable,
+                      JavaMLReadable):
     """
     Model fitted by NaiveBayes.
 
@@ -1804,9 +1840,60 @@ class NaiveBayesModel(JavaProbabilisticClassificationModel, JavaMLWritable, Java
         return self._call_java("theta")
 
 
+class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, HasMaxIter,
+                                  HasTol, HasStepSize, HasSolver):
+    """
+    Params for :py:class:`MultilayerPerceptronClassifier`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
+                   "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
+                   "neurons and output layer of 10 neurons.",
+                   typeConverter=TypeConverters.toListInt)
+    blockSize = Param(Params._dummy(), "blockSize", "Block size for stacking input data in " +
+                      "matrices. Data is stacked within partitions. If block size is more than " +
+                      "remaining data in a partition then it is adjusted to the size of this " +
+                      "data. Recommended size is between 10 and 1000, default is 128.",
+                      typeConverter=TypeConverters.toInt)
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: l-bfgs, gd.", typeConverter=TypeConverters.toString)
+    initialWeights = Param(Params._dummy(), "initialWeights", "The initial weights of the model.",
+                           typeConverter=TypeConverters.toVector)
+
+    @since("1.6.0")
+    def getLayers(self):
+        """
+        Gets the value of layers or its default value.
+        """
+        return self.getOrDefault(self.layers)
+
+    @since("1.6.0")
+    def getBlockSize(self):
+        """
+        Gets the value of blockSize or its default value.
+        """
+        return self.getOrDefault(self.blockSize)
+
+    @since("2.0.0")
+    def getStepSize(self):
+        """
+        Gets the value of stepSize or its default value.
+        """
+        return self.getOrDefault(self.stepSize)
+
+    @since("2.0.0")
+    def getInitialWeights(self):
+        """
+        Gets the value of initialWeights or its default value.
+        """
+        return self.getOrDefault(self.initialWeights)
+
+
 @inherit_doc
-class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, HasMaxIter, HasTol, HasSeed,
-                                     HasStepSize, HasSolver, JavaMLWritable, JavaMLReadable):
+class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, _MultilayerPerceptronParams,
+                                     JavaMLWritable, JavaMLReadable):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -1862,20 +1949,6 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, HasMaxIter, Ha
     .. versionadded:: 1.6.0
     """
 
-    layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
-                   "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
-                   "neurons and output layer of 10 neurons.",
-                   typeConverter=TypeConverters.toListInt)
-    blockSize = Param(Params._dummy(), "blockSize", "Block size for stacking input data in " +
-                      "matrices. Data is stacked within partitions. If block size is more than " +
-                      "remaining data in a partition then it is adjusted to the size of this " +
-                      "data. Recommended size is between 10 and 1000, default is 128.",
-                      typeConverter=TypeConverters.toInt)
-    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
-                   "options: l-bfgs, gd.", typeConverter=TypeConverters.toString)
-    initialWeights = Param(Params._dummy(), "initialWeights", "The initial weights of the model.",
-                           typeConverter=TypeConverters.toVector)
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
@@ -1921,25 +1994,11 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, HasMaxIter, Ha
         return self._set(layers=value)
 
     @since("1.6.0")
-    def getLayers(self):
-        """
-        Gets the value of layers or its default value.
-        """
-        return self.getOrDefault(self.layers)
-
-    @since("1.6.0")
     def setBlockSize(self, value):
         """
         Sets the value of :py:attr:`blockSize`.
         """
         return self._set(blockSize=value)
-
-    @since("1.6.0")
-    def getBlockSize(self):
-        """
-        Gets the value of blockSize or its default value.
-        """
-        return self.getOrDefault(self.blockSize)
 
     @since("2.0.0")
     def setStepSize(self, value):
@@ -1949,25 +2008,11 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, HasMaxIter, Ha
         return self._set(stepSize=value)
 
     @since("2.0.0")
-    def getStepSize(self):
-        """
-        Gets the value of stepSize or its default value.
-        """
-        return self.getOrDefault(self.stepSize)
-
-    @since("2.0.0")
     def setInitialWeights(self, value):
         """
         Sets the value of :py:attr:`initialWeights`.
         """
         return self._set(initialWeights=value)
-
-    @since("2.0.0")
-    def getInitialWeights(self):
-        """
-        Gets the value of initialWeights or its default value.
-        """
-        return self.getOrDefault(self.initialWeights)
 
 
 class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationModel, JavaMLWritable,

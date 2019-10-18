@@ -2434,7 +2434,7 @@ class HiveDDLSuite
         "CREATE TABLE IF NOT EXISTS t1 (c1_int INT, c2_string STRING, c3_float FLOAT)")
       val desc = sql("DESC FORMATTED t1").filter($"col_name".startsWith("Last Access"))
         .select("data_type")
-      // check if the last access time doesnt have the default date of year
+      // check if the last access time doesn't have the default date of year
       // 1970 as its a wrong access time
       assert((desc.first.toString.contains("UNKNOWN")))
     }
