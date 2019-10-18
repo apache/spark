@@ -207,7 +207,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
       rowWithNoNullColumns.getDecimal(11, 38, 18))
 
     for (i <- fieldTypes.indices) {
-      // Cann't call setNullAt() on DecimalType
+      // Can't call setNullAt() on DecimalType
       if (i == 11) {
         setToNullAfterCreation.setDecimal(11, null, 38)
       } else {

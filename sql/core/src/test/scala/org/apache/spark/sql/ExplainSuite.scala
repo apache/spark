@@ -241,9 +241,22 @@ class ExplainSuite extends QueryTest with SharedSparkSession {
               |FROM df1 JOIN df2 ON df1.k = df2.k AND df2.id < 2
               |""".stripMargin
 
-          val expected_pattern = "Subquery:1 Hosting operator id = 1 Hosting Expression = k#x"
+          val expected_pattern1 =
+            "Subquery:1 Hosting operator id = 1 Hosting Expression = k#xL IN subquery#x"
+          val expected_pattern2 =
+            "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
+              "IN subquery#x\\)\\]"
+          val expected_pattern3 =
+            "Location: PrunedInMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
+              "/df2/.*, ... 99 entries\\]"
+          val expected_pattern4 =
+            "Location: PrunedInMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
+              "/df1/.*, ... 999 entries\\]"
           withNormalizedExplain(sqlText) { normalizedOutput =>
-            assert(expected_pattern.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern2.r.findAllMatchIn(normalizedOutput).length == 1)
+            assert(expected_pattern3.r.findAllMatchIn(normalizedOutput).length == 2)
+            assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
           }
         }
       }
