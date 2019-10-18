@@ -37,9 +37,8 @@ case class CreateNamespaceExec(
     private var properties: Map[String, String])
     extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-    val ns = namespace.toArray
-    if (ifNotExists && catalog.namespaceExists(ns)) {
-      throw new NamespaceAlreadyExistsException(ns)
+    if (ifNotExists && catalog.namespaceExists(namespace.toArray)) {
+      return Seq.empty
     }
 
     // Add any additional properties.
@@ -50,9 +49,7 @@ case class CreateNamespaceExec(
       properties += ("locationSpec" -> CatalogUtils.stringToURI(locationSpec.get).toString)
     }
 
-    // Note that even if ifNotExists is set to false, createNamespace can still throw
-    // NamespaceAlreadyExistsException depending on the SupportsNamespaces implementation.
-    catalog.createNamespace(ns, properties.asJava)
+    catalog.createNamespace(namespace.toArray, properties.asJava)
 
     Seq.empty
   }
