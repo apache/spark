@@ -52,7 +52,6 @@ SELECT BIT_AND(b1) AS n1, BIT_OR(b2)  AS n2 FROM bitwise_test where 1 = 0;
 -- null case
 SELECT BIT_AND(b4) AS n1, BIT_OR(b4)  AS n2 FROM bitwise_test where b4 is null;
 
-
 SELECT
  BIT_AND(cast(b1 as tinyint)) AS a1,
  BIT_AND(cast(b2 as smallint)) AS b1,
@@ -63,6 +62,16 @@ SELECT
  BIT_OR(b3)  AS g7,
  BIT_OR(b4)  AS h3
 FROM bitwise_test;
+
+-- group by
+SELECT b1 , bit_and(b2), bit_or(b4) FROM bitwise_test GROUP BY b1;
+
+--having
+SELECT b1, bit_and(b2) FROM bitwise_test GROUP BY b1 HAVING bit_and(b2) < 7;
+
+-- window
+SELECT b1, b2, bit_and(b2) OVER (PARTITION BY b1 ORDER BY b2) FROM bitwise_test;
+SELECT b1, b2, bit_or(b2) OVER (PARTITION BY b1 ORDER BY b2) FROM bitwise_test;
 
 --
 -- test boolean aggregates
