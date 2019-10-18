@@ -30,13 +30,14 @@ abstract class ExtractIntervalPart(
     val dataType: DataType,
     func: CalendarInterval => Any,
     funcName: String)
-    extends UnaryExpression
-    with ExpectsInputTypes
-    with Serializable {
+  extends UnaryExpression with ExpectsInputTypes with Serializable {
+
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
+
   override protected def nullSafeEval(interval: Any): Any = {
     func(interval.asInstanceOf[CalendarInterval])
   }
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$iu.$funcName($c)")
