@@ -412,10 +412,10 @@ object TypeCoercion {
       case e if !e.childrenResolved => e
 
       case a @ BinaryArithmetic(left @ StringType(), right)
-        if right.dataType != CalendarIntervalType =>
+        if !Seq(CalendarIntervalType, TimestampType, DateType).contains(right.dataType) =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
       case a @ BinaryArithmetic(left, right @ StringType())
-        if left.dataType != CalendarIntervalType =>
+        if !Seq(CalendarIntervalType, TimestampType, DateType).contains(left.dataType) =>
         a.makeCopy(Array(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
@@ -862,8 +862,10 @@ object TypeCoercion {
         SubtractTimestamps(Cast(l, TimestampType), r)
 
       // Cast StringType to CalendarIntervalType
-      case Add(l @ StringType(), r @ (TimestampType() | DateType())) => TimeAdd(r, l)
-      case Add(l @ (TimestampType() | DateType()), r @ StringType()) => TimeAdd(l, r)
+      case Add(l @ StringType(), r @ (TimestampType() | DateType())) =>
+        TimeAdd(r, Cast(l, CalendarIntervalType))
+      case Add(l @ (TimestampType() | DateType()), r @ StringType()) =>
+        TimeAdd(l, Cast(r, CalendarIntervalType))
       // Cast StringType to TimestampType
       case Subtract(l @ StringType(), r @ (TimestampType() | DateType())) =>
         SubtractTimestamps(Cast(l, TimestampType), r)
