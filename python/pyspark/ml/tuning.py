@@ -514,10 +514,11 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         :return: Java object equivalent to this instance.
         """
 
+        sc = SparkContext._active_spark_context
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel",
                                              self.uid,
                                              self.bestModel._to_java(),
-                                             self.avgMetrics)
+                                             _py2java(sc, self.avgMetrics))
         estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)
@@ -850,11 +851,12 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
         :return: Java object equivalent to this instance.
         """
 
+        sc = SparkContext._active_spark_context
         _java_obj = JavaParams._new_java_obj(
             "org.apache.spark.ml.tuning.TrainValidationSplitModel",
             self.uid,
             self.bestModel._to_java(),
-            self.validationMetrics)
+            _py2java(sc, self.validationMetrics))
         estimator, epms, evaluator = super(TrainValidationSplitModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)
