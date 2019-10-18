@@ -189,6 +189,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
+    Batch("Add Join Hint", Once,
+      AddJoinHint) :+
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       ColumnPruning,

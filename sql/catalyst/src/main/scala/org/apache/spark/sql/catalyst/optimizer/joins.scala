@@ -208,3 +208,27 @@ object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with Predicat
       }
   }
 }
+
+/**
+ * This rule forces to use shuffle sort merge join for those one side of join is StreamingRelation
+ * and the other side of join is not StreamingRelation.
+ *
+ * TODO: This rule is used to walk around SPARK-29438.
+ */
+object AddJoinHint extends Rule[LogicalPlan] with PredicateHelper {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    val existStreamStreamJoin = plan.collect {
+      case j @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming =>
+        j
+    }.nonEmpty
+    if (existStreamStreamJoin) {
+      plan transform {
+        case j: Join =>
+          val joinHint = Some(HintInfo(Some(SHUFFLE_MERGE)))
+          j.copy(hint = JoinHint(joinHint, joinHint))
+      }
+    } else {
+      plan
+    }
+  }
+}
