@@ -36,6 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 // TODO: all commands should look up table from the current catalog. The `SessionCatalog` doesn't
 //       need to track current database at all.
+private[sql]
 class CatalogManager(
     conf: SQLConf,
     defaultSessionCatalog: CatalogPlugin,
