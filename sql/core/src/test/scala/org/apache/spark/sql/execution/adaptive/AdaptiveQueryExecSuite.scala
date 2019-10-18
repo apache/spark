@@ -229,6 +229,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 2)
+      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      // Even with local shuffle reader, the query statge reuse can also work.
       val ex = findReusedExchange(adaptivePlan)
       assert(ex.size == 1)
     }
