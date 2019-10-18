@@ -21,24 +21,17 @@ import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
 
 object IntervalUtils {
-  final val MONTHS_PER_YEAR: Int = 12
-  final val MONTHS_PER_QUARTER: Byte = 3
-  final val YEARS_PER_MILLENNIUM: Int = 1000
-  final val YEARS_PER_CENTURY: Int = 100
-  final val YEARS_PER_DECADE: Int = 10
-  final val MICROS_PER_HOUR: Long = DateTimeUtils.MILLIS_PER_HOUR * DateTimeUtils.MICROS_PER_MILLIS
-  final val MICROS_PER_MINUTE: Long = {
-    DateTimeUtils.MILLIS_PER_MINUTE * DateTimeUtils.MICROS_PER_MILLIS
-  }
-  // The average year of the Gregorian calendar 365.2425 days long, see
-  // https://en.wikipedia.org/wiki/Gregorian_calendar
-  // Leap year occurs every 4 years, except for years that are divisible by 100
-  // and not divisible by 400. So, the mean length of of the Gregorian calendar year is:
-  //  1 mean year = (365 + 1/4 - 1/100 + 1/400) days = 365.2425 days
-  // The mean year length in seconds is:
-  //  60 * 60 * 24 * 365.2425 = 31556952.0 = 12 * 2629746
-  final val SECONDS_PER_MONTH: Int = 2629746
-  final val MICROS_PER_MONTH: Long = SECONDS_PER_MONTH * DateTimeUtils.MICROS_PER_SECOND
+  val MONTHS_PER_YEAR: Int = 12
+  val MONTHS_PER_QUARTER: Byte = 3
+  val YEARS_PER_MILLENNIUM: Int = 1000
+  val YEARS_PER_CENTURY: Int = 100
+  val YEARS_PER_DECADE: Int = 10
+  val MICROS_PER_HOUR: Long = DateTimeUtils.MILLIS_PER_HOUR * DateTimeUtils.MICROS_PER_MILLIS
+  val MICROS_PER_MINUTE: Long = DateTimeUtils.MILLIS_PER_MINUTE * DateTimeUtils.MICROS_PER_MILLIS
+  val DAYS_PER_MONTH: Byte = 30
+  val MICROS_PER_MONTH: Long = DAYS_PER_MONTH * DateTimeUtils.SECONDS_PER_DAY
+  /* 365.25 days per year assumes leap year every four years */
+  val MICROS_PER_YEAR: Long = (36525L * DateTimeUtils.MICROS_PER_DAY) / 100
 
   def getYears(interval: CalendarInterval): Int = {
     interval.months / MONTHS_PER_YEAR
@@ -90,8 +83,9 @@ object IntervalUtils {
 
   // Returns total number of seconds with microseconds fractional part in the given interval.
   def getEpoch(interval: CalendarInterval): Decimal = {
-    val monthsDurationUs = Math.multiplyExact(interval.months, MICROS_PER_MONTH)
-    val result = Math.addExact(interval.microseconds, monthsDurationUs)
+    var result = interval.microseconds
+    result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
+    result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
     Decimal(result, 18, 6)
   }
 }
