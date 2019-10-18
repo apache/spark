@@ -207,8 +207,9 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       // Note: alter properties here because Hive does not support altering other fields
       catalog.alterDatabase(db1.copy(properties = Map("k" -> "v3", "good" -> "true")))
       val newDb1 = catalog.getDatabaseMetadata("db1")
-      assert(db1.properties.isEmpty)
-      assert(newDb1.properties.size == 2)
+      val reversedProperties = Seq("ownerName", "ownerType")
+      assert((db1.properties -- reversedProperties).isEmpty)
+      assert((newDb1.properties -- reversedProperties).size == 2)
       assert(newDb1.properties.get("k") == Some("v3"))
       assert(newDb1.properties.get("good") == Some("true"))
     }

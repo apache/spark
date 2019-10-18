@@ -366,6 +366,7 @@ class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
   import testImplicits._
   val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
+  private val reversedProperties = Seq("ownerName", "ownerType")
 
   override def afterEach(): Unit = {
     try {
@@ -1100,7 +1101,8 @@ class HiveDDLSuite
       sql(s"CREATE DATABASE $dbName Location '${tmpDir.toURI.getPath.stripSuffix("/")}'")
       val db1 = catalog.getDatabaseMetadata(dbName)
       val dbPath = new URI(tmpDir.toURI.toString.stripSuffix("/"))
-      assert(db1 == CatalogDatabase(dbName, "", dbPath, Map.empty))
+      assert(db1.copy(properties = db1.properties -- reversedProperties) ===
+        CatalogDatabase(dbName, "", dbPath, Map.empty))
       sql("USE db1")
 
       sql(s"CREATE TABLE $tabName as SELECT 1")
@@ -1138,7 +1140,7 @@ class HiveDDLSuite
     val expectedDBLocation = s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
     val expectedDBUri = CatalogUtils.stringToURI(expectedDBLocation)
     val db1 = catalog.getDatabaseMetadata(dbName)
-    assert(db1 == CatalogDatabase(
+    assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
       dbName,
       "",
       expectedDBUri,

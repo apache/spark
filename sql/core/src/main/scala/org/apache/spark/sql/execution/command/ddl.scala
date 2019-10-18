@@ -178,13 +178,14 @@ case class DescribeDatabaseCommand(
         Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri)) :: Nil
 
     if (extended) {
-      val properties =
-        if (dbMetadata.properties.isEmpty) {
+      val properties = dbMetadata.properties -- Seq("ownerName", "ownerType")
+      val propertiesStr =
+        if (properties.isEmpty) {
           ""
         } else {
-          dbMetadata.properties.toSeq.mkString("(", ", ", ")")
+          properties.toSeq.mkString("(", ", ", ")")
         }
-      result :+ Row("Properties", properties)
+      result :+ Row("Properties", propertiesStr)
     } else {
       result
     }

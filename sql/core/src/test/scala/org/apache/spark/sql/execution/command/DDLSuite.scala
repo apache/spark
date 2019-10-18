@@ -22,7 +22,6 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
@@ -172,6 +171,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
+  protected val reversedProperties = Seq("ownerName", "ownerType")
+
   protected def isUsingHiveMetastore: Boolean = {
     spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
   }
@@ -315,7 +316,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     try {
       sql(s"CREATE DATABASE $dbName")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      assert(db1 == CatalogDatabase(
+      assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
         dbName,
         "",
         getDBPath(dbName),
@@ -338,7 +339,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
           val expPath = makeQualifiedPath(tmpDir.toString)
-          assert(db1 == CatalogDatabase(
+          assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
             expPath,
@@ -361,7 +362,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        assert(db1 == CatalogDatabase(
+        assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
           getDBPath(dbNameWithoutBackTicks),

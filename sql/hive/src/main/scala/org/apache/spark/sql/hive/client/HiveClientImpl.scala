@@ -400,7 +400,7 @@ private[hive] class HiveClientImpl(
     Option(client.getDatabase(dbName)).map { d =>
       val paras = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
         Map(DB_OWNER_NAME_PROP -> shim.getDatabaseOwnerName(d),
-          DB_OWNER_NAME_PROP -> shim.getDatabaseOwnerType(d))
+          DB_OWNER_TYPE_PROP -> shim.getDatabaseOwnerType(d))
 
       CatalogDatabase(
         name = d.getName,
