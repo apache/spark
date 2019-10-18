@@ -294,7 +294,7 @@ case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Opti
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends ParsedStatement
 
 /**
- * A ANALYZE TABLE statement, as parsed from SQL.
+ * An ANALYZE TABLE statement, as parsed from SQL.
  */
 case class AnalyzeTableStatement(
     tableName: Seq[String],
@@ -302,7 +302,7 @@ case class AnalyzeTableStatement(
     noScan: Boolean) extends ParsedStatement
 
 /**
- * A ANALYZE TABLE FOR COLUMNS statement, as parsed from SQL.
+ * An ANALYZE TABLE FOR COLUMNS statement, as parsed from SQL.
  */
 case class AnalyzeColumnStatement(
     tableName: Seq[String],
