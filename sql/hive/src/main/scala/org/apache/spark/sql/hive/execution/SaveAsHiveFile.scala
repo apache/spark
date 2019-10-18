@@ -52,7 +52,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
-      partitionAttributes: Seq[Attribute] = Nil): Set[String] = {
+      partitionAttributes: Seq[Attribute] = Nil,
+      dynamicPartitionOverwrite: Boolean = false): Set[String] = {
 
     val isCompressed =
       fileSinkConf.getTableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
@@ -81,7 +82,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
-      outputPath = outputLocation)
+      outputPath = outputLocation,
+      dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
     FileFormatWriter.write(
       sparkSession = sparkSession,
