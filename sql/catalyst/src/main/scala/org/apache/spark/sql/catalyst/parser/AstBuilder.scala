@@ -1773,7 +1773,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
             CalendarInterval.fromCaseInsensitiveString(value)
           } catch {
             case e: IllegalArgumentException =>
-              val ex = new ParseException(e.getMessage, ctx)
+              val ex = new ParseException("Cannot parse the INTERVAL value: " + value, ctx)
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
