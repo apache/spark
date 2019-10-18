@@ -332,4 +332,5 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.stop()
     rpcEnv.shutdown()
   }
+
 }
