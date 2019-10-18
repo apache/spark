@@ -203,6 +203,7 @@ class GBTClassifier @Since("1.4.0") (
     } else {
       GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy))
     }
+    baseLearners.map(tree => copyValues(tree))
 
     val numFeatures = baseLearners.head.numFeatures
     instr.logNumFeatures(numFeatures)
