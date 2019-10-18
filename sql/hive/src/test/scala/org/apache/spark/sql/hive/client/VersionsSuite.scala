@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
@@ -168,6 +169,19 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val tempDB = CatalogDatabase(
         "temporary", description = "test create", tempDatabasePath, Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
+    }
+
+    test(s"$version: create/get/alter database should pick right user name as owner") {
+      val ownerName = "Kent Yao"
+      val dbName = "SPARK_29425"
+      val originalDb =
+        CatalogDatabase(dbName, "desc", new URI("loc"), Map("ownerName" -> ownerName))
+      client.createDatabase(originalDb, ignoreIfExists = true)
+      val db1 = client.getDatabase(dbName)
+      if (version != "0.12") assert(db1.properties("ownerName") === ownerName)
+      client.alterDatabase(db1.copy(properties = Map()))
+      val db2 = client.getDatabase(dbName)
+      assert(db2.properties("ownerName") === UserGroupInformation.getCurrentUser.getUserName)
     }
 
     test(s"$version: createDatabase with null description") {
