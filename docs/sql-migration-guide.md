@@ -802,7 +802,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `CLUSTER BY`
   * `SORT BY`
 * All Hive operators, including:
-  * Relational operators (`=`, `⇔`, `==`, `<>`, `<`, `>`, `>=`, `<=`, etc)
+  * Relational operators (`=`, `<=>`, `==`, `<>`, `<`, `>`, `>=`, `<=`, etc)
   * Arithmetic operators (`+`, `-`, `*`, `/`, `%`, etc)
   * Logical operators (`AND`, `&&`, `OR`, `||`, etc)
   * Complex type constructors
