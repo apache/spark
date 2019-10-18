@@ -35,5 +35,5 @@ private[spark] class ExecutorResourceInfo(
 
   override protected def resourceName = this.name
   override protected def resourceAddresses = this.addresses
-  override protected def tasksPerAddress = numParts
+  override protected def slotsPerAddress: Int = numParts
 }

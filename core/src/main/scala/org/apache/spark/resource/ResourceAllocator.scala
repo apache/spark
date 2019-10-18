@@ -30,20 +30,20 @@ trait ResourceAllocator {
 
   protected def resourceName: String
   protected def resourceAddresses: Seq[String]
-  protected def resourcesPerAddress: Int
+  protected def slotsPerAddress: Int
 
   /**
    * Map from an address to its availability, a value > 0 means the address is available,
    * while value of 0 means the address is fully assigned.
    *
    * For task resources ([[org.apache.spark.scheduler.ExecutorResourceInfo]]), this value
-   * can be a multiple, such that each address can be allocated up to [[resourcesPerAddress]]
+   * can be a multiple, such that each address can be allocated up to [[slotsPerAddress]]
    * times.
    *
    * TODO Use [[OpenHashMap]] instead to gain better performance.
    */
   private lazy val addressAvailabilityMap = {
-    mutable.HashMap(resourceAddresses.map(_ -> resourcesPerAddress): _*)
+    mutable.HashMap(resourceAddresses.map(_ -> slotsPerAddress): _*)
   }
 
   /**
@@ -59,7 +59,7 @@ trait ResourceAllocator {
    */
   private[spark] def assignedAddrs: Seq[String] = addressAvailabilityMap
     .flatMap { case (addr, available) =>
-      (0 until resourcesPerAddress - available).map(_ => addr)
+      (0 until slotsPerAddress - available).map(_ => addr)
     }.toSeq
 
   /**
@@ -95,7 +95,7 @@ trait ResourceAllocator {
           s"address $address doesn't exist.")
       }
       val isAvailable = addressAvailabilityMap(address)
-      if (isAvailable < resourcesPerAddress) {
+      if (isAvailable < slotsPerAddress) {
         addressAvailabilityMap(address) = addressAvailabilityMap(address) + 1
       } else {
         throw new SparkException(s"Try to release an address that is not assigned. $resourceName " +

@@ -28,7 +28,7 @@ private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String
 
   override protected def resourceName = this.name
   override protected def resourceAddresses = this.addresses
-  override protected def resourcesPerAddress: Int = 1
+  override protected def slotsPerAddress: Int = 1
 
   def acquire(amount: Int): ResourceInformation = {
     val allocated = availableAddrs.take(amount)
