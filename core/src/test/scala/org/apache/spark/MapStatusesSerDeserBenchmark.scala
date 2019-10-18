@@ -23,43 +23,46 @@ import org.apache.spark.scheduler.CompressedMapStatus
 import org.apache.spark.storage.BlockManagerId
 
 /**
- * Benchmark for MapStatuses serialization performance.
+ * Benchmark for MapStatuses serialization & deserialization performance.
  * {{{
  *   To run this benchmark:
  *   1. without sbt: bin/spark-submit --class <this class>
  *        --jars <catalyst test jar>,<core test jar>
  *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
- *      Results will be written to "benchmarks/MapStatusesSerializationBenchmark-results.txt".
+ *      Results will be written to "benchmarks/MapStatusesSerDeserBenchmark-results.txt".
  * }}}
  */
-object MapStatusesSerializationBenchmark extends BenchmarkBase {
+object MapStatusesSerDeserBenchmark extends BenchmarkBase {
 
   var sc: SparkContext = null
+  var tracker: MapOutputTrackerMaster = null
 
-  def serializationBenchmark(numMaps: Int, blockSize: Int,
-    minBroadcastSize: Int = Int.MaxValue): Unit = {
-    val benchmark = new Benchmark(s"MapStatuses Serialization with $numMaps MapOutput",
-      numMaps, output = output)
+  def serDeserBenchmark(numMaps: Int, blockSize: Int, enableBroadcast: Boolean): Unit = {
+    val minBroadcastSize = if (enableBroadcast) {
+      0
+    } else {
+      Int.MaxValue
+    }
+
+    val benchmark = new Benchmark(s"$numMaps MapOutputs, $blockSize blocks " + {
+      if (enableBroadcast) "w/ " else "w/o "
+    } + "broadcast", numMaps, output = output)
 
     val shuffleId = 10
-    val tracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    val rpcEnv = sc.env.rpcEnv
-    val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, sc.getConf)
-    rpcEnv.stop(tracker.trackerEndpoint)
-    rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
-
 
     tracker.registerShuffle(shuffleId, numMaps)
     val r = new scala.util.Random(912)
     (0 until numMaps).foreach { i =>
       tracker.registerMapOutput(shuffleId, i,
         new CompressedMapStatus(BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000),
-          Array.range(0, 500).map(i => math.abs(r.nextLong())), i))
+          Array.fill(blockSize) {
+            // Creating block size ranging from 0byte to 1GB
+            (r.nextDouble() * 1024 * 1024 * 1024).toLong
+          }, i))
     }
 
     val shuffleStatus = tracker.shuffleStatuses.get(shuffleId).head
-
 
     var serializedMapStatusSizes = 0
     var serializedBroadcastSizes = 0
@@ -71,20 +74,44 @@ object MapStatusesSerializationBenchmark extends BenchmarkBase {
       serializedBroadcastSizes = serializedBroadcast.value.length
     }
 
-
     benchmark.addCase("Serialization") { _ =>
       MapOutputTracker.serializeMapStatuses(
         shuffleStatus.mapStatuses, tracker.broadcastManager, tracker.isLocal, minBroadcastSize)
     }
 
+    benchmark.addCase("Deserialization") { _ =>
+      val result = MapOutputTracker.deserializeMapStatuses(serializedMapStatus)
+      assert(result.length == numMaps)
+    }
+
     benchmark.run()
+    // scalastyle:off
+    import org.apache.commons.io.FileUtils
+    benchmark.out.println("Compressed Serialized MapStatus sizes: " +
+      FileUtils.byteCountToDisplaySize(serializedMapStatusSizes))
+    benchmark.out.println(s"Compressed Serialized Broadcast MapStatus sizes: " +
+      FileUtils.byteCountToDisplaySize(serializedBroadcastSizes) + "\n\n")
+    // scalastyle:on
+
     tracker.unregisterShuffle(shuffleId)
-    tracker.stop()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     createSparkContext()
-    serializationBenchmark(200000, 500)
+    tracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    val rpcEnv = sc.env.rpcEnv
+    val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, sc.getConf)
+    rpcEnv.stop(tracker.trackerEndpoint)
+    rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+
+    serDeserBenchmark(200000, 10, true)
+    serDeserBenchmark(200000, 10, false)
+
+    serDeserBenchmark(200000, 100, true)
+    serDeserBenchmark(200000, 100, false)
+
+    serDeserBenchmark(200000, 1000, true)
+    serDeserBenchmark(200000, 1000, false)
   }
 
   def createSparkContext(): Unit = {
@@ -96,6 +123,7 @@ object MapStatusesSerializationBenchmark extends BenchmarkBase {
   }
 
   override def afterAll(): Unit = {
+    tracker.stop()
     if (sc != null) {
       sc.stop()
     }
