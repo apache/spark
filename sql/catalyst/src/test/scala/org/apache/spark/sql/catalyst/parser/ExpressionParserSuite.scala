@@ -424,18 +424,18 @@ class ExpressionParserSuite extends AnalysisTest {
   test("type constructors") {
     // Dates.
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
-    intercept("DAtE 'mar 11 2016'")
+    intercept("DAtE 'mar 11 2016'", "Cannot parse the DATE value")
 
     // Timestamps.
     assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
-    intercept("timestamP '2016-33-11 20:54:00.000'")
+    intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
     // Interval.
     val intervalLiteral = Literal(CalendarInterval.fromString("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
-    intercept("Interval 'interval 3 monthsss 1 hoursss'")
+    intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
