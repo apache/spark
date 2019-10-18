@@ -22,7 +22,7 @@ import org.scalatest.Matchers.the
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.execution.exchange.Exchange
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, UserDefinedAggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -412,43 +412,16 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
         Row("b", 2, 4, 8)))
   }
 
-/*
-  test("window function with udia") {
-    val udia = new UserDefinedImperativeAggregator[Long] {
-      import org.apache.spark.unsafe.Platform
+  test("window function with aggregator") {
+    val agg = UserDefinedAggregator(new Aggregator[(Long, Long), Long, Long] {
+      def zero: Long = 0L
+      def reduce(b: Long, a: (Long, Long)): Long = b + (a._1 * a._2)
+      def merge(b1: Long, b2: Long): Long = b1 + b2
+      def finish(r: Long): Long = r
+      def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+      def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    })
 
-      def inputSchema: StructType = new StructType()
-        .add("a", LongType)
-        .add("b", LongType)
-
-      def resultType: DataType = LongType
-
-      def deterministic: Boolean = true
-
-      def initial: Long = 0L
-
-      def update(agg: Long, input: Row): Long = {
-        if (!(input.isNullAt(0) || input.isNullAt(1))) {
-          agg + (input.getLong(0) * input.getLong(1))
-        } else {
-          agg
-        }
-      }
-
-      def merge(agg1: Long, agg2: Long): Long = agg1 + agg2
-
-      def evaluate(agg: Long): Any = agg
-
-      def serialize(agg: Long): Array[Byte] = {
-        val byteArray = new Array[Byte](8)
-        Platform.putLong(byteArray, Platform.BYTE_ARRAY_OFFSET, agg)
-        byteArray
-      }
-
-      def deserialize(data: Array[Byte]): Long = {
-        Platform.getLong(data, Platform.BYTE_ARRAY_OFFSET)
-      }
-    }
     val df = Seq(
       ("a", 1, 1),
       ("a", 1, 5),
@@ -464,7 +437,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
         $"key",
         $"a",
         $"b",
-        udia($"a", $"b").over(window)),
+        agg($"a", $"b").over(window)),
       Seq(
         Row("a", 1, 1, 6),
         Row("a", 1, 5, 6),
@@ -474,7 +447,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
         Row("b", 3, 8, 32),
         Row("b", 2, 4, 8)))
   }
-*/
 
   test("null inputs") {
     val df = Seq(("a", 1), ("a", 1), ("a", 2), ("a", 2), ("b", 4), ("b", 3), ("b", 2))
