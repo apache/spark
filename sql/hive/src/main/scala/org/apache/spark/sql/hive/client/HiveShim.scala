@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.client
 import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
 import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
-import java.util.{Locale, ArrayList => JArrayList, List => JList, Map => JMap, Set => JSet}
+import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.IMetaStoreClient
-import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri, Function => HiveFunction}
+import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
