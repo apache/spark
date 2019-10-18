@@ -798,7 +798,7 @@ SELECT cast(1 as string) / cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query 95 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (double and timestamp).; line 1 pos 7
+cannot resolve '(CAST(1 AS STRING) / CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: differing types in '(CAST(1 AS STRING) / CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' (string and timestamp).; line 1 pos 7
 
 
 -- !query 96
@@ -807,7 +807,7 @@ SELECT cast(1 as string) / cast('2017-12-11 09:30:00' as date) FROM t
 struct<>
 -- !query 96 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST('2017-12-11 09:30:00' AS DATE))' (double and date).; line 1 pos 7
+cannot resolve '(CAST(1 AS STRING) / CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: differing types in '(CAST(1 AS STRING) / CAST('2017-12-11 09:30:00' AS DATE))' (string and date).; line 1 pos 7
 
 
 -- !query 97
@@ -1095,7 +1095,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) / cast(1 as string) FROM t
 struct<>
 -- !query 128 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) / CAST(CAST(1 AS STRING) AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) / CAST(CAST(1 AS STRING) AS DOUBLE))' (timestamp and double).; line 1 pos 7
+cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) / CAST(1 AS STRING))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) / CAST(1 AS STRING))' (timestamp and string).; line 1 pos 7
 
 
 -- !query 129
@@ -1203,7 +1203,7 @@ SELECT cast('2017-12-11 09:30:00' as date) / cast(1 as string) FROM t
 struct<>
 -- !query 140 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) / CAST(CAST(1 AS STRING) AS DOUBLE))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) / CAST(CAST(1 AS STRING) AS DOUBLE))' (date and double).; line 1 pos 7
+cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) / CAST(1 AS STRING))' due to data type mismatch: differing types in '(CAST('2017-12-11 09:30:00' AS DATE) / CAST(1 AS STRING))' (date and string).; line 1 pos 7
 
 
 -- !query 141
