@@ -2104,7 +2104,10 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
         val errMsg = s"Literals of type '$fieldStr' are currently not supported " +
           s"for the ${source.dataType.catalogString} type."
         if (source.dataType == CalendarIntervalType) {
-          IntervalPart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
+          ExtractIntervalPart.parseExtractField(
+            fieldStr,
+            source,
+            throw new AnalysisException(errMsg))
         } else {
           DatePart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
         }
