@@ -44,6 +44,9 @@ object MemoryStream {
 
   def apply[A : Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+
+  def apply[A : Encoder](numPartitions: Int)(implicit sqlContext: SQLContext): MemoryStream[A] =
+    new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext, numPartitions)
 }
 
 /**
@@ -137,7 +140,7 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
  * is intended for use in unit tests as it can only replay data when the object is still
  * available.
  */
-case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
+case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPartitions: Int = 1)
     extends MemoryStreamBase[A](sqlContext) with MicroBatchStream with Logging {
 
   protected val output = logicalPlan.output
@@ -206,8 +209,12 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
       logDebug(generateDebugString(newBlocks.flatten, startOrdinal, endOrdinal))
 
-      newBlocks.map { block =>
-        new MemoryStreamInputPartition(block)
+      val inputRows = newBlocks.flatten.toArray
+      (0 until numPartitions).map { newPartIdx =>
+        val records = inputRows.zipWithIndex.filter { case (_, idx) =>
+          idx % numPartitions == newPartIdx
+        }.map(_._1)
+        new MemoryStreamInputPartition(records)
       }.toArray
     }
   }
