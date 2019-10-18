@@ -113,4 +113,26 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     catalog.createDatabase(newDb("dbWithNullDesc").copy(description = null), ignoreIfExists = false)
     assert(catalog.getDatabase("dbWithNullDesc").description == "")
   }
+
+  test("SPARK-29498 CatalogTable to HiveTable should not change the table's ownership") {
+    val catalog = newBasicCatalog()
+    val identifier = TableIdentifier("spark_29498", Some("default"))
+    val owner = "SPARK-29498"
+    val newTable = CatalogTable(
+      identifier,
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat(
+        locationUri = None,
+        inputFormat = None,
+        outputFormat = None,
+        serde = None,
+        compressed = false,
+        properties = Map.empty),
+      owner = owner,
+      schema = new StructType().add("i", "int"),
+      provider = Some("hive"))
+
+    catalog.createTable(newTable, false)
+    assert(catalog.getTable("default", "spark_29498").owner === owner)
+  }
 }
