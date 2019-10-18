@@ -97,6 +97,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.currentCatalog).thenReturn(testCat)
+    when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
 
@@ -111,6 +112,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.currentCatalog).thenReturn(v2SessionCatalog)
+    when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     manager
   }
 
