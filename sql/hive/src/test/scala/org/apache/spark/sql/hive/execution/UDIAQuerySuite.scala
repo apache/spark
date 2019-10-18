@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.lang.{Double => jlDouble, Integer => jlInt, Long => jlLong}
+
 import scala.collection.JavaConverters._
 import scala.util.Random
 
@@ -25,96 +27,44 @@ import test.org.apache.spark.sql.MyDoubleSum
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-//import org.apache.spark.sql.expressions.{UserDefinedImperativeAggregator}
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregator}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
-/*
-class MyDoubleAvgUDIA extends UserDefinedImperativeAggregator[(Double, Long)] {
-  import org.apache.spark.unsafe.Platform
-
-  def inputSchema: StructType = new StructType()
-    .add("x", DoubleType, true)
-
-  def resultType: DataType = DoubleType
-
-  def deterministic: Boolean = true
-
-  def initial: (Double, Long) = (0D, 0L)
-
-  def update(agg: (Double, Long), input: Row): (Double, Long) = {
-    if (input.isNullAt(0)) agg else (agg._1 + input.getDouble(0), agg._2 + 1L)
+class MyDoubleAvgAggBase extends Aggregator[jlDouble, (Double, Long), jlDouble] {
+  def zero: (Double, Long) = (0.0, 0L)
+  def reduce(b: (Double, Long), a: jlDouble): (Double, Long) = {
+    if (a != null) (b._1 + a, b._2 + 1L) else b
   }
-
-  def merge(agg1: (Double, Long), agg2: (Double, Long)): (Double, Long) =
-    (agg1._1 + agg2._1, agg1._2 + agg2._2)
-
-  def evaluate(agg: (Double, Long)): Any = {
-    val (s, n) = agg
-    if (n == 0L) null else 100.0 + (s / n.toDouble)
-  }
-
-  def serialize(agg: (Double, Long)): Array[Byte] = {
-    val (s, n) = agg
-    val byteArray = new Array[Byte](2 * 8)
-    Platform.putDouble(byteArray, Platform.BYTE_ARRAY_OFFSET, s)
-    Platform.putLong(byteArray, Platform.BYTE_ARRAY_OFFSET + 8, n)
-    byteArray
-  }
-
-  def deserialize(data: Array[Byte]): (Double, Long) = {
-    val s = Platform.getDouble(data, Platform.BYTE_ARRAY_OFFSET)
-    val n = Platform.getLong(data, Platform.BYTE_ARRAY_OFFSET + 8)
-    (s, n)
-  }
+  def merge(b1: (Double, Long), b2: (Double, Long)): (Double, Long) =
+    (b1._1 + b2._1, b1._2 + b2._2)
+  def finish(r: (Double, Long)): jlDouble =
+    if (r._2 > 0L) 100.0 + (r._1 / r._2.toDouble) else null
+  def bufferEncoder: Encoder[(Double, Long)] =
+    Encoders.tuple(Encoders.scalaDouble, Encoders.scalaLong)
+  def outputEncoder: Encoder[jlDouble] = Encoders.DOUBLE
 }
 
-class MyDoubleSumUDIA extends MyDoubleAvgUDIA {
-  override def evaluate(agg: (Double, Long)): Any = {
-    val (s, n) = agg
-    if (n == 0L) null else s
-  }
+object MyDoubleAvgAgg extends MyDoubleAvgAggBase
+object MyDoubleSumAgg extends MyDoubleAvgAggBase {
+  override def finish(r: (Double, Long)): jlDouble = if (r._2 > 0L) r._1 else null
 }
 
-class LongProductSumUDIA extends UserDefinedImperativeAggregator[Long] {
-  import org.apache.spark.unsafe.Platform
-
-  def inputSchema: StructType = new StructType()
-    .add("a", LongType)
-    .add("b", LongType)
-
-  def resultType: DataType = LongType
-
-  def deterministic: Boolean = true
-
-  def initial: Long = 0L
-
-  def update(agg: Long, input: Row): Long = {
-    if (!(input.isNullAt(0) || input.isNullAt(1))) {
-      agg + (input.getLong(0) * input.getLong(1))
-    } else {
-      agg
-    }
+object LongProductSumAgg extends Aggregator[(jlLong, jlLong), Long, jlLong] {
+  def zero: Long = 0L
+  def reduce(b: Long, a: (jlLong, jlLong)): Long = {
+    if ((a._1 != null) && (a._2 != null)) b + (a._1 * a._2) else b
   }
-
-  def merge(agg1: Long, agg2: Long): Long = agg1 + agg2
-
-  def evaluate(agg: Long): Any = agg
-
-  def serialize(agg: Long): Array[Byte] = {
-    val byteArray = new Array[Byte](8)
-    Platform.putLong(byteArray, Platform.BYTE_ARRAY_OFFSET, agg)
-    byteArray
-  }
-
-  def deserialize(data: Array[Byte]): Long = {
-    Platform.getLong(data, Platform.BYTE_ARRAY_OFFSET)
-  }
+  def merge(b1: Long, b2: Long): Long = b1 + b2
+  def finish(r: Long): jlLong = r
+  def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+  def outputEncoder: Encoder[jlLong] = Encoders.LONG
 }
 
 @SQLUserDefinedType(udt = classOf[CountSerDeUDT])
@@ -159,43 +109,17 @@ class CountSerDeUDT extends UserDefinedType[CountSerDeSQL] {
 
 case object CountSerDeUDT extends CountSerDeUDT
 
-case object CountSerDeUDIA extends UserDefinedImperativeAggregator[CountSerDeSQL] {
-  import org.apache.spark.unsafe.Platform
-
-  def inputSchema: StructType = StructType(StructField("x", IntegerType) :: Nil)
-
-  def resultType: DataType = CountSerDeUDT
-
-  def deterministic: Boolean = true
-
-  def initial: CountSerDeSQL = CountSerDeSQL(0, 0, 0)
-
-  def update(agg: CountSerDeSQL, input: Row): CountSerDeSQL =
-    agg.copy(sum = agg.sum + input.getInt(0))
-
-  def merge(agg1: CountSerDeSQL, agg2: CountSerDeSQL): CountSerDeSQL =
-    CountSerDeSQL(agg1.nSer + agg2.nSer, agg1.nDeSer + agg2.nDeSer, agg1.sum + agg2.sum)
-
-  def evaluate(agg: CountSerDeSQL): Any = agg
-
-  def serialize(agg: CountSerDeSQL): Array[Byte] = {
-    val CountSerDeSQL(ns, nd, s) = agg
-    val byteArray = new Array[Byte](3 * 4)
-    Platform.putInt(byteArray, Platform.BYTE_ARRAY_OFFSET, ns + 1)
-    Platform.putInt(byteArray, Platform.BYTE_ARRAY_OFFSET + 4, nd)
-    Platform.putInt(byteArray, Platform.BYTE_ARRAY_OFFSET + 8, s)
-    byteArray
-  }
-
-  def deserialize(data: Array[Byte]): CountSerDeSQL = {
-    val ns = Platform.getInt(data, Platform.BYTE_ARRAY_OFFSET)
-    val nd = Platform.getInt(data, Platform.BYTE_ARRAY_OFFSET + 4)
-    val s = Platform.getInt(data, Platform.BYTE_ARRAY_OFFSET + 8)
-    CountSerDeSQL(ns, nd + 1, s)
-  }
+object CountSerDeAgg extends Aggregator[Int, CountSerDeSQL, CountSerDeSQL] {
+  def zero: CountSerDeSQL = CountSerDeSQL(0, 0, 0)
+  def reduce(b: CountSerDeSQL, a: Int): CountSerDeSQL = b.copy(sum = b.sum + a)
+  def merge(b1: CountSerDeSQL, b2: CountSerDeSQL): CountSerDeSQL =
+    CountSerDeSQL(b1.nSer + b2.nSer, b1.nDeSer + b2.nDeSer, b1.sum + b2.sum)
+  def finish(r: CountSerDeSQL): CountSerDeSQL = r
+  def bufferEncoder: Encoder[CountSerDeSQL] = ExpressionEncoder[CountSerDeSQL]()
+  def outputEncoder: Encoder[CountSerDeSQL] = ExpressionEncoder[CountSerDeSQL]()
 }
 
-abstract class UDIAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 
   override def beforeAll(): Unit = {
@@ -253,10 +177,10 @@ abstract class UDIAQuerySuite extends QueryTest with SQLTestUtils with TestHiveS
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
     emptyDF.createOrReplaceTempView("emptyTable")
 
-    // Register UDIAs
-    spark.udf.register("mydoublesum", new MyDoubleSumUDIA)
-    spark.udf.register("mydoubleavg", new MyDoubleAvgUDIA)
-    spark.udf.register("longProductSum", new LongProductSumUDIA)
+    // Register UDAs
+    spark.udf.register("mydoublesum", MyDoubleSumAgg)
+    spark.udf.register("mydoubleavg", MyDoubleAvgAgg)
+    spark.udf.register("longProductSum", LongProductSumAgg)
   }
 
   override def afterAll(): Unit = {
@@ -270,7 +194,7 @@ abstract class UDIAQuerySuite extends QueryTest with SQLTestUtils with TestHiveS
     }
   }
 
-  test("udia") {
+  test("aggregators") {
     checkAnswer(
       spark.sql(
         """
@@ -290,7 +214,7 @@ abstract class UDIAQuerySuite extends QueryTest with SQLTestUtils with TestHiveS
         Row(null, null, 110.0, null, null, 10.0) :: Nil)
   }
 
-  test("non-deterministic children expressions of UDIA") {
+  test("non-deterministic children expressions of aggregator") {
     val e = intercept[AnalysisException] {
       spark.sql(
         """
@@ -397,6 +321,7 @@ abstract class UDIAQuerySuite extends QueryTest with SQLTestUtils with TestHiveS
         Row(3, null, 3.0, null, null, null) ::
         Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
   }
+
   test("multiple distinct multiple columns sets") {
     checkAnswer(
       spark.sql(
@@ -425,19 +350,18 @@ abstract class UDIAQuerySuite extends QueryTest with SQLTestUtils with TestHiveS
         Row(3, 0, null, 1, 3, 0, 0, 0, null, 1, 3, 0, 2, 2) :: Nil)
   }
 
-  test("verify UDIA ser/de behavior") {
+  test("verify aggregator ser/de behavior") {
     val data = sparkContext.parallelize((1 to 100).toSeq, 3).toDF("value1")
+    val agg = UserDefinedAggregator(CountSerDeAgg)
     checkAnswer(
-      data.agg(CountSerDeUDIA($"value1")),
+      data.agg(agg($"value1")),
       Row(CountSerDeSQL(4, 4, 5050)) :: Nil)
   }
 }
 
+class HashUDAQuerySuite extends UDAQuerySuite
 
-class HashUDIAQuerySuite extends UDIAQuerySuite
-
-
-class HashUDIAQueryWithControlledFallbackSuite extends UDIAQuerySuite {
+class HashUDAQueryWithControlledFallbackSuite extends UDAQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     Seq("true", "false").foreach { enableTwoLevelMaps =>
@@ -482,4 +406,3 @@ class HashUDIAQueryWithControlledFallbackSuite extends UDIAQuerySuite {
     checkAnswer(df, expectedAnswer.collect())
   }
 }
-*/
