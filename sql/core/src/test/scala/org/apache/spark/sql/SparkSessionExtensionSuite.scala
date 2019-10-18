@@ -176,7 +176,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     val session = SparkSession.builder()
       .master("local[1]")
       .config(COLUMN_BATCH_SIZE.key, 2)
-      .withExtensions{ extensions =>
+      .withExtensions { extensions =>
         extensions.injectColumnar(session =>
           MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())) }
       .getOrCreate()
@@ -189,7 +189,6 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       val input = Seq((100L), (200L), (300L))
       val data = input.toDF("vals").repartition(1)
       val df = data.selectExpr("vals + 1")
-
       val result = df.collect()
       assert(result sameElements input.map(x => Row(x + 2)))
     } finally {
