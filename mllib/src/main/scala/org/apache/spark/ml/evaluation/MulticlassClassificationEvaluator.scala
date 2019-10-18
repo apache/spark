@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.DoubleType
 
 /**
  * Evaluator for multiclass classification, which expects input columns: prediction, label,
- * weight(optional) and probability(only for logLoss).
+ * weight (optional) and probability (only for logLoss).
  */
 @Since("1.5.0")
 class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") override val uid: String)

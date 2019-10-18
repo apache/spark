@@ -36,8 +36,8 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
 
   /**
    * An auxiliary constructor taking a DataFrame.
-   * @param predictionAndLabels a DataFrame with columns: prediction, label, weight(optional)
-   *                            and probability(only for logLoss)
+   * @param predictionAndLabels a DataFrame with columns: prediction, label, weight (optional)
+   *                            and probability (only for logLoss)
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
     this(predictionAndLabels.rdd.map { r =>

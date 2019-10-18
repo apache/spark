@@ -317,7 +317,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                                         HasProbabilityCol, JavaMLReadable, JavaMLWritable):
     """
     Evaluator for Multiclass Classification, which expects input
-    columns: prediction, label, weight(optional) and probabilityCol(only for logLoss).
+    columns: prediction, label, weight (optional) and probabilityCol (only for logLoss).
 
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
