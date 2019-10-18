@@ -79,9 +79,9 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   private def createStageInfo(stageId: Int, attemptId: Int): StageInfo = {
     new StageInfo(stageId = stageId,
       attemptId = attemptId,
+      numTasks = 8,
       // The following fields are not used in tests
       name = "",
-      numTasks = 0,
       rddInfos = Nil,
       parentIds = Nil,
       details = "")
@@ -94,8 +94,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val info = new TaskInfo(
       taskId = taskId,
       attemptNumber = attemptNumber,
+      index = taskId.toInt,
       // The following fields are not used in tests
-      index = 0,
       launchTime = 0,
       executorId = "",
       host = "",
@@ -190,6 +190,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       ),
       createProperties(executionId)))
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 0, createTaskInfo(1, 0)))
 
     assert(statusStore.executionMetrics(executionId).isEmpty)
 
@@ -217,6 +219,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
     // Retrying a stage should reset the metrics
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 1, createTaskInfo(0, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 1, createTaskInfo(1, 0)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, accum updates)
@@ -260,6 +264,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
     // Summit a new stage
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(1, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(1, 0, createTaskInfo(1, 0)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, accum updates)
@@ -490,8 +496,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val statusStore = spark.sharedState.statusStore
     val oldCount = statusStore.executionsList().size
 
-    val expectedAccumValue = 12345
-    val expectedAccumValue2 = 54321
+    val expectedAccumValue = 12345L
+    val expectedAccumValue2 = 54321L
     val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue, expectedAccumValue2)
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
@@ -517,8 +523,9 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
     val driverMetric2 = physicalPlan.metrics("dummy2")
-    val expectedValue = SQLMetrics.stringValue(driverMetric.metricType, Seq(expectedAccumValue))
-    val expectedValue2 = SQLMetrics.stringValue(driverMetric2.metricType, Seq(expectedAccumValue2))
+    val expectedValue = SQLMetrics.stringValue(driverMetric.metricType, Array(expectedAccumValue))
+    val expectedValue2 = SQLMetrics.stringValue(driverMetric2.metricType,
+      Array(expectedAccumValue2))
 
     assert(metrics.contains(driverMetric.id))
     assert(metrics(driverMetric.id) === expectedValue)
