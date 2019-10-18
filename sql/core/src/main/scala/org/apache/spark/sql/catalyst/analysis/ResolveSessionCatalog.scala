@@ -262,8 +262,7 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(Some(nameParts.head), pattern)
 
-    // TODO (SPARK-29014): we should check if the current catalog is session catalog here.
-    case ShowTablesStatement(None, pattern) if defaultCatalog.isEmpty =>
+    case ShowTablesStatement(None, pattern) if isSessionCatalog(currentCatalog) =>
       ShowTablesCommand(None, pattern)
 
     case AnalyzeTableStatement(tableName, partitionSpec, noScan) =>

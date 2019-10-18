@@ -727,6 +727,23 @@ class DataSourceV2SQLSuite
       expectV2Catalog = false)
   }
 
+  test("ShowTables: change current catalog and namespace with USE statements") {
+    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
+
+    // Initially, the v2 session catalog (current catalog) is used.
+    runShowTablesSql(
+      "SHOW TABLES", Seq(Row("", "source", true), Row("", "source2", true)),
+      expectV2Catalog = false)
+
+    // Update the current catalog, and no table is matched since the current namespace is Array().
+    sql("USE testcat")
+    runShowTablesSql("SHOW TABLES", Seq())
+
+    // Update the current namespace to match ns1.ns2.table.
+    sql("USE testcat.ns1.ns2")
+    runShowTablesSql("SHOW TABLES", Seq(Row("ns1.ns2", "table")))
+  }
+
   private def runShowTablesSql(
       sqlText: String,
       expected: Seq[Row],
