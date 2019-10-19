@@ -92,7 +92,7 @@ private[kafka010] abstract class KafkaRowWriter(
       throw new NullPointerException(s"null topic present in the data. Use the " +
         s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
     }
-    val partition: java.lang.Integer =
+    val partition: Integer =
       if (projectedRow.isNullAt(4)) null else projectedRow.getInt(4)
     val record = if (projectedRow.isNullAt(3)) {
       new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, partition, key, value)

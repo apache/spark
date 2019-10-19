@@ -22,6 +22,8 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.clients.producer.internals.DefaultPartitioner
+import org.apache.kafka.common.Cluster
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.time.SpanSugar._
 
@@ -384,32 +386,31 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
 
   test("batch - write to kafka") {
     val topic = newTopic()
-    testUtils.createTopic(topic, 4)
+    testUtils.createTopic(topic)
     val data = Seq(
       Row(topic, "1", Seq(
         Row("a", "b".getBytes(UTF_8))
-      ), 0),
+      )),
       Row(topic, "2", Seq(
         Row("c", "d".getBytes(UTF_8)),
         Row("e", "f".getBytes(UTF_8))
-      ), 1),
+      )),
       Row(topic, "3", Seq(
         Row("g", "h".getBytes(UTF_8)),
         Row("g", "i".getBytes(UTF_8))
-      ), 2),
-      Row(topic, "4", null, 3),
+      )),
+      Row(topic, "4", null),
       Row(topic, "5", Seq(
         Row("j", "k".getBytes(UTF_8)),
         Row("j", "l".getBytes(UTF_8)),
         Row("m", "n".getBytes(UTF_8))
-      ), 0)
+      ))
     )
 
     val df = spark.createDataFrame(
       spark.sparkContext.parallelize(data),
       StructType(Seq(StructField("topic", StringType), StructField("value", StringType),
-        StructField("headers", KafkaRecordToRowConverter.headersType),
-        StructField("partition", IntegerType)))
+        StructField("headers", KafkaRecordToRowConverter.headersType)))
     )
 
     df.write
@@ -420,83 +421,105 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
       .save()
     checkAnswer(
       createKafkaReader(topic, includeHeaders = true).selectExpr(
-        "CAST(value as STRING) value", "headers", "partition"
+        "CAST(value as STRING) value", "headers"
       ),
-      Row("1", Seq(Row("a", "b".getBytes(UTF_8))), 0) ::
-        Row("2", Seq(Row("c", "d".getBytes(UTF_8)), Row("e", "f".getBytes(UTF_8))), 1) ::
-        Row("3", Seq(Row("g", "h".getBytes(UTF_8)), Row("g", "i".getBytes(UTF_8))), 2) ::
-        Row("4", null, 3) ::
+      Row("1", Seq(Row("a", "b".getBytes(UTF_8)))) ::
+        Row("2", Seq(Row("c", "d".getBytes(UTF_8)), Row("e", "f".getBytes(UTF_8)))) ::
+        Row("3", Seq(Row("g", "h".getBytes(UTF_8)), Row("g", "i".getBytes(UTF_8)))) ::
+        Row("4", null) ::
         Row("5", Seq(
           Row("j", "k".getBytes(UTF_8)),
           Row("j", "l".getBytes(UTF_8)),
-          Row("m", "n".getBytes(UTF_8))), 0) ::
+          Row("m", "n".getBytes(UTF_8)))) ::
         Nil
     )
   }
 
-  test("batch - partition column vs default Kafka partitioner") {
-    val fixedKey = "fixed_key"
-    val nrPartitions = 100
-
-    // default Kafka partitioner calculate partition deterministically based on the key
-    val keyTopic = newTopic()
-    testUtils.createTopic(keyTopic, nrPartitions)
-
-    Seq((keyTopic, fixedKey, "value"))
-      .toDF("topic", "key", "value")
+  def writeToKafka(df: DataFrame, topic: String, options: Map[String, String] = Map.empty): Unit = {
+    df
       .write
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("topic", keyTopic)
+      .option("topic", topic)
+      .options(options)
       .mode("append")
       .save()
+  }
 
-    // getting the partition corresponding to the fixed key
-    val keyPartition = createKafkaReader(keyTopic).select("partition")
-      .map(_.getInt(0)).collect().toList.head
+  def partitionsInTopic(topic: String): Set[Int] = {
+    createKafkaReader(topic)
+      .select("partition")
+      .map(_.getInt(0))
+      .collect()
+      .toSet
+  }
+
+  test("batch - partition column sets partition in kafka writes") {
+    val fixedKey = "fixed_key"
+    val nrPartitions = 4
 
     val topic = newTopic()
     testUtils.createTopic(topic, nrPartitions)
 
-    // even values use default kafka partitioner, odd use 'n'
-    val df = (0 until 100)
-      .map(n => (topic, fixedKey, s"$n", if (n % 2 == 0) None else Some(n)))
-      .toDF("topic", "key", "value", "partition")
+    // default Kafka partitioner calculates partitions deterministically based on the key
+    val df = (0 until 5)
+      .map(n => (topic, fixedKey, s"$n"))
+      .toDF("topic", "key", "value")
+    writeToKafka(df, topic)
+    val partitionsForFixedKey = partitionsInTopic(topic)
+    assert(partitionsForFixedKey.size == 1)
+    val keyPartition = partitionsForFixedKey.head
 
-    df.write
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("topic", topic)
-      .mode("append")
-      .save()
+    val topic2 = newTopic()
+    testUtils.createTopic(topic2, nrPartitions)
 
-    checkAnswer(
-      createKafkaReader(topic).selectExpr(
-        "CAST(key as STRING) key", "CAST(value as STRING) value", "partition"
-      ),
-      (0 until 100)
-        .map(n => (fixedKey, s"$n", if (n % 2 == 0) keyPartition else n))
-        .toDF("key", "value", "partition")
-    )
+    val differentPartition = (0 until nrPartitions).find(p => p != keyPartition).get
+    val df2 = df.withColumn("partition", lit(differentPartition))
+    writeToKafka(df2, topic2)
+    val partitions = partitionsInTopic(topic2)
+    assert(partitions.size == 1)
+    assert(partitions.head != keyPartition)
   }
 
-  test("batch - non-existing partitions trigger standard Kafka exception") {
-    val topic = newTopic()
-    val producerTimeout = "1000"
-    testUtils.createTopic(topic, 4)
-    val df = Seq((topic, "1", 5)).toDF("topic", "value", "partition")
+  test("batch - partition column and partitioner priorities") {
+    val nrPartitions = 4
+    val topic1 = newTopic()
+    val topic2 = newTopic()
+    val topic3 = newTopic()
+    val topic4 = newTopic()
+    testUtils.createTopic(topic1, nrPartitions)
+    testUtils.createTopic(topic2, nrPartitions)
+    testUtils.createTopic(topic3, nrPartitions)
+    testUtils.createTopic(topic4, nrPartitions)
 
-    val ex = intercept[SparkException] {
-      df.write
-        .format("kafka")
-        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-        .option("kafka.max.block.ms", producerTimeout) // default (60000 ms) would be too slow
-        .option("topic", topic)
-        .mode("append")
-        .save()
-    }
-    TestUtils.assertExceptionMsg(
-      ex, s"Topic $topic not present in metadata after $producerTimeout ms")
+    val df = (0 until 5).map(n => (topic1, s"$n", s"$n")).toDF("topic", "key", "value")
+
+    // default kafka partitioner
+    writeToKafka(df, topic1)
+    val partitionsInTopic1 = partitionsInTopic(topic1)
+    assert(partitionsInTopic1.size > 1)
+
+    // custom partitioner (always returns 0) overrides default partitioner
+    writeToKafka(df, topic2, Map(
+      "kafka.partitioner.class" -> "org.apache.spark.sql.kafka010.TestKafkaPartitioner"
+    ))
+    val partitionsInTopic2 = partitionsInTopic(topic2)
+    assert(partitionsInTopic2.size == 1)
+    assert(partitionsInTopic2.head == 0)
+
+    // partition column overrides custom partitioner
+    val dfWithCustomPartition = df.withColumn("partition", lit(2))
+    writeToKafka(dfWithCustomPartition, topic3, Map(
+      "kafka.partitioner.class" -> "org.apache.spark.sql.kafka010.TestKafkaPartitioner"
+    ))
+    val partitionsInTopic3 = partitionsInTopic(topic3)
+    assert(partitionsInTopic3.size == 1)
+    assert(partitionsInTopic3.head == 2)
+
+    // when the partition column value is null, it is ignored
+    val dfWithNullPartitions = df.withColumn("partition", lit(null).cast(IntegerType))
+    writeToKafka(dfWithNullPartitions, topic4)
+    assert(partitionsInTopic(topic4) == partitionsInTopic1)
   }
 
   test("batch - null topic field value, and no topic option") {
@@ -595,4 +618,16 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
       writeTask.close()
     }
   }
+}
+
+class TestKafkaPartitioner extends DefaultPartitioner {
+  override def partition(
+                          topic: String,
+                          key: Any,
+                          keyBytes: Array[Byte],
+                          value: Any,
+                          valueBytes: Array[Byte],
+                          cluster: Cluster
+                        )
+  : Int = 0
 }
