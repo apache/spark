@@ -1148,10 +1148,9 @@ applications. There are two configuration keys available for loading plugins int
 - <code>spark.plugins</code>
 - <code>spark.plugins.static</code>
 
-Both do the same thing: they take a comma-separated list of class names that implement the
-<code>org.apache.spark.api.plugin.SparkPlugin</code> interface. The two names exist so that
-it's possible for one "static" list to be placed in the Spark default config file, allowing
-users to easily add other plugins from the command line option without overwriting the
-"static" list.
+Both take a comma-separated list of class names that implement the
+<code>org.apache.spark.api.plugin.SparkPlugin</code> interface. The two names exist so that it's
+possible for one "static" list to be placed in the Spark default config file, allowing users to
+easily add other plugins from the command line without overwriting the "static" list.
 
 Duplicate plugins are ignored.
