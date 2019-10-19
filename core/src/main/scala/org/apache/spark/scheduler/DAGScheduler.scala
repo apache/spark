@@ -175,6 +175,10 @@ private[spark] class DAGScheduler(
   // TODO: Garbage collect information about failure epochs when we know there are no more
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
+  // There will be a regression when an executor lost and then causes 'fetch failed'.
+  // So we should distinguish the failedEpoch of 'executor lost' from the fetchFailedEpoch
+  // of 'fetch failed'.
+  private val fetchFailedEpoch = new HashMap[String, Long]
 
   private [scheduler] val outputCommitCoordinator = env.outputCommitCoordinator
 
@@ -1682,6 +1686,7 @@ private[spark] class DAGScheduler(
               execId = bmAddress.executorId,
               fileLost = true,
               hostToUnregisterOutputs = hostToUnregisterOutputs,
+              fetchFailed = true,
               maybeEpoch = Some(task.epoch))
           }
         }
@@ -1838,12 +1843,21 @@ private[spark] class DAGScheduler(
       execId: String,
       fileLost: Boolean,
       hostToUnregisterOutputs: Option[String],
+      fetchFailed: Boolean = false,
       maybeEpoch: Option[Long] = None): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
-    if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
+    val executorNewlyFailed = !failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch
+    val executorNewlyFetchFailed =
+      !fetchFailedEpoch.contains(execId) || fetchFailedEpoch(execId) < currentEpoch
+    if (executorNewlyFailed || executorNewlyFetchFailed) {
+      if (executorNewlyFailed) {
+        blockManagerMaster.removeExecutor(execId)
+      }
+      if (fetchFailed) {
+        fetchFailedEpoch(execId) = currentEpoch
+      }
       failedEpoch(execId) = currentEpoch
       logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
-      blockManagerMaster.removeExecutor(execId)
       if (fileLost) {
         hostToUnregisterOutputs match {
           case Some(host) =>
@@ -1886,6 +1900,11 @@ private[spark] class DAGScheduler(
     if (failedEpoch.contains(execId)) {
       logInfo("Host added was in lost list earlier: " + host)
       failedEpoch -= execId
+    }
+    // remove from fetchFailedEpoch(execId)
+    if (fetchFailedEpoch.contains(execId)) {
+      logInfo("Host added was in lost list earlier: " + host)
+      fetchFailedEpoch -= execId
     }
   }
 

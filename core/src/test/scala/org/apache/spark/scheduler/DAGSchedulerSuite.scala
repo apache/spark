@@ -510,7 +510,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(initialMapStatus1.map{_.mapId}.toSet === Set(5, 6, 7))
 
     val initialMapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
-    //  val initialMapStatus1 = mapOutputTracker.mapStatuses.get(0).get
     assert(initialMapStatus2.count(_ != null) === 3)
     assert(initialMapStatus2.map{_.location.executorId}.toSet ===
       Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
@@ -535,6 +534,169 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mapStatus2.count(_ != null) === 1)
     assert(mapStatus2(2).location.executorId === "exec-hostB")
     assert(mapStatus2(2).location.host === "hostB")
+  }
+
+  test("All shuffle files on the executor should be cleaned up when executor lost " +
+    "and then causes 'fetch failed'") {
+    // whether to kill Executor or not before FetchFailed
+    Seq(true, false).foreach { killExecutor => {
+      afterEach()
+      val conf = new SparkConf()
+      conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
+      conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "false")
+      init(conf)
+      runEvent(ExecutorAdded("exec-hostA1", "hostA"))
+      runEvent(ExecutorAdded("exec-hostA2", "hostA"))
+      runEvent(ExecutorAdded("exec-hostB", "hostB"))
+      val firstRDD = new MyRDD(sc, 3, Nil)
+      val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(3))
+      val firstShuffleId = firstShuffleDep.shuffleId
+      val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
+      val secondShuffleId = shuffleDep.shuffleId
+      val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+
+      submit(reduceRdd, Array(0))
+      // map stage1 completes successfully, with one task on each executor
+      complete(taskSets(0), Seq(
+        (Success,
+          MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345),
+            Array.fill[Long](1)(2), mapTaskId = 5)),
+        (Success,
+          MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345),
+            Array.fill[Long](1)(2), mapTaskId = 6)),
+        (Success, makeMapStatus("hostB", 1, mapTaskId = 7))
+      ))
+      // map stage2 completes successfully, with one task on each executor
+      complete(taskSets(1), Seq(
+        (Success,
+          MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345),
+            Array.fill[Long](1)(2), mapTaskId = 8)),
+        (Success,
+          MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345),
+            Array.fill[Long](1)(2), mapTaskId = 9)),
+        (Success, makeMapStatus("hostB", 1))
+      ))
+      // make sure our test setup is correct
+      val initialMapStatus1 = mapOutputTracker.shuffleStatuses(firstShuffleId).mapStatuses
+      //  val initialMapStatus1 = mapOutputTracker.mapStatuses.get(0).get
+      assert(initialMapStatus1.count(_ != null) === 3)
+      assert(initialMapStatus1.map {
+        _.location.executorId
+      }.toSet ===
+        Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
+      val initialMapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
+      assert(initialMapStatus2.count(_ != null) === 3)
+      assert(initialMapStatus2.map {
+        _.location.executorId
+      }.toSet ===
+        Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
+      // kill exec-hostA2
+      if (killExecutor) {
+        runEvent(ExecutorLost("exec-hostA2", ExecutorKilled))
+      }
+      // reduce stage fails with a fetch failure from one host
+      complete(taskSets(2), Seq(
+        (FetchFailed(BlockManagerId("exec-hostA2", "hostA", 12345),
+          secondShuffleId, 0L, 0, 0, "ignored"), null)
+      ))
+      // Here is the main assertion -- make sure that we de-register
+      // the map outputs for exec-hostA2
+      val mapStatus1 = mapOutputTracker.shuffleStatuses(firstShuffleId).mapStatuses
+      assert(mapStatus1.count(_ != null) === 2)
+      assert(mapStatus1(0).location.executorId === "exec-hostA1")
+      assert(mapStatus1(0).location.host === "hostA")
+      assert(mapStatus1(2).location.executorId === "exec-hostB")
+      assert(mapStatus1(2).location.host === "hostB")
+
+      val mapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
+      assert(mapStatus2.count(_ != null) === 2)
+      assert(mapStatus2(0).location.executorId === "exec-hostA1")
+      assert(mapStatus2(0).location.host === "hostA")
+      assert(mapStatus2(2).location.executorId === "exec-hostB")
+      assert(mapStatus2(2).location.host === "hostB")
+    }
+    }
+  }
+
+  test("All shuffle files on the host should be cleaned up when host lost") {
+    // whether to kill Executor or not before FetchFailed
+    Seq(true, false).foreach { killExecutor => {
+      afterEach()
+      val conf = new SparkConf()
+      conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
+      conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
+      init(conf)
+      runEvent(ExecutorAdded("exec-hostA1", "hostA"))
+      runEvent(ExecutorAdded("exec-hostA2", "hostA"))
+      runEvent(ExecutorAdded("exec-hostB", "hostB"))
+      val firstRDD = new MyRDD(sc, 3, Nil)
+      val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(3))
+      val firstShuffleId = firstShuffleDep.shuffleId
+      val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
+      val secondShuffleId = shuffleDep.shuffleId
+      val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+
+      submit(reduceRdd, Array(0))
+      // map stage1 completes successfully, with one task on each executor
+      complete(taskSets(0), Seq(
+        (Success,
+          MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345),
+            Array.fill[Long](1)(2), mapTaskId = 5)),
+        (Success,
+          MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345),
+            Array.fill[Long](1)(2), mapTaskId = 6)),
+        (Success, makeMapStatus("hostB", 1, mapTaskId = 7))
+      ))
+      // map stage2 completes successfully, with one task on each executor
+      complete(taskSets(1), Seq(
+        (Success,
+          MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345),
+            Array.fill[Long](1)(2), mapTaskId = 8)),
+        (Success,
+          MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345),
+            Array.fill[Long](1)(2), mapTaskId = 9)),
+        (Success, makeMapStatus("hostB", 1))
+      ))
+      // make sure our test setup is correct
+      val initialMapStatus1 = mapOutputTracker.shuffleStatuses(firstShuffleId).mapStatuses
+      assert(initialMapStatus1.count(_ != null) === 3)
+      assert(initialMapStatus1.map {
+        _.location.executorId
+      }.toSet ===
+        Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
+
+      val initialMapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
+      assert(initialMapStatus2.count(_ != null) === 3)
+      assert(initialMapStatus2.map {
+        _.location.executorId
+      }.toSet ===
+        Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
+      // kill exec-hostA2
+      if (killExecutor) {
+        runEvent(ExecutorLost("exec-hostA2", ExecutorKilled))
+      }
+      // reduce stage fails with a fetch failure from one host
+      complete(taskSets(2), Seq(
+        (FetchFailed(BlockManagerId("exec-hostA2", "hostA", 12345),
+          secondShuffleId, 0L, 0, 0, "ignored"),
+          null)
+      ))
+
+      // Here is the main assertion -- make sure that we de-register
+      // the map outputs for both map stage from both executors on hostA
+      val mapStatus1 = mapOutputTracker.shuffleStatuses(firstShuffleId).mapStatuses
+      assert(mapStatus1.count(_ != null) === 1)
+      assert(mapStatus1(2).location.executorId === "exec-hostB")
+      assert(mapStatus1(2).location.host === "hostB")
+
+      val mapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
+      assert(mapStatus2.count(_ != null) === 1)
+      assert(mapStatus2(2).location.executorId === "exec-hostB")
+      assert(mapStatus2(2).location.host === "hostB")
+    }
+    }
   }
 
   test("zero split job") {
