@@ -31,7 +31,7 @@ private[spark] class BlockManagerMasterHeartbeatEndpoint(
     isLocal: Boolean)
   extends ThreadSafeRpcEndpoint with Logging {
 
-  // Mapping from block manager id to the block manager's information.
+  // Mapping from block manager id to its last seen ms.
   private val blockManagerLastSeen = new mutable.HashMap[BlockManagerId, Long]
 
   // Mapping from executor ID to block manager ID.
