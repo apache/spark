@@ -103,7 +103,7 @@ object TimeWindow {
    */
   private def getIntervalInMicroSeconds(interval: String): Long = {
     val cal = CalendarInterval.fromCaseInsensitiveString(interval)
-    if (cal.months > 0) {
+    if (cal.months != 0) {
       throw new IllegalArgumentException(
         s"Intervals greater than a month is not supported ($interval).")
     }
