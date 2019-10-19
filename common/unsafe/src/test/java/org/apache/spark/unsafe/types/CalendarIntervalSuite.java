@@ -315,14 +315,15 @@ public class CalendarIntervalSuite {
   }
 
   @Test
-  public void pisitiveIntervalTest() {
-    assertTrue(fromString("1 months").isPositive(28));
-    assertTrue(fromString("1 microsecond").isPositive(30));
-    assertTrue(fromString("1 year -360 days").isPositive(31));
-    assertTrue(fromString("-1 year 380 days").isPositive(31));
+  public void negativeIntervalTest() {
+    assertTrue(fromString("-1 months").isNegative(28));
+    assertTrue(fromString("-1 microsecond").isNegative(30));
+    assertTrue(fromString("-1 month 30 days").isNegative(31));
+    assertTrue(fromString("2 months -61 days").isNegative(30));
+    assertTrue(fromString("-1 year -2 seconds").isNegative(30));
 
-    assertFalse(fromString("0 months").isPositive(28));
-    assertFalse(fromString("-1 month 30 days").isPositive(31));
-    assertFalse(fromString("2 months -60 days").isPositive(30));
+    assertFalse(fromString("0 months").isNegative(28));
+    assertFalse(fromString("1 year -360 days").isNegative(31));
+    assertFalse(fromString("-1 year 380 days").isNegative(31));
   }
 }

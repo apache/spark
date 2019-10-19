@@ -424,11 +424,11 @@ public final class CalendarInterval implements Serializable {
   }
 
   /**
-   * Checks the interval is positive
+   * Checks the interval is negative
    * @param daysPerMonth the number of days per one month
-   * @return true if duration of the given interval is greater than 0 otherwise false
+   * @return true if duration of the given interval is less than 0 otherwise false
    */
-  public boolean isPositive(int daysPerMonth) {
-    return getDuration(daysPerMonth, TimeUnit.MICROSECONDS) > 0;
+  public boolean isNegative(int daysPerMonth) {
+    return getDuration(daysPerMonth, TimeUnit.MICROSECONDS) < 0;
   }
 }

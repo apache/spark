@@ -164,8 +164,7 @@ private[sql] class GroupStateImpl[S] private(
       throw new IllegalArgumentException(s"Provided duration ($duration) is not positive")
     }
 
-    val millisPerMonth = TimeUnit.MICROSECONDS.toMillis(CalendarInterval.MICROS_PER_DAY) * 31
-    cal.milliseconds + cal.months * millisPerMonth
+    cal.getDuration(31, TimeUnit.MILLISECONDS)
   }
 
   private def checkTimeoutTimestampAllowed(): Unit = {
