@@ -172,10 +172,10 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: create/get/alter database should pick right user name as owner") {
-      val ownerName = "Kent Yao"
+      val ownerName = "SPARK_29425"
       val dbName = "SPARK_29425"
       val originalDb =
-        CatalogDatabase(dbName, "desc", new URI("loc"), Map("ownerName" -> ownerName))
+        CatalogDatabase(dbName, "desc", Utils.createTempDir().toURI, Map("ownerName" -> ownerName))
       client.createDatabase(originalDb, ignoreIfExists = true)
       val db1 = client.getDatabase(dbName)
       if (version != "0.12") assert(db1.properties("ownerName") === ownerName)

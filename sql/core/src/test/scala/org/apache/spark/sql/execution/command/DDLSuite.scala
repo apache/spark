@@ -744,8 +744,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
         val catalogDatabase =
           spark.sessionState.catalog.externalCatalog.getDatabase(dbNameWithoutBackTicks)
-        assert(catalogDatabase.properties.get("ownerName") === Utils.getCurrentUserName())
-        assert(catalogDatabase.properties.get("ownerType") === "USER")
+        assert(catalogDatabase.properties("ownerName") === Utils.getCurrentUserName())
+        assert(catalogDatabase.properties("ownerType") === "USER")
 
         checkAnswer(
           sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
