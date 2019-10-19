@@ -1210,6 +1210,38 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("LOAD DATA INTO TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, data string)
+           |USING foo
+           |PARTITIONED BY (id)
+         """.stripMargin)
+
+      val e1 = intercept[AnalysisException] {
+        sql(s"LOAD DATA INPATH 'filepath' INTO TABLE $t")
+      }
+      assert(e1.message.contains("LOAD DATA is only supported with v1 tables"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"LOAD DATA LOCAL INPATH 'filepath' INTO TABLE $t")
+      }
+      assert(e2.message.contains("LOAD DATA is only supported with v1 tables"))
+
+      val e3 = intercept[AnalysisException] {
+        sql(s"LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t")
+      }
+      assert(e3.message.contains("LOAD DATA is only supported with v1 tables"))
+
+      val e4 = intercept[AnalysisException] {
+        sql(s"LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t PARTITION(id=1)")
+      }
+      assert(e4.message.contains("LOAD DATA is only supported with v1 tables"))
+    }
+  }
+
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
     val errMsg = intercept[AnalysisException] {
       sql(sqlStatement)
