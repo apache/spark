@@ -20,6 +20,7 @@ package org.apache.spark.unsafe.types;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.*;
 import static org.apache.spark.unsafe.types.CalendarInterval.*;
@@ -296,5 +297,32 @@ public class CalendarIntervalSuite {
 
     assertNull(fromString("INTERVAL"));
     assertNull(fromString("  Interval "));
+  }
+
+  @Test
+  public void durationTest() {
+    assertEquals(fromString("0 seconds").getDuration(31, TimeUnit.MILLISECONDS), 0);
+    assertEquals(fromString("1 month").getDuration(31, TimeUnit.DAYS), 31);
+    assertEquals(fromString("1 microsecond").getDuration(30, TimeUnit.MICROSECONDS), 1);
+    assertEquals(fromString("1 month -30 days").getDuration(31, TimeUnit.DAYS), 1);
+
+    try {
+      fromString(Integer.MAX_VALUE + " month").getDuration(31, TimeUnit.SECONDS);
+      fail("Expected to throw an exception for the invalid input");
+    } catch (ArithmeticException e) {
+      assertTrue(e.getMessage().contains("overflow"));
+    }
+  }
+
+  @Test
+  public void pisitiveIntervalTest() {
+    assertTrue(fromString("1 months").isPositive(28));
+    assertTrue(fromString("1 microsecond").isPositive(30));
+    assertTrue(fromString("1 year -360 days").isPositive(31));
+    assertTrue(fromString("-1 year 380 days").isPositive(31));
+
+    assertFalse(fromString("0 months").isPositive(28));
+    assertFalse(fromString("-1 month 30 days").isPositive(31));
+    assertFalse(fromString("2 months -60 days").isPositive(30));
   }
 }
