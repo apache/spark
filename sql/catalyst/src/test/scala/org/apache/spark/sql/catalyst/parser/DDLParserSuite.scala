@@ -955,6 +955,12 @@ class DDLParserSuite extends AnalysisTest {
       "missing 'COLUMNS' at '<EOF>'")
   }
 
+  test("MSCK REPAIR table") {
+    comparePlans(
+      parsePlan("MSCK REPAIR TABLE a.b.c"),
+      RepairTableStatement(Seq("a", "b", "c")))
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],
