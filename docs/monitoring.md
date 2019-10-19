@@ -1143,7 +1143,7 @@ can provide fine-grained profiling on individual nodes.
 properties are useful for those comfortable with JVM internals.
 
 Spark also provides a plugin API so that custom instrumentation code can be added to Spark
-applications. There are two configuration available for loading plugins into Spark:
+applications. There are two configuration keys available for loading plugins into Spark:
 
 - <code>spark.plugins</code>
 - <code>spark.plugins.static</code>
