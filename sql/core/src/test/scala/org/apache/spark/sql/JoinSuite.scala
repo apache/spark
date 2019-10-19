@@ -1049,7 +1049,7 @@ class JoinWithResourceCleanSuite extends JoinSuite with BeforeAndAfterAll {
   import testImplicits._
   import scala.collection.mutable.ArrayBuffer
 
-  private def checkCleanupResourceTriggered(plan: SparkPlan) : ArrayBuffer[SortExec] = {
+  private def checkCleanupResourceTriggered(plan: SparkPlan): ArrayBuffer[SortExec] = {
     // Check cleanupResources are finally triggered in SortExec node
     val sorts = new ArrayBuffer[SortExec]()
     plan.foreachUp {

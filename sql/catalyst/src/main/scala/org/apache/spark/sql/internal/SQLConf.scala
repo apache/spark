@@ -2432,6 +2432,9 @@ class SQLConf extends Serializable with Logging {
   def sortMergeJoinExecBufferSpillThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD)
 
+  def sortMergeJoinExecEagerCleanupResources: Boolean =
+    getConf(SORT_MERGE_JOIN_EXEC_EAGER_CLEANUP_RESOURCES)
+
   def cartesianProductExecBufferInMemoryThreshold: Int =
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 

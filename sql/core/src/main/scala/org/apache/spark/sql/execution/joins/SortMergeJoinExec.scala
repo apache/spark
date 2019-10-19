@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.internal.SQLConf.SORT_MERGE_JOIN_EXEC_EAGER_CLEANUP_RESOURCES
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -163,13 +162,18 @@ case class SortMergeJoinExec(
   }
 
   private def needEagerCleanup: Boolean = {
-    sqlContext.conf.getConf(SORT_MERGE_JOIN_EXEC_EAGER_CLEANUP_RESOURCES)
+    sqlContext.conf.sortMergeJoinExecEagerCleanupResources
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillThreshold = getSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
+    val cleanupResourceFunc: () => Unit = if (needEagerCleanup) {
+      cleanupResources
+    } else {
+      () => {}
+    }
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val boundCondition: (InternalRow) => Boolean = {
         condition.map { cond =>
@@ -197,7 +201,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources
+              cleanupResourceFunc
             )
             private[this] val joinRow = new JoinedRow
 
@@ -242,7 +246,7 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(rightIter),
             inMemoryThreshold,
             spillThreshold,
-            cleanupResources
+            cleanupResourceFunc
           )
           val rightNullRow = new GenericInternalRow(right.output.length)
           new LeftOuterIterator(
@@ -257,7 +261,7 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(leftIter),
             inMemoryThreshold,
             spillThreshold,
-            cleanupResources
+            cleanupResourceFunc
           )
           val leftNullRow = new GenericInternalRow(left.output.length)
           new RightOuterIterator(
@@ -292,7 +296,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources
+              cleanupResourceFunc
             )
             private[this] val joinRow = new JoinedRow
 
@@ -328,7 +332,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources
+              cleanupResourceFunc
             )
             private[this] val joinRow = new JoinedRow
 
@@ -371,7 +375,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources
+              cleanupResourceFunc
             )
             private[this] val joinRow = new JoinedRow
 

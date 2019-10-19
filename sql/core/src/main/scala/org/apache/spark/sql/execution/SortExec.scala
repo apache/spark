@@ -71,6 +71,7 @@ case class SortExec(
    * should make it public.
    */
   def createSorter(): UnsafeExternalRowSorter = {
+    assert(rowSorter == null)
     val ordering = newOrdering(sortOrder, output)
 
     // The comparator for comparing prefix
@@ -194,12 +195,12 @@ case class SortExec(
    * In SortExec, we overwrites cleanupResources to close UnsafeExternalRowSorter.
    */
   override protected[sql] def cleanupResources(): Unit = {
-    super.cleanupResources()
     if (rowSorter != null) {
       // There's possible for rowSorter is null here, for example, in the scenario of empty
       // iterator in the current task, the downstream physical node(like SortMergeJoinExec) will
       // trigger cleanupResources before rowSorter initialized in createSorter.
       rowSorter.cleanupResources()
     }
+    super.cleanupResources()
   }
 }
