@@ -58,7 +58,7 @@ object IntervalUtils {
   }
 
   def getDays(interval: CalendarInterval): Long = {
-    interval.microseconds / DateTimeUtils.MICROS_PER_DAY
+    interval.days
   }
 
   def getHours(interval: CalendarInterval): Byte = {
@@ -84,6 +84,7 @@ object IntervalUtils {
   // Returns total number of seconds with microseconds fractional part in the given interval.
   def getEpoch(interval: CalendarInterval): Decimal = {
     var result = interval.microseconds
+    result += DateTimeUtils.MICROS_PER_DAY * interval.days
     result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
     result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
     Decimal(result, 18, 6)
