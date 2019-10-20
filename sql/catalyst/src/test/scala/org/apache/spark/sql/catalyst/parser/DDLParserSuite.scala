@@ -961,6 +961,23 @@ class DDLParserSuite extends AnalysisTest {
       RepairTableStatement(Seq("a", "b", "c")))
   }
 
+  test("CACHE table") {
+    comparePlans(
+      parsePlan("CACHE TABLE a.b.c"),
+      CacheTableStatement(Seq("a", "b", "c"), None, false, Map.empty))
+
+    comparePlans(
+      parsePlan("CACHE LAZY TABLE a.b.c"),
+      CacheTableStatement(Seq("a", "b", "c"), None, true, Map.empty))
+
+    comparePlans(
+      parsePlan("CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')"),
+      CacheTableStatement(Seq("a", "b", "c"), None, true, Map("storageLevel" -> "DISK_ONLY")))
+
+    intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
+    "It is not allowed to add catalog/database prefix `a.b`")
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],

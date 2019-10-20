@@ -2728,4 +2728,26 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
     RepairTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
   }
+
+  /**
+   * Create a [[CacheTableStatement]].
+   *
+   * For example:
+   * {{{
+   *   CACHE [LAZY] TABLE multi_part_name
+   *   [OPTIONS tablePropertyList] [[AS] query]
+   * }}}
+   */
+  override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
+    val query = Option(ctx.query).map(plan)
+    val tableName = visitMultipartIdentifier(ctx.multipartIdentifier)
+    if (query.isDefined && tableName.length > 1) {
+      val catalogAndDatabase = tableName.init.mkString(".")
+      throw new ParseException("It is not allowed to add catalog/database " +
+        s"prefix `$catalogAndDatabase` to " +
+        "the table name in CACHE TABLE AS SELECT", ctx)
+    }
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    CacheTableStatement(tableName, query, ctx.LAZY != null, options)
+  }
 }
