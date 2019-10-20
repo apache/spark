@@ -371,8 +371,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
  */
 private[spark] class MapOutputTrackerMaster(
     conf: SparkConf,
-    broadcastManager: BroadcastManager,
-    isLocal: Boolean)
+    private[spark] val broadcastManager: BroadcastManager,
+    private[spark] val isLocal: Boolean)
   extends MapOutputTracker(conf) {
 
   // The size at which we use Broadcast to send the map output statuses to the executors

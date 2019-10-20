@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.{DateTimeException, Instant, LocalDate, LocalDateTime, ZoneId}
+import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
@@ -2032,10 +2032,11 @@ object DatePart {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(field, source) - Extracts a part of the date/timestamp.",
+  usage = "_FUNC_(field, source) - Extracts a part of the date/timestamp or interval source.",
   arguments = """
     Arguments:
-      * field - selects which part of the source should be extracted. Supported string values are:
+      * field - selects which part of the source should be extracted.
+               Supported string values of `field` for dates and timestamps are:
                 ["MILLENNIUM", ("MILLENNIA", "MIL", "MILS"),
                  "CENTURY", ("CENTURIES", "C", "CENT"),
                  "DECADE", ("DECADES", "DEC", "DECS"),
@@ -2055,7 +2056,21 @@ object DatePart {
                  "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS"),
                  "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US"),
                  "EPOCH"]
-      * source - a date (or timestamp) column from where `field` should be extracted
+                Supported string values of `field` for intervals are:
+                 ["MILLENNIUM", ("MILLENNIA", "MIL", "MILS"),
+                   "CENTURY", ("CENTURIES", "C", "CENT"),
+                   "DECADE", ("DECADES", "DEC", "DECS"),
+                   "YEAR", ("Y", "YEARS", "YR", "YRS"),
+                   "QUARTER", ("QTR"),
+                   "MONTH", ("MON", "MONS", "MONTHS"),
+                   "DAY", ("D", "DAYS"),
+                   "HOUR", ("H", "HOURS", "HR", "HRS"),
+                   "MINUTE", ("M", "MIN", "MINS", "MINUTES"),
+                   "SECOND", ("S", "SEC", "SECONDS", "SECS"),
+                   "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS"),
+                   "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US"),
+                   "EPOCH"]
+      * source - a date/timestamp or interval column from where `field` should be extracted
   """,
   examples = """
     Examples:
@@ -2067,6 +2082,10 @@ object DatePart {
        224
       > SELECT _FUNC_('SECONDS', timestamp'2019-10-01 00:00:01.000001');
        1.000001
+      > SELECT _FUNC_('days', interval 1 year 10 months 5 days);
+       5
+      > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
+       30.001001
   """,
   since = "3.0.0")
 case class DatePart(field: Expression, source: Expression, child: Expression)
@@ -2082,9 +2101,16 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
         Literal(null, DoubleType)
       } else {
         val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
-        DatePart.parseExtractField(fieldStr, source, {
-          throw new AnalysisException(s"Literals of type '$fieldStr' are currently not supported.")
-        })
+        val errMsg = s"Literals of type '$fieldStr' are currently not supported " +
+          s"for the ${source.dataType.catalogString} type."
+        if (source.dataType == CalendarIntervalType) {
+          ExtractIntervalPart.parseExtractField(
+            fieldStr,
+            source,
+            throw new AnalysisException(errMsg))
+        } else {
+          DatePart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
+        }
       }
     })
   }

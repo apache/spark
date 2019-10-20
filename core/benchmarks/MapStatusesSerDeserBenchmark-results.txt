@@ -1,0 +1,66 @@
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+200000 MapOutputs, 10 blocks w/ broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Serialization                                       625            639           9          0.3        3127.2       1.0X
+Deserialization                                     875            931          49          0.2        4376.2       0.7X
+
+Compressed Serialized MapStatus sizes: 393 bytes
+Compressed Serialized Broadcast MapStatus sizes: 3 MB
+
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+200000 MapOutputs, 10 blocks w/o broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Serialization                                       604            640          71          0.3        3018.4       1.0X
+Deserialization                                     889            903          17          0.2        4443.8       0.7X
+
+Compressed Serialized MapStatus sizes: 3 MB
+Compressed Serialized Broadcast MapStatus sizes: 0 bytes
+
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+200000 MapOutputs, 100 blocks w/ broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Serialization                                      1879           1880           2          0.1        9394.9       1.0X
+Deserialization                                    1147           1150           5          0.2        5733.8       1.6X
+
+Compressed Serialized MapStatus sizes: 411 bytes
+Compressed Serialized Broadcast MapStatus sizes: 15 MB
+
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+200000 MapOutputs, 100 blocks w/o broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Serialization                                      1825           1826           1          0.1        9123.3       1.0X
+Deserialization                                    1147           1281         189          0.2        5735.7       1.6X
+
+Compressed Serialized MapStatus sizes: 15 MB
+Compressed Serialized Broadcast MapStatus sizes: 0 bytes
+
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+200000 MapOutputs, 1000 blocks w/ broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Serialization                                     12327          12518         270          0.0       61634.3       1.0X
+Deserialization                                    3120           3133          18          0.1       15600.8       4.0X
+
+Compressed Serialized MapStatus sizes: 544 bytes
+Compressed Serialized Broadcast MapStatus sizes: 131 MB
+
+
+OpenJDK 64-Bit Server VM 1.8.0_222-8u222-b10-1ubuntu1~18.04.1-b10 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+200000 MapOutputs, 1000 blocks w/o broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Serialization                                     11928          11986          82          0.0       59642.2       1.0X
+Deserialization                                    3137           3138           2          0.1       15683.3       3.8X
+
+Compressed Serialized MapStatus sizes: 131 MB
+Compressed Serialized Broadcast MapStatus sizes: 0 bytes
+
+

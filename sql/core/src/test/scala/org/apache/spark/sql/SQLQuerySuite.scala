@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -59,7 +60,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
       StringUtils.filterPattern(
-        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName), pattern)
+        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName)
+        ++ FunctionsCommand.virtualOperators, pattern)
         .map(Row(_))
     }
 
