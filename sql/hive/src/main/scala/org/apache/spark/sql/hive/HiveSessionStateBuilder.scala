@@ -98,7 +98,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    * Logical query plan optimizer that takes into account Hive.
    */
   override protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalog, experimentalMethods) {
+    new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
       override def postHocOptimizationBatches: Seq[Batch] = Seq(
         Batch("Prune Hive Table Partitions", Once, PruneHiveTablePartitions(session))
       )
