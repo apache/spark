@@ -244,8 +244,6 @@ case class CreateNamespace(
   catalog: SupportsNamespaces,
   namespace: Seq[String],
   ifNotExists: Boolean,
-  comment: Option[String],
-  locationSpec: Option[String],
   properties: Map[String, String]) extends Command
 
 /**

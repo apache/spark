@@ -2318,12 +2318,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
     checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
 
+    var properties = ctx.tablePropertyList.asScala.headOption
+      .map(visitPropertyKeyValues)
+      .getOrElse(Map.empty)
+    Option(ctx.comment).map(string).map {
+      properties += CreateNamespaceStatement.COMMENT_PROPERTY_KEY -> _
+    }
+    ctx.locationSpec.asScala.headOption.map(visitLocationSpec).map {
+      properties += CreateNamespaceStatement.LOCATION_PROPERTY_KEY -> _
+    }
+
     CreateNamespaceStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
       ctx.EXISTS != null,
-      Option(ctx.comment).map(string),
-      ctx.locationSpec.asScala.headOption.map(visitLocationSpec),
-      ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues).getOrElse(Map.empty))
+      properties)
   }
 
   /**

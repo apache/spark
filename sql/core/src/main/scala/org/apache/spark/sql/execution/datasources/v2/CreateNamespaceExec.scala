@@ -32,21 +32,11 @@ case class CreateNamespaceExec(
     catalog: SupportsNamespaces,
     namespace: Seq[String],
     ifNotExists: Boolean,
-    comment: Option[String],
-    locationSpec: Option[String],
     private var properties: Map[String, String])
     extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     if (ifNotExists && catalog.namespaceExists(namespace.toArray)) {
       return Seq.empty
-    }
-
-    // Add any additional properties.
-    if (comment.nonEmpty) {
-      properties += ("comment" -> comment.get)
-    }
-    if (locationSpec.nonEmpty) {
-      properties += ("locationSpec" -> CatalogUtils.stringToURI(locationSpec.get).toString)
     }
 
     catalog.createNamespace(namespace.toArray, properties.asJava)

@@ -289,8 +289,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
 
-    case CreateNamespace(catalog, namespace, ifNotExists, comment, locationSpec, properties) =>
-      CreateNamespaceExec(catalog, namespace, ifNotExists, comment, locationSpec, properties) :: Nil
+    case CreateNamespace(catalog, namespace, ifNotExists, properties) =>
+      CreateNamespaceExec(catalog, namespace, ifNotExists, properties) :: Nil
 
     case r: ShowNamespaces =>
       ShowNamespacesExec(r.output, r.catalog, r.namespace, r.pattern) :: Nil

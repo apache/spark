@@ -255,12 +255,18 @@ class ResolveSessionCatalog(
     case DropViewStatement(SessionCatalog(catalog, viewName), ifExists) =>
       DropTableCommand(viewName.asTableIdentifier, ifExists, isView = true, purge = false)
 
-    case c @ CreateNamespaceStatement(SessionCatalog(catalog, nameParts), _, _, _, _) =>
+    case c @ CreateNamespaceStatement(SessionCatalog(catalog, nameParts), _, _) =>
       if (nameParts.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${nameParts.quoted}")
       }
-      CreateDatabaseCommand(nameParts.head, c.ifNotExists, c.locationSpec, c.comment, c.properties)
+
+      val comment = c.properties.get(CreateNamespaceStatement.COMMENT_PROPERTY_KEY)
+      val location = c.properties.get(CreateNamespaceStatement.LOCATION_PROPERTY_KEY)
+      val newProperties = c.properties -
+        CreateNamespaceStatement.COMMENT_PROPERTY_KEY -
+        CreateNamespaceStatement.LOCATION_PROPERTY_KEY
+      CreateDatabaseCommand(nameParts.head, c.ifNotExists, location, comment, newProperties)
 
     case ShowTablesStatement(Some(SessionCatalog(catalog, nameParts)), pattern) =>
       if (nameParts.length != 1) {

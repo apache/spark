@@ -857,9 +857,12 @@ class DDLParserSuite extends AnalysisTest {
       CreateNamespaceStatement(
         Seq("database_name"),
         ifNotExists = true,
-        Some("database_comment"),
-        Some("/home/user/db"),
-        Map("a" -> "a", "b" -> "b", "c" -> "c")))
+        Map(
+          "a" -> "a",
+          "b" -> "b",
+          "c" -> "c",
+          "comment" -> "database_comment",
+          "location" -> "/home/user/db")))
   }
 
   test("create namespace -- check duplicates") {
@@ -897,9 +900,11 @@ class DDLParserSuite extends AnalysisTest {
       CreateNamespaceStatement(
         Seq("database_name"),
         ifNotExists = false,
-        None,
-        Some("/home/user/db"),
-        Map("a" -> "1", "b" -> "0.1", "c" -> "true")))
+        Map(
+          "a" -> "1",
+          "b" -> "0.1",
+          "c" -> "true",
+          "location" -> "/home/user/db")))
   }
 
   test("show databases: basic") {
