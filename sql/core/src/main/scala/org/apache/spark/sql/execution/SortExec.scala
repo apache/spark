@@ -71,7 +71,6 @@ case class SortExec(
    * should make it public.
    */
   def createSorter(): UnsafeExternalRowSorter = {
-    assert(rowSorter == null)
     val ordering = newOrdering(sortOrder, output)
 
     // The comparator for comparing prefix
