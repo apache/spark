@@ -31,11 +31,11 @@ private object Triggers {
 
   def convert(interval: String): Long = {
     val cal = CalendarInterval.fromCaseInsensitiveString(interval)
-    if (cal.months > 0 || cal.days > 0) {
+    if (cal.months > 0) {
       throw new IllegalArgumentException(
         s"Doesn't support day, week, month or year interval: $interval")
     }
-    TimeUnit.MICROSECONDS.toMillis(cal.microseconds)
+    TimeUnit.MICROSECONDS.toMillis(cal.microseconds + cal.days * CalendarInterval.MICROS_PER_DAY)
   }
 
   def convert(interval: Duration): Long = interval.toMillis
