@@ -1064,7 +1064,7 @@ class JoinWithResourceCleanSuite extends JoinSuite with BeforeAndAfterAll {
     sorts
   }
 
-  override def checkAnswer(df: => DataFrame, rows: Seq[Row]): Unit = {
+  override protected def checkAnswer(df: => DataFrame, rows: Seq[Row]): Unit = {
     withSQLConf(
       SQLConf.SORT_MERGE_JOIN_EXEC_EAGER_CLEANUP_RESOURCES.key -> "true") {
       checkCleanupResourceTriggered(df.queryExecution.sparkPlan)
