@@ -113,7 +113,7 @@ public class CalendarIntervalSuite {
       }
     }
 
-    for (String input : new String[]{"interval", "interval1 day", "foo", "foo 1 day"}) {
+    for (String input : new String[]{"interval", "interval1 day", "foo", "foo 1 day", "1 dday"}) {
       try {
         fromCaseInsensitiveString(input);
         fail("Expected to throw an exception for the invalid input");
@@ -122,7 +122,7 @@ public class CalendarIntervalSuite {
         if (input.trim().equalsIgnoreCase("interval")) {
           assertTrue(msg.contains("Interval string must have time units"));
         } else {
-          assertTrue(msg.contains("Invalid interval:"));
+          assertTrue(msg.contains("Invalid interval"));
         }
       }
     }
@@ -296,5 +296,28 @@ public class CalendarIntervalSuite {
 
     assertNull(fromString("INTERVAL"));
     assertNull(fromString("  Interval "));
+  }
+
+  @Test
+  public void uniqueUnitTest() {
+    String[] inputs = new String[]{
+      "1 year 2 years",
+      "2 months 1 month",
+      "interval 1 month 2 weeks 1 day 1 week",
+      "interval 1 day 2 weeks 3 days",
+      " 1 hour 1 hour",
+      "6 minutes 1 Minute ",
+      "7 SECONDS 1 Second",
+      "3 MilliSECONDS 1 MilliSecond",
+      "8 microseconds 10 MICROSECONDS"
+    };
+    for (String input : inputs) {
+      try {
+        fromCaseInsensitiveString(input);
+        fail("Expected to throw an exception for the invalid input");
+      } catch (IllegalArgumentException e) {
+        assertTrue(e.getMessage().contains("Interval units must be unique"));
+      }
+    }
   }
 }
