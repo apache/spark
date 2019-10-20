@@ -1386,15 +1386,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
   }
 
-  test("MSCK REPAIR table") {
-    val sql = "MSCK REPAIR TABLE tab1"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRecoverPartitionsCommand(
-      TableIdentifier("tab1", None),
-      "MSCK REPAIR TABLE")
-    comparePlans(parsed, expected)
-  }
-
   test("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
     val (target, source, location, exists) = parser.parsePlan(v1).collect {

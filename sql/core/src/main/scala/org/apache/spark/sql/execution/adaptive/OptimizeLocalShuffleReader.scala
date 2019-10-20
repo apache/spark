@@ -61,7 +61,7 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     val numExchangeAfter = numExchanges(EnsureRequirements(conf).apply(optimizedPlan))
 
     if (numExchangeAfter > numExchangeBefore) {
-      logWarning("OptimizeLocalShuffleReader rule is not applied due" +
+      logDebug("OptimizeLocalShuffleReader rule is not applied due" +
         " to additional shuffles will be introduced.")
       plan
     } else {
