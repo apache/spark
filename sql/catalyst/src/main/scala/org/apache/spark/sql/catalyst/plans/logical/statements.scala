@@ -321,7 +321,7 @@ case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
  * A CACHE TABLE statement, as parsed from SQL
  */
 case class CacheTableStatement(
-    tableNames: Seq[String],
+    tableName: Seq[String],
     plan: Option[LogicalPlan],
     isLazy: Boolean,
     options: Map[String, String]) extends ParsedStatement
