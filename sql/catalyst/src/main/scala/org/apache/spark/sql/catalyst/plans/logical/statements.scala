@@ -316,3 +316,8 @@ case class AnalyzeColumnStatement(
  * A REPAIR TABLE statement, as parsed from SQL
  */
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
+
+/**
+ * A SHOW CREATE TABLE statement, as parsed from SQL.
+ */
+case class ShowCreateTableStatement(tableName: Seq[String]) extends ParsedStatement

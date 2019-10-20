@@ -197,7 +197,7 @@ statement
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
-    | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
+    | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?

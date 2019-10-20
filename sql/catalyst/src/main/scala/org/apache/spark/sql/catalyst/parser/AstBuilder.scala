@@ -2728,4 +2728,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
     RepairTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
   }
+
+  /**
+   * Creates a [[ShowCreateTableStatement]]
+   */
+  override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
+    ShowCreateTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+  }
 }
