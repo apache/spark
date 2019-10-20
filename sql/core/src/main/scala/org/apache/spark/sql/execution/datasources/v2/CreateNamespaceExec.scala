@@ -35,11 +35,11 @@ case class CreateNamespaceExec(
     private var properties: Map[String, String])
     extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-    if (ifNotExists && catalog.namespaceExists(namespace.toArray)) {
-      return Seq.empty
+    try {
+      catalog.createNamespace(namespace.toArray, properties.asJava)
+    } catch {
+      case _ : NamespaceAlreadyExistsException if ifNotExists =>
     }
-
-    catalog.createNamespace(namespace.toArray, properties.asJava)
 
     Seq.empty
   }
