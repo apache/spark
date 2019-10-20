@@ -252,26 +252,29 @@ case class PruneHiveTablePartitions(
           predicate.references.subsetOf(partitionSet)
       }
       val conf = session.sessionState.conf
-      if (pruningPredicates.nonEmpty && conf.fallBackToHdfsForStatsEnabled &&
-        conf.metastorePartitionPruning) {
+      if (conf.metastorePartitionPruning && pruningPredicates.nonEmpty) {
         val prunedPartitions = session.sharedState.externalCatalog.listPartitionsByFilter(
           relation.tableMeta.database,
           relation.tableMeta.identifier.table,
           pruningPredicates,
           conf.sessionLocalTimeZone)
         val sizeInBytes = try {
-          prunedPartitions.map { part =>
+          val sizeOfPartitions = prunedPartitions.map { part =>
             val rawDataSize = part.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
             val totalSize = part.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
             if (rawDataSize.isDefined && rawDataSize.get > 0) {
               rawDataSize.get
             } else if (totalSize.isDefined && totalSize.get > 0L) {
               totalSize.get
-            } else {
+            } else if (conf.fallBackToHdfsForStatsEnabled) {
               CommandUtils.calculateLocationSize(
                 session.sessionState, relation.tableMeta.identifier, part.storage.locationUri)
+            } else { // we cannot get any size statics here. Use 0 as the default size to sum up.
+              0L
             }
           }.sum
+          // If size of partitions is zero fall back to the default size.
+          if (sizeOfPartitions == 0L) conf.defaultSizeInBytes else sizeOfPartitions
         } catch {
           case e: IOException =>
             logWarning("Failed to get table size from HDFS.", e)
@@ -279,9 +282,10 @@ case class PruneHiveTablePartitions(
         }
         val withStats = relation.tableMeta.copy(
           stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-        val prunedCatalogRelation = relation.copy(tableMeta = withStats)
+        val prunedHiveTableRelation = relation.copy(tableMeta = withStats,
+          normalizedFilters = pruningPredicates, prunedPartitions = prunedPartitions)
         val filterExpression = predicates.reduceLeft(And)
-        Filter(filterExpression, prunedCatalogRelation)
+        Filter(filterExpression, prunedHiveTableRelation)
       } else {
         filter
       }

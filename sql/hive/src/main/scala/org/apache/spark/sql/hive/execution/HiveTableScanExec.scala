@@ -166,14 +166,20 @@ case class HiveTableScanExec(
   @transient lazy val rawPartitions = {
     val prunedPartitions =
       if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-          partitionPruningPred.size > 0) {
+        partitionPruningPred.nonEmpty) {
         // Retrieve the original attributes based on expression ID so that capitalization matches.
         val normalizedFilters = partitionPruningPred.map(_.transform {
           case a: AttributeReference => originalAttributes(a)
         })
-        sparkSession.sessionState.catalog.listPartitionsByFilter(
-          relation.tableMeta.identifier,
-          normalizedFilters)
+        val isFiltersEqual = normalizedFilters.zip(relation.normalizedFilters)
+          .forall { case (e1, e2) => e1.semanticEquals(e2) }
+        if (isFiltersEqual) {
+          relation.prunedPartitions
+        } else {
+          sparkSession.sessionState.catalog.listPartitionsByFilter(
+            relation.tableMeta.identifier,
+            normalizedFilters)
+        }
       } else {
         sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
       }
