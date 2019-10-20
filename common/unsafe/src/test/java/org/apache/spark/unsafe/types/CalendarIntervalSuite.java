@@ -320,4 +320,20 @@ public class CalendarIntervalSuite {
       }
     }
   }
+
+  @Test
+  public void unorderedUnitsTest() {
+    Arrays.asList(
+      "interval   23   month -5  years  ",
+      "23   month  -5  years").forEach(input ->
+      assertEquals(fromString(input), new CalendarInterval(-5 * 12 + 23, 0))
+    );
+    Arrays.asList(
+      "interval 1 microsecond 2 milliseconds 3 seconds 4 minutes 5 hours",
+      "1 microsecond 2 milliseconds 3 seconds 4 minutes 5 hours",
+      "1 microsecond 5 hours 2 milliseconds 4 minutes 3 seconds ").forEach(input ->
+      assertEquals(fromString(input),
+        fromString("5 hours 4 minutes 3 seconds 2 milliseconds 1 microseconds"))
+    );
+  }
 }
