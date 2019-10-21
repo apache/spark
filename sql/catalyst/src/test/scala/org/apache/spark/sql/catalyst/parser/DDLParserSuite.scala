@@ -971,6 +971,24 @@ class DDLParserSuite extends AnalysisTest {
       TruncateTableStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10"))))
   }
 
+  test("SHOW PARTITIONS") {
+    val sql1 = "SHOW PARTITIONS t1"
+    val sql2 = "SHOW PARTITIONS db1.t1"
+    val sql3 = "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')"
+
+    val parsed1 = parsePlan(sql1)
+    val expected1 = ShowPartitionsStatement(Seq("t1"), None)
+    val parsed2 = parsePlan(sql2)
+    val expected2 = ShowPartitionsStatement(Seq("db1", "t1"), None)
+    val parsed3 = parsePlan(sql3)
+    val expected3 = ShowPartitionsStatement(Seq("t1"),
+      Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],
