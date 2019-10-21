@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.util.Locale
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable.ListBuffer
 
 import org.mockito.Mockito._
 
@@ -42,15 +42,12 @@ class JoinSuite extends QueryTest with SharedSparkSession {
   private def attachCleanupResourceChecker(plan: SparkPlan): Unit = {
     // SPARK-21492: Check cleanupResources are finally triggered in SortExec node for every
     // test case
-    val sorts = new ArrayBuffer[SortExec]()
     plan.foreachUp {
-      case s: SortExec => sorts += s
+      case s: SortExec =>
+        val sortExec = spy(s)
+        verify(sortExec, atLeastOnce).cleanupResources()
+        verify(sortExec.rowSorter, atLeastOnce).cleanupResources()
       case _ =>
-    }
-    sorts.foreach { sort =>
-      val sortExec = spy(sort)
-      verify(sortExec, atLeastOnce).cleanupResources()
-      verify(sortExec.rowSorter, atLeastOnce).cleanupResources()
     }
   }
 
