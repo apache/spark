@@ -31,7 +31,7 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends L
   /**
    * Returns a placeholder for a physical plan that executes `plan`. This placeholder will be
    * filled in automatically by the QueryPlanner using the other execution strategies that are
-   * available.
+   * available.Q
    */
   protected def planLater(plan: LogicalPlan): PhysicalPlan
 

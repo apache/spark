@@ -779,7 +779,10 @@ private[spark] class ApplicationMaster(
         Option(allocator) match {
           case Some(a) =>
             if (a.requestTotalExecutorsWithPreferredLocalities(r.requestedTotal,
-              r.localityAwareTasks, r.hostToLocalTaskCount, r.nodeBlacklist)) {
+              r.numLocalityAwareTasksPerResourceProfileId(
+                ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID),
+              r.hostToLocalTaskCount.map { case ((host, rp), count) => (host, count) },
+              r.nodeBlacklist)) {
               resetAllocatorInterval()
             }
             context.reply(true)

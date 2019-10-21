@@ -52,7 +52,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
-import org.apache.spark.resource.{ResourceID, ResourceInformation}
+import org.apache.spark.resource.{ResourceID, ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
@@ -1615,6 +1615,29 @@ class SparkContext(config: SparkConf) extends Logging {
     schedulerBackend match {
       case b: ExecutorAllocationClient =>
         b.requestTotalExecutors(numExecutors, localityAwareTasks, hostToLocalTaskCount)
+      case _ =>
+        logWarning("Requesting executors is not supported by current scheduler.")
+        false
+    }
+  }
+
+  def requestTotalExecutors(
+      numExecutors: Int,
+      localityAwareTasks: Int,
+      hostToLocalTaskCount: scala.collection.immutable.Map[String, Int],
+      resources: Option[Map[String, ResourceProfile]] = None
+  ): Boolean = {
+    schedulerBackend match {
+      case b: ExecutorAllocationClient =>
+        // assume this is using the default resource profile, would need to add api to support
+        // others
+        val hostToLocalTaskCountWithResourceProfileId = hostToLocalTaskCount.map {
+          case (host, count) => ((host, ResourceProfile.getOrCreateDefaultProfile(conf)), count)
+        }
+        val localityAwareTasksWithResourceProfileId =
+          Map[Int, Int](localityAwareTasks -> ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+        b.requestTotalExecutors(numExecutors, localityAwareTasksWithResourceProfileId.toMap,
+          hostToLocalTaskCountWithResourceProfileId, None)
       case _ =>
         logWarning("Requesting executors is not supported by current scheduler.")
         false

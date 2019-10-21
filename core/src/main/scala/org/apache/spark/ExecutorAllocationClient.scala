@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import org.apache.spark.resource.ResourceProfile
+
 /**
  * A client that communicates with the cluster manager to request or kill executors.
  * This is currently supported only in YARN mode.
@@ -41,23 +43,22 @@ private[spark] trait ExecutorAllocationClient {
    *                     shouldn't kill any running executor to reach this number, but,
    *                     if all existing executors were to die, this is the number of executors
    *                     we'd want to be allocated.
-   * @param localityAwareTasks The number of tasks in all active stages that have a locality
-   *                           preferences. This includes running, pending, and completed tasks.
-   * @param hostToLocalTaskCount A map of hosts to the number of tasks from all active stages
-   *                             that would like to like to run on that host.
-   *                             This includes running, pending, and completed tasks.
+   * TODO - update
    * @return whether the request is acknowledged by the cluster manager.
    */
   private[spark] def requestTotalExecutors(
-      numExecutors: Int,
-      localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int]): Boolean
+      numExecutors: Int,  // TODO - do we need anymore if resources below has it???
+      numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
+      hostToLocalTaskCount: Map[(String, ResourceProfile), Int],
+      resources: Option[Map[ResourceProfile, Int]] = None): Boolean
 
   /**
    * Request an additional number of executors from the cluster manager.
+   * TODO - update
    * @return whether the request is acknowledged by the cluster manager.
    */
-  def requestExecutors(numAdditionalExecutors: Int): Boolean
+  def requestExecutors(numAdditionalExecutors: Int, // TODO - shoudln't be needed anymore
+      resources: Option[Map[ResourceProfile, Int]] = None): Boolean
 
   /**
    * Request that the cluster manager kill the specified executors.
