@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.{Column, Encoder, TypedColumn}
+import org.apache.spark.sql.{Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
-import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
-// import org.apache.spark.sql.types.ObjectType
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 
 /**
  * A base class for user-defined aggregations, which can be used in `Dataset` operations to take
