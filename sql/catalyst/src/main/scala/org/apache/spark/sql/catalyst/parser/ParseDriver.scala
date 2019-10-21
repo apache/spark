@@ -88,11 +88,6 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 
-    // scalastyle:off
-    if (command.startsWith("set") || command.startsWith("select i, left('ahoj', i)")) {
-      println(s"SQLConf.get.ansiEnabled: ${SQLConf.get.ansiEnabled}")
-    }
-    // scalastyle:on
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)

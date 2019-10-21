@@ -275,17 +275,7 @@ private[hive] class SparkExecuteStatementOperation(
       Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
       sqlContext.sparkContext.setJobGroup(statementId, statement)
-      // scalastyle:off
-      if (statement.startsWith("set") || statement.startsWith("select i, left('ahoj', i)")) {
-        println("=" * 96)
-        println(s"statement: ${statement}")
-        println("spark.sql.ansi.enabled before: " + sqlContext.conf.getConfString("spark.sql.ansi.enabled"))
-        result = sqlContext.sql(statement)
-        println("spark.sql.ansi.enabled after: " + sqlContext.conf.getConfString("spark.sql.ansi.enabled"))
-        // scalastyle:on
-      } else {
-        result = sqlContext.sql(statement)
-      }
+      result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
         case SetCommand(Some((SQLConf.THRIFTSERVER_POOL.key, Some(value)))) =>
