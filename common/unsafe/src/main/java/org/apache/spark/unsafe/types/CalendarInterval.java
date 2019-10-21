@@ -159,65 +159,60 @@ public final class CalendarInterval implements Serializable {
     return result;
   }
 
-  public static CalendarInterval fromSingleUnitString(String unit, String s)
+  public static CalendarInterval fromUnitString(String[] units, String[] values)
       throws IllegalArgumentException {
+    assert units.length == values.length;
+    int months = 0;
+    long microseconds = 0;
 
-    CalendarInterval result = null;
-    if (s == null) {
-      throw new IllegalArgumentException(String.format("Interval %s string was null", unit));
-    }
-    s = s.trim();
-    try {
-      switch (unit) {
-        case "year":
-          int year = (int) toLongWithRange("year", s,
-            Integer.MIN_VALUE / 12, Integer.MAX_VALUE / 12);
-          result = new CalendarInterval(year * 12, 0L);
-          break;
-        case "month":
-          int month = (int) toLongWithRange("month", s,
-            Integer.MIN_VALUE, Integer.MAX_VALUE);
-          result = new CalendarInterval(month, 0L);
-          break;
-        case "week":
-          long week = toLongWithRange("week", s,
-            Long.MIN_VALUE / MICROS_PER_WEEK, Long.MAX_VALUE / MICROS_PER_WEEK);
-          result = new CalendarInterval(0, week * MICROS_PER_WEEK);
-          break;
-        case "day":
-          long day = toLongWithRange("day", s,
-            Long.MIN_VALUE / MICROS_PER_DAY, Long.MAX_VALUE / MICROS_PER_DAY);
-          result = new CalendarInterval(0, day * MICROS_PER_DAY);
-          break;
-        case "hour":
-          long hour = toLongWithRange("hour", s,
-            Long.MIN_VALUE / MICROS_PER_HOUR, Long.MAX_VALUE / MICROS_PER_HOUR);
-          result = new CalendarInterval(0, hour * MICROS_PER_HOUR);
-          break;
-        case "minute":
-          long minute = toLongWithRange("minute", s,
-            Long.MIN_VALUE / MICROS_PER_MINUTE, Long.MAX_VALUE / MICROS_PER_MINUTE);
-          result = new CalendarInterval(0, minute * MICROS_PER_MINUTE);
-          break;
-        case "second": {
-          long micros = parseSecondNano(s);
-          result = new CalendarInterval(0, micros);
-          break;
+    for (int i = 0; i < units.length; i++) {
+      try {
+        String value = values[i].trim();
+        switch (units[i]) {
+          case "year":
+            months = Math.addExact(months, Math.multiplyExact(Integer.parseInt(value), 12));
+            break;
+          case "month":
+            months = Math.addExact(months, Integer.parseInt(value));
+            break;
+          case "week":
+            microseconds = Math.addExact(
+              microseconds,
+              Math.multiplyExact(Long.parseLong(value), MICROS_PER_WEEK));
+            break;
+          case "day":
+            microseconds = Math.addExact(
+              microseconds,
+              Math.multiplyExact(Long.parseLong(value), MICROS_PER_DAY));
+            break;
+          case "hour":
+            microseconds = Math.addExact(
+              microseconds,
+              Math.multiplyExact(Long.parseLong(value), MICROS_PER_HOUR));
+            break;
+          case "minute":
+            microseconds = Math.addExact(
+              microseconds,
+              Math.multiplyExact(Long.parseLong(value), MICROS_PER_MINUTE));
+            break;
+          case "second": {
+            microseconds = Math.addExact(microseconds, parseSecondNano(value));
+            break;
+          }
+          case "millisecond":
+            microseconds = Math.addExact(
+              microseconds,
+              Math.multiplyExact(Long.parseLong(value), MICROS_PER_MILLI));
+            break;
+          case "microsecond":
+            microseconds = Math.addExact(microseconds, Long.parseLong(value));
+            break;
         }
-        case "millisecond":
-          long millisecond = toLongWithRange("millisecond", s,
-            Long.MIN_VALUE / MICROS_PER_MILLI, Long.MAX_VALUE / MICROS_PER_MILLI);
-          result = new CalendarInterval(0, millisecond * MICROS_PER_MILLI);
-          break;
-        case "microsecond":
-          long micros = Long.parseLong(s);
-          result = new CalendarInterval(0, micros);
-          break;
+      } catch (Exception e) {
+        throw new IllegalArgumentException("Error parsing interval string: " + e.getMessage(), e);
       }
-    } catch (Exception e) {
-      throw new IllegalArgumentException("Error parsing interval string: " + e.getMessage(), e);
     }
-    return result;
+    return new CalendarInterval(months, microseconds);
   }
 
   /**

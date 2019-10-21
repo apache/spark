@@ -19,8 +19,6 @@ package org.apache.spark.unsafe.types;
 
 import org.junit.Test;
 
-import java.util.Arrays;
-
 import static org.junit.Assert.*;
 import static org.apache.spark.unsafe.types.CalendarInterval.*;
 

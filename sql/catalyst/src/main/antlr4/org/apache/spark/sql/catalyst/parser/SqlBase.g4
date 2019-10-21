@@ -80,7 +80,7 @@ singleTableSchema
     ;
 
 singleInterval
-    : INTERVAL? intervalField+ EOF
+    : INTERVAL? (intervalValue intervalUnit)+ EOF
     ;
 
 statement

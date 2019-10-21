@@ -75,6 +75,6 @@ trait ParserInterface {
   /**
    * Parse a string to a [[CalendarInterval]].
    */
-  @throws[ParseException]("Text cannot be parsed to a DataType")
+  @throws[ParseException]("Text cannot be parsed to an interval")
   def parseInterval(sqlText: String): CalendarInterval
 }
