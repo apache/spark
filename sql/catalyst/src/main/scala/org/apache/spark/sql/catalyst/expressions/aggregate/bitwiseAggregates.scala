@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BitwiseAnd, BitwiseOr, ExpectsInputTypes, Expression, ExpressionDescription, If, IsNotNull, IsNull, Literal, Nvl2}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BitwiseAnd, BitwiseOr, ExpectsInputTypes, Expression, ExpressionDescription, If, IsNull, Literal}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegralType}
 
 @ExpressionDescription(
@@ -57,7 +57,6 @@ case class BitAndAgg(child: Expression) extends DeclarativeAggregate with Expect
       If(IsNull(bitAnd.right), bitAnd.left, BitwiseAnd(bitAnd.left, bitAnd.right))) :: Nil
 
   override lazy val evaluateExpression: AttributeReference = bitAnd
-
 }
 
 @ExpressionDescription(
