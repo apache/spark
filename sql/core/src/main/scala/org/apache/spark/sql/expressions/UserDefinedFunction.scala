@@ -19,7 +19,7 @@ package org.apache.spark.sql.expressions
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.{Experimental, Stable}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -153,6 +153,7 @@ private[sql] case class SparkUserDefinedFunction(
  *
  * @since 3.0.0
  */
+@Experimental
 case class UserDefinedAggregator[IN: TypeTag, BUF, OUT](
     aggregator: Aggregator[IN, BUF, OUT],
     name: Option[String] = None,
