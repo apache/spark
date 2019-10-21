@@ -286,9 +286,9 @@ case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[S
  * A CREATE NAMESPACE statement, as parsed from SQL.
  */
 case class CreateNamespaceStatement(
-  namespace: Seq[String],
-  ifNotExists: Boolean,
-  properties: Map[String, String]) extends ParsedStatement
+    namespace: Seq[String],
+    ifNotExists: Boolean,
+    properties: Map[String, String]) extends ParsedStatement
 
 object CreateNamespaceStatement {
   val COMMENT_PROPERTY_KEY: String = "comment"

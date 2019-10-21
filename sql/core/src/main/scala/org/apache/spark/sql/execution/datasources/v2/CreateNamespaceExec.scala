@@ -21,7 +21,6 @@ import scala.collection.JavaConverters.mapAsJavaMapConverter
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
-import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 
@@ -35,10 +34,18 @@ case class CreateNamespaceExec(
     private var properties: Map[String, String])
     extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-    try {
-      catalog.createNamespace(namespace.toArray, properties.asJava)
-    } catch {
-      case _ : NamespaceAlreadyExistsException if ifNotExists =>
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    val ns = namespace.toArray
+    if (!catalog.namespaceExists(ns)) {
+      try {
+        catalog.createNamespace(ns, properties.asJava)
+      } catch {
+        case _: NamespaceAlreadyExistsException if ifNotExists =>
+          logWarning(s"Namespace ${namespace.quoted} was created concurrently. Ignoring.")
+      }
+    } else if (!ifNotExists) {
+      throw new NamespaceAlreadyExistsException(ns)
     }
 
     Seq.empty
