@@ -221,7 +221,7 @@ abstract class PartitioningAwareFileIndex(
         if (!fs.isDirectory(userDefinedBasePath)) {
           throw new IllegalArgumentException(s"Option '$BASE_PATH_PARAM' must be a directory")
         }
-        rootPaths.find(!_.toString.startsWith(userDefinedBasePath.toString)) match {
+        rootPaths.find(!_.toUri.getPath.startsWith(userDefinedBasePath.toUri.getPath)) match {
           case Some(rp) => throw new IllegalArgumentException(
             s"Wrong basePath $userDefinedBasePath for the root path: $rp")
 
