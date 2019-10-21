@@ -40,21 +40,21 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
 <dl>
   <dt><code><em>OR REPLACE</em></code></dt>
   <dd>
-    If specified, the resources for function are reloaded. This is mainly useful
+    If specified, the resources for the function are reloaded. This is mainly useful
     to pick up any changes made to the implementation of the function. This
     parameter is mutually exclusive to <code>IF NOT EXISTS</code> and can not
     be specified together.
   </dd>
   <dt><code><em>TEMPORARY</em></code></dt>
   <dd>
-    Indicates the scope of function being created. When TEMPORARY is specified, the
+    Indicates the scope of function being created. When <code>TEMPORARY</code> is specified, the
     created function is valid and visible in the current session. No persistent
     entry is made in the catalog for these kind of functions.
   </dd>
   <dt><code><em>IF NOT EXISTS</em></code></dt>
   <dd>
     If specified, creates the function only when it does not exist. The creation
-    of function succeeds (no error is thrown), if the specified function already
+    of function succeeds (no error is thrown) if the specified function already
     exists in the system. This parameter is mutually exclusive to <code> OR REPLACE</code> 
     and can not be specified together.
   </dd>
@@ -70,7 +70,7 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
   <dt><code><em>class_name</em></code></dt>
   <dd>
     Specifies the name of the class that provides the implementation for function to be created.
-    The implementing class should extend from one of the base classes as follows:
+    The implementing class should extend one of the base classes as follows:
     <ul>
       <li>Should extend <code>UDF</code> or <code>UDAF</code> in <code>org.apache.hadoop.hive.ql.exec</code> package.</li>
       <li>Should extend <code>AbstractGenericUDAFResolver</code>, <code>GenericUDF</code>, or
@@ -91,14 +91,14 @@ CREATE [ OR REPLACE ] [ TEMPORARY ] FUNCTION [ IF NOT EXISTS ]
 
 ### Examples
 {% highlight sql %}
--- 1. Create a simple UDF `SimpleUdf` that adds the supplied integral value by 10.
+-- 1. Create a simple UDF `SimpleUdf` that increments the supplied integral value by 10.
 --    import org.apache.hadoop.hive.ql.exec.UDF;
 --    public class SimpleUdf extends UDF {
 --      public int evaluate(int value) {
---      return value + 10;
+--        return value + 10;
 --      }
 --    }
--- 2. Compile and place it in a jar file called `SimpleUdf.jar` in /tmp.
+-- 2. Compile and place it in a JAR file called `SimpleUdf.jar` in /tmp.
 
 -- Create a table called `test` and insert two rows.
 CREATE TABLE test(c1 INT);
@@ -140,12 +140,12 @@ SHOW USER FUNCTIONS;
   |   simple_temp_udf|
   +------------------+
 
--- 1. Mofify `SimpleUdf`'s implementation to add supplied integral value by 20.
+-- 1. Modify `SimpleUdf`'s implementation to add supplied integral value by 20.
 --    import org.apache.hadoop.hive.ql.exec.UDF;
   
 --    public class SimpleUdfR extends UDF {
 --      public int evaluate(int value) {
---      return value + 20;
+--        return value + 20;
 --      }
 --    }
 -- 2. Compile and place it in a jar file called `SimpleUdfR.jar` in /tmp.
