@@ -61,7 +61,7 @@ object IntervalBenchmark extends SqlBasedBenchmark {
 
   private def buildString(withPrefix: Boolean, units: Seq[String] = Seq.empty): String = {
     val sep = if (units.length > 0) ", " else ""
-    val otherUnits = sep + s"'${units.mkString(" ")}'"
+    val otherUnits = s"$sep'${units.mkString(" ")}'"
     val prefix = if (withPrefix) "'interval'" else "''"
     s"concat_ws(' ', ${prefix}, cast(id % 10000 AS string), 'years'${otherUnits})"
   }
