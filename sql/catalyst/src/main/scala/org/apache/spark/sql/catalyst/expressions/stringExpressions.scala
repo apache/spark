@@ -2268,7 +2268,7 @@ case class FormatNumber(x: Expression, d: Expression)
 }
 
 object ToNumber {
-  def transfer(input: UTF8String, pattern: UTF8String): UTF8String = {
+  def convert(input: UTF8String, pattern: UTF8String): UTF8String = {
     val inputStr = input.toString
     val patternStr = pattern.toString.toUpperCase(Locale.ROOT).replaceAll("FM", "")
     val hasSign = inputStr.startsWith("-") ||
@@ -2280,14 +2280,12 @@ object ToNumber {
     } else {
       (inputStr, patternStr.replaceAll("FM", ""))
     }
-    val inputChars = newInputStr.toCharArray()
-    val patternChars = newPatternStr.toIterator
     val builder = new UTF8StringBuilder
     var indexOfString = 0
     var hasPoint = false
-    patternChars.foreach { c =>
+    newPatternStr.foreach { c =>
       if (newInputStr.length > indexOfString) {
-        val currentChar = inputChars(indexOfString)
+        val currentChar = newInputStr(indexOfString)
         c match {
           case '9' | '0' if Character.isDigit(currentChar) =>
             builder.append(newInputStr.substring(indexOfString, indexOfString + 1))
@@ -2305,8 +2303,8 @@ object ToNumber {
             indexOfString += 1
           case ',' | 'G' if Character.isDigit(currentChar) =>
           case 'L' =>
-            while (Character.isLetter(inputChars(indexOfString)) ||
-              inputChars(indexOfString) == '$') {
+            while (Character.isLetter(newInputStr(indexOfString)) ||
+              newInputStr(indexOfString) == '$') {
               indexOfString += 1
             }
           case _ =>
@@ -2373,20 +2371,12 @@ case class ToNumber(left: Expression, right: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    def checkDecimalPointNum(c: Char): Boolean = {
-      c == '.' || c == 'D'
-    }
-
-    def checkSignNum(c: Char): Boolean = {
-      c == 'S'
-    }
-
     val inputTypeCheck = super.checkInputDataTypes()
     if(inputTypeCheck.isSuccess && pattern.isDefined) {
       val patternStr = pattern.get
-      if (patternStr.count(checkDecimalPointNum) > 1) {
+      if (patternStr.count{ c => c == '.' || c == 'D'} > 1) {
         TypeCheckResult.TypeCheckFailure(s"Multiple decimal points in $patternStr")
-      } else if (patternStr.count(checkSignNum) > 1) {
+      } else if (patternStr.count(_ == 'S') > 1) {
         TypeCheckResult.TypeCheckFailure(s"Cannot use 'S' twice.")
       } else if (patternStr.contains('S') && patternStr.contains("PR")) {
         TypeCheckResult.TypeCheckFailure(s"Cannot use 'S' and 'PR' together.")
@@ -2403,17 +2393,15 @@ case class ToNumber(left: Expression, right: Expression)
   override def nullSafeEval(string: Any, pattern: Any): Any = {
     val input = string.asInstanceOf[UTF8String]
     val patternStr = pattern.asInstanceOf[UTF8String]
-    ToNumber.transfer(input, patternStr)
+    ToNumber.convert(input, patternStr)
   }
 
   override def prettyName: String = "to_number"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (l, r) => {
-      s"""
-        ${ev.value} = org.apache.spark.sql.catalyst.expressions.ToNumber.transfer(
-          $l, $r);
-       """})
+      s"${ev.value} = org.apache.spark.sql.catalyst.expressions.ToNumber.convert($l, $r);"
+    })
   }
 }
 
