@@ -479,13 +479,13 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(text, delimiter [, null_string]) - splits string into array elements using" +
+  usage = "_FUNC_(text, delimiter [, replaced]) - splits string into array elements using" +
     " supplied delimiter and optional null string",
   examples = """
     Examples:
       > SELECT _FUNC_('xx~^~yy~^~zz~^~', '~^~', 'yy');
        [xx,NULL,zz,""]
-  """)
+  """, since = "3.0.0")
 case class StringToArray(text: Expression, delimiter: Expression, replaced: Expression)
   extends TernaryExpression with CodegenFallback with ExpectsInputTypes {
 
