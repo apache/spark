@@ -247,10 +247,12 @@ case class PruneHiveTablePartitions(
         }
       }
       val partitionSet = AttributeSet(relation.partitionCols)
-      val pruningPredicates = normalizedFilters.filter { predicate =>
-        !predicate.references.isEmpty &&
-          predicate.references.subsetOf(partitionSet)
-      }
+      // SPARK-24085: remove scalar subquery in partition expression then get normalized predicates
+      val pruningPredicates = normalizedFilters
+        .filterNot(SubqueryExpression.hasSubquery)
+        .filter { predicate =>
+          !predicate.references.isEmpty && predicate.references.subsetOf(partitionSet)
+        }
       val conf = session.sessionState.conf
       if (conf.metastorePartitionPruning && pruningPredicates.nonEmpty) {
         val prunedPartitions = session.sharedState.externalCatalog.listPartitionsByFilter(
