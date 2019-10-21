@@ -622,12 +622,11 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
 
 class TestKafkaPartitioner extends DefaultPartitioner {
   override def partition(
-                          topic: String,
-                          key: Any,
-                          keyBytes: Array[Byte],
-                          value: Any,
-                          valueBytes: Array[Byte],
-                          cluster: Cluster
-                        )
+      topic: String,
+      key: Any,
+      keyBytes: Array[Byte],
+      value: Any,
+      valueBytes: Array[Byte],
+      cluster: Cluster)
   : Int = 0
 }
