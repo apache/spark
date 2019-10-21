@@ -1065,16 +1065,12 @@ class JoinWithResourceCleanSuite extends JoinSuite with BeforeAndAfterAll {
   }
 
   override protected def checkAnswer(df: => DataFrame, rows: Seq[Row]): Unit = {
-    withSQLConf(
-      SQLConf.SORT_MERGE_JOIN_EXEC_EAGER_CLEANUP_RESOURCES.key -> "true") {
-      checkCleanupResourceTriggered(df.queryExecution.sparkPlan)
-      super.checkAnswer(df, rows)
-    }
+    checkCleanupResourceTriggered(df.queryExecution.sparkPlan)
+    super.checkAnswer(df, rows)
   }
 
-  test("cleanupResource in code generation") {
+  test("cleanupResource with code generation") {
     withSQLConf(
-      SQLConf.SORT_MERGE_JOIN_EXEC_EAGER_CLEANUP_RESOURCES.key -> "true",
       SQLConf.SHUFFLE_PARTITIONS.key -> "1",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df1 = spark.range(0, 10, 1, 2)
@@ -1086,6 +1082,18 @@ class JoinWithResourceCleanSuite extends JoinSuite with BeforeAndAfterAll {
       sorts.foreach { sort =>
         verify(spy(sort), atLeastOnce).doProduce(any())
       }
+      checkAnswer(res, Row(0, 0, 0))
+    }
+  }
+
+  test("cleanupResource without code generation") {
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(0, 10, 1, 2)
+      val df2 = spark.range(10).select($"id".as("b1"), (- $"id").as("b2"))
+      val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2").select($"b1", $"b2", $"id")
       checkAnswer(res, Row(0, 0, 0))
     }
   }

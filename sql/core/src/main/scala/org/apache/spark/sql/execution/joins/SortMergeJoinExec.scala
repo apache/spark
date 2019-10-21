@@ -161,19 +161,10 @@ case class SortMergeJoinExec(
     sqlContext.conf.sortMergeJoinExecBufferInMemoryThreshold
   }
 
-  private def needEagerCleanup: Boolean = {
-    sqlContext.conf.sortMergeJoinExecEagerCleanupResources
-  }
-
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillThreshold = getSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
-    val cleanupResourceFunc: () => Unit = if (needEagerCleanup) {
-      cleanupResources
-    } else {
-      () => {}
-    }
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val boundCondition: (InternalRow) => Boolean = {
         condition.map { cond =>
@@ -201,7 +192,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResourceFunc
+              cleanupResources
             )
             private[this] val joinRow = new JoinedRow
 
@@ -246,7 +237,7 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(rightIter),
             inMemoryThreshold,
             spillThreshold,
-            cleanupResourceFunc
+            cleanupResources
           )
           val rightNullRow = new GenericInternalRow(right.output.length)
           new LeftOuterIterator(
@@ -261,7 +252,7 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(leftIter),
             inMemoryThreshold,
             spillThreshold,
-            cleanupResourceFunc
+            cleanupResources
           )
           val leftNullRow = new GenericInternalRow(left.output.length)
           new RightOuterIterator(
@@ -296,7 +287,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResourceFunc
+              cleanupResources
             )
             private[this] val joinRow = new JoinedRow
 
@@ -332,7 +323,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResourceFunc
+              cleanupResources
             )
             private[this] val joinRow = new JoinedRow
 
@@ -375,7 +366,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResourceFunc
+              cleanupResources
             )
             private[this] val joinRow = new JoinedRow
 
@@ -655,10 +646,8 @@ case class SortMergeJoinExec(
       (evaluateVariables(leftVars), "")
     }
 
-    val eagerCleanup = if (needEagerCleanup) {
-      val thisPlan = ctx.addReferenceObj("plan", this)
-      s"$thisPlan.cleanupResources();"
-    } else ""
+    val thisPlan = ctx.addReferenceObj("plan", this)
+    val eagerCleanup = s"$thisPlan.cleanupResources();"
 
     s"""
        |while (findNextInnerJoinRows($leftInput, $rightInput)) {
