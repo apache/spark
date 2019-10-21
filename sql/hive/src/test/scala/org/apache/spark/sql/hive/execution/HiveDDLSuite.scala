@@ -769,6 +769,11 @@ class HiveDDLSuite
     }
   }
 
+  private def assertErrorForProcessViewAsTable(sqlText: String): Unit = {
+    val message = intercept[AnalysisException](sql(sqlText)).getMessage
+    assert(message.contains("Invalid command"))
+  }
+
   private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
     val message = intercept[AnalysisException](sql(sqlText)).getMessage
     assert(message.contains("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
@@ -831,13 +836,13 @@ class HiveDDLSuite
 
         assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
+        assertErrorForProcessViewAsTable(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
 
         assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
+        assertErrorForProcessViewAsTable(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
+        assertErrorForProcessViewAsTable(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
 
