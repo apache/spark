@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.regex.Pattern
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -474,4 +476,54 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   }
 
   override def prettyName: String = "str_to_map"
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(text, delimiter [, null_string]) - splits string into array elements using" +
+    " supplied delimiter and optional null string",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('xx~^~yy~^~zz~^~', '~^~', 'yy');
+       [xx,NULL,zz,""]
+  """)
+case class StringToArray(text: Expression, delimiter: Expression, replaced: Expression)
+  extends TernaryExpression with CodegenFallback with ExpectsInputTypes {
+
+  def this(text: Expression, delimiter: Expression) =
+    this(text, delimiter, Literal.create(null, StringType))
+
+  override def prettyName: String = "string_to_array"
+
+  override def children: Seq[Expression] = Seq(text, delimiter, replaced)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
+
+  override def dataType: DataType = ArrayType(StringType, containsNull = true)
+
+  override def eval(input: InternalRow): Any = {
+    val exprs = children
+    val value1 = exprs(0).eval(input)
+    if (value1 != null) {
+      val tempValue2 = exprs(1).eval(input)
+      val value2 = if (tempValue2 == null) UTF8String.EMPTY_UTF8 else tempValue2
+      nullSafeEval(value1, value2, exprs(2).eval(input))
+    } else {
+      null
+    }
+  }
+
+  override def nullSafeEval(string: Any, deli: Any, replaced: Any): Any = {
+    val originalStr = string.asInstanceOf[UTF8String]
+    val quotedDelimiter = Pattern.quote(deli.asInstanceOf[UTF8String].toString)
+    val strings = if (replaced == null) {
+      originalStr.split(UTF8String.fromString(quotedDelimiter), -1)
+    } else {
+      originalStr.toString.split(quotedDelimiter, -1).map {
+        case s if UTF8String.fromString(s).equals(replaced) => null
+        case s => UTF8String.fromString(s)
+      }
+    }
+    val inited = if (UTF8String.EMPTY_UTF8.equals(deli)) strings.init else strings
+    new GenericArrayData(inited.asInstanceOf[Array[Any]])
+  }
 }

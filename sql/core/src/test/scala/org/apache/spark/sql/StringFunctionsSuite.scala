@@ -530,4 +530,33 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
   }
+
+  test("string_to_array function") {
+    val df1 = Seq("xx~^~yy~^~zz~^~").toDF("a")
+
+    checkAnswer(
+      df1.selectExpr("string_to_array(a, '~^~', 'yy')"),
+      Seq(Row(Seq("xx", null, "zz", "")))
+    )
+    checkAnswer(
+      df1.selectExpr("string_to_array(a, '~^~')"),
+      Seq(Row(Seq("xx", "yy", "zz", "")))
+    )
+
+    checkAnswer(
+      df1.selectExpr("string_to_array(a, '~^~', '.*')"),
+      Seq(Row(Seq("xx", "yy", "zz", "")))
+    )
+
+    checkAnswer(
+      df1.selectExpr("string_to_array(a, null, 'y')"),
+      Seq(Row(Seq("x", "x", "~", "^", "~", null, null, "~", "^", "~", "z", "z", "~", "^", "~")))
+    )
+
+    val df2 = Seq(null.asInstanceOf[String]).toDF("a")
+    checkAnswer(df2.selectExpr("string_to_array(a, ',')"), Seq(Row(null)))
+
+    val df3 = Seq("").toDF("a")
+    checkAnswer(df3.selectExpr("string_to_array(a, ',')"), Seq(Row(Seq(""))))
+  }
 }

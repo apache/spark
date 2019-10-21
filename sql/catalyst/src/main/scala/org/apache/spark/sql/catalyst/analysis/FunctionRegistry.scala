@@ -382,6 +382,7 @@ object FunctionRegistry {
     expression[XPathLong]("xpath_long"),
     expression[XPathShort]("xpath_short"),
     expression[XPathString]("xpath_string"),
+    expression[StringToArray]("string_to_array"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
