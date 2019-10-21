@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.benchmark
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.SaveMode.Overwrite
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -36,12 +38,13 @@ import org.apache.spark.sql.internal.SQLConf
  * }}}
  */
 object IntervalBenchmark extends SqlBasedBenchmark {
+  import spark.implicits._
 
-  private def doBenchmark(cardinality: Long, exprs: String*): Unit = {
+  private def doBenchmark(cardinality: Long, exprs: Column*): Unit = {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       spark
         .range(0, cardinality, 1, 1)
-        .selectExpr(exprs: _*)
+        .select(exprs: _*)
         .write
         .format("noop")
         .mode(Overwrite)
@@ -53,22 +56,23 @@ object IntervalBenchmark extends SqlBasedBenchmark {
       benchmark: Benchmark,
       cardinality: Long,
       name: String,
-      exprs: String*): Unit = {
+      exprs: Column*): Unit = {
     benchmark.addCase(name, numIters = 3) { _ =>
       doBenchmark(cardinality, exprs: _*)
     }
   }
 
-  private def buildString(withPrefix: Boolean, units: Seq[String] = Seq.empty): String = {
-    val sep = if (units.length > 0) ", " else ""
-    val otherUnits = s"$sep'${units.mkString(" ")}'"
-    val prefix = if (withPrefix) "'interval'" else "''"
-    s"concat_ws(' ', ${prefix}, cast(id % 10000 AS string), 'years'${otherUnits})"
+  private def buildString(withPrefix: Boolean, units: Seq[String] = Seq.empty): Column = {
+    val init = lit(if (withPrefix) "interval" else "") ::
+      ($"id" % 10000).cast("string") ::
+      lit("years") :: Nil
+
+    concat_ws(" ", (init ++ units.map(lit)): _*)
   }
 
   private def addCase(benchmark: Benchmark, cardinality: Long, units: Seq[String]): Unit = {
     Seq(true, false).foreach { withPrefix =>
-      val expr = s"CAST(${buildString(withPrefix, units)} AS interval)"
+      val expr = buildString(withPrefix, units).cast("interval")
       val note = if (withPrefix) "w/ interval" else "w/o interval"
       benchmark.addCase(s"${units.length + 1} units $note", numIters = 3) { _ =>
         doBenchmark(cardinality, expr)
