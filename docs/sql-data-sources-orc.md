@@ -31,7 +31,7 @@ the vectorized reader is used when `spark.sql.hive.convertMetastoreOrc` is also 
   <tr>
     <td><code>spark.sql.orc.impl</code></td>
     <td><code>native</code></td>
-    <td>The name of ORC implementation. It can be one of <code>native</code> and <code>hive</code>. <code>native</code> means the native ORC support. <code>hive</code> means the ORC library in Hive 1.2.1.</td>
+    <td>The name of ORC implementation. It can be one of <code>native</code> and <code>hive</code>. <code>native</code> means the native ORC support. <code>hive</code> means the ORC library in Hive.</td>
   </tr>
   <tr>
     <td><code>spark.sql.orc.enableVectorizedReader</code></td>
