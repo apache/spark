@@ -75,11 +75,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  override def sparkConf: SparkConf = super.sparkConf
-    // Hive Thrift server should not executes SQL queries in an asynchronous way
-    // because we may set session configuration.
-    .set(HiveUtils.HIVE_THRIFT_SERVER_ASYNC, true)
-
   override val isTestWithConfigSets = false
 
   /** List of test cases to ignore, in lower cases. */
