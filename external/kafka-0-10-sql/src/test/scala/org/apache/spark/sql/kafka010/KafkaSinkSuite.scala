@@ -454,33 +454,6 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
       .toSet
   }
 
-  test("batch - partition column sets partition in kafka writes") {
-    val fixedKey = "fixed_key"
-    val nrPartitions = 4
-
-    val topic = newTopic()
-    testUtils.createTopic(topic, nrPartitions)
-
-    // default Kafka partitioner calculates partitions deterministically based on the key
-    val df = (0 until 5)
-      .map(n => (topic, fixedKey, s"$n"))
-      .toDF("topic", "key", "value")
-    writeToKafka(df, topic)
-    val partitionsForFixedKey = partitionsInTopic(topic)
-    assert(partitionsForFixedKey.size == 1)
-    val keyPartition = partitionsForFixedKey.head
-
-    val topic2 = newTopic()
-    testUtils.createTopic(topic2, nrPartitions)
-
-    val differentPartition = (0 until nrPartitions).find(p => p != keyPartition).get
-    val df2 = df.withColumn("partition", lit(differentPartition))
-    writeToKafka(df2, topic2)
-    val partitions = partitionsInTopic(topic2)
-    assert(partitions.size == 1)
-    assert(partitions.head != keyPartition)
-  }
-
   test("batch - partition column and partitioner priorities") {
     val nrPartitions = 4
     val topic1 = newTopic()
@@ -491,6 +464,9 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
     testUtils.createTopic(topic2, nrPartitions)
     testUtils.createTopic(topic3, nrPartitions)
     testUtils.createTopic(topic4, nrPartitions)
+    val customKafkaPartitionerConf = Map(
+      "kafka.partitioner.class" -> "org.apache.spark.sql.kafka010.TestKafkaPartitioner"
+    )
 
     val df = (0 until 5).map(n => (topic1, s"$n", s"$n")).toDF("topic", "key", "value")
 
@@ -500,18 +476,14 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
     assert(partitionsInTopic1.size > 1)
 
     // custom partitioner (always returns 0) overrides default partitioner
-    writeToKafka(df, topic2, Map(
-      "kafka.partitioner.class" -> "org.apache.spark.sql.kafka010.TestKafkaPartitioner"
-    ))
+    writeToKafka(df, topic2, customKafkaPartitionerConf)
     val partitionsInTopic2 = partitionsInTopic(topic2)
     assert(partitionsInTopic2.size == 1)
     assert(partitionsInTopic2.head == 0)
 
     // partition column overrides custom partitioner
     val dfWithCustomPartition = df.withColumn("partition", lit(2))
-    writeToKafka(dfWithCustomPartition, topic3, Map(
-      "kafka.partitioner.class" -> "org.apache.spark.sql.kafka010.TestKafkaPartitioner"
-    ))
+    writeToKafka(dfWithCustomPartition, topic3, customKafkaPartitionerConf)
     val partitionsInTopic3 = partitionsInTopic(topic3)
     assert(partitionsInTopic3.size == 1)
     assert(partitionsInTopic3.head == 2)
