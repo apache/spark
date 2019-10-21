@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.StructType
 class JoinSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  private def checkCleanupResourceTriggered(plan: SparkPlan): ArrayBuffer[SortExec] = {
+  private def attachCleanupResourceChecker(plan: SparkPlan): Unit = {
     // SPARK-21492: Check cleanupResources are finally triggered in SortExec node for every
     // test case
     val sorts = new ArrayBuffer[SortExec]()
@@ -52,11 +52,10 @@ class JoinSuite extends QueryTest with SharedSparkSession {
       verify(sortExec, atLeastOnce).cleanupResources()
       verify(sortExec.rowSorter, atLeastOnce).cleanupResources()
     }
-    sorts
   }
 
   override protected def checkAnswer(df: => DataFrame, rows: Seq[Row]): Unit = {
-    checkCleanupResourceTriggered(df.queryExecution.sparkPlan)
+    attachCleanupResourceChecker(df.queryExecution.sparkPlan)
     super.checkAnswer(df, rows)
   }
 

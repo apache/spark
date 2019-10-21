@@ -135,7 +135,7 @@ case class SortExec(
   // Name of sorter variable used in codegen.
   private var sorterVariable: String = _
 
-  override protected[sql] def doProduce(ctx: CodegenContext): String = {
+  override protected def doProduce(ctx: CodegenContext): String = {
     val needToSort =
       ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "needToSort", v => s"$v = true;")
 
