@@ -178,9 +178,9 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     emptyDF.createOrReplaceTempView("emptyTable")
 
     // Register UDAs
-    spark.udf.register("mydoublesum", MyDoubleSumAgg)
-    spark.udf.register("mydoubleavg", MyDoubleAvgAgg)
-    spark.udf.register("longProductSum", LongProductSumAgg)
+    spark.udf.registerAggregator("mydoublesum", MyDoubleSumAgg)
+    spark.udf.registerAggregator("mydoubleavg", MyDoubleAvgAgg)
+    spark.udf.registerAggregator("longProductSum", LongProductSumAgg)
   }
 
   override def afterAll(): Unit = {

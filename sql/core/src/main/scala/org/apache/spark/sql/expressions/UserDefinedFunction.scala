@@ -148,8 +148,10 @@ private[sql] case class SparkUserDefinedFunction(
  * {{{
  *   val agg: Aggregator[IN, BUF, OUT] = // typed aggregator
  *   val udaf1 = UserDefinedAggregator(agg)
- *   val udaf2 = spark.udf.register("agg", agg)
+ *   val udaf2 = spark.udf.registerAggregator("agg", agg)
  * }}}
+ *
+ * @since 3.0.0
  */
 case class UserDefinedAggregator[IN: TypeTag, BUF, OUT](
     aggregator: Aggregator[IN, BUF, OUT],

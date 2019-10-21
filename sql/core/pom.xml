@@ -125,6 +125,11 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.isarnproject</groupId>
+      <artifactId>isarn-sketches_${scala.binary.version}</artifactId>
+      <version>0.2.2</version>
+    </dependency>
+    <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
       <version>1.4.195</version>

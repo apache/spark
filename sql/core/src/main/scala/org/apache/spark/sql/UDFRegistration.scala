@@ -80,7 +80,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     udaf
   }
 
-  def register[IN: TypeTag, BUF, OUT](
+  /**
+   * Registers a typed [[Aggregator]] for use with untyped Data Frames
+   *
+   * @param name the name to register under
+   * @param agg the typed Aggregator
+   * @return a UserDefinedAggregator that can be used as an aggregating UDF
+   *
+   * @since 3.0.0
+   */
+  def registerAggregator[IN: TypeTag, BUF, OUT](
       name: String,
       agg: Aggregator[IN, BUF, OUT]): UserDefinedAggregator[IN, BUF, OUT] = {
     val inputEncoder = (ExpressionEncoder[IN]()).resolveAndBind()
