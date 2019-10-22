@@ -325,6 +325,13 @@ case class TruncateTableStatement(
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
+ * A SHOW PARTITIONS statement, as parsed from SQL
+ */
+case class ShowPartitionsStatement(
+    tableName: Seq[String],
+    partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
+
+/**
  * A REFRESH TABLE statement, as parsed from SQL
  */
 case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
