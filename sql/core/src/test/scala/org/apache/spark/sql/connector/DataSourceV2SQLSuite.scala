@@ -1206,6 +1206,21 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("TRUNCATE TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, data string)
+           |USING foo
+           |PARTITIONED BY (id)
+         """.stripMargin)
+
+      testV1Command("TRUNCATE TABLE", t)
+      testV1Command("TRUNCATE TABLE", s"$t PARTITION(id='1')")
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
