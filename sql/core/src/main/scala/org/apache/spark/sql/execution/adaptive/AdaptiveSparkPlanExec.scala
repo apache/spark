@@ -92,6 +92,9 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(conf, subqueryCache),
+    // Here we need put the OptimizeLocalShuffleReader rule before
+    // ReduceNumShufflePartitions rule to avoid the further optimizaiton.
+    OptimizeLocalShuffleReader(conf),
     ReduceNumShufflePartitions(conf),
     ApplyColumnarRulesAndInsertTransitions(session.sessionState.conf,
       session.sessionState.columnarRules),

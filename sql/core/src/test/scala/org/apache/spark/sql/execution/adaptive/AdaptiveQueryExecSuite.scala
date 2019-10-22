@@ -164,7 +164,7 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
       // additional shuffle exchange introduced, only one shuffle reader to local shuffle reader.
-      checkNumLocalShuffleReaders(adaptivePlan, 1)
+      checkNumLocalShuffleReaders(adaptivePlan, 2)
     }
   }
 
