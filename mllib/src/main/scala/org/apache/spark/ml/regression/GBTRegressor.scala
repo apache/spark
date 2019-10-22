@@ -181,6 +181,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       GradientBoostedTrees.run(trainDataset, boostingStrategy,
         $(seed), $(featureSubsetStrategy))
     }
+    baseLearners.foreach(copyValues(_))
 
     val numFeatures = baseLearners.head.numFeatures
     instr.logNumFeatures(numFeatures)

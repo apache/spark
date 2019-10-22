@@ -329,3 +329,10 @@ case class AnalyzeColumnStatement(
  * A REPAIR TABLE statement, as parsed from SQL
  */
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
+
+/**
+ * A TRUNCATE TABLE statement, as parsed from SQL
+ */
+case class TruncateTableStatement(
+    tableName: Seq[String],
+    partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement

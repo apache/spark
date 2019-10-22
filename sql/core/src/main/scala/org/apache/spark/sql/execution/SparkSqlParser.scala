@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Concrete parser for Spark SQL statements.
  */
-class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
+class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
   val astBuilder = new SparkSqlAstBuilder(conf)
 
   private val substitutor = new VariableSubstitution(conf)
@@ -344,20 +344,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       isOverwrite = ctx.OVERWRITE != null,
       partition = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
     )
-  }
-
-  /**
-   * Create a [[TruncateTableCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
-   * }}}
-   */
-  override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
-    TruncateTableCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
   /**

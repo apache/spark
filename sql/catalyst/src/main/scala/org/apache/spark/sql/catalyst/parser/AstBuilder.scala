@@ -2763,4 +2763,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
     RepairTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
   }
+
+  /**
+   * Create a [[TruncateTableStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   TRUNCATE TABLE multi_part_name [PARTITION (partcol1=val1, partcol2=val2 ...)]
+   * }}}
+   */
+  override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
+    TruncateTableStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+  }
 }
