@@ -980,8 +980,8 @@ object SQLConf {
       .createWithDefault(true)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
-    .doc("The maximum number of bytes to pack into a single partition when Spark file-based" +
-      " sources are used to read files.")
+    .doc("The maximum number of bytes to pack into a single partition when Spark file-based " +
+      "sources are used to read files.")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(128 * 1024 * 1024) // parquet.block.size
 
