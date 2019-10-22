@@ -2318,13 +2318,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *   create_namespace_clauses (order insensitive):
    *     [COMMENT namespace_comment]
    *     [LOCATION path]
-   *     [WITH DBPROPERTIES (key1=val1, key2=val2, ...)]
+   *     [WITH PROPERTIES (key1=val1, key2=val2, ...)]
    * }}}
    */
   override def visitCreateNamespace(ctx: CreateNamespaceContext): LogicalPlan = withOrigin(ctx) {
     checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
+    checkDuplicateClauses(ctx.PROPERTIES, "WITH PROPERTIES", ctx)
     checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
+
+    if (!ctx.PROPERTIES.isEmpty() && !ctx.DBPROPERTIES.isEmpty()) {
+      throw new ParseException(s"Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
+    }
 
     var properties = ctx.tablePropertyList.asScala.headOption
       .map(visitPropertyKeyValues)
