@@ -961,6 +961,16 @@ class DDLParserSuite extends AnalysisTest {
       RepairTableStatement(Seq("a", "b", "c")))
   }
 
+  test("TRUNCATE table") {
+    comparePlans(
+      parsePlan("TRUNCATE TABLE a.b.c"),
+      TruncateTableStatement(Seq("a", "b", "c"), None))
+
+    comparePlans(
+      parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
+      TruncateTableStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10"))))
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],

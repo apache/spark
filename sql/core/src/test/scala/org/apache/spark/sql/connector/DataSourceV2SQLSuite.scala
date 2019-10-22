@@ -1210,6 +1210,28 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("TRUNCATE TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, data string)
+           |USING foo
+           |PARTITIONED BY (id)
+         """.stripMargin)
+
+      val e1 = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t")
+      }
+      assert(e1.message.contains("TRUNCATE TABLE is only supported with v1 tables"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t PARTITION(id='1')")
+      }
+      assert(e2.message.contains("TRUNCATE TABLE is only supported with v1 tables"))
+    }
+  }
+
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
     val errMsg = intercept[AnalysisException] {
       sql(sqlStatement)
