@@ -104,4 +104,8 @@ class StreamingQueryWrapper(@transient private val _streamingQuery: StreamExecut
   override def exception: Option[StreamingQueryException] = {
     streamingQuery.exception
   }
+
+  override def getTotalInputRecords: Long = {
+    streamingQuery.getTotalInputRecords
+  }
 }

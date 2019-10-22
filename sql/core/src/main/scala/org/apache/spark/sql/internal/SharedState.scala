@@ -18,8 +18,8 @@
 package org.apache.spark.sql.internal
 
 import java.net.URL
-import java.util.Locale
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
 
@@ -111,6 +112,11 @@ private[sql] class SharedState(
   val cacheManager: CacheManager = new CacheManager
 
   /**
+   * Class for caching streaming query instance.
+   */
+  val streamingQueryCache = new mutable.HashSet[(StreamingQuery, Long)]
+
+  /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
    * [[org.apache.spark.scheduler.SparkListenerEvent]]s.
    */
@@ -119,7 +125,7 @@ private[sql] class SharedState(
     val listener = new SQLAppStatusListener(conf, kvStore, live = true)
     sparkContext.listenerBus.addToStatusQueue(listener)
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
-    sparkContext.ui.foreach(new SQLTab(statusStore, _))
+    sparkContext.ui.foreach(new SQLTab(statusStore, Some(streamingQueryCache), _))
     statusStore
   }
 

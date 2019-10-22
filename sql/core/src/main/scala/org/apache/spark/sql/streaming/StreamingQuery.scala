@@ -161,4 +161,9 @@ trait StreamingQuery {
    * @since 2.0.0
    */
   def explain(extended: Boolean): Unit
+
+  /**
+   * Returns the total input records of this streaming query.
+   */
+  def getTotalInputRecords: Long
 }

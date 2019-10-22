@@ -17,16 +17,25 @@
 
 package org.apache.spark.sql.execution.ui
 
+import scala.collection.mutable.HashSet
+
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.streaming.ui.{StreamingQueryPage, StreamingQueryStatisticsPage}
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
+class SQLTab(
+    val sqlStore: SQLAppStatusStore,
+    val streamQueryCache: Option[HashSet[(StreamingQuery, Long)]],
+    sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "SQL") with Logging {
 
   val parent = sparkUI
 
   attachPage(new AllExecutionsPage(this))
   attachPage(new ExecutionPage(this))
+  attachPage(new StreamingQueryPage(this, streamQueryCache))
+  attachPage(new StreamingQueryStatisticsPage(this, streamQueryCache))
   parent.attachTab(this)
 
   parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")

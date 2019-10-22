@@ -15,22 +15,52 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.ui
 
-import org.apache.spark.SparkConf
-import org.apache.spark.scheduler.SparkListener
-import org.apache.spark.status.{AppHistoryServerPlugin, ElementTrackingStore}
-import org.apache.spark.ui.SparkUI
+.graph {
+  font: 10px sans-serif;
+}
 
-class SQLHistoryServerPlugin extends AppHistoryServerPlugin {
-  override def createListeners(conf: SparkConf, store: ElementTrackingStore): Seq[SparkListener] = {
-    Seq(new SQLAppStatusListener(conf, store, live = false))
-  }
+.axis path, .axis line {
+  fill: none;
+  stroke: gray;
+  shape-rendering: crispEdges;
+}
 
-  override def setupUI(ui: SparkUI): Unit = {
-    val sqlStatusStore = new SQLAppStatusStore(ui.store.store)
-    if (sqlStatusStore.executionsCount() > 0) {
-      new SQLTab(sqlStatusStore, None, ui)
-    }
-  }
+.axis text {
+  fill: gray;
+}
+
+.tooltip-inner {
+  max-width: 500px !important; /* Make sure we only have one line tooltip */
+}
+
+.line {
+  fill: none;
+  stroke: #0088cc;
+  stroke-width: 1.5px;
+}
+
+.bar rect {
+  fill: #0088cc;
+  shape-rendering: crispEdges;
+}
+
+.bar rect:hover {
+  fill: #00c2ff;
+}
+
+.timeline {
+  width: 500px;
+}
+
+.histogram {
+  width: auto;
+}
+
+span.expand-input-rate {
+  cursor: pointer;
+}
+
+tr.batch-table-cell-highlight > td {
+  background-color: #D6FFE4 !important;
 }

@@ -81,6 +81,9 @@ trait ProgressReporter extends Logging {
   /** Holds the most recent query progress updates.  Accesses must lock on the queue itself. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
 
+  /** Count the total input records of this streaming query. */
+  private var totalInputRecords = 0L
+
   private val noDataProgressEventInterval =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
 
@@ -110,6 +113,8 @@ trait ProgressReporter extends Logging {
   def lastProgress: StreamingQueryProgress = progressBuffer.synchronized {
     progressBuffer.lastOption.orNull
   }
+
+  def getTotalInputRecords: Long = totalInputRecords
 
   /** Begins recording statistics about query progress for a given trigger. */
   protected def startTrigger(): Unit = {
@@ -159,6 +164,7 @@ trait ProgressReporter extends Logging {
 
     val sourceProgress = sources.distinct.map { source =>
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
+      totalInputRecords += numRecords
       new SourceProgress(
         description = source.toString,
         startOffset = currentTriggerStartOffsets.get(source).orNull,
@@ -179,6 +185,7 @@ trait ProgressReporter extends Logging {
       name = name,
       timestamp = formatTimestamp(currentTriggerStartTimestamp),
       batchId = currentBatchId,
+      batchDuration = currentTriggerEndTimestamp - currentTriggerStartTimestamp,
       durationMs = new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).asJava),
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
