@@ -75,6 +75,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var principal: String = null
   var keytab: String = null
   private var dynamicAllocationEnabled: Boolean = false
+  var redirectSystemPrintStream: Boolean = false
 
   // Standalone cluster mode only
   var supervise: Boolean = false
@@ -208,6 +209,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orNull
     dynamicAllocationEnabled =
       sparkProperties.get(DYN_ALLOCATION_ENABLED.key).exists("true".equalsIgnoreCase)
+    redirectSystemPrintStream =
+      sparkProperties.get("spark.printstream.redirect").exists("true".equalsIgnoreCase)
 
     // Global defaults. These should be keep to minimum to avoid confusing behavior.
     master = Option(master).getOrElse("local[*]")

@@ -51,7 +51,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBibl
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -614,6 +614,8 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         confKey = DRIVER_SUPERVISE.key),
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, confKey = "spark.jars.ivy"),
+      OptionAssigner(args.redirectSystemPrintStream.toString, STANDALONE | MESOS | YARN | KUBERNETES,
+        ALL_DEPLOY_MODES, confKey = "spark.printstream.redirect"),
 
       // An internal option used only for spark-shell to add user jars to repl's classloader,
       // previously it uses "spark.jars" or "spark.yarn.dist.jars" which now may be pointed to
@@ -925,7 +927,9 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     try {
-      app.start(childArgs.toArray, sparkConf)
+      LoggingPrintStream.withOutSystem(
+        sparkConf.getBoolean("spark.printstream.redirect", false),
+        app.start(childArgs.toArray, sparkConf))
     } catch {
       case t: Throwable =>
         throw findCause(t)

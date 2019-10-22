@@ -32,7 +32,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils._
@@ -297,14 +297,18 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       driverConf.set(EXECUTOR_ID, arguments.executorId)
-      val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.hostname,
-        arguments.cores, cfg.ioEncryptionKey, isLocal = false)
+      LoggingPrintStream.withOutSystem(
+        driverConf.getBoolean("spark.printstream.redirect", false),
+        {
+          val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.hostname,
+            arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
-      env.rpcEnv.setupEndpoint("Executor", backendCreateFn(env.rpcEnv, arguments, env))
-      arguments.workerUrl.foreach { url =>
-        env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
-      }
-      env.rpcEnv.awaitTermination()
+          env.rpcEnv.setupEndpoint("Executor", backendCreateFn(env.rpcEnv, arguments, env))
+          arguments.workerUrl.foreach { url =>
+            env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
+          }
+          env.rpcEnv.awaitTermination()
+        })
     }
   }
 
