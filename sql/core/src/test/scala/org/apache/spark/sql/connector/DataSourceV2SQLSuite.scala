@@ -1232,6 +1232,28 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SHOW PARTITIONS") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, data string)
+           |USING foo
+           |PARTITIONED BY (id)
+         """.stripMargin)
+
+      val e1 = intercept[AnalysisException] {
+        val partition = sql(s"SHOW PARTITIONS $t")
+      }
+      assert(e1.message.contains("SHOW PARTITIONS is only supported with v1 tables"))
+
+      val e2 = intercept[AnalysisException] {
+        val partition2 = sql(s"SHOW PARTITIONS $t PARTITION(id='1')")
+      }
+      assert(e2.message.contains("SHOW PARTITIONS is only supported with v1 tables"))
+    }
+  }
+
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
     val errMsg = intercept[AnalysisException] {
       sql(sqlStatement)
