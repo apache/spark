@@ -97,6 +97,13 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
       for (_ <- 0 until slots) {
         addresses.foreach(addr => info.acquire(Seq(addr)))
       }
+
+      // assert that each address was assigned `slots` times
+      info.assignedAddrs
+        .groupBy(identity)
+        .mapValues(_.size)
+        .foreach(x => assert(x._2 == slots))
+
       addresses.foreach { addr =>
         assertThrows[SparkException] {
           info.acquire(Seq(addr))
