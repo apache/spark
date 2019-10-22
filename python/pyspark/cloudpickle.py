@@ -77,13 +77,6 @@ _DYNAMIC_CLASS_TRACKER_BY_CLASS = weakref.WeakKeyDictionary()
 _DYNAMIC_CLASS_TRACKER_BY_ID = weakref.WeakValueDictionary()
 _DYNAMIC_CLASS_TRACKER_LOCK = threading.Lock()
 
-PYPY = platform.python_implementation() == "PyPy"
-
-builtin_code_type = None
-if PYPY:
-    # builtin-code objects only exist in pypy
-    builtin_code_type = type(float.__new__.__code__)
-
 if sys.version_info[0] < 3:  # pragma: no branch
     from pickle import Pickler
     try:
@@ -460,39 +453,11 @@ class CloudPickler(Pickler):
         Determines what kind of function obj is (e.g. lambda, defined at
         interactive prompt, etc) and handles the pickling appropriately.
         """
-        if _is_global(obj, name=name):
-            return Pickler.save_global(self, obj, name=name)
-        elif PYPY and isinstance(obj.__code__, builtin_code_type):
-            return self.save_pypy_builtin_func(obj)
-        else:
+        if not _is_global(obj, name=name):
             return self.save_function_tuple(obj)
+        return Pickler.save_global(self, obj, name=name)
 
     dispatch[types.FunctionType] = save_function
-
-    def save_pypy_builtin_func(self, obj):
-        """Save pypy equivalent of builtin functions.
-
-        PyPy does not have the concept of builtin-functions. Instead,
-        builtin-functions are simple function instances, but with a
-        builtin-code attribute.
-        Most of the time, builtin functions should be pickled by attribute. But
-        PyPy has flaky support for __qualname__, so some builtin functions such
-        as float.__new__ will be classified as dynamic. For this reason only,
-        we created this special routine. Because builtin-functions are not
-        expected to have closure or globals, there is no additional hack
-        (compared the one already implemented in pickle) to protect ourselves
-        from reference cycles. A simple (reconstructor, newargs, obj.__dict__)
-        tuple is save_reduced.
-
-        Note also that PyPy improved their support for __qualname__ in v3.6, so
-        this routing should be removed when cloudpickle supports only PyPy 3.6
-        and later.
-        """
-        rv = (types.FunctionType, (obj.__code__, {}, obj.__name__,
-                                   obj.__defaults__, obj.__closure__),
-              obj.__dict__)
-        self.save_reduce(*rv, obj=obj)
-
 
     def _save_subimports(self, code, top_level_dependencies):
         """
@@ -711,7 +676,10 @@ class CloudPickler(Pickler):
         write(pickle.TUPLE)
         write(pickle.REDUCE)  # applies _fill_function on the tuple
 
-    _extract_code_globals_cache = weakref.WeakKeyDictionary()
+    _extract_code_globals_cache = (
+        weakref.WeakKeyDictionary()
+        if not hasattr(sys, "pypy_version_info")
+        else {})
 
     @classmethod
     def extract_code_globals(cls, co):
@@ -720,14 +688,19 @@ class CloudPickler(Pickler):
         """
         out_names = cls._extract_code_globals_cache.get(co)
         if out_names is None:
-            names = co.co_names
-            out_names = {names[oparg] for _, oparg in _walk_global_ops(co)}
+            try:
+                names = co.co_names
+            except AttributeError:
+                # PyPy "builtin-code" object
+                out_names = set()
+            else:
+                out_names = {names[oparg] for _, oparg in _walk_global_ops(co)}
 
-            # see if nested function have any global refs
-            if co.co_consts:
-                for const in co.co_consts:
-                    if isinstance(const, types.CodeType):
-                        out_names |= cls.extract_code_globals(const)
+                # see if nested function have any global refs
+                if co.co_consts:
+                    for const in co.co_consts:
+                        if type(const) is types.CodeType:
+                            out_names |= cls.extract_code_globals(const)
 
             cls._extract_code_globals_cache[co] = out_names
 
