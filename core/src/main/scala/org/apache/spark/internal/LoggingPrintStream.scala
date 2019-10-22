@@ -86,7 +86,7 @@ private[spark] class LoggingPrintStream(out: OutputStream) extends PrintStream(o
   }
 
   override def println(s: String) {
-    logInfo("++++Print+++" + s)
+    logInfo(s)
   }
 
   override def println(obj: Object) {
