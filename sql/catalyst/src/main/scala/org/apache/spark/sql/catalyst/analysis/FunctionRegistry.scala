@@ -486,6 +486,7 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method"),
+    expression[Version]("version"),
 
     // grouping sets
     expression[Cube]("cube"),

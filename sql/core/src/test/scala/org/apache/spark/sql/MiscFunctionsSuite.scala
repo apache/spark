@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark._
 import org.apache.spark.sql.test.SharedSparkSession
 
 class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
@@ -30,6 +31,12 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
         s"reflect('$className', 'method1', a, b)",
         s"java_method('$className', 'method1', a, b)"),
       Row("m1one", "m1one"))
+  }
+
+  test("version") {
+    checkAnswer(
+      Seq("").toDF("a").selectExpr("version()"),
+      Row(SPARK_VERSION + " " + SPARK_REVISION))
   }
 }
 
