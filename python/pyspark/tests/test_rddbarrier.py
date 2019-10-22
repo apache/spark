@@ -32,10 +32,10 @@ class RDDBarrierTests(ReusedPySparkTestCase):
         self.assertFalse(rdd._is_barrier())
 
         def f(index, iterator):
-            yield index + sum(iterator)
+            yield index
         rdd1 = rdd.barrier().mapPartitionsWithIndex(f)
         self.assertTrue(rdd1._is_barrier())
-        self.assertEqual(rdd1.collect(), [3, 13, 23, 33])
+        self.assertEqual(rdd1.collect(), [0, 1, 2, 3])
 
 
 if __name__ == "__main__":
