@@ -106,6 +106,9 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <!-- Although SPARK-28737 upgraded Jersey to 2.29 for JDK11, 'com.spotify.docker-client' still
+      uses this repackaged 'jersey-guava'. We add this back for JDK8. For JDK11, TODO(SPARK-29547)
+      is tracking this. -->
     <dependency>
       <groupId>org.glassfish.jersey.bundles.repackaged</groupId>
       <artifactId>jersey-guava</artifactId>
