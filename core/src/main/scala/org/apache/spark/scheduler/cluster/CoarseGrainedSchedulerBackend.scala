@@ -69,8 +69,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
   private val createTimeNs = System.nanoTime()
 
-  private val taskResources =
-    scheduler.resourcesReqsPerTask.map(req => req.resourceName -> req).toMap
+  private val taskResources: Map[String, ResourceRequirement] =
+    if (scheduler.resourcesReqsPerTask != null) {
+      scheduler.resourcesReqsPerTask.map(req => req.resourceName -> req).toMap
+    } else {
+      Map.empty
+    }
 
   // Accessing `executorDataMap` in the inherited methods from ThreadSafeRpcEndpoint doesn't need
   // any protection. But accessing `executorDataMap` out of the inherited methods must be
