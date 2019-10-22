@@ -99,7 +99,7 @@ case class BitOrAgg(child: Expression) extends DeclarativeAggregate with Expects
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the bitwise OR of all non-null input values, or null if none.",
+  usage = "_FUNC_(expr) - Returns the bitwise XOR of all non-null input values, or null if none.",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (3), (5) AS tab(col);
