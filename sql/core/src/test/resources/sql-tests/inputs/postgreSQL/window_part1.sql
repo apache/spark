@@ -5,33 +5,38 @@
 
 CREATE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1;
 
-CREATE TABLE empsalary (
-    depname string,
-    empno integer,
-    salary int,
-    enroll_date date
-) USING parquet;
+-- [SPARK-29540] Thrift in some cases can't parse string to date
+-- CREATE TABLE empsalary (
+--     depname string,
+--     empno integer,
+--     salary int,
+--     enroll_date date
+-- ) USING parquet;
 
-INSERT INTO empsalary VALUES ('develop', 10, 5200, '2007-08-01');
-INSERT INTO empsalary VALUES ('sales', 1, 5000, '2006-10-01');
-INSERT INTO empsalary VALUES ('personnel', 5, 3500, '2007-12-10');
-INSERT INTO empsalary VALUES ('sales', 4, 4800, '2007-08-08');
-INSERT INTO empsalary VALUES ('personnel', 2, 3900, '2006-12-23');
-INSERT INTO empsalary VALUES ('develop', 7, 4200, '2008-01-01');
-INSERT INTO empsalary VALUES ('develop', 9, 4500, '2008-01-01');
-INSERT INTO empsalary VALUES ('sales', 3, 4800, '2007-08-01');
-INSERT INTO empsalary VALUES ('develop', 8, 6000, '2006-10-01');
-INSERT INTO empsalary VALUES ('develop', 11, 5200, '2007-08-15');
+-- [SPARK-29540] Thrift in some cases can't parse string to date
+-- INSERT INTO empsalary VALUES ('develop', 10, 5200, '2007-08-01');
+-- INSERT INTO empsalary VALUES ('sales', 1, 5000, '2006-10-01');
+-- INSERT INTO empsalary VALUES ('personnel', 5, 3500, '2007-12-10');
+-- INSERT INTO empsalary VALUES ('sales', 4, 4800, '2007-08-08');
+-- INSERT INTO empsalary VALUES ('personnel', 2, 3900, '2006-12-23');
+-- INSERT INTO empsalary VALUES ('develop', 7, 4200, '2008-01-01');
+-- INSERT INTO empsalary VALUES ('develop', 9, 4500, '2008-01-01');
+-- INSERT INTO empsalary VALUES ('sales', 3, 4800, '2007-08-01');
+-- INSERT INTO empsalary VALUES ('develop', 8, 6000, '2006-10-01');
+-- INSERT INTO empsalary VALUES ('develop', 11, 5200, '2007-08-15');
 
-SELECT depname, empno, salary, sum(salary) OVER (PARTITION BY depname) FROM empsalary ORDER BY depname, salary;
+-- [SPARK-29540] Thrift in some cases can't parse string to date
+-- SELECT depname, empno, salary, sum(salary) OVER (PARTITION BY depname) FROM empsalary ORDER BY depname, salary;
 
-SELECT depname, empno, salary, rank() OVER (PARTITION BY depname ORDER BY salary) FROM empsalary;
+-- [SPARK-29540] Thrift in some cases can't parse string to date
+-- SELECT depname, empno, salary, rank() OVER (PARTITION BY depname ORDER BY salary) FROM empsalary;
 
 -- with GROUP BY
 SELECT four, ten, SUM(SUM(four)) OVER (PARTITION BY four), AVG(ten) FROM tenk1
 GROUP BY four, ten ORDER BY four, ten;
 
-SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
+-- [SPARK-29540] Thrift in some cases can't parse string to date
+-- SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
 
 -- [SPARK-28064] Order by does not accept a call to rank()
 -- SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY rank() OVER w;
@@ -112,15 +117,17 @@ SELECT avg(four) OVER (PARTITION BY four ORDER BY thousand / 100) FROM tenk1 WHE
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER win AS wsum
 FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
 
+-- [SPARK-29540] Thrift in some cases can't parse string to date
 -- more than one window with GROUP BY
-SELECT sum(salary),
-  row_number() OVER (ORDER BY depname),
-  sum(sum(salary)) OVER (ORDER BY depname DESC)
-FROM empsalary GROUP BY depname;
+-- SELECT sum(salary),
+--   row_number() OVER (ORDER BY depname),
+--   sum(sum(salary)) OVER (ORDER BY depname DESC)
+-- FROM empsalary GROUP BY depname;
 
+-- [SPARK-29540] Thrift in some cases can't parse string to date
 -- identical windows with different names
-SELECT sum(salary) OVER w1, count(*) OVER w2
-FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
+-- SELECT sum(salary) OVER w1, count(*) OVER w2
+-- FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 
 -- subplan
 -- [SPARK-28379] Correlated scalar subqueries must be aggregated
@@ -130,8 +137,9 @@ FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 -- empty table
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s;
 
+-- [SPARK-29540] Thrift in some cases can't parse string to date
 -- mixture of agg/wfunc in the same window
-SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
+-- SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
 
 -- Cannot safely cast 'enroll_date': StringType to DateType;
 -- SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
@@ -338,6 +346,7 @@ SELECT * FROM v_window;
 -- SELECT * FROM v_window;
 
 DROP VIEW v_window;
-DROP TABLE empsalary;
+-- [SPARK-29540] Thrift in some cases can't parse string to date
+-- DROP TABLE empsalary;
 DROP VIEW tenk2;
 DROP VIEW int4_tbl;
