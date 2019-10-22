@@ -65,8 +65,7 @@ private[spark] case class ResourceRequest(
 private[spark] case class ResourceRequirement(
     resourceName: String,
     amount: Int,
-    numParts: Int = 1) {
-}
+    numParts: Int = 1)
 
 /**
  * Case class representing allocated resource addresses for a specific resource.
