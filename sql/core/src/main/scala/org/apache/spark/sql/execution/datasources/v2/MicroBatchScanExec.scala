@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 
 /**
  * Physical plan node for scanning a micro-batch of data from a data source.
@@ -46,6 +46,6 @@ case class MicroBatchScanExec(
   override lazy val readerFactory: PartitionReaderFactory = stream.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
+    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar)
   }
 }

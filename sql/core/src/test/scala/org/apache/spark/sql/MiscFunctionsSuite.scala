@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
+class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("reflect and java_method") {

@@ -59,7 +59,7 @@ struct<>
 -- !query 6
 SELECT tb.* FROM ta INNER JOIN tb ON ta.a = tb.a AND ta.tag = tb.tag
 -- !query 6 schema
-struct<a:string,tag:string>
+struct<a:int,tag:string>
 -- !query 6 output
 1	a
 1	a

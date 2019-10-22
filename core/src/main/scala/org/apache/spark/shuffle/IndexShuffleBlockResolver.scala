@@ -51,18 +51,18 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-  def getDataFile(shuffleId: Int, mapId: Int): File = {
+  def getDataFile(shuffleId: Int, mapId: Long): File = {
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
-  private def getIndexFile(shuffleId: Int, mapId: Int): File = {
+  private def getIndexFile(shuffleId: Int, mapId: Long): File = {
     blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
   /**
    * Remove data file and index file that contain the output data from one map.
    */
-  def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
+  def removeDataByMap(shuffleId: Int, mapId: Long): Unit = {
     var file = getDataFile(shuffleId, mapId)
     if (file.exists()) {
       if (!file.delete()) {
@@ -135,7 +135,7 @@ private[spark] class IndexShuffleBlockResolver(
    */
   def writeIndexFileAndCommit(
       shuffleId: Int,
-      mapId: Int,
+      mapId: Long,
       lengths: Array[Long],
       dataTmp: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
@@ -190,10 +190,18 @@ private[spark] class IndexShuffleBlockResolver(
     }
   }
 
-  override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
+  override def getBlockData(blockId: BlockId): ManagedBuffer = {
+    val (shuffleId, mapId, startReduceId, endReduceId) = blockId match {
+      case id: ShuffleBlockId =>
+        (id.shuffleId, id.mapId, id.reduceId, id.reduceId + 1)
+      case batchId: ShuffleBlockBatchId =>
+        (batchId.shuffleId, batchId.mapId, batchId.startReduceId, batchId.endReduceId)
+      case _ =>
+        throw new IllegalArgumentException("unexpected shuffle block id format: " + blockId)
+    }
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
-    val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
+    val indexFile = getIndexFile(shuffleId, mapId)
 
     // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
     // which is incorrectly using our file descriptor then this code will fetch the wrong offsets
@@ -202,22 +210,23 @@ private[spark] class IndexShuffleBlockResolver(
     // class of issue from re-occurring in the future which is why they are left here even though
     // SPARK-22982 is fixed.
     val channel = Files.newByteChannel(indexFile.toPath)
-    channel.position(blockId.reduceId * 8L)
+    channel.position(startReduceId * 8L)
     val in = new DataInputStream(Channels.newInputStream(channel))
     try {
-      val offset = in.readLong()
-      val nextOffset = in.readLong()
+      val startOffset = in.readLong()
+      channel.position(endReduceId * 8L)
+      val endOffset = in.readLong()
       val actualPosition = channel.position()
-      val expectedPosition = blockId.reduceId * 8L + 16
+      val expectedPosition = endReduceId * 8L + 8
       if (actualPosition != expectedPosition) {
         throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
           s"expected $expectedPosition but actual position was $actualPosition.")
       }
       new FileSegmentManagedBuffer(
         transportConf,
-        getDataFile(blockId.shuffleId, blockId.mapId),
-        offset,
-        nextOffset - offset)
+        getDataFile(shuffleId, mapId),
+        startOffset,
+        endOffset - startOffset)
     } finally {
       in.close()
     }

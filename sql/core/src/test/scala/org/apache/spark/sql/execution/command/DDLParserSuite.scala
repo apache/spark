@@ -35,10 +35,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, Log
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-class DDLParserSuite extends AnalysisTest with SharedSQLContext {
+class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   private lazy val parser = new SparkSqlParser(new SQLConf)
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
@@ -182,6 +182,15 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
     assertUnsupported(
       sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
+  }
+
+  test("alter database set location") {
+    // ALTER (DATABASE|SCHEMA) database_name SET LOCATION
+    val sql1 = "ALTER DATABASE database_name SET LOCATION '/home/user/db'"
+    val parsed1 = parser.parsePlan(sql1)
+
+    val expected1 = AlterDatabaseSetLocationCommand("database_name", "/home/user/db")
+    comparePlans(parsed1, expected1)
   }
 
   test("describe database") {
@@ -800,17 +809,6 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
        |ALTER TABLE table_name REPLACE COLUMNS (new_col1 INT
        |COMMENT 'test_comment', new_col2 LONG COMMENT 'test_comment2') RESTRICT
       """.stripMargin)
-  }
-
-  test("show databases") {
-    val sql1 = "SHOW DATABASES"
-    val sql2 = "SHOW DATABASES LIKE 'defau*'"
-    val parsed1 = parser.parsePlan(sql1)
-    val expected1 = ShowDatabasesCommand(None)
-    val parsed2 = parser.parsePlan(sql2)
-    val expected2 = ShowDatabasesCommand(Some("defau*"))
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
   }
 
   test("show tblproperties") {
@@ -1444,15 +1442,6 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
     val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
     intercept(sql1, "Found duplicate clauses: COMMENT")
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
-  }
-
-  test("MSCK REPAIR table") {
-    val sql = "MSCK REPAIR TABLE tab1"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRecoverPartitionsCommand(
-      TableIdentifier("tab1", None),
-      "MSCK REPAIR TABLE")
-    comparePlans(parsed, expected)
   }
 
   test("create table like") {

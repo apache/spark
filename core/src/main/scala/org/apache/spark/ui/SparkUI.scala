@@ -66,6 +66,9 @@ private[spark] class SparkUI private (
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
     attachHandler(ApiRootResource.getServletHandler(this))
+    if (sc.map(_.conf.get(UI_PROMETHEUS_ENABLED)).getOrElse(false)) {
+      attachHandler(PrometheusResource.getServletHandler(this))
+    }
 
     // These should be POST only, but, the YARN AM proxy won't proxy POSTs
     attachHandler(createRedirectHandler(
@@ -94,7 +97,7 @@ private[spark] class SparkUI private (
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
-  override def stop() {
+  override def stop(): Unit = {
     super.stop()
     logInfo(s"Stopped Spark web UI at $webUrl")
   }
@@ -138,6 +141,9 @@ private[spark] class SparkUI private (
     streamingJobProgressListener = Option(sparkListener)
   }
 
+  def clearStreamingJobProgressListener(): Unit = {
+    streamingJobProgressListener = None
+  }
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)

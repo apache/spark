@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * (private[classification])  Params for probabilistic classification.
  */
-private[classification] trait ProbabilisticClassifierParams
+private[ml] trait ProbabilisticClassifierParams
   extends ClassifierParams with HasProbabilityCol with HasThresholds {
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -147,8 +147,8 @@ abstract class ProbabilisticClassificationModel[
     }
 
     if (numColsOutput == 0) {
-      this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() does nothing" +
+        " because no output columns were set.")
     }
     outputData.toDF
   }

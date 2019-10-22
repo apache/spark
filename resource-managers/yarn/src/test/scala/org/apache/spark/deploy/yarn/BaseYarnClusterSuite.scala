@@ -63,7 +63,7 @@ abstract class BaseYarnClusterSuite
 
   def newYarnConfig(): YarnConfiguration
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
 
     tempDir = Utils.createTempDir()
@@ -115,7 +115,7 @@ abstract class BaseYarnClusterSuite
     File.createTempFile("token", ".txt", hadoopConfDir)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       yarnCluster.stop()
     } finally {

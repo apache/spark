@@ -45,7 +45,7 @@ public class ExternalShuffleSecuritySuite {
 
   @Before
   public void beforeEach() throws IOException {
-    transportContext = new TransportContext(conf, new ExternalShuffleBlockHandler(conf, null));
+    transportContext = new TransportContext(conf, new ExternalBlockHandler(conf, null));
     TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf,
         new TestSecretKeyHolder("my-app-id", "secret"));
     this.server = transportContext.createServer(Arrays.asList(bootstrap));
@@ -91,7 +91,7 @@ public class ExternalShuffleSecuritySuite {
     validate("my-app-id", "secret", true);
   }
 
-  /** Creates an ExternalShuffleClient and attempts to register with the server. */
+  /** Creates an ExternalBlockStoreClient and attempts to register with the server. */
   private void validate(String appId, String secretKey, boolean encrypt)
         throws IOException, InterruptedException {
     TransportConf testConf = conf;
@@ -100,8 +100,8 @@ public class ExternalShuffleSecuritySuite {
         ImmutableMap.of("spark.authenticate.enableSaslEncryption", "true")));
     }
 
-    try (ExternalShuffleClient client =
-        new ExternalShuffleClient(
+    try (ExternalBlockStoreClient client =
+        new ExternalBlockStoreClient(
           testConf, new TestSecretKeyHolder(appId, secretKey), true, 5000)) {
       client.init(appId);
       // Registration either succeeds or throws an exception.

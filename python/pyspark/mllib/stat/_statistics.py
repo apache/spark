@@ -98,10 +98,10 @@ class Statistics(object):
         """
         Compute the correlation (matrix) for the input RDD(s) using the
         specified method.
-        Methods currently supported: I{pearson (default), spearman}.
+        Methods currently supported: `pearson (default), spearman`.
 
         If a single RDD of Vectors is passed in, a correlation matrix
-        comparing the columns in the input RDD is returned. Use C{method=}
+        comparing the columns in the input RDD is returned. Use `method`
         to specify the method to be used for single RDD inout.
         If two RDDs of floats are passed in, a single float is returned.
 

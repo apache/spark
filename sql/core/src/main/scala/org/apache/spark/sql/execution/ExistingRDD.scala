@@ -69,9 +69,8 @@ case class ExternalRDDScanExec[T](
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val outputDataType = outputObjAttr.dataType
     rdd.mapPartitionsInternal { iter =>
-      val outputObject = ObjectOperator.wrapObjectToRow(outputDataType)
+      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
       iter.map { value =>
         numOutputRows += 1
         outputObject(value)

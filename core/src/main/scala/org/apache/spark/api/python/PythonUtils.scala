@@ -81,4 +81,8 @@ private[spark] object PythonUtils {
   def isEncryptionEnabled(sc: JavaSparkContext): Boolean = {
     sc.conf.get(org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED)
   }
+
+  def getBroadcastThreshold(sc: JavaSparkContext): Long = {
+    sc.conf.get(org.apache.spark.internal.config.BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD)
+  }
 }

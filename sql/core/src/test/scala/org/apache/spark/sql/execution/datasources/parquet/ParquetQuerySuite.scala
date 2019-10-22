@@ -33,14 +33,14 @@ import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStru
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
  * A test suite that tests various Parquet queries.
  */
-abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext {
+abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSparkSession {
   import testImplicits._
 
   test("simple select queries") {
@@ -162,9 +162,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   test("SPARK-10634 timestamp written and read as INT64 - truncation") {
     withTable("ts") {
       sql("create table ts (c1 int, c2 timestamp) using parquet")
-      sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
+      sql("insert into ts values (1, timestamp'2016-01-01 10:11:12.123456')")
       sql("insert into ts values (2, null)")
-      sql("insert into ts values (3, '1965-01-01 10:11:12.123456')")
+      sql("insert into ts values (3, timestamp'1965-01-01 10:11:12.123456')")
       val expected = Seq(
         (1, "2016-01-01 10:11:12.123456"),
         (2, null),
@@ -177,13 +177,13 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     withTable("ts") {
       withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
         sql("create table ts (c1 int, c2 timestamp) using parquet")
-        sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
+        sql("insert into ts values (1, timestamp'2016-01-01 10:11:12.123456')")
         sql("insert into ts values (2, null)")
-        sql("insert into ts values (3, '1965-01-01 10:11:12.125456')")
-        sql("insert into ts values (4, '1965-01-01 10:11:12.125')")
-        sql("insert into ts values (5, '1965-01-01 10:11:12.1')")
-        sql("insert into ts values (6, '1965-01-01 10:11:12.123456789')")
-        sql("insert into ts values (7, '0001-01-01 00:00:00.000000')")
+        sql("insert into ts values (3, timestamp'1965-01-01 10:11:12.125456')")
+        sql("insert into ts values (4, timestamp'1965-01-01 10:11:12.125')")
+        sql("insert into ts values (5, timestamp'1965-01-01 10:11:12.1')")
+        sql("insert into ts values (6, timestamp'1965-01-01 10:11:12.123456789')")
+        sql("insert into ts values (7, timestamp'0001-01-01 00:00:00.000000')")
         val expected = Seq(
           (1, "2016-01-01 10:11:12.123"),
           (2, null),
@@ -911,8 +911,7 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "parquet")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "parquet")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 
   test("returning batch for wide table") {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
@@ -924,14 +923,14 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
         // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
         val df2 = spark.read.parquet(path)
         val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
-        assert(!fileScan2.asInstanceOf[FileSourceScanExec].supportsBatch)
+        assert(!fileScan2.asInstanceOf[FileSourceScanExec].supportsColumnar)
         checkAnswer(df2, df)
 
         // return batch
         val columns = Seq.tabulate(9) {i => s"c$i"}
         val df3 = df2.selectExpr(columns : _*)
         val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
-        assert(fileScan3.asInstanceOf[FileSourceScanExec].supportsBatch)
+        assert(fileScan3.asInstanceOf[FileSourceScanExec].supportsColumnar)
         checkAnswer(df3, df.selectExpr(columns : _*))
       }
     }
@@ -945,7 +944,7 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("returning batch for wide table") {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {

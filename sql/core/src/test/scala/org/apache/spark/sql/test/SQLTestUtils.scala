@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
@@ -391,7 +392,7 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
-    val withoutFilters = df.queryExecution.sparkPlan.transform {
+    val withoutFilters = df.queryExecution.executedPlan.transform {
       case FilterExec(_, child) => child
     }
 
@@ -423,6 +424,14 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
+  }
+
+  /**
+   * Returns the size of the local directory except the metadata file and the temporary file.
+   */
+  def getLocalDirSize(file: File): Long = {
+    assert(file.isDirectory)
+    file.listFiles.filter(f => DataSourceUtils.isDataFile(f.getName)).map(_.length).sum
   }
 }
 

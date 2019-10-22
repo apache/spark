@@ -19,6 +19,8 @@ package org.apache.spark.unsafe.types;
 
 import org.junit.Test;
 
+import java.util.Arrays;
+
 import static org.junit.Assert.*;
 import static org.apache.spark.unsafe.types.CalendarInterval.*;
 
@@ -72,36 +74,26 @@ public class CalendarIntervalSuite {
     testSingleUnit("millisecond", 3, 0, 3 * MICROS_PER_MILLI);
     testSingleUnit("microsecond", 3, 0, 3);
 
-    String input;
-
-    input = "interval   -5  years  23   month";
     CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0);
-    assertEquals(fromString(input), result);
-
-    input = "interval   -5  years  23   month   ";
-    assertEquals(fromString(input), result);
-
-    input = "  interval   -5  years  23   month   ";
-    assertEquals(fromString(input), result);
+    Arrays.asList(
+      "interval   -5  years  23   month",
+      "  -5  years  23   month",
+      "interval   -5  years  23   month   ",
+      "  -5  years  23   month   ",
+      "  interval   -5  years  23   month   ").forEach(input ->
+      assertEquals(fromString(input), result)
+    );
 
     // Error cases
-    input = "interval   3month 1 hour";
-    assertNull(fromString(input));
-
-    input = "interval 3 moth 1 hour";
-    assertNull(fromString(input));
-
-    input = "interval";
-    assertNull(fromString(input));
-
-    input = "int";
-    assertNull(fromString(input));
-
-    input = "";
-    assertNull(fromString(input));
-
-    input = null;
-    assertNull(fromString(input));
+    Arrays.asList(
+      "interval   3month 1 hour",
+      "3month 1 hour",
+      "interval 3 moth 1 hour",
+      "3 moth 1 hour",
+      "interval",
+      "int",
+      "",
+      null).forEach(input -> assertNull(fromString(input)));
   }
 
   @Test
@@ -115,7 +107,9 @@ public class CalendarIntervalSuite {
         fromCaseInsensitiveString(input);
         fail("Expected to throw an exception for the invalid input");
       } catch (IllegalArgumentException e) {
-        assertTrue(e.getMessage().contains("cannot be null or blank"));
+        String msg = e.getMessage();
+        if (input == null) assertTrue(msg.contains("cannot be null"));
+        else assertTrue(msg.contains("cannot be blank"));
       }
     }
 
@@ -124,7 +118,12 @@ public class CalendarIntervalSuite {
         fromCaseInsensitiveString(input);
         fail("Expected to throw an exception for the invalid input");
       } catch (IllegalArgumentException e) {
-        assertTrue(e.getMessage().contains("Invalid interval"));
+        String msg = e.getMessage();
+        if (input.trim().equalsIgnoreCase("interval")) {
+          assertTrue(msg.contains("Interval string must have time units"));
+        } else {
+          assertTrue(msg.contains("Invalid interval:"));
+        }
       }
     }
   }
@@ -162,7 +161,8 @@ public class CalendarIntervalSuite {
     assertEquals(fromDayTimeString(input), i);
 
     input = "10 0:12:0.888";
-    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE);
+    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE +
+      888 * MICROS_PER_MILLI);
     assertEquals(fromDayTimeString(input), i);
 
     input = "-3 0:0:0";
@@ -183,6 +183,14 @@ public class CalendarIntervalSuite {
       fail("Expected to throw an exception for the invalid input");
     } catch (IllegalArgumentException e) {
       assertTrue(e.getMessage().contains("not match day-time format"));
+    }
+
+    try {
+      input = "5 1:12:20";
+      fromDayTimeString(input, "hour", "microsecond");
+      fail("Expected to throw an exception for the invalid convention type");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("Cannot support (interval"));
     }
   }
 
@@ -259,10 +267,34 @@ public class CalendarIntervalSuite {
   }
 
   private static void testSingleUnit(String unit, int number, int months, long microseconds) {
-    String input1 = "interval " + number + " " + unit;
-    String input2 = "interval " + number + " " + unit + "s";
-    CalendarInterval result = new CalendarInterval(months, microseconds);
-    assertEquals(fromString(input1), result);
-    assertEquals(fromString(input2), result);
+    Arrays.asList("interval ", "").forEach(prefix -> {
+      String input1 = prefix + number + " " + unit;
+      String input2 = prefix + number + " " + unit + "s";
+      CalendarInterval result = new CalendarInterval(months, microseconds);
+      assertEquals(fromString(input1), result);
+      assertEquals(fromString(input2), result);
+    });
+  }
+
+  @Test
+  public void fromStringCaseSensitivityTest() {
+    testSingleUnit("YEAR", 3, 36, 0);
+    testSingleUnit("Month", 3, 3, 0);
+    testSingleUnit("Week", 3, 0, 3 * MICROS_PER_WEEK);
+    testSingleUnit("DAY", 3, 0, 3 * MICROS_PER_DAY);
+    testSingleUnit("HouR", 3, 0, 3 * MICROS_PER_HOUR);
+    testSingleUnit("MiNuTe", 3, 0, 3 * MICROS_PER_MINUTE);
+    testSingleUnit("Second", 3, 0, 3 * MICROS_PER_SECOND);
+    testSingleUnit("MilliSecond", 3, 0, 3 * MICROS_PER_MILLI);
+    testSingleUnit("MicroSecond", 3, 0, 3);
+
+    String input;
+
+    input = "INTERVAL -5 YEARS 23 MONTHS";
+    CalendarInterval result = new CalendarInterval(-5 * 12 + 23, 0);
+    assertEquals(fromString(input), result);
+
+    assertNull(fromString("INTERVAL"));
+    assertNull(fromString("  Interval "));
   }
 }

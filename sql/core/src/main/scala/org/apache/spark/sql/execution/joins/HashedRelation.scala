@@ -72,6 +72,11 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def keyIsUnique: Boolean
 
   /**
+   * Returns an iterator for keys of InternalRow type.
+   */
+  def keys(): Iterator[InternalRow]
+
+  /**
    * Returns a read-only copy of this, to be safely used in current thread.
    */
   def asReadOnlyCopy(): HashedRelation
@@ -118,16 +123,17 @@ private[execution] object HashedRelation {
  *  [size of key] [size of value] [key bytes] [bytes for value]
  */
 private[joins] class UnsafeHashedRelation(
+    private var numKeys: Int,
     private var numFields: Int,
     private var binaryMap: BytesToBytesMap)
   extends HashedRelation with Externalizable with KryoSerializable {
 
-  private[joins] def this() = this(0, null)  // Needed for serialization
+  private[joins] def this() = this(0, 0, null)  // Needed for serialization
 
   override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
 
   override def asReadOnlyCopy(): UnsafeHashedRelation = {
-    new UnsafeHashedRelation(numFields, binaryMap)
+    new UnsafeHashedRelation(numKeys, numFields, binaryMap)
   }
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
@@ -167,6 +173,28 @@ private[joins] class UnsafeHashedRelation(
       resultRow
     } else {
       null
+    }
+  }
+
+  override def keys(): Iterator[InternalRow] = {
+    val iter = binaryMap.safeIterator()
+
+    new Iterator[InternalRow] {
+      val unsafeRow = new UnsafeRow(numKeys)
+
+      override def hasNext: Boolean = {
+        iter.hasNext
+      }
+
+      override def next(): InternalRow = {
+        if (!hasNext) {
+          throw new NoSuchElementException("End of the iterator")
+        } else {
+          val loc = iter.next()
+          unsafeRow.pointTo(loc.getKeyBase, loc.getKeyOffset, loc.getKeyLength)
+          unsafeRow
+        }
+      }
     }
   }
 
@@ -313,7 +341,7 @@ private[joins] object UnsafeHashedRelation {
       }
     }
 
-    new UnsafeHashedRelation(numFields, binaryMap)
+    new UnsafeHashedRelation(key.size, numFields, binaryMap)
   }
 }
 
@@ -527,6 +555,47 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       }
     }
     null
+  }
+
+  /**
+   * Builds an iterator on a sparse array.
+   */
+  def keys(): Iterator[InternalRow] = {
+    val row = new GenericInternalRow(1)
+    // a) in dense mode the array stores the address
+    //  => (k, v) = (minKey + index, array(index))
+    // b) in sparse mode the array stores both the key and the address
+    //  => (k, v) = (array(index), array(index+1))
+    new Iterator[InternalRow] {
+      // cursor that indicates the position of the next key which was not read by a next() call
+      var pos = 0
+      // when we iterate in dense mode we need to jump two positions at a time
+      val step = if (isDense) 0 else 1
+
+      override def hasNext: Boolean = {
+        // go to the next key if the current key slot is empty
+        while (pos + step < array.length) {
+          if (array(pos + step) > 0) {
+            return true
+          }
+          pos += step + 1
+        }
+        false
+      }
+
+      override def next(): InternalRow = {
+        if (!hasNext) {
+          throw new NoSuchElementException("End of the iterator")
+        } else {
+          // the key is retrieved based on the map mode
+          val ret = if (isDense) minKey + pos else array(pos)
+          // advance the cursor to the next index
+          pos += step + 1
+          row.setLong(0, ret)
+          row
+        }
+      }
+    }
   }
 
   /**
@@ -756,7 +825,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   }
 }
 
-private[joins] class LongHashedRelation(
+class LongHashedRelation(
     private var nFields: Int,
     private var map: LongToUnsafeRowMap) extends HashedRelation with Externalizable {
 
@@ -805,6 +874,11 @@ private[joins] class LongHashedRelation(
     resultRow = new UnsafeRow(nFields)
     map = in.readObject().asInstanceOf[LongToUnsafeRowMap]
   }
+
+  /**
+   * Returns an iterator for keys of InternalRow type.
+   */
+  override def keys(): Iterator[InternalRow] = map.keys()
 }
 
 /**
@@ -837,7 +911,7 @@ private[joins] object LongHashedRelation {
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
-private[execution] case class HashedRelationBroadcastMode(key: Seq[Expression])
+case class HashedRelationBroadcastMode(key: Seq[Expression])
   extends BroadcastMode {
 
   override def transform(rows: Array[InternalRow]): HashedRelation = {

@@ -25,7 +25,6 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -201,8 +200,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
            |SELECT 7, 8, 3
           """.stripMargin)
     }
-    assert(e.getMessage.contains(
-      "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [c]"))
+    assert(e.getMessage.contains("IF NOT EXISTS with dynamic partitions: c"))
 
     // If the partition already exists, the insert will overwrite the data
     // unless users specify IF NOT EXISTS
@@ -557,7 +555,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     val inputPath = new Path("/tmp/b/c")
     var stagingDir = "tmp/b"
     val saveHiveFile = InsertIntoHiveTable(null, Map.empty, null, false, false, null)
-    val getStagingDir = PrivateMethod[Path]('getStagingDir)
+    val getStagingDir = PrivateMethod[Path](Symbol("getStagingDir"))
     var path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
     assert(path.toString.indexOf("/tmp/b_hive_") != -1)
 

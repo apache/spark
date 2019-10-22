@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.sources.v2.reader.partitioning.{ClusteredDistribution, Partitioning}
+import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Partitioning}
 
 /**
  * An adapter from public data source partitioning to catalyst internal `Partitioning`.

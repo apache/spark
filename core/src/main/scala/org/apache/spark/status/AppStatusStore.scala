@@ -136,6 +136,12 @@ private[spark] class AppStatusStore(
     store.read(classOf[StageDataWrapper], Array(stageId, stageAttemptId)).locality
   }
 
+  // SPARK-26119: we only want to consider successful tasks when calculating the metrics summary,
+  // but currently this is very expensive when using a disk store. So we only trigger the slower
+  // code path when we know we have all data in memory. The following method checks whether all
+  // the data will be in memory.
+  private def isInMemoryStore: Boolean = store.isInstanceOf[InMemoryStore] || listener.isDefined
+
   /**
    * Calculates a summary of the task metrics for the given stage attempt, returning the
    * requested quantiles for the recorded metrics.
@@ -156,7 +162,8 @@ private[spark] class AppStatusStore(
     // cheaper for disk stores (avoids deserialization).
     val count = {
       Utils.tryWithResource(
-        if (store.isInstanceOf[InMemoryStore]) {
+        if (isInMemoryStore) {
+          // For Live UI, we should count the tasks with status "SUCCESS" only.
           store.view(classOf[TaskDataWrapper])
             .parent(stageKey)
             .index(TaskIndexNames.STATUS)
@@ -245,7 +252,7 @@ private[spark] class AppStatusStore(
     // and failed tasks differently (would be tricky). Also would require changing the disk store
     // version (to invalidate old stores).
     def scanTasks(index: String)(fn: TaskDataWrapper => Long): IndexedSeq[Double] = {
-      if (store.isInstanceOf[InMemoryStore]) {
+      if (isInMemoryStore) {
         val quantileTasks = store.view(classOf[TaskDataWrapper])
           .parent(stageKey)
           .index(index)

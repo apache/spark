@@ -19,12 +19,12 @@
 PySpark supports custom serializers for transferring data; this can improve
 performance.
 
-By default, PySpark uses L{PickleSerializer} to serialize objects using Python's
-C{cPickle} serializer, which can serialize nearly any Python object.
-Other serializers, like L{MarshalSerializer}, support fewer datatypes but can be
+By default, PySpark uses :class:`PickleSerializer` to serialize objects using Python's
+`cPickle` serializer, which can serialize nearly any Python object.
+Other serializers, like :class:`MarshalSerializer`, support fewer datatypes but can be
 faster.
 
-The serializer is chosen when creating L{SparkContext}:
+The serializer is chosen when creating :class:`SparkContext`:
 
 >>> from pyspark.context import SparkContext
 >>> from pyspark.serializers import MarshalSerializer
@@ -34,7 +34,7 @@ The serializer is chosen when creating L{SparkContext}:
 >>> sc.stop()
 
 PySpark serializes objects in batches; by default, the batch size is chosen based
-on the size of objects and is also configurable by SparkContext's C{batchSize}
+on the size of objects and is also configurable by SparkContext's `batchSize`
 parameter:
 
 >>> sc = SparkContext('local', 'test', batchSize=2)
@@ -69,7 +69,7 @@ else:
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
-from pyspark.util import _exception_message
+from pyspark.util import _exception_message, print_exec
 
 
 __all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]
@@ -129,7 +129,7 @@ class FramedSerializer(Serializer):
 
     """
     Serializer that writes objects as a stream of (length, data) pairs,
-    where C{length} is a 32-bit integer and data is C{length} bytes.
+    where `length` is a 32-bit integer and data is `length` bytes.
     """
 
     def __init__(self):
@@ -399,6 +399,32 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
     def __repr__(self):
         return "ArrowStreamPandasUDFSerializer"
+
+
+class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
+
+    def load_stream(self, stream):
+        """
+        Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and yield as two
+        lists of pandas.Series.
+        """
+        import pyarrow as pa
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 2:
+                batch1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                yield (
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()]
+                )
+
+            elif dataframes_in_group != 0:
+                raise ValueError(
+                    'Invalid number of pandas.DataFrames in group {0}'.format(dataframes_in_group))
 
 
 class BatchedSerializer(Serializer):
@@ -690,7 +716,7 @@ class CloudPickleSerializer(PickleSerializer):
                 msg = "Object too large to serialize: %s" % emsg
             else:
                 msg = "Could not serialize object: %s: %s" % (e.__class__.__name__, emsg)
-            cloudpickle.print_exec(sys.stderr)
+            print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
 
 

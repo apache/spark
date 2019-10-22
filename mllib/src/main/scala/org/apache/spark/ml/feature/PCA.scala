@@ -26,11 +26,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{DenseMatrix => OldDenseMatrix, DenseVector => OldDenseVector,
-  Matrices => OldMatrices, Vector => OldVector, Vectors => OldVectors}
-import org.apache.spark.mllib.linalg.MatrixImplicits._
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.{DenseMatrix => OldDenseMatrix, Vectors => OldVectors}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -92,12 +88,13 @@ class PCA @Since("1.5.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): PCAModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
+    val input = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
     }
     val pca = new feature.PCA(k = $(k))
     val pcaModel = pca.fit(input)
-    copyValues(new PCAModel(uid, pcaModel.pc, pcaModel.explainedVariance).setParent(this))
+    copyValues(new PCAModel(uid, pcaModel.pc.asML, pcaModel.explainedVariance.asML)
+      .setParent(this))
   }
 
   @Since("1.5.0")
@@ -149,15 +146,24 @@ class PCAModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val pcaModel = new feature.PCAModel($(k),
-      OldMatrices.fromML(pc).asInstanceOf[OldDenseMatrix],
-      OldVectors.fromML(explainedVariance).asInstanceOf[OldDenseVector])
 
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => pcaModel.transform(OldVectors.fromML(v)).asML
+    val func = { vector: Vector =>
+      vector match {
+        case dv: DenseVector =>
+          pc.transpose.multiply(dv)
+        case SparseVector(size, indices, values) =>
+          /* SparseVector -> single row SparseMatrix */
+          val sm = Matrices.sparse(size, 1, Array(0, indices.length), indices, values).transpose
+          val projection = sm.multiply(pc)
+          Vectors.dense(projection.values)
+        case _ =>
+          throw new IllegalArgumentException("Unsupported vector format. Expected " +
+            s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
+      }
+    }
 
-    val pcaOp = udf(transformer)
-    dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
+    val transformer = udf(func)
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
   }
 
   @Since("1.5.0")

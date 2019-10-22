@@ -25,6 +25,7 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
@@ -76,16 +77,20 @@ private[sql] class JSONOptions(
   // Whether to ignore column of all null values or empty array/struct during schema inference
   val dropFieldIfAllNull = parameters.get("dropFieldIfAllNull").map(_.toBoolean).getOrElse(false)
 
+  // Whether to ignore null fields during json generating
+  val ignoreNullFields = parameters.getOrElse("ignoreNullFields",
+    SQLConf.get.jsonGeneratorIgnoreNullFields).toBoolean
+
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
   val zoneId: ZoneId = DateTimeUtils.getZoneId(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
-  val dateFormat: String = parameters.getOrElse("dateFormat", "yyyy-MM-dd")
+  val dateFormat: String = parameters.getOrElse("dateFormat", "uuuu-MM-dd")
 
   val timestampFormat: String =
-    parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+    parameters.getOrElse("timestampFormat", "uuuu-MM-dd'T'HH:mm:ss.SSSXXX")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
@@ -109,7 +114,7 @@ private[sql] class JSONOptions(
     .orElse(parameters.get("charset")).map(checkedEncoding)
 
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
-    lineSep.getBytes(encoding.getOrElse("UTF-8"))
+    lineSep.getBytes(encoding.getOrElse(StandardCharsets.UTF_8.name()))
   }
   val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 

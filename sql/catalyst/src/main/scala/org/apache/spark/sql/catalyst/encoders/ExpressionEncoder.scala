@@ -382,6 +382,8 @@ case class ExpressionEncoder[T](
       .map { case(f, a) => s"${f.name}$a: ${f.dataType.simpleString}"}.mkString(", ")
 
   override def toString: String = s"class[$schemaString]"
+
+  override def makeCopy: ExpressionEncoder[T] = copy()
 }
 
 // A dummy logical plan that can hold expressions and go through optimizer rules.

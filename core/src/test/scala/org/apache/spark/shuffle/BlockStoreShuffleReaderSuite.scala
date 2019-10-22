@@ -102,12 +102,13 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     // Make a mocked MapOutputTracker for the shuffle reader to use to determine what
     // shuffle data to read.
     val mapOutputTracker = mock(classOf[MapOutputTracker])
-    when(mapOutputTracker.getMapSizesByExecutorId(shuffleId, reduceId, reduceId + 1)).thenReturn {
+    when(mapOutputTracker.getMapSizesByExecutorId(
+      shuffleId, reduceId, reduceId + 1)).thenReturn {
       // Test a scenario where all data is local, to avoid creating a bunch of additional mocks
       // for the code to read data over the network.
       val shuffleBlockIdsAndSizes = (0 until numMaps).map { mapId =>
         val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
-        (shuffleBlockId, byteOutputStream.size().toLong)
+        (shuffleBlockId, byteOutputStream.size().toLong, mapId)
       }
       Seq((localBlockManagerId, shuffleBlockIdsAndSizes)).toIterator
     }
@@ -118,7 +119,7 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
       when(dependency.serializer).thenReturn(serializer)
       when(dependency.aggregator).thenReturn(None)
       when(dependency.keyOrdering).thenReturn(None)
-      new BaseShuffleHandle(shuffleId, numMaps, dependency)
+      new BaseShuffleHandle(shuffleId, dependency)
     }
 
     val serializerManager = new SerializerManager(
@@ -129,15 +130,15 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
 
     val taskContext = TaskContext.empty()
     val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val blocksByAddress = mapOutputTracker.getMapSizesByExecutorId(
+      shuffleId, reduceId, reduceId + 1)
     val shuffleReader = new BlockStoreShuffleReader(
       shuffleHandle,
-      reduceId,
-      reduceId + 1,
+      blocksByAddress,
       taskContext,
       metrics,
       serializerManager,
-      blockManager,
-      mapOutputTracker)
+      blockManager)
 
     assert(shuffleReader.read().length === keyValuePairsPerMap * numMaps)
 

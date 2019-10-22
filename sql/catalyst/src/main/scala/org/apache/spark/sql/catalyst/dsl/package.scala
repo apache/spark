@@ -114,7 +114,13 @@ package object dsl {
     def getField(fieldName: String): UnresolvedExtractValue =
       UnresolvedExtractValue(expr, Literal(fieldName))
 
-    def cast(to: DataType): Expression = Cast(expr, to)
+    def cast(to: DataType): Expression = {
+      if (expr.resolved && expr.dataType.sameType(to)) {
+        expr
+      } else {
+        Cast(expr, to)
+      }
+    }
 
     def asc: SortOrder = SortOrder(expr, Ascending)
     def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Set.empty)
@@ -379,10 +385,14 @@ package object dsl {
         Generate(generator, unrequiredChildIndex, outer,
           alias, outputNames.map(UnresolvedAttribute(_)), logicalPlan)
 
-      def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
-        InsertIntoTable(
-          analysis.UnresolvedRelation(TableIdentifier(tableName)),
-          Map.empty, logicalPlan, overwrite, ifPartitionNotExists = false)
+      def insertInto(tableName: String): LogicalPlan = insertInto(table(tableName))
+
+      def insertInto(
+          table: LogicalPlan,
+          partition: Map[String, Option[String]] = Map.empty,
+          overwrite: Boolean = false,
+          ifPartitionNotExists: Boolean = false): LogicalPlan =
+        InsertIntoStatement(table, partition, logicalPlan, overwrite, ifPartitionNotExists)
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 

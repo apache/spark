@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumnStatement, DescribeTableStatement, LogicalPlan, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -210,111 +210,10 @@ class SparkSqlParserSuite extends AnalysisTest {
       "no viable alternative at input")
   }
 
-  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
-    assertEqual("describe t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = false))
-    assertEqual("describe table t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = false))
-    assertEqual("describe table extended t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = true))
-    assertEqual("describe table formatted t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = true))
-  }
-
   test("describe query") {
     val query = "SELECT * FROM t"
     assertEqual("DESCRIBE QUERY " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
     assertEqual("DESCRIBE " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
-  }
-
-  test("describe table column") {
-    assertEqual("DESCRIBE t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = false))
-    assertEqual("DESCRIBE t `abc.xyz`",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("abc.xyz"), isExtended = false))
-    assertEqual("DESCRIBE t abc.xyz",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("abc", "xyz"), isExtended = false))
-    assertEqual("DESCRIBE t `a.b`.`x.y`",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("a.b", "x.y"), isExtended = false))
-
-    assertEqual("DESCRIBE TABLE t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = false))
-    assertEqual("DESCRIBE TABLE EXTENDED t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = true))
-    assertEqual("DESCRIBE TABLE FORMATTED t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = true))
-
-    intercept("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col",
-      "DESC TABLE COLUMN for a specific partition is not supported")
-  }
-
-  test("analyze table statistics") {
-    assertEqual("analyze table t compute statistics",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
-    assertEqual("analyze table t compute statistics noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
-    assertEqual("analyze table t partition (a) compute statistics nOscAn",
-      AnalyzePartitionCommand(TableIdentifier("t"), Map("a" -> None), noscan = true))
-
-    // Partitions specified
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> Some("2008-04-09"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
-    assertEqual("ANALYZE TABLE t PARTITION(ds, hr=11) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> None, "hr" -> Some("11"))))
-    assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> None, "hr" -> None)))
-    assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> None, "hr" -> None)))
-
-    intercept("analyze table t compute statistics xxxx",
-      "Expected `NOSCAN` instead of `xxxx`")
-    intercept("analyze table t partition (a) compute statistics xxxx",
-      "Expected `NOSCAN` instead of `xxxx`")
-  }
-
-  test("analyze table column statistics") {
-    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS", "")
-
-    assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
-
-    // Partition specified - should be ignored
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
-      "COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
-
-    // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
-    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
-      "COMPUTE STATISTICS FOR ALL COLUMNS",
-      AnalyzeColumnCommand(TableIdentifier("t"), None, allColumns = true))
-
-    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL COLUMNS key, value",
-      "mismatched input 'key' expecting <EOF>")
-    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL",
-      "missing 'COLUMNS' at '<EOF>'")
   }
 
   test("query organization") {

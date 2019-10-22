@@ -81,7 +81,7 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
     this
   }
 
-  override def update(key: A, value: B) {
+  override def update(key: A, value: B): Unit = {
     this += ((key, value))
   }
 
@@ -97,7 +97,7 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
 
   override def size: Int = internalMap.size
 
-  override def foreach[U](f: ((A, B)) => U) {
+  override def foreach[U](f: ((A, B)) => U): Unit = {
     val it = getEntrySet.iterator
     while(it.hasNext) {
       val entry = it.next()
@@ -111,13 +111,13 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
     Option(prev).map(_.value)
   }
 
-  def putAll(map: Map[A, B]) {
+  def putAll(map: Map[A, B]): Unit = {
     map.foreach { case (k, v) => update(k, v) }
   }
 
   def toMap: Map[A, B] = iterator.toMap
 
-  def clearOldValues(threshTime: Long, f: (A, B) => Unit) {
+  def clearOldValues(threshTime: Long, f: (A, B) => Unit): Unit = {
     val it = getEntrySet.iterator
     while (it.hasNext) {
       val entry = it.next()
@@ -130,7 +130,7 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
   }
 
   /** Removes old key-value pairs that have timestamp earlier than `threshTime`. */
-  def clearOldValues(threshTime: Long) {
+  def clearOldValues(threshTime: Long): Unit = {
     clearOldValues(threshTime, (_, _) => ())
   }
 

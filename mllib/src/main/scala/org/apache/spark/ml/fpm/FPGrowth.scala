@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasPredictionCol
@@ -116,7 +116,6 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
 }
 
 /**
- * :: Experimental ::
  * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
  * <a href="https://doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
  * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
@@ -128,7 +127,6 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
  * Association rule learning (Wikipedia)</a>
  */
 @Since("2.2.0")
-@Experimental
 class FPGrowth @Since("2.2.0") (
     @Since("2.2.0") override val uid: String)
   extends Estimator[FPGrowthModel] with FPGrowthParams with DefaultParamsWritable {
@@ -213,13 +211,11 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by FPGrowth.
  *
  * @param freqItemsets frequent itemsets in the format of DataFrame("items"[Array], "freq"[Long])
  */
 @Since("2.2.0")
-@Experimental
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") @transient val freqItemsets: DataFrame,

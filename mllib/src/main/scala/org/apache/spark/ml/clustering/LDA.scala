@@ -19,6 +19,8 @@ package org.apache.spark.ml.clustering
 
 import java.util.Locale
 
+import breeze.linalg.normalize
+import breeze.numerics.exp
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
@@ -27,7 +29,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Matrix, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.util._
@@ -35,7 +37,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel,
   EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
-  LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
+  LDAOptimizer => OldLDAOptimizer, LDAUtils => OldLDAUtils, LocalLDAModel => OldLocalLDAModel,
   OnlineLDAOptimizer => OldOnlineLDAOptimizer}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
@@ -43,7 +45,7 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
+import org.apache.spark.sql.functions.{monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.PeriodicCheckpointer
@@ -457,19 +459,47 @@ abstract class LDAModel private[ml] (
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    if ($(topicDistributionCol).nonEmpty) {
+    transformSchema(dataset.schema, logging = true)
 
-      // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-      val transformer = oldLocalModel.getTopicDistributionMethod
+    val func = getTopicDistributionMethod
+    val transformer = udf(func)
+    dataset.withColumn($(topicDistributionCol),
+      transformer(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+  }
 
-      val t = udf { (v: Vector) => transformer(OldVectors.fromML(v)).asML }
-      dataset.withColumn($(topicDistributionCol),
-        t(DatasetUtils.columnToVector(dataset, getFeaturesCol))).toDF()
-    } else {
-      logWarning("LDAModel.transform was called without any output columns. Set an output column" +
-        " such as topicDistributionCol to produce results.")
-      dataset.toDF()
-    }
+  /**
+   * Get a method usable as a UDF for `topicDistributions()`
+   */
+  private def getTopicDistributionMethod: Vector => Vector = {
+    val expElogbeta = exp(OldLDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
+    val oldModel = oldLocalModel
+    val docConcentrationBrz = oldModel.docConcentration.asBreeze
+    val gammaShape = oldModel.gammaShape
+    val k = oldModel.k
+    val gammaSeed = oldModel.seed
+
+    vector: Vector =>
+      if (vector.numNonzeros == 0) {
+        Vectors.zeros(k)
+      } else {
+        val (ids: List[Int], cts: Array[Double]) = vector match {
+          case v: DenseVector => (List.range(0, v.size), v.values)
+          case v: SparseVector => (v.indices.toList, v.values)
+          case other =>
+            throw new UnsupportedOperationException(
+              s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+        }
+
+        val (gamma, _, _) = OldOnlineLDAOptimizer.variationalTopicInference(
+          ids,
+          cts,
+          expElogbeta,
+          docConcentrationBrz,
+          gammaShape,
+          k,
+          gammaSeed)
+        Vectors.dense(normalize(gamma, 1.0).toArray)
+      }
   }
 
   @Since("1.6.0")

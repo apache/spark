@@ -38,7 +38,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
 
   private var orderedLabeledPoints50_1000: RDD[LabeledPoint] = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     orderedLabeledPoints50_1000 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
@@ -49,7 +49,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
 
-  def regressionTestWithContinuousFeatures(rf: RandomForestRegressor) {
+  def regressionTestWithContinuousFeatures(rf: RandomForestRegressor): Unit = {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val newRF = rf
       .setImpurity("variance")
@@ -111,6 +111,24 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
     assert(mostImportantFeature === 1)
     assert(importances.toArray.sum === 1.0)
     assert(importances.toArray.forall(_ >= 0.0))
+  }
+
+  test("model support predict leaf index") {
+    val model0 = new DecisionTreeRegressionModel("dtc", TreeTests.root0, 3)
+    val model1 = new DecisionTreeRegressionModel("dtc", TreeTests.root1, 3)
+    val model = new RandomForestRegressionModel("rfr", Array(model0, model1), 3)
+    model.setLeafCol("predictedLeafId")
+      .setPredictionCol("")
+
+    val data = TreeTests.getTwoTreesLeafData
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect()
+      .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>
+        assert(leafId === predictedLeafId)
+    }
   }
 
   test("should support all NumericType labels and not support other types") {

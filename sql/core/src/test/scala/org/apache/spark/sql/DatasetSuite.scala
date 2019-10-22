@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.ScroogeLikeExample
@@ -33,7 +34,7 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
@@ -49,7 +50,7 @@ object TestForTypeAlias {
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
 }
 
-class DatasetSuite extends QueryTest with SharedSQLContext {
+class DatasetSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
@@ -601,6 +602,70 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         count("*").as[Long],
         avg("_2").as[Double]),
       ("a", 30L, 32L, 2L, 15.0), ("b", 3L, 5L, 2L, 1.5), ("c", 1L, 2L, 1L, 1.0))
+  }
+
+  test("typed aggregation: expr, expr, expr, expr, expr") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+
+    checkDatasetUnorderly(
+      ds.groupByKey(_._1).agg(
+        sum("_2").as[Long],
+        sum($"_2" + 1).as[Long],
+        count("*").as[Long],
+        avg("_2").as[Double],
+        countDistinct("*").as[Long]),
+      ("a", 30L, 32L, 2L, 15.0, 2L), ("b", 3L, 5L, 2L, 1.5, 2L), ("c", 1L, 2L, 1L, 1.0, 1L))
+  }
+
+  test("typed aggregation: expr, expr, expr, expr, expr, expr") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+
+    checkDatasetUnorderly(
+      ds.groupByKey(_._1).agg(
+        sum("_2").as[Long],
+        sum($"_2" + 1).as[Long],
+        count("*").as[Long],
+        avg("_2").as[Double],
+        countDistinct("*").as[Long],
+        max("_2").as[Long]),
+      ("a", 30L, 32L, 2L, 15.0, 2L, 20L),
+      ("b", 3L, 5L, 2L, 1.5, 2L, 2L),
+      ("c", 1L, 2L, 1L, 1.0, 1L, 1L))
+  }
+
+  test("typed aggregation: expr, expr, expr, expr, expr, expr, expr") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+
+    checkDatasetUnorderly(
+      ds.groupByKey(_._1).agg(
+        sum("_2").as[Long],
+        sum($"_2" + 1).as[Long],
+        count("*").as[Long],
+        avg("_2").as[Double],
+        countDistinct("*").as[Long],
+        max("_2").as[Long],
+        min("_2").as[Long]),
+      ("a", 30L, 32L, 2L, 15.0, 2L, 20L, 10L),
+      ("b", 3L, 5L, 2L, 1.5, 2L, 2L, 1L),
+      ("c", 1L, 2L, 1L, 1.0, 1L, 1L, 1L))
+  }
+
+  test("typed aggregation: expr, expr, expr, expr, expr, expr, expr, expr") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+
+    checkDatasetUnorderly(
+      ds.groupByKey(_._1).agg(
+        sum("_2").as[Long],
+        sum($"_2" + 1).as[Long],
+        count("*").as[Long],
+        avg("_2").as[Double],
+        countDistinct("*").as[Long],
+        max("_2").as[Long],
+        min("_2").as[Long],
+        mean("_2").as[Double]),
+      ("a", 30L, 32L, 2L, 15.0, 2L, 20L, 10L, 15.0),
+      ("b", 3L, 5L, 2L, 1.5, 2L, 2L, 1L, 1.5),
+      ("c", 1L, 2L, 1L, 1.0, 1L, 1L, 1L, 1.0))
   }
 
   test("cogroup") {
@@ -1776,6 +1841,24 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     val instant = java.time.Instant.parse("2019-03-30T09:54:00Z")
     assert(spark.range(1).map { _ => instant }.head === instant)
+  }
+
+  val dotColumnTestModes = Table(
+    ("caseSensitive", "colName"),
+    ("true", "field.1"),
+    ("false", "Field.1")
+  )
+
+  test("SPARK-25153: Improve error messages for columns with dots/periods") {
+    forAll(dotColumnTestModes) { (caseSensitive, colName) =>
+      val ds = Seq(SpecialCharClass("1", "2")).toDS
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        val errorMsg = intercept[AnalysisException] {
+          ds(colName)
+        }
+        assert(errorMsg.getMessage.contains(s"did you mean to quote the `$colName` column?"))
+      }
+    }
   }
 }
 

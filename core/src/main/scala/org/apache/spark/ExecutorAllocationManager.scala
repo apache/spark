@@ -94,6 +94,7 @@ private[spark] class ExecutorAllocationManager(
     client: ExecutorAllocationClient,
     listenerBus: LiveListenerBus,
     conf: SparkConf,
+    cleaner: Option[ContextCleaner] = None,
     clock: Clock = new SystemClock())
   extends Logging {
 
@@ -148,7 +149,7 @@ private[spark] class ExecutorAllocationManager(
   // Listener for Spark events that impact the allocation policy
   val listener = new ExecutorAllocationListener
 
-  val executorMonitor = new ExecutorMonitor(conf, client, clock)
+  val executorMonitor = new ExecutorMonitor(conf, client, listenerBus, clock)
 
   // Executor that handles the scheduling task.
   private val executor =
@@ -194,11 +195,13 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
-    // Require external shuffle service for dynamic allocation
-    // Otherwise, we may lose shuffle files when killing executors
-    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !testing) {
-      throw new SparkException("Dynamic allocation of executors requires the external " +
-        "shuffle service. You may enable this through spark.shuffle.service.enabled.")
+    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING)) {
+        logWarning("Dynamic allocation without a shuffle service is an experimental feature.")
+      } else if (!testing) {
+        throw new SparkException("Dynamic allocation of executors requires the external " +
+          "shuffle service. You may enable this through spark.shuffle.service.enabled.")
+      }
     }
 
     if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {
@@ -214,6 +217,7 @@ private[spark] class ExecutorAllocationManager(
   def start(): Unit = {
     listenerBus.addToManagementQueue(listener)
     listenerBus.addToManagementQueue(executorMonitor)
+    cleaner.foreach(_.attachListener(executorMonitor))
 
     val scheduleTask = new Runnable() {
       override def run(): Unit = {
@@ -284,7 +288,7 @@ private[spark] class ExecutorAllocationManager(
     }
 
     // Update executor target number only after initializing flag is unset
-    updateAndSyncNumExecutorsTarget(clock.getTimeMillis())
+    updateAndSyncNumExecutorsTarget(clock.nanoTime())
     if (executorIdsToBeRemoved.nonEmpty) {
       removeExecutors(executorIdsToBeRemoved)
     }
@@ -332,7 +336,7 @@ private[spark] class ExecutorAllocationManager(
       val delta = addExecutors(maxNeeded)
       logDebug(s"Starting timer to add more executors (to " +
         s"expire in $sustainedSchedulerBacklogTimeoutS seconds)")
-      addTime = now + (sustainedSchedulerBacklogTimeoutS * 1000)
+      addTime = now + TimeUnit.SECONDS.toNanos(sustainedSchedulerBacklogTimeoutS)
       delta
     } else {
       0
@@ -477,7 +481,7 @@ private[spark] class ExecutorAllocationManager(
     if (addTime == NOT_SET) {
       logDebug(s"Starting timer to add executors because pending tasks " +
         s"are building up (to expire in $schedulerBacklogTimeoutS seconds)")
-      addTime = clock.getTimeMillis + schedulerBacklogTimeoutS * 1000
+      addTime = clock.nanoTime() + TimeUnit.SECONDS.toNanos(schedulerBacklogTimeoutS)
     }
   }
 

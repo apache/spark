@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ExecSubqueryExpression, SparkPlan}
 
 case class PlanAdaptiveSubqueries(
-    subqueryMap: Map[Long, ExecSubqueryExpression]) extends Rule[SparkPlan] {
+    subqueryMap: scala.collection.Map[Long, ExecSubqueryExpression]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {

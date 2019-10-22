@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.lang.{Iterable => JIterable}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
 
@@ -41,6 +42,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -57,6 +59,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOURCE_SCHEMA_NUMPARTS, DATASOURCE_SCHEMA_PART_PREFIX}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -160,7 +163,7 @@ private[hive] class HiveClientImpl(
     // HiveConf is a Hadoop Configuration, which has a field of classLoader and
     // the initial value will be the current thread's context class loader
     // (i.e. initClassLoader at here).
-    // We call initialConf.setClassLoader(initClassLoader) at here to make
+    // We call hiveConf.setClassLoader(initClassLoader) at here to make
     // this action explicit.
     hiveConf.setClassLoader(initClassLoader)
 
@@ -174,14 +177,15 @@ private[hive] class HiveClientImpl(
     // has hive-site.xml. So, HiveConf will use that to override its default values.
     // 2: we set all spark confs to this hiveConf.
     // 3: we set all entries in config to this hiveConf.
-    (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
-      ++ sparkConf.getAll.toMap ++ extraConfig).foreach { case (k, v) =>
+    val confMap = (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue) ++
+      sparkConf.getAll.toMap ++ extraConfig).toMap
+    confMap.foreach { case (k, v) => hiveConf.set(k, v) }
+    SQLConf.get.redactOptions(confMap).foreach { case (k, v) =>
       logDebug(
         s"""
            |Applying Hadoop/Hive/Spark and extra properties to Hive Conf:
-           |$k=${if (k.toLowerCase(Locale.ROOT).contains("password")) "xxx" else v}
+           |$k=$v
          """.stripMargin)
-      hiveConf.set(k, v)
     }
     // Disable CBO because we removed the Calcite dependency.
     hiveConf.setBoolean("hive.cbo.enable", false)
@@ -189,9 +193,16 @@ private[hive] class HiveClientImpl(
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
+    // Hive 2.3 will set UDFClassLoader to hiveConf when initializing SessionState
+    // since HIVE-11878, and ADDJarCommand will add jars to clientLoader.classLoader.
+    // For this reason we cannot load the jars added by ADDJarCommand because of class loader
+    // got changed. We reset it to clientLoader.ClassLoader here.
+    if (HiveUtils.isHive23) {
+      state.getConf.setClassLoader(clientLoader.classLoader)
+    }
     SessionState.start(state)
-    state.out = new PrintStream(outputBuffer, true, "UTF-8")
-    state.err = new PrintStream(outputBuffer, true, "UTF-8")
+    state.out = new PrintStream(outputBuffer, true, UTF_8.name())
+    state.err = new PrintStream(outputBuffer, true, UTF_8.name())
     state
   }
 
@@ -220,7 +231,7 @@ private[hive] class HiveClientImpl(
     hiveConf
   }
 
-  private val userName = conf.getUser
+  override val userName = UserGroupInformation.getCurrentUser.getShortUserName
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
@@ -361,6 +372,13 @@ private[hive] class HiveClientImpl(
   }
 
   override def alterDatabase(database: CatalogDatabase): Unit = withHiveState {
+    if (!getDatabase(database.name).locationUri.equals(database.locationUri)) {
+      // SPARK-29260: Enable supported versions once it support altering database location.
+      if (!(version.equals(hive.v3_0) || version.equals(hive.v3_1))) {
+        throw new AnalysisException(
+          s"Hive ${version.fullVersion} does not support altering database location")
+      }
+    }
     client.alterDatabase(
       database.name,
       new HiveDatabase(
@@ -1020,7 +1038,7 @@ private[hive] object HiveClientImpl {
     }
     hiveTable.setFields(schema.asJava)
     hiveTable.setPartCols(partCols.asJava)
-    userName.foreach(hiveTable.setOwner)
+    Option(table.owner).filter(_.nonEmpty).orElse(userName).foreach(hiveTable.setOwner)
     hiveTable.setCreateTime(MILLISECONDS.toSeconds(table.createTime).toInt)
     hiveTable.setLastAccessTime(MILLISECONDS.toSeconds(table.lastAccessTime).toInt)
     table.storage.locationUri.map(CatalogUtils.URIToString).foreach { loc =>

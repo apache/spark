@@ -24,9 +24,9 @@ import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester with KafkaTest {
+class CachedKafkaProducerSuite extends SharedSparkSession with PrivateMethodTester with KafkaTest {
 
   type KP = KafkaProducer[Array[Byte], Array[Byte]]
 
@@ -46,7 +46,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams)
     assert(producer == producer2)
 
-    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
+    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]](Symbol("getAsMap"))
     val map = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map.size == 1)
   }
@@ -63,7 +63,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     // With updated conf, a new producer instance should be created.
     assert(producer != producer2)
 
-    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
+    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]](Symbol("getAsMap"))
     val map = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map.size == 2)
 

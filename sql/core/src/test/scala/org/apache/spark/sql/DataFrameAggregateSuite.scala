@@ -27,13 +27,13 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types.DecimalType
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
-class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
+class DataFrameAggregateSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   val absTol = 1e-8
@@ -165,6 +165,21 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         Row(null, 2012, 1, 0, 2) ::
         Row(null, 2013, 1, 0, 2) ::
         Row(null, null, 1, 1, 3) :: Nil
+    )
+
+    // use column reference in `grouping_id` instead of column name
+    checkAnswer(
+      courseSales.cube("course", "year")
+        .agg(grouping_id(courseSales("course"), courseSales("year"))),
+      Row("Java", 2012, 0) ::
+        Row("Java", 2013, 0) ::
+        Row("Java", null, 1) ::
+        Row("dotNET", 2012, 0) ::
+        Row("dotNET", 2013, 0) ::
+        Row("dotNET", null, 1) ::
+        Row(null, 2012, 2) ::
+        Row(null, 2013, 2) ::
+        Row(null, null, 3) :: Nil
     )
 
     intercept[AnalysisException] {
@@ -725,13 +740,6 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-26021: NaN and -0.0 in grouping expressions") {
-    import java.lang.Float.floatToRawIntBits
-    import java.lang.Double.doubleToRawLongBits
-
-    // 0.0/0.0 and NaN are different values.
-    assert(floatToRawIntBits(0.0f/0.0f) != floatToRawIntBits(Float.NaN))
-    assert(doubleToRawLongBits(0.0/0.0) != doubleToRawLongBits(Double.NaN))
-
     checkAnswer(
       Seq(0.0f, -0.0f, 0.0f/0.0f, Float.NaN).toDF("f").groupBy("f").count(),
       Row(0.0f, 2) :: Row(Float.NaN, 2) :: Nil)

@@ -22,15 +22,18 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * End-to-end test cases for SQL queries.
@@ -101,38 +104,64 @@ import org.apache.spark.sql.types.StructType
  * Therefore, UDF test cases should have single input and output files but executed by three
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
  */
-class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
+@ExtendedSQLTest
+class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   import IntegratedUDFTestUtils._
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+  protected val isTestWithConfigSets: Boolean = true
 
-  private val baseResourcePath = {
-    // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
-    // relative path. Otherwise, we use classloader's getResource to find the location.
-    if (regenerateGoldenFiles) {
-      java.nio.file.Paths.get("src", "test", "resources", "sql-tests").toFile
-    } else {
-      val res = getClass.getClassLoader.getResource("sql-tests")
-      new File(res.getFile)
+  protected val baseResourcePath = {
+    // We use a path based on Spark home for 2 reasons:
+    //   1. Maven can't get correct resource directory when resources in other jars.
+    //   2. We test subclasses in the hive-thriftserver module.
+    val sparkHome = {
+      assert(sys.props.contains("spark.test.home") ||
+        sys.env.contains("SPARK_HOME"), "spark.test.home or SPARK_HOME is not set.")
+      sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
     }
+
+    java.nio.file.Paths.get(sparkHome,
+      "sql", "core", "src", "test", "resources", "sql-tests").toFile
   }
 
-  private val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
-  private val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
+  protected val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
+  protected val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
 
-  private val validFileExtensions = ".sql"
+  protected val validFileExtensions = ".sql"
+
+  private val notIncludedMsg = "[not included in comparison]"
+  private val clsName = this.getClass.getCanonicalName
+
+  protected val emptySchema = StructType(Seq.empty).catalogString
+
+  protected override def sparkConf: SparkConf = super.sparkConf
+    // Fewer shuffle partitions to speed up testing.
+    .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
   /** List of test cases to ignore, in lower cases. */
-  private val blackList = Set(
-    "blacklist.sql"   // Do NOT remove this one. It is here to test the blacklist functionality.
+  protected def blackList: Set[String] = Set(
+    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
+    // SPARK-28885 String value is not allowed to be stored as numeric type with
+    // ANSI store assignment policy.
+    "postgreSQL/numeric.sql",
+    "postgreSQL/int2.sql",
+    "postgreSQL/int4.sql",
+    "postgreSQL/int8.sql",
+    "postgreSQL/float4.sql",
+    "postgreSQL/float8.sql",
+    // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
+    // ANSI store assignment policy.
+    "postgreSQL/date.sql",
+    "postgreSQL/timestamp.sql"
   )
 
   // Create all the test cases.
   listTestCases().foreach(createScalaTestCase)
 
   /** A single SQL query's output. */
-  private case class QueryOutput(sql: String, schema: String, output: String) {
+  protected case class QueryOutput(sql: String, schema: String, output: String) {
     def toString(queryIndex: Int): String = {
       // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
       s"-- !query $queryIndex\n" +
@@ -145,36 +174,58 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   /** A test case. */
-  private trait TestCase {
+  protected trait TestCase {
     val name: String
     val inputFile: String
     val resultFile: String
   }
 
+  /**
+   * traits that indicate UDF or PgSQL to trigger the code path specific to each. For instance,
+   * PgSQL tests require to register some UDF functions.
+   */
+  protected trait PgSQLTest
+
+  protected trait UDFTest {
+    val udf: TestUDF
+  }
+
   /** A regular test case. */
-  private case class RegularTestCase(
+  protected case class RegularTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase
 
   /** A PostgreSQL test case. */
-  private case class PgSQLTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase
+  protected case class PgSQLTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase with PgSQLTest
 
   /** A UDF test case. */
-  private case class UDFTestCase(
-      name: String, inputFile: String, resultFile: String, udf: TestUDF) extends TestCase
+  protected case class UDFTestCase(
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udf: TestUDF) extends TestCase with UDFTest
 
-  private def createScalaTestCase(testCase: TestCase): Unit = {
+  /** A UDF PostgreSQL test case. */
+  protected case class UDFPgSQLTestCase(
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udf: TestUDF) extends TestCase with UDFTest with PgSQLTest
+
+  protected def createScalaTestCase(testCase: TestCase): Unit = {
     if (blackList.exists(t =>
         testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else testCase match {
-      case UDFTestCase(_, _, _, udf: TestPythonUDF) if !shouldTestPythonUDFs =>
+      case udfTestCase: UDFTest
+          if udfTestCase.udf.isInstanceOf[TestPythonUDF] && !shouldTestPythonUDFs =>
         ignore(s"${testCase.name} is skipped because " +
           s"[$pythonExec] and/or pyspark were not available.") {
           /* Do nothing */
         }
-      case UDFTestCase(_, _, _, udf: TestScalarPandasUDF) if !shouldTestScalarPandasUDFs =>
+      case udfTestCase: UDFTest
+          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestScalarPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
@@ -199,18 +250,20 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   /** Run a test case. */
-  private def runTest(testCase: TestCase): Unit = {
+  protected def runTest(testCase: TestCase): Unit = {
     val input = fileToString(new File(testCase.inputFile))
 
-    val (comments, code) = input.split("\n").partition(_.startsWith("--"))
+    val (comments, code) = input.split("\n").partition(_.trim.startsWith("--"))
 
     // List of SQL queries to run
     // note: this is not a robust way to split queries using semicolon, but works for now.
     val queries = code.mkString("\n").split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
+      // Fix misplacement when comment is at the end of the query.
+      .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
 
     // When we are regenerating the golden files, we don't need to set any config as they
     // all need to return the same result
-    if (regenerateGoldenFiles) {
+    if (regenerateGoldenFiles || !isTestWithConfigSets) {
       runQueries(queries, testCase, None)
     } else {
       val configSets = {
@@ -246,7 +299,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  private def runQueries(
+  protected def runQueries(
       queries: Seq[String],
       testCase: TestCase,
       configSet: Option[Seq[(String, String)]]): Unit = {
@@ -254,15 +307,25 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
     loadTestData(localSparkSession)
+
     testCase match {
-      case udfTestCase: UDFTestCase => registerTestUDF(udfTestCase.udf, localSparkSession)
-      case _: PgSQLTestCase =>
+      case udfTestCase: UDFTest =>
+        registerTestUDF(udfTestCase.udf, localSparkSession)
+      case _ =>
+    }
+
+    testCase match {
+      case _: PgSQLTest =>
         // booleq/boolne used by boolean.sql
         localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
         localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
-        // vol used by boolean.sql
+        // vol used by boolean.sql and case.sql.
         localSparkSession.udf.register("vol", (s: String) => s)
-      case _ => // Don't add UDFs in Regular tests.
+        // PostgreSQL enabled cartesian product by default.
+        localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
+        localSparkSession.conf.set(SQLConf.DIALECT.key, SQLConf.Dialect.POSTGRESQL.toString)
+      case _ =>
     }
 
     if (configSet.isDefined) {
@@ -273,12 +336,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     }
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryOutput] = queries.map { sql =>
-      val (schema, output) = getNormalizedResult(localSparkSession, sql)
+      val (schema, output) = handleExceptions(getNormalizedResult(localSparkSession, sql))
       // We might need to do some query canonicalization in the future.
       QueryOutput(
         sql = sql,
-        schema = schema.catalogString,
-        output = output.mkString("\n").trim)
+        schema = schema,
+        output = output.mkString("\n").replaceAll("\\s+$", ""))
     }
 
     if (regenerateGoldenFiles) {
@@ -296,101 +359,130 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       stringToFile(resultFile, goldenOutput)
     }
 
-    // Read back the golden file.
-    val expectedOutputs: Seq[QueryOutput] = {
-      val goldenOutput = fileToString(new File(testCase.resultFile))
-      val segments = goldenOutput.split("-- !query.+\n")
+    // This is a temporary workaround for SPARK-28894. The test names are truncated after
+    // the last dot due to a bug in SBT. This makes easier to debug via Jenkins test result
+    // report. See SPARK-28894.
+    withClue(s"${testCase.name}${System.lineSeparator()}") {
+      // Read back the golden file.
+      val expectedOutputs: Seq[QueryOutput] = {
+        val goldenOutput = fileToString(new File(testCase.resultFile))
+        val segments = goldenOutput.split("-- !query.+\n")
 
-      // each query has 3 segments, plus the header
-      assert(segments.size == outputs.size * 3 + 1,
-        s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
-        s"Try regenerate the result files.")
-      Seq.tabulate(outputs.size) { i =>
-        QueryOutput(
-          sql = segments(i * 3 + 1).trim,
-          schema = segments(i * 3 + 2).trim,
-          output = segments(i * 3 + 3).trim
-        )
+        // each query has 3 segments, plus the header
+        assert(segments.size == outputs.size * 3 + 1,
+          s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
+            s"Try regenerate the result files.")
+        Seq.tabulate(outputs.size) { i =>
+          QueryOutput(
+            sql = segments(i * 3 + 1).trim,
+            schema = segments(i * 3 + 2).trim,
+            output = segments(i * 3 + 3).replaceAll("\\s+$", "")
+          )
+        }
       }
-    }
 
-    // Compare results.
-    assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
-      outputs.size
-    }
+      // Compare results.
+      assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
+        outputs.size
+      }
 
-    outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
-      assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
-        output.sql
-      }
-      assertResult(expected.schema,
-        s"Schema did not match for query #$i\n${expected.sql}: $output") {
-        output.schema
-      }
-      assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
-        output.output
+      outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
+        assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
+          output.sql
+        }
+        assertResult(expected.schema,
+          s"Schema did not match for query #$i\n${expected.sql}: $output") {
+          output.schema
+        }
+        assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
+          output.output
+        }
       }
     }
   }
 
-  /** Executes a query and returns the result as (schema of the output, normalized output). */
-  private def getNormalizedResult(session: SparkSession, sql: String): (StructType, Seq[String]) = {
-    // Returns true if the plan is supposed to be sorted.
-    def isSorted(plan: LogicalPlan): Boolean = plan match {
-      case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case _: DescribeCommandBase | _: DescribeColumnCommand => true
-      case PhysicalOperation(_, _, Sort(_, true, _)) => true
-      case _ => plan.children.iterator.exists(isSorted)
-    }
-
+  /**
+   * This method handles exceptions occurred during query execution as they may need special care
+   * to become comparable to the expected output.
+   *
+   * @param result a function that returns a pair of schema and output
+   */
+  protected def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
     try {
-      val df = session.sql(sql)
-      val schema = df.schema
-      val notIncludedMsg = "[not included in comparison]"
-      val clsName = this.getClass.getCanonicalName
-      // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-      val answer = hiveResultString(df.queryExecution.executedPlan)
-        .map(_.replaceAll("#\\d+", "#x")
-        .replaceAll(
-          s"Location.*/sql/core/spark-warehouse/$clsName/",
-          s"Location ${notIncludedMsg}sql/core/spark-warehouse/")
-        .replaceAll("Created By.*", s"Created By $notIncludedMsg")
-        .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
-        .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
-        .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
-        .replaceAll("\\*\\(\\d+\\) ", "*"))  // remove the WholeStageCodegen codegenStageIds
-
-      // If the output is not pre-sorted, sort it.
-      if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
-
+      result
     } catch {
       case a: AnalysisException =>
         // Do not output the logical plan tree which contains expression IDs.
         // Also implement a crude way of masking expression IDs in the error message
         // with a generic pattern "###".
         val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        (StructType(Seq.empty), Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
+        (emptySchema, Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
+      case s: SparkException if s.getCause != null =>
+        // For a runtime exception, it is hard to match because its message contains
+        // information of stage, task ID, etc.
+        // To make result matching simpler, here we match the cause of the exception if it exists.
+        val cause = s.getCause
+        (emptySchema, Seq(cause.getClass.getName, cause.getMessage))
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
-        (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))
+        (emptySchema, Seq(e.getClass.getName, e.getMessage))
     }
   }
 
-  private def listTestCases(): Seq[TestCase] = {
+  /** Executes a query and returns the result as (schema of the output, normalized output). */
+  private def getNormalizedResult(session: SparkSession, sql: String): (String, Seq[String]) = {
+    // Returns true if the plan is supposed to be sorted.
+    def isSorted(plan: LogicalPlan): Boolean = plan match {
+      case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
+      case _: DescribeCommandBase
+          | _: DescribeColumnCommand
+          | _: DescribeTableStatement
+          | _: DescribeColumnStatement => true
+      case PhysicalOperation(_, _, Sort(_, true, _)) => true
+      case _ => plan.children.iterator.exists(isSorted)
+    }
+
+    val df = session.sql(sql)
+    val schema = df.schema.catalogString
+    // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
+    val answer = SQLExecution.withNewExecutionId(session, df.queryExecution, Some(sql)) {
+      hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
+    }
+
+    // If the output is not pre-sorted, sort it.
+    if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
+  }
+
+  protected def replaceNotIncludedMsg(line: String): String = {
+    line.replaceAll("#\\d+", "#x")
+      .replaceAll(
+        s"Location.*$clsName/",
+        s"Location ${notIncludedMsg}/{warehouse_dir}/")
+      .replaceAll("Created By.*", s"Created By $notIncludedMsg")
+      .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
+      .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
+      .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
+      .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
+  }
+
+  protected def listTestCases(): Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
-      if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
+      if (file.getAbsolutePath.startsWith(
+        s"$inputFilePath${File.separator}udf${File.separator}postgreSQL")) {
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
+          UDFPgSQLTestCase(
+            s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
+        }
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
         Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
           UDFTestCase(
-            s"$testCaseName - ${udf.prettyName}",
-            absPath,
-            resultFile,
-            udf)
+            s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
@@ -399,7 +491,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   /** Returns all the files (not directories) in a directory, recursively. */
-  private def listFilesRecursively(path: File): Seq[File] = {
+  protected def listFilesRecursively(path: File): Seq[File] = {
     val (dirs, files) = path.listFiles().partition(_.isDirectory)
     // Filter out test files with invalid extensions such as temp files created
     // by vi (.swp), Mac (.DS_Store) etc.

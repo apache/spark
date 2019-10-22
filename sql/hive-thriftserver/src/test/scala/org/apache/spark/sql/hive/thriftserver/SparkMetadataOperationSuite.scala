@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.ResultSet
+import java.sql.{DatabaseMetaData, ResultSet}
 
 class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
@@ -38,8 +38,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
       val metaData = statement.getConnection.getMetaData
 
-      checkResult(metaData.getSchemas(null, "%"),
-        Seq("db1", "db2", "default"))
+      checkResult(metaData.getSchemas(null, "%"), Seq("db1", "db2", "default", "global_temp"))
       checkResult(metaData.getSchemas(null, "db1"), Seq("db1"))
       checkResult(metaData.getSchemas(null, "db_not_exist"), Seq.empty)
       checkResult(metaData.getSchemas(null, "db*"), Seq("db1", "db2"))
@@ -68,7 +67,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       val metaData = statement.getConnection.getMetaData
 
       checkResult(metaData.getTables(null, "%", "%", null),
-        Seq("table1", "table2", "view1"))
+        Seq("table1", "table2", "view1", "view_global_temp_1", "view_temp_1"))
 
       checkResult(metaData.getTables(null, "%", "table1", null), Seq("table1"))
 
@@ -78,10 +77,19 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
         Seq("table1", "table2"))
 
       checkResult(metaData.getTables(null, "%", "%", Array("VIEW")),
-        Seq("view1"))
+        Seq("view1", "view_global_temp_1", "view_temp_1"))
+
+      checkResult(metaData.getTables(null, "%", "view_global_temp_1", null),
+        Seq("view_global_temp_1"))
+
+      checkResult(metaData.getTables(null, "%", "view_temp_1", null),
+        Seq("view_temp_1"))
 
       checkResult(metaData.getTables(null, "%", "%", Array("TABLE", "VIEW")),
-        Seq("table1", "table2", "view1"))
+        Seq("table1", "table2", "view1", "view_global_temp_1", "view_temp_1"))
+
+      checkResult(metaData.getTables(null, "%", "table_not_exist", Array("TABLE", "VIEW")),
+        Seq.empty)
     }
   }
 
@@ -119,7 +127,9 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
           ("table1", "val", "12", "STRING", "String column"),
           ("table2", "key", "4", "INT", ""),
           ("table2", "val", "3", "DECIMAL(10,0)", "Decimal column"),
-          ("view1", "key", "4", "INT", "Int column")))
+          ("view1", "key", "4", "INT", "Int column"),
+          ("view_global_temp_1", "col2", "4", "INT", ""),
+          ("view_temp_1", "col2", "4", "INT", "")))
 
       checkResult(metaData.getColumns(null, "%", "table1", null),
         Seq(
@@ -129,7 +139,112 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       checkResult(metaData.getColumns(null, "%", "table1", "key"),
         Seq(("table1", "key", "4", "INT", "Int column")))
 
+      checkResult(metaData.getColumns(null, "%", "view%", null),
+        Seq(
+          ("view1", "key", "4", "INT", "Int column"),
+          ("view_global_temp_1", "col2", "4", "INT", ""),
+          ("view_temp_1", "col2", "4", "INT", "")))
+
+      checkResult(metaData.getColumns(null, "%", "view_global_temp_1", null),
+        Seq(("view_global_temp_1", "col2", "4", "INT", "")))
+
+      checkResult(metaData.getColumns(null, "%", "view_temp_1", null),
+        Seq(("view_temp_1", "col2", "4", "INT", "")))
+
+      checkResult(metaData.getColumns(null, "%", "view_temp_1", "col2"),
+        Seq(("view_temp_1", "col2", "4", "INT", "")))
+
+      checkResult(metaData.getColumns(null, "default", "%", null),
+        Seq(
+          ("table1", "key", "4", "INT", "Int column"),
+          ("table1", "val", "12", "STRING", "String column"),
+          ("table2", "key", "4", "INT", ""),
+          ("table2", "val", "3", "DECIMAL(10,0)", "Decimal column"),
+          ("view1", "key", "4", "INT", "Int column"),
+          ("view_temp_1", "col2", "4", "INT", "")))
+
       checkResult(metaData.getColumns(null, "%", "table_not_exist", null), Seq.empty)
+    }
+  }
+
+  test("Spark's own GetTableTypesOperation(SparkGetTableTypesOperation)") {
+    def checkResult(rs: ResultSet, tableTypes: Seq[String]): Unit = {
+      for (i <- tableTypes.indices) {
+        assert(rs.next())
+        assert(rs.getString("TABLE_TYPE") === tableTypes(i))
+      }
+      // Make sure there are no more elements
+      assert(!rs.next())
+    }
+
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      checkResult(metaData.getTableTypes, Seq("TABLE", "VIEW"))
+    }
+  }
+
+  test("Spark's own GetFunctionsOperation(SparkGetFunctionsOperation)") {
+    def checkResult(rs: ResultSet, functionName: Seq[String]): Unit = {
+      for (i <- functionName.indices) {
+        assert(rs.next())
+        assert(rs.getString("FUNCTION_SCHEM") === "default")
+        assert(rs.getString("FUNCTION_NAME") === functionName(i))
+        assert(rs.getString("REMARKS").startsWith(s"${functionName(i)}("))
+        assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
+        assert(rs.getString("SPECIFIC_NAME").startsWith("org.apache.spark.sql.catalyst"))
+      }
+      // Make sure there are no more elements
+      assert(!rs.next())
+    }
+
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      // Hive does not have an overlay function, we use overlay to test.
+      checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, null, "overla*"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, "", "overla*"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, null, "does-not-exist*"), Seq.empty)
+      checkResult(metaData.getFunctions(null, "default", "overlay"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, "default", "shift*"),
+        Seq("shiftleft", "shiftright", "shiftrightunsigned"))
+    }
+
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getFunctions(null, "default", "upPer")
+      assert(rs.next())
+      assert(rs.getString("FUNCTION_SCHEM") === "default")
+      assert(rs.getString("FUNCTION_NAME") === "upper")
+      assert(rs.getString("REMARKS") ===
+        "upper(str) - Returns `str` with all characters changed to uppercase.")
+      assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
+      assert(rs.getString("SPECIFIC_NAME") === "org.apache.spark.sql.catalyst.expressions.Upper")
+      // Make sure there are no more elements
+      assert(!rs.next())
+    }
+  }
+
+  test("Spark's own GetCatalogsOperation(SparkGetCatalogsOperation)") {
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getCatalogs
+      assert(!rs.next())
+    }
+  }
+
+  test("GetTypeInfo Thrift API") {
+    def checkResult(rs: ResultSet, typeNames: Seq[String]): Unit = {
+      for (i <- typeNames.indices) {
+        assert(rs.next())
+        assert(rs.getString("TYPE_NAME") === typeNames(i))
+      }
+      // Make sure there are no more elements
+      assert(!rs.next())
+    }
+
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      checkResult(metaData.getTypeInfo, ThriftserverShimUtils.supportedType().map(_.getName))
     }
   }
 }

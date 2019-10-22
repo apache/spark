@@ -27,8 +27,8 @@ from pyspark import keyword_only
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.feature import Binarizer, Bucketizer, ElementwiseProduct, IndexToString, \
-    VectorSlicer, Word2Vec
-from pyspark.ml.linalg import DenseVector, SparseVector
+    MaxAbsScaler, VectorSlicer, Word2Vec
+from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
 from pyspark.ml.wrapper import JavaParams
@@ -86,6 +86,15 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertEqual(b.getSplits(), [1.0, 4.0])
         self.assertTrue(all([type(v) == float for v in b.getSplits()]))
         self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", 1.0]))
+
+    def test_list_list_float(self):
+        b = Bucketizer(splitsArray=[[-0.1, 0.5, 3], [-5, 1.5]])
+        self.assertEqual(b.getSplitsArray(), [[-0.1, 0.5, 3.0], [-5.0, 1.5]])
+        self.assertTrue(all([type(v) == list for v in b.getSplitsArray()]))
+        self.assertTrue(all([type(v) == float for v in b.getSplitsArray()[0]]))
+        self.assertTrue(all([type(v) == float for v in b.getSplitsArray()[1]]))
+        self.assertRaises(TypeError, lambda: Bucketizer(splitsArray=["a", 1.0]))
+        self.assertRaises(TypeError, lambda: Bucketizer(splitsArray=[[-5, 1.5], ["a", 1.0]]))
 
     def test_list_string(self):
         for labels in [np.array(['a', u'b']), ['a', u'b'], np.array(['a', 'b'])]:
@@ -215,6 +224,10 @@ class ParamTests(SparkSessionTestCase):
         testParams.setMaxIter(100)
         self.assertTrue(testParams.isSet(maxIter))
         self.assertEqual(testParams.getMaxIter(), 100)
+        testParams.clear(maxIter)
+        self.assertFalse(testParams.isSet(maxIter))
+        self.assertEqual(testParams.getMaxIter(), 10)
+        testParams.setMaxIter(100)
 
         self.assertTrue(testParams.hasParam(inputCol.name))
         self.assertFalse(testParams.hasDefault(inputCol))
@@ -238,6 +251,18 @@ class ParamTests(SparkSessionTestCase):
             "\n".join(["inputCol: input column name. (undefined)",
                        "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
                        "seed: random seed. (default: 41, current: 43)"]))
+
+    def test_clear_param(self):
+        df = self.spark.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
+        maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
+        model = maScaler.fit(df)
+        self.assertTrue(model.isSet(model.outputCol))
+        self.assertEqual(model.getOutputCol(), "scaled")
+        model.clear(model.outputCol)
+        self.assertFalse(model.isSet(model.outputCol))
+        self.assertEqual(model.getOutputCol()[:12], 'MaxAbsScaler')
+        output = model.transform(df)
+        self.assertEqual(model.getOutputCol(), output.schema.names[1])
 
     def test_kmeans_param(self):
         algo = KMeans()
@@ -343,7 +368,8 @@ class DefaultValuesTests(PySparkTestCase):
         for module in modules:
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if not name.endswith('Model') and not name.endswith('Params') \
-                        and issubclass(cls, JavaParams) and not inspect.isabstract(cls):
+                        and issubclass(cls, JavaParams) and not inspect.isabstract(cls) \
+                        and not name.startswith('Java') and name != '_LSH':
                     # NOTE: disable check_params_exist until there is parity with Scala API
                     check_params(self, cls(), check_params_exist=False)
 
