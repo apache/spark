@@ -275,14 +275,12 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   testQuietly("can't start multiple instances of the same streaming query in the same session") {
     withTempDir { dir =>
-      val session2 = spark.cloneSession()
-
-      val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
-      val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
+      val (ms1, ds1) = makeDataset
+      val (ms2, ds2) = makeDataset
       val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
       val dataLocation = new File(dir, "data").getCanonicalPath
 
-      val query1 = ms1.toDS().writeStream.format("parquet")
+      val query1 = ds1.writeStream.format("parquet")
         .option("checkpointLocation", chkLocation).start(dataLocation)
       ms1.addData(1, 2, 3)
       try {
@@ -300,12 +298,14 @@ class StreamingQueryManagerSuite extends StreamTest {
   testQuietly(
     "can't start multiple instances of the same streaming query in the different sessions") {
     withTempDir { dir =>
-      val (ms1, ds1) = makeDataset
-      val (ms2, ds2) = makeDataset
+      val session2 = spark.cloneSession()
+
+      val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
+      val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
       val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
       val dataLocation = new File(dir, "data").getCanonicalPath
 
-      val query1 = ds1.writeStream.format("parquet")
+      val query1 = ms1.toDS().writeStream.format("parquet")
         .option("checkpointLocation", chkLocation).start(dataLocation)
       ms1.addData(1, 2, 3)
       try {
