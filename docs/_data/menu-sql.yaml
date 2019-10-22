@@ -212,6 +212,10 @@
                   url: sql-ref-syntax-aux-resource-mgmt-add-file.html
                 - text: ADD JAR
                   url: sql-ref-syntax-aux-resource-mgmt-add-jar.html
+                - text: LIST FILE
+                  url: sql-ref-syntax-aux-resource-mgmt-list-file.html
+                - text: LIST JAR
+                  url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
     - text: Functions
       url: sql-ref-functions.html
       subitems:

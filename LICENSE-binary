@@ -225,7 +225,7 @@ org.scalanlp:breeze-macros_2.12
 org.scalanlp:breeze_2.12
 org.typelevel:macro-compat_2.12
 org.yaml:snakeyaml
-org.apache.xbean:xbean-asm5-shaded
+org.apache.xbean:xbean-asm7-shaded
 com.squareup.okhttp3:logging-interceptor
 com.squareup.okhttp3:okhttp
 com.squareup.okio:okio
@@ -254,6 +254,7 @@ commons-codec:commons-codec
 commons-collections:commons-collections
 io.fabric8:kubernetes-client
 io.fabric8:kubernetes-model
+io.fabric8:kubernetes-model-common
 io.netty:netty-all
 net.hydromatic:eigenbase-properties
 net.sf.supercsv:super-csv
@@ -320,11 +321,14 @@ com.github.mifmif:generex
 com.github.stephenc.jcip:jcip-annotations
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
+com.google.flatbuffers:flatbuffers-java
+com.google.guava:guava
 com.google.inject:guice
 com.google.inject.extensions:guice-servlet
 com.nimbusds:nimbus-jose-jwt
 com.twitter:parquet-hadoop-bundle
 commons-cli:commons-cli
+commons-daemon:commons-daemon
 commons-dbcp:commons-dbcp
 commons-io:commons-io
 commons-lang:commons-lang
@@ -369,11 +373,6 @@ org.datanucleus:datanucleus-api-jdo
 org.datanucleus:datanucleus-core
 org.datanucleus:datanucleus-rdbms
 org.lz4:lz4-java
-org.spark-project.hive:hive-beeline
-org.spark-project.hive:hive-cli
-org.spark-project.hive:hive-exec
-org.spark-project.hive:hive-jdbc
-org.spark-project.hive:hive-metastore
 org.xerial.snappy:snappy-java
 stax:stax-api
 xerces:xercesImpl
@@ -397,18 +396,25 @@ org.scala-lang.modules:scala-xml_2.12
 org.opencypher:okapi-shade
 com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.zaxxer.HikariCP
+org.apache.hive:hive-beeline
+org.apache.hive:hive-cli
 org.apache.hive:hive-common
+org.apache.hive:hive-exec
+org.apache.hive:hive-jdbc
 org.apache.hive:hive-llap-common
+org.apache.hive:hive-metastore
 org.apache.hive:hive-serde
 org.apache.hive:hive-service-rpc
 org.apache.hive:hive-shims-0.23
 org.apache.hive:hive-shims
+org.apache.hive:hive-common
 org.apache.hive:hive-shims-scheduler
 org.apache.hive:hive-storage-api
 org.apache.hive:hive-vector-code-gen
 org.datanucleus:javax.jdo
 com.tdunning:json
 org.apache.velocity:velocity
+org.apache.yetus:audience-annotations
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
@@ -516,6 +522,7 @@ Common Development and Distribution License (CDDL) 1.1
 
 javax.el:javax.el-api	https://javaee.github.io/uel-ri/
 javax.servlet:javax.servlet-api   https://javaee.github.io/servlet-spec/
+javax.servlet.jsp:jsp-api
 javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
 javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
 org.glassfish.hk2:hk2-api https://github.com/javaee/glassfish
@@ -537,6 +544,7 @@ Eclipse Distribution License (EDL) 1.0
 --------------------------------------
 
 org.glassfish.jaxb:jaxb-runtime
+jakarta.activation:jakarta.activation-api
 jakarta.xml.bind:jakarta.xml.bind-api
 com.sun.istack:istack-commons-runtime
 
@@ -546,6 +554,7 @@ Eclipse Public License (EPL) 2.0
 
 jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/ee4j.ca
 jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
+org.glassfish.hk2.external:jakarta.inject
 
 
 Python Software Foundation License

@@ -554,7 +554,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   }
 
   test("replace column using withColumns") {
-    val df2 = sparkContext.parallelize(Array((1, 2), (2, 3), (3, 4))).toDF("x", "y")
+    val df2 = sparkContext.parallelize(Seq((1, 2), (2, 3), (3, 4))).toDF("x", "y")
     val df3 = df2.withColumns(Seq("x", "newCol1", "newCol2"),
       Seq(df2("x") + 1, df2("y"), df2("y") + 1))
     checkAnswer(
@@ -2212,9 +2212,9 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
 
     val df3 = df1.groupByRelationKey("a", "b")
       .cogroup(df2.groupByRelationKey("a", "b")) { case (key, data1, data2) =>
-         data1.zip(data2).map { p =>
-           p._1.getInt(2) + p._2.getInt(2)
-         }
+        data1.zip(data2).map { p =>
+          p._1.getInt(2) + p._2.getInt(2)
+        }
       }.toDF
 
     checkAnswer(df3, Row(7) :: Row(9) :: Nil)
@@ -2224,5 +2224,13 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
       case h: ShuffleExchangeExec => h
     }
     assert(exchanges.size == 2)
+  }
+
+  test("SPARK-29442 Set `default` mode should override the existing mode") {
+    val df = Seq(Tuple1(1)).toDF()
+    val writer = df.write.mode("overwrite").mode("default")
+    val modeField = classOf[DataFrameWriter[Tuple1[Int]]].getDeclaredField("mode")
+    modeField.setAccessible(true)
+    assert(SaveMode.ErrorIfExists === modeField.get(writer).asInstanceOf[SaveMode])
   }
 }

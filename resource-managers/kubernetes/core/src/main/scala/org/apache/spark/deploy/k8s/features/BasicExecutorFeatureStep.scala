@@ -216,6 +216,9 @@ private[spark] class BasicExecutorFeatureStep(
         .endSpec()
       .build()
 
+    kubernetesConf.get(KUBERNETES_EXECUTOR_SCHEDULER_NAME)
+      .foreach(executorPod.getSpec.setSchedulerName)
+
     SparkPod(executorPod, containerWithLimitCores)
   }
 }

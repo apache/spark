@@ -360,8 +360,8 @@ class DataFrameReader(OptionUtils):
                      or RDD of Strings storing CSV rows.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets a single character as a separator for each field and value.
-                    If None is set, it uses the default value, ``,``.
+        :param sep: sets a separator (one or more characters) for each field and value. If None is
+                    set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
                          it uses the default value, ``UTF-8``.
         :param quote: sets a single character used for escaping quoted values where the
@@ -890,7 +890,7 @@ class DataFrameWriter(OptionUtils):
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
-        :param sep: sets a single character as a separator for each field and value. If None is
+        :param sep: sets a separator (one or more characters) for each field and value. If None is
                     set, it uses the default value, ``,``.
         :param quote: sets a single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default

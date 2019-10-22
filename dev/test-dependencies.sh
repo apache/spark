@@ -75,7 +75,7 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
 
   echo "Generating dependency manifest for $HADOOP_PROFILE"
   mkdir -p dev/pr-deps
-  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly \
+  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly -am \
     | grep "Dependencies classpath:" -A 1 \
     | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
     | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE
