@@ -2327,7 +2327,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     checkDuplicateClauses(ctx.PROPERTIES, "WITH PROPERTIES", ctx)
     checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
 
-    if (!ctx.PROPERTIES.isEmpty() && !ctx.DBPROPERTIES.isEmpty()) {
+    if (!ctx.PROPERTIES.isEmpty && !ctx.DBPROPERTIES.isEmpty) {
       throw new ParseException(s"Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
     }
 
