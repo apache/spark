@@ -40,7 +40,7 @@ class QueryPlanningTrackerEndToEndSuite extends StreamTest {
     assert(tracker.rules.nonEmpty)
   }
 
-  test("streaming") {
+  test("SPARK-29227: Track rule info in optimization phase in streaming") {
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
 
