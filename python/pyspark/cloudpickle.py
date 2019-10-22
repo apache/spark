@@ -50,7 +50,6 @@ import logging
 import opcode
 import operator
 import pickle
-import platform
 import struct
 import sys
 import traceback
@@ -86,6 +85,10 @@ if sys.version_info[0] < 3:  # pragma: no branch
     string_types = (basestring,)  # noqa
     PY3 = False
     PY2 = True
+    PY2_WRAPPER_DESCRIPTOR_TYPE = type(object.__init__)
+    PY2_METHOD_WRAPPER_TYPE = type(object.__eq__)
+    PY2_CLASS_DICT_BLACKLIST = (PY2_METHOD_WRAPPER_TYPE,
+                                PY2_WRAPPER_DESCRIPTOR_TYPE)
 else:
     types.ClassType = type
     from pickle import _Pickler as Pickler
@@ -93,7 +96,6 @@ else:
     string_types = (str,)
     PY3 = True
     PY2 = False
-    from importlib._bootstrap import _find_spec
 
 
 def _ensure_tracking(class_def):
@@ -113,79 +115,6 @@ def _lookup_class_or_track(class_tracker_id, class_def):
                 class_tracker_id, class_def)
             _DYNAMIC_CLASS_TRACKER_BY_CLASS[class_def] = class_tracker_id
     return class_def
-
-if PY3:
-    from pickle import _getattribute
-else:
-    # pickle._getattribute is a python3 addition and enchancement of getattr,
-    # that can handle dotted attribute names. In cloudpickle for python2,
-    # handling dotted names is not needed, so we simply define _getattribute as
-    # a wrapper around getattr.
-    def _getattribute(obj, name):
-        return getattr(obj, name, None), None
-
-
-def _whichmodule(obj, name):
-    """Find the module an object belongs to.
-
-    This function differs from ``pickle.whichmodule`` in two ways:
-    - it does not mangle the cases where obj's module is __main__ and obj was
-      not found in any module.
-    - Errors arising during module introspection are ignored, as those errors
-      are considered unwanted side effects.
-    """
-    module_name = getattr(obj, '__module__', None)
-    if module_name is not None:
-        return module_name
-    # Protect the iteration by using a list copy of sys.modules against dynamic
-    # modules that trigger imports of other modules upon calls to getattr.
-    for module_name, module in list(sys.modules.items()):
-        if module_name == '__main__' or module is None:
-            continue
-        try:
-            if _getattribute(module, name)[0] is obj:
-                return module_name
-        except Exception:
-            pass
-    return None
-
-
-def _is_global(obj, name=None):
-    """Determine if obj can be pickled as attribute of a file-backed module"""
-    if name is None:
-        name = getattr(obj, '__qualname__', None)
-    if name is None:
-        name = getattr(obj, '__name__', None)
-
-    module_name = _whichmodule(obj, name)
-
-    if module_name is None:
-        # In this case, obj.__module__ is None AND obj was not found in any
-        # imported module. obj is thus treated as dynamic.
-        return False
-
-    if module_name == "__main__":
-        return False
-
-    module = sys.modules.get(module_name, None)
-    if module is None:
-        # The main reason why obj's module would not be imported is that this
-        # module has been dynamically created, using for example
-        # types.ModuleType. The other possibility is that module was removed
-        # from sys.modules after obj was created/imported. But this case is not
-        # supported, as the standard pickle does not support it either.
-        return False
-
-    # module has been added to sys.modules, but it can still be dynamic.
-    if _is_dynamic(module):
-        return False
-
-    try:
-        obj2, parent = _getattribute(module, name)
-    except AttributeError:
-        # obj was not found inside the module it points to
-        return False
-    return obj2 is obj
 
 
 def _make_cell_set_template_code():
@@ -301,6 +230,10 @@ HAVE_ARGUMENT = dis.HAVE_ARGUMENT
 EXTENDED_ARG = dis.EXTENDED_ARG
 
 
+def islambda(func):
+    return getattr(func, '__name__') == '<lambda>'
+
+
 _BUILTIN_TYPE_NAMES = {}
 for k, v in types.__dict__.items():
     if type(v) is type:
@@ -309,6 +242,32 @@ for k, v in types.__dict__.items():
 
 def _builtin_type(name):
     return getattr(types, name)
+
+
+def _make__new__factory(type_):
+    def _factory():
+        return type_.__new__
+    return _factory
+
+
+# NOTE: These need to be module globals so that they're pickleable as globals.
+_get_dict_new = _make__new__factory(dict)
+_get_frozenset_new = _make__new__factory(frozenset)
+_get_list_new = _make__new__factory(list)
+_get_set_new = _make__new__factory(set)
+_get_tuple_new = _make__new__factory(tuple)
+_get_object_new = _make__new__factory(object)
+
+# Pre-defined set of builtin_function_or_method instances that can be
+# serialized.
+_BUILTIN_TYPE_CONSTRUCTORS = {
+    dict.__new__: _get_dict_new,
+    frozenset.__new__: _get_frozenset_new,
+    set.__new__: _get_set_new,
+    list.__new__: _get_list_new,
+    tuple.__new__: _get_tuple_new,
+    object.__new__: _get_object_new,
+}
 
 
 if sys.version_info < (3, 4):  # pragma: no branch
@@ -363,6 +322,17 @@ def _extract_class_dict(cls):
             base_value = inherited_dict[name]
             if value is base_value:
                 to_remove.append(name)
+            elif PY2:
+                # backward compat for Python 2
+                if hasattr(value, "im_func"):
+                    if value.im_func is getattr(base_value, "im_func", None):
+                        to_remove.append(name)
+                elif isinstance(value, PY2_CLASS_DICT_BLACKLIST):
+                    # On Python 2 we have no way to pickle those specific
+                    # methods types nor to check that they are actually
+                    # inherited. So we assume that they are always inherited
+                    # from builtin types.
+                    to_remove.append(name)
         except KeyError:
             pass
     for name in to_remove:
@@ -453,9 +423,94 @@ class CloudPickler(Pickler):
         Determines what kind of function obj is (e.g. lambda, defined at
         interactive prompt, etc) and handles the pickling appropriately.
         """
-        if not _is_global(obj, name=name):
-            return self.save_function_tuple(obj)
-        return Pickler.save_global(self, obj, name=name)
+        try:
+            should_special_case = obj in _BUILTIN_TYPE_CONSTRUCTORS
+        except TypeError:
+            # Methods of builtin types aren't hashable in python 2.
+            should_special_case = False
+
+        if should_special_case:
+            # We keep a special-cased cache of built-in type constructors at
+            # global scope, because these functions are structured very
+            # differently in different python versions and implementations (for
+            # example, they're instances of types.BuiltinFunctionType in
+            # CPython, but they're ordinary types.FunctionType instances in
+            # PyPy).
+            #
+            # If the function we've received is in that cache, we just
+            # serialize it as a lookup into the cache.
+            return self.save_reduce(_BUILTIN_TYPE_CONSTRUCTORS[obj], (), obj=obj)
+
+        write = self.write
+
+        if name is None:
+            name = obj.__name__
+        try:
+            # whichmodule() could fail, see
+            # https://bitbucket.org/gutworth/six/issues/63/importing-six-breaks-pickling
+            modname = pickle.whichmodule(obj, name)
+        except Exception:
+            modname = None
+        # print('which gives %s %s %s' % (modname, obj, name))
+        try:
+            themodule = sys.modules[modname]
+        except KeyError:
+            # eval'd items such as namedtuple give invalid items for their function __module__
+            modname = '__main__'
+
+        if modname == '__main__':
+            themodule = None
+
+        try:
+            lookedup_by_name = getattr(themodule, name, None)
+        except Exception:
+            lookedup_by_name = None
+
+        if themodule:
+            if lookedup_by_name is obj:
+                return self.save_global(obj, name)
+
+        # a builtin_function_or_method which comes in as an attribute of some
+        # object (e.g., itertools.chain.from_iterable) will end
+        # up with modname "__main__" and so end up here. But these functions
+        # have no __code__ attribute in CPython, so the handling for
+        # user-defined functions below will fail.
+        # So we pickle them here using save_reduce; have to do it differently
+        # for different python versions.
+        if not hasattr(obj, '__code__'):
+            if PY3:  # pragma: no branch
+                rv = obj.__reduce_ex__(self.proto)
+            else:
+                if hasattr(obj, '__self__'):
+                    rv = (getattr, (obj.__self__, name))
+                else:
+                    raise pickle.PicklingError("Can't pickle %r" % obj)
+            return self.save_reduce(obj=obj, *rv)
+
+        # if func is lambda, def'ed at prompt, is in main, or is nested, then
+        # we'll pickle the actual function object rather than simply saving a
+        # reference (as is done in default pickler), via save_function_tuple.
+        if (islambda(obj)
+                or getattr(obj.__code__, 'co_filename', None) == '<stdin>'
+                or themodule is None):
+            self.save_function_tuple(obj)
+            return
+        else:
+            # func is nested
+            if lookedup_by_name is None or lookedup_by_name is not obj:
+                self.save_function_tuple(obj)
+                return
+
+        if obj.__dict__:
+            # essentially save_reduce, but workaround needed to avoid recursion
+            self.save(_restore_attr)
+            write(pickle.MARK + pickle.GLOBAL + modname + '\n' + name + '\n')
+            self.memoize(obj)
+            self.save(obj.__dict__)
+            write(pickle.TUPLE + pickle.REDUCE)
+        else:
+            write(pickle.GLOBAL + modname + '\n' + name + '\n')
+            self.memoize(obj)
 
     dispatch[types.FunctionType] = save_function
 
@@ -666,7 +721,7 @@ class CloudPickler(Pickler):
             'name': func.__name__,
             'doc': func.__doc__,
         }
-        if hasattr(func, '__annotations__') and sys.version_info >= (3, 4):
+        if hasattr(func, '__annotations__') and sys.version_info >= (3, 7):
             state['annotations'] = func.__annotations__
         if hasattr(func, '__qualname__'):
             state['qualname'] = func.__qualname__
@@ -758,44 +813,12 @@ class CloudPickler(Pickler):
 
         return (code, f_globals, defaults, closure, dct, base_globals)
 
-    if not PY3:  # pragma: no branch
-        # Python3 comes with native reducers that allow builtin functions and
-        # methods pickling as module/class attributes.  The following method
-        # extends this for python2.
-        # Please note that currently, neither pickle nor cloudpickle support
-        # dynamically created builtin functions/method pickling.
-        def save_builtin_function_or_method(self, obj):
-            is_bound = getattr(obj, '__self__', None) is not None
-            if is_bound:
-                # obj is a bound builtin method.
-                rv = (getattr, (obj.__self__, obj.__name__))
-                return self.save_reduce(obj=obj, *rv)
+    def save_builtin_function(self, obj):
+        if obj.__module__ == "__builtin__":
+            return self.save_global(obj)
+        return self.save_function(obj)
 
-            is_unbound = hasattr(obj, '__objclass__')
-            if is_unbound:
-                # obj is an unbound builtin method (accessed from its class)
-                rv = (getattr, (obj.__objclass__, obj.__name__))
-                return self.save_reduce(obj=obj, *rv)
-
-            # Otherwise, obj is not a method, but a function. Fallback to
-            # default pickling by attribute.
-            return Pickler.save_global(self, obj)
-
-        dispatch[types.BuiltinFunctionType] = save_builtin_function_or_method
-
-        # A comprehensive summary of the various kinds of builtin methods can
-        # be found in PEP 579: https://www.python.org/dev/peps/pep-0579/
-        classmethod_descriptor_type = type(float.__dict__['fromhex'])
-        wrapper_descriptor_type = type(float.__repr__)
-        method_wrapper_type = type(1.5.__repr__)
-
-        dispatch[classmethod_descriptor_type] = save_builtin_function_or_method
-        dispatch[wrapper_descriptor_type] = save_builtin_function_or_method
-        dispatch[method_wrapper_type] = save_builtin_function_or_method
-
-    if sys.version_info[:2] < (3, 4):
-        method_descriptor = type(str.upper)
-        dispatch[method_descriptor] = save_builtin_function_or_method
+    dispatch[types.BuiltinFunctionType] = save_builtin_function
 
     def save_global(self, obj, name=None, pack=struct.pack):
         """
@@ -810,15 +833,23 @@ class CloudPickler(Pickler):
             return self.save_reduce(type, (Ellipsis,), obj=obj)
         elif obj is type(NotImplemented):
             return self.save_reduce(type, (NotImplemented,), obj=obj)
-        elif obj in _BUILTIN_TYPE_NAMES:
-            return self.save_reduce(
-                _builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
-        elif name is not None:
-            Pickler.save_global(self, obj, name=name)
-        elif not _is_global(obj, name=name):
-            self.save_dynamic_class(obj)
-        else:
-            Pickler.save_global(self, obj, name=name)
+
+        if obj.__module__ == "__main__":
+            return self.save_dynamic_class(obj)
+
+        try:
+            return Pickler.save_global(self, obj, name=name)
+        except Exception:
+            if obj.__module__ == "__builtin__" or obj.__module__ == "builtins":
+                if obj in _BUILTIN_TYPE_NAMES:
+                    return self.save_reduce(
+                        _builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
+
+            typ = type(obj)
+            if typ is not obj and isinstance(obj, (type, types.ClassType)):
+                return self.save_dynamic_class(obj)
+
+            raise
 
     dispatch[type] = save_global
     dispatch[types.ClassType] = save_global
@@ -1086,6 +1117,13 @@ def dynamic_subimport(name, vars):
     return mod
 
 
+# restores function attributes
+def _restore_attr(obj, attr):
+    for key, val in attr.items():
+        setattr(obj, key, val)
+    return obj
+
+
 def _gen_ellipsis():
     return Ellipsis
 
@@ -1292,29 +1330,7 @@ def _is_dynamic(module):
         return False
 
     if hasattr(module, '__spec__'):
-        if module.__spec__ is not None:
-            return False
-
-        # In PyPy, Some built-in modules such as _codecs can have their
-        # __spec__ attribute set to None despite being imported.  For such
-        # modules, the ``_find_spec`` utility of the standard library is used.
-        parent_name = module.__name__.rpartition('.')[0]
-        if parent_name:  # pragma: no cover
-            # This code handles the case where an imported package (and not
-            # module) remains with __spec__ set to None. It is however untested
-            # as no package in the PyPy stdlib has __spec__ set to None after
-            # it is imported.
-            try:
-                parent = sys.modules[parent_name]
-            except KeyError:
-                msg = "parent {!r} not in sys.modules"
-                raise ImportError(msg.format(parent_name))
-            else:
-                pkgpath = parent.__path__
-        else:
-            pkgpath = None
-        return _find_spec(module.__name__, pkgpath, module) is None
-
+        return module.__spec__ is None
     else:
         # Backward compat for Python 2
         import imp
@@ -1329,3 +1345,18 @@ def _is_dynamic(module):
         except ImportError:
             return True
         return False
+
+
+""" Use copy_reg to extend global pickle definitions """
+
+if sys.version_info < (3, 4):  # pragma: no branch
+    method_descriptor = type(str.upper)
+
+    def _reduce_method_descriptor(obj):
+        return (getattr, (obj.__objclass__, obj.__name__))
+
+    try:
+        import copy_reg as copyreg
+    except ImportError:
+        import copyreg
+    copyreg.pickle(method_descriptor, _reduce_method_descriptor)
