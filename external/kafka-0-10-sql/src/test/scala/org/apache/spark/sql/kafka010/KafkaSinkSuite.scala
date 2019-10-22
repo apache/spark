@@ -599,6 +599,5 @@ class TestKafkaPartitioner extends DefaultPartitioner {
       keyBytes: Array[Byte],
       value: Any,
       valueBytes: Array[Byte],
-      cluster: Cluster)
-  : Int = 0
+      cluster: Cluster): Int = 0
 }
