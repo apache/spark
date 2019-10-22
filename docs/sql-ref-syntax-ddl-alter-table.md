@@ -23,7 +23,8 @@ license: |
 `ALTER TABLE` statement changes the schema or properties of a table.
 
 ### RENAME 
-`ALTER TABLE RENAME` statement changes the table name of an exsisting table in the Database.
+`ALTER TABLE RENAME` statement changes the table name of an existing table in the database.
+
 #### Syntax
 {% highlight sql %}
 ALTER TABLE [db_name.]old_table_name RENAME TO [db_name.]new_table_name
@@ -77,24 +78,24 @@ ALTER TABLE table_name ADD COLUMNS (col_spec[, col_spec ...])
 ### SET AND UNSET
 
 #### SET TABLE PROPERTIES
-`ALTER TABLE SET` command is used for setting the Table properties.If a particular property was already set, 
+`ALTER TABLE SET` command is used for setting the table properties. If a particular property was already set, 
 this overrides the old value with the new one.
 
-`ALTER TABLE USET` is used to drop the table Property. 
+`ALTER TABLE USET` is used to drop the table property. 
 
 ##### Syntax
 {% highlight sql %}
 
---Set Table Properties
+--Set Table Properties 
 ALTER TABLE table_name SET TBLPROPERTIES (key1=val1, key2=val2, ...)
 
 --Unset Table Properties
 ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] (key1, key2, ...)
-
+  
 {% endhighlight %}
 
 #### SET SERDE
-`ALTER TABLE SET` command is used for setting the SERDE or SERDE Propeties in Hive tables.If a particular property was already set, 
+`ALTER TABLE SET` command is used for setting the SERDE or SERDE properties in Hive tables. If a particular property was already set,  
 this overrides the old value with the new one.
 
 ##### Syntax
@@ -145,7 +146,7 @@ ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION 'new_location';
 {% highlight sql %}
 
 --RENAME table 
-desc student;
+DESC student;
 +--------------------------+------------+----------+--+
 |         col_name         | data_type  | comment  |
 +--------------------------+------------+----------+--+
@@ -161,7 +162,7 @@ ALTER TABLE Student RENAME TO StudentInfo;
 
 --After Renaming the table
 
-desc studentInfo;
+DESC studentInfo;
 +--------------------------+------------+----------+--+
 |         col_name         | data_type  | comment  |
 +--------------------------+------------+----------+--+
@@ -198,7 +199,7 @@ show partitions StudentInfo;
 
 -- Add new column to a table
 
-desc studentInfo;
+DESC studentInfo;
 +--------------------------+------------+----------+--+
 |         col_name         | data_type  | comment  |
 +--------------------------+------------+----------+--+
@@ -210,10 +211,10 @@ desc studentInfo;
 | age                      | int        | NULL     |
 +--------------------------+------------+----------+
 
-ALTER TABLE StudentINfo ADD columns (LastName string, DOB timestamp);
+ALTER TABLE StudentInfo ADD columns (LastName string, DOB timestamp);
 
 --After Adding New columns to the table
-desc studentInfo;
+DESC studentInfo;
 +--------------------------+------------+----------+--+
 |         col_name         | data_type  | comment  |
 +--------------------------+------------+----------+--+
