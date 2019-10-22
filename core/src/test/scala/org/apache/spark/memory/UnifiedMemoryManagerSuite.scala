@@ -309,6 +309,15 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     mm.invokePrivate[Unit](assertInvariants())
   }
 
+  test("invalid MEMORY_OFFHEAP_SIZE") {
+    val conf = new SparkConf()
+      .set(MEMORY_OFFHEAP_SIZE, 0)
+    val exception = intercept[IllegalArgumentException] {
+      UnifiedMemoryManager(conf, numCores = 1)
+    }
+    assert(exception.getMessage.contains("The off-heap memory size must be positive."))
+  }
+
   test("not enough free memory in the storage pool --OFF_HEAP") {
     val conf = new SparkConf()
       .set(MEMORY_OFFHEAP_SIZE, 1000L)

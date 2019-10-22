@@ -254,7 +254,7 @@ package object config {
       "consumption must fit within some hard limit then be sure to shrink your JVM heap size " +
       "accordingly. This must be set to a positive value when spark.memory.offHeap.enabled=true.")
     .bytesConf(ByteUnit.BYTE)
-    .checkValue(_ > 0, "The off-heap memory size must not be negative")
+    .checkValue(_ > 0, "The off-heap memory size must be positive.")
     .createWithDefault(0)
 
   private[spark] val MEMORY_STORAGE_FRACTION = ConfigBuilder("spark.memory.storageFraction")
