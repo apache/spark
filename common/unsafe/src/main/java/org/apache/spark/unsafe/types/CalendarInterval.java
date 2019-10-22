@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -409,26 +408,5 @@ public final class CalendarInterval implements Serializable {
     if (value != 0) {
       sb.append(' ').append(value).append(' ').append(unit).append('s');
     }
-  }
-
-  /**
-   * Gets interval duration
-   * @param daysPerMonth the number of days per one month
-   * @param targetUnit time units of the result
-   * @return duration in the specified time units
-   */
-  public long getDuration(int daysPerMonth, TimeUnit targetUnit) {
-    long monthsDuration = Math.multiplyExact(daysPerMonth * MICROS_PER_DAY, months);
-    long result = Math.addExact(microseconds, monthsDuration);
-    return targetUnit.convert(result, TimeUnit.MICROSECONDS);
-  }
-
-  /**
-   * Checks the interval is negative
-   * @param daysPerMonth the number of days per one month
-   * @return true if duration of the given interval is less than 0 otherwise false
-   */
-  public boolean isNegative(int daysPerMonth) {
-    return getDuration(daysPerMonth, TimeUnit.MICROSECONDS) < 0;
   }
 }

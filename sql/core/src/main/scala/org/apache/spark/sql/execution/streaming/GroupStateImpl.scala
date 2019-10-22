@@ -21,6 +21,7 @@ import java.sql.Date
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -161,11 +162,11 @@ private[sql] class GroupStateImpl[S] private(
   private def parseDuration(duration: String): Long = {
     val cal = CalendarInterval.fromCaseInsensitiveString(duration)
     val daysPerMonth = 31
-    if (cal.isNegative(daysPerMonth)) {
+    if (IntervalUtils.isNegative(cal, daysPerMonth)) {
       throw new IllegalArgumentException(s"Provided duration ($duration) is negative")
     }
 
-    cal.getDuration(daysPerMonth, TimeUnit.MILLISECONDS)
+    IntervalUtils.getDuration(cal, daysPerMonth, TimeUnit.MILLISECONDS)
   }
 
   private def checkTimeoutTimestampAllowed(): Unit = {

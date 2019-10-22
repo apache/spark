@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -87,5 +89,33 @@ object IntervalUtils {
     result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
     result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
     Decimal(result, 18, 6)
+  }
+
+  /**
+   * Gets interval duration
+   *
+   * @param cal - the interval to get duration
+   * @param daysPerMonth - the number of days per one month
+   * @param targetUnit - time units of the result
+   * @return duration in the specified time units
+   */
+  def getDuration(
+      cal: CalendarInterval,
+      daysPerMonth: Int,
+      targetUnit: TimeUnit): Long = {
+    val monthsDuration = Math.multiplyExact(daysPerMonth * DateTimeUtils.MICROS_PER_DAY, cal.months)
+    val result = Math.addExact(cal.microseconds, monthsDuration)
+    targetUnit.convert(result, TimeUnit.MICROSECONDS)
+  }
+
+  /**
+   * Checks the interval is negative
+   *
+   * @param cal - the checked interval
+   * @param daysPerMonth - the number of days per one month
+   * @return true if duration of the given interval is less than 0 otherwise false
+   */
+  def isNegative(cal: CalendarInterval, daysPerMonth: Int): Boolean = {
+    getDuration(cal, daysPerMonth, TimeUnit.MICROSECONDS) < 0
   }
 }
