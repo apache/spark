@@ -50,6 +50,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     val statusStore = createStatusStore
     val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
     when(tab.sqlStore).thenReturn(statusStore)
+    when(tab.streamQueryCache).thenReturn(None)
 
     val request = mock(classOf[HttpServletRequest])
     when(tab.appName).thenReturn("testing")
@@ -66,6 +67,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     val request = mock(classOf[HttpServletRequest])
 
     when(tab.sqlStore).thenReturn(statusStore)
+    when(tab.streamQueryCache).thenReturn(None)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
     when(request.getParameter("failed.sort")).thenReturn("Duration")

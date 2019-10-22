@@ -29,6 +29,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.ui.SQLTab
 import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
 class StreamingQueryPage(parent: SQLTab, store: Option[HashSet[(StreamingQuery, Long)]])
@@ -43,26 +44,10 @@ class StreamingQueryPage(parent: SQLTab, store: Option[HashSet[(StreamingQuery, 
     SparkUIUtils.headerSparkPage(request, "Streaming Query", content, parent)
   }
 
-  def withNull(body: => Any): Any = {
-    try {
-      body
-    } catch {
-      case _: Exception =>
-        "-"
-    }
-  }
-
-  def withInvalid(body: => Double): Double = {
-    if (body.isNaN || body.isInfinite) {
-      0.0d
-    } else {
-      body
-    }
-  }
-
   def generateDataRow(request: HttpServletRequest, isActive: Boolean)
-    (query: (StreamingQuery, Long)): Seq[Node] = {
+    (streamQuery: (StreamingQuery, Long)): Seq[Node] = {
 
+    val (query, timeSinceStart) = streamQuery
     def details(detail: Any): Seq[Node] = {
       val s = detail.asInstanceOf[String]
       val isMultiline = s.indexOf('\n') >= 0
@@ -89,54 +74,54 @@ class StreamingQueryPage(parent: SQLTab, store: Option[HashSet[(StreamingQuery, 
     }
 
     val statisticsLink = "%s/%s/streaming/statistics?id=%s"
-      .format(SparkUIUtils.prependBaseUri(request, parent.basePath), parent.prefix, query._1.runId)
+      .format(SparkUIUtils.prependBaseUri(request, parent.basePath), parent.prefix, query.runId)
 
-    val name = if (query._1.name == null || query._1.name.isEmpty) {
-      query._1.id
+    val name = if (query.name == null || query.name.isEmpty) {
+      query.id
     } else {
-      query._1.name
+      query.name
     }
 
     val status = if (isActive) {
       "RUNNING"
     } else {
-      query._1.exception.map(_.message) match {
+      query.exception.map(_.message) match {
         case Some(_) => "FAILED"
         case None => "FINISHED"
       }
     }
 
     val duration = if (isActive) {
-      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query._2)
+      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - timeSinceStart)
     } else {
-      withNull {
-        val end = query._1.lastProgress.timestamp
-        val start = query._1.recentProgress.head.timestamp
+      withNoProgress(query, {
+        val end = query.lastProgress.timestamp
+        val start = query.recentProgress.head.timestamp
         SparkUIUtils.formatDurationVerbose(
           df.parse(end).getTime - df.parse(start).getTime)
-      }
+      }, "-")
     }
 
     <tr>
       <td> {name} </td>
       <td> {status} </td>
-      <td> {query._1.id} </td>
-      <td> <a href={statisticsLink}> {query._1.runId} </a> </td>
-      <td> {withNull { SparkUIUtils.formatDate(query._2) }} </td>
+      <td> {query.id} </td>
+      <td> <a href={statisticsLink}> {query.runId} </a> </td>
+      <td> {SparkUIUtils.formatDate(timeSinceStart)} </td>
       <td> {duration} </td>
-      <td> {withNull {
-        (query._1.recentProgress.map(p => withInvalid(p.inputRowsPerSecond)).sum /
-          query._1.recentProgress.length).formatted("%.2f") }}
+      <td> {withNoProgress(query, {
+        (query.recentProgress.map(p => withNumberInvalid(p.inputRowsPerSecond)).sum /
+          query.recentProgress.length).formatted("%.2f") }, "NaN")}
       </td>
-      <td> {withNull {
-        (query._1.recentProgress.map(p => withInvalid(p.processedRowsPerSecond)).sum /
-          query._1.recentProgress.length).formatted("%.2f") }}
+      <td> {withNoProgress(query, {
+        (query.recentProgress.map(p => withNumberInvalid(p.processedRowsPerSecond)).sum /
+          query.recentProgress.length).formatted("%.2f") }, "NaN")}
       </td>
-      <td> {withNull { query._1.getTotalInputRecords }} </td>
-      <td> {withNull { query._1.lastProgress.batchId }} </td>
-      {details(withNull {
-      s"== JSON representation of this progress ==\n${query._1.lastProgress.prettyJson}" })}
-      {details(withNull { query._1.exception.map(_.message).getOrElse("-") })}
+      <td> {withNoProgress(query, { query.getTotalInputRecords }, "NaN")} </td>
+      <td> {withNoProgress(query, { query.lastProgress.batchId }, "NaN")} </td>
+      {details(withNoProgress(query, {
+      s"== JSON representation of this progress ==\n${query.lastProgress.prettyJson}" }, "-"))}
+      {details(withNoProgress(query, { query.exception.map(_.message).getOrElse("-") }, "-"))}
     </tr>
   }
 

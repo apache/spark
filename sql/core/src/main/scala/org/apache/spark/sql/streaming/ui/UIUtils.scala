@@ -22,16 +22,18 @@ import java.util.{Locale, TimeZone}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
+import org.apache.spark.sql.streaming.StreamingQuery
+
 private[sql] object UIUtils {
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val batchTimeFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.ROOT)
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
   }
 
   private val batchTimeFormatWithMilliseconds = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.ROOT)
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
   }
 
   /**
@@ -91,6 +93,22 @@ private[sql] object UIUtils {
       // Remove new lines and single quotes, followed by escaping HTML version 4.0
       StringEscapeUtils.escapeHtml4(
         NEWLINE_AND_SINGLE_QUOTE_REGEX.replaceAllIn(requestParameter, ""))
+    }
+  }
+
+  def withNumberInvalid(number: => Double): Double = {
+    if (number.isNaN || number.isInfinite) {
+      0.0d
+    } else {
+      number
+    }
+  }
+
+  def withNoProgress[T](query: StreamingQuery, body: => T, default: T): T = {
+    if (query.lastProgress != null) {
+      body
+    } else {
+      default
     }
   }
 }

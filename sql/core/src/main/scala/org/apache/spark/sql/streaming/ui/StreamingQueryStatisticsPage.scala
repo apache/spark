@@ -20,8 +20,7 @@ package org.apache.spark.sql.streaming.ui
 import java.{util => ju}
 import java.lang.{Long => JLong}
 import java.text.SimpleDateFormat
-import java.util.{TimeZone, UUID}
-import java.util.concurrent.TimeUnit
+import java.util.UUID
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
@@ -29,8 +28,10 @@ import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 import org.apache.spark.sql.execution.ui.SQLTab
 import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 
 class StreamingQueryStatisticsPage(
@@ -38,7 +39,7 @@ class StreamingQueryStatisticsPage(
     store: Option[HashSet[(StreamingQuery, Long)]])
   extends WebUIPage("streaming/statistics") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-  df.setTimeZone(TimeZone.getDefault)
+  df.setTimeZone(getTimeZone("UTC"))
 
   def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
@@ -52,7 +53,7 @@ class StreamingQueryStatisticsPage(
     val parameterId = UIUtils.stripXSS(request.getParameter("id"))
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val query = if (store.nonEmpty) {
+    val (query, timeSinceStart) = if (store.nonEmpty) {
       store.get.find(i => i._1.runId.equals(UUID.fromString(parameterId)))
         .getOrElse(throw new Exception(s"Can not find streaming query $parameterId"))
     } else {
@@ -60,51 +61,14 @@ class StreamingQueryStatisticsPage(
     }
 
     val resources = generateLoadResources(request)
-
+    val basicInfo = generateBasicInfo(query, timeSinceStart)
     val content =
       store.synchronized { // make sure all parts in this page are consistent
         resources ++
-          generateStatTable(query._1)
+          basicInfo ++
+          generateStatTable(query)
       }
     SparkUIUtils.headerSparkPage(request, "Streaming Query Statistics", content, parent)
-  }
-
-  def normalizeDuration(milliseconds: Long): (Double, TimeUnit) = {
-    if (milliseconds < 1000) {
-      return (milliseconds, TimeUnit.MILLISECONDS)
-    }
-    val seconds = milliseconds.toDouble / 1000
-    if (seconds < 60) {
-      return (seconds, TimeUnit.SECONDS)
-    }
-    val minutes = seconds / 60
-    if (minutes < 60) {
-      return (minutes, TimeUnit.MINUTES)
-    }
-    val hours = minutes / 60
-    if (hours < 24) {
-      return (hours, TimeUnit.HOURS)
-    }
-    val days = hours / 24
-    (days, TimeUnit.DAYS)
-  }
-
-  def shortTimeUnitString(unit: TimeUnit): String = unit match {
-    case TimeUnit.NANOSECONDS => "ns"
-    case TimeUnit.MICROSECONDS => "us"
-    case TimeUnit.MILLISECONDS => "ms"
-    case TimeUnit.SECONDS => "sec"
-    case TimeUnit.MINUTES => "min"
-    case TimeUnit.HOURS => "hrs"
-    case TimeUnit.DAYS => "days"
-  }
-
-  def withInvalid(body: => Double): Double = {
-    if (body.isNaN || body.isInfinite) {
-      0.0d
-    } else {
-      body
-    }
   }
 
   def generateTimeMap(times: Seq[Long]): Seq[Node] = {
@@ -127,12 +91,30 @@ class StreamingQueryStatisticsPage(
     <script>{Unparsed(js)}</script>
   }
 
-  def withNoProgress[T](query: StreamingQuery, body: => T, default: T): T = {
-    if (query.lastProgress != null) {
-      body
+  def generateBasicInfo(query: StreamingQuery, timeSinceStart: Long): Seq[Node] = {
+    val duration = if (query.isActive) {
+      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - timeSinceStart)
     } else {
-      default
+      withNoProgress(query, {
+        val end = query.lastProgress.timestamp
+        val start = query.recentProgress.head.timestamp
+        SparkUIUtils.formatDurationVerbose(
+          df.parse(end).getTime - df.parse(start).getTime)
+      }, "-")
     }
+
+    <div>Running batches for
+      <strong>
+        {duration}
+      </strong>
+      since
+      <strong>
+        {SparkUIUtils.formatDate(timeSinceStart)}
+      </strong>
+      (<strong>{withNoProgress(query, { query.lastProgress.batchId + 1L }, "NaN")}</strong>
+      completed batches, <strong>{query.getTotalInputRecords}</strong> records)
+    </div>
+    <br />
   }
 
   def generateStatTable(query: StreamingQuery): Seq[Node] = {
@@ -154,16 +136,16 @@ class StreamingQueryStatisticsPage(
     val minBatchDuration = 0L
 
     val inputRateData = withNoProgress(query, query.recentProgress.map(p =>
-      (df.parse(p.timestamp).getTime, withInvalid { p.inputRowsPerSecond })),
+      (df.parse(p.timestamp).getTime, withNumberInvalid { p.inputRowsPerSecond })),
       Array.empty[(Long, Double)])
     val processRateData = withNoProgress(query, query.recentProgress.map(p =>
-      (df.parse(p.timestamp).getTime, withInvalid { p.processedRowsPerSecond })),
+      (df.parse(p.timestamp).getTime, withNumberInvalid { p.processedRowsPerSecond })),
       Array.empty[(Long, Double)])
     val inputRowsData = withNoProgress(query, query.recentProgress.map(p =>
-      (df.parse(p.timestamp).getTime, withInvalid { p.numInputRows })),
+      (df.parse(p.timestamp).getTime, withNumberInvalid { p.numInputRows })),
       Array.empty[(Long, Double)])
     val batchDurations = withNoProgress(query, query.recentProgress.map(p =>
-      (df.parse(p.timestamp).getTime, withInvalid { p.batchDuration })),
+      (df.parse(p.timestamp).getTime, withNumberInvalid { p.batchDuration })),
       Array.empty[(Long, Double)])
     val operationDurationData = withNoProgress(query, query.recentProgress.map { case p =>
       val durationMs = p.durationMs
