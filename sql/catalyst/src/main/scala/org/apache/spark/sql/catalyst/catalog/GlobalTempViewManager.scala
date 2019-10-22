@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.util.concurrent.locks.{Lock, ReentrantReadWriteLock}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -38,14 +39,16 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  */
 class GlobalTempViewManager(val database: String) {
 
+  private val lock = new ReentrantReadWriteLock()
+
   /** List of view definitions, mapping from view name to logical plan. */
-  @GuardedBy("this")
+  @GuardedBy("lock")
   private val viewDefinitions = new mutable.HashMap[String, LogicalPlan]
 
   /**
    * Returns the global view definition which matches the given name, or None if not found.
    */
-  def get(name: String): Option[LogicalPlan] = synchronized {
+  def get(name: String): Option[LogicalPlan] = withReadLock {
     viewDefinitions.get(name)
   }
 
@@ -56,7 +59,7 @@ class GlobalTempViewManager(val database: String) {
   def create(
       name: String,
       viewDefinition: LogicalPlan,
-      overrideIfExists: Boolean): Unit = synchronized {
+      overrideIfExists: Boolean): Unit = withWriteLock {
     if (!overrideIfExists && viewDefinitions.contains(name)) {
       throw new TempTableAlreadyExistsException(name)
     }
@@ -68,7 +71,7 @@ class GlobalTempViewManager(val database: String) {
    */
   def update(
       name: String,
-      viewDefinition: LogicalPlan): Boolean = synchronized {
+      viewDefinition: LogicalPlan): Boolean = withWriteLock {
     if (viewDefinitions.contains(name)) {
       viewDefinitions.put(name, viewDefinition)
       true
@@ -80,7 +83,7 @@ class GlobalTempViewManager(val database: String) {
   /**
    * Removes the global temp view if it exists, returns true if removed, false otherwise.
    */
-  def remove(name: String): Boolean = synchronized {
+  def remove(name: String): Boolean = withWriteLock {
     viewDefinitions.remove(name).isDefined
   }
 
@@ -89,7 +92,7 @@ class GlobalTempViewManager(val database: String) {
    * issue an exception if the source view exists but the destination view already exists. Returns
    * true if renamed, false otherwise.
    */
-  def rename(oldName: String, newName: String): Boolean = synchronized {
+  def rename(oldName: String, newName: String): Boolean = withWriteLock {
     if (viewDefinitions.contains(oldName)) {
       if (viewDefinitions.contains(newName)) {
         throw new AnalysisException(
@@ -108,14 +111,29 @@ class GlobalTempViewManager(val database: String) {
   /**
    * Lists the names of all global temporary views.
    */
-  def listViewNames(pattern: String): Seq[String] = synchronized {
+  def listViewNames(pattern: String): Seq[String] = withReadLock {
     StringUtils.filterPattern(viewDefinitions.keys.toSeq, pattern)
   }
 
   /**
    * Clears all the global temporary views.
    */
-  def clear(): Unit = synchronized {
+  def clear(): Unit = withWriteLock {
     viewDefinitions.clear()
+  }
+
+  private def withReadLock[A](f: => A): A =
+    withLock(lock.readLock())(f)
+
+  private def withWriteLock[A](f: => A): A =
+    withLock(lock.writeLock())(f)
+
+  private def withLock[A](lock: Lock)(f: => A): A = {
+    lock.lockInterruptibly()
+    try {
+      f
+    } finally {
+      lock.unlock()
+    }
   }
 }
