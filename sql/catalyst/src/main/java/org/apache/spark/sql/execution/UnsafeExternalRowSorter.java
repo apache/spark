@@ -53,6 +53,12 @@ public final class UnsafeExternalRowSorter {
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
+  // This flag makes sure the cleanupResource() has been called. After the cleanup work,
+  // iterator.next should always return false. Downstream operator triggers the resource
+  // cleanup while they found there's no need to keep the iterator any more.
+  // See more details in SPARK-21492.
+  private boolean isReleased = false;
+
   public abstract static class PrefixComputer {
 
     public static class Prefix {
@@ -159,7 +165,8 @@ public final class UnsafeExternalRowSorter {
     return sorter.getSortTimeNanos();
   }
 
-  private void cleanupResources() {
+  public void cleanupResources() {
+    isReleased = true;
     sorter.cleanupResources();
   }
 
@@ -178,7 +185,7 @@ public final class UnsafeExternalRowSorter {
 
         @Override
         public boolean hasNext() {
-          return sortedIterator.hasNext();
+          return !isReleased && sortedIterator.hasNext();
         }
 
         @Override
