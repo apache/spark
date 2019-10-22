@@ -614,7 +614,8 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         confKey = DRIVER_SUPERVISE.key),
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, confKey = "spark.jars.ivy"),
-      OptionAssigner(args.redirectSystemPrintStream.toString, STANDALONE | MESOS | YARN | KUBERNETES,
+      OptionAssigner(args.redirectSystemPrintStream.toString,
+        STANDALONE | MESOS | YARN | KUBERNETES,
         ALL_DEPLOY_MODES, confKey = "spark.printstream.redirect"),
 
       // An internal option used only for spark-shell to add user jars to repl's classloader,
