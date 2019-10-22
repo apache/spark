@@ -311,3 +311,8 @@ case class AnalyzeColumnStatement(
   require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
     "mutually exclusive. Only one of them should be specified.")
 }
+
+/**
+ * A REPAIR TABLE statement, as parsed from SQL
+ */
+case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement

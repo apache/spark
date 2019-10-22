@@ -78,8 +78,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   override val isTestWithConfigSets = false
 
   /** List of test cases to ignore, in lower cases. */
-  override def blackList: Set[String] = Set(
-    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
+  override def blackList: Set[String] = super.blackList ++ Set(
     // Missing UDF
     "postgreSQL/boolean.sql",
     "postgreSQL/case.sql",
@@ -87,17 +86,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     "date.sql",
     // SPARK-28620
     "postgreSQL/float4.sql",
-    // SPARK-28885 String value is not allowed to be stored as numeric type with
-    // ANSI store assignment policy.
-    "postgreSQL/numeric.sql",
-    "postgreSQL/int2.sql",
-    "postgreSQL/int4.sql",
-    "postgreSQL/int8.sql",
-    "postgreSQL/float8.sql",
-    // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
-    // ANSI store assignment policy.
-    "postgreSQL/date.sql",
-    "postgreSQL/timestamp.sql",
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
