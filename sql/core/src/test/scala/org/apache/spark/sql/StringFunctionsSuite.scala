@@ -94,6 +94,21 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("300", "100") :: Row("400", "100") :: Row("400-400", "100") :: Nil)
   }
 
+  test("sting split_part") {
+    val df = Seq("abc~@~def~@~ghi").toDF("a")
+    checkAnswer(df.selectExpr("split_part(a, '~@~', 2)"), Seq(Row("def")))
+    checkAnswer(df.selectExpr("split_part(a, '~@~', -1)"), Seq(Row(null)))
+    checkAnswer(df.selectExpr("split_part(a, '~@~', 4)"), Seq(Row(null)))
+
+    checkAnswer(df.selectExpr("split_part(null, '~@~', 2)"), Seq(Row(null)))
+    checkAnswer(df.selectExpr("split_part(a, null, 2)"), Seq(Row(null)))
+    checkAnswer(df.selectExpr("split_part(a, '~@~', null)"), Seq(Row(null)))
+
+    val df2 = Seq("abc~.~def~@~ghi").toDF("a")
+    checkAnswer(df2.selectExpr("split_part(a, '~.~', 2)"), Seq(Row("def~@~ghi")))
+    checkAnswer(df2.selectExpr("split_part(a, '', 1)"), Seq(Row("abc~.~def~@~ghi")))
+  }
+
   test("non-matching optional group") {
     val df = Seq(Tuple1("aaaac")).toDF("s")
     checkAnswer(

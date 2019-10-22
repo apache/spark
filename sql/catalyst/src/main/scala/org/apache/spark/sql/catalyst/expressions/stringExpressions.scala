@@ -2333,3 +2333,41 @@ case class Sentences(
     new GenericArrayData(result)
   }
 }
+
+@ExpressionDescription(
+  usage = "_FUNC_(text, delimiter, field) - Split string on delimiter and return the given field" +
+    " (counting from one).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('abc~@~def~@~ghi', '~@~', 2);
+       def
+  """,
+  since = "3.0.0")
+case class SplitPart(text: Expression, delimiter: Expression, field: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
+
+  override def prettyName: String = "split_part"
+
+  override def children: Seq[Expression] = text :: delimiter :: field :: Nil
+
+  override def inputTypes: Seq[AbstractDataType] = StringType :: StringType :: IntegerType :: Nil
+
+  override def dataType: DataType = StringType
+
+  override def nullSafeEval(text: Any, deli: Any, idx: Any): Any = {
+    val string = text.asInstanceOf[UTF8String]
+    val delimiterLit = Pattern.quote(deli.asInstanceOf[UTF8String].toString)
+    val index = idx.asInstanceOf[Int]
+    val strings: Array[UTF8String] = if (UTF8String.EMPTY_UTF8.equals(deli)) {
+      Array(string)
+    } else {
+      string.split(UTF8String.fromString(delimiterLit), -1)
+    }
+
+    if (index > strings.size || index <= 0) {
+      null
+    } else {
+      strings(index - 1)
+    }
+  }
+}
