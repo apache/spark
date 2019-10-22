@@ -17,9 +17,15 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.ArrayType
 
 /**
  * A test suite to test DataFrame/SQL functionalities with complex types (i.e. array, struct, map).
@@ -63,6 +69,33 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
   test("SPARK-15285 Generated SpecificSafeProjection.apply method grows beyond 64KB") {
     val ds100_5 = Seq(S100_5()).toDS()
     ds100_5.rdd.count
+  }
+
+  test("SPARK-29503 nest unsafe struct inside safe array") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val exampleDS = spark.sparkContext.parallelize(Seq(Seq(1, 2, 3))).toDF("items")
+
+      // items: Seq[Int] => items.map { item => Seq(Struct(item)) }
+      val result = exampleDS.select(
+        new Column(MapObjects(
+          (item: Expression) => array(struct(new Column(item))).expr,
+          $"items".expr,
+          exampleDS.schema("items").dataType.asInstanceOf[ArrayType].elementType
+        )) as "items"
+      ).collect()
+
+      def getValueInsideDepth(result: Row, index: Int): Int = {
+        // expected output:
+        // WrappedArray([WrappedArray(WrappedArray([1]), WrappedArray([2]), WrappedArray([3]))])
+        result.getSeq[mutable.WrappedArray[_]](0)(index)(0)
+          .asInstanceOf[GenericRowWithSchema].getInt(0)
+      }
+
+      assert(result.size === 1)
+      assert(getValueInsideDepth(result.head, 0) === 1)
+      assert(getValueInsideDepth(result.head, 1) === 2)
+      assert(getValueInsideDepth(result.head, 2) === 3)
+    }
   }
 }
 
