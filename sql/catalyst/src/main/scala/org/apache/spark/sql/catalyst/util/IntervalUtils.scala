@@ -103,4 +103,12 @@ object IntervalUtils {
         throw ex
     }
   }
+
+  def safeFromString(str: String): CalendarInterval = {
+    try {
+      fromString(str)
+    } catch {
+      case _: IllegalArgumentException => null
+    }
+  }
 }
