@@ -2742,4 +2742,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       visitMultipartIdentifier(ctx.multipartIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
+
+  /**
+   * A command for users to list the partition names of a table. If partition spec is specified,
+   * partitions that match the spec are returned. Otherwise an empty result set is returned.
+   *
+   * This function creates a [[ShowPartitionsStatement]] logical plan
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW PARTITIONS multi_part_name [partition_spec];
+   * }}}
+   */
+  override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    ShowPartitionsStatement(table, partitionKeys)
+  }
 }
