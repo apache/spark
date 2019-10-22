@@ -1086,6 +1086,14 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("REFRESH TABLE: v2 table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql(s"REFRESH TABLE $t")
+    }
+  }
+
   test("REPLACE TABLE: v1 table") {
     val e = intercept[AnalysisException] {
       sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
@@ -1195,14 +1203,6 @@ class DataSourceV2SQLSuite
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
       testV1Command("MSCK REPAIR TABLE", t)
-    }
-  }
-
-  test("REFRESH TABLE") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("REFRESH TABLE", t)
     }
   }
 

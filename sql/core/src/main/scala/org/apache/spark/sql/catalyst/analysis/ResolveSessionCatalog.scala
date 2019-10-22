@@ -216,6 +216,9 @@ class ResolveSessionCatalog(
           ignoreIfExists = c.ifNotExists)
       }
 
+    case RefreshTableStatement(SessionCatalog(_, tableName)) =>
+      RefreshTable(tableName.asTableIdentifier)
+
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
     case c @ ReplaceTableStatement(
@@ -282,10 +285,6 @@ class ResolveSessionCatalog(
       AlterTableRecoverPartitionsCommand(
         v1TableName.asTableIdentifier,
         "MSCK REPAIR TABLE")
-
-    case RefreshTableStatement(tableName) =>
-      val v1TableName = parseV1Table(tableName, "REFRESH TABLE")
-      RefreshTable(v1TableName.asTableIdentifier)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
