@@ -2975,6 +2975,13 @@
     </profile>
 
     <profile>
+      <id>spark-thriftserver</id>
+      <modules>
+        <module>sql/thriftserver</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>hadoop-cloud</id>
       <modules>
         <module>hadoop-cloud</module>
