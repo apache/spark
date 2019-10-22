@@ -86,10 +86,12 @@
     <module>common/kvstore</module>
     <module>common/network-common</module>
     <module>common/network-shuffle</module>
+    <module>common/network-yarn</module>
     <module>common/unsafe</module>
     <module>common/tags</module>
     <module>core</module>
     <module>graphx</module>
+    <module>hadoop-cloud</module>
     <module>mllib</module>
     <module>mllib-local</module>
     <module>tools</module>
@@ -97,6 +99,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>sql/hive-thriftserver</module>
     <module>assembly</module>
     <module>examples</module>
     <module>repl</module>
@@ -106,9 +109,15 @@
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
     <module>external/avro</module>
+    <module>external/docker-integration-tests</module>
+    <module>external/kinesis-asl-assembly</module>
+    <module>external/kinesis-asl</module>
+    <module>external/spark-ganglia-lgpl</module>
     <module>graph/api</module>
     <module>graph/cypher</module>
     <module>graph/graph</module>
+    <module>resource-managers/mesos</module>
+    <module>resource-managers/yarn</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
