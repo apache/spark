@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BitwiseAnd, BitwiseOr, ExpectsInputTypes, Expression, ExpressionDescription, If, IsNull, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BitwiseAnd, BitwiseOr, BitwiseXor, ExpectsInputTypes, Expression, ExpressionDescription, If, IsNull, Literal}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegralType}
 
 @ExpressionDescription(
@@ -96,4 +96,43 @@ case class BitOrAgg(child: Expression) extends DeclarativeAggregate with Expects
       If(IsNull(bitOr.right), bitOr.left, BitwiseOr(bitOr.left, bitOr.right))) :: Nil
 
   override lazy val evaluateExpression: AttributeReference = bitOr
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the bitwise OR of all non-null input values, or null if none.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (3), (5) AS tab(col);
+       6
+  """,
+  since = "3.0.0")
+case class BitXorAgg(child: Expression) extends DeclarativeAggregate with ExpectsInputTypes {
+
+  override def nodeName: String = "bit_xor"
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
+
+  private lazy val bitXOr = AttributeReference("bit_xor", child.dataType)()
+
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = bitXOr :: Nil
+
+  override lazy val initialValues: Seq[Literal] = Literal.create(null, dataType) :: Nil
+
+  override lazy val updateExpressions: Seq[Expression] =
+    If(IsNull(bitXOr),
+      child,
+      If(IsNull(child), bitXOr, BitwiseXor(bitXOr, child))) :: Nil
+
+  override lazy val mergeExpressions: Seq[Expression] =
+    If(IsNull(bitXOr.left),
+      bitXOr.right,
+      If(IsNull(bitXOr.right), bitXOr.left, BitwiseXor(bitXOr.left, bitXOr.right))) :: Nil
+
+  override lazy val evaluateExpression: AttributeReference = bitXOr
 }
