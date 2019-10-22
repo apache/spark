@@ -484,7 +484,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   examples = """
     Examples:
       > SELECT _FUNC_('xx~^~yy~^~zz~^~', '~^~', 'yy');
-       [xx,null,zz,""]
+       ["xx",null,"zz",""]
   """, since = "3.0.0")
 case class StringToArray(text: Expression, delimiter: Expression, replaced: Expression)
   extends TernaryExpression with CodegenFallback with ExpectsInputTypes {
