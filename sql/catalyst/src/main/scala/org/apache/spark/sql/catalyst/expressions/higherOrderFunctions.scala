@@ -306,7 +306,7 @@ case class ArrayTransform(
       > SELECT _FUNC_(array('bc', 'ab', 'dc'), (x, y) -> f(x, y));
        ["dc", "bc", "ab"]
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
- |     ["d", "c", "b", "a", null]
+       ["d", "c", "b", "a", null]
   """,
   since = "2.4.0")
 case class ArraySort(
@@ -369,17 +369,9 @@ case class ArraySort(
   def comparator(inputRow: InternalRow): Comparator[Any] = {
     val f = functionForEval
     (o1: Any, o2: Any) => {
-      if (o1 == null && o2 == null) {
-        0
-      } else if (o1 == null) {
-        1
-      } else if (o2 == null) {
-        -1
-      } else {
         firstParam.value.set(o2)
         secondParam.value.set(o1)
         f.eval(inputRow).asInstanceOf[Int]
-      }
     }
   }
 

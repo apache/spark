@@ -327,15 +327,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     })
 
     spark.udf.register("fString", (x: String, y: String) => {
-      if (x < y) -1
+      if (x == null && y == null) 0
+      else if (x == null) -1
+      else if (y == null) 1
+      else if (x < y) -1
       else if (x == y) 0
       else 1
     })
 
     spark.udf.register("fStringLength", (x: String, y: String) => {
-      if (x.length < y.length) 1
+      if (x == null && y == null) 0
+      else if (x == null) -1
+      else if (y == null) 1
+      else if (x.length < y.length) 1
       else if (x.length == y.length) 0
       else -1
+
     })
 
     val df1 = Seq(Array[Int](3, 2, 5, 1, 2)).toDF("a")
@@ -365,12 +372,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Seq("a", "abc", "abcd")))
     )
 
-    val df4 = Seq((Array[Array[Int]](null, Array(2, 3, 1), null, Array(4, 2, 1, 4),
+    val df4 = Seq((Array[Array[Int]](Array(2, 3, 1), Array(4, 2, 1, 4),
       Array(1, 2)), "x")).toDF("a", "b")
     checkAnswer(
       df4.selectExpr("array_sort(a, (x, y) -> fDesc(cardinality(x), cardinality(y)))"),
       Seq(
-        Row(Seq[Seq[Int]](Seq(1, 2), Seq(2, 3, 1), Seq(4, 2, 1, 4), null, null)))
+        Row(Seq[Seq[Int]](Seq(1, 2), Seq(2, 3, 1), Seq(4, 2, 1, 4))))
     )
 
     val df5 = Seq(Array[String]("bc", null, "ab", "dc")).toDF("a")
@@ -379,6 +386,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(
         Row(Seq("dc", "bc", "ab", null)))
     )
+
+    spark.sql("drop temporary function fAsc")
+    spark.sql("drop temporary function fDesc")
+    spark.sql("drop temporary function fString")
+    spark.sql("drop temporary function fStringLength")
   }
 
   test("sort_array/array_sort functions") {
@@ -387,7 +399,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (Array.empty[Int], Array.empty[String]),
       (null, null)
     ).toDF("a", "b")
-   checkAnswer(
+    checkAnswer(
       df.select(sort_array($"a"), sort_array($"b")),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
