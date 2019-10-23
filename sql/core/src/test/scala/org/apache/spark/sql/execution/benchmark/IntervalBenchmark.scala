@@ -52,16 +52,6 @@ object IntervalBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def addCase(
-      benchmark: Benchmark,
-      cardinality: Long,
-      name: String,
-      exprs: Column*): Unit = {
-    benchmark.addCase(name, numIters = 3) { _ =>
-      doBenchmark(cardinality, exprs: _*)
-    }
-  }
-
   private def buildString(withPrefix: Boolean, units: Seq[String] = Seq.empty): Column = {
     val init = lit(if (withPrefix) "interval" else "") ::
       ($"id" % 10000).cast("string") ::
@@ -88,8 +78,6 @@ object IntervalBenchmark extends SqlBasedBenchmark {
     val intervalToTest = ListBuffer[String]()
 
     val benchmark = new Benchmark("cast strings to intervals", N, output = output)
-    addCase(benchmark, N, "string w/ interval", buildString(true, timeUnits))
-    addCase(benchmark, N, "string w/o interval", buildString(false, timeUnits))
     addCase(benchmark, N, intervalToTest) // Only years
 
     for (unit <- timeUnits) {
