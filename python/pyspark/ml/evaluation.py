@@ -196,6 +196,25 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         """
         return self.getOrDefault(self.numBins)
 
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setRawPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`rawPredictionCol`.
+        """
+        return self._set(rawPredictionCol=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
     @keyword_only
     @since("1.4.0")
     def setParams(self, rawPredictionCol="rawPrediction", labelCol="label",
@@ -298,6 +317,25 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
         Gets the value of throughOrigin or its default value.
         """
         return self.getOrDefault(self.throughOrigin)
+
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
 
     @keyword_only
     @since("1.4.0")
@@ -453,6 +491,32 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         """
         return self.getOrDefault(self.eps)
 
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("3.0.0")
+    def setProbabilityCol(self, value):
+        """
+        Sets the value of :py:attr:`probabilityCol`.
+        """
+        return self._set(probabilityCol=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
     @keyword_only
     @since("1.5.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
@@ -549,6 +613,20 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         """
         return self.getOrDefault(self.metricLabel)
 
+    @since("3.0.0")
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
     @keyword_only
     @since("3.0.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
@@ -613,6 +691,18 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
+    @keyword_only
+    @since("2.3.0")
+    def setParams(self, predictionCol="prediction", featuresCol="features",
+                  metricName="silhouette", distanceMeasure="squaredEuclidean"):
+        """
+        setParams(self, predictionCol="prediction", featuresCol="features", \
+                  metricName="silhouette", distanceMeasure="squaredEuclidean")
+        Sets params for clustering evaluator.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
     @since("2.3.0")
     def setMetricName(self, value):
         """
@@ -627,18 +717,6 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
         """
         return self.getOrDefault(self.metricName)
 
-    @keyword_only
-    @since("2.3.0")
-    def setParams(self, predictionCol="prediction", featuresCol="features",
-                  metricName="silhouette", distanceMeasure="squaredEuclidean"):
-        """
-        setParams(self, predictionCol="prediction", featuresCol="features", \
-                  metricName="silhouette", distanceMeasure="squaredEuclidean")
-        Sets params for clustering evaluator.
-        """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
-
     @since("2.4.0")
     def setDistanceMeasure(self, value):
         """
@@ -652,6 +730,18 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
         Gets the value of `distanceMeasure`
         """
         return self.getOrDefault(self.distanceMeasure)
+
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
 
 
 @inherit_doc
@@ -733,6 +823,20 @@ class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
         Gets the value of k or its default value.
         """
         return self.getOrDefault(self.k)
+
+    @since("3.0.0")
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
 
     @keyword_only
     @since("3.0.0")

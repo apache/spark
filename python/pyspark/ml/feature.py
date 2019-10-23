@@ -154,6 +154,32 @@ class Binarizer(JavaTransformer, HasThreshold, HasThresholds, HasInputCol, HasOu
         """
         return self._set(thresholds=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
 
 class _LSHParams(HasInputCol, HasOutputCol):
     """
@@ -183,11 +209,35 @@ class _LSH(JavaEstimator, _LSHParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(numHashTables=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
 
 class _LSHModel(JavaModel, _LSHParams):
     """
     Mixin for Locality Sensitive Hashing (LSH) models.
     """
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     def approxNearestNeighbors(self, dataset, key, numNearestNeighbors, distCol="distCol"):
         """
@@ -350,6 +400,24 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
         """
         return self._set(bucketLength=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
     def _create_model(self, java_model):
         return BucketedRandomProjectionLSHModel(java_model)
 
@@ -365,6 +433,20 @@ class BucketedRandomProjectionLSHModel(_LSHModel, _BucketedRandomProjectionLSHPa
 
     .. versionadded:: 2.2.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
 
 @inherit_doc
@@ -509,6 +591,38 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
         Gets the array of split points or its default value.
         """
         return self.getOrDefault(self.splitsArray)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
 
 class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
@@ -695,6 +809,18 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
         """
         return self._set(binary=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     def _create_model(self, java_model):
         return CountVectorizerModel(java_model)
 
@@ -706,6 +832,34 @@ class CountVectorizerModel(JavaModel, _CountVectorizerParams, JavaMLReadable, Ja
 
     .. versionadded:: 1.6.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setMinTF(self, value):
+        """
+        Sets the value of :py:attr:`minTF`.
+        """
+        return self._set(minTF=value)
+
+    @since("3.0.0")
+    def setBinary(self, value):
+        """
+        Sets the value of :py:attr:`binary`.
+        """
+        return self._set(binary=value)
 
     @classmethod
     @since("2.4.0")
@@ -978,6 +1132,24 @@ class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures,
         """
         return self.getOrDefault(self.categoricalCols)
 
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setNumFeatures(self, value):
+        """
+        Sets the value of :py:attr:`numFeatures`.
+        """
+        return self._set(numFeatures=value)
+
 
 @inherit_doc
 class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, JavaMLReadable,
@@ -1049,6 +1221,24 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         Gets the value of binary or its default value.
         """
         return self.getOrDefault(self.binary)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setNumFeatures(self, value):
+        """
+        Sets the value of :py:attr:`numFeatures`.
+        """
+        return self._set(numFeatures=value)
 
     @since("3.0.0")
     def indexOf(self, term):
@@ -1145,6 +1335,18 @@ class IDF(JavaEstimator, _IDFParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(minDocFreq=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     def _create_model(self, java_model):
         return IDFModel(java_model)
 
@@ -1155,6 +1357,20 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 1.4.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.0.0")
@@ -1308,6 +1524,20 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(missingValue=value)
 
+    @since("2.2.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("2.2.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
     def _create_model(self, java_model):
         return ImputerModel(java_model)
 
@@ -1318,6 +1548,20 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 2.2.0
     """
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
 
     @property
     @since("2.2.0")
@@ -1380,6 +1624,20 @@ class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, J
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
 
 class _MaxAbsScalerParams(HasInputCol, HasOutputCol):
@@ -1449,6 +1707,18 @@ class MaxAbsScaler(JavaEstimator, _MaxAbsScalerParams, JavaMLReadable, JavaMLWri
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     def _create_model(self, java_model):
         return MaxAbsScalerModel(java_model)
 
@@ -1459,6 +1729,20 @@ class MaxAbsScalerModel(JavaModel, _MaxAbsScalerParams, JavaMLReadable, JavaMLWr
 
     .. versionadded:: 2.0.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.0.0")
@@ -1543,6 +1827,12 @@ class MinHashLSH(_LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaM
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
 
     def _create_model(self, java_model):
         return MinHashLSHModel(java_model)
@@ -1675,6 +1965,18 @@ class MinMaxScaler(JavaEstimator, _MinMaxScalerParams, JavaMLReadable, JavaMLWri
         """
         return self._set(max=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     def _create_model(self, java_model):
         return MinMaxScalerModel(java_model)
 
@@ -1685,6 +1987,34 @@ class MinMaxScalerModel(JavaModel, _MinMaxScalerParams, JavaMLReadable, JavaMLWr
 
     .. versionadded:: 1.6.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setMin(self, value):
+        """
+        Sets the value of :py:attr:`min`.
+        """
+        return self._set(min=value)
+
+    @since("3.0.0")
+    def setMax(self, value):
+        """
+        Sets the value of :py:attr:`max`.
+        """
+        return self._set(max=value)
 
     @property
     @since("2.0.0")
@@ -1944,6 +2274,27 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
         """
         return self._set(dropLast=value)
 
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
     def _create_model(self, java_model):
         return OneHotEncoderModel(java_model)
 
@@ -1954,6 +2305,34 @@ class OneHotEncoderModel(JavaModel, _OneHotEncoderParams, JavaMLReadable, JavaML
 
     .. versionadded:: 2.3.0
     """
+
+    @since("3.0.0")
+    def setDropLast(self, value):
+        """
+        Sets the value of :py:attr:`dropLast`.
+        """
+        return self._set(dropLast=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
     @property
     @since("2.3.0")
@@ -2213,6 +2592,38 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
         """
         return self.getOrDefault(self.relativeError)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
     def _create_model(self, java_model):
         """
         Private method to convert the java_model to a Python model.
@@ -2373,6 +2784,20 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
         """
         return self._set(withScaling=value)
 
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     def _create_model(self, java_model):
         return RobustScalerModel(java_model)
 
@@ -2383,6 +2808,20 @@ class RobustScalerModel(JavaModel, _RobustScalerParams, JavaMLReadable, JavaMLWr
 
     .. versionadded:: 3.0.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("3.0.0")
@@ -2694,6 +3133,18 @@ class StandardScaler(JavaEstimator, _StandardScalerParams, JavaMLReadable, JavaM
         """
         return self._set(withStd=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     def _create_model(self, java_model):
         return StandardScalerModel(java_model)
 
@@ -2704,6 +3155,18 @@ class StandardScalerModel(JavaModel, _StandardScalerParams, JavaMLReadable, Java
 
     .. versionadded:: 1.4.0
     """
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.0.0")
@@ -2866,6 +3329,38 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
         """
         return self._set(stringOrderType=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
 
 class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaMLWritable):
     """
@@ -2873,6 +3368,39 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
 
     .. versionadded:: 1.4.0
     """
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("2.4.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
     @classmethod
     @since("2.4.0")
@@ -2920,13 +3448,6 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
         Ordered list of labels, corresponding to indices to be assigned.
         """
         return self._call_java("labels")
-
-    @since("2.4.0")
-    def setHandleInvalid(self, value):
-        """
-        Sets the value of :py:attr:`handleInvalid`.
-        """
-        return self._set(handleInvalid=value)
 
 
 @inherit_doc
@@ -2980,6 +3501,18 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
         Gets the value of :py:attr:`labels` or its default value.
         """
         return self.getOrDefault(self.labels)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
 
 class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
@@ -3078,6 +3611,18 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         Gets the value of :py:attr:`locale`.
         """
         return self.getOrDefault(self.locale)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @staticmethod
     @since("2.0.0")
@@ -3220,6 +3765,24 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def setInputCols(self, value):
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
 
 class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
     """
@@ -3359,6 +3922,24 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
         """
         return self._set(maxCategories=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
     def _create_model(self, java_model):
         return VectorIndexerModel(java_model)
 
@@ -3379,6 +3960,20 @@ class VectorIndexerModel(JavaModel, _VectorIndexerParams, JavaMLReadable, JavaML
 
     .. versionadded:: 1.4.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("1.4.0")
@@ -3488,6 +4083,18 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
         """
         return self.getOrDefault(self.names)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
 
 class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
     """
@@ -3560,6 +4167,11 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     >>> sent = ("a b " * 100 + "a c " * 10).split(" ")
     >>> doc = spark.createDataFrame([(sent,), (sent,)], ["sentence"])
     >>> word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
+    >>> word2Vec.setMaxIter(10)
+    Word2Vec...
+    >>> word2Vec.getMaxIter()
+    10
+    >>> word2Vec.clear(word2Vec.maxIter)
     >>> model = word2Vec.fit(doc)
     >>> model.getMinCount()
     5
@@ -3666,12 +4278,36 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(maxSentenceLength=value)
 
-    @since("2.0.0")
-    def getMaxSentenceLength(self):
+    def setMaxIter(self, value):
         """
-        Gets the value of maxSentenceLength or its default value.
+        Sets the value of :py:attr:`maxIter`.
         """
-        return self.getOrDefault(self.maxSentenceLength)
+        return self._set(maxIter=value)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("1.4.0")
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
 
     def _create_model(self, java_model):
         return Word2VecModel(java_model)
@@ -3691,6 +4327,18 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable, JavaMLWritable):
         with two fields, word and vector.
         """
         return self._call_java("getVectors")
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @since("1.5.0")
     def findSynonyms(self, word, num):
@@ -3800,6 +4448,18 @@ class PCA(JavaEstimator, _PCAParams, JavaMLReadable, JavaMLWritable):
         """
         return self._set(k=value)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
     def _create_model(self, java_model):
         return PCAModel(java_model)
 
@@ -3810,6 +4470,20 @@ class PCAModel(JavaModel, _PCAParams, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 1.5.0
     """
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.0.0")
@@ -4000,6 +4674,24 @@ class RFormula(JavaEstimator, _RFormulaParams, JavaMLReadable, JavaMLWritable):
         Sets the value of :py:attr:`stringIndexerOrderType`.
         """
         return self._set(stringIndexerOrderType=value)
+
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
     def _create_model(self, java_model):
         return RFormulaModel(java_model)
@@ -4228,6 +4920,24 @@ class ChiSqSelector(JavaEstimator, _ChiSqSelectorParams, JavaMLReadable, JavaMLW
         """
         return self._set(fwe=value)
 
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
     def _create_model(self, java_model):
         return ChiSqSelectorModel(java_model)
 
@@ -4238,6 +4948,20 @@ class ChiSqSelectorModel(JavaModel, _ChiSqSelectorParams, JavaMLReadable, JavaML
 
     .. versionadded:: 2.0.0
     """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     @property
     @since("2.0.0")
@@ -4322,6 +5046,18 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
     def setSize(self, value):
         """ Sets size param, the size of vectors in `inputCol`."""
         return self._set(size=value)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
 
 if __name__ == "__main__":
