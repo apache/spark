@@ -21,11 +21,13 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.language.existentials
 
+import org.mockito.Mockito._
+
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.execution.{BinaryExecNode, SortExec}
+import org.apache.spark.sql.execution.{BinaryExecNode, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -33,6 +35,23 @@ import org.apache.spark.sql.types.StructType
 
 class JoinSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
+
+  private def attachCleanupResourceChecker(plan: SparkPlan): Unit = {
+    // SPARK-21492: Check cleanupResources are finally triggered in SortExec node for every
+    // test case
+    plan.foreachUp {
+      case s: SortExec =>
+        val sortExec = spy(s)
+        verify(sortExec, atLeastOnce).cleanupResources()
+        verify(sortExec.rowSorter, atLeastOnce).cleanupResources()
+      case _ =>
+    }
+  }
+
+  override protected def checkAnswer(df: => DataFrame, rows: Seq[Row]): Unit = {
+    attachCleanupResourceChecker(df.queryExecution.sparkPlan)
+    super.checkAnswer(df, rows)
+  }
 
   setupTestData()
 
@@ -925,6 +944,18 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         select * from tmp join tab3 on a = x and b = i
       """)
       checkAnswer(df, Row(1, 100, 42, 200, 1, 42))
+    }
+  }
+
+  test("SPARK-21492: cleanupResource without code generation") {
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(0, 10, 1, 2)
+      val df2 = spark.range(10).select($"id".as("b1"), (- $"id").as("b2"))
+      val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2").select($"b1", $"b2", $"id")
+      checkAnswer(res, Row(0, 0, 0))
     }
   }
 }
