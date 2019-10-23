@@ -142,7 +142,7 @@
                         </goals>
                         <configuration>
                             <sources>
-                                <source>src/gen/java</source>
+                                <source>src/gen/thrift/gen-javabean</source>
                             </sources>
                         </configuration>
                     </execution>
