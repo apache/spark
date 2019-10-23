@@ -31,7 +31,7 @@ private[sql] class StreamQueryStore {
   private val cache = new mutable.HashMap[UUID, (StreamingQuery, Long)]()
 
   def addStreamQuery(query: StreamingQuery): Unit = {
-    synchronized(lock) {
+    lock.synchronized {
       if (!cache.contains(query.id)) {
         val curTime = System.currentTimeMillis()
         cache.put(query.id, (query, curTime))
@@ -39,9 +39,21 @@ private[sql] class StreamQueryStore {
     }
   }
 
-  def existingStreamQueries: Seq[StreamingQuery] = {
-    synchronized(lock) {
-      cache.values.map(_._1).toSeq
+  def existingStreamQueries: Seq[(StreamingQuery, Long)] = {
+    lock.synchronized {
+      cache.values.toSeq
+    }
+  }
+
+  def numExistingQueries: Int = {
+    lock.synchronized {
+      cache.size
+    }
+  }
+
+  def isEmpty: Boolean = {
+    lock.synchronized {
+      cache.isEmpty
     }
   }
 }

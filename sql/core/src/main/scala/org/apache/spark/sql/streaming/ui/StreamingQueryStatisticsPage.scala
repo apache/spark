@@ -54,8 +54,9 @@ class StreamingQueryStatisticsPage(
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val (query, timeSinceStart) = if (store.nonEmpty) {
-      store.get.existingStreamQueries.find(i => i.runId.equals(UUID.fromString(parameterId)))
-        .getOrElse(throw new Exception(s"Can not find streaming query $parameterId"))
+      store.get.existingStreamQueries.find { case (query, _) =>
+        query.runId.equals(UUID.fromString(parameterId))
+      }.getOrElse(throw new Exception(s"Can not find streaming query $parameterId"))
     } else {
       throw new Exception(s"Can not find streaming query $parameterId")
     }
@@ -103,6 +104,12 @@ class StreamingQueryStatisticsPage(
       }, "-")
     }
 
+    val name = if (query.name == null || query.name.isEmpty) {
+      "null"
+    } else {
+      query.name
+    }
+
     <div>Running batches for
       <strong>
         {duration}
@@ -115,6 +122,12 @@ class StreamingQueryStatisticsPage(
       completed batches,
       <strong>{query.getQuerySummary.getMetric(QuerySummary.TOTAL_INPUT_RECORDS, 0L)}
       </strong> records)
+    </div>
+    <br />
+    <div>
+      [name = <strong>{name}</strong>,
+       id = <strong>{query.id}</strong>,
+       runId = <strong>{query.runId}</strong>]
     </div>
     <br />
   }

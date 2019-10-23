@@ -77,7 +77,7 @@ class StreamingQueryPage(parent: SQLTab, store: Option[StreamQueryStore])
       .format(SparkUIUtils.prependBaseUri(request, parent.basePath), parent.prefix, query.runId)
 
     val name = if (query.name == null || query.name.isEmpty) {
-      query.id
+      "null"
     } else {
       query.name
     }
@@ -128,7 +128,7 @@ class StreamingQueryPage(parent: SQLTab, store: Option[StreamQueryStore])
 
   private def generateStreamingQueryTable(request: HttpServletRequest): Seq[Node] = {
     val (activeQueries, inactiveQueries) =
-      store.map(_.existingStreamQueries.partition(_.isActive)).getOrElse((Seq.empty, Seq.empty))
+      store.map(_.existingStreamQueries.partition(_._1.isActive)).getOrElse((Seq.empty, Seq.empty))
     val activeQueryTables = if (activeQueries.nonEmpty) {
       val headerRow = Seq(
         "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input PerSec",
