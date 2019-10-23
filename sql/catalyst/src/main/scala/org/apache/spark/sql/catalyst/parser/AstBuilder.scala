@@ -2799,4 +2799,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
     ShowPartitionsStatement(table, partitionKeys)
   }
+
+  /**
+   * Create a [[RefreshTableStatement]].
+   *
+   * For example:
+   * {{{
+   *   REFRESH TABLE multi_part_name
+   * }}}
+   */
+  override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
+    RefreshTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+  }
 }

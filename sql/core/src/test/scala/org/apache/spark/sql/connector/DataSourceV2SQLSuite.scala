@@ -1112,6 +1112,20 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("REFRESH TABLE: v2 table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+      val identifier = Identifier.of(Array("ns1", "ns2"), "tbl")
+
+      assert(!testCatalog.isTableInvalidated(identifier))
+      sql(s"REFRESH TABLE $t")
+      assert(testCatalog.isTableInvalidated(identifier))
+    }
+  }
+
   test("REPLACE TABLE: v1 table") {
     val e = intercept[AnalysisException] {
       sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
@@ -1211,16 +1225,8 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-
-      val e = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $t COMPUTE STATISTICS")
-      }
-      assert(e.message.contains("ANALYZE TABLE is only supported with v1 tables"))
-
-      val e2 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
-      }
-      assert(e2.message.contains("ANALYZE TABLE is only supported with v1 tables"))
+      testV1Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS")
+      testV1Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS FOR ALL COLUMNS")
     }
   }
 
@@ -1228,11 +1234,7 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-
-      val e = intercept[AnalysisException] {
-        sql(s"MSCK REPAIR TABLE $t")
-      }
-      assert(e.message.contains("MSCK REPAIR TABLE is only supported with v1 tables"))
+      testV1Command("MSCK REPAIR TABLE", t)
     }
   }
 
@@ -1246,15 +1248,8 @@ class DataSourceV2SQLSuite
            |PARTITIONED BY (id)
          """.stripMargin)
 
-      val e1 = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t")
-      }
-      assert(e1.message.contains("TRUNCATE TABLE is only supported with v1 tables"))
-
-      val e2 = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION(id='1')")
-      }
-      assert(e2.message.contains("TRUNCATE TABLE is only supported with v1 tables"))
+      testV1Command("TRUNCATE TABLE", t)
+      testV1Command("TRUNCATE TABLE", s"$t PARTITION(id='1')")
     }
   }
 
@@ -1268,16 +1263,16 @@ class DataSourceV2SQLSuite
            |PARTITIONED BY (id)
          """.stripMargin)
 
-      val e1 = intercept[AnalysisException] {
-        val partition = sql(s"SHOW PARTITIONS $t")
-      }
-      assert(e1.message.contains("SHOW PARTITIONS is only supported with v1 tables"))
-
-      val e2 = intercept[AnalysisException] {
-        val partition2 = sql(s"SHOW PARTITIONS $t PARTITION(id='1')")
-      }
-      assert(e2.message.contains("SHOW PARTITIONS is only supported with v1 tables"))
+      testV1Command("SHOW PARTITIONS", t)
+      testV1Command("SHOW PARTITIONS", s"$t PARTITION(id='1')")
     }
+  }
+
+  private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(s"$sqlCommand $sqlParams")
+    }
+    assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {

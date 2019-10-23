@@ -144,13 +144,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[RefreshTable]] logical plan.
-   */
-  override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
-    RefreshTable(visitTableIdentifier(ctx.tableIdentifier))
-  }
-
-  /**
    * Create a [[RefreshResource]] logical plan.
    */
   override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {

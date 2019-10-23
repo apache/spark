@@ -348,3 +348,10 @@ case class SetCatalogAndNamespace(
     catalogManager: CatalogManager,
     catalogName: Option[String],
     namespace: Option[Seq[String]]) extends Command
+
+/**
+ * The logical plan of the REFRESH TABLE command that works for v2 catalogs.
+ */
+case class RefreshTable(
+    catalog: TableCatalog,
+    ident: Identifier) extends Command
