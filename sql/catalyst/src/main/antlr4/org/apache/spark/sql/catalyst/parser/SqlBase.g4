@@ -83,10 +83,10 @@ statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE NAMESPACE? multipartIdentifier                               #use
-    | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
+    | CREATE (database | NAMESPACE) (IF NOT EXISTS)? multipartIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
-         (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
+         (WITH (DBPROPERTIES | PROPERTIES) tablePropertyList))*        #createNamespace
     | ALTER database db=errorCapturingIdentifier
         SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
     | ALTER database db=errorCapturingIdentifier
@@ -1039,6 +1039,7 @@ ansiNonReserved
     | POSITION
     | PRECEDING
     | PRINCIPALS
+    | PROPERTIES
     | PURGE
     | QUERY
     | RANGE
@@ -1299,6 +1300,7 @@ nonReserved
     | PRECEDING
     | PRIMARY
     | PRINCIPALS
+    | PROPERTIES
     | PURGE
     | QUERY
     | RANGE
@@ -1564,6 +1566,7 @@ POSITION: 'POSITION';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
 PRINCIPALS: 'PRINCIPALS';
+PROPERTIES: 'PROPERTIES';
 PURGE: 'PURGE';
 QUERY: 'QUERY';
 RANGE: 'RANGE';

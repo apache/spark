@@ -323,33 +323,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[CreateDatabaseCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   CREATE DATABASE [IF NOT EXISTS] database_name
-   *     create_database_clauses;
-   *
-   *   create_database_clauses (order insensitive):
-   *     [COMMENT database_comment]
-   *     [LOCATION path]
-   *     [WITH DBPROPERTIES (key1=val1, key2=val2, ...)]
-   * }}}
-   */
-  override def visitCreateDatabase(ctx: CreateDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
-    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
-    checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
-
-    CreateDatabaseCommand(
-      ctx.db.getText,
-      ctx.EXISTS != null,
-      ctx.locationSpec.asScala.headOption.map(visitLocationSpec),
-      Option(ctx.comment).map(string),
-      ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues).getOrElse(Map.empty))
-  }
-
-  /**
    * Create an [[AlterDatabasePropertiesCommand]] command.
    *
    * For example:

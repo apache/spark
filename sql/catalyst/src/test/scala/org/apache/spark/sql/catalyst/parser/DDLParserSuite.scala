@@ -845,6 +845,90 @@ class DDLParserSuite extends AnalysisTest {
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
   }
 
+  test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
+    val expected = CreateNamespaceStatement(
+      Seq("a", "b", "c"),
+      ifNotExists = true,
+      Map(
+        "a" -> "a",
+        "b" -> "b",
+        "c" -> "c",
+        "comment" -> "namespace_comment",
+        "location" -> "/home/user/db"))
+
+    comparePlans(
+      parsePlan(
+        """
+          |CREATE NAMESPACE IF NOT EXISTS a.b.c
+          |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
+          |COMMENT 'namespace_comment' LOCATION '/home/user/db'
+        """.stripMargin),
+      expected)
+
+    comparePlans(
+      parsePlan(
+        """
+          |CREATE DATABASE IF NOT EXISTS a.b.c
+          |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
+          |COMMENT 'namespace_comment' LOCATION '/home/user/db'
+        """.stripMargin),
+      expected)
+  }
+
+  test("create namespace -- check duplicates") {
+    def createDatabase(duplicateClause: String): String = {
+      s"""
+         |CREATE NAMESPACE IF NOT EXISTS a.b.c
+         |$duplicateClause
+         |$duplicateClause
+      """.stripMargin
+    }
+    val sql1 = createDatabase("COMMENT 'namespace_comment'")
+    val sql2 = createDatabase("LOCATION '/home/user/db'")
+    val sql3 = createDatabase("WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+    val sql4 = createDatabase("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: LOCATION")
+    intercept(sql3, "Found duplicate clauses: WITH PROPERTIES")
+    intercept(sql4, "Found duplicate clauses: WITH DBPROPERTIES")
+  }
+
+  test("create namespace - property values must be set") {
+    assertUnsupported(
+      sql = "CREATE NAMESPACE a.b.c WITH PROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+  }
+
+  test("create namespace -- either PROPERTIES or DBPROPERTIES is allowed") {
+    val sql =
+      s"""
+         |CREATE NAMESPACE IF NOT EXISTS a.b.c
+         |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
+         |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
+      """.stripMargin
+    intercept(sql, "Either PROPERTIES or DBPROPERTIES is allowed")
+  }
+
+  test("create namespace - support for other types in PROPERTIES") {
+    val sql =
+      """
+        |CREATE NAMESPACE a.b.c
+        |LOCATION '/home/user/db'
+        |WITH PROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE)
+      """.stripMargin
+    comparePlans(
+      parsePlan(sql),
+      CreateNamespaceStatement(
+        Seq("a", "b", "c"),
+        ifNotExists = false,
+        Map(
+          "a" -> "1",
+          "b" -> "0.1",
+          "c" -> "true",
+          "location" -> "/home/user/db")))
+  }
+
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),
