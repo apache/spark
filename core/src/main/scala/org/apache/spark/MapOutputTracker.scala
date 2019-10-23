@@ -17,28 +17,27 @@
 
 package org.apache.spark
 
-import java.io.{ObjectOutputStream, ByteArrayInputStream, ObjectInputStream}
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit, LinkedBlockingQueue, ThreadPoolExecutor}
+import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{HashMap, Map, ListBuffer}
-import scala.concurrent.{Future, ExecutionContext}
+import scala.collection.mutable.{HashMap, ListBuffer, Map}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-import com.github.luben.zstd.ZstdInputStream
-import com.github.luben.zstd.ZstdOutputStream
+
 import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOutputStream}
+
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.io.ZStdCompressionCodec
-import org.apache.spark.rpc.{RpcEndpointRef, RpcCallContext, RpcEndpoint, RpcEnv}
-import org.apache.spark.scheduler.{MapStatus, ExecutorCacheTaskLocation}
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
+import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, MapStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
-import org.apache.spark.storage.{ShuffleBlockId, BlockManagerId, BlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
 
 /**
