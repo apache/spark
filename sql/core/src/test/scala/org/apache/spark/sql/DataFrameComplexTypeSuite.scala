@@ -73,28 +73,19 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-29503 nest unsafe struct inside safe array") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      val exampleDS = spark.sparkContext.parallelize(Seq(Seq(1, 2, 3))).toDF("items")
+      val df = spark.sparkContext.parallelize(Seq(Seq(1, 2, 3))).toDF("items")
 
       // items: Seq[Int] => items.map { item => Seq(Struct(item)) }
-      val result = exampleDS.select(
+      val result = df.select(
         new Column(MapObjects(
           (item: Expression) => array(struct(new Column(item))).expr,
           $"items".expr,
-          exampleDS.schema("items").dataType.asInstanceOf[ArrayType].elementType
+          df.schema("items").dataType.asInstanceOf[ArrayType].elementType
         )) as "items"
       ).collect()
 
-      def getValueInsideDepth(result: Row, index: Int): Int = {
-        // expected output:
-        // WrappedArray([WrappedArray(WrappedArray([1]), WrappedArray([2]), WrappedArray([3]))])
-        result.getSeq[mutable.WrappedArray[_]](0)(index)(0)
-          .asInstanceOf[GenericRowWithSchema].getInt(0)
-      }
-
       assert(result.size === 1)
-      assert(getValueInsideDepth(result.head, 0) === 1)
-      assert(getValueInsideDepth(result.head, 1) === 2)
-      assert(getValueInsideDepth(result.head, 2) === 3)
+      assert(result === Row(Seq(Seq(Row(1)), Seq(Row(2)), Seq(Row(3)))) :: Nil)
     }
   }
 }
