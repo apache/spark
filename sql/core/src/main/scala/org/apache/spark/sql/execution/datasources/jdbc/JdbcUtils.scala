@@ -615,7 +615,9 @@ object JdbcUtils extends Logging {
       batchSize: Int,
       dialect: JdbcDialect,
       isolationLevel: Int,
-      options: JDBCOptions): Long = {
+      options: JDBCOptions): Unit = {
+    val outMetrics = TaskContext.get().taskMetrics().outputMetrics
+
     val conn = getConnection()
     var committed = false
 
@@ -643,7 +645,7 @@ object JdbcUtils extends Logging {
       }
     }
     val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
-    var totalUpdatedRows = 0
+    var totalRowCount = 0
     try {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
@@ -672,13 +674,14 @@ object JdbcUtils extends Logging {
           }
           stmt.addBatch()
           rowCount += 1
+          totalRowCount += 1
           if (rowCount % batchSize == 0) {
-            totalUpdatedRows += stmt.executeBatch().sum
+            stmt.executeBatch()
             rowCount = 0
           }
         }
         if (rowCount > 0) {
-          totalUpdatedRows += stmt.executeBatch().sum
+          stmt.executeBatch()
         }
       } finally {
         stmt.close()
@@ -687,7 +690,6 @@ object JdbcUtils extends Logging {
         conn.commit()
       }
       committed = true
-      totalUpdatedRows
     } catch {
       case e: SQLException =>
         val cause = e.getNextException
@@ -715,9 +717,13 @@ object JdbcUtils extends Logging {
         // tell the user about another problem.
         if (supportsTransactions) {
           conn.rollback()
+        } else {
+          outMetrics.setRecordsWritten(totalRowCount)
         }
         conn.close()
       } else {
+        outMetrics.setRecordsWritten(totalRowCount)
+
         // The stage must succeed.  We cannot propagate any exception close() might throw.
         try {
           conn.close()
@@ -840,12 +846,9 @@ object JdbcUtils extends Logging {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.rdd.foreachPartition { iterator =>
-      val outMetrics = TaskContext.get().taskMetrics().outputMetrics
-      val totalUpdatedRows = savePartition(
+    repartitionedDF.rdd.foreachPartition { iterator => savePartition(
         getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
         options)
-      outMetrics.setRecordsWritten(outMetrics.recordsWritten + totalUpdatedRows)
     }
   }
 
