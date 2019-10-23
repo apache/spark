@@ -122,12 +122,12 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       <div>
         <ul class="unstyled">
           {
-            if (streamQueryStore.nonEmpty && !streamQueryStore.get.isEmpty) {
+            if (streamQueryStore.nonEmpty && streamQueryStore.get.existingStreamQueries.nonEmpty) {
               val streamQueryPageLink = "%s/%s/streaming"
                 .format(UIUtils.prependBaseUri(request, parent.basePath), parent.prefix)
               <li>
                 <a href={streamQueryPageLink}><strong>Streaming Queries:</strong></a>
-                {streamQueryStore.get.numExistingQueries}
+                {streamQueryStore.get.existingStreamQueries.size}
               </li>
             }
           }

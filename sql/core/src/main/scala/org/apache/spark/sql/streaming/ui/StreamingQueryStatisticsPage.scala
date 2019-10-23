@@ -28,8 +28,8 @@ import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
-import org.apache.spark.sql.execution.streaming.QuerySummary
-import org.apache.spark.sql.execution.ui.{SQLTab, StreamQueryStore}
+import org.apache.spark.sql.execution.streaming.{QuerySummary, StreamQueryStore}
+import org.apache.spark.sql.execution.ui.SQLTab
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
@@ -110,6 +110,8 @@ class StreamingQueryStatisticsPage(
       query.name
     }
 
+    val numBatches = withNoProgress(query, { query.lastProgress.batchId + 1L }, 0)
+    val totalRecords = query.getQuerySummary.getMetric(QuerySummary.TOTAL_INPUT_RECORDS, 0L)
     <div>Running batches for
       <strong>
         {duration}
@@ -118,10 +120,7 @@ class StreamingQueryStatisticsPage(
       <strong>
         {SparkUIUtils.formatDate(timeSinceStart)}
       </strong>
-      (<strong>{withNoProgress(query, { query.lastProgress.batchId + 1L }, "NaN")}</strong>
-      completed batches,
-      <strong>{query.getQuerySummary.getMetric(QuerySummary.TOTAL_INPUT_RECORDS, 0L)}
-      </strong> records)
+      (<strong>{numBatches}</strong> completed batches, <strong>{totalRecords}</strong> records)
     </div>
     <br />
     <div>

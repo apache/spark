@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.ui
+package org.apache.spark.sql.execution.streaming
 
 import java.util.UUID
 
@@ -42,18 +42,6 @@ private[sql] class StreamQueryStore {
   def existingStreamQueries: Seq[(StreamingQuery, Long)] = {
     lock.synchronized {
       cache.values.toSeq
-    }
-  }
-
-  def numExistingQueries: Int = {
-    lock.synchronized {
-      cache.size
-    }
-  }
-
-  def isEmpty: Boolean = {
-    lock.synchronized {
-      cache.isEmpty
     }
   }
 }

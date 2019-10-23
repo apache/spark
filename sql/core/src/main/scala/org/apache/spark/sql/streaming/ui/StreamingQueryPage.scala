@@ -26,8 +26,8 @@ import scala.xml.Node
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.QuerySummary
-import org.apache.spark.sql.execution.ui.{SQLTab, StreamQueryStore}
+import org.apache.spark.sql.execution.streaming.{QuerySummary, StreamQueryStore}
+import org.apache.spark.sql.execution.ui.SQLTab
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}

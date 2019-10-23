@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.ui
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.streaming.StreamQueryStore
 import org.apache.spark.sql.streaming.ui.{StreamingQueryPage, StreamingQueryStatisticsPage}
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 

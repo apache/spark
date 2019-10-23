@@ -17,30 +17,25 @@
 
 package org.apache.spark.sql.streaming.ui
 
-import org.apache.spark.sql.streaming.StreamingQuery
+import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
+import org.scalatest.Matchers
 
-private[ui] object UIUtils {
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryProgress}
 
-  /**
-   * Check whether `number` is valid, if not return 0.0d
-   */
-  def withNumberInvalid(number: => Double): Double = {
-    if (number.isNaN || number.isInfinite) {
-      0.0d
-    } else {
-      number
-    }
+class UIUtilsSuite extends SparkFunSuite with Matchers {
+  test("streaming query started with no batch completed") {
+    val query = mock(classOf[StreamingQuery], RETURNS_SMART_NULLS)
+    when(query.lastProgress).thenReturn(null)
+
+    assert(0 == UIUtils.withNoProgress(query, 1, 0))
   }
 
-  /**
-   * Execute a block of code when there is already one completed batch in streaming query,
-   * otherwise return `default` value.
-   */
-  def withNoProgress[T](query: StreamingQuery, body: => T, default: T): T = {
-    if (query.lastProgress != null) {
-      body
-    } else {
-      default
-    }
+  test("streaming query started with at least one batch completed") {
+    val query = mock(classOf[StreamingQuery], RETURNS_SMART_NULLS)
+    val progress = mock(classOf[StreamingQueryProgress], RETURNS_SMART_NULLS)
+    when(query.lastProgress).thenReturn(progress)
+
+    assert(1 == UIUtils.withNoProgress(query, 1, 0))
   }
 }
