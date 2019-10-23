@@ -26,10 +26,10 @@ import org.apache.spark.annotation.DeveloperApi;
  * Plugins can be loaded by adding the plugin's class name to the appropriate Spark configuration.
  * Check the Spark configuration documentation for details.
  * <p>
- * Plugins have two components: a driver-side component, of which a single instance is created
- * per application, inside the Spark driver. And an executor-side component, of which one instance
- * is created in each executor that is started by Spark. Details of each component can be found
- * in the documentation for {@link DriverPlugin} and {@link ExecutorPlugin}.
+ * Plugins have two optional components: a driver-side component, of which a single instance is
+ * created per application, inside the Spark driver. And an executor-side component, of which one
+ * instance is created in each executor that is started by Spark. Details of each component can be
+ * found in the documentation for {@link DriverPlugin} and {@link ExecutorPlugin}.
  *
  * @since 3.0.0
  */

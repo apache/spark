@@ -1146,11 +1146,11 @@ Spark also provides a plugin API so that custom instrumentation code can be adde
 applications. There are two configuration keys available for loading plugins into Spark:
 
 - <code>spark.plugins</code>
-- <code>spark.plugins.static</code>
+- <code>spark.plugins.defaultList</code>
 
 Both take a comma-separated list of class names that implement the
 <code>org.apache.spark.api.plugin.SparkPlugin</code> interface. The two names exist so that it's
-possible for one "static" list to be placed in the Spark default config file, allowing users to
-easily add other plugins from the command line without overwriting the "static" list.
+possible for one list to be placed in the Spark default config file, allowing users to
+easily add other plugins from the command line without overwriting the config file's list.
 
 Duplicate plugins are ignored.

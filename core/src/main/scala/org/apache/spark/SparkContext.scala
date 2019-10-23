@@ -541,7 +541,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
-    // Initialize any plugins before the app is initialized in the cluster manager.
+    // Initialize any plugins before the task scheduler is initialized.
     _plugins = PluginContainer(this)
 
     // Create and start the scheduler

@@ -1159,11 +1159,11 @@ package object config {
         s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
       .createWithDefault(1024 * 1024)
 
-  private[spark] val STATIC_PLUGINS_LIST = "spark.plugins.static"
+  private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
 
   private[spark] val PLUGINS =
     ConfigBuilder("spark.plugins")
-      .withPrepended(STATIC_PLUGINS_LIST, separator = ",")
+      .withPrepended(DEFAULT_PLUGINS_LIST, separator = ",")
       .doc("Comma-separated list of class names implementing " +
         "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
       .stringConf

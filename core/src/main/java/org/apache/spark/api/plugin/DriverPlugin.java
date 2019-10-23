@@ -36,8 +36,8 @@ public interface DriverPlugin {
    * Initialize the plugin.
    * <p>
    * This method is called early in the initialization of the Spark driver. Explicitly, it is
-   * called before the application is submitted to the cluster manager. This means that a lot
-   * of Spark subsystems may yet not have been initialized. This call also blocks driver
+   * called before the Spark driver's task scheduler is initialized. This means that a lot
+   * of other Spark subsystems may yet not have been initialized. This call also blocks driver
    * initialization.
    * <p>
    * It's recommended that plugins be careful about what operations are performed in this call,

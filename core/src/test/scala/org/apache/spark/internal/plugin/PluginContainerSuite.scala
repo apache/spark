@@ -108,7 +108,7 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
       .setAppName(getClass().getName())
       .set(SparkLauncher.SPARK_MASTER, "local[1]")
       .set(PLUGINS, Seq(classOf[TestSparkPlugin].getName()))
-      .set(STATIC_PLUGINS_LIST, classOf[TestSparkPlugin].getName())
+      .set(DEFAULT_PLUGINS_LIST, classOf[TestSparkPlugin].getName())
 
     assert(conf.get(PLUGINS).size === 2)
 
