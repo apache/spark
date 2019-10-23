@@ -25,6 +25,7 @@ import scala.xml.Node
 import org.apache.spark.status.{AppStatusStore, StreamBlockData}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
+import org.apache.spark.ui.storage.ToolTips._
 import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
@@ -56,7 +57,8 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
             rddHeader,
             rddRow(request, _: v1.RDDStorageInfo),
             rdds,
-            id = Some("storage-by-rdd-table"))}
+            id = Some("storage-by-rdd-table"),
+            tooltipHeaders = tooltips)}
         </div>
       </div>
     }
@@ -71,6 +73,16 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
     "Fraction Cached",
     "Size in Memory",
     "Size on Disk")
+
+  /** Tooltips for header fields of the RDD table */
+  private val tooltips = Seq(
+    Some(ID),
+    Some(RDD_NAME),
+    Some(STORAGE_LEVEL),
+    Some(CACHED_PARTITIONS),
+    Some(FRACTION_CACHED),
+    Some(SIZE_IN_MEMORY),
+    Some(SIZE_ON_DISK))
 
   /** Render an HTML row representing an RDD */
   private def rddRow(request: HttpServletRequest, rdd: v1.RDDStorageInfo): Seq[Node] = {
