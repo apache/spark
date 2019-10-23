@@ -32,6 +32,9 @@ addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.9.2")
 
 addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "1.0.0")
 
+// SPARK-29560 Only sbt-mima-plugin needs this repo
+resolvers += Resolver.url("bintray",
+  new java.net.URL("https://dl.bintray.com/typesafe/sbt-plugins"))(Resolver.defaultIvyPatterns)
 addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.3.0")
 
 // sbt 1.0.0 support: https://github.com/AlpineNow/junit_xml_listener/issues/6

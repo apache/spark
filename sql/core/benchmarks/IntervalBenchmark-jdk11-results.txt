@@ -1,0 +1,25 @@
+OpenJDK 64-Bit Server VM 11.0.4+11-post-Ubuntu-1ubuntu218.04.3 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+cast strings to intervals:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+string w/ interval                                  663            758          99          1.5         663.2       1.0X
+string w/o interval                                 563            582          19          1.8         563.2       1.2X
+1 units w/ interval                                 891            953          97          1.1         891.2       0.7X
+1 units w/o interval                                894            905          15          1.1         893.6       0.7X
+2 units w/ interval                                1142           1169          24          0.9        1141.8       0.6X
+2 units w/o interval                               1195           1200           7          0.8        1194.7       0.6X
+3 units w/ interval                                1449           1452           3          0.7        1449.5       0.5X
+3 units w/o interval                               1489           1491           1          0.7        1489.3       0.4X
+4 units w/ interval                                1688           1690           1          0.6        1688.4       0.4X
+4 units w/o interval                               1711           1722          11          0.6        1710.9       0.4X
+5 units w/ interval                                1961           1983          23          0.5        1961.3       0.3X
+5 units w/o interval                               1983           1991          10          0.5        1983.4       0.3X
+6 units w/ interval                                2217           2228          11          0.5        2216.9       0.3X
+6 units w/o interval                               2240           2244           5          0.4        2239.6       0.3X
+7 units w/ interval                                2454           2468          16          0.4        2454.1       0.3X
+7 units w/o interval                               2480           2491          15          0.4        2479.5       0.3X
+8 units w/ interval                                2762           2792          26          0.4        2761.9       0.2X
+8 units w/o interval                               2763           2778          14          0.4        2762.9       0.2X
+9 units w/ interval                                3036           3060          21          0.3        3036.4       0.2X
+9 units w/o interval                               3095           3111          15          0.3        3094.8       0.2X
+
