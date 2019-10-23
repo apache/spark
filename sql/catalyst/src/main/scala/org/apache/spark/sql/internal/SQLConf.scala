@@ -1014,8 +1014,7 @@ object SQLConf {
 
   val MAX_RECORDS_PER_FILE = buildConf("spark.sql.files.maxRecordsPerFile")
     .doc("Maximum number of records to write out to a single file. " +
-      "If this value is zero or negative, there is no limit. This configuration is " +
-      "effective only when using file-based sources such as Parquet, JSON and ORC.")
+      "If this value is zero or negative, there is no limit.")
     .longConf
     .createWithDefault(0)
 
