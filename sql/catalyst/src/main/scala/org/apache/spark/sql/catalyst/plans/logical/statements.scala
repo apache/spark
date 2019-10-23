@@ -87,6 +87,14 @@ case class CreateTableAsSelectStatement(
 }
 
 /**
+ * A CREATE TABLE LIKE statement, as parsed from SQL
+ */
+case class CreateTableLikeStatement(
+    targetTable: Seq[String],
+    sourceTable: Seq[String],
+    location: Option[String],
+    ifNotExists: Boolean) extends ParsedStatement
+/**
  * A REPLACE TABLE command, as parsed from SQL.
  *
  * If the table exists prior to running this command, executing this statement

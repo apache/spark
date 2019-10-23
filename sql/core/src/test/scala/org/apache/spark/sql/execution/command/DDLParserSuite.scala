@@ -1105,49 +1105,28 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
   }
 
-  test("create table like") {
-    val v1 = "CREATE TABLE table1 LIKE table2"
-    val (target, source, location, exists) = parser.parsePlan(v1).collect {
-      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
+  test("load data") {
+    val v1 = "LOAD DATA INPATH 'path' INTO TABLE table1"
+    val (table, path, isLocal, isOverwrite, partition) = parser.parsePlan(v1).collect {
+      case LoadDataCommand(t, path, l, o, partition) => (t, path, l, o, partition)
     }.head
-    assert(exists == false)
-    assert(target.database.isEmpty)
-    assert(target.table == "table1")
-    assert(source.database.isEmpty)
-    assert(source.table == "table2")
-    assert(location.isEmpty)
+    assert(table.database.isEmpty)
+    assert(table.table == "table1")
+    assert(path == "path")
+    assert(!isLocal)
+    assert(!isOverwrite)
+    assert(partition.isEmpty)
 
-    val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
-    val (target2, source2, location2, exists2) = parser.parsePlan(v2).collect {
-      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
+    val v2 = "LOAD DATA LOCAL INPATH 'path' OVERWRITE INTO TABLE table1 PARTITION(c='1', d='2')"
+    val (table2, path2, isLocal2, isOverwrite2, partition2) = parser.parsePlan(v2).collect {
+      case LoadDataCommand(t, path, l, o, partition) => (t, path, l, o, partition)
     }.head
-    assert(exists2)
-    assert(target2.database.isEmpty)
-    assert(target2.table == "table1")
-    assert(source2.database.isEmpty)
-    assert(source2.table == "table2")
-    assert(location2.isEmpty)
-
-    val v3 = "CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'"
-    val (target3, source3, location3, exists3) = parser.parsePlan(v3).collect {
-      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
-    }.head
-    assert(!exists3)
-    assert(target3.database.isEmpty)
-    assert(target3.table == "table1")
-    assert(source3.database.isEmpty)
-    assert(source3.table == "table2")
-    assert(location3 == Some("/spark/warehouse"))
-
-    val v4 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2  LOCATION '/spark/warehouse'"
-    val (target4, source4, location4, exists4) = parser.parsePlan(v4).collect {
-      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
-    }.head
-    assert(exists4)
-    assert(target4.database.isEmpty)
-    assert(target4.table == "table1")
-    assert(source4.database.isEmpty)
-    assert(source4.table == "table2")
-    assert(location4 == Some("/spark/warehouse"))
+    assert(table2.database.isEmpty)
+    assert(table2.table == "table1")
+    assert(path2 == "path")
+    assert(isLocal2)
+    assert(isOverwrite2)
+    assert(partition2.nonEmpty)
+    assert(partition2.get.apply("c") == "1" && partition2.get.apply("d") == "2")
   }
 }

@@ -377,6 +377,24 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("create table like") {
+    comparePlans(
+      parsePlan("CREATE TABLE a.b.c LIKE d.e.f"),
+      CreateTableLikeStatement(Seq("a", "b", "c"), Seq("d", "e", "f"), None, false))
+
+    comparePlans(
+      parsePlan("CREATE TABLE IF NOT EXISTS a.b.c LIKE d.e.f"),
+      CreateTableLikeStatement(Seq("a", "b", "c"), Seq("d", "e", "f"), None, true))
+
+    comparePlans(
+      parsePlan("CREATE TABLE a.b.c LIKE d.e.f LOCATION '/tmp'"),
+      CreateTableLikeStatement(Seq("a", "b", "c"), Seq("d", "e", "f"), Some("/tmp"), false))
+
+    comparePlans(
+      parsePlan("CREATE TABLE IF NOT EXISTS a.b.c LIKE d.e.f LOCATION '/tmp'"),
+      CreateTableLikeStatement(Seq("a", "b", "c"), Seq("d", "e", "f"), Some("/tmp"), true))
+  }
+
   test("drop table") {
     parseCompare("DROP TABLE testcat.ns1.ns2.tbl",
       DropTableStatement(Seq("testcat", "ns1", "ns2", "tbl"), ifExists = false, purge = false))

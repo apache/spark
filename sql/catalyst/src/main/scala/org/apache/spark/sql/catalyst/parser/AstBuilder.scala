@@ -3180,4 +3180,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       originalText = source(ctx.query),
       query = plan(ctx.query))
   }
+
+  /**
+   * Create a [[CreateTableLikeStatement]] logical plan.
+   *
+   * For example:
+   * {{{
+   *   CREATE TABLE [IF NOT EXISTS] multi_part_table_name
+   *   LIKE existing_multi_part_table_name [locationSpec]
+   * }}}
+   */
+  override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
+    val targetTable = visitMultipartIdentifier(ctx.target)
+    val sourceTable = visitMultipartIdentifier(ctx.source)
+    val location = Option(ctx.locationSpec).map(visitLocationSpec)
+    CreateTableLikeStatement(targetTable, sourceTable, location, ctx.EXISTS != null)
+  }
 }
