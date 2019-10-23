@@ -455,7 +455,7 @@ object MimaExcludes {
 
     // [SPARK-29543][SS][UI] Init structured streaming ui
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryProgress.this"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQuery.getTotalInputRecords")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQuery.getQuerySummary")
   )
 
   // Exclude rules for 2.4.x

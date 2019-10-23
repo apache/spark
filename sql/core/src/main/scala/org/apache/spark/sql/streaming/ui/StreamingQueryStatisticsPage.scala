@@ -29,6 +29,7 @@ import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
+import org.apache.spark.sql.execution.streaming.QuerySummary
 import org.apache.spark.sql.execution.ui.SQLTab
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.ui.UIUtils._
@@ -112,7 +113,9 @@ class StreamingQueryStatisticsPage(
         {SparkUIUtils.formatDate(timeSinceStart)}
       </strong>
       (<strong>{withNoProgress(query, { query.lastProgress.batchId + 1L }, "NaN")}</strong>
-      completed batches, <strong>{query.getTotalInputRecords}</strong> records)
+      completed batches,
+      <strong>{query.getQuerySummary.getMetric(QuerySummary.TOTAL_INPUT_RECORDS, 0L)}
+      </strong> records)
     </div>
     <br />
   }

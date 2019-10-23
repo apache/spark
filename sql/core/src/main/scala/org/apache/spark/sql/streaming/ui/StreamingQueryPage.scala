@@ -27,6 +27,7 @@ import scala.xml.Node
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.streaming.QuerySummary
 import org.apache.spark.sql.execution.ui.SQLTab
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.ui.UIUtils._
@@ -117,7 +118,8 @@ class StreamingQueryPage(parent: SQLTab, store: Option[HashSet[(StreamingQuery, 
         (query.recentProgress.map(p => withNumberInvalid(p.processedRowsPerSecond)).sum /
           query.recentProgress.length).formatted("%.2f") }, "NaN")}
       </td>
-      <td> {withNoProgress(query, { query.getTotalInputRecords }, "NaN")} </td>
+      <td> {withNoProgress(query,
+        { query.getQuerySummary.getMetric(QuerySummary.TOTAL_INPUT_RECORDS, 0L) }, "NaN")} </td>
       <td> {withNoProgress(query, { query.lastProgress.batchId }, "NaN")} </td>
       {details(withNoProgress(query, {
       s"== JSON representation of this progress ==\n${query.lastProgress.prettyJson}" }, "-"))}

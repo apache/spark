@@ -82,7 +82,7 @@ trait ProgressReporter extends Logging {
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
 
   /** Count the total input records of this streaming query. */
-  private var totalInputRecords = 0L
+  private val querySummary = new QuerySummary()
 
   private val noDataProgressEventInterval =
     sparkSession.sessionState.conf.streamingNoDataProgressEventInterval
@@ -114,7 +114,7 @@ trait ProgressReporter extends Logging {
     progressBuffer.lastOption.orNull
   }
 
-  def getTotalInputRecords: Long = totalInputRecords
+  def getQuerySummary: QuerySummary = querySummary
 
   /** Begins recording statistics about query progress for a given trigger. */
   protected def startTrigger(): Unit = {
@@ -152,8 +152,8 @@ trait ProgressReporter extends Logging {
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
     val executionStats = extractExecutionStats(hasNewData)
-    val processingTimeSec =
-      (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
+    val processingTimeMills = currentTriggerEndTimestamp - currentTriggerStartTimestamp
+    val processingTimeSec = processingTimeMills.toDouble / MILLIS_PER_SECOND
 
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
       (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
@@ -164,7 +164,8 @@ trait ProgressReporter extends Logging {
 
     val sourceProgress = sources.distinct.map { source =>
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
-      totalInputRecords += numRecords
+      querySummary.updateMetric(QuerySummary.TOTAL_INPUT_RECORDS,
+        oldValue => oldValue.asInstanceOf[Long] + numRecords)
       new SourceProgress(
         description = source.toString,
         startOffset = currentTriggerStartOffsets.get(source).orNull,
@@ -185,7 +186,7 @@ trait ProgressReporter extends Logging {
       name = name,
       timestamp = formatTimestamp(currentTriggerStartTimestamp),
       batchId = currentBatchId,
-      batchDuration = currentTriggerEndTimestamp - currentTriggerStartTimestamp,
+      batchDuration = processingTimeMills,
       durationMs = new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).asJava),
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
@@ -350,4 +351,36 @@ trait ProgressReporter extends Logging {
   protected def updateStatusMessage(message: String): Unit = {
     currentStatus = currentStatus.copy(message = message)
   }
+}
+
+/**
+ * A summary information of the streaming query.
+ */
+class QuerySummary {
+  private val summary = new mutable.HashMap[String, Any]
+
+  summary.put(QuerySummary.TOTAL_INPUT_RECORDS, 0L)
+
+  def addMetric(name: String, value: Any): Unit = {
+    summary.put(name, value)
+  }
+
+  def updateMetric(name: String, body: Any => Any): Unit = {
+    if (summary.contains(name)) {
+      val oldValue = summary(name)
+      summary.put(name, body(oldValue))
+    }
+  }
+
+  def getMetric[T](name: String, default: T): T = {
+    if (summary.contains(name)) {
+      summary(name).asInstanceOf[T]
+    } else {
+      default
+    }
+  }
+}
+
+object QuerySummary {
+  val TOTAL_INPUT_RECORDS = "TotalInputRecords"
 }
