@@ -146,7 +146,8 @@ class SQLAppStatusListener(
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     event.accumUpdates.foreach { case (taskId, stageId, attemptId, accumUpdates) =>
-      updateStageMetrics(stageId, attemptId, taskId, -1, accumUpdates, false)
+      updateStageMetrics(stageId, attemptId, taskId, SQLAppStatusListener.UNKNOWN_PARTITION,
+        accumUpdates, false)
     }
   }
 
@@ -245,7 +246,7 @@ class SQLAppStatusListener(
       stageId: Int,
       attemptId: Int,
       taskId: Long,
-      partIdx: Int, // -1 if unknown from the event data.
+      partIdx: Int,
       accumUpdates: Seq[AccumulableInfo],
       succeeded: Boolean): Unit = {
     Option(stageMetrics.get(stageId)).foreach { metrics =>
@@ -462,7 +463,7 @@ private class LiveStageMetrics(
       eventPartIdx: Int,
       finished: Boolean,
       accumUpdates: Seq[AccumulableInfo]): Unit = {
-    val partIdx = if (eventPartIdx == -1) {
+    val partIdx = if (eventPartIdx == SQLAppStatusListener.UNKNOWN_PARTITION) {
       if (!taskIndices.contains(taskId)) {
         // We probably missed the start event for the task, just ignore it.
         return
@@ -482,7 +483,7 @@ private class LiveStageMetrics(
       .filter { acc => acc.update.isDefined && accumulatorIds.contains(acc.id) }
       .foreach { acc =>
         // In a live application, accumulators have Long values, but when reading from event
-        // logs, they have String values. For now, assume all accumulators are Long and covert
+        // logs, they have String values. For now, assume all accumulators are Long and convert
         // accordingly.
         val value = acc.update.get match {
           case s: String => s.toLong
@@ -500,4 +501,8 @@ private class LiveStageMetrics(
   }
 
   def metricValues(): Seq[(Long, Array[Long])] = taskMetrics.asScala.toSeq
+}
+
+private object SQLAppStatusListener {
+  val UNKNOWN_PARTITION = -1
 }

@@ -207,5 +207,4 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
   case class Measurements(
       taskEventsTimes: Seq[Long],
       aggregationTime: Long)
-
 }
