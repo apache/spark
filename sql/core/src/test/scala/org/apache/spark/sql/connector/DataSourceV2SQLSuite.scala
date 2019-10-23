@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
@@ -764,6 +764,32 @@ class DataSourceV2SQLSuite
     assert(expected === df.collect())
   }
 
+  test("CreateNameSpace: basic tests") {
+    // Session catalog is used.
+    sql("CREATE NAMESPACE ns")
+    testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
+
+    // V2 non-session catalog is used.
+    sql("CREATE NAMESPACE testcat.ns1.ns2")
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
+
+    // TODO: Add tests for validating namespace metadata when DESCRIBE NAMESPACE is available.
+  }
+
+  test("CreateNameSpace: test handling of 'IF NOT EXIST'") {
+    sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
+
+    // The 'ns1' namespace already exists, so this should fail.
+    val exception = intercept[NamespaceAlreadyExistsException] {
+      sql("CREATE NAMESPACE testcat.ns1")
+    }
+    assert(exception.getMessage.contains("Namespace 'ns1' already exists"))
+
+    // The following will be no-op since the namespace already exists.
+    sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
+  }
+
   test("ShowNamespaces: show root namespaces with default v2 catalog") {
     spark.conf.set("spark.sql.default.catalog", "testcat")
 
@@ -1207,6 +1233,50 @@ class DataSourceV2SQLSuite
         sql(s"MSCK REPAIR TABLE $t")
       }
       assert(e.message.contains("MSCK REPAIR TABLE is only supported with v1 tables"))
+    }
+  }
+
+  test("TRUNCATE TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, data string)
+           |USING foo
+           |PARTITIONED BY (id)
+         """.stripMargin)
+
+      val e1 = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t")
+      }
+      assert(e1.message.contains("TRUNCATE TABLE is only supported with v1 tables"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t PARTITION(id='1')")
+      }
+      assert(e2.message.contains("TRUNCATE TABLE is only supported with v1 tables"))
+    }
+  }
+
+  test("SHOW PARTITIONS") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, data string)
+           |USING foo
+           |PARTITIONED BY (id)
+         """.stripMargin)
+
+      val e1 = intercept[AnalysisException] {
+        val partition = sql(s"SHOW PARTITIONS $t")
+      }
+      assert(e1.message.contains("SHOW PARTITIONS is only supported with v1 tables"))
+
+      val e2 = intercept[AnalysisException] {
+        val partition2 = sql(s"SHOW PARTITIONS $t PARTITION(id='1')")
+      }
+      assert(e2.message.contains("SHOW PARTITIONS is only supported with v1 tables"))
     }
   }
 

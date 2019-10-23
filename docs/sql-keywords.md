@@ -210,6 +210,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>PRECEDING</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>PRIMARY</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>PRINCIPALS</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
+  <tr><td>PROPERTIES</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>PURGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>QUERY</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>RANGE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
