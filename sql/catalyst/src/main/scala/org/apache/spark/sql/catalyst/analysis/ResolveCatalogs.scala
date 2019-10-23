@@ -168,6 +168,13 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${viewName.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
+    case c @ CreateNamespaceStatement(NonSessionCatalog(catalog, nameParts), _, _) =>
+      CreateNamespace(
+        catalog.asNamespaceCatalog,
+        nameParts,
+        c.ifNotExists,
+        c.properties)
+
     case ShowNamespacesStatement(Some(CatalogAndNamespace(catalog, namespace)), pattern) =>
       ShowNamespaces(catalog.asNamespaceCatalog, namespace, pattern)
 

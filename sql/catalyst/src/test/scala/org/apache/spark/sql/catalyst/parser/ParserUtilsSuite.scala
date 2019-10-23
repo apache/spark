@@ -50,7 +50,7 @@ class ParserUtilsSuite extends SparkFunSuite {
       |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
     """.stripMargin
   ) { parser =>
-    parser.statement().asInstanceOf[CreateDatabaseContext]
+    parser.statement().asInstanceOf[CreateNamespaceContext]
   }
 
   val emptyContext = buildContext("") { parser =>

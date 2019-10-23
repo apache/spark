@@ -2308,6 +2308,46 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[CreateNamespaceStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE NAMESPACE [IF NOT EXISTS] ns1.ns2.ns3
+   *     create_namespace_clauses;
+   *
+   *   create_namespace_clauses (order insensitive):
+   *     [COMMENT namespace_comment]
+   *     [LOCATION path]
+   *     [WITH PROPERTIES (key1=val1, key2=val2, ...)]
+   * }}}
+   */
+  override def visitCreateNamespace(ctx: CreateNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
+    checkDuplicateClauses(ctx.PROPERTIES, "WITH PROPERTIES", ctx)
+    checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
+
+    if (!ctx.PROPERTIES.isEmpty && !ctx.DBPROPERTIES.isEmpty) {
+      throw new ParseException(s"Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
+    }
+
+    var properties = ctx.tablePropertyList.asScala.headOption
+      .map(visitPropertyKeyValues)
+      .getOrElse(Map.empty)
+    Option(ctx.comment).map(string).map {
+      properties += CreateNamespaceStatement.COMMENT_PROPERTY_KEY -> _
+    }
+    ctx.locationSpec.asScala.headOption.map(visitLocationSpec).map {
+      properties += CreateNamespaceStatement.LOCATION_PROPERTY_KEY -> _
+    }
+
+    CreateNamespaceStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.EXISTS != null,
+      properties)
+  }
+
+  /**
    * Create a [[ShowNamespacesStatement]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
