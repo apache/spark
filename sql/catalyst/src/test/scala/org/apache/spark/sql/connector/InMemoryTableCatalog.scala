@@ -34,6 +34,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   protected val tables: util.Map[Identifier, InMemoryTable] =
     new ConcurrentHashMap[Identifier, InMemoryTable]()
 
+  private val invalidatedTables: util.Set[Identifier] = ConcurrentHashMap.newKeySet()
+
   private var _name: Option[String] = None
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
@@ -53,6 +55,10 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case _ =>
         throw new NoSuchTableException(ident)
     }
+  }
+
+  override def invalidateTable(ident: Identifier): Unit = {
+    invalidatedTables.add(ident)
   }
 
   override def createTable(
@@ -102,6 +108,10 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case _ =>
         throw new NoSuchTableException(oldIdent)
     }
+  }
+
+  def isTableInvalidated(ident: Identifier): Boolean = {
+    invalidatedTables.contains(ident)
   }
 
   def clearTables(): Unit = {

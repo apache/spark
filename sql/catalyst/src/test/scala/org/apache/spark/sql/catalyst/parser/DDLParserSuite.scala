@@ -1081,6 +1081,12 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed5, expected5)
   }
 
+  test("REFRESH TABLE table") {
+    comparePlans(
+      parsePlan("REFRESH TABLE a.b.c"),
+      RefreshTableStatement(Seq("a", "b", "c")))
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],
