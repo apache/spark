@@ -48,8 +48,7 @@ private case object MySQLDialect extends JdbcDialect {
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
-  override def validateFetchSize(properties: Map[String, String]): Unit = {
-    val size = properties.getOrElse(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "0").toInt
+  override def validateFetchSize(size: Int): Unit = {
     require(size >= 0 || size == Integer.MIN_VALUE,
       s"Invalid value `${size.toString}` for parameter " +
         s"`${JDBCOptions.JDBC_BATCH_FETCH_SIZE}` for MySQL. " +
