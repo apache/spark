@@ -64,6 +64,7 @@ private class DriverPluginContainer(sc: SparkContext, plugins: Seq[SparkPlugin])
   override def shutdown(): Unit = {
     driverPlugins.foreach { case (name, plugin) =>
       try {
+        logDebug(s"Stopping plugin $name.")
         plugin.shutdown()
       } catch {
         case t: Throwable =>
