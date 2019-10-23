@@ -845,6 +845,90 @@ class DDLParserSuite extends AnalysisTest {
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
   }
 
+  test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
+    val expected = CreateNamespaceStatement(
+      Seq("a", "b", "c"),
+      ifNotExists = true,
+      Map(
+        "a" -> "a",
+        "b" -> "b",
+        "c" -> "c",
+        "comment" -> "namespace_comment",
+        "location" -> "/home/user/db"))
+
+    comparePlans(
+      parsePlan(
+        """
+          |CREATE NAMESPACE IF NOT EXISTS a.b.c
+          |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
+          |COMMENT 'namespace_comment' LOCATION '/home/user/db'
+        """.stripMargin),
+      expected)
+
+    comparePlans(
+      parsePlan(
+        """
+          |CREATE DATABASE IF NOT EXISTS a.b.c
+          |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
+          |COMMENT 'namespace_comment' LOCATION '/home/user/db'
+        """.stripMargin),
+      expected)
+  }
+
+  test("create namespace -- check duplicates") {
+    def createDatabase(duplicateClause: String): String = {
+      s"""
+         |CREATE NAMESPACE IF NOT EXISTS a.b.c
+         |$duplicateClause
+         |$duplicateClause
+      """.stripMargin
+    }
+    val sql1 = createDatabase("COMMENT 'namespace_comment'")
+    val sql2 = createDatabase("LOCATION '/home/user/db'")
+    val sql3 = createDatabase("WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+    val sql4 = createDatabase("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: LOCATION")
+    intercept(sql3, "Found duplicate clauses: WITH PROPERTIES")
+    intercept(sql4, "Found duplicate clauses: WITH DBPROPERTIES")
+  }
+
+  test("create namespace - property values must be set") {
+    assertUnsupported(
+      sql = "CREATE NAMESPACE a.b.c WITH PROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+  }
+
+  test("create namespace -- either PROPERTIES or DBPROPERTIES is allowed") {
+    val sql =
+      s"""
+         |CREATE NAMESPACE IF NOT EXISTS a.b.c
+         |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
+         |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
+      """.stripMargin
+    intercept(sql, "Either PROPERTIES or DBPROPERTIES is allowed")
+  }
+
+  test("create namespace - support for other types in PROPERTIES") {
+    val sql =
+      """
+        |CREATE NAMESPACE a.b.c
+        |LOCATION '/home/user/db'
+        |WITH PROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE)
+      """.stripMargin
+    comparePlans(
+      parsePlan(sql),
+      CreateNamespaceStatement(
+        Seq("a", "b", "c"),
+        ifNotExists = false,
+        Map(
+          "a" -> "1",
+          "b" -> "0.1",
+          "c" -> "true",
+          "location" -> "/home/user/db")))
+  }
+
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),
@@ -965,6 +1049,49 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c"),
       ShowCreateTableStatement(Seq("a", "b", "c")))
+  }
+
+  test("TRUNCATE table") {
+    comparePlans(
+      parsePlan("TRUNCATE TABLE a.b.c"),
+      TruncateTableStatement(Seq("a", "b", "c"), None))
+
+    comparePlans(
+      parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
+      TruncateTableStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10"))))
+  }
+
+  test("SHOW PARTITIONS") {
+    val sql1 = "SHOW PARTITIONS t1"
+    val sql2 = "SHOW PARTITIONS db1.t1"
+    val sql3 = "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')"
+    val sql4 = "SHOW PARTITIONS a.b.c"
+    val sql5 = "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')"
+
+    val parsed1 = parsePlan(sql1)
+    val expected1 = ShowPartitionsStatement(Seq("t1"), None)
+    val parsed2 = parsePlan(sql2)
+    val expected2 = ShowPartitionsStatement(Seq("db1", "t1"), None)
+    val parsed3 = parsePlan(sql3)
+    val expected3 = ShowPartitionsStatement(Seq("t1"),
+      Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))
+    val parsed4 = parsePlan(sql4)
+    val expected4 = ShowPartitionsStatement(Seq("a", "b", "c"), None)
+    val parsed5 = parsePlan(sql5)
+    val expected5 = ShowPartitionsStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10")))
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
+    comparePlans(parsed5, expected5)
+  }
+
+  test("REFRESH TABLE table") {
+    comparePlans(
+      parsePlan("REFRESH TABLE a.b.c"),
+      RefreshTableStatement(Seq("a", "b", "c")))
+>>>>>>> upstream/master
   }
 
   private case class TableSpec(

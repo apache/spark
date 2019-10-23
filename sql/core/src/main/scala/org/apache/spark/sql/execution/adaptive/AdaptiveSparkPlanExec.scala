@@ -92,6 +92,15 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(conf, subqueryCache),
+
+    // When adding local shuffle readers in 'OptimizeLocalShuffleReader`, we revert all the local
+    // readers if additional shuffles are introduced. This may be too conservative: maybe there is
+    // only one local reader that introduces shuffle, and we can still keep other local readers.
+    // Here we re-execute this rule with the sub-plan-tree of a query stage, to make sure necessary
+    // local readers are added before executing the query stage.
+    // This rule must be executed before `ReduceNumShufflePartitions`, as local shuffle readers
+    // can't change number of partitions.
+    OptimizeLocalShuffleReader(conf),
     ReduceNumShufflePartitions(conf),
     ApplyColumnarRulesAndInsertTransitions(session.sessionState.conf,
       session.sessionState.columnarRules),
