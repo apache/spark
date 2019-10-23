@@ -240,6 +240,11 @@
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
 
     <CodeCacheSize>1g</CodeCacheSize>
+
+    <!-- Thrift properties -->
+    <thrift.home>you-must-set-this-to-run-thrift</thrift.home>
+    <thrift.gen.dir>${basedir}/src/gen/thrift</thrift.gen.dir>
+    <thrift.args>-I ${thrift.home} --gen java:beans,hashcode,generated_annotations=undated</thrift.args>
   </properties>
   <repositories>
     <repository>
@@ -3100,7 +3105,7 @@
                   <target>
                     <taskdef name="for" classname="net.sf.antcontrib.logic.ForTask"
                              classpathref="maven.plugin.classpath" />
-                    <property name="thrift.args" value="-I ${thrift.home} --gen java:beans,hashcode,generated_annotations=undated --gen cpp --gen php --gen py --gen rb"/>
+                    <property name="thrift.args" value="-I ${thrift.home} --gen java:beans,hashcode,generated_annotations=undated"/>
                     <property name="thrift.gen.dir" value="${basedir}/src/gen/thrift"/>
                     <delete dir="${thrift.gen.dir}"/>
                     <mkdir dir="${thrift.gen.dir}"/>
