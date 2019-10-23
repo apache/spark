@@ -687,6 +687,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
    * files. If it is not set, the UTF-8 charset will be used. </li>
    * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
+   * <li>`ignoreNullFields` (default `true`): whether to ignore null fields in column/struct
+   * during json generating. </li>
    * </ul>
    *
    * @since 1.4.0
