@@ -40,7 +40,7 @@ ALTER TABLE table_name PARTITION partition_spec RENAME TO PARTITION partition_sp
 </dl>
 <dl>
   <dt><code><em>db_name</em></code></dt>
-  <dd>Name of the  exsisting database.</dd>
+  <dd>Name of the existing database.</dd>
 </dl>
 
 <dl>
@@ -55,7 +55,7 @@ ALTER TABLE table_name PARTITION partition_spec RENAME TO PARTITION partition_sp
 
 
 ### ADD COLUMNS
-`ALTER TABLE ADD COLUMNS` statement adds mentioned columns to an exsisting table.
+`ALTER TABLE ADD COLUMNS` statement adds mentioned columns to an existing table.
 
 #### Syntax
 {% highlight sql %}
@@ -138,7 +138,7 @@ ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION 'new_location';
 
 <dl>
   <dt><code><em>SERDEPROPERTIES (key1=val1, key2=val2, ...)</em></code></dt>
-  <dd>Specifices the SERDE properties to be set.</dd>
+  <dd>Specifies the SERDE properties to be set.</dd>
 </dl>
 
 
@@ -162,7 +162,7 @@ ALTER TABLE Student RENAME TO StudentInfo;
 
 --After Renaming the table
 
-DESC studentInfo;
+DESC StudentInfo;
 +--------------------------+------------+----------+--+
 |         col_name         | data_type  | comment  |
 +--------------------------+------------+----------+--+
@@ -176,7 +176,7 @@ DESC studentInfo;
 
 --RENAME partition
 
-show partitions StudentInfo;
+SHOW PARTITIONS StudentInfo;
 +------------+--+
 | partition  |
 +------------+--+
@@ -188,7 +188,7 @@ show partitions StudentInfo;
 ALTER TABLE default.StudentInfo PARTITION (age='10') RENAME TO PARTITION (age='15');
 
 --After renaming Partition
-show partitions StudentInfo;
+SHOW PARTITIONS StudentInfo;
 +------------+--+
 | partition  |
 +------------+--+
@@ -199,7 +199,7 @@ show partitions StudentInfo;
 
 -- Add new column to a table
 
-DESC studentInfo;
+DESC StudentInfo;
 +--------------------------+------------+----------+--+
 |         col_name         | data_type  | comment  |
 +--------------------------+------------+----------+--+
@@ -214,7 +214,7 @@ DESC studentInfo;
 ALTER TABLE StudentInfo ADD columns (LastName string, DOB timestamp);
 
 --After Adding New columns to the table
-DESC studentInfo;
+DESC StudentInfo;
 +--------------------------+------------+----------+--+
 |         col_name         | data_type  | comment  |
 +--------------------------+------------+----------+--+
