@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{InSubquery, ListQuery}
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
  * Unit tests for [[ResolveSubquery]].
@@ -50,7 +50,7 @@ class ResolveSubquerySuite extends AnalysisTest {
       t2,
       Inner,
       Some(InSubquery(Seq(a), ListQuery(Project(Seq(UnresolvedAttribute("c")), t3)))),
-      null)
+      JoinHint.NONE)
     assertAnalysisSuccess(expr)
   }
 }
