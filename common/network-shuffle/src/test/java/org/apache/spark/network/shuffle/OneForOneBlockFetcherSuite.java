@@ -64,7 +64,7 @@ public class OneForOneBlockFetcherSuite {
     BlockFetchingListener listener = fetchBlocks(
       blocks,
       blockIds,
-      new FetchShuffleBlocks("app-id", "exec-id", 0, new long[] { 0 }, new int[][] {{ 0 }}),
+      new FetchShuffleBlocks("app-id", "exec-id", 0, new long[] { 0 }, new int[][] {{ 0 }}, false),
       conf);
 
     verify(listener).onBlockFetchSuccess("shuffle_0_0_0", blocks.get("shuffle_0_0_0"));
@@ -100,13 +100,31 @@ public class OneForOneBlockFetcherSuite {
     BlockFetchingListener listener = fetchBlocks(
       blocks,
       blockIds,
-      new FetchShuffleBlocks("app-id", "exec-id", 0, new long[] { 0 }, new int[][] {{ 0, 1, 2 }}),
+      new FetchShuffleBlocks(
+        "app-id", "exec-id", 0, new long[] { 0 }, new int[][] {{ 0, 1, 2 }}, false),
       conf);
 
     for (int i = 0; i < 3; i ++) {
       verify(listener, times(1)).onBlockFetchSuccess(
         "shuffle_0_0_" + i, blocks.get("shuffle_0_0_" + i));
     }
+  }
+
+  @Test
+  public void testBatchFetchThreeShuffleBlocks() {
+    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    blocks.put("shuffle_0_0_0_3", new NioManagedBuffer(ByteBuffer.wrap(new byte[58])));
+    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+
+    BlockFetchingListener listener = fetchBlocks(
+      blocks,
+      blockIds,
+      new FetchShuffleBlocks(
+        "app-id", "exec-id", 0, new long[] { 0 }, new int[][] {{ 0, 3 }}, true),
+      conf);
+
+    verify(listener, times(1)).onBlockFetchSuccess(
+      "shuffle_0_0_0_3", blocks.get("shuffle_0_0_0_3"));
   }
 
   @Test

@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement, UseStatement}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
@@ -1770,7 +1769,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
-          Literal(CalendarInterval.fromString(value), CalendarIntervalType)
+          val interval = try {
+            CalendarInterval.fromCaseInsensitiveString(value)
+          } catch {
+            case e: IllegalArgumentException =>
+              val ex = new ParseException("Cannot parse the INTERVAL value: " + value, ctx)
+              ex.setStackTrace(e.getStackTrace)
+              throw ex
+          }
+          Literal(interval, CalendarIntervalType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
@@ -2304,6 +2311,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a [[ShowNamespacesStatement]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.DATABASES != null && ctx.multipartIdentifier != null) {
+      throw new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
+    }
+
     ShowNamespacesStatement(
       Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
       Option(ctx.pattern).map(string))
@@ -2656,5 +2667,96 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         partitionSpec,
         isExtended)
     }
+  }
+
+  /**
+   * Create an [[AnalyzeTableStatement]], or an [[AnalyzeColumnStatement]].
+   * Example SQL for analyzing a table or a set of partitions :
+   * {{{
+   *   ANALYZE TABLE multi_part_name [PARTITION (partcol1[=val1], partcol2[=val2], ...)]
+   *   COMPUTE STATISTICS [NOSCAN];
+   * }}}
+   *
+   * Example SQL for analyzing columns :
+   * {{{
+   *   ANALYZE TABLE multi_part_name COMPUTE STATISTICS FOR COLUMNS column1, column2;
+   * }}}
+   *
+   * Example SQL for analyzing all columns of a table:
+   * {{{
+   *   ANALYZE TABLE multi_part_name COMPUTE STATISTICS FOR ALL COLUMNS;
+   * }}}
+   */
+  override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
+    def checkPartitionSpec(): Unit = {
+      if (ctx.partitionSpec != null) {
+        logWarning("Partition specification is ignored when collecting column statistics: " +
+          ctx.partitionSpec.getText)
+      }
+    }
+    if (ctx.identifier != null &&
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
+    }
+
+    val tableName = visitMultipartIdentifier(ctx.multipartIdentifier())
+    if (ctx.ALL() != null) {
+      checkPartitionSpec()
+      AnalyzeColumnStatement(tableName, None, allColumns = true)
+    } else if (ctx.identifierSeq() == null) {
+      val partitionSpec = if (ctx.partitionSpec != null) {
+        visitPartitionSpec(ctx.partitionSpec)
+      } else {
+        Map.empty[String, Option[String]]
+      }
+      AnalyzeTableStatement(tableName, partitionSpec, noScan = ctx.identifier != null)
+    } else {
+      checkPartitionSpec()
+      AnalyzeColumnStatement(
+        tableName, Option(visitIdentifierSeq(ctx.identifierSeq())), allColumns = false)
+    }
+  }
+
+  /**
+   * Create a [[RepairTableStatement]].
+   *
+   * For example:
+   * {{{
+   *   MSCK REPAIR TABLE multi_part_name
+   * }}}
+   */
+  override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
+    RepairTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+  }
+
+  /**
+   * Create a [[TruncateTableStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   TRUNCATE TABLE multi_part_name [PARTITION (partcol1=val1, partcol2=val2 ...)]
+   * }}}
+   */
+  override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
+    TruncateTableStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+  }
+
+  /**
+   * A command for users to list the partition names of a table. If partition spec is specified,
+   * partitions that match the spec are returned. Otherwise an empty result set is returned.
+   *
+   * This function creates a [[ShowPartitionsStatement]] logical plan
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW PARTITIONS multi_part_name [partition_spec];
+   * }}}
+   */
+  override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    ShowPartitionsStatement(table, partitionKeys)
   }
 }

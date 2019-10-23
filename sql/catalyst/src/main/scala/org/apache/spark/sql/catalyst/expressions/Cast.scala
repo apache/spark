@@ -165,6 +165,7 @@ object Cast {
    */
   def canANSIStoreAssign(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
+    case (NullType, _) => true
     case (_: NumericType, _: NumericType) => true
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true

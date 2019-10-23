@@ -811,17 +811,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin)
   }
 
-  test("show databases") {
-    val sql1 = "SHOW DATABASES"
-    val sql2 = "SHOW DATABASES LIKE 'defau*'"
-    val parsed1 = parser.parsePlan(sql1)
-    val expected1 = ShowDatabasesCommand(None)
-    val parsed2 = parser.parsePlan(sql2)
-    val expected2 = ShowDatabasesCommand(Some("defau*"))
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
   test("show tblproperties") {
     val parsed1 = parser.parsePlan("SHOW TBLPROPERTIES tab1")
     val expected1 = ShowTablePropertiesCommand(TableIdentifier("tab1", None), None)
@@ -879,27 +868,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
-  }
-
-
-  test("show partitions") {
-    val sql1 = "SHOW PARTITIONS t1"
-    val sql2 = "SHOW PARTITIONS db1.t1"
-    val sql3 = "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val expected1 =
-      ShowPartitionsCommand(TableIdentifier("t1", None), None)
-    val parsed2 = parser.parsePlan(sql2)
-    val expected2 =
-      ShowPartitionsCommand(TableIdentifier("t1", Some("db1")), None)
-    val expected3 =
-      ShowPartitionsCommand(TableIdentifier("t1", None),
-        Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))
-    val parsed3 = parser.parsePlan(sql3)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
   }
 
   test("support for other types in DBPROPERTIES") {
@@ -1453,15 +1421,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
     intercept(sql1, "Found duplicate clauses: COMMENT")
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
-  }
-
-  test("MSCK REPAIR table") {
-    val sql = "MSCK REPAIR TABLE tab1"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRecoverPartitionsCommand(
-      TableIdentifier("tab1", None),
-      "MSCK REPAIR TABLE")
-    comparePlans(parsed, expected)
   }
 
   test("create table like") {

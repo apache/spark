@@ -93,8 +93,7 @@ statement
         SET locationSpec                                               #setDatabaseLocation
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
-    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
-    | SHOW NAMESPACES ((FROM | IN) multipartIdentifier)?
+    | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
@@ -125,7 +124,7 @@ statement
         (COMMENT comment=STRING) |
         (TBLPROPERTIES tableProps=tablePropertyList))*
         (AS? query)?                                                   #replaceTable
-    | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
+    | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
@@ -195,7 +194,7 @@ statement
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) tableIdentifier
         ((FROM | IN) db=errorCapturingIdentifier)?                     #showColumns
-    | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
+    | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
@@ -212,8 +211,8 @@ statement
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData
-    | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
-    | MSCK REPAIR TABLE tableIdentifier                                #repairTable
+    | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
+    | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration

@@ -566,8 +566,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can set the following CSV-specific options to deal with CSV files:
    * <ul>
-   * <li>`sep` (default `,`): sets a single character as a separator for each
-   * field and value.</li>
+   * <li>`sep` (default `,`): sets a separator for each field and value. This separator can be one
+   * or more characters.</li>
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
    * <li>`quote` (default `"`): sets a single character used for escaping quoted values where

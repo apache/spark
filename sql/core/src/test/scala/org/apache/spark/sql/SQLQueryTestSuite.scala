@@ -25,7 +25,6 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -143,7 +142,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   /** List of test cases to ignore, in lower cases. */
   protected def blackList: Set[String] = Set(
-    "blacklist.sql"   // Do NOT remove this one. It is here to test the blacklist functionality.
+    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
+    // SPARK-28885 String value is not allowed to be stored as numeric type with
+    // ANSI store assignment policy.
+    "postgreSQL/numeric.sql",
+    "postgreSQL/int2.sql",
+    "postgreSQL/int4.sql",
+    "postgreSQL/int8.sql",
+    "postgreSQL/float4.sql",
+    "postgreSQL/float8.sql",
+    // SPARK-28885 String value is not allowed to be stored as date/timestamp type with
+    // ANSI store assignment policy.
+    "postgreSQL/date.sql",
+    "postgreSQL/timestamp.sql"
   )
 
   // Create all the test cases.
@@ -445,8 +456,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   protected def replaceNotIncludedMsg(line: String): String = {
     line.replaceAll("#\\d+", "#x")
       .replaceAll(
-        s"Location.*/sql/core/spark-warehouse/$clsName/",
-        s"Location ${notIncludedMsg}sql/core/spark-warehouse/")
+        s"Location.*$clsName/",
+        s"Location ${notIncludedMsg}/{warehouse_dir}/")
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")

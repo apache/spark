@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -126,9 +125,9 @@ class Analyzer(
     maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
-  private val catalog: SessionCatalog = catalogManager.v1SessionCatalog
+  private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
-  override def isView(nameParts: Seq[String]): Boolean = catalog.isView(nameParts)
+  override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)
 
   // Only for tests.
   def this(catalog: SessionCatalog, conf: SQLConf) = {
@@ -226,7 +225,7 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
-      ResolveHigherOrderFunctions(catalog) ::
+      ResolveHigherOrderFunctions(v1SessionCatalog) ::
       ResolveLambdaVariables(conf) ::
       ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
@@ -722,7 +721,7 @@ class Analyzer(
     // have empty defaultDatabase and all the relations in viewText have database part defined.
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
       case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
-        if catalog.isTemporaryTable(ident) =>
+        if v1SessionCatalog.isTemporaryTable(ident) =>
         resolveRelation(lookupTableFromCatalog(ident, u, AnalysisContext.get.defaultDatabase))
 
       case u @ UnresolvedRelation(AsTableIdentifier(ident)) if !isRunningDirectlyOnFiles(ident) =>
@@ -779,7 +778,7 @@ class Analyzer(
       val tableIdentWithDb = tableIdentifier.copy(
         database = tableIdentifier.database.orElse(defaultDatabase))
       try {
-        catalog.lookupRelation(tableIdentWithDb)
+        v1SessionCatalog.lookupRelation(tableIdentWithDb)
       } catch {
         case _: NoSuchTableException | _: NoSuchDatabaseException =>
           u
@@ -793,8 +792,9 @@ class Analyzer(
     // Note that we are testing (!db_exists || !table_exists) because the catalog throws
     // an exception from tableExists if the database does not exist.
     private def isRunningDirectlyOnFiles(table: TableIdentifier): Boolean = {
-      table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
-        (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))
+      table.database.isDefined && conf.runSQLonFile && !v1SessionCatalog.isTemporaryTable(table) &&
+        (!v1SessionCatalog.databaseExists(table.database.get)
+          || !v1SessionCatalog.tableExists(table))
     }
   }
 
@@ -1512,13 +1512,14 @@ class Analyzer(
       plan.resolveExpressions {
         case f: UnresolvedFunction
           if externalFunctionNameSet.contains(normalizeFuncName(f.name)) => f
-        case f: UnresolvedFunction if catalog.isRegisteredFunction(f.name) => f
-        case f: UnresolvedFunction if catalog.isPersistentFunction(f.name) =>
+        case f: UnresolvedFunction if v1SessionCatalog.isRegisteredFunction(f.name) => f
+        case f: UnresolvedFunction if v1SessionCatalog.isPersistentFunction(f.name) =>
           externalFunctionNameSet.add(normalizeFuncName(f.name))
           f
         case f: UnresolvedFunction =>
           withPosition(f) {
-            throw new NoSuchFunctionException(f.name.database.getOrElse(catalog.getCurrentDatabase),
+            throw new NoSuchFunctionException(
+              f.name.database.getOrElse(v1SessionCatalog.getCurrentDatabase),
               f.name.funcName)
           }
       }
@@ -1533,7 +1534,7 @@ class Analyzer(
 
       val databaseName = name.database match {
         case Some(a) => formatDatabaseName(a)
-        case None => catalog.getCurrentDatabase
+        case None => v1SessionCatalog.getCurrentDatabase
       }
 
       FunctionIdentifier(funcName, Some(databaseName))
@@ -1558,7 +1559,7 @@ class Analyzer(
             }
           case u @ UnresolvedGenerator(name, children) =>
             withPosition(u) {
-              catalog.lookupFunction(name, children) match {
+              v1SessionCatalog.lookupFunction(name, children) match {
                 case generator: Generator => generator
                 case other =>
                   failAnalysis(s"$name is expected to be a generator. However, " +
@@ -1567,7 +1568,7 @@ class Analyzer(
             }
           case u @ UnresolvedFunction(funcId, children, isDistinct) =>
             withPosition(u) {
-              catalog.lookupFunction(funcId, children) match {
+              v1SessionCatalog.lookupFunction(funcId, children) match {
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
@@ -2503,9 +2504,9 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case append @ AppendData(table, query, _, isByName)
           if table.resolved && query.resolved && !append.outputResolved =>
+        validateStoreAssignmentPolicy()
         val projection =
-          TableOutputResolver.resolveOutputColumns(
-            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
+          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
 
         if (projection != query) {
           append.copy(query = projection)
@@ -2515,9 +2516,9 @@ class Analyzer(
 
       case overwrite @ OverwriteByExpression(table, _, query, _, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
+        validateStoreAssignmentPolicy()
         val projection =
-          TableOutputResolver.resolveOutputColumns(
-            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
+          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
 
         if (projection != query) {
           overwrite.copy(query = projection)
@@ -2527,9 +2528,9 @@ class Analyzer(
 
       case overwrite @ OverwritePartitionsDynamic(table, query, _, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
+        validateStoreAssignmentPolicy()
         val projection =
-          TableOutputResolver.resolveOutputColumns(
-            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
+          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
 
         if (projection != query) {
           overwrite.copy(query = projection)
@@ -2539,16 +2540,14 @@ class Analyzer(
     }
   }
 
-  private def storeAssignmentPolicy: StoreAssignmentPolicy.Value = {
-    val policy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.STRICT)
+  private def validateStoreAssignmentPolicy(): Unit = {
     // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
-    if (policy == StoreAssignmentPolicy.LEGACY) {
+    if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
       val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
       throw new AnalysisException(s"""
         |"LEGACY" store assignment policy is disallowed in Spark data source V2.
         |Please set the configuration $configKey to other values.""".stripMargin)
     }
-    policy
   }
 
   private def commonNaturalJoinProcessing(
@@ -2768,17 +2767,17 @@ class Analyzer(
   private def lookupV2RelationAndCatalog(
       identifier: Seq[String]): Option[(DataSourceV2Relation, CatalogPlugin, Identifier)] =
     identifier match {
-      case AsTemporaryViewIdentifier(ti) if catalog.isTemporaryTable(ti) => None
-      case CatalogObjectIdentifier(Some(v2Catalog), ident) =>
-        CatalogV2Util.loadTable(v2Catalog, ident) match {
-          case Some(table) => Some((DataSourceV2Relation.create(table), v2Catalog, ident))
+      case AsTemporaryViewIdentifier(ti) if v1SessionCatalog.isTemporaryTable(ti) => None
+      case CatalogObjectIdentifier(catalog, ident) if !CatalogV2Util.isSessionCatalog(catalog) =>
+        CatalogV2Util.loadTable(catalog, ident) match {
+          case Some(table) => Some((DataSourceV2Relation.create(table), catalog, ident))
           case None => None
         }
-      case CatalogObjectIdentifier(None, ident) =>
-        CatalogV2Util.loadTable(catalogManager.v2SessionCatalog, ident) match {
+      case CatalogObjectIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
+        CatalogV2Util.loadTable(catalog, ident) match {
           case Some(_: V1Table) => None
           case Some(table) =>
-            Some((DataSourceV2Relation.create(table), catalogManager.v2SessionCatalog, ident))
+            Some((DataSourceV2Relation.create(table), catalog, ident))
           case None => None
         }
       case _ => None
