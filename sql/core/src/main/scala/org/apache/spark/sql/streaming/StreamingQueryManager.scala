@@ -367,10 +367,10 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         queryManager.get(query.id).stop()
       } else if (streamAlreadyActive) {
         throw new IllegalStateException(
-          s"Cannot start query with id ${query.id} as another query with same id is " +
-            s"already active. Perhaps you are attempting to restart a query from checkpoint " +
-            s"that is already active. You may stop the old query by setting the SQL " +
-            s"configuration: spark.conf.set(\"${SQLConf.STOP_RUNNING_DUPLICATE_STREAM}\", true).")
+          "Cannot start query with id ${query.id} as another query with same id is " +
+            "already active. Perhaps you are attempting to restart a query from checkpoint " +
+            "that is already active. You may stop the old query by setting the SQL " +
+            s"""configuration: spark.conf.set("${SQLConf.STOP_RUNNING_DUPLICATE_STREAM}", true).""")
       }
 
       activeQueries.put(query.id, query)
