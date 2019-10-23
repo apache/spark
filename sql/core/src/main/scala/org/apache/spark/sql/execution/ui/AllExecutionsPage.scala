@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
 private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with Logging {
 
   private val sqlStore = parent.sqlStore
-  private val streamQueryStore = parent.streamQueryCache
+  private val streamQueryStore = parent.streamQueryStore
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val currentTime = System.currentTimeMillis()

@@ -375,7 +375,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         }
         throw e
     }
-    sparkSession.sharedState.streamingQueryCache.add((query, System.currentTimeMillis()))
+    sparkSession.sharedState.streamQueryStore.addStreamQuery(query)
     query
   }
 

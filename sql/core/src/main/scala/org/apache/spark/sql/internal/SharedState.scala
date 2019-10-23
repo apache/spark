@@ -22,16 +22,14 @@ import java.net.URL
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
-
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
-import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
+import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamQueryStore}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.status.ElementTrackingStore
@@ -114,7 +112,7 @@ private[sql] class SharedState(
   /**
    * Class for caching streaming query instance.
    */
-  val streamingQueryCache = new mutable.HashSet[(StreamingQuery, Long)]
+  val streamQueryStore: StreamQueryStore = new StreamQueryStore()
 
   /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
@@ -125,7 +123,7 @@ private[sql] class SharedState(
     val listener = new SQLAppStatusListener(conf, kvStore, live = true)
     sparkContext.listenerBus.addToStatusQueue(listener)
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
-    sparkContext.ui.foreach(new SQLTab(statusStore, Some(streamingQueryCache), _))
+    sparkContext.ui.foreach(new SQLTab(statusStore, Some(streamQueryStore), _))
     statusStore
   }
 

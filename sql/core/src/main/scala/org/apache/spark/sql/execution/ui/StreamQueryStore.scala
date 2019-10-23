@@ -17,27 +17,31 @@
 
 package org.apache.spark.sql.execution.ui
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.streaming.ui.{StreamingQueryPage, StreamingQueryStatisticsPage}
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import java.util.UUID
 
-class SQLTab(
-    val sqlStore: SQLAppStatusStore,
-    val streamQueryStore: Option[StreamQueryStore],
-    sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "SQL") with Logging {
+import scala.collection.mutable
 
-  val parent = sparkUI
+import org.apache.spark.sql.streaming.StreamingQuery
 
-  attachPage(new AllExecutionsPage(this))
-  attachPage(new ExecutionPage(this))
-  attachPage(new StreamingQueryPage(this, streamQueryStore))
-  attachPage(new StreamingQueryStatisticsPage(this, streamQueryStore))
-  parent.attachTab(this)
+/**
+ * A class that holds and manages [[StreamingQuery]].
+ */
+private[sql] class StreamQueryStore {
+  private val lock = new Object
+  private val cache = new mutable.HashMap[UUID, (StreamingQuery, Long)]()
 
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
-}
+  def addStreamQuery(query: StreamingQuery): Unit = {
+    synchronized(lock) {
+      if (!cache.contains(query.id)) {
+        val curTime = System.currentTimeMillis()
+        cache.put(query.id, (query, curTime))
+      }
+    }
+  }
 
-object SQLTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+  def existingStreamQueries: Seq[StreamingQuery] = {
+    synchronized(lock) {
+      cache.values.map(_._1).toSeq
+    }
+  }
 }

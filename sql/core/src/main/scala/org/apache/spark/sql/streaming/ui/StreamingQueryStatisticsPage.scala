@@ -24,20 +24,19 @@ import java.util.UUID
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 import org.apache.spark.sql.execution.streaming.QuerySummary
-import org.apache.spark.sql.execution.ui.SQLTab
+import org.apache.spark.sql.execution.ui.{SQLTab, StreamQueryStore}
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.ui.UIUtils._
-import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
 
 class StreamingQueryStatisticsPage(
     parent: SQLTab,
-    store: Option[HashSet[(StreamingQuery, Long)]])
+    store: Option[StreamQueryStore])
   extends WebUIPage("streaming/statistics") with Logging {
   val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   df.setTimeZone(getTimeZone("UTC"))
@@ -51,11 +50,11 @@ class StreamingQueryStatisticsPage(
   }
 
   override def render(request: HttpServletRequest): Seq[Node] = {
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val (query, timeSinceStart) = if (store.nonEmpty) {
-      store.get.find(i => i._1.runId.equals(UUID.fromString(parameterId)))
+      store.get.existingStreamQueries.find(i => i.runId.equals(UUID.fromString(parameterId)))
         .getOrElse(throw new Exception(s"Can not find streaming query $parameterId"))
     } else {
       throw new Exception(s"Can not find streaming query $parameterId")
@@ -75,7 +74,7 @@ class StreamingQueryStatisticsPage(
   def generateTimeMap(times: Seq[Long]): Seq[Node] = {
     val js = "var timeFormat = {};\n" + times.map { time =>
       val formattedTime =
-        UIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
+        SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
       s"timeFormat[$time] = '$formattedTime';"
     }.mkString("\n")
 
@@ -86,7 +85,7 @@ class StreamingQueryStatisticsPage(
     val js = "var timeToValues = {};\n" + values.map { case (x, y) =>
       val s = y.asScala.toSeq.sortBy(_._1).map(e => s""""${e._2.toDouble}"""")
         .mkString("[", ",", "]")
-      s"""timeToValues["${UIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)}"] = $s;"""
+      s"""timeToValues["${SparkUIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)}"] = $s;"""
     }.mkString("\n")
 
     <script>{Unparsed(js)}</script>
@@ -281,131 +280,5 @@ class StreamingQueryStatisticsPage(
     // scalastyle:on
 
     generateVar(operationDurationData) ++ generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
-  }
-}
-
-class JsCollector {
-
-  private var variableId = 0
-
-  /**
-   * Return the next unused JavaScript variable name
-   */
-  def nextVariableName: String = {
-    variableId += 1
-    "v" + variableId
-  }
-
-  /**
-   * JavaScript statements that will execute before `statements`
-   */
-  private val preparedStatements = ArrayBuffer[String]()
-
-  /**
-   * JavaScript statements that will execute after `preparedStatements`
-   */
-  private val statements = ArrayBuffer[String]()
-
-  def addPreparedStatement(js: String): Unit = {
-    preparedStatements += js
-  }
-
-  def addStatement(js: String): Unit = {
-    statements += js
-  }
-
-  /**
-   * Generate a html snippet that will execute all scripts when the DOM has finished loading.
-   */
-  def toHtml: Seq[Node] = {
-    val js =
-      s"""
-         |$$(document).ready(function() {
-         |    ${preparedStatements.mkString("\n")}
-         |    ${statements.mkString("\n")}
-         |});""".stripMargin
-
-    <script>{Unparsed(js)}</script>
-  }
-}
-
-class GraphUIData(
-    timelineDivId: String,
-    histogramDivId: String,
-    data: Seq[(Long, Double)],
-    minX: Long,
-    maxX: Long,
-    minY: Double,
-    maxY: Double,
-    unitY: String,
-    batchInterval: Option[Double] = None) {
-
-  private var dataJavaScriptName: String = _
-
-  def generateDataJs(jsCollector: JsCollector): Unit = {
-    val jsForData = data.map { case (x, y) =>
-      s"""{"x": $x, "y": $y}"""
-    }.mkString("[", ",", "]")
-    dataJavaScriptName = jsCollector.nextVariableName
-    jsCollector.addPreparedStatement(s"var $dataJavaScriptName = $jsForData;")
-  }
-
-  def generateTimelineHtml(jsCollector: JsCollector): Seq[Node] = {
-    jsCollector.addPreparedStatement(s"registerTimeline($minY, $maxY);")
-    if (batchInterval.isDefined) {
-      jsCollector.addStatement(
-        "drawTimeline(" +
-          s"'#$timelineDivId', $dataJavaScriptName, $minX, $maxX, $minY, $maxY, '$unitY'," +
-          s" ${batchInterval.get}" +
-          ");")
-    } else {
-      jsCollector.addStatement(
-        s"drawTimeline('#$timelineDivId', $dataJavaScriptName, $minX, $maxX, $minY, $maxY," +
-          s" '$unitY');")
-    }
-    <div id={timelineDivId}></div>
-  }
-
-  def generateHistogramHtml(jsCollector: JsCollector): Seq[Node] = {
-    val histogramData = s"$dataJavaScriptName.map(function(d) { return d.y; })"
-    jsCollector.addPreparedStatement(s"registerHistogram($histogramData, $minY, $maxY);")
-    if (batchInterval.isDefined) {
-      jsCollector.addStatement(
-        "drawHistogram(" +
-          s"'#$histogramDivId', $histogramData, $minY, $maxY, '$unitY', ${batchInterval.get}" +
-          ");")
-    } else {
-      jsCollector.addStatement(
-        s"drawHistogram('#$histogramDivId', $histogramData, $minY, $maxY, '$unitY');")
-    }
-    <div id={histogramDivId}></div>
-  }
-
-  def generateAreaStackHtmlWithData(
-      jsCollector: JsCollector,
-      values: Array[(Long, ju.Map[String, JLong])],
-      operationLabels: Seq[String]): Seq[Node] = {
-    val jsForData = values.map { case (x, y) =>
-      val s = y.asScala.toSeq.sortBy(_._1).map(e => s""""${e._1}": "${e._2.toDouble}"""")
-        .mkString(",")
-      s"""{x: "${UIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)}", $s}"""
-    }.mkString("[", ",", "]")
-    val jsForLabels = operationLabels.mkString("[\"", "\",\"", "\"]")
-    val (maxX, minX, maxY, minY) = if (values != null && values.length > 0) {
-      (values.map(_._1.toLong).max,
-        values.map(_._1.toLong).min,
-        values.map(_._2.asScala.toSeq.map(_._2.toLong).sum).max,
-        values.map(_._2.asScala.toSeq.map(_._2.toLong).sum).min)
-    } else {
-      (0L, 0L, 0L, 0L)
-    }
-
-    dataJavaScriptName = jsCollector.nextVariableName
-    jsCollector.addPreparedStatement(s"var $dataJavaScriptName = $jsForData;")
-    val labels = jsCollector.nextVariableName
-    jsCollector.addPreparedStatement(s"var $labels = $jsForLabels;")
-    jsCollector.addStatement(
-      s"drawAreaStack('#$timelineDivId', $labels, $dataJavaScriptName, $minX, $maxX, $minY, $maxY)")
-    <div id={timelineDivId}></div>
   }
 }
