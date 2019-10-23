@@ -88,3 +88,10 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-completedExecutions','aggregated-completedExecutions');
   collapseTablePageLoad('collapse-aggregated-failedExecutions','aggregated-failedExecutions');
 });
+
+$(function() {
+    // Trigger a double click on the span to show full job description.
+    $(".description-input").dblclick(function() {
+        $(this).removeClass("description-input").addClass("description-input-full");
+    });
+});
