@@ -1268,23 +1268,19 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SHOW CREATE TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      testV1Command("SHOW CREATE TABLE", s"$t")
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
     }
     assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
-  }
-
-  test("SHOW CREATE TABLE") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-
-      val e = intercept[AnalysisException] {
-        sql(s"SHOW CREATE TABLE $t")
-      }
-      assert(e.message.contains("SHOW CREATE TABLE is only supported with v1 tables"))
-    }
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
