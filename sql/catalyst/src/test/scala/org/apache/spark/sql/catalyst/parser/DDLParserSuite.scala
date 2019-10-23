@@ -1091,7 +1091,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
       RefreshTableStatement(Seq("a", "b", "c")))
->>>>>>> upstream/master
   }
 
   private case class TableSpec(
