@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
-import org.apache.spark.sql.catalyst.expressions.{Expression, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
