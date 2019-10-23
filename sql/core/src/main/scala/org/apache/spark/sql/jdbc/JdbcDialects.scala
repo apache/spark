@@ -22,6 +22,7 @@ import java.sql.{Connection, Date, Timestamp}
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
 
 /**
@@ -148,6 +149,29 @@ abstract class JdbcDialect extends Serializable {
    * @param properties The connection properties.  This is passed through from the relation.
    */
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+  }
+
+  /**
+   * Do some extra properties validation work in addition to the validation in [[JDBCOptions]],
+   * eg. [[validateFetchSize()]].
+   * @param properties The connection properties.  This is passed through from the relation.
+   */
+  def validateProperties(properties: Map[String, String]): Unit = {
+    validateFetchSize(properties)
+  }
+  /**
+   * This is to validate the fetch size specified via [[JDBCOptions.JDBC_BATCH_FETCH_SIZE]].
+   * The implementation here requires the fetch size >= 0, sub classes may override it to meet
+   * requirement of different dialects.
+   * @param properties The connection properties.  This is passed through from the relation.
+   */
+  def validateFetchSize(properties: Map[String, String]): Unit = {
+    val size = properties.getOrElse(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "0").toInt
+    require(size >= 0,
+          s"Invalid value `${size.toString}` for parameter " +
+            s"`${JDBCOptions.JDBC_BATCH_FETCH_SIZE}` for dialect ${this.getClass.getSimpleName}. " +
+            s"The minimum value is 0. When the value is 0, " +
+            "the JDBC driver ignores the value and does the estimates.")
   }
 
   /**

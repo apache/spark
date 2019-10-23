@@ -184,6 +184,9 @@ private[jdbc] class JDBCRDD(
     options: JDBCOptions)
   extends RDD[InternalRow](sc, Nil) {
 
+  import scala.collection.JavaConverters._
+  JdbcDialects.get(url).validateProperties(options.asProperties.asScala.toMap)
+
   /**
    * Retrieve the list of partitions corresponding to this RDD.
    */

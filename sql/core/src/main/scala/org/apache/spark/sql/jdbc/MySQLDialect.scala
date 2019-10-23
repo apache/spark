@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.Types
 
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types.{BooleanType, DataType, LongType, MetadataBuilder}
 
 private case object MySQLDialect extends JdbcDialect {
@@ -46,4 +47,15 @@ private case object MySQLDialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  override def validateFetchSize(properties: Map[String, String]): Unit = {
+    val size = properties.getOrElse(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "0").toInt
+    require(size >= 0 || size == Integer.MIN_VALUE,
+      s"Invalid value `${size.toString}` for parameter " +
+        s"`${JDBCOptions.JDBC_BATCH_FETCH_SIZE}` for MySQL. " +
+        s"The value should be >= 0 or equals Integer.MIN_VALUE; " +
+        s"When the value is 0, the JDBC driver ignores the value and does the estimates; " +
+        s"When the value is Integer.MIN_VALUE, the data will be fetched in streaming manner, " +
+        s"namely, fetch one row at a time.")
+  }
 }
