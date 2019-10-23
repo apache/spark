@@ -163,7 +163,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
-      // additional shuffle exchange introduced, only one shuffle reader to local shuffle reader.
+      // The child of remaining one BroadcastHashJoin is not ShuffleQueryStage.
+      // So only two LocalShuffleReader.
       checkNumLocalShuffleReaders(adaptivePlan, 2)
     }
   }
@@ -188,7 +189,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
-      // additional shuffle exchange introduced, only one shuffle reader to local shuffle reader.
+      // The child of remaining two BroadcastHashJoin is not ShuffleQueryStage.
+      // So only two LocalShuffleReader.
       checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
@@ -213,7 +215,8 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 3)
-      // additional shuffle exchange introduced, only one shuffle reader to local shuffle reader.
+      // The child of remaining two BroadcastHashJoin is not ShuffleQueryStage.
+      // So only two LocalShuffleReader.
       checkNumLocalShuffleReaders(adaptivePlan, 1)
     }
   }
