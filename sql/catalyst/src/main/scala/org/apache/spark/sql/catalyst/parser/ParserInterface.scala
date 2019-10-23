@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Interface for a parser.
@@ -71,10 +70,4 @@ trait ParserInterface {
    */
   @throws[ParseException]("Text cannot be parsed to a DataType")
   def parseDataType(sqlText: String): DataType
-
-  /**
-   * Parse a string to a [[CalendarInterval]].
-   */
-  @throws[ParseException]("Text cannot be parsed to an interval")
-  def parseInterval(sqlText: String): CalendarInterval
 }

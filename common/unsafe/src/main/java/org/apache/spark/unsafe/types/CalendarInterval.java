@@ -167,45 +167,44 @@ public final class CalendarInterval implements Serializable {
 
     for (int i = 0; i < units.length; i++) {
       try {
-        String value = values[i].trim();
         switch (units[i]) {
           case "year":
-            months = Math.addExact(months, Math.multiplyExact(Integer.parseInt(value), 12));
+            months = Math.addExact(months, Math.multiplyExact(Integer.parseInt(values[i]), 12));
             break;
           case "month":
-            months = Math.addExact(months, Integer.parseInt(value));
+            months = Math.addExact(months, Integer.parseInt(values[i]));
             break;
           case "week":
             microseconds = Math.addExact(
               microseconds,
-              Math.multiplyExact(Long.parseLong(value), MICROS_PER_WEEK));
+              Math.multiplyExact(Long.parseLong(values[i]), MICROS_PER_WEEK));
             break;
           case "day":
             microseconds = Math.addExact(
               microseconds,
-              Math.multiplyExact(Long.parseLong(value), MICROS_PER_DAY));
+              Math.multiplyExact(Long.parseLong(values[i]), MICROS_PER_DAY));
             break;
           case "hour":
             microseconds = Math.addExact(
               microseconds,
-              Math.multiplyExact(Long.parseLong(value), MICROS_PER_HOUR));
+              Math.multiplyExact(Long.parseLong(values[i]), MICROS_PER_HOUR));
             break;
           case "minute":
             microseconds = Math.addExact(
               microseconds,
-              Math.multiplyExact(Long.parseLong(value), MICROS_PER_MINUTE));
+              Math.multiplyExact(Long.parseLong(values[i]), MICROS_PER_MINUTE));
             break;
           case "second": {
-            microseconds = Math.addExact(microseconds, parseSecondNano(value));
+            microseconds = Math.addExact(microseconds, parseSecondNano(values[i]));
             break;
           }
           case "millisecond":
             microseconds = Math.addExact(
               microseconds,
-              Math.multiplyExact(Long.parseLong(value), MICROS_PER_MILLI));
+              Math.multiplyExact(Long.parseLong(values[i]), MICROS_PER_MILLI));
             break;
           case "microsecond":
-            microseconds = Math.addExact(microseconds, Long.parseLong(value));
+            microseconds = Math.addExact(microseconds, Long.parseLong(values[i]));
             break;
         }
       } catch (Exception e) {

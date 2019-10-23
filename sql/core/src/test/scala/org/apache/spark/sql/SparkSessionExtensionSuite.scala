@@ -299,9 +299,6 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseDataType(sqlText: String): DataType =
     delegate.parseDataType(sqlText)
-
-  override def parseInterval(sqlText: String): CalendarInterval =
-    delegate.parseInterval(sqlText)
 }
 
 object MyExtensions {

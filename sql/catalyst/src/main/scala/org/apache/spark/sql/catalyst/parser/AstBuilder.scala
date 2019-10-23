@@ -107,7 +107,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         u => normalizeInternalUnit(u.getText.toLowerCase(Locale.ROOT))
       }.toArray
       val values = ctx.intervalValue().asScala.map(getIntervalValue).toArray
-      CalendarInterval.fromUnitString(units, values)
+      try {
+        CalendarInterval.fromUnitString(units, values)
+      } catch {
+        case i: IllegalArgumentException =>
+          val e = new ParseException(i.getMessage, ctx)
+          e.setStackTrace(i.getStackTrace)
+          throw e
+      }
     }
   }
 
