@@ -32,6 +32,10 @@
     <url>http://spark.apache.org/</url>
     <properties>
         <sbt.project.name>thriftserver</sbt.project.name>
+        <!-- Thrift properties -->
+        <thrift.home>you-must-set-this-to-run-thrift</thrift.home>
+        <thrift.gen.dir>${basedir}/src/gen/thrift</thrift.gen.dir>
+        <thrift.args>-I ${thrift.home} --gen java:beans,hashcode,generated_annotations=undated --gen cpp --gen php --gen py --gen rb</thrift.args>
     </properties>
 
     <dependencies>
