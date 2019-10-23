@@ -164,6 +164,17 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
   override def freshCopy(): Uuid = Uuid(randomSeed)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage =
+    """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release or snapshot version and the second being a git revision.""".stripMargin,
+  examples = s"""
+    Examples:
+      > SELECT _FUNC_();
+       ${SPARK_VERSION + " " + SPARK_REVISION}
+  """,
+  since = """3.0.0""")
+// scalastyle:on line.size.limit
 case class Version() extends LeafExpression with CodegenFallback {
   override def nullable: Boolean = false
 
