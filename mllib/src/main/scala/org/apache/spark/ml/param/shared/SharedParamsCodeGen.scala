@@ -58,7 +58,7 @@ private[shared] object SharedParamsCodeGen {
         " The class with largest value p/t is predicted, where p is the original probability" +
         " of that class and t is the class's threshold",
         isValid = "(t: Array[Double]) => t.forall(_ >= 0) && t.count(_ == 0) <= 1",
-        finalMethods = false),
+        finalMethods = false, finalFields = false),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),

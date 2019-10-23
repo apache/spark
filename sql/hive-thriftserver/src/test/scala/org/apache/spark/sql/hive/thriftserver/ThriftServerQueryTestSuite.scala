@@ -83,8 +83,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   override val isTestWithConfigSets = false
 
   /** List of test cases to ignore, in lower cases. */
-  override def blackList: Set[String] = Set(
-    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
+  override def blackList: Set[String] = super.blackList ++ Set(
     // Missing UDF
     "postgreSQL/boolean.sql",
     "postgreSQL/case.sql",

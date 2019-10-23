@@ -125,6 +125,7 @@ trait AdaptiveSparkPlanHelper {
   private def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
     case a: AdaptiveSparkPlanExec => Seq(a.executedPlan)
     case s: QueryStageExec => Seq(s.plan)
+    case l: LocalShuffleReaderExec => Seq(l.child)
     case _ => p.children
   }
 }

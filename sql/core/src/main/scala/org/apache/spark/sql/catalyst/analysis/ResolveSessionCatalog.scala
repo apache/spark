@@ -21,13 +21,12 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, Table, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowTablesCommand}
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowTablesCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
 
@@ -263,9 +262,34 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(Some(nameParts.head), pattern)
 
-    // TODO (SPARK-29014): we should check if the current catalog is session catalog here.
-    case ShowTablesStatement(None, pattern) if defaultCatalog.isEmpty =>
+    case ShowTablesStatement(None, pattern) if isSessionCatalog(currentCatalog) =>
       ShowTablesCommand(None, pattern)
+
+    case AnalyzeTableStatement(tableName, partitionSpec, noScan) =>
+      val v1TableName = parseV1Table(tableName, "ANALYZE TABLE")
+      if (partitionSpec.isEmpty) {
+        AnalyzeTableCommand(v1TableName.asTableIdentifier, noScan)
+      } else {
+        AnalyzePartitionCommand(v1TableName.asTableIdentifier, partitionSpec, noScan)
+      }
+
+    case AnalyzeColumnStatement(tableName, columnNames, allColumns) =>
+      val v1TableName = parseV1Table(tableName, "ANALYZE TABLE")
+      AnalyzeColumnCommand(v1TableName.asTableIdentifier, columnNames, allColumns)
+
+    case RepairTableStatement(tableName) =>
+      val v1TableName = parseV1Table(tableName, "MSCK REPAIR TABLE")
+      AlterTableRecoverPartitionsCommand(
+        v1TableName.asTableIdentifier,
+        "MSCK REPAIR TABLE")
+  }
+
+  private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
+    val CatalogAndIdentifierParts(catalog, parts) = tableName
+    if (!isSessionCatalog(catalog)) {
+      throw new AnalysisException(s"$sql is only supported with v1 tables.")
+    }
+    parts
   }
 
   private def buildCatalogTable(

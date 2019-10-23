@@ -29,7 +29,7 @@
   <name>Spark Project Kubernetes</name>
   <properties>
     <sbt.project.name>kubernetes</sbt.project.name>
-    <kubernetes.client.version>4.4.2</kubernetes.client.version>
+    <kubernetes.client.version>4.6.1</kubernetes.client.version>
   </properties>
 
   <dependencies>
@@ -87,12 +87,6 @@
       <artifactId>guava</artifactId>
     </dependency>
     <!-- End of shaded deps. -->
-
-    <dependency>
-      <groupId>com.squareup.okhttp3</groupId>
-      <artifactId>okhttp</artifactId>
-      <version>3.8.1</version>
-    </dependency>
 
     <dependency>
       <groupId>org.mockito</groupId>

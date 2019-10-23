@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange}
 
@@ -178,9 +177,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case ShowTablesStatement(Some(NonSessionCatalog(catalog, nameParts)), pattern) =>
       ShowTables(catalog.asTableCatalog, nameParts, pattern)
 
-    // TODO (SPARK-29014): we should check if the current catalog is not session catalog here.
-    case ShowTablesStatement(None, pattern) if defaultCatalog.isDefined =>
-      ShowTables(defaultCatalog.get.asTableCatalog, catalogManager.currentNamespace, pattern)
+    case ShowTablesStatement(None, pattern) if !isSessionCatalog(currentCatalog) =>
+      ShowTables(currentCatalog.asTableCatalog, catalogManager.currentNamespace, pattern)
 
     case UseStatement(isNamespaceSet, nameParts) =>
       if (isNamespaceSet) {
