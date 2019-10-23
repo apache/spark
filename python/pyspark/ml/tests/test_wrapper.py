@@ -16,7 +16,6 @@
 #
 
 import unittest
-import os
 
 import py4j
 
