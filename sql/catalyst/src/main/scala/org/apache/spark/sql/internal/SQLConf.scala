@@ -980,36 +980,33 @@ object SQLConf {
       .createWithDefault(true)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
-    .doc("The maximum number of bytes to pack into a single partition when Spark file-based " +
-      "sources are used to read files.")
+    .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(128 * 1024 * 1024) // parquet.block.size
 
   val FILES_OPEN_COST_IN_BYTES = buildConf("spark.sql.files.openCostInBytes")
     .internal()
-    .doc("The estimated cost to open a file, measured by the number of bytes could be scanned in " +
-      "the same time. This is used when putting multiple file-source files into a partition. " +
-      "It's better to over estimated, then the partitions with small files will be faster than " +
-      "partitions with bigger files (which is scheduled first).")
+    .doc("The estimated cost to open a file, measured by the number of bytes could be scanned in" +
+      " the same time. This is used when putting multiple files into a partition. It's better to" +
+      " over estimated, then the partitions with small files will be faster than partitions with" +
+      " bigger files (which is scheduled first).")
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
-    .doc("Whether to ignore corrupt file-source files. If true, the Spark jobs will continue to " +
-      "run when encountering corrupted files and the contents that have been read will still be " +
-      "returned.")
+    .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
+      "encountering corrupted files and the contents that have been read will still be returned.")
     .booleanConf
     .createWithDefault(false)
 
   val IGNORE_MISSING_FILES = buildConf("spark.sql.files.ignoreMissingFiles")
-    .doc("Whether to ignore missing file-source files. If true, the Spark jobs will continue to " +
-      "run when encountering missing files and the contents that have been read will still be " +
-      "returned.")
+    .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
+      "encountering missing files and the contents that have been read will still be returned.")
     .booleanConf
     .createWithDefault(false)
 
   val MAX_RECORDS_PER_FILE = buildConf("spark.sql.files.maxRecordsPerFile")
-    .doc("Maximum number of records to write out to a single file-source file. " +
+    .doc("Maximum number of records to write out to a single file. " +
       "If this value is zero or negative, there is no limit.")
     .longConf
     .createWithDefault(0)
