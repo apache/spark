@@ -2203,4 +2203,12 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
           |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
     }
   }
+
+  test("SPARK-29442 Set `default` mode should override the existing mode") {
+    val df = Seq(Tuple1(1)).toDF()
+    val writer = df.write.mode("overwrite").mode("default")
+    val modeField = classOf[DataFrameWriter[Tuple1[Int]]].getDeclaredField("mode")
+    modeField.setAccessible(true)
+    assert(SaveMode.ErrorIfExists === modeField.get(writer).asInstanceOf[SaveMode])
+  }
 }

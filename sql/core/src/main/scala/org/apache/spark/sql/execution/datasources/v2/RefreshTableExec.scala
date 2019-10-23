@@ -15,11 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical.sql
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 
-case class DescribeTableStatement(
-    tableName: Seq[String],
-    partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends ParsedStatement
+case class RefreshTableExec(
+    catalog: TableCatalog,
+    ident: Identifier) extends V2CommandExec {
+  override protected def run(): Seq[InternalRow] = {
+    catalog.invalidateTable(ident)
+    Seq.empty
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
+}

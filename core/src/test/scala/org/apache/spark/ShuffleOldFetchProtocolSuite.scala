@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical.sql
+package org.apache.spark
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.scalatest.BeforeAndAfterAll
 
-case class DeleteFromStatement(
-    tableName: Seq[String],
-    tableAlias: Option[String],
-    condition: Option[Expression])
-    extends ParsedStatement
+class ShuffleOldFetchProtocolSuite extends ShuffleSuite with BeforeAndAfterAll {
+
+  // This test suite should run all tests by setting spark.shuffle.useOldFetchProtocol=true.
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.set("spark.shuffle.useOldFetchProtocol", "true")
+  }
+}

@@ -38,7 +38,7 @@ sealed abstract class BlockId {
   // convenience methods
   def asRDDId: Option[RDDBlockId] = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None
   def isRDD: Boolean = isInstanceOf[RDDBlockId]
-  def isShuffle: Boolean = isInstanceOf[ShuffleBlockId]
+  def isShuffle: Boolean = isInstanceOf[ShuffleBlockId] || isInstanceOf[ShuffleBlockBatchId]
   def isBroadcast: Boolean = isInstanceOf[BroadcastBlockId]
 
   override def toString: String = name
@@ -54,6 +54,18 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
 @DeveloperApi
 case class ShuffleBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
+}
+
+// The batch id of continuous shuffle blocks of same mapId in range [startReduceId, endReduceId).
+@DeveloperApi
+case class ShuffleBlockBatchId(
+    shuffleId: Int,
+    mapId: Long,
+    startReduceId: Int,
+    endReduceId: Int) extends BlockId {
+  override def name: String = {
+    "shuffle_" + shuffleId + "_" + mapId + "_" + startReduceId + "_" + endReduceId
+  }
 }
 
 @DeveloperApi
@@ -104,6 +116,7 @@ class UnrecognizedBlockId(name: String)
 object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
+  val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
@@ -118,6 +131,8 @@ object BlockId {
       RDDBlockId(rddId.toInt, splitIndex.toInt)
     case SHUFFLE(shuffleId, mapId, reduceId) =>
       ShuffleBlockId(shuffleId.toInt, mapId.toLong, reduceId.toInt)
+    case SHUFFLE_BATCH(shuffleId, mapId, startReduceId, endReduceId) =>
+      ShuffleBlockBatchId(shuffleId.toInt, mapId.toLong, startReduceId.toInt, endReduceId.toInt)
     case SHUFFLE_DATA(shuffleId, mapId, reduceId) =>
       ShuffleDataBlockId(shuffleId.toInt, mapId.toLong, reduceId.toInt)
     case SHUFFLE_INDEX(shuffleId, mapId, reduceId) =>
