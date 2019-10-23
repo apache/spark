@@ -159,7 +159,7 @@ public final class CalendarInterval implements Serializable {
     return result;
   }
 
-  public static CalendarInterval fromUnitString(String[] units, String[] values)
+  public static CalendarInterval fromUnitStrings(String[] units, String[] values)
       throws IllegalArgumentException {
     assert units.length == values.length;
     int months = 0;

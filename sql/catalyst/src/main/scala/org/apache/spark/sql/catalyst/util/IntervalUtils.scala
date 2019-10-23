@@ -92,6 +92,11 @@ object IntervalUtils {
     Decimal(result, 18, 6)
   }
 
+  /**
+   * Converts a string to [[CalendarInterval]] case-insensitively.
+   *
+   * @throws IllegalArgumentException if the input string is not in valid interval format.
+   */
   def fromString(str: String): CalendarInterval = {
     if (str == null) throw new IllegalArgumentException("Interval string cannot be null")
     try {
@@ -104,6 +109,9 @@ object IntervalUtils {
     }
   }
 
+  /**
+   * A safe version of `fromString`. It returns null for invalid input string.
+   */
   def safeFromString(str: String): CalendarInterval = {
     try {
       fromString(str)

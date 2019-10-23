@@ -597,7 +597,7 @@ class ExpressionParserSuite extends AnalysisTest {
     "microsecond")
 
   def intervalLiteral(u: String, s: String): Literal = {
-    Literal(CalendarInterval.fromUnitString(Array(u), Array(s)))
+    Literal(CalendarInterval.fromUnitStrings(Array(u), Array(s)))
   }
 
   test("intervals") {

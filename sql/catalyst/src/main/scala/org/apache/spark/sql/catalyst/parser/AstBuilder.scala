@@ -108,7 +108,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       }.toArray
       val values = ctx.intervalValue().asScala.map(getIntervalValue).toArray
       try {
-        CalendarInterval.fromUnitString(units, values)
+        CalendarInterval.fromUnitStrings(units, values)
       } catch {
         case i: IllegalArgumentException =>
           val e = new ParseException(i.getMessage, ctx)
@@ -1953,7 +1953,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       val unitText = unit.getText.toLowerCase(Locale.ROOT)
       val interval = (unitText, Option(to).map(_.getText.toLowerCase(Locale.ROOT))) match {
         case (u, None) =>
-          CalendarInterval.fromUnitString(Array(normalizeInternalUnit(u)), Array(s))
+          CalendarInterval.fromUnitStrings(Array(normalizeInternalUnit(u)), Array(s))
         case ("year", Some("month")) =>
           CalendarInterval.fromYearMonthString(s)
         case ("day", Some("hour")) =>
