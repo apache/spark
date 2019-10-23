@@ -90,8 +90,8 @@ $(function() {
 });
 
 $(function() {
-    // Trigger a double click on the span to show full job description.
-    $(".description-input").dblclick(function() {
-        $(this).removeClass("description-input").addClass("description-input-full");
+    // Show/hide full job description on click event.
+    $(".description-input").click(function() {
+        $(this).toggleClass("description-input-full");
     });
 });
