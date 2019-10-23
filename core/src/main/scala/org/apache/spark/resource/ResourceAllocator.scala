@@ -49,7 +49,7 @@ trait ResourceAllocator {
   /**
    * Sequence of currently available resource addresses.
    *
-   * With [[slotsPerAddress]] > 1, [[availableAddrs]] can contain duplicate addresses
+   * With [[slotsPerAddress]] greater than 1, [[availableAddrs]] can contain duplicate addresses
    * e.g. with [[slotsPerAddress]] == 2, availableAddrs for addresses 0 and 1 can look like
    * Seq("0", "0", "1"), where address 0 has two assignments available, and 1 has one.
    */
@@ -61,7 +61,7 @@ trait ResourceAllocator {
   /**
    * Sequence of currently assigned resource addresses.
    *
-   * With [[slotsPerAddress]] > 1, [[assignedAddrs]] can contain duplicate addresses
+   * With [[slotsPerAddress]] greater than 1, [[assignedAddrs]] can contain duplicate addresses
    * e.g. with [[slotsPerAddress]] == 2, assignedAddrs for addresses 0 and 1 can look like
    * Seq("0", "1", "1"), where address 0 was assigned once, and 1 was assigned twice.
    */
