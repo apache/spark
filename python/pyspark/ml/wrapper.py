@@ -23,7 +23,7 @@ if sys.version >= '3':
 from pyspark import since
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
-from pyspark.ml import Estimator, Transformer, Model
+from pyspark.ml import Estimator, Transformer, Model, UnaryTransformer
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol
 from pyspark.ml.util import _jvm
@@ -327,6 +327,21 @@ class JavaEstimator(JavaParams, Estimator):
 class JavaTransformer(JavaParams, Transformer):
     """
     Base class for :py:class:`Transformer`s that wrap Java/Scala
+    implementations. Subclasses should ensure they have the transformer Java object
+    available as _java_obj.
+    """
+
+    __metaclass__ = ABCMeta
+
+    def _transform(self, dataset):
+        self._transfer_params_to_java()
+        return DataFrame(self._java_obj.transform(dataset._jdf), dataset.sql_ctx)
+
+
+@inherit_doc
+class JavaUnaryTransformer(JavaParams, UnaryTransformer):
+    """
+    Base class for :py:class:`UnaryTransformer`s that wrap Java/Scala
     implementations. Subclasses should ensure they have the transformer Java object
     available as _java_obj.
     """

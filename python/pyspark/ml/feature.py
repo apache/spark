@@ -24,7 +24,8 @@ from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, \
+    JavaUnaryTransformer, _jvm
 from pyspark.ml.common import inherit_doc
 
 __all__ = ['Binarizer',
@@ -76,6 +77,12 @@ class Binarizer(JavaTransformer, HasThreshold, HasThresholds, HasInputCol, HasOu
 
     >>> df = spark.createDataFrame([(0.5,)], ["values"])
     >>> binarizer = Binarizer(threshold=1.0, inputCol="values", outputCol="features")
+    >>> binarizer.setThreshold(1.0)
+    Binarizer...
+    >>> binarizer.setInputCol("values")
+    Binarizer...
+    >>> binarizer.setOutputCol("features")
+    Binarizer...
     >>> binarizer.transform(df).head().features
     0.0
     >>> binarizer.setParams(outputCol="freqs").transform(df).head().freqs
@@ -319,8 +326,15 @@ class BucketedRandomProjectionLSH(_LSH, _BucketedRandomProjectionLSHParams,
     ...         (2, Vectors.dense([1.0, -1.0 ]),),
     ...         (3, Vectors.dense([1.0, 1.0]),)]
     >>> df = spark.createDataFrame(data, ["id", "features"])
-    >>> brp = BucketedRandomProjectionLSH(inputCol="features", outputCol="hashes",
-    ...                                   seed=12345, bucketLength=1.0)
+    >>> brp = BucketedRandomProjectionLSH()
+    >>> brp.setInputCol("features")
+    BucketedRandomProjectionLSH...
+    >>> brp.setOutputCol("hashes")
+    BucketedRandomProjectionLSH...
+    >>> brp.setSeed(12345)
+    BucketedRandomProjectionLSH...
+    >>> brp.setBucketLength(1.0)
+    BucketedRandomProjectionLSH...
     >>> model = brp.fit(df)
     >>> model.getBucketLength()
     1.0
@@ -462,8 +476,13 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
     >>> values = [(0.1, 0.0), (0.4, 1.0), (1.2, 1.3), (1.5, float("nan")),
     ...     (float("nan"), 1.0), (float("nan"), 0.0)]
     >>> df = spark.createDataFrame(values, ["values1", "values2"])
-    >>> bucketizer = Bucketizer(splits=[-float("inf"), 0.5, 1.4, float("inf")],
-    ...     inputCol="values1", outputCol="buckets")
+    >>> bucketizer = Bucketizer()
+    >>> bucketizer.setSplits([-float("inf"), 0.5, 1.4, float("inf")])
+    Bucketizer...
+    >>> bucketizer.setInputCol("values1")
+    Bucketizer...
+    >>> bucketizer.setOutputCol("buckets")
+    Bucketizer...
     >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df).collect()
     >>> bucketed = bucketizer.setHandleInvalid("keep").transform(df.select("values1"))
     >>> bucketed.show(truncate=False)
@@ -709,7 +728,11 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
     >>> df = spark.createDataFrame(
     ...    [(0, ["a", "b", "c"]), (1, ["a", "b", "b", "c", "a"])],
     ...    ["label", "raw"])
-    >>> cv = CountVectorizer(inputCol="raw", outputCol="vectors")
+    >>> cv = CountVectorizer()
+    >>> cv.setInputCol("raw")
+    CountVectorizer...
+    >>> cv.setOutputCol("vectors")
+    CountVectorizer...
     >>> model = cv.fit(df)
     >>> model.transform(df).show(truncate=False)
     +-----+---------------+-------------------------+
@@ -907,7 +930,7 @@ class CountVectorizerModel(JavaModel, _CountVectorizerParams, JavaMLReadable, Ja
 
 
 @inherit_doc
-class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class DCT(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that takes the 1D discrete cosine transform
     of a real vector. No zero padding is performed on the input vector.
@@ -920,7 +943,13 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df1 = spark.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
-    >>> dct = DCT(inverse=False, inputCol="vec", outputCol="resultVec")
+    >>> dct = DCT( )
+    >>> dct.setInverse(False)
+    DCT...
+    >>> dct.setInputCol("vec")
+    DCT...
+    >>> dct.setOutputCol("resultVec")
+    DCT...
     >>> df2 = dct.transform(df1)
     >>> df2.head().resultVec
     DenseVector([10.969..., -0.707..., -2.041...])
@@ -976,8 +1005,7 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
 
 
 @inherit_doc
-class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
-                         JavaMLWritable):
+class ElementwiseProduct(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     Outputs the Hadamard product (i.e., the element-wise product) of each input vector
     with a provided "weight" vector. In other words, it scales each column of the dataset
@@ -985,8 +1013,13 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([2.0, 1.0, 3.0]),)], ["values"])
-    >>> ep = ElementwiseProduct(scalingVec=Vectors.dense([1.0, 2.0, 3.0]),
-    ...     inputCol="values", outputCol="eprod")
+    >>> ep = ElementwiseProduct()
+    >>> ep.setScalingVec(Vectors.dense([1.0, 2.0, 3.0]))
+    ElementwiseProduct...
+    >>> ep.setInputCol("values")
+    ElementwiseProduct...
+    >>> ep.setOutputCol("eprod")
+    ElementwiseProduct...
     >>> ep.transform(df).head().eprod
     DenseVector([2.0, 2.0, 9.0])
     >>> ep.setParams(scalingVec=Vectors.dense([2.0, 3.0, 5.0])).transform(df).head().eprod
@@ -1077,7 +1110,11 @@ class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures,
     >>> data = [(2.0, True, "1", "foo"), (3.0, False, "2", "bar")]
     >>> cols = ["real", "bool", "stringNum", "string"]
     >>> df = spark.createDataFrame(data, cols)
-    >>> hasher = FeatureHasher(inputCols=cols, outputCol="features")
+    >>> hasher = FeatureHasher()
+    >>> hasher.setInputCols(cols)
+    FeatureHasher...
+    >>> hasher.setOutputCol("features")
+    FeatureHasher...
     >>> hasher.transform(df).head().features
     SparseVector(262144, {174475: 2.0, 247670: 1.0, 257907: 1.0, 262126: 1.0})
     >>> hasher.setCategoricalCols(["real"]).transform(df).head().features
@@ -1163,7 +1200,9 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     otherwise the features will not be mapped evenly to the columns.
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["words"])
-    >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
+    >>> hashingTF = HashingTF(inputCol="words", outputCol="features")
+    >>> hashingTF.setNumFeatures(10)
+    HashingTF...
     >>> hashingTF.transform(df).head().features
     SparseVector(10, {5: 1.0, 7: 1.0, 8: 1.0})
     >>> hashingTF.setParams(outputCol="freqs").transform(df).head().freqs
@@ -1276,7 +1315,11 @@ class IDF(JavaEstimator, _IDFParams, JavaMLReadable, JavaMLWritable):
     >>> from pyspark.ml.linalg import DenseVector
     >>> df = spark.createDataFrame([(DenseVector([1.0, 2.0]),),
     ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
-    >>> idf = IDF(minDocFreq=3, inputCol="tf", outputCol="idf")
+    >>> idf = IDF(minDocFreq=3)
+    >>> idf.setInputCol("tf")
+    IDF...
+    >>> idf.setOutputCol("idf")
+    IDF...
     >>> model = idf.fit(df)
     >>> model.getMinDocFreq()
     3
@@ -1444,7 +1487,11 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
 
     >>> df = spark.createDataFrame([(1.0, float("nan")), (2.0, float("nan")), (float("nan"), 3.0),
     ...                             (4.0, 4.0), (5.0, 5.0)], ["a", "b"])
-    >>> imputer = Imputer(inputCols=["a", "b"], outputCols=["out_a", "out_b"])
+    >>> imputer = Imputer()
+    >>> imputer.setInputCols(["a", "b"])
+    Imputer...
+    >>> imputer.setOutputCols(["out_a", "out_b"])
+    Imputer...
     >>> model = imputer.fit(df)
     >>> model.getStrategy()
     'mean'
@@ -1586,7 +1633,11 @@ class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, J
     with four categories, the output would then be `Vector(0, 0, 0, 0, 3, 4, 0, 0)`.
 
     >>> df = spark.createDataFrame([(0.0, 1.0), (2.0, 3.0)], ["a", "b"])
-    >>> interaction = Interaction(inputCols=["a", "b"], outputCol="ab")
+    >>> interaction = Interaction()
+    >>> interaction.setInputCols(["a", "b"])
+    Interaction...
+    >>> interaction.setOutputCol("ab")
+    Interaction...
     >>> interaction.transform(df).show()
     +---+---+-----+
     |  a|  b|   ab|
@@ -1658,7 +1709,9 @@ class MaxAbsScaler(JavaEstimator, _MaxAbsScalerParams, JavaMLReadable, JavaMLWri
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
-    >>> maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
+    >>> maScaler = MaxAbsScaler(outputCol="scaled")
+    >>> maScaler.setInputCol("a")
+    MaxAbsScaler...
     >>> model = maScaler.fit(df)
     >>> model.setOutputCol("scaledOutput")
     MaxAbsScaler...
@@ -1771,7 +1824,13 @@ class MinHashLSH(_LSH, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable, JavaM
     ...         (1, Vectors.sparse(6, [2, 3, 4], [1.0, 1.0, 1.0]),),
     ...         (2, Vectors.sparse(6, [0, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df = spark.createDataFrame(data, ["id", "features"])
-    >>> mh = MinHashLSH(inputCol="features", outputCol="hashes", seed=12345)
+    >>> mh = MinHashLSH()
+    >>> mh.setInputCol("features")
+    MinHashLSH...
+    >>> mh.setOutputCol("hashes")
+    MinHashLSH...
+    >>> mh.setSeed(12345)
+    MinHashLSH...
     >>> model = mh.fit(df)
     >>> model.transform(df).head()
     Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([6179668...
@@ -1896,7 +1955,9 @@ class MinMaxScaler(JavaEstimator, _MinMaxScalerParams, JavaMLReadable, JavaMLWri
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
-    >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
+    >>> mmScaler = MinMaxScaler(outputCol="scaled")
+    >>> mmScaler.setInputCol("a")
+    MinMaxScaler...
     >>> model = mmScaler.fit(df)
     >>> model.setOutputCol("scaledOutput")
     MinMaxScaler...
@@ -2035,7 +2096,7 @@ class MinMaxScalerModel(JavaModel, _MinMaxScalerParams, JavaMLReadable, JavaMLWr
 
 @inherit_doc
 @ignore_unicode_prefix
-class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class NGram(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that converts the input array of strings into an array of n-grams. Null
     values in the input array are ignored.
@@ -2046,7 +2107,11 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
     returned.
 
     >>> df = spark.createDataFrame([Row(inputTokens=["a", "b", "c", "d", "e"])])
-    >>> ngram = NGram(n=2, inputCol="inputTokens", outputCol="nGrams")
+    >>> ngram = NGram(n=2)
+    >>> ngram.setInputCol("inputTokens")
+    NGram...
+    >>> ngram.setOutputCol("nGrams")
+    NGram...
     >>> ngram.transform(df).head()
     Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b', u'b c', u'c d', u'd e'])
     >>> # Change n-gram length
@@ -2111,14 +2176,18 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
 
 
 @inherit_doc
-class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class Normalizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
      Normalize a vector to have unit norm using the given p-norm.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> svec = Vectors.sparse(4, {1: 4.0, 3: 3.0})
     >>> df = spark.createDataFrame([(Vectors.dense([3.0, -4.0]), svec)], ["dense", "sparse"])
-    >>> normalizer = Normalizer(p=2.0, inputCol="dense", outputCol="features")
+    >>> normalizer = Normalizer(p=2.0)
+    >>> normalizer.setInputCol("dense")
+    Normalizer...
+    >>> normalizer.setOutputCol("features")
+    Normalizer...
     >>> normalizer.transform(df).head().features
     DenseVector([0.6, -0.8])
     >>> normalizer.setParams(inputCol="sparse", outputCol="freqs").transform(df).head().freqs
@@ -2225,7 +2294,11 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
-    >>> ohe = OneHotEncoder(inputCols=["input"], outputCols=["output"])
+    >>> ohe = OneHotEncoder()
+    >>> ohe.setInputCols(["input"])
+    OneHotEncoder...
+    >>> ohe.setOutputCols(["output"])
+    OneHotEncoder...
     >>> model = ohe.fit(df)
     >>> model.getHandleInvalid()
     'error'
@@ -2345,8 +2418,7 @@ class OneHotEncoderModel(JavaModel, _OneHotEncoderParams, JavaMLReadable, JavaML
 
 
 @inherit_doc
-class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
-                          JavaMLWritable):
+class PolynomialExpansion(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     Perform feature expansion in a polynomial space. As said in `wikipedia of Polynomial Expansion
     <http://en.wikipedia.org/wiki/Polynomial_expansion>`_, "In mathematics, an
@@ -2356,7 +2428,11 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
-    >>> px = PolynomialExpansion(degree=2, inputCol="dense", outputCol="expanded")
+    >>> px = PolynomialExpansion(degree=2)
+    >>> px.setInputCol("dense")
+    PolynomialExpansion...
+    >>> px.setOutputCol("expanded")
+    PolynomialExpansion...
     >>> px.transform(df).head().expanded
     DenseVector([0.5, 0.25, 2.0, 1.0, 4.0])
     >>> px.setParams(outputCol="test").transform(df).head().test
@@ -2439,8 +2515,13 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
 
     >>> values = [(0.1,), (0.4,), (1.2,), (1.5,), (float("nan"),), (float("nan"),)]
     >>> df1 = spark.createDataFrame(values, ["values"])
-    >>> qds1 = QuantileDiscretizer(numBuckets=2,
-    ...     inputCol="values", outputCol="buckets", relativeError=0.01, handleInvalid="error")
+    >>> qds1 = QuantileDiscretizer(inputCol="values", outputCol="buckets")
+    >>> qds1.setNumBuckets(2)
+    QuantileDiscretizer...
+    >>> qds1.setRelativeError(0.01)
+    QuantileDiscretizer...
+    >>> qds1.setHandleInvalid("error")
+    QuantileDiscretizer...
     >>> qds1.getRelativeError()
     0.01
     >>> bucketizer = qds1.fit(df1)
@@ -2703,7 +2784,11 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
     ...         (3, Vectors.dense([3.0, -3.0]),),
     ...         (4, Vectors.dense([4.0, -4.0]),),]
     >>> df = spark.createDataFrame(data, ["id", "features"])
-    >>> scaler = RobustScaler(inputCol="features", outputCol="scaled")
+    >>> scaler = RobustScaler()
+    >>> scaler.setInputCol("features")
+    RobustScaler...
+    >>> scaler.setOutputCol("scaled")
+    RobustScaler...
     >>> model = scaler.fit(df)
     >>> model.setOutputCol("output")
     RobustScaler...
@@ -2842,7 +2927,7 @@ class RobustScalerModel(JavaModel, _RobustScalerParams, JavaMLReadable, JavaMLWr
 
 @inherit_doc
 @ignore_unicode_prefix
-class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class RegexTokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     A regex based tokenizer that extracts tokens either by using the
     provided regex pattern (in Java dialect) to split the text
@@ -2852,7 +2937,11 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
     It returns an array of strings that can be empty.
 
     >>> df = spark.createDataFrame([("A B  c",)], ["text"])
-    >>> reTokenizer = RegexTokenizer(inputCol="text", outputCol="words")
+    >>> reTokenizer = RegexTokenizer()
+    >>> reTokenizer.setInputCol("text")
+    RegexTokenizer...
+    >>> reTokenizer.setOutputCol("words")
+    RegexTokenizer...
     >>> reTokenizer.transform(df).head()
     Row(text=u'A B  c', words=[u'a', u'b', u'c'])
     >>> # Change a parameter.
@@ -3068,7 +3157,11 @@ class StandardScaler(JavaEstimator, _StandardScalerParams, JavaMLReadable, JavaM
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
-    >>> standardScaler = StandardScaler(inputCol="a", outputCol="scaled")
+    >>> standardScaler = StandardScaler()
+    >>> standardScaler.setInputCol("a")
+    StandardScaler...
+    >>> standardScaler.setOutputCol("scaled")
+    StandardScaler...
     >>> model = standardScaler.fit(df)
     >>> model.getInputCol()
     'a'
@@ -3228,8 +3321,10 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     so the most frequent label gets index 0. The ordering behavior is controlled by
     setting :py:attr:`stringOrderType`. Its default value is 'frequencyDesc'.
 
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="error",
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed",
     ...     stringOrderType="frequencyDesc")
+    >>> stringIndexer.setHandleInvalid("error")
+    StringIndexer...
     >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
@@ -3522,7 +3617,11 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     .. note:: null values from input array are preserved unless adding null to stopWords explicitly.
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["text"])
-    >>> remover = StopWordsRemover(inputCol="text", outputCol="words", stopWords=["b"])
+    >>> remover = StopWordsRemover(stopWords=["b"])
+    >>> remover.setInputCol("text")
+    StopWordsRemover...
+    >>> remover.setOutputCol("words")
+    StopWordsRemover...
     >>> remover.transform(df).head().words == ['a', 'c']
     True
     >>> stopWordsRemoverPath = temp_path + "/stopwords-remover"
@@ -3638,13 +3737,15 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
 
 @inherit_doc
 @ignore_unicode_prefix
-class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class Tokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     A tokenizer that converts the input string to lowercase and then
     splits it by white spaces.
 
     >>> df = spark.createDataFrame([("a b c",)], ["text"])
-    >>> tokenizer = Tokenizer(inputCol="text", outputCol="words")
+    >>> tokenizer = Tokenizer(outputCol="words")
+    >>> tokenizer.setInputCol("text")
+    Tokenizer...
     >>> tokenizer.transform(df).head()
     Row(text=u'a b c', words=[u'a', u'b', u'c'])
     >>> # Change a parameter.
@@ -3697,7 +3798,9 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
     A feature transformer that merges multiple columns into a vector column.
 
     >>> df = spark.createDataFrame([(1, 0, 3)], ["a", "b", "c"])
-    >>> vecAssembler = VectorAssembler(inputCols=["a", "b", "c"], outputCol="features")
+    >>> vecAssembler = VectorAssembler(outputCol="features")
+    >>> vecAssembler.setInputCols(["a", "b", "c"])
+    VectorAssembler...
     >>> vecAssembler.transform(df).head().features
     DenseVector([1.0, 0.0, 3.0])
     >>> vecAssembler.setParams(outputCol="freqs").transform(df).head().freqs
@@ -3851,7 +3954,9 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 1.0]),), (Vectors.dense([0.0, 2.0]),)], ["a"])
-    >>> indexer = VectorIndexer(maxCategories=2, inputCol="a", outputCol="indexed")
+    >>> indexer = VectorIndexer(maxCategories=2, inputCol="a")
+    >>> indexer.setOutputCol("indexed")
+    VectorIndexer...
     >>> model = indexer.fit(df)
     >>> indexer.getHandleInvalid()
     'error'
@@ -4012,7 +4117,9 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
     ...     (Vectors.dense([-2.0, 2.3, 0.0, 0.0, 1.0]),),
     ...     (Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0]),),
     ...     (Vectors.dense([0.6, -1.1, -3.0, 4.5, 3.3]),)], ["features"])
-    >>> vs = VectorSlicer(inputCol="features", outputCol="sliced", indices=[1, 4])
+    >>> vs = VectorSlicer(outputCol="sliced", indices=[1, 4])
+    >>> vs.setInputCol("features")
+    VectorSlicer...
     >>> vs.transform(df).head().sliced
     DenseVector([2.3, 1.0])
     >>> vectorSlicerPath = temp_path + "/vector-slicer"
@@ -4395,7 +4502,9 @@ class PCA(JavaEstimator, _PCAParams, JavaMLReadable, JavaMLWritable):
     ...     (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
     ...     (Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0]),)]
     >>> df = spark.createDataFrame(data,["features"])
-    >>> pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+    >>> pca = PCA(k=2, inputCol="features")
+    >>> pca.setOutputCol("pca_features")
+    PCA...
     >>> model = pca.fit(df)
     >>> model.getK()
     2

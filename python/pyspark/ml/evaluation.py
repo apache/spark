@@ -119,7 +119,9 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     ...    [(0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)])
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["raw", "label"])
     ...
-    >>> evaluator = BinaryClassificationEvaluator(rawPredictionCol="raw")
+    >>> evaluator = BinaryClassificationEvaluator()
+    >>> evaluator.setRawPredictionCol("raw")
+    BinaryClassificationEvaluator...
     >>> evaluator.evaluate(dataset)
     0.70...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
@@ -239,7 +241,9 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
     ...   (-25.98418959, -22.0), (30.69731842, 33.0), (74.69283752, 71.0)]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["raw", "label"])
     ...
-    >>> evaluator = RegressionEvaluator(predictionCol="raw")
+    >>> evaluator = RegressionEvaluator()
+    >>> evaluator.setPredictionCol("raw")
+    RegressionEvaluator...
     >>> evaluator.evaluate(dataset)
     2.842...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "r2"})
@@ -360,7 +364,9 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
-    >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction")
+    >>> evaluator = MulticlassClassificationEvaluator()
+    >>> evaluator.setPredictionCol("prediction")
+    MulticlassClassificationEvaluator...
     >>> evaluator.evaluate(dataset)
     0.66...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
@@ -546,7 +552,9 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     ...     ([0.0, 1.0, 2.0], [0.0, 1.0]), ([1.0], [1.0, 2.0])]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
     ...
-    >>> evaluator = MultilabelClassificationEvaluator(predictionCol="prediction")
+    >>> evaluator = MultilabelClassificationEvaluator()
+    >>> evaluator.setPredictionCol("prediction")
+    MultilabelClassificationEvaluator...
     >>> evaluator.evaluate(dataset)
     0.63...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
@@ -659,7 +667,9 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     ...     ([10.5, 11.5], 1.0), ([1.0, 1.0], 0.0), ([8.0, 6.0], 1.0)])
     >>> dataset = spark.createDataFrame(featureAndPredictions, ["features", "prediction"])
     ...
-    >>> evaluator = ClusteringEvaluator(predictionCol="prediction")
+    >>> evaluator = ClusteringEvaluator()
+    >>> evaluator.setPredictionCol("prediction")
+    ClusteringEvaluator...
     >>> evaluator.evaluate(dataset)
     0.9079...
     >>> ce_path = temp_path + "/ce"
@@ -759,7 +769,9 @@ class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
     ...     ([1.0, 2.0, 3.0, 4.0, 5.0], [])]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
     ...
-    >>> evaluator = RankingEvaluator(predictionCol="prediction")
+    >>> evaluator = RankingEvaluator()
+    >>> evaluator.setPredictionCol("prediction")
+    RankingEvaluator...
     >>> evaluator.evaluate(dataset)
     0.35...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "precisionAtK", evaluator.k: 2})

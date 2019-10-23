@@ -48,6 +48,14 @@ class MinHashLSHModel private[ml](
     private[ml] val randCoefficients: Array[(Int, Int)])
   extends LSHModel[MinHashLSHModel] {
 
+  /** @group setParam */
+  @Since("2.4.0")
+  override def setInputCol(value: String): this.type = super.set(inputCol, value)
+
+  /** @group setParam */
+  @Since("2.4.0")
+  override def setOutputCol(value: String): this.type = super.set(outputCol, value)
+
   @Since("2.1.0")
   override protected[ml] def hashFunction(elems: Vector): Array[Vector] = {
     require(elems.numNonzeros > 0, "Must have at least 1 non zero entry.")
@@ -104,6 +112,12 @@ class MinHashLSHModel private[ml](
  */
 @Since("2.1.0")
 class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with HasSeed {
+
+  @Since("2.1.0")
+  override def setInputCol(value: String): this.type = super.setInputCol(value)
+
+  @Since("2.1.0")
+  override def setOutputCol(value: String): this.type = super.setOutputCol(value)
 
   @Since("2.1.0")
   override def setNumHashTables(value: Int): this.type = super.setNumHashTables(value)
