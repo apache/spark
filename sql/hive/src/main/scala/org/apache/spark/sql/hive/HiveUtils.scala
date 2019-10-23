@@ -129,6 +129,15 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val USE_FILECOMMITPROTOCOL_DYNAMIC_PARTITION_OVERWRITE =
+    buildConf("spark.sql.hive.filecommit.dynamicPartitionOverwrite")
+      .doc("When this is enabled, Spark will use dynamicPartitionOverwrite with " +
+        "built-in FileCommitProtocol instead of Hadoop FileOutputCommitter to commit " +
+        "job output files, when insert overwrite into Hive table.")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_METASTORE_SHARED_PREFIXES = buildConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +

@@ -32,7 +32,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -199,6 +201,9 @@ case class InsertIntoHiveTable(
       attr.withName(name.toLowerCase(Locale.ROOT))
     }
 
+    val enableDynamicPartitionOverwrite =
+      SQLConf.get.getConf(HiveUtils.USE_FILECOMMITPROTOCOL_DYNAMIC_PARTITION_OVERWRITE)
+
     saveAsHiveFile(
       sparkSession = sparkSession,
       plan = child,
@@ -206,7 +211,8 @@ case class InsertIntoHiveTable(
       fileSinkConf = fileSinkConf,
       outputLocation = tmpLocation.toString,
       partitionAttributes = partitionAttributes,
-      dynamicPartitionOverwrite = numDynamicPartitions > 0 && overwrite)
+      dynamicPartitionOverwrite = enableDynamicPartitionOverwrite &&
+        numDynamicPartitions > 0 && overwrite)
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
