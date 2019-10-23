@@ -573,9 +573,8 @@ private[hive] class HiveClientImpl(
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
     verifyColumnDataType(table.dataSchema)
-    val owner = Option(table.owner).filter(_.nonEmpty).getOrElse(userName)
     val hiveTable = toHiveTable(
-      table.copy(properties = table.ignoredProperties ++ table.properties), Some(owner))
+      table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"$dbName.$tableName"
     shim.alterTable(client, qualifiedTableName, hiveTable)
@@ -1039,7 +1038,7 @@ private[hive] object HiveClientImpl {
     }
     hiveTable.setFields(schema.asJava)
     hiveTable.setPartCols(partCols.asJava)
-    userName.foreach(hiveTable.setOwner)
+    Option(table.owner).filter(_.nonEmpty).orElse(userName).foreach(hiveTable.setOwner)
     hiveTable.setCreateTime(MILLISECONDS.toSeconds(table.createTime).toInt)
     hiveTable.setLastAccessTime(MILLISECONDS.toSeconds(table.lastAccessTime).toInt)
     table.storage.locationUri.map(CatalogUtils.URIToString).foreach { loc =>
