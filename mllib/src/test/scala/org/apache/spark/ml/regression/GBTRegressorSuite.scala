@@ -296,7 +296,21 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-    /////////////////////////////////////////////////////////////////////////////
+  test("tree params") {
+    val gbt = new GBTRegressor()
+      .setMaxDepth(2)
+      .setCheckpointInterval(5)
+      .setSeed(123)
+    val model = gbt.fit(trainData.toDF)
+
+    model.trees.foreach (i => {
+      assert(i.getMaxDepth === model.getMaxDepth)
+      assert(i.getCheckpointInterval === model.getCheckpointInterval)
+      assert(i.getSeed === model.getSeed)
+    })
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
