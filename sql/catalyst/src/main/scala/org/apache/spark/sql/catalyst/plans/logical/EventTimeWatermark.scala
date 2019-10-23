@@ -30,7 +30,7 @@ object EventTimeWatermark {
 
   def getDelayMs(delay: CalendarInterval): Long = {
     // We define month as `31 days` to simplify calculation.
-    IntervalUtils.getDuration(delay, 31, TimeUnit.MILLISECONDS)
+    IntervalUtils.getDuration(delay, TimeUnit.MILLISECONDS)
   }
 }
 

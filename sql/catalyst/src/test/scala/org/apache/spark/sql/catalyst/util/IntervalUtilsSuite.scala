@@ -27,17 +27,17 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 class IntervalUtilsSuite extends SparkFunSuite with Matchers {
   test("interval duration") {
-    def duration(s: String, daysPerMonth: Int, unit: TimeUnit): Long = {
-      getDuration(CalendarInterval.fromString(s), daysPerMonth, unit)
+    def duration(s: String, unit: TimeUnit, daysPerMonth: Int): Long = {
+      getDuration(CalendarInterval.fromString(s), unit, daysPerMonth)
     }
 
-    assert(duration("0 seconds", 31, TimeUnit.MILLISECONDS) === 0)
-    assert(duration("1 month", 31, TimeUnit.DAYS) === 31)
-    assert(duration("1 microsecond", 30, TimeUnit.MICROSECONDS) === 1)
-    assert(duration("1 month -30 days", 31, TimeUnit.DAYS) === 1)
+    assert(duration("0 seconds", TimeUnit.MILLISECONDS, 31) === 0)
+    assert(duration("1 month", TimeUnit.DAYS, 31) === 31)
+    assert(duration("1 microsecond", TimeUnit.MICROSECONDS, 30) === 1)
+    assert(duration("1 month -30 days", TimeUnit.DAYS, 31) === 1)
 
     try {
-      duration(Integer.MAX_VALUE + " month", 31, TimeUnit.SECONDS)
+      duration(Integer.MAX_VALUE + " month", TimeUnit.SECONDS, 31)
       fail("Expected to throw an exception for the invalid input")
     } catch {
       case e: ArithmeticException =>

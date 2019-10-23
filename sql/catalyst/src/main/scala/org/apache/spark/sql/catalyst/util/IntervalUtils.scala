@@ -95,14 +95,14 @@ object IntervalUtils {
    * Gets interval duration
    *
    * @param cal - the interval to get duration
-   * @param daysPerMonth - the number of days per one month
    * @param targetUnit - time units of the result
+   * @param daysPerMonth - the number of days per one month
    * @return duration in the specified time units
    */
   def getDuration(
       cal: CalendarInterval,
-      daysPerMonth: Int,
-      targetUnit: TimeUnit): Long = {
+      targetUnit: TimeUnit,
+      daysPerMonth: Int = 31): Long = {
     val monthsDuration = Math.multiplyExact(daysPerMonth * DateTimeUtils.MICROS_PER_DAY, cal.months)
     val result = Math.addExact(cal.microseconds, monthsDuration)
     targetUnit.convert(result, TimeUnit.MICROSECONDS)
@@ -115,7 +115,7 @@ object IntervalUtils {
    * @param daysPerMonth - the number of days per one month
    * @return true if duration of the given interval is less than 0 otherwise false
    */
-  def isNegative(cal: CalendarInterval, daysPerMonth: Int): Boolean = {
-    getDuration(cal, daysPerMonth, TimeUnit.MICROSECONDS) < 0
+  def isNegative(cal: CalendarInterval, daysPerMonth: Int = 31): Boolean = {
+    getDuration(cal, TimeUnit.MICROSECONDS, daysPerMonth) < 0
   }
 }
