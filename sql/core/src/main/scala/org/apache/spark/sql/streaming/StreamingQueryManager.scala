@@ -355,11 +355,22 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       // Make sure no other query with same id is active across all sessions
       val activeOption =
         Option(sparkSession.sharedState.activeStreamingQueries.putIfAbsent(query.id, this))
-      if (activeOption.isDefined || activeQueries.values.exists(_.id == query.id)) {
+
+      val streamAlreadyActive =
+        activeOption.isDefined || activeQueries.values.exists(_.id == query.id)
+      val turnOffOldStream =
+        sparkSession.sessionState.conf.getConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM)
+      if (streamAlreadyActive && turnOffOldStream) {
+        val queryManager = activeOption.getOrElse(this)
+        logInfo(s"Stopping existing streaming query [id=${query.id}], as a new run is being " +
+          "started.")
+        queryManager.get(query.id).stop()
+      } else if (streamAlreadyActive) {
         throw new IllegalStateException(
           s"Cannot start query with id ${query.id} as another query with same id is " +
             s"already active. Perhaps you are attempting to restart a query from checkpoint " +
-            s"that is already active.")
+            s"that is already active. You may stop the old query by setting the SQL " +
+            s"configuration: spark.conf.set(\"${SQLConf.STOP_RUNNING_DUPLICATE_STREAM}\", true).")
       }
 
       activeQueries.put(query.id, query)
