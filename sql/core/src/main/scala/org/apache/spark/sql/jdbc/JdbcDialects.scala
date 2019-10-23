@@ -165,7 +165,7 @@ abstract class JdbcDialect extends Serializable {
    * requirement of different dialects.
    * @param properties The connection properties.  This is passed through from the relation.
    */
-  def validateFetchSize(properties: Map[String, String]): Unit = {
+  protected def validateFetchSize(properties: Map[String, String]): Unit = {
     val size = properties.getOrElse(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "0").toInt
     require(size >= 0,
           s"Invalid value `${size.toString}` for parameter " +
