@@ -166,7 +166,10 @@ private[spark] class Executor(
     }
   }
 
-  private val plugins: Option[PluginContainer] = PluginContainer(env)
+  // Plugins need to load using a class loader that includes the executor's user classpath
+  private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
+    PluginContainer(env)
+  }
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
@@ -300,8 +303,8 @@ private[spark] class Executor(
             logWarning("Plugin " + plugin.getClass().getCanonicalName() + " shutdown failed", e)
         }
       }
+      plugins.foreach(_.shutdown())
     }
-    plugins.foreach(_.shutdown())
     if (!isLocal) {
       env.stop()
     }
