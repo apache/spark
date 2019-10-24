@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
+import org.apache.spark.sql.types.{DataTypes, MapType}
 
 class HiveResultSuite extends SharedSparkSession {
   import testImplicits._
@@ -57,5 +59,32 @@ class HiveResultSuite extends SharedSparkSession {
       .selectExpr(s"CAST(value AS decimal(38, 8))").queryExecution.executedPlan
     val result = HiveResult.hiveResultString(executedPlan)
     assert(result.head === "0.00000000")
+  }
+
+  test("SPARK-26544: toHiveString correctly escape map type") {
+    withSQLConf(SQLConf.THRIFTSERVER_RESULT_ESCAPE_STRUCT_STRING.key -> "true") {
+      val m = Map("log_pb" -> """{"impr_id":"20181231"}""", "request_id" -> "001")
+      val mapType = new MapType(DataTypes.StringType, DataTypes.StringType, true)
+      assert(HiveResult.toHiveString((m, mapType)) ===
+        """{"log_pb":"{\"impr_id\":\"20181231\"}","request_id":"001"}""")
+    }
+  }
+
+  test("SPARK-26544: toHiveString correctly escape map type with specially characters") {
+    withSQLConf(SQLConf.THRIFTSERVER_RESULT_ESCAPE_STRUCT_STRING.key -> "true") {
+      val specialChars = List(8, 9, 10, 13, 6).map(_.toChar).mkString("") // \b\t\n\r\u0006
+      val m = Map("log_pb" -> s"""{"impr_id":"special chars $specialChars"}""")
+      val mapType = new MapType(DataTypes.StringType, DataTypes.StringType, true)
+      val result = HiveResult.toHiveString((m, mapType))
+
+      val c1 = Array("\\", "b").mkString("")
+      val c2 = Array("\\", "t").mkString("")
+      val c3 = Array("\\", "n").mkString("")
+      val c4 = Array("\\", "r").mkString("")
+      val c5 = Array("\\", "u", "0", "0", "0", "6").mkString("")
+      val expected =
+        """{"log_pb":"{\"impr_id\":\"special chars """ + c1 + c2 + c3 + c4 + c5 + """\"}"}"""
+      assert(result === expected)
+    }
   }
 }

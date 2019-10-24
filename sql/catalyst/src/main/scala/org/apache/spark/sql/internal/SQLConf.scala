@@ -770,6 +770,11 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
+  val THRIFTSERVER_RESULT_ESCAPE_STRUCT_STRING = buildConf("spark.sql.thriftserver.result.escapeStructString.enabled")
+    .doc("When true, escape string when needed to ensure the result returned is a valid json.")
+    .booleanConf
+    .createWithDefault(false)
+
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
@@ -2312,6 +2317,8 @@ class SQLConf extends Serializable with Logging {
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
   def utcTimestampFuncEnabled: Boolean = getConf(UTC_TIMESTAMP_FUNC_ENABLED)
+
+  def escapeStructStringEnabled: Boolean = getConf(THRIFTSERVER_RESULT_ESCAPE_STRUCT_STRING)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
