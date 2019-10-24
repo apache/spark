@@ -35,8 +35,7 @@ import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -486,7 +485,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("abcd".getBytes, BinaryType),
       ("abcd", StringType),
       (BigDecimal.valueOf(10), DecimalType.IntDecimal),
-      (CalendarInterval.fromString("interval 3 day"), CalendarIntervalType),
+      (IntervalUtils.fromString("interval 3 day"), CalendarIntervalType),
       (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
       (Array(3, 2, 1), ArrayType(IntegerType))
     ).foreach { case (input, dt) =>

@@ -166,21 +166,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[CacheTableCommand]] logical plan.
-   */
-  override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
-    val query = Option(ctx.query).map(plan)
-    val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
-    if (query.isDefined && tableIdent.database.isDefined) {
-      val database = tableIdent.database.get
-      throw new ParseException(s"It is not allowed to add database prefix `$database` to " +
-        s"the table name in CACHE TABLE AS SELECT", ctx)
-    }
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    CacheTableCommand(tableIdent, query, ctx.LAZY != null, options)
-  }
-
-  /**
    * Create an [[UncacheTableCommand]] logical plan.
    */
   override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
