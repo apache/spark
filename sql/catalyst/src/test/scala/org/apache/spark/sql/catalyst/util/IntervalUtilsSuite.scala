@@ -24,7 +24,7 @@ import org.apache.spark.unsafe.types.CalendarInterval._
 
 class IntervalUtilsSuite extends SparkFunSuite {
 
-  test("fromString") {
+  test("fromString: basic") {
     testSingleUnit("YEAR", 3, 36, 0)
     testSingleUnit("Month", 3, 3, 0)
     testSingleUnit("Week", 3, 0, 3 * MICROS_PER_WEEK)
@@ -60,6 +60,23 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
   }
 
+  test("fromString: random order field") {
+    val input = "1 day 1 year"
+    val result = new CalendarInterval(12, MICROS_PER_DAY)
+    assert(fromString(input) == result)
+  }
+
+  test("fromString: duplicated fields") {
+    val input = "1 day 1 day"
+    val result = new CalendarInterval(0, 2 * MICROS_PER_DAY)
+    assert(fromString(input) == result)
+  }
+
+  test("fromString: value with +/-") {
+    val input = "+1 year -1 day"
+    val result = new CalendarInterval(12, -MICROS_PER_DAY)
+    assert(fromString(input) == result)
+  }
 
   private def testSingleUnit(unit: String, number: Int, months: Int, microseconds: Long): Unit = {
     for (prefix <- Seq("interval ", "")) {
