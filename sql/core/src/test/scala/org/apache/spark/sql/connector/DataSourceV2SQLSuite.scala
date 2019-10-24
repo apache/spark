@@ -1268,13 +1268,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(s"$sqlCommand $sqlParams")
-    }
-    assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
-  }
-
   test("LOAD DATA INTO TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1285,26 +1278,19 @@ class DataSourceV2SQLSuite
            |PARTITIONED BY (id)
          """.stripMargin)
 
-      val e1 = intercept[AnalysisException] {
-        sql(s"LOAD DATA INPATH 'filepath' INTO TABLE $t")
-      }
-      assert(e1.message.contains("LOAD DATA is only supported with v1 tables"))
-
-      val e2 = intercept[AnalysisException] {
-        sql(s"LOAD DATA LOCAL INPATH 'filepath' INTO TABLE $t")
-      }
-      assert(e2.message.contains("LOAD DATA is only supported with v1 tables"))
-
-      val e3 = intercept[AnalysisException] {
-        sql(s"LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t")
-      }
-      assert(e3.message.contains("LOAD DATA is only supported with v1 tables"))
-
-      val e4 = intercept[AnalysisException] {
-        sql(s"LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t PARTITION(id=1)")
-      }
-      assert(e4.message.contains("LOAD DATA is only supported with v1 tables"))
+      testV1Command("LOAD DATA", s"INPATH 'filepath' INTO TABLE $t")
+      testV1Command("LOAD DATA", s"LOCAL INPATH 'filepath' INTO TABLE $t")
+      testV1Command("LOAD DATA", s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t")
+      testV1Command("LOAD DATA",
+        s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t PARTITION(id=1)")
     }
+  }
+
+  private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(s"$sqlCommand $sqlParams")
+    }
+    assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {
