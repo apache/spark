@@ -42,6 +42,7 @@ import org.apache.spark.util.Utils
 
 class JDBCSuite extends QueryTest
   with BeforeAndAfter with PrivateMethodTester with SharedSparkSession {
+  import scala.collection.JavaConverters._
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -457,6 +458,30 @@ class JDBCSuite extends QueryTest
       spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
     }.getMessage
     assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
+  }
+
+  test("[SPARK-21287] Dialect validate properties") {
+    val mysqlDialect = JdbcDialects.get("jdbc:mysql:xxx")
+    val h2Dialect = JdbcDialects.get("jdbc:h2:xxx")
+    val properties = new Properties()
+    properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "-1")
+    val e1 = intercept[IllegalArgumentException] {
+      mysqlDialect.validateProperties(properties.asScala.toMap)
+    }.getMessage
+    val e2 = intercept[IllegalArgumentException] {
+      h2Dialect.validateProperties(properties.asScala.toMap)
+    }.getMessage
+    properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "1")
+    mysqlDialect.validateProperties(properties.asScala.toMap)
+    h2Dialect.validateProperties(properties.asScala.toMap)
+    properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, Integer.MIN_VALUE.toString)
+    mysqlDialect.validateProperties(properties.asScala.toMap)
+    val e3 = intercept[IllegalArgumentException] {
+      h2Dialect.validateProperties(properties.asScala.toMap)
+    }.getMessage
+    assert(e1.contains("Invalid value `-1` for parameter `fetchsize`"))
+    assert(e2.contains("Invalid value `-1` for parameter `fetchsize`"))
+    assert(e3.contains(s"Invalid value `${Integer.MIN_VALUE.toString}` for parameter `fetchsize`"))
   }
 
   test("Missing partition columns") {

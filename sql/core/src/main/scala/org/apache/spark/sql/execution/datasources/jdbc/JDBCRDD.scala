@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
@@ -184,7 +185,6 @@ private[jdbc] class JDBCRDD(
     options: JDBCOptions)
   extends RDD[InternalRow](sc, Nil) {
 
-  import scala.collection.JavaConverters._
   JdbcDialects.get(url).validateProperties(options.asProperties.asScala.toMap)
 
   /**
@@ -274,7 +274,6 @@ private[jdbc] class JDBCRDD(
     val part = thePart.asInstanceOf[JDBCPartition]
     conn = getConnection()
     val dialect = JdbcDialects.get(url)
-    import scala.collection.JavaConverters._
     dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
 
     // This executes a generic SQL statement (or PL/SQL block) before reading
