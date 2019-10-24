@@ -147,14 +147,7 @@ class JDBCOptions(
      """.stripMargin
   )
 
-  val fetchSize = {
-    val size = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
-    require(size >= 0,
-      s"Invalid value `${size.toString}` for parameter " +
-        s"`$JDBC_BATCH_FETCH_SIZE`. The minimum value is 0. When the value is 0, " +
-        "the JDBC driver ignores the value and does the estimates.")
-    size
-  }
+  val fetchSize = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
 
   // ------------------------------------------------------------
   // Optional parameters only for writing
