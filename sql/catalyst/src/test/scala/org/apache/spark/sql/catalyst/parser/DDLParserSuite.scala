@@ -1039,13 +1039,13 @@ class DDLParserSuite extends AnalysisTest {
       "missing 'COLUMNS' at '<EOF>'")
   }
 
-  test("MSCK REPAIR table") {
+  test("MSCK REPAIR TABLE") {
     comparePlans(
       parsePlan("MSCK REPAIR TABLE a.b.c"),
       RepairTableStatement(Seq("a", "b", "c")))
   }
 
-  test("CACHE table") {
+  test("CACHE TABLE") {
     comparePlans(
       parsePlan("CACHE TABLE a.b.c"),
       CacheTableStatement(Seq("a", "b", "c"), None, false, Map.empty))
@@ -1060,6 +1060,16 @@ class DDLParserSuite extends AnalysisTest {
 
     intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
       "It is not allowed to add catalog/namespace prefix a.b")
+  }
+
+  test("UNCACHE TABLE") {
+    comparePlans(
+      parsePlan("UNCACHE TABLE a.b.c"),
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = false))
+
+    comparePlans(
+      parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = true))
   }
 
   test("TRUNCATE table") {
@@ -1098,7 +1108,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed5, expected5)
   }
 
-  test("REFRESH TABLE table") {
+  test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
       RefreshTableStatement(Seq("a", "b", "c")))
