@@ -55,6 +55,24 @@ public interface DriverPlugin {
   }
 
   /**
+   * Register metrics published by the plugin with Spark's metrics system.
+   * <p>
+   * This method is called later in the initialization of the Spark application, after most
+   * subsystems are up and the application ID is known. If there are metrics registered in
+   * the registry ({@link PluginContext#metricRegistry()}), then a metrics source with the
+   * plugin name will be created.
+   * <p>
+   * Note that even though the metric registry is still accessible after this method is called,
+   * registering new metrics after this method is called may result in the metrics not being
+   * available.
+   *
+   * @param appId The application ID from the cluster manager.
+   * @param pluginContext Additional plugin-specific about the Spark application where the plugin
+   *                      is running.
+   */
+  default void registerMetrics(String appId, PluginContext pluginContext) {}
+
+  /**
    * RPC message handler.
    * <p>
    * Plugins can use Spark's RPC system to send messages from executors to the driver (but not

@@ -29,13 +29,14 @@ import org.apache.spark.util.Utils
 sealed abstract class PluginContainer {
 
   def shutdown(): Unit
+  def registerMetrics(appId: String): Unit
 
 }
 
 private class DriverPluginContainer(sc: SparkContext, plugins: Seq[SparkPlugin])
   extends PluginContainer with Logging {
 
-  private val driverPlugins: Seq[(String, DriverPlugin)] = plugins.flatMap { p =>
+  private val driverPlugins: Seq[(String, DriverPlugin, PluginContextImpl)] = plugins.flatMap { p =>
     val driverPlugin = p.driverPlugin()
     if (driverPlugin != null) {
       val name = p.getClass().getName()
@@ -48,21 +49,28 @@ private class DriverPluginContainer(sc: SparkContext, plugins: Seq[SparkPlugin])
           sc.conf.set(s"${PluginContainer.EXTRA_CONF_PREFIX}$name.$k", v)
         }
       }
-      ctx.registerMetrics()
       logInfo(s"Initialized driver component for plugin $name.")
-      Some(p.getClass().getName() -> driverPlugin)
+      Some((p.getClass().getName(), driverPlugin, ctx))
     } else {
       None
     }
   }
 
   if (driverPlugins.nonEmpty) {
+    val pluginsByName = driverPlugins.map { case (name, plugin, _) => (name, plugin) }.toMap
     sc.env.rpcEnv.setupEndpoint(classOf[PluginEndpoint].getName(),
-      new PluginEndpoint(driverPlugins.toMap, sc.env.rpcEnv))
+      new PluginEndpoint(pluginsByName, sc.env.rpcEnv))
+  }
+
+  override def registerMetrics(appId: String): Unit = {
+    driverPlugins.foreach { case (_, plugin, ctx) =>
+      plugin.registerMetrics(appId, ctx)
+      ctx.registerMetrics()
+    }
   }
 
   override def shutdown(): Unit = {
-    driverPlugins.foreach { case (name, plugin) =>
+    driverPlugins.foreach { case (name, plugin, _) =>
       try {
         logDebug(s"Stopping plugin $name.")
         plugin.shutdown()
@@ -102,6 +110,10 @@ private class ExecutorPluginContainer(env: SparkEnv, plugins: Seq[SparkPlugin])
         None
       }
     }
+  }
+
+  override def registerMetrics(appId: String): Unit = {
+    throw new IllegalStateException("Should not be called for the executor container.")
   }
 
   override def shutdown(): Unit = {

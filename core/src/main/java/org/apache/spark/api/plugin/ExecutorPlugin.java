@@ -36,6 +36,10 @@ public interface ExecutorPlugin {
    * When a Spark plugin provides an executor plugin, this method will be called during the
    * initialization of the executor process. It will block executor initialization until it
    * returns.
+   * <p>
+   * Executor plugins that publish metrics should register all metrics with the context's
+   * registry ({@link PluginContext#metricRegistry()}) when this method is called. Metrics
+   * registered afterwards are not guaranteed to show up.
    *
    * @param ctx Context information for the executor where the plugin is running.
    * @param extraConf Extra configuration provided by the driver component during its

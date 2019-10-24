@@ -191,11 +191,14 @@ class TestSparkPlugin extends SparkPlugin {
 private class TestDriverPlugin extends DriverPlugin {
 
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
+    TestSparkPlugin.driverContext = ctx
+    TestSparkPlugin.extraConf
+  }
+
+  override def registerMetrics(appId: String, ctx: PluginContext): Unit = {
     ctx.metricRegistry().register("driverMetric", new Gauge[Int] {
       override def getValue(): Int = 42
     })
-    TestSparkPlugin.driverContext = ctx
-    TestSparkPlugin.extraConf
   }
 
   override def receive(msg: AnyRef): AnyRef = msg match {

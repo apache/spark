@@ -42,14 +42,6 @@ public interface PluginContext {
 
   /**
    * Registry where to register metrics published by the plugin associated with this context.
-   * <p>
-   * Plugins should register all needed metrics in their initialization callback, otherwise
-   * Spark's metrics system may not properly report them. It's safe for plugins to access this
-   * registry later to interface with the registered metrics, but adding or removing metrics
-   * after initialization may not have the desired effect.
-   * <p>
-   * If the plugin does not register any metrics during its initialization call, a metrics
-   * source for the plugin will not be generated.
    */
   MetricRegistry metricRegistry();
 
