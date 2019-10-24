@@ -1268,6 +1268,20 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("CACHE TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      testV1Command("CACHE TABLE", t)
+
+      val e = intercept[AnalysisException] {
+        sql(s"CACHE LAZY TABLE $t")
+      }
+      assert(e.message.contains("CACHE TABLE is only supported with v1 tables"))
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
