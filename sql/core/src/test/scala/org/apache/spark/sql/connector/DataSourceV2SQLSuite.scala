@@ -1282,6 +1282,16 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("UNCACHE TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      testV1Command("UNCACHE TABLE", t)
+      testV1Command("UNCACHE TABLE", s"IF EXISTS $t")
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")

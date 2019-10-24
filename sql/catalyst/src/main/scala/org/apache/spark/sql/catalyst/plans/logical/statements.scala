@@ -340,6 +340,13 @@ case class CacheTableStatement(
     options: Map[String, String]) extends ParsedStatement
 
 /**
+ * An UNCACHE TABLE statement, as parsed from SQL
+ */
+case class UncacheTableStatement(
+    tableName: Seq[String],
+    ifExists: Boolean) extends ParsedStatement
+
+/**
  * A TRUNCATE TABLE statement, as parsed from SQL
  */
 case class TruncateTableStatement(
