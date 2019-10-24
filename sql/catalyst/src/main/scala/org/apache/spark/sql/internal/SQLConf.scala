@@ -1189,8 +1189,9 @@ object SQLConf {
 
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
-      .doc("Whether to ignore null fields in column/struct during json generating. " +
-        "If false, json generator will generate null in Column/Struct.")
+      .doc("Whether to ignore null fields when generating JSON objects in JSON data source and " +
+        "JSON functions such as to_json. " +
+        "If false, it generates null for null fields in JSON objects.")
       .booleanConf
       .createWithDefault(true)
 

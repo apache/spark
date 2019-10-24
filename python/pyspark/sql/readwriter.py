@@ -817,9 +817,8 @@ class DataFrameWriter(OptionUtils):
                         the default UTF-8 charset will be used.
         :param lineSep: defines the line separator that should be used for writing. If None is
                         set, it uses the default value, ``\\n``.
-        :param ignoreNullFields: whether to ignore null fields in column/struct
-                        during json generating. If None is set,
-                        it uses the default value, ``true``.
+        :param ignoreNullFields: Whether to ignore null fields when generating JSON objects.
+                        If None is set, it uses the default value, ``true``.
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
