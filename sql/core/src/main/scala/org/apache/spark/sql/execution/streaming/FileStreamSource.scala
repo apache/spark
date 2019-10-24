@@ -55,8 +55,17 @@ class FileStreamSource(
     fs.makeQualified(new Path(path))  // can contain glob patterns
   }
 
-  private val sourceCleaner = new FileStreamSourceCleaner(fs, qualifiedBasePath,
-    sourceOptions.sourceArchiveDir)
+  private val sourceCleaner: FileStreamSourceCleaner = {
+    val (archiveFs, qualifiedArchivePath) = sourceOptions.sourceArchiveDir match {
+      case Some(dir) =>
+        val path = new Path(dir)
+        val fs = path.getFileSystem(hadoopConf)
+        (Some(fs), Some(fs.makeQualified(path)))
+
+      case None => (None, None)
+    }
+    new FileStreamSourceCleaner(fs, qualifiedBasePath, archiveFs, qualifiedArchivePath)
+  }
 
   private val optionsWithPartitionBasePath = sourceOptions.optionMapWithoutPath ++ {
     if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path")) {
@@ -357,25 +366,54 @@ object FileStreamSource {
   private[sql] class FileStreamSourceCleaner(
       fileSystem: FileSystem,
       sourcePath: Path,
-      baseArchivePathString: Option[String]) extends Logging {
+      baseArchiveFileSystem: Option[FileSystem],
+      baseArchivePath: Option[Path]) extends Logging {
+    require(baseArchiveFileSystem.isDefined == baseArchivePath.isDefined)
 
     private val sourceGlobFilters: Seq[GlobFilter] = buildSourceGlobFilters(sourcePath)
 
-    private val baseArchivePath: Option[Path] = baseArchivePathString.map(new Path(_))
+    private val sameFsSourceAndArchive: Boolean = {
+      baseArchiveFileSystem.exists { fs =>
+        if (fileSystem.getUri != fs.getUri) {
+          logWarning("Base archive path is located to the different filesystem with source, " +
+            s"which is not supported. source path: ${sourcePath} / base archive path: " +
+            s"${baseArchivePath.get}")
+          false
+        } else {
+          true
+        }
+      }
+    }
+
+    /**
+     * This is a flag to skip matching archived path with source path.
+     *
+     * FileStreamSource reads the files which one of below conditions is met:
+     * 1) file itself is matched with source path
+     * 2) parent directory is matched with source path
+     *
+     * Checking with glob pattern is costly, so this flag leverages above information to prune
+     * the cases where the file cannot be matched with source path. For example, when file is
+     * moved to archive directory, destination path will retain input file's path as suffix,
+     * so destination path can't be matched with source path if archive directory's depth is
+     * longer than 2, as neither file nor parent directory of destination path can be matched
+     * with source path.
+     */
+    private val skipCheckingGlob: Boolean = baseArchivePath.exists(_.depth() > 2)
 
     def archive(entry: FileEntry): Unit = {
       require(baseArchivePath.isDefined)
 
-      val curPath = new Path(new URI(entry.path))
-      val curPathUri = curPath.toUri
+      if (sameFsSourceAndArchive) {
+        val curPath = new Path(new URI(entry.path))
+        val newPath = new Path(baseArchivePath.get, curPath.toUri.getPath.stripPrefix("/"))
 
-      val newPath = buildArchiveFilePath(curPathUri)
-
-      if (isArchiveFileMatchedAgainstSourcePattern(newPath)) {
-        logWarning(s"Fail to move $curPath to $newPath - destination matches " +
-          s"to source path/pattern. Skip moving file.")
-      } else {
-        doArchive(curPath, newPath)
+        if (!skipCheckingGlob && pathMatchesSourcePattern(newPath)) {
+          logWarning(s"Skip moving $curPath to $newPath - destination matches " +
+            s"to source path/pattern.")
+        } else {
+          doArchive(curPath, newPath)
+        }
       }
     }
 
@@ -385,7 +423,7 @@ object FileStreamSource {
         logDebug(s"Removing completed file $curPath")
 
         if (!fileSystem.delete(curPath, false)) {
-          logWarning(s"Fail to remove $curPath / skip removing file.")
+          logWarning(s"Failed to remove $curPath / skip removing file.")
         }
       } catch {
         case NonFatal(e) =>
@@ -406,32 +444,11 @@ object FileStreamSource {
       filters.toList
     }
 
-    private def buildArchiveFilePath(pathUri: URI): Path = {
-      require(baseArchivePath.isDefined)
-      new Path(baseArchivePath.get, pathUri.getPath.stripPrefix("/"))
-    }
-
     /**
      * This method checks whether the destination of archive file will be under the source path
      * (which contains glob) to prevent the possibility of overwriting/re-reading as input.
-     *
-     * FileStreamSource reads the files which one of below conditions is met:
-     * 1) file itself is matched with source path
-     * 2) parent directory is matched with source path
-     *
-     * Checking with glob pattern is costly, so this method leverages above information to prune
-     * the cases where the file cannot be matched with source path. For example, when file is
-     * moved to archive directory, destination path will retain input file's path as suffix,
-     * so destination path can't be matched with source path if archive directory's depth is
-     * longer than 2, as neither file nor parent directory of destination path can be matched
-     * with source path.
      */
-    private def isArchiveFileMatchedAgainstSourcePattern(archiveFile: Path): Boolean = {
-      if (baseArchivePath.get.depth() > 2) {
-        // there's no chance for archive file to be matched against source pattern
-        return false
-      }
-
+    private def pathMatchesSourcePattern(archiveFile: Path): Boolean = {
       var matched = true
 
       // new path will never match against source path when the depth is not a range of
@@ -441,29 +458,23 @@ object FileStreamSource {
       val depthSourcePattern = sourceGlobFilters.length
       val depthArchiveFile = archiveFile.depth()
 
-      // we already checked against the depth of archive path, but rechecking wouldn't hurt
-      if (depthArchiveFile < depthSourcePattern || depthArchiveFile > depthSourcePattern + 1) {
-        // never matched
-        matched = false
+      var pathToCompare = if (depthArchiveFile == depthSourcePattern + 1) {
+        archiveFile.getParent
       } else {
-        var pathToCompare = if (depthArchiveFile == depthSourcePattern + 1) {
-          archiveFile.getParent
-        } else {
-          archiveFile
-        }
-
-        // Now pathToCompare should have same depth as sourceGlobFilters.length
-        var index = 0
-        do {
-          // GlobFilter only matches against its name, not full path so it's safe to compare
-          if (!sourceGlobFilters(index).accept(pathToCompare)) {
-            matched = false
-          } else {
-            pathToCompare = pathToCompare.getParent
-            index += 1
-          }
-        } while (matched && !pathToCompare.isRoot)
+        archiveFile
       }
+
+      // Now pathToCompare should have same depth as sourceGlobFilters.length
+      var index = 0
+      do {
+        // GlobFilter only matches against its name, not full path so it's safe to compare
+        if (!sourceGlobFilters(index).accept(pathToCompare)) {
+          matched = false
+        } else {
+          pathToCompare = pathToCompare.getParent
+          index += 1
+        }
+      } while (matched && !pathToCompare.isRoot)
 
       matched
     }

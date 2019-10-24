@@ -1673,7 +1673,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("move completed files to archive directory when archive option is enabled") {
-
     withThreeTempDirs { case (src, tmp, archiveDir) =>
       withSQLConf(
         SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
@@ -1740,7 +1739,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  class FakeFileSystem extends FileSystem {
+  class FakeFileSystem(scheme: String) extends FileSystem {
     val requestsExists = new mutable.MutableList[Path]()
     val requestsMkdirs = new mutable.MutableList[Path]()
     val requestsRename = new mutable.MutableList[(Path, Path)]()
@@ -1766,7 +1765,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       requestsRename.clear()
     }
 
-    override def getUri: URI = throw new NotImplementedError
+    override def getUri: URI = URI.create(s"${scheme}:///")
 
     override def open(f: Path, bufferSize: Int): FSDataInputStream = throw new NotImplementedError
 
@@ -1788,34 +1787,19 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
     override def setWorkingDirectory(new_dir: Path): Unit = throw new NotImplementedError
 
-    override def getWorkingDirectory: Path = throw new NotImplementedError
+    override def getWorkingDirectory: Path = new Path("/somewhere")
 
     override def getFileStatus(f: Path): FileStatus = throw new NotImplementedError
   }
 
   test("FileStreamSourceCleaner - archive - destinations match against source pattern") {
-
-    def assertNoMove(fs: FakeFileSystem): Unit = {
-      assert(fs.requestsExists.isEmpty)
-      assert(fs.requestsMkdirs.isEmpty)
-      assert(fs.requestsRename.isEmpty)
-    }
-
-    def assertMoveFile(fs: FakeFileSystem, sourcePath: Path, expectedArchivePath: Path): Unit = {
-      assert(fs.requestsExists.nonEmpty)
-      assert(fs.requestsExists.head === expectedArchivePath.getParent)
-      assert(fs.requestsMkdirs.isEmpty)
-      assert(fs.requestsRename.nonEmpty)
-      assert(fs.requestsRename.head === ((sourcePath, expectedArchivePath)))
-    }
-
-    val fakeFileSystem = new FakeFileSystem()
+    val fakeFileSystem = new FakeFileSystem("fake")
 
     val sourcePatternPath = new Path("/hello*/h{e,f}ll?")
-    val baseArchiveDirPath = "/hello"
+    val baseArchiveDirPath = new Path("/hello")
 
     val sourceCleaner = new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
-      Some(baseArchiveDirPath))
+      Some(fakeFileSystem), Some(baseArchiveDirPath))
 
     // file 1: /hello/helln
     // final destination = /hello/hello/helln
@@ -1851,10 +1835,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
     // corner case: this should end up with all archive destinations to be
     // matched against source pattern
-    val baseArchiveDirPath2 = "/"
+    val baseArchiveDirPath2 = new Path("/")
 
     val sourceCleaner2 = new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
-      Some(baseArchiveDirPath2))
+      Some(fakeFileSystem), Some(baseArchiveDirPath2))
 
     // file 4 (& final destination): /hello/helln
     // final destination matches source pattern
@@ -1873,6 +1857,40 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     assertNoMove(fakeFileSystem)
 
     fakeFileSystem.clearRecords()
+  }
+
+  test("FileStreamSourceCleaner - archive - different filesystems between source and archive") {
+    val fakeFileSystem = new FakeFileSystem("fake")
+    val fakeFileSystem2 = new FakeFileSystem("fake2")
+
+    val sourcePatternPath = new Path("/hello*/h{e,f}ll?")
+    val baseArchiveDirPath = new Path("/hello")
+
+    val sourceCleaner = new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
+      Some(fakeFileSystem2), Some(baseArchiveDirPath))
+
+    val sourcePath = new Path("/hello/hfllo/spark")
+    sourceCleaner.archive(FileEntry(sourcePath.toUri.getPath, 0, 0))
+
+    assertNoMove(fakeFileSystem)
+    assertNoMove(fakeFileSystem2)
+  }
+
+  private def assertNoMove(fs: FakeFileSystem): Unit = {
+    assert(fs.requestsExists.isEmpty)
+    assert(fs.requestsMkdirs.isEmpty)
+    assert(fs.requestsRename.isEmpty)
+  }
+
+  private def assertMoveFile(
+      fs: FakeFileSystem,
+      sourcePath: Path,
+      expectedArchivePath: Path): Unit = {
+    assert(fs.requestsExists.nonEmpty)
+    assert(fs.requestsExists.head === expectedArchivePath.getParent)
+    assert(fs.requestsMkdirs.isEmpty)
+    assert(fs.requestsRename.nonEmpty)
+    assert(fs.requestsRename.head === ((sourcePath, expectedArchivePath)))
   }
 
   private def assertFileIsNotMoved(sourceDir: File, expectedDir: File, filePrefix: String): Unit = {
