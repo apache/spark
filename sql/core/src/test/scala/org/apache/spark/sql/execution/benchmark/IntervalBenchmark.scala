@@ -88,8 +88,9 @@ object IntervalBenchmark extends SqlBasedBenchmark {
     val intervalToTest = ListBuffer[String]()
 
     val benchmark = new Benchmark("cast strings to intervals", N, output = output)
-    addCase(benchmark, N, "string w/ interval", buildString(true, timeUnits))
-    addCase(benchmark, N, "string w/o interval", buildString(false, timeUnits))
+    // The first 2 cases are used to show the overhead of preparing the interval string.
+    addCase(benchmark, N, "prepare string w/ interval", buildString(true, timeUnits))
+    addCase(benchmark, N, "prepare string w/o interval", buildString(false, timeUnits))
     addCase(benchmark, N, intervalToTest) // Only years
 
     for (unit <- timeUnits) {
