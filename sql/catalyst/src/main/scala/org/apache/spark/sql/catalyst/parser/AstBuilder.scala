@@ -2770,7 +2770,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-<<<<<<< HEAD
    * Create a [[CacheTableStatement]].
    *
    * For example:
@@ -2780,12 +2779,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
     val query = Option(ctx.query).map(plan)
     val tableName = visitMultipartIdentifier(ctx.multipartIdentifier)
     if (query.isDefined && tableName.length > 1) {
-      val catalogAndDatabase = tableName.init.mkString(".")
-      throw new ParseException("It is not allowed to add catalog/database " +
-        s"prefix `$catalogAndDatabase` to " +
+      val catalogAndNamespace = tableName.init
+      throw new ParseException("It is not allowed to add catalog/namespace " +
+        s"prefix ${catalogAndNamespace.quoted} to " +
         "the table name in CACHE TABLE AS SELECT", ctx)
     }
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)

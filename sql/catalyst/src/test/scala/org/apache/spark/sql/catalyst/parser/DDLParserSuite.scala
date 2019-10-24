@@ -1059,7 +1059,7 @@ class DDLParserSuite extends AnalysisTest {
       CacheTableStatement(Seq("a", "b", "c"), None, true, Map("storageLevel" -> "DISK_ONLY")))
 
     intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
-      "It is not allowed to add catalog/database prefix `a.b`")
+      "It is not allowed to add catalog/namespace prefix a.b")
   }
 
   test("TRUNCATE table") {
