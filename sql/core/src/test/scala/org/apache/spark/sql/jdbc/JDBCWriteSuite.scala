@@ -598,5 +598,4 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     sparkContext.removeSparkListener(listener)
     taskMetrics.sum
   }
-
 }

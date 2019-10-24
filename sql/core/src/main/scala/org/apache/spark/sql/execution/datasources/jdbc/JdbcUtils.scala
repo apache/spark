@@ -847,8 +847,8 @@ object JdbcUtils extends Logging {
       case _ => df
     }
     repartitionedDF.rdd.foreachPartition { iterator => savePartition(
-        getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
-        options)
+      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
+      options)
     }
   }
 
