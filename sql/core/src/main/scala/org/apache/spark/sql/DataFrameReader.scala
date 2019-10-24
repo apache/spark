@@ -284,15 +284,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       url: String,
       table: String,
       columnName: String,
-      lowerBound: Long,
-      upperBound: Long,
+      lowerBound: String,
+      upperBound: String,
       numPartitions: Int,
       connectionProperties: Properties): DataFrame = {
     // columnName, lowerBound, upperBound and numPartitions override settings in extraOptions.
     this.extraOptions ++= Map(
       JDBCOptions.JDBC_PARTITION_COLUMN -> columnName,
-      JDBCOptions.JDBC_LOWER_BOUND -> lowerBound.toString,
-      JDBCOptions.JDBC_UPPER_BOUND -> upperBound.toString,
+      JDBCOptions.JDBC_LOWER_BOUND -> lowerBound,
+      JDBCOptions.JDBC_UPPER_BOUND -> upperBound,
       JDBCOptions.JDBC_NUM_PARTITIONS -> numPartitions.toString)
     jdbc(url, table, connectionProperties)
   }

@@ -491,7 +491,7 @@ class JDBCSuite extends QueryTest
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
-    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties())
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", "0", "4", 3, new Properties())
     checkNumPartitions(df, expectedNumPartitions = 3)
     assert(df.collect().length === 3)
   }
@@ -504,17 +504,17 @@ class JDBCSuite extends QueryTest
   }
 
   test("Partitioning on column that might have null values.") {
-    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties())
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", "0", "4", 3, new Properties())
     checkNumPartitions(df, expectedNumPartitions = 3)
     assert(df.collect().length === 4)
 
-    val df2 = spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties())
+    val df2 = spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", "0", "4", 3, new Properties())
     checkNumPartitions(df2, expectedNumPartitions = 3)
     assert(df2.collect().length === 4)
 
     // partitioning on a nullable quoted column
     assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", """"Dept"""", 0, 4, 3, new Properties())
+      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", """"Dept"""", "0", "4", 3, new Properties())
         .collect().length === 4)
   }
 
@@ -523,8 +523,8 @@ class JDBCSuite extends QueryTest
       url = urlWithUserAndPass,
       table = "TEST.seq",
       columnName = "id",
-      lowerBound = 0,
-      upperBound = 4,
+      lowerBound = "0",
+      upperBound = "4",
       numPartitions = 0,
       connectionProperties = new Properties()
     )
@@ -537,8 +537,8 @@ class JDBCSuite extends QueryTest
       url = urlWithUserAndPass,
       table = "TEST.seq",
       columnName = "id",
-      lowerBound = 1,
-      upperBound = 5,
+      lowerBound = "1",
+      upperBound = "5",
       numPartitions = 10,
       connectionProperties = new Properties()
     )
@@ -551,8 +551,8 @@ class JDBCSuite extends QueryTest
       url = urlWithUserAndPass,
       table = "TEST.seq",
       columnName = "id",
-      lowerBound = 5,
-      upperBound = 5,
+      lowerBound = "5",
+      upperBound = "5",
       numPartitions = 4,
       connectionProperties = new Properties()
     )
@@ -566,8 +566,8 @@ class JDBCSuite extends QueryTest
         url = urlWithUserAndPass,
         table = "TEST.seq",
         columnName = "id",
-        lowerBound = 5,
-        upperBound = 1,
+        lowerBound = "5",
+        upperBound = "1",
         numPartitions = 3,
         connectionProperties = new Properties()
       )
