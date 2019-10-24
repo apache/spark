@@ -24,8 +24,7 @@ from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, \
-    JavaUnaryTransformer, _jvm
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
 
 __all__ = ['Binarizer',
@@ -930,7 +929,7 @@ class CountVectorizerModel(JavaModel, _CountVectorizerParams, JavaMLReadable, Ja
 
 
 @inherit_doc
-class DCT(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
+class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that takes the 1D discrete cosine transform
     of a real vector. No zero padding is performed on the input vector.
@@ -1003,9 +1002,22 @@ class DCT(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self.getOrDefault(self.inverse)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
 
 @inherit_doc
-class ElementwiseProduct(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
+class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
+                         JavaMLWritable):
     """
     Outputs the Hadamard product (i.e., the element-wise product) of each input vector
     with a provided "weight" vector. In other words, it scales each column of the dataset
@@ -1070,6 +1082,18 @@ class ElementwiseProduct(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         Gets the value of scalingVec or its default value.
         """
         return self.getOrDefault(self.scalingVec)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
 
 @inherit_doc
@@ -2096,7 +2120,7 @@ class MinMaxScalerModel(JavaModel, _MinMaxScalerParams, JavaMLReadable, JavaMLWr
 
 @inherit_doc
 @ignore_unicode_prefix
-class NGram(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
+class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that converts the input array of strings into an array of n-grams. Null
     values in the input array are ignored.
@@ -2174,9 +2198,21 @@ class NGram(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self.getOrDefault(self.n)
 
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
 
 @inherit_doc
-class Normalizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
+class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
      Normalize a vector to have unit norm using the given p-norm.
 
@@ -2241,6 +2277,18 @@ class Normalizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         Gets the value of p or its default value.
         """
         return self.getOrDefault(self.p)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
 
 class _OneHotEncoderParams(HasInputCols, HasOutputCols, HasHandleInvalid):
@@ -2418,7 +2466,8 @@ class OneHotEncoderModel(JavaModel, _OneHotEncoderParams, JavaMLReadable, JavaML
 
 
 @inherit_doc
-class PolynomialExpansion(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
+class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
+                          JavaMLWritable):
     """
     Perform feature expansion in a polynomial space. As said in `wikipedia of Polynomial Expansion
     <http://en.wikipedia.org/wiki/Polynomial_expansion>`_, "In mathematics, an
@@ -2484,6 +2533,18 @@ class PolynomialExpansion(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         Gets the value of degree or its default value.
         """
         return self.getOrDefault(self.degree)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
 
 @inherit_doc
@@ -2927,7 +2988,7 @@ class RobustScalerModel(JavaModel, _RobustScalerParams, JavaMLReadable, JavaMLWr
 
 @inherit_doc
 @ignore_unicode_prefix
-class RegexTokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
+class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A regex based tokenizer that extracts tokens either by using the
     provided regex pattern (in Java dialect) to split the text
@@ -3057,6 +3118,18 @@ class RegexTokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         Gets the value of toLowercase or its default value.
         """
         return self.getOrDefault(self.toLowercase)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
 
 @inherit_doc
@@ -3737,7 +3810,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
 
 @inherit_doc
 @ignore_unicode_prefix
-class Tokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
+class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A tokenizer that converts the input string to lowercase and then
     splits it by white spaces.
@@ -3789,6 +3862,18 @@ class Tokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
 
 @inherit_doc
