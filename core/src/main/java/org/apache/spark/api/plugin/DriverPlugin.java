@@ -47,8 +47,8 @@ public interface DriverPlugin {
    * @param sc The SparkContext loading the plugin.
    * @param pluginContext Additional plugin-specific about the Spark application where the plugin
    *                      is running.
-   * @return A map containing configuration data for the executor-side component of the plugin.
-   *         This map will be provided to the {@link ExecutorPlugin}'s initialization method.
+   * @return A map that will be provided to the {@link ExecutorPlugin#init(PluginContext,Map)}
+   *         method.
    */
   default Map<String, String> init(SparkContext sc, PluginContext pluginContext) {
     return Collections.emptyMap();
