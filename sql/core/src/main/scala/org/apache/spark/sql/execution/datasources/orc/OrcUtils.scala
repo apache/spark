@@ -51,8 +51,7 @@ object OrcUtils extends Logging {
     val fs = filePath.getFileSystem(hadoopConf)
     val readerOptions = OrcFile.readerOptions(hadoopConf).filesystem(fs)
     try {
-      val reader = OrcFile.createReader(filePath, readerOptions)
-      reader.getRawDataSize
+      Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions))(_.getRawDataSize)
     } catch {
       case _: IOException => BigInt(0)
     }
