@@ -154,6 +154,9 @@ case class Like(left: Expression, right: Expression, escapeCharOpt: Option[Char]
       val pattern = ctx.freshName("pattern")
       val rightStr = ctx.freshName("rightStr")
       val escapeChar = escapeCharOpt.map { str =>
+        // We need double escape to avoid org.codehaus.commons.compiler.CompileException.
+        // '\\' will cause exception 'Single quote must be backslash-escaped in character literal'.
+        // '\"' will cause exception 'Line break in literal not allowed'.
         if (str.equals("\"") || str.equals("\\")) {
           s"""\\\\$str"""
         } else {
