@@ -34,6 +34,16 @@ import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{AccumulatorMetadata, LongAccumulator, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 
+/**
+ * Benchmark for metrics aggregation in the SQL listener.
+ * {{{
+ *   To run this benchmark:
+ *   1. without sbt: bin/spark-submit --class <this class> --jars <core test jar>
+ *   2. build/sbt "core/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
+ *      Results will be written to "benchmarks/MetricsAggregationBenchmark-results.txt".
+ * }}}
+ */
 object MetricsAggregationBenchmark extends BenchmarkBase {
 
   private def metricTrackingBenchmark(
@@ -161,13 +171,12 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
 
     val benchmark = new Benchmark(
       s"metrics aggregation ($metricCount metrics, $taskCount tasks per stage)", 1,
-      warmupTime = 0.seconds)
+      warmupTime = 0.seconds, output = output)
 
     // Run this outside the measurement code so that classes are loaded and JIT is triggered,
     // otherwise the first run tends to be much slower than others. Also because this benchmark is a
     // bit weird and doesn't really map to what the Benchmark class expects, so it's a bit harder
     // to use warmupTime and friends effectively.
-    benchmark.out.printf("Warming up...\n")
     stageCounts.foreach { count =>
       metricTrackingBenchmark(new Benchmark.Timer(-1), metricCount, taskCount, count)
     }
