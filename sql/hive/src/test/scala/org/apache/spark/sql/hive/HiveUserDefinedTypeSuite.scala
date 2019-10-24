@@ -17,39 +17,34 @@
 
 package org.apache.spark.sql.hive
 
-import java.lang
-
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, StandardListObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 
-import org.apache.spark.sql.{QueryTest, RandomDataGenerator, Row, SparkSession}
+import org.apache.spark.sql.{QueryTest, RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType
 
-class HiveUserDefinedTypeSuite extends QueryTest {
-  private[this] val functionClass = classOf[org.apache.spark.sql.hive.TestUDF].getCanonicalName
+class HiveUserDefinedTypeSuite extends QueryTest with TestHiveSingleton {
+  private val functionClass = classOf[org.apache.spark.sql.hive.TestUDF].getCanonicalName
 
   test("Support UDT in Hive UDF") {
     val functionName = "get_point_x"
-    val sql = spark.sql _
     try {
       val schema = new StructType().add("point", new ExamplePointUDT)
       val inputGenerator = RandomDataGenerator.forType(schema, nullable = false).get
       val input = inputGenerator.apply().asInstanceOf[Row]
       val df = spark.createDataFrame(Array(input).toList.asJava, schema)
       df.createOrReplaceTempView("src")
-      sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
+      spark.sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
 
       checkAnswer(
-        sql(s"SELECT $functionName(point) FROM src"),
+        spark.sql(s"SELECT $functionName(point) FROM src"),
         Row(input.getAs[ExamplePoint](0).x))
-    } catch {
-      case cause: Throwable => throw cause
     } finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
@@ -59,12 +54,10 @@ class HiveUserDefinedTypeSuite extends QueryTest {
         s"Function $functionName should have been dropped. But, it still exists.")
     }
   }
-
-  override protected def spark: SparkSession = TestHive.sparkSession
 }
 
 class TestUDF extends GenericUDF {
-  var data: StandardListObjectInspector = _
+  private var data: StandardListObjectInspector = _
 
   override def getDisplayString(children: Array[String]): String = "get_point_x"
 
@@ -75,6 +68,6 @@ class TestUDF extends GenericUDF {
 
   override def evaluate(arguments: Array[GenericUDF.DeferredObject]): AnyRef = {
     val point = data.getList(arguments(0).get())
-    new lang.Double(point.get(0).asInstanceOf[Double])
+    new java.lang.Double(point.get(0).asInstanceOf[Double])
   }
 }
