@@ -81,7 +81,7 @@ ALTER TABLE table_name ADD COLUMNS (col_spec[, col_spec ...])
 `ALTER TABLE SET` command is used for setting the table properties. If a particular property was already set, 
 this overrides the old value with the new one.
 
-`ALTER TABLE USET` is used to drop the table property. 
+`ALTER TABLE UNSET` is used to drop the table property. 
 
 ##### Syntax
 {% highlight sql %}
