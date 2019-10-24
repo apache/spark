@@ -1062,6 +1062,16 @@ class DDLParserSuite extends AnalysisTest {
       "It is not allowed to add catalog/namespace prefix a.b")
   }
 
+  test("UNCACHE TABLE table") {
+    comparePlans(
+      parsePlan("UNCACHE TABLE a.b.c"),
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = false))
+
+    comparePlans(
+      parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = true))
+  }
+
   test("TRUNCATE table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),
@@ -1102,16 +1112,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
       RefreshTableStatement(Seq("a", "b", "c")))
-  }
-
-  test("UNCACHE TABLE table") {
-    comparePlans(
-      parsePlan("UNCACHE TABLE a.b.c"),
-      UncacheTableStatement(Seq("a", "b", "c"), ifExists = false))
-
-    comparePlans(
-      parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
-      UncacheTableStatement(Seq("a", "b", "c"), ifExists = true))
   }
 
   private case class TableSpec(
