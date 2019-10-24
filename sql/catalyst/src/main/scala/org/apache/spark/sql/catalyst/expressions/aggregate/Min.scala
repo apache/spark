@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
        -1
   """,
   since = "1.0.0")
-case class Min(child: Expression) extends DeclarativeAggregate with OrderIrrelevantAggs {
+case class Min(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
 

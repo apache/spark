@@ -30,8 +30,8 @@ class RemoveRedundantSortsSuite extends PlanTest {
     val batches =
       Batch("Limit PushDown", Once,
         LimitPushDown) ::
-      Batch("Remove Redundant Sorts", Once,
-        RemoveRedundantSorts) ::
+      Batch("Eliminate Sorts", Once,
+        EliminateSorts) ::
       Batch("Collapse Project", Once,
         CollapseProject) :: Nil
   }

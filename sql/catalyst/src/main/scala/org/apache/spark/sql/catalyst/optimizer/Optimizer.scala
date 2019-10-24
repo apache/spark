@@ -97,7 +97,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
         PruneFilters,
-        EliminateSorts,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
         RewriteCorrelatedScalarSubquery,
@@ -174,8 +173,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder) :+
-    Batch("Remove Redundant Sorts", Once,
-      RemoveRedundantSorts) :+
+    Batch("Eliminate Sorts", Once,
+      EliminateSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
@@ -953,29 +952,22 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Removes no-op SortOrder from Sort
+ * Removes Sort operation. This can happen:
+ * 1) if the sort is noop
+ * 2) if the child is already sorted
+ * 3) if there is another Sort operator separated by 0...n Project/Filter operators
+ * 4) if the Sort operator is within Join and without Limit
+ * 5) if the Sort operator is within GroupBy and the aggregate function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) child else s.copy(order = newOrders)
-  }
-}
-
-/**
- * Removes redundant Sort operation. This can happen:
- * 1) if the child is already sorted
- * 2) if there is another Sort operator separated by 0...n Project/Filter operators
- * 3) if the Sort operator is within Join and without Limit
- * 4) if the Sort operator is within GroupBy and the aggregate function is order irrelevant
- */
-object RemoveRedundantSorts extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case Sort(orders, true, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
       child
     case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
-    case j @ Join(originLeft, originRight, _, _, _) =>
+    case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
       j.copy(left = recursiveRemoveSort(originLeft), right = recursiveRemoveSort(originRight))
     case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
       g.copy(child = recursiveRemoveSort(originChild))
@@ -995,13 +987,21 @@ object RemoveRedundantSorts extends Rule[LogicalPlan] {
   }
 
   def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
-    val aggExpressions = aggs.flatMap { e =>
-      e.collect {
-        case ae: AggregateExpression => ae
-      }
+    def isOrderIrrelevantAggFunction(func: AggregateFunction): Boolean = func match {
+      case _: Sum => true
+      case _: Min => true
+      case _: Max => true
+      case _: Count => true
+      case _: Average => true
+      case _: CentralMomentAgg => true
+      case _ => false
     }
 
-    aggExpressions.forall(_.aggregateFunction.isInstanceOf[OrderIrrelevantAggs])
+    aggs.flatMap { e =>
+      e.collect {
+        case ae: AggregateExpression => ae.aggregateFunction
+      }
+    }.forall(isOrderIrrelevantAggFunction)
   }
 }
 
