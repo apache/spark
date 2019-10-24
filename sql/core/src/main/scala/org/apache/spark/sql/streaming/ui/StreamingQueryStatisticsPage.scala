@@ -44,8 +44,8 @@ class StreamingQueryStatisticsPage(
   def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
-        <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/sql/streaming/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/sql/streaming/streaming-page.js")}></script>
+        <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
+      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
     // scalastyle:on
   }
 
