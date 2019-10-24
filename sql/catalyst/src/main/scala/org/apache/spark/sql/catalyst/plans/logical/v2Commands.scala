@@ -237,6 +237,14 @@ case class ReplaceTableAsSelect(
   }
 }
 
+/**
+ * The logical plan of the CREATE NAMESPACE command that works for v2 catalogs.
+ */
+case class CreateNamespace(
+    catalog: SupportsNamespaces,
+    namespace: Seq[String],
+    ifNotExists: Boolean,
+    properties: Map[String, String]) extends Command
 
 /**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
@@ -340,3 +348,10 @@ case class SetCatalogAndNamespace(
     catalogManager: CatalogManager,
     catalogName: Option[String],
     namespace: Option[Seq[String]]) extends Command
+
+/**
+ * The logical plan of the REFRESH TABLE command that works for v2 catalogs.
+ */
+case class RefreshTable(
+    catalog: TableCatalog,
+    ident: Identifier) extends Command
