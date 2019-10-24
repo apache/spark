@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BitwiseAnd, BitwiseOr, BitwiseXor, ExpectsInputTypes, Expression, ExpressionDescription, If, IsNull, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryArithmetic, BitwiseAnd, BitwiseOr, BitwiseXor, ExpectsInputTypes, Expression, ExpressionDescription, If, IsNull, Literal}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegralType}
 
 abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes {
 
   val child: Expression
+
+  def bitOperator(left: Expression, right: Expression): BinaryArithmetic
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -32,13 +34,23 @@ abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes 
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
 
-  protected lazy val bitAgg = AttributeReference(nodeName, child.dataType)()
+  private lazy val bitAgg = AttributeReference(nodeName, child.dataType)()
 
   override lazy val initialValues: Seq[Literal] = Literal.create(null, dataType) :: Nil
 
   override lazy val aggBufferAttributes: Seq[AttributeReference] = bitAgg :: Nil
 
   override lazy val evaluateExpression: AttributeReference = bitAgg
+
+  override lazy val updateExpressions: Seq[Expression] =
+    If(IsNull(bitAgg),
+      child,
+      If(IsNull(child), bitAgg, bitOperator(bitAgg, child))) :: Nil
+
+  override lazy val mergeExpressions: Seq[Expression] =
+    If(IsNull(bitAgg.left),
+      bitAgg.right,
+      If(IsNull(bitAgg.right), bitAgg.left, bitOperator(bitAgg.left, bitAgg.right))) :: Nil
 }
 
 @ExpressionDescription(
@@ -53,15 +65,9 @@ case class BitAndAgg(child: Expression) extends BitAggregate {
 
   override def nodeName: String = "bit_and"
 
-  override lazy val updateExpressions: Seq[Expression] =
-    If(IsNull(bitAgg),
-      child,
-      If(IsNull(child), bitAgg, BitwiseAnd(bitAgg, child))) :: Nil
-
-  override lazy val mergeExpressions: Seq[Expression] =
-    If(IsNull(bitAgg.left),
-      bitAgg.right,
-      If(IsNull(bitAgg.right), bitAgg.left, BitwiseAnd(bitAgg.left, bitAgg.right))) :: Nil
+  override def bitOperator(left: Expression, right: Expression): BinaryArithmetic = {
+    BitwiseAnd(left, right)
+  }
 }
 
 @ExpressionDescription(
@@ -76,15 +82,9 @@ case class BitOrAgg(child: Expression) extends BitAggregate {
 
   override def nodeName: String = "bit_or"
 
-  override lazy val updateExpressions: Seq[Expression] =
-    If(IsNull(bitAgg),
-      child,
-      If(IsNull(child), bitAgg, BitwiseOr(bitAgg, child))) :: Nil
-
-  override lazy val mergeExpressions: Seq[Expression] =
-    If(IsNull(bitAgg.left),
-      bitAgg.right,
-      If(IsNull(bitAgg.right), bitAgg.left, BitwiseOr(bitAgg.left, bitAgg.right))) :: Nil
+  override def bitOperator(left: Expression, right: Expression): BinaryArithmetic = {
+    BitwiseOr(left, right)
+  }
 }
 
 @ExpressionDescription(
@@ -99,13 +99,7 @@ case class BitXorAgg(child: Expression) extends BitAggregate {
 
   override def nodeName: String = "bit_xor"
 
-  override lazy val updateExpressions: Seq[Expression] =
-    If(IsNull(bitAgg),
-      child,
-      If(IsNull(child), bitAgg, BitwiseXor(bitAgg, child))) :: Nil
-
-  override lazy val mergeExpressions: Seq[Expression] =
-    If(IsNull(bitAgg.left),
-      bitAgg.right,
-      If(IsNull(bitAgg.right), bitAgg.left, BitwiseXor(bitAgg.left, bitAgg.right))) :: Nil
+  override def bitOperator(left: Expression, right: Expression): BinaryArithmetic = {
+    BitwiseXor(left, right)
+  }
 }
