@@ -788,7 +788,7 @@ class DataFrameWriter(OptionUtils):
 
     @since(1.4)
     def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None,
-             lineSep=None, encoding=None):
+             lineSep=None, encoding=None, ignoreNullFields=None):
         """Saves the content of the :class:`DataFrame` in JSON format
         (`JSON Lines text format or newline-delimited JSON <http://jsonlines.org/>`_) at the
         specified path.
@@ -817,13 +817,15 @@ class DataFrameWriter(OptionUtils):
                         the default UTF-8 charset will be used.
         :param lineSep: defines the line separator that should be used for writing. If None is
                         set, it uses the default value, ``\\n``.
+        :param ignoreNullFields: Whether to ignore null fields when generating JSON objects.
+                        If None is set, it uses the default value, ``true``.
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         self._set_opts(
             compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
-            lineSep=lineSep, encoding=encoding)
+            lineSep=lineSep, encoding=encoding, ignoreNullFields=ignoreNullFields)
         self._jwrite.json(path)
 
     @since(1.4)
