@@ -172,13 +172,16 @@ case class DescribeDatabaseCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbMetadata: CatalogDatabase =
       sparkSession.sessionState.catalog.getDatabaseMetadata(databaseName)
+    val allDbProperties = dbMetadata.properties
     val result =
       Row("Database Name", dbMetadata.name) ::
         Row("Description", dbMetadata.description) ::
-        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri)) :: Nil
+        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
+        Row("Owner", allDbProperties.getOrElse("ownerName", "")) ::
+        Row("Owner Type", allDbProperties.getOrElse("ownerType", "")) :: Nil
 
     if (extended) {
-      val properties = dbMetadata.properties -- Seq("ownerName", "ownerType")
+      val properties = allDbProperties -- Seq("ownerName", "ownerType")
       val propertiesStr =
         if (properties.isEmpty) {
           ""
