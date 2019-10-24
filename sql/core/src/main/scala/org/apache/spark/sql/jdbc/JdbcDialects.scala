@@ -152,27 +152,17 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
-   * Do some extra properties validation work in addition to the validation in [[JDBCOptions]],
-   * eg. [[validateFetchSize()]].
+   * Do some extra properties validation work in addition to the validation
+   * in [[org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions]].
    * @param properties The connection properties.  This is passed through from the relation.
    */
   def validateProperties(properties: Map[String, String]): Unit = {
     val fetchSize = properties.getOrElse(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "0").toInt
-    validateFetchSize(fetchSize)
-  }
-
-  /**
-   * This is to validate the fetch size specified via [[JDBCOptions.JDBC_BATCH_FETCH_SIZE]].
-   * The implementation here requires the fetch size >= 0, sub classes may override it to meet
-   * requirement of different dialects.
-   * @param size the fetch size to validate.
-   */
-  protected def validateFetchSize(size: Int): Unit = {
-    require(size >= 0,
-          s"Invalid value `${size.toString}` for parameter " +
-            s"`${JDBCOptions.JDBC_BATCH_FETCH_SIZE}` for dialect ${this.getClass.getSimpleName}. " +
-            s"The minimum value is 0. When the value is 0, " +
-            "the JDBC driver ignores the value and does the estimates.")
+    require(fetchSize >= 0,
+      s"Invalid value `${fetchSize.toString}` for parameter " +
+        s"`${JDBCOptions.JDBC_BATCH_FETCH_SIZE}` for dialect ${this.getClass.getSimpleName}. " +
+        s"The minimum value is 0. When the value is 0, " +
+        "the JDBC driver ignores the value and does the estimates.")
   }
 
   /**
