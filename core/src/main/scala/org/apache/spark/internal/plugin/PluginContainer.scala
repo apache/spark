@@ -119,7 +119,7 @@ private class ExecutorPluginContainer(env: SparkEnv, plugins: Seq[SparkPlugin])
 
 object PluginContainer {
 
-  val EXTRA_CONF_PREFIX = "spark.plugins.__internal_conf__."
+  val EXTRA_CONF_PREFIX = "spark.plugins.internal."
 
   def apply(sc: SparkContext): Option[PluginContainer] = PluginContainer(Left(sc))
 
