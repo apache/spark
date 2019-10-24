@@ -52,7 +52,7 @@ private case object MySQLDialect extends JdbcDialect {
     require(size >= 0 || size == Integer.MIN_VALUE,
       s"Invalid value `${size.toString}` for parameter " +
         s"`${JDBCOptions.JDBC_BATCH_FETCH_SIZE}` for MySQL. " +
-        s"The value should be >= 0 or equals Integer.MIN_VALUE; " +
+        s"The value should be >= 0 or equal Integer.MIN_VALUE; " +
         s"When the value is 0, the JDBC driver ignores the value and does the estimates; " +
         s"When the value is Integer.MIN_VALUE, the data will be fetched in streaming manner, " +
         s"namely, fetch one row at a time.")
