@@ -207,7 +207,7 @@ statement
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE tableIdentifier
         (OPTIONS options=tablePropertyList)? (AS? query)?              #cacheTable
-    | UNCACHE TABLE (IF EXISTS)? tableIdentifier                       #uncacheTable
+    | UNCACHE TABLE (IF EXISTS)? multipartIdentifier                   #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData

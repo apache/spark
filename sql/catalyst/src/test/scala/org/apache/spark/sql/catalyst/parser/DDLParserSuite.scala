@@ -1087,6 +1087,16 @@ class DDLParserSuite extends AnalysisTest {
       RefreshTableStatement(Seq("a", "b", "c")))
   }
 
+  test("UNCACHE TABLE table") {
+    comparePlans(
+      parsePlan("UNCACHE TABLE a.b.c"),
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = false))
+
+    comparePlans(
+      parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = true))
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],

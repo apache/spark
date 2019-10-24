@@ -348,3 +348,10 @@ case class ShowPartitionsStatement(
  * A REFRESH TABLE statement, as parsed from SQL
  */
 case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
+
+/**
+ * A UNCACHE TABLE statement, as parsed from SQL
+ */
+case class UncacheTableStatement(
+    tableName: Seq[String],
+    ifExists: Boolean) extends ParsedStatement

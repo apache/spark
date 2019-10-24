@@ -2811,4 +2811,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
     RefreshTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
   }
+
+  /**
+   * Create an [[UncacheTableStatement]] logical plan.
+   */
+  override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
+    UncacheTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier), ctx.EXISTS != null)
+  }
 }
