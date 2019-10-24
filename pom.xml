@@ -240,11 +240,6 @@
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
 
     <CodeCacheSize>1g</CodeCacheSize>
-
-    <!-- Thrift properties -->
-    <thrift.home>you-must-set-this-to-run-thrift</thrift.home>
-    <thrift.gen.dir>${basedir}/src/gen/thrift</thrift.gen.dir>
-    <thrift.args>-I ${thrift.home} --gen java:beans,hashcode,generated_annotations=undated</thrift.args>
   </properties>
   <repositories>
     <repository>
@@ -3088,68 +3083,6 @@
     </profile>
     <profile>
       <id>sparkr</id>
-    </profile>
-
-    <profile>
-      <id>thriftif</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-antrun-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>generate-thrift-sources</id>
-                <phase>generate-sources</phase>
-                <configuration>
-                  <target>
-                    <taskdef name="for" classname="net.sf.antcontrib.logic.ForTask"
-                             classpathref="maven.plugin.classpath" />
-                    <property name="thrift.args" value="-I ${thrift.home} --gen java:beans,hashcode,generated_annotations=undated"/>
-                    <property name="thrift.gen.dir" value="${basedir}/src/gen/thrift"/>
-                    <delete dir="${thrift.gen.dir}"/>
-                    <mkdir dir="${thrift.gen.dir}"/>
-                    <for param="thrift.file">
-                      <path>
-                        <fileset dir="." includes="if/*.thrift,if/test/*.thrift,src/main/thrift/*.thrift" />
-                      </path>
-                      <sequential>
-                        <echo message="Generating Thrift code for @{thrift.file}"/>
-                        <exec executable="${thrift.home}/bin/thrift"  failonerror="true" dir=".">
-                          <arg line="${thrift.args} -I ${basedir}/include -I ${basedir}/.. -o ${thrift.gen.dir} @{thrift.file} " />
-                        </exec>
-                      </sequential>
-                    </for>
-                  </target>
-                </configuration>
-                <goals>
-                  <goal>run</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-enforcer-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>enforce-property</id>
-                <goals>
-                  <goal>enforce</goal>
-                </goals>
-                <configuration>
-                  <rules>
-                    <requireProperty>
-                      <property>thrift.home</property>
-                    </requireProperty>
-                  </rules>
-                  <fail>true</fail>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
   </profiles>
 </project>
