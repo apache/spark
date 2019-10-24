@@ -331,6 +331,8 @@ class JavaTransformer(JavaParams, Transformer):
     available as _java_obj.
     """
 
+    __metaclass__ = ABCMeta
+
     def _transform(self, dataset):
         self._transfer_params_to_java()
         return DataFrame(self._java_obj.transform(dataset._jdf), dataset.sql_ctx)
