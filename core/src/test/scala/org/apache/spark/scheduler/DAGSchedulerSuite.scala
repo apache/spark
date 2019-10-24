@@ -510,6 +510,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(initialMapStatus1.map{_.mapId}.toSet === Set(5, 6, 7))
 
     val initialMapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
+    //  val initialMapStatus1 = mapOutputTracker.mapStatuses.get(0).get
     assert(initialMapStatus2.count(_ != null) === 3)
     assert(initialMapStatus2.map{_.location.executorId}.toSet ===
       Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
@@ -536,14 +537,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mapStatus2(2).location.host === "hostB")
   }
 
-  test("All shuffle files on the executor should be cleaned up when executor lost " +
-    "and then causes 'fetch failed'") {
+  test("[SPARK-29551] All shuffle files on the executor should be cleaned up when " +
+    "executor lost and then causes 'fetch failed'") {
     // whether to kill Executor or not before FetchFailed
-    Seq(true, false).foreach { killExecutor => {
+    Seq(true, false).foreach { killExecutor =>
       afterEach()
       val conf = new SparkConf()
       conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
-      conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "false")
+      conf.set(config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE.key, "false")
       init(conf)
       runEvent(ExecutorAdded("exec-hostA1", "hostA"))
       runEvent(ExecutorAdded("exec-hostA2", "hostA"))
@@ -616,16 +617,15 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       assert(mapStatus2(2).location.executorId === "exec-hostB")
       assert(mapStatus2(2).location.host === "hostB")
     }
-    }
   }
 
-  test("All shuffle files on the host should be cleaned up when host lost") {
+  test("[SPARK-29551] All shuffle files on the host should be cleaned up when host lost") {
     // whether to kill Executor or not before FetchFailed
-    Seq(true, false).foreach { killExecutor => {
+    Seq(true, false).foreach { killExecutor =>
       afterEach()
       val conf = new SparkConf()
       conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
-      conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
+      conf.set(config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE.key, "true")
       init(conf)
       runEvent(ExecutorAdded("exec-hostA1", "hostA"))
       runEvent(ExecutorAdded("exec-hostA2", "hostA"))
@@ -695,7 +695,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       assert(mapStatus2.count(_ != null) === 1)
       assert(mapStatus2(2).location.executorId === "exec-hostB")
       assert(mapStatus2(2).location.host === "hostB")
-    }
     }
   }
 
