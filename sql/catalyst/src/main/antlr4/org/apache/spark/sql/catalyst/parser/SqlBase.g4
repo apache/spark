@@ -79,6 +79,10 @@ singleTableSchema
     : colTypeList EOF
     ;
 
+singleInterval
+    : INTERVAL? (intervalValue intervalUnit)+ EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement

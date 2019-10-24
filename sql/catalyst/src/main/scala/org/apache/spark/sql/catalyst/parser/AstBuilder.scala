@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -98,6 +99,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   override def visitSingleTableSchema(ctx: SingleTableSchemaContext): StructType = {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
+  }
+
+  override def visitSingleInterval(ctx: SingleIntervalContext): CalendarInterval = {
+    withOrigin(ctx) {
+      val units = ctx.intervalUnit().asScala.map {
+        u => normalizeInternalUnit(u.getText.toLowerCase(Locale.ROOT))
+      }.toArray
+      val values = ctx.intervalValue().asScala.map(getIntervalValue).toArray
+      try {
+        CalendarInterval.fromUnitStrings(units, values)
+      } catch {
+        case i: IllegalArgumentException =>
+          val e = new ParseException(i.getMessage, ctx)
+          e.setStackTrace(i.getStackTrace)
+          throw e
+      }
+    }
   }
 
   /* ********************************************************************************************
@@ -1770,7 +1788,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
           val interval = try {
-            CalendarInterval.fromCaseInsensitiveString(value)
+            IntervalUtils.fromString(value)
           } catch {
             case e: IllegalArgumentException =>
               val ex = new ParseException("Cannot parse the INTERVAL value: " + value, ctx)
@@ -1930,15 +1948,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitIntervalField(ctx: IntervalFieldContext): CalendarInterval = withOrigin(ctx) {
     import ctx._
-    val s = value.getText
+    val s = getIntervalValue(value)
     try {
       val unitText = unit.getText.toLowerCase(Locale.ROOT)
       val interval = (unitText, Option(to).map(_.getText.toLowerCase(Locale.ROOT))) match {
-        case (u, None) if u.endsWith("s") =>
-          // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
-          CalendarInterval.fromSingleUnitString(u.substring(0, u.length - 1), s)
         case (u, None) =>
-          CalendarInterval.fromSingleUnitString(u, s)
+          CalendarInterval.fromUnitStrings(Array(normalizeInternalUnit(u)), Array(s))
         case ("year", Some("month")) =>
           CalendarInterval.fromYearMonthString(s)
         case ("day", Some("hour")) =>
@@ -1965,6 +1980,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         pe.setStackTrace(e.getStackTrace)
         throw pe
     }
+  }
+
+  private def getIntervalValue(value: IntervalValueContext): String = {
+    if (value.STRING() != null) {
+      string(value.STRING())
+    } else {
+      value.getText
+    }
+  }
+
+  // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
+  private def normalizeInternalUnit(s: String): String = {
+    if (s.endsWith("s")) s.substring(0, s.length - 1) else s
   }
 
   /* ********************************************************************************************
