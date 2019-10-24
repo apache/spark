@@ -16,29 +16,3 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-
-"""Enums for DAG serialization."""
-
-from enum import Enum, unique
-
-
-# Fields of an encoded object in serialization.
-@unique
-class Encoding(str, Enum):
-    """Enum of encoding constants."""
-    TYPE = '__type'
-    VAR = '__var'
-
-
-# Supported types for encoding. primitives and list are not encoded.
-@unique
-class DagAttributeTypes(str, Enum):
-    """Enum of supported attribute types of DAG."""
-    DAG = 'dag'
-    OP = 'operator'
-    DATETIME = 'datetime'
-    TIMEDELTA = 'timedelta'
-    TIMEZONE = 'timezone'
-    DICT = 'dict'
-    SET = 'set'
-    TUPLE = 'tuple'
