@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.IntervalUtils.fromString
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromString, stringToInterval}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.types.CalendarInterval._
 
 class IntervalUtilsSuite extends SparkFunSuite {
@@ -85,6 +85,20 @@ class IntervalUtilsSuite extends SparkFunSuite {
       val result = new CalendarInterval(months, microseconds)
       assert(fromString(input1) == result)
       assert(fromString(input2) == result)
+    }
+  }
+
+  test("string to interval") {
+    Seq(
+      "1 day",
+      " 123 MONTHS",
+      "interval -1 day +3 Microseconds",
+      "  interval  8  years -11 months 123  weeks   -1 day " +
+        "23 hours -22 minutes 1 second  -123  millisecond    567 microseconds ").foreach { s =>
+      val utf8String = UTF8String.fromString(s)
+      val interval = stringToInterval(utf8String)
+      val expectedInterval = fromString(s)
+      assert(interval === Some(expectedInterval))
     }
   }
 }
