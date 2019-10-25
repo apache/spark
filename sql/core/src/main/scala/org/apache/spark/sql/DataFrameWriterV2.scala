@@ -51,9 +51,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private val tableName = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(table)
 
   private val (catalog, identifier) = {
-    val CatalogObjectIdentifier(maybeCatalog, identifier) = tableName
-    val catalog = maybeCatalog.getOrElse(catalogManager.currentCatalog).asTableCatalog
-    (catalog, identifier)
+    val CatalogObjectIdentifier(catalog, identifier) = tableName
+    (catalog.asTableCatalog, identifier)
   }
 
   private val logicalPlan = df.queryExecution.logical

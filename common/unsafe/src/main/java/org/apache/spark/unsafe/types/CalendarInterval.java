@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -33,86 +32,11 @@ public final class CalendarInterval implements Serializable {
   public static final long MICROS_PER_DAY = MICROS_PER_HOUR * 24;
   public static final long MICROS_PER_WEEK = MICROS_PER_DAY * 7;
 
-  /**
-   * A function to generate regex which matches interval string's unit part like "3 years".
-   *
-   * First, we can leave out some units in interval string, and we only care about the value of
-   * unit, so here we use non-capturing group to wrap the actual regex.
-   * At the beginning of the actual regex, we should match spaces before the unit part.
-   * Next is the number part, starts with an optional "-" to represent negative value. We use
-   * capturing group to wrap this part as we need the value later.
-   * Finally is the unit name, ends with an optional "s".
-   */
-  private static String unitRegex(String unit) {
-    return "(?:\\s+(-?\\d+)\\s+" + unit + "s?)?";
-  }
-
-  private static Pattern p = Pattern.compile("interval" + unitRegex("year") + unitRegex("month") +
-    unitRegex("week") + unitRegex("day") + unitRegex("hour") + unitRegex("minute") +
-    unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"),
-    Pattern.CASE_INSENSITIVE);
-
-  private static Pattern yearMonthPattern =
-    Pattern.compile("^(?:['|\"])?([+|-])?(\\d+)-(\\d+)(?:['|\"])?$");
+  private static Pattern yearMonthPattern = Pattern.compile(
+    "^([+|-])?(\\d+)-(\\d+)$");
 
   private static Pattern dayTimePattern = Pattern.compile(
-    "^(?:['|\"])?([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
-
-  private static Pattern quoteTrimPattern = Pattern.compile("^(?:['|\"])?(.*?)(?:['|\"])?$");
-
-  private static long toLong(String s) {
-    if (s == null) {
-      return 0;
-    } else {
-      return Long.parseLong(s);
-    }
-  }
-
-  /**
-   * Convert a string to CalendarInterval. Return null if the input string is not a valid interval.
-   * This method is case-insensitive.
-   */
-  public static CalendarInterval fromString(String s) {
-    if (s == null) {
-      return null;
-    }
-    s = s.trim();
-    Matcher m = p.matcher(s);
-    if (!m.matches() || s.compareToIgnoreCase("interval") == 0) {
-      return null;
-    } else {
-      long months = toLong(m.group(1)) * 12 + toLong(m.group(2));
-      long microseconds = toLong(m.group(3)) * MICROS_PER_WEEK;
-      microseconds += toLong(m.group(4)) * MICROS_PER_DAY;
-      microseconds += toLong(m.group(5)) * MICROS_PER_HOUR;
-      microseconds += toLong(m.group(6)) * MICROS_PER_MINUTE;
-      microseconds += toLong(m.group(7)) * MICROS_PER_SECOND;
-      microseconds += toLong(m.group(8)) * MICROS_PER_MILLI;
-      microseconds += toLong(m.group(9));
-      return new CalendarInterval((int) months, microseconds);
-    }
-  }
-
-  /**
-   * Convert a string to CalendarInterval. Unlike fromString, this method can handle
-   * strings without the `interval` prefix and throws IllegalArgumentException
-   * when the input string is not a valid interval.
-   *
-   * @throws IllegalArgumentException if the string is not a valid internal.
-   */
-  public static CalendarInterval fromCaseInsensitiveString(String s) {
-    if (s == null || s.trim().isEmpty()) {
-      throw new IllegalArgumentException("Interval cannot be null or blank.");
-    }
-    String sInLowerCase = s.trim().toLowerCase(Locale.ROOT);
-    String interval =
-      sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
-    CalendarInterval cal = fromString(interval);
-    if (cal == null) {
-      throw new IllegalArgumentException("Invalid interval: " + s);
-    }
-    return cal;
-  }
+    "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$");
 
   public static long toLongWithRange(String fieldName,
       String s, long minValue, long maxValue) throws IllegalArgumentException {
@@ -235,72 +159,59 @@ public final class CalendarInterval implements Serializable {
     return result;
   }
 
-  public static CalendarInterval fromSingleUnitString(String unit, String s)
+  public static CalendarInterval fromUnitStrings(String[] units, String[] values)
       throws IllegalArgumentException {
+    assert units.length == values.length;
+    int months = 0;
+    long microseconds = 0;
 
-    CalendarInterval result = null;
-    if (s == null) {
-      throw new IllegalArgumentException(String.format("Interval %s string was null", unit));
-    }
-    s = s.trim();
-    Matcher m = quoteTrimPattern.matcher(s);
-    if (!m.matches()) {
-      throw new IllegalArgumentException(
-        "Interval string does not match day-time format of 'd h:m:s.n': " + s);
-    } else {
+    for (int i = 0; i < units.length; i++) {
       try {
-        switch (unit) {
+        switch (units[i]) {
           case "year":
-            int year = (int) toLongWithRange("year", m.group(1),
-              Integer.MIN_VALUE / 12, Integer.MAX_VALUE / 12);
-            result = new CalendarInterval(year * 12, 0L);
+            months = Math.addExact(months, Math.multiplyExact(Integer.parseInt(values[i]), 12));
             break;
           case "month":
-            int month = (int) toLongWithRange("month", m.group(1),
-              Integer.MIN_VALUE, Integer.MAX_VALUE);
-            result = new CalendarInterval(month, 0L);
+            months = Math.addExact(months, Integer.parseInt(values[i]));
             break;
           case "week":
-            long week = toLongWithRange("week", m.group(1),
-              Long.MIN_VALUE / MICROS_PER_WEEK, Long.MAX_VALUE / MICROS_PER_WEEK);
-            result = new CalendarInterval(0, week * MICROS_PER_WEEK);
+            microseconds = Math.addExact(
+              microseconds,
+              Math.multiplyExact(Long.parseLong(values[i]), MICROS_PER_WEEK));
             break;
           case "day":
-            long day = toLongWithRange("day", m.group(1),
-              Long.MIN_VALUE / MICROS_PER_DAY, Long.MAX_VALUE / MICROS_PER_DAY);
-            result = new CalendarInterval(0, day * MICROS_PER_DAY);
+            microseconds = Math.addExact(
+              microseconds,
+              Math.multiplyExact(Long.parseLong(values[i]), MICROS_PER_DAY));
             break;
           case "hour":
-            long hour = toLongWithRange("hour", m.group(1),
-              Long.MIN_VALUE / MICROS_PER_HOUR, Long.MAX_VALUE / MICROS_PER_HOUR);
-            result = new CalendarInterval(0, hour * MICROS_PER_HOUR);
+            microseconds = Math.addExact(
+              microseconds,
+              Math.multiplyExact(Long.parseLong(values[i]), MICROS_PER_HOUR));
             break;
           case "minute":
-            long minute = toLongWithRange("minute", m.group(1),
-              Long.MIN_VALUE / MICROS_PER_MINUTE, Long.MAX_VALUE / MICROS_PER_MINUTE);
-            result = new CalendarInterval(0, minute * MICROS_PER_MINUTE);
+            microseconds = Math.addExact(
+              microseconds,
+              Math.multiplyExact(Long.parseLong(values[i]), MICROS_PER_MINUTE));
             break;
           case "second": {
-            long micros = parseSecondNano(m.group(1));
-            result = new CalendarInterval(0, micros);
+            microseconds = Math.addExact(microseconds, parseSecondNano(values[i]));
             break;
           }
           case "millisecond":
-            long millisecond = toLongWithRange("millisecond", m.group(1),
-              Long.MIN_VALUE / MICROS_PER_MILLI, Long.MAX_VALUE / MICROS_PER_MILLI);
-            result = new CalendarInterval(0, millisecond * MICROS_PER_MILLI);
+            microseconds = Math.addExact(
+              microseconds,
+              Math.multiplyExact(Long.parseLong(values[i]), MICROS_PER_MILLI));
             break;
-          case "microsecond": {
-            long micros = Long.parseLong(m.group(1));
-            result = new CalendarInterval(0, micros);
+          case "microsecond":
+            microseconds = Math.addExact(microseconds, Long.parseLong(values[i]));
             break;
-          }
         }
       } catch (Exception e) {
         throw new IllegalArgumentException("Error parsing interval string: " + e.getMessage(), e);
       }
     }
-    return result;
+    return new CalendarInterval(months, microseconds);
   }
 
   /**
