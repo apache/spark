@@ -2136,13 +2136,11 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
     loss Supports:
 
     * logisticLoss (default)
-
     * squaredError
 
     solver Supports:
 
     * gd (normal mini-batch gradient descent)
-
     * adamW (default)
 
     >>> from pyspark.ml.linalg import Vectors
@@ -2170,7 +2168,8 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
     .. versionadded:: 3.0.0
     """
 
-    numFactors = Param(Params._dummy(), "numFactors", "dimensionality of the factorization",
+    numFactors = Param(Params._dummy(), "numFactors", "dimensionality of the factor vectors, " +
+                       "which are used to get pairwise interactions between variables",
                        typeConverter=TypeConverters.toInt)
 
     fitBias = Param(Params._dummy(), "fitBias", "whether to fit global bias term",
@@ -2179,10 +2178,12 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
     fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
                       typeConverter=TypeConverters.toBoolean)
 
-    regParam = Param(Params._dummy(), "regParam", "regularization for L2",
+    regParam = Param(Params._dummy(), "regParam", "the parameter of l2-regularization term, " +
+                     "which prevents overfitting by adding sum of squares of all the parameters",
                      typeConverter=TypeConverters.toFloat)
 
-    miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "mini-batch fraction",
+    miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "fraction of the input data " +
+                              "set that should be used for one iteration of gradient descent",
                               typeConverter=TypeConverters.toFloat)
 
     initStd = Param(Params._dummy(), "initStd", "standard deviation of initial coefficients",
@@ -2195,26 +2196,23 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
                  "options: logisticLoss, squaredError. (Default logisticLoss)",
                  typeConverter=TypeConverters.toString)
 
-    verbose = Param(Params._dummy(), "verbose", "whether to print information per iteration step",
-                    typeConverter=TypeConverters.toBoolean)
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                 tol=1e-6, solver="adamW", loss="logisticLoss", verbose=False):
+                 tol=1e-6, solver="adamW", loss="logisticLoss"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                 tol=1e-6, solver="adamW", loss="logisticLoss", verbose=False)
+                 tol=1e-6, solver="adamW", loss="logisticLoss")
         """
         super(FactorizationMachines, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.FactorizationMachines", self.uid)
         self._setDefault(numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
                          miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                         tol=1e-6, solver="adamW", loss="logisticLoss", verbose=False)
+                         tol=1e-6, solver="adamW", loss="logisticLoss")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2223,12 +2221,12 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                  tol=1e-6, solver="adamW", loss="logisticLoss", verbose=False):
+                  tol=1e-6, solver="adamW", loss="logisticLoss"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                  tol=1e-6, solver="adamW", loss="logisticLoss", verbose=False)
+                  tol=1e-6, solver="adamW", loss="logisticLoss")
         Sets Params for Factorization Machines.
         """
         kwargs = self._input_kwargs
@@ -2271,13 +2269,6 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
         Sets the value of :py:attr:`initStd`.
         """
         return self._set(initStd=value)
-
-    @since("3.0.0")
-    def setVerbose(self, value):
-        """
-        Sets the value of :py:attr:`verbose`.
-        """
-        return self._set(verbose=value)
 
 
 class FactorizationMachinesModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):

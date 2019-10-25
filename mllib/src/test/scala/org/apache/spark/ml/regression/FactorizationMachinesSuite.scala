@@ -109,8 +109,7 @@ object FactorizationMachinesSuite {
     "stepSize" -> 0.1,
     "tol" -> 1e-4,
     "solver" -> "gd",
-    "loss" -> "squaredError",
-    "verbose" -> true
+    "loss" -> "squaredError"
   )
 
   def generateFactorizationCrossInput(

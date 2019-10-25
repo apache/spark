@@ -35,7 +35,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.{linalg => OldLinalg}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.optimization.{Gradient, GradientDescent, Updater}
+import org.apache.spark.mllib.optimization.{Gradient, GradientDescent, SquaredL2Updater, Updater}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -58,7 +58,9 @@ private[regression] trait FactorizationMachinesParams
    */
   @Since("3.0.0")
   final val numFactors: IntParam = new IntParam(this, "numFactors",
-    "dimensionality of the factorization")
+    "dimensionality of the factor vectors, " +
+      "which are used to get pairwise interactions between variables",
+    ParamValidators.gt(0))
 
   /** @group getParam */
   @Since("3.0.0")
@@ -94,7 +96,9 @@ private[regression] trait FactorizationMachinesParams
    */
   @Since("3.0.0")
   final val regParam: DoubleParam = new DoubleParam(this, "regParam",
-    "regularization for L2")
+    "the parameter of l2-regularization term, " +
+      "which prevents overfitting by adding sum of squares of all the parameters",
+    ParamValidators.gtEq(0))
 
   /** @group getParam */
   @Since("3.0.0")
@@ -106,7 +110,8 @@ private[regression] trait FactorizationMachinesParams
    */
   @Since("3.0.0")
   final val miniBatchFraction: DoubleParam = new DoubleParam(this, "miniBatchFraction",
-    "mini-batch fraction")
+    "fraction of the input data set that should be used for one iteration of gradient descent",
+    ParamValidators.inRange(0, 1, false, true))
 
   /** @group getParam */
   @Since("3.0.0")
@@ -118,7 +123,7 @@ private[regression] trait FactorizationMachinesParams
    */
   @Since("3.0.0")
   final val initStd: DoubleParam = new DoubleParam(this, "initStd",
-    "standard deviation of initial coefficients")
+    "standard deviation of initial coefficients", ParamValidators.gt(0))
 
   /** @group getParam */
   @Since("3.0.0")
@@ -148,20 +153,6 @@ private[regression] trait FactorizationMachinesParams
   final override val loss: Param[String] = new Param[String](this, "loss", "The loss function to" +
     s" be optimized. Supported options: ${supportedLosses.mkString(", ")}. (Default logisticLoss)",
     ParamValidators.inArray[String](supportedLosses))
-
-  /**
-   * Param for whether to print information per iteration step
-   *
-   * @group param
-   */
-  @Since("3.0.0")
-  final val verbose: BooleanParam = new BooleanParam(this, "verbose",
-    "whether to print information per iteration step")
-
-  /** @group getParam */
-  @Since("3.0.0")
-  final def getVerbose: Boolean = $(verbose)
-
 }
 
 /**
@@ -294,25 +285,6 @@ class FactorizationMachines @Since("3.0.0") (
   def setLoss(value: String): this.type = set(loss, value)
   setDefault(loss -> LogisticLoss)
 
-  /**
-   * Set the verbose.
-   * Factorization Machines may produce a gradient explosion, so output some log use logInfo.
-   * logInfo will output
-   *  - iter_num: current iterate epoch
-   *  - iter_step_size: step size(aka learning rate)
-   *  - weights_norm2: weight's L2 norm
-   *  - cur_tol: current tolerance in GradientDescent
-   *  - grad_norm1: gradient's L1 norm
-   *  - first_weight: first parameter in weights
-   *  - first_gradient: first parameter's gradient
-   * Default is false.
-   *
-   * @group setParam
-   */
-  @Since("3.0.0")
-  def setVerbose(value: Boolean): this.type = set(verbose, value)
-  setDefault(verbose -> false)
-
   override protected[spark] def train(dataset: Dataset[_]): FactorizationMachinesModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     train(dataset, handlePersistence)
@@ -346,15 +318,15 @@ class FactorizationMachines @Since("3.0.0") (
         (if ($(fitLinear)) Array.fill(numFeatures)(0.0) else Array.empty[Double]) ++
         (if ($(fitBias)) Array.fill(1)(0.0) else Array.empty[Double]))
 
-    val data = instances.map{ case OldLabeledPoint(label, features) => (label, features) }
+    val data = instances.map { case OldLabeledPoint(label, features) => (label, features) }
 
     // optimize coefficients with gradient descent
     val gradient = BaseFactorizationMachinesGradient.parseLoss(
       $(loss), $(numFactors), $(fitBias), $(fitLinear), numFeatures)
 
     val updater = $(solver) match {
-      case GD => new FactorizationMachinesUpdater().setVerbose($(verbose))
-      case AdamW => new AdamWUpdater(coefficientsSize).setVerbose($(verbose))
+      case GD => new SquaredL2Updater()
+      case AdamW => new AdamWUpdater(coefficientsSize)
     }
 
     val optimizer = new GradientDescent(gradient, updater)
@@ -575,15 +547,14 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
     }
     (0 until numFactors).foreach { f =>
       var sumSquare = 0.0
-      var squareSum = 0.0
+      var sum = 0.0
       data.foreachActive { case (index, value) =>
         val vx = weights(index * numFactors + f) * value
         sumSquare += vx * vx
-        squareSum += vx
+        sum += vx
       }
-      sumVX(f) = squareSum
-      squareSum = squareSum * squareSum
-      rawPrediction += 0.5 * (squareSum - sumSquare)
+      sumVX(f) = sum
+      rawPrediction += 0.5 * (sum * sum - sumSquare)
     }
 
     rawPrediction
@@ -747,59 +718,15 @@ private[ml] class MSEFactorizationMachinesGradient(
   }
 }
 
-private[ml] class FactorizationMachinesUpdater extends Updater with Logging {
-  var verbose: Boolean = false
-
-  def setVerbose(isVerbose: Boolean): this.type = {
-    this.verbose = isVerbose
-    this
-  }
-
-  override def compute(
-      weightsOld: OldVector,
-      gradient: OldVector,
-      stepSize: Double,
-      iter: Int,
-      regParam: Double
-    ): (OldVector, Double) = {
-    // add up both updates from the gradient of the loss (= step) as well as
-    // the gradient of the regularizer (= regParam * weightsOld)
-    // w' = w - thisIterStepSize * (gradient + regParam * w)
-    // w' = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
-    val thisIterStepSize = stepSize / math.sqrt(iter)
-    val brzWeights: BV[Double] = weightsOld.asBreeze.toDenseVector
-    brzWeights :*= (1.0 - thisIterStepSize * regParam)
-    brzAxpy(-thisIterStepSize, gradient.asBreeze, brzWeights)
-    val norm = brzNorm(brzWeights, 2.0)
-
-    if (verbose) {
-      val gradNorm = brzNorm(gradient.asBreeze.toDenseVector)
-      val solutionVecDiff = brzNorm(weightsOld.asBreeze.toDenseVector - brzWeights)
-      val curTol = solutionVecDiff / Math.max(brzNorm(brzWeights), 1.0)
-      logInfo(s"iter_num: $iter, iter_step_size: $thisIterStepSize" +
-        s", weights_norm2: $norm, cur_tol: $curTol, grad_norm1: $gradNorm" +
-        s", first_weight: ${brzWeights(0)}, first_gradient: ${gradient(0)}")
-    }
-
-    (Vectors.fromBreeze(brzWeights), 0.5 * regParam * norm * norm)
-  }
-}
-
 private[ml] class AdamWUpdater(weightSize: Int) extends Updater with Logging {
-  var beta1: Double = 0.9
-  var beta2: Double = 0.999
-  var epsilon: Double = 1e-8
+  val beta1: Double = 0.9
+  val beta2: Double = 0.999
+  val epsilon: Double = 1e-8
 
   val m: BV[Double] = BV.zeros[Double](weightSize).toDenseVector
   val v: BV[Double] = BV.zeros[Double](weightSize).toDenseVector
   var beta1T: Double = 1.0
   var beta2T: Double = 1.0
-
-  var verbose: Boolean = false
-  def setVerbose(isVerbose: Boolean): this.type = {
-    this.verbose = isVerbose
-    this
-  }
 
   override def compute(
     weightsOld: OldVector,
@@ -823,15 +750,6 @@ private[ml] class AdamWUpdater(weightSize: Int) extends Updater with Logging {
       w -= lr * mHat / (brzSqrt(vHat) + epsilon) + regParam * w
     }
     val norm = brzNorm(w, 2.0)
-
-    if (verbose) {
-      val gradNorm = brzNorm(gradient.asBreeze.toDenseVector)
-      val solutionVecDiff = brzNorm(weightsOld.asBreeze.toDenseVector - w)
-      val curTol = solutionVecDiff / Math.max(brzNorm(w), 1.0)
-      logInfo(s"iter_num: $iter, iter_step_size: $lr" +
-        s", weights_norm2: $norm, cur_tol: $curTol, grad_norm1: $gradNorm" +
-        s", first_weight: ${w(0)}, first_gradient: ${gradient(0)}")
-    }
 
     (Vectors.fromBreeze(w), 0.5 * regParam * norm * norm)
   }
