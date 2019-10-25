@@ -256,7 +256,7 @@ class KafkaTestUtils(
     }
   }
 
-  def setupKrbDebug(): Unit = {
+  private def setupKrbDebug(): Unit = {
     if (System.getProperty("java.vendor").contains("IBM")) {
       System.setProperty(IBM_KRB_DEBUG_CONFIG, "all")
     } else {
@@ -318,7 +318,7 @@ class KafkaTestUtils(
     teardownKrbDebug()
   }
 
-  def teardownKrbDebug(): Unit = {
+  private def teardownKrbDebug(): Unit = {
     if (System.getProperty("java.vendor").contains("IBM")) {
       System.clearProperty(IBM_KRB_DEBUG_CONFIG)
     } else {
