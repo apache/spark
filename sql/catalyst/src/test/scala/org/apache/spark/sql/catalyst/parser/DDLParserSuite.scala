@@ -1045,6 +1045,12 @@ class DDLParserSuite extends AnalysisTest {
       RepairTableStatement(Seq("a", "b", "c")))
   }
 
+  test("SHOW CREATE table") {
+    comparePlans(
+      parsePlan("SHOW CREATE TABLE a.b.c"),
+      ShowCreateTableStatement(Seq("a", "b", "c")))
+  }
+
   test("CACHE TABLE") {
     comparePlans(
       parsePlan("CACHE TABLE a.b.c"),
