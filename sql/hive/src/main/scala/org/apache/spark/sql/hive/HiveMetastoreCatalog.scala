@@ -209,13 +209,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
           val updatedTable = inferIfNeeded(relation, options, fileFormat, Option(fileIndex))
 
+          // Spark SQL's data source table now support static and dynamic partition insert. Source
+          // table converted from Hive table should always use dynamic.
+          val enableDynamicPartition = options.updated("partitionOverwriteMode", "dynamic")
           val fsRelation = HadoopFsRelation(
             location = fileIndex,
             partitionSchema = partitionSchema,
             dataSchema = updatedTable.dataSchema,
             bucketSpec = None,
             fileFormat = fileFormat,
-            options = options)(sparkSession = sparkSession)
+            options = enableDynamicPartition)(sparkSession = sparkSession)
           val created = LogicalRelation(fsRelation, updatedTable)
           catalogProxy.cacheTable(tableIdentifier, created)
           created

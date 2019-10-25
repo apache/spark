@@ -191,8 +191,8 @@ class GBTClassifier @Since("1.4.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, labelCol, featuresCol, predictionCol, impurity, lossType,
-      maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
+    instr.logParams(this, labelCol, featuresCol, predictionCol, leafCol, impurity,
+      lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
       seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy,
       validationIndicatorCol, validationTol)
     instr.logNumClasses(numClasses)
@@ -203,6 +203,7 @@ class GBTClassifier @Since("1.4.0") (
     } else {
       GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy))
     }
+    baseLearners.foreach(copyValues(_))
 
     val numFeatures = baseLearners.head.numFeatures
     instr.logNumFeatures(numFeatures)
@@ -286,12 +287,16 @@ class GBTClassificationModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
-    val predictUDF = udf { (features: Any) =>
-      bcastModel.value.predict(features.asInstanceOf[Vector])
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+
+    val outputData = super.transform(dataset)
+    if ($(leafCol).nonEmpty) {
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))))
+    } else {
+      outputData
     }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
   override def predict(features: Vector): Double = {

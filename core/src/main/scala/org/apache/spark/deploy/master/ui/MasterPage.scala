@@ -25,6 +25,7 @@ import org.json4s.JValue
 
 import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
+import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master._
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -67,28 +68,57 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     }
   }
 
+  private def formatWorkerResourcesDetails(worker: WorkerInfo): String = {
+    val usedInfo = worker.resourcesInfoUsed
+    val freeInfo = worker.resourcesInfoFree
+    formatResourcesDetails(usedInfo, freeInfo)
+  }
+
+  private def formatMasterResourcesInUse(aliveWorkers: Array[WorkerInfo]): String = {
+    val totalInfo = aliveWorkers.map(_.resourcesInfo)
+      .map(resources => toMutable(resources))
+      .flatMap(_.toIterator)
+      .groupBy(_._1) // group by resource name
+      .map { case (rName, rInfoArr) =>
+        rName -> rInfoArr.map(_._2).reduce(_ + _)
+      }.map { case (k, v) => (k, v.toResourceInformation) }
+    val usedInfo = aliveWorkers.map(_.resourcesInfoUsed)
+      .map (resources => toMutable(resources))
+      .flatMap(_.toIterator)
+      .groupBy(_._1) // group by resource name
+      .map { case (rName, rInfoArr) =>
+      rName -> rInfoArr.map(_._2).reduce(_ + _)
+    }.map { case (k, v) => (k, v.toResourceInformation) }
+    formatResourcesUsed(totalInfo, usedInfo)
+  }
+
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = getMasterState
 
-    val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
+    val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory", "Resources")
     val workers = state.workers.sortBy(_.id)
     val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Executor", "Submitted Time",
-      "User", "State", "Duration")
+    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Executor",
+      "Resources Per Executor", "Submitted Time", "User", "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
     val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
 
-    val driverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
-      "Memory", "Main Class")
+    val activeDriverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
+      "Memory", "Resources", "Main Class", "Duration")
     val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
-    val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
+    val activeDriversTable =
+      UIUtils.listingTable(activeDriverHeaders, activeDriverRow, activeDrivers)
+
+    val completedDriverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
+      "Memory", "Resources", "Main Class")
     val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
-    val completedDriversTable = UIUtils.listingTable(driverHeaders, driverRow, completedDrivers)
+    val completedDriversTable =
+      UIUtils.listingTable(completedDriverHeaders, completedDriverRow, completedDrivers)
 
     // For now we only show driver information if the user has submitted drivers to the cluster.
     // This is until we integrate the notion of drivers and applications in the UI.
@@ -113,6 +143,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
               <li><strong>Memory in use:</strong>
                 {Utils.megabytesToString(aliveWorkers.map(_.memory).sum)} Total,
                 {Utils.megabytesToString(aliveWorkers.map(_.memoryUsed).sum)} Used</li>
+              <li><strong>Resources in use:</strong>
+                {formatMasterResourcesInUse(aliveWorkers)}</li>
               <li><strong>Applications:</strong>
                 {state.activeApps.length} <a href="#running-app">Running</a>,
                 {state.completedApps.length} <a href="#completed-app">Completed</a> </li>
@@ -236,6 +268,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         {Utils.megabytesToString(worker.memory)}
         ({Utils.megabytesToString(worker.memoryUsed)} Used)
       </td>
+      <td>{formatWorkerResourcesDetails(worker)}</td>
     </tr>
   }
 
@@ -272,6 +305,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td sorttable_customkey={app.desc.memoryPerExecutorMB.toString}>
         {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
       </td>
+      <td>
+        {formatResourceRequirements(app.desc.resourceReqsPerExecutor)}
+      </td>
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
       <td>{app.state.toString}</td>
@@ -279,7 +315,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     </tr>
   }
 
-  private def driverRow(driver: DriverInfo): Seq[Node] = {
+  private def activeDriverRow(driver: DriverInfo) = driverRow(driver, showDuration = true)
+
+  private def completedDriverRow(driver: DriverInfo) = driverRow(driver, showDuration = false)
+
+  private def driverRow(driver: DriverInfo, showDuration: Boolean): Seq[Node] = {
     val killLink = if (parent.killEnabled &&
       (driver.state == DriverState.RUNNING ||
         driver.state == DriverState.SUBMITTED ||
@@ -312,7 +352,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td sorttable_customkey={driver.desc.mem.toString}>
         {Utils.megabytesToString(driver.desc.mem.toLong)}
       </td>
+      <td>{formatResourcesAddresses(driver.resources)}</td>
       <td>{driver.desc.command.arguments(2)}</td>
+      {if (showDuration) {
+        <td>{UIUtils.formatDuration(System.currentTimeMillis() - driver.startTime)}</td>
+      }}
     </tr>
   }
 }

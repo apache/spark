@@ -344,7 +344,7 @@ object CatalystTypeConverters {
   private class DecimalConverter(dataType: DecimalType)
     extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
 
-    private val nullOnOverflow = SQLConf.get.decimalOperationsNullOnOverflow
+    private val nullOnOverflow = !SQLConf.get.ansiEnabled
 
     override def toCatalystImpl(scalaValue: Any): Decimal = {
       val decimal = scalaValue match {

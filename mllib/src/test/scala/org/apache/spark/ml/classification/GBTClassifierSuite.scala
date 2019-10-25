@@ -24,7 +24,7 @@ import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
-import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -55,7 +55,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   private val eps: Double = 1e-5
   private val absEps: Double = 1e-8
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100), 2)
       .map(_.asML)
@@ -156,11 +156,8 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("GBTClassifier: Predictor, Classifier methods") {
-    val rawPredictionCol = "rawPrediction"
-    val predictionCol = "prediction"
     val labelCol = "label"
     val featuresCol = "features"
-    val probabilityCol = "probability"
 
     val gbt = new GBTClassifier().setSeed(123)
     val trainingDataset = trainData.toDF(labelCol, featuresCol)
@@ -250,6 +247,26 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)
+  }
+
+  test("model support predict leaf index") {
+    val model0 = new DecisionTreeRegressionModel("dtc", TreeTests.root0, 3)
+    val model1 = new DecisionTreeRegressionModel("dtc", TreeTests.root1, 3)
+    val model = new GBTClassificationModel("gbtc", Array(model0, model1), Array(1.0, 1.0), 3, 2)
+    model.setLeafCol("predictedLeafId")
+      .setRawPredictionCol("")
+      .setPredictionCol("")
+      .setProbabilityCol("")
+
+    val data = TreeTests.getTwoTreesLeafData
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect()
+      .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>
+        assert(leafId === predictedLeafId)
+    }
   }
 
   test("should support all NumericType labels and not support other types") {
@@ -437,6 +454,22 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
         i += 1
       }
     }
+  }
+
+  test("tree params") {
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
+    val gbt = new GBTClassifier()
+      .setMaxDepth(2)
+      .setCheckpointInterval(5)
+      .setSeed(123)
+    val model = gbt.fit(df)
+
+    model.trees.foreach (i => {
+      assert(i.getMaxDepth === model.getMaxDepth)
+      assert(i.getCheckpointInterval === model.getCheckpointInterval)
+      assert(i.getSeed === model.getSeed)
+    })
   }
 
   /////////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,12 @@
+- text: Spark Core
+  url: core-migration-guide.html
+- text: SQL, Datasets and DataFrame
+  url: sql-migration-guide.html
+- text: Structured Streaming
+  url: ss-migration-guide.html
+- text: MLlib (Machine Learning)
+  url: ml-migration-guide.html
+- text: PySpark (Python on Spark)
+  url: pyspark-migration-guide.html
+- text: SparkR (R on Spark)
+  url: sparkr-migration-guide.html

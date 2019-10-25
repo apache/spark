@@ -314,8 +314,10 @@ object FunctionRegistry {
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
     expression[EveryAgg]("every"),
+    expression[EveryAgg]("bool_and"),
     expression[AnyAgg]("any"),
-    expression[SomeAgg]("some"),
+    expression[AnyAgg]("some"),
+    expression[AnyAgg]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -417,6 +419,7 @@ object FunctionRegistry {
     expression[TimeWindow]("window"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[DatePart]("date_part"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -456,6 +459,7 @@ object FunctionRegistry {
     expression[MapFilter]("map_filter"),
     expression[ArrayFilter]("filter"),
     expression[ArrayExists]("exists"),
+    expression[ArrayForAll]("forall"),
     expression[ArrayAggregate]("aggregate"),
     expression[TransformValues]("transform_values"),
     expression[TransformKeys]("transform_keys"),
@@ -520,6 +524,9 @@ object FunctionRegistry {
     expression[BitwiseNot]("~"),
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
+    expression[BitwiseCount]("bit_count"),
+    expression[BitAndAgg]("bit_and"),
+    expression[BitOrAgg]("bit_or"),
 
     // json
     expression[StructsToJson]("to_json"),

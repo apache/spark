@@ -39,10 +39,10 @@ import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
+class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"
@@ -50,6 +50,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val carsFile8859 = "test-data/cars_iso-8859-1.csv"
   private val carsTsvFile = "test-data/cars.tsv"
   private val carsAltFile = "test-data/cars-alternative.csv"
+  private val carsMultiCharDelimitedFile = "test-data/cars-multichar-delim.csv"
+  private val carsMultiCharCrazyDelimitedFile = "test-data/cars-multichar-delim-crazy.csv"
   private val carsUnbalancedQuotesFile = "test-data/cars-unbalanced-quotes.csv"
   private val carsNullFile = "test-data/cars-null.csv"
   private val carsEmptyValueFile = "test-data/cars-empty-value.csv"
@@ -66,6 +68,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
+  private val malformedRowFile = "test-data/malformedRow.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -185,6 +188,49 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       .load(testFile(carsAltFile))
 
     verifyCars(cars, withHeader = true)
+  }
+
+  test("test with tab delimiter and double quote") {
+    val cars = spark.read
+        .options(Map("quote" -> "\"", "delimiter" -> """\t""", "header" -> "true"))
+        .csv(testFile(carsTsvFile))
+
+    verifyCars(cars, numFields = 6, withHeader = true, checkHeader = false)
+  }
+
+  test("SPARK-24540: test with multiple character delimiter (comma space)") {
+    val cars = spark.read
+        .options(Map("quote" -> "\'", "delimiter" -> ", ", "header" -> "true"))
+        .csv(testFile(carsMultiCharDelimitedFile))
+
+    verifyCars(cars, withHeader = true)
+  }
+
+  test("SPARK-24540: test with multiple (crazy) character delimiter") {
+    val cars = spark.read
+        .options(Map("quote" -> "\'", "delimiter" -> """_/-\\_""", "header" -> "true"))
+        .csv(testFile(carsMultiCharCrazyDelimitedFile))
+
+    verifyCars(cars, withHeader = true)
+
+    // check all the other columns, besides year (which is covered by verifyCars)
+    val otherCols = cars.select("make", "model", "comment", "blank").collect()
+    val expectedOtherColVals = Seq(
+      ("Tesla", "S", "No comment", null),
+      ("Ford", "E350", "Go get one now they are going fast", null),
+      ("Chevy", "Volt", null, null)
+    )
+
+    expectedOtherColVals.zipWithIndex.foreach { case (values, index) =>
+      val actualRow = otherCols(index)
+      values match {
+        case (make, model, comment, blank) =>
+          assert(make == actualRow.getString(0))
+          assert(model == actualRow.getString(1))
+          assert(comment == actualRow.getString(2))
+          assert(blank == actualRow.getString(3))
+      }
+    }
   }
 
   test("parse unescaped quotes with maxCharsPerColumn") {
@@ -819,8 +865,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       .load(testFile(simpleSparseFile))
 
     assert(
-      df.schema.fields.map(field => field.dataType).deep ==
-      Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
+      df.schema.fields.map(field => field.dataType).sameElements(
+        Array(IntegerType, IntegerType, IntegerType, IntegerType)))
   }
 
   test("old csv data source name works") {
@@ -2063,7 +2109,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
   test("SPARK-27873: disabling enforceSchema should not fail columnNameOfCorruptRecord") {
     Seq("csv", "").foreach { reader =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> reader) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> reader) {
         withTempPath { path =>
           val df = Seq(("0", "2013-111-11")).toDF("a", "b")
           df.write
@@ -2107,6 +2153,19 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
       assert(errMsg.contains("..."),
         "expect the TextParsingException truncate the error content to be 1000 length.")
+    }
+  }
+
+  test("SPARK-29101 test count with DROPMALFORMED mode") {
+    Seq((true, 4), (false, 3)).foreach { case (csvColumnPruning, expectedCount) =>
+      withSQLConf(SQLConf.CSV_PARSER_COLUMN_PRUNING.key -> csvColumnPruning.toString) {
+        val count = spark.read
+          .option("header", "true")
+          .option("mode", "DROPMALFORMED")
+          .csv(testFile(malformedRowFile))
+          .count()
+        assert(expectedCount == count)
+      }
     }
   }
 }

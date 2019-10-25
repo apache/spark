@@ -24,6 +24,7 @@ import java.nio.file.{Files, Paths}
 import scala.sys.process._
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SecurityManager, SparkConf, TestUtils}
@@ -34,6 +35,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
 
 /**
@@ -44,7 +46,9 @@ import org.apache.spark.util.Utils
  * expected version under this local directory, e.g. `/tmp/spark-test/spark-2.0.3`, we will skip the
  * downloading for this spark version.
  */
+@ExtendedHiveTest
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
+  private val isTestAtLeastJava9 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
   private val tmpDataDir = Utils.createTempDir(namePrefix = "test-data")
   // For local test, you can set `sparkTestingDir` to a static value like `/tmp/test-spark`, to
@@ -137,9 +141,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     new String(Files.readAllBytes(contentPath), StandardCharsets.UTF_8)
   }
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-
+  private def prepare(): Unit = {
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
     Files.write(tempPyFile.toPath,
@@ -201,7 +203,16 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     tempPyFile.delete()
   }
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    if (!isTestAtLeastJava9) {
+      prepare()
+    }
+  }
+
   test("backward compatibility") {
+    // TODO SPARK-28704 Test backward compatibility on JDK9+ once we have a version supports JDK9+
+    assume(!isTestAtLeastJava9)
     val args = Seq(
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",

@@ -200,8 +200,9 @@ class UDFTests(ReusedSQLTestCase):
         # The udf uses attributes from both sides of join, so it is pulled out as Filter +
         # Cross join.
         df = left.join(right, f("a", "b"))
-        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
-            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": False}):
+            with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+                df.collect()
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
             self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
@@ -551,7 +552,7 @@ class UDFTests(ReusedSQLTestCase):
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
                 .option('from', 0).option('to', 1).load().toDF('i')
             datasource_v2_df = self.spark.read \
-                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .format("org.apache.spark.sql.connector.SimpleDataSourceV2") \
                 .load().toDF('i', 'j')
 
             c1 = udf(lambda x: x + 1, 'int')(lit(1))

@@ -142,6 +142,12 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_EXECUTOR_SCHEDULER_NAME =
+    ConfigBuilder("spark.kubernetes.executor.scheduler.name")
+      .doc("Specify the scheduler name for each executor pod")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_EXECUTOR_REQUEST_CORES =
     ConfigBuilder("spark.kubernetes.executor.request.cores")
       .doc("Specify the cpu request for each executor pod")
@@ -329,6 +335,12 @@ private[spark] object Config extends Logging {
         "of failure or normal termination.")
       .booleanConf
       .createWithDefault(true)
+
+  val KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.dynamicAllocation.deleteGracePeriod")
+      .doc("How long to wait for executors to shut down gracefully before a forceful kill.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5s")
 
   val KUBERNETES_SUBMIT_GRACE_PERIOD =
     ConfigBuilder("spark.kubernetes.appKillPodDeletionGracePeriod")

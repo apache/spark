@@ -64,13 +64,13 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 
 	</div>
 	<div data-lang="java" markdown="1">
-            import org.apache.spark.storage.StorageLevel
-            import org.apache.spark.streaming.kinesis.KinesisInputDStream
-            import org.apache.spark.streaming.Seconds
-            import org.apache.spark.streaming.StreamingContext
-            import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+            import org.apache.spark.storage.StorageLevel;
+            import org.apache.spark.streaming.kinesis.KinesisInputDStream;
+            import org.apache.spark.streaming.Seconds;
+            import org.apache.spark.streaming.StreamingContext;
+            import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
 
-            KinesisInputDStream<byte[]> kinesisStream = KinesisInputDStream.builder
+            KinesisInputDStream<byte[]> kinesisStream = KinesisInputDStream.builder()
                 .streamingContext(streamingContext)
                 .endpointUrl([endpoint URL])
                 .regionName([region name])
@@ -81,7 +81,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                 .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
                 .build();
 
-	See the [API docs](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html)
+	See the [API docs](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
 
 	</div>
@@ -98,14 +98,21 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 	</div>
 	</div>
 
-	You may also provide a "message handler function" that takes a Kinesis `Record` and returns a generic object `T`, in case you would like to use other data included in a `Record` such as partition key. This is currently only supported in Scala and Java.
+	You may also provide the following settings. These are currently only supported in Scala and Java.
+
+	- A "message handler function" that takes a Kinesis `Record` and returns a generic object `T`, in case you would like to use other data included in a `Record` such as partition key.
+
+	- CloudWatch metrics level and dimensions. See [the AWS documentation about monitoring KCL](https://docs.aws.amazon.com/streams/latest/dev/monitoring-with-kcl.html) for details.
 
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
+                import collection.JavaConverters._
                 import org.apache.spark.storage.StorageLevel
                 import org.apache.spark.streaming.kinesis.KinesisInputDStream
                 import org.apache.spark.streaming.{Seconds, StreamingContext}
                 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+                import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration
+                import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 
                 val kinesisStream = KinesisInputDStream.builder
                     .streamingContext(streamingContext)
@@ -116,17 +123,22 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                     .checkpointAppName([Kinesis app name])
                     .checkpointInterval([checkpoint interval])
                     .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
+                    .metricsLevel(MetricsLevel.DETAILED)
+                    .metricsEnabledDimensions(KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS.asScala.toSet)
                     .buildWithMessageHandler([message handler])
 
 	</div>
 	<div data-lang="java" markdown="1">
-                import org.apache.spark.storage.StorageLevel
-                import org.apache.spark.streaming.kinesis.KinesisInputDStream
-                import org.apache.spark.streaming.Seconds
-                import org.apache.spark.streaming.StreamingContext
-                import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+                import org.apache.spark.storage.StorageLevel;
+                import org.apache.spark.streaming.kinesis.KinesisInputDStream;
+                import org.apache.spark.streaming.Seconds;
+                import org.apache.spark.streaming.StreamingContext;
+                import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
+                import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration;
+                import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel;
+                import scala.collection.JavaConverters;
 
-                KinesisInputDStream<byte[]> kinesisStream = KinesisInputDStream.builder
+                KinesisInputDStream<byte[]> kinesisStream = KinesisInputDStream.builder()
                     .streamingContext(streamingContext)
                     .endpointUrl([endpoint URL])
                     .regionName([region name])
@@ -135,6 +147,8 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                     .checkpointAppName([Kinesis app name])
                     .checkpointInterval([checkpoint interval])
                     .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
+                    .metricsLevel(MetricsLevel.DETAILED)
+                    .metricsEnabledDimensions(JavaConverters.asScalaSetConverter(KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS).asScala().toSet())
                     .buildWithMessageHandler([message handler]);
 
 	</div>

@@ -25,7 +25,7 @@ import scala.collection.immutable.Map
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
+import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
@@ -215,8 +215,7 @@ class HadoopRDD[K, V](
           val codecFactory = new CompressionCodecFactory(jobConf)
           if (Utils.isFileSplittable(path, codecFactory)) {
             logWarning(s"Loading one large file ${path.toString} with only one partition, " +
-              s"we can increase partition numbers by the `minPartitions` argument in method " +
-              "`sc.textFile`")
+              s"we can increase partition numbers for improving performance.")
           } else {
             logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +
               s"partition, because the file is compressed by unsplittable compression codec.")
@@ -376,7 +375,7 @@ class HadoopRDD[K, V](
     locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
   }
 
-  override def checkpoint() {
+  override def checkpoint(): Unit = {
     // Do nothing. Hadoop RDD should not be checkpointed.
   }
 
@@ -413,7 +412,7 @@ private[spark] object HadoopRDD extends Logging {
 
   /** Add Hadoop configuration specific to a single partition and attempt. */
   def addLocalConfiguration(jobTrackerId: String, jobId: Int, splitId: Int, attemptId: Int,
-                            conf: JobConf) {
+                            conf: JobConf): Unit = {
     val jobID = new JobID(jobTrackerId, jobId)
     val taId = new TaskAttemptID(new TaskID(jobID, TaskType.MAP, splitId), attemptId)
 

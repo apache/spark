@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D;
+import org.jtransforms.dct.DoubleDCT_1D;
 
 import org.junit.Assert;
 import org.junit.Test;

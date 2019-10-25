@@ -66,7 +66,7 @@ class AccumulatorSourceSuite extends SparkFunSuite {
     assert(gauges.get("my-accumulator-2").getValue() == 456)
   }
 
-  test("the double accumulators value propety is checked when the gauge's value is requested") {
+  test("the double accumulators value property is checked when the gauge's value is requested") {
     val acc1 = new DoubleAccumulator()
     acc1.add(123.123)
     val acc2 = new DoubleAccumulator()

@@ -236,7 +236,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   }
 
   test("aggregate") {
-    val pairs = sc.makeRDD(Array(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
+    val pairs = sc.makeRDD(Seq(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
     type StringMap = HashMap[String, Int]
     val emptyMap = new StringMap {
       override def default(key: String): Int = 0
@@ -366,7 +366,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(math.abs(partitions1(1).length - 500) < initialPartitions)
     assert(repartitioned1.collect() === input)
 
-    def testSplitPartitions(input: Seq[Int], initialPartitions: Int, finalPartitions: Int) {
+    def testSplitPartitions(input: Seq[Int], initialPartitions: Int, finalPartitions: Int): Unit = {
       val data = sc.parallelize(input, initialPartitions)
       val repartitioned = data.repartition(finalPartitions)
       assert(repartitioned.partitions.size === finalPartitions)
@@ -1099,7 +1099,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       override def index: Int = 0
     })
     override def getDependencies: Seq[Dependency[_]] = mutableDependencies
-    def addDependency(dep: Dependency[_]) {
+    def addDependency(dep: Dependency[_]): Unit = {
       mutableDependencies += dep
     }
   }

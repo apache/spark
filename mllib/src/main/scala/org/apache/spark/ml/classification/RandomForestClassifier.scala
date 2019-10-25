@@ -25,7 +25,7 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.tree.{RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
+import org.apache.spark.ml.tree.{TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
@@ -136,12 +136,14 @@ class RandomForestClassifier @Since("1.4.0") (
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
 
     instr.logParams(this, labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
-      impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
-      minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
+      leafCol, impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB,
+      minInfoGain, minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds,
+      checkpointInterval)
 
     val trees = RandomForest
       .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
+    trees.foreach(copyValues(_))
 
     val numFeatures = trees.head.numFeatures
     instr.logNumClasses(numClasses)
@@ -208,12 +210,16 @@ class RandomForestClassificationModel private[ml] (
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
-    val predictUDF = udf { (features: Any) =>
-      bcastModel.value.predict(features.asInstanceOf[Vector])
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+
+    val outputData = super.transform(dataset)
+    if ($(leafCol).nonEmpty) {
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))))
+    } else {
+      outputData
     }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
   override protected def predictRaw(features: Vector): Vector = {

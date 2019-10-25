@@ -131,6 +131,8 @@ private[yarn] class YarnAllocator(
 
   // Executor memory in MiB.
   protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
+  // Executor offHeap memory in MiB.
+  protected val executorOffHeapMemory = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf)
   // Additional memory overhead.
   protected val memoryOverhead: Int = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN)).toInt
@@ -149,7 +151,7 @@ private[yarn] class YarnAllocator(
   // Resource capability requested for each executor
   private[yarn] val resource: Resource = {
     val resource = Resource.newInstance(
-      executorMemory + memoryOverhead + pysparkWorkerMemory, executorCores)
+      executorMemory + executorOffHeapMemory + memoryOverhead + pysparkWorkerMemory, executorCores)
     ResourceRequestHelper.setResourceRequests(executorResourceRequests, resource)
     logDebug(s"Created resource capability: $resource")
     resource

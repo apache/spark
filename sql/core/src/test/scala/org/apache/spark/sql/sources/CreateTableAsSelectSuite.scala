@@ -19,21 +19,16 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf.BUCKETING_MAX_BUCKETS
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-class CreateTableAsSelectSuite
-  extends DataSourceTest
-  with SharedSQLContext
-  with BeforeAndAfterEach {
+class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
   import testImplicits._
 
   protected override lazy val sql = spark.sql _

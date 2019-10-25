@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -407,7 +407,7 @@ class DDLParserSuite extends AnalysisTest {
   private def testCreateOrReplaceDdl(
       sqlStatement: String,
       tableSpec: TableSpec,
-      expectedIfNotExists: Boolean) {
+      expectedIfNotExists: Boolean): Unit = {
     val parsedPlan = parsePlan(sqlStatement)
     val newTableToken = sqlStatement.split(" ")(0).trim.toUpperCase(Locale.ROOT)
     parsedPlan match {
@@ -617,6 +617,47 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("describe table column") {
+    comparePlans(parsePlan("DESCRIBE t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("abc.xyz"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE t abc.xyz"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("abc", "xyz"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("a.b", "x.y"), isExtended = false))
+
+    comparePlans(parsePlan("DESCRIBE TABLE t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = true))
+    comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = true))
+
+    val caught = intercept[AnalysisException](
+      parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
+    assert(caught.getMessage.contains(
+        "DESC TABLE COLUMN for a specific partition is not supported"))
+  }
+
+  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
+    comparePlans(parsePlan("describe t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
+    comparePlans(parsePlan("describe table t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
+    comparePlans(parsePlan("describe table extended t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
+    comparePlans(parsePlan("describe table formatted t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
+  }
+
   test("insert table: basic append") {
     Seq(
       "INSERT INTO TABLE testcat.ns1.ns2.tbl SELECT * FROM source",
@@ -721,6 +762,356 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     assert(exc.getMessage.contains("INSERT INTO ... IF NOT EXISTS"))
+  }
+
+  test("delete from table: delete all") {
+    parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
+      DeleteFromStatement(
+        Seq("testcat", "ns1", "ns2", "tbl"),
+        None,
+        None))
+  }
+
+  test("delete from table: with alias and where clause") {
+    parseCompare("DELETE FROM testcat.ns1.ns2.tbl AS t WHERE t.a = 2",
+      DeleteFromStatement(
+        Seq("testcat", "ns1", "ns2", "tbl"),
+        Some("t"),
+        Some(EqualTo(UnresolvedAttribute("t.a"), Literal(2)))))
+  }
+
+  test("delete from table: columns aliases is not allowed") {
+    val exc = intercept[ParseException] {
+      parsePlan("DELETE FROM testcat.ns1.ns2.tbl AS t(a,b,c,d) WHERE d = 2")
+    }
+
+    assert(exc.getMessage.contains("Columns aliases is not allowed in DELETE."))
+  }
+
+  test("update table: basic") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl
+        |SET t.a='Robert', t.b=32
+      """.stripMargin,
+      UpdateTableStatement(
+        Seq("testcat", "ns1", "ns2", "tbl"),
+        None,
+        Seq(Seq("t", "a"), Seq("t", "b")),
+        Seq(Literal("Robert"), Literal(32)),
+        None))
+  }
+
+  test("update table: with alias and where clause") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl AS t
+        |SET t.a='Robert', t.b=32
+        |WHERE t.c=2
+      """.stripMargin,
+      UpdateTableStatement(
+        Seq("testcat", "ns1", "ns2", "tbl"),
+        Some("t"),
+        Seq(Seq("t", "a"), Seq("t", "b")),
+        Seq(Literal("Robert"), Literal(32)),
+        Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
+  }
+
+  test("update table: columns aliases is not allowed") {
+    val exc = intercept[ParseException] {
+      parsePlan(
+        """
+          |UPDATE testcat.ns1.ns2.tbl AS t(a,b,c,d)
+          |SET b='Robert', c=32
+          |WHERE d=2
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("Columns aliases is not allowed in UPDATE."))
+  }
+
+  test("show tables") {
+    comparePlans(
+      parsePlan("SHOW TABLES"),
+      ShowTablesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
+      ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
+  }
+
+  test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
+    val expected = CreateNamespaceStatement(
+      Seq("a", "b", "c"),
+      ifNotExists = true,
+      Map(
+        "a" -> "a",
+        "b" -> "b",
+        "c" -> "c",
+        "comment" -> "namespace_comment",
+        "location" -> "/home/user/db"))
+
+    comparePlans(
+      parsePlan(
+        """
+          |CREATE NAMESPACE IF NOT EXISTS a.b.c
+          |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
+          |COMMENT 'namespace_comment' LOCATION '/home/user/db'
+        """.stripMargin),
+      expected)
+
+    comparePlans(
+      parsePlan(
+        """
+          |CREATE DATABASE IF NOT EXISTS a.b.c
+          |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
+          |COMMENT 'namespace_comment' LOCATION '/home/user/db'
+        """.stripMargin),
+      expected)
+  }
+
+  test("create namespace -- check duplicates") {
+    def createDatabase(duplicateClause: String): String = {
+      s"""
+         |CREATE NAMESPACE IF NOT EXISTS a.b.c
+         |$duplicateClause
+         |$duplicateClause
+      """.stripMargin
+    }
+    val sql1 = createDatabase("COMMENT 'namespace_comment'")
+    val sql2 = createDatabase("LOCATION '/home/user/db'")
+    val sql3 = createDatabase("WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+    val sql4 = createDatabase("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: LOCATION")
+    intercept(sql3, "Found duplicate clauses: WITH PROPERTIES")
+    intercept(sql4, "Found duplicate clauses: WITH DBPROPERTIES")
+  }
+
+  test("create namespace - property values must be set") {
+    assertUnsupported(
+      sql = "CREATE NAMESPACE a.b.c WITH PROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+  }
+
+  test("create namespace -- either PROPERTIES or DBPROPERTIES is allowed") {
+    val sql =
+      s"""
+         |CREATE NAMESPACE IF NOT EXISTS a.b.c
+         |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
+         |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
+      """.stripMargin
+    intercept(sql, "Either PROPERTIES or DBPROPERTIES is allowed")
+  }
+
+  test("create namespace - support for other types in PROPERTIES") {
+    val sql =
+      """
+        |CREATE NAMESPACE a.b.c
+        |LOCATION '/home/user/db'
+        |WITH PROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE)
+      """.stripMargin
+    comparePlans(
+      parsePlan(sql),
+      CreateNamespaceStatement(
+        Seq("a", "b", "c"),
+        ifNotExists = false,
+        Map(
+          "a" -> "1",
+          "b" -> "0.1",
+          "c" -> "true",
+          "location" -> "/home/user/db")))
+  }
+
+  test("show databases: basic") {
+    comparePlans(
+      parsePlan("SHOW DATABASES"),
+      ShowNamespacesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW DATABASES LIKE 'defau*'"),
+      ShowNamespacesStatement(None, Some("defau*")))
+  }
+
+  test("show databases: FROM/IN operator is not allowed") {
+    def verify(sql: String): Unit = {
+      val exc = intercept[ParseException] { parsePlan(sql) }
+      assert(exc.getMessage.contains("FROM/IN operator is not allowed in SHOW DATABASES"))
+    }
+
+    verify("SHOW DATABASES FROM testcat.ns1.ns2")
+    verify("SHOW DATABASES IN testcat.ns1.ns2")
+  }
+
+  test("show namespaces") {
+    comparePlans(
+      parsePlan("SHOW NAMESPACES"),
+      ShowNamespacesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1")), Some("*pattern*")))
+  }
+
+  test("analyze table statistics") {
+    comparePlans(parsePlan("analyze table a.b.c compute statistics"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map.empty, noScan = false))
+    comparePlans(parsePlan("analyze table a.b.c compute statistics noscan"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map.empty, noScan = true))
+    comparePlans(parsePlan("analyze table a.b.c partition (a) compute statistics nOscAn"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("a" -> None), noScan = true))
+
+    // Partitions specified
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS"),
+      AnalyzeTableStatement(
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = false))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan"),
+      AnalyzeTableStatement(
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = true))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09")), noScan = true))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS"),
+      AnalyzeTableStatement(
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = false))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan"),
+      AnalyzeTableStatement(
+        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = true))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr=11) COMPUTE STATISTICS noscan"),
+      AnalyzeTableStatement(
+        Seq("a", "b", "c"), Map("ds" -> None, "hr" -> Some("11")), noScan = true))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> None, "hr" -> None), noScan = false))
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS noscan"),
+      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> None, "hr" -> None), noScan = true))
+
+    intercept("analyze table a.b.c compute statistics xxxx",
+      "Expected `NOSCAN` instead of `xxxx`")
+    intercept("analyze table a.b.c partition (a) compute statistics xxxx",
+      "Expected `NOSCAN` instead of `xxxx`")
+  }
+
+  test("analyze table column statistics") {
+    intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS", "")
+
+    comparePlans(
+      parsePlan("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS key, value"),
+      AnalyzeColumnStatement(Seq("a", "b", "c"), Option(Seq("key", "value")), allColumns = false))
+
+    // Partition specified - should be ignored
+    comparePlans(
+      parsePlan(
+        s"""
+           |ANALYZE TABLE a.b.c PARTITION(ds='2017-06-10')
+           |COMPUTE STATISTICS FOR COLUMNS key, value
+         """.stripMargin),
+      AnalyzeColumnStatement(Seq("a", "b", "c"), Option(Seq("key", "value")), allColumns = false))
+
+    // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
+    comparePlans(
+      parsePlan(
+        s"""
+           |ANALYZE TABLE a.b.c PARTITION(ds='2017-06-10')
+           |COMPUTE STATISTICS FOR ALL COLUMNS
+         """.stripMargin),
+      AnalyzeColumnStatement(Seq("a", "b", "c"), None, allColumns = true))
+
+    intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
+      "mismatched input 'key' expecting <EOF>")
+    intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL",
+      "missing 'COLUMNS' at '<EOF>'")
+  }
+
+  test("MSCK REPAIR TABLE") {
+    comparePlans(
+      parsePlan("MSCK REPAIR TABLE a.b.c"),
+      RepairTableStatement(Seq("a", "b", "c")))
+  }
+
+  test("CACHE TABLE") {
+    comparePlans(
+      parsePlan("CACHE TABLE a.b.c"),
+      CacheTableStatement(Seq("a", "b", "c"), None, false, Map.empty))
+
+    comparePlans(
+      parsePlan("CACHE LAZY TABLE a.b.c"),
+      CacheTableStatement(Seq("a", "b", "c"), None, true, Map.empty))
+
+    comparePlans(
+      parsePlan("CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')"),
+      CacheTableStatement(Seq("a", "b", "c"), None, true, Map("storageLevel" -> "DISK_ONLY")))
+
+    intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
+      "It is not allowed to add catalog/namespace prefix a.b")
+  }
+
+  test("UNCACHE TABLE") {
+    comparePlans(
+      parsePlan("UNCACHE TABLE a.b.c"),
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = false))
+
+    comparePlans(
+      parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = true))
+  }
+
+  test("TRUNCATE table") {
+    comparePlans(
+      parsePlan("TRUNCATE TABLE a.b.c"),
+      TruncateTableStatement(Seq("a", "b", "c"), None))
+
+    comparePlans(
+      parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
+      TruncateTableStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10"))))
+  }
+
+  test("SHOW PARTITIONS") {
+    val sql1 = "SHOW PARTITIONS t1"
+    val sql2 = "SHOW PARTITIONS db1.t1"
+    val sql3 = "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')"
+    val sql4 = "SHOW PARTITIONS a.b.c"
+    val sql5 = "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')"
+
+    val parsed1 = parsePlan(sql1)
+    val expected1 = ShowPartitionsStatement(Seq("t1"), None)
+    val parsed2 = parsePlan(sql2)
+    val expected2 = ShowPartitionsStatement(Seq("db1", "t1"), None)
+    val parsed3 = parsePlan(sql3)
+    val expected3 = ShowPartitionsStatement(Seq("t1"),
+      Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))
+    val parsed4 = parsePlan(sql4)
+    val expected4 = ShowPartitionsStatement(Seq("a", "b", "c"), None)
+    val parsed5 = parsePlan(sql5)
+    val expected5 = ShowPartitionsStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10")))
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
+    comparePlans(parsed5, expected5)
+  }
+
+  test("REFRESH TABLE") {
+    comparePlans(
+      parsePlan("REFRESH TABLE a.b.c"),
+      RefreshTableStatement(Seq("a", "b", "c")))
   }
 
   private case class TableSpec(

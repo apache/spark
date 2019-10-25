@@ -25,25 +25,25 @@ import org.apache.spark.internal.config
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.TransportServer
-import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleClient}
+import org.apache.spark.network.shuffle.{ExternalBlockHandler, ExternalBlockStoreClient}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
 /**
  * This suite creates an external shuffle server and routes all shuffle fetches through it.
  * Note that failures in this suite may arise due to changes in Spark that invalidate expectations
- * set up in `ExternalShuffleBlockHandler`, such as changing the format of shuffle files or how
+ * set up in `ExternalBlockHandler`, such as changing the format of shuffle files or how
  * we hash files into folders.
  */
 class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll with Eventually {
   var server: TransportServer = _
   var transportContext: TransportContext = _
-  var rpcHandler: ExternalShuffleBlockHandler = _
+  var rpcHandler: ExternalBlockHandler = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 2)
-    rpcHandler = new ExternalShuffleBlockHandler(transportConf, null)
+    rpcHandler = new ExternalBlockHandler(transportConf, null)
     transportContext = new TransportContext(transportConf, rpcHandler)
     server = transportContext.createServer()
 
@@ -52,7 +52,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     conf.set(config.SHUFFLE_SERVICE_PORT, server.getPort)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     Utils.tryLogNonFatalError{
       server.close()
     }
@@ -69,7 +69,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
   test("using external shuffle service") {
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
-    sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalShuffleClient])
+    sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
 
     // In a slow machine, one slave may register hundreds of milliseconds ahead of the other one.
     // If we don't wait for all slaves, it's possible that only one executor runs all jobs. Then
@@ -100,7 +100,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     val confWithRddFetchEnabled = conf.clone.set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetchEnabled)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
-    sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalShuffleClient])
+    sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
     try {
       val rdd = sc.parallelize(0 until 100, 2)
         .map { i => (i, 1) }

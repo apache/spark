@@ -90,16 +90,16 @@ CREATE OR REPLACE TEMPORARY VIEW test_agg AS SELECT * FROM VALUES
   (5, null), (5, true), (5, false) AS test_agg(k, v);
 
 -- empty table
-SELECT every(v), some(v), any(v) FROM test_agg WHERE 1 = 0;
+SELECT every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE 1 = 0;
 
 -- all null values
-SELECT every(v), some(v), any(v) FROM test_agg WHERE k = 4;
+SELECT every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE k = 4;
 
 -- aggregates are null Filtering
-SELECT every(v), some(v), any(v) FROM test_agg WHERE k = 5;
+SELECT every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg WHERE k = 5;
 
 -- group by
-SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k;
+SELECT k, every(v), some(v), any(v), bool_and(v), bool_or(v) FROM test_agg GROUP BY k;
 
 -- having
 SELECT k, every(v) FROM test_agg GROUP BY k HAVING every(v) = false;
@@ -137,10 +137,18 @@ SELECT any(1L);
 -- input type checking String
 SELECT every("true");
 
--- every/some/any aggregates are supported as windows expression.
+-- input type checking Decimal
+SELECT bool_and(1.0);
+
+-- input type checking double
+SELECT bool_or(1.0D);
+
+-- every/some/any aggregates/bool_and/bool_or are supported as windows expression.
 SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 SELECT k, v, some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 SELECT k, v, any(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
+SELECT k, v, bool_and(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
+SELECT k, v, bool_or(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 
 -- Having referencing aggregate expressions is ok.
 SELECT count(*) FROM test_agg HAVING count(*) > 1L;

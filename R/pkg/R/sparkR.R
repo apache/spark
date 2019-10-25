@@ -266,11 +266,12 @@ sparkR.sparkContext <- function(
 #' df <- read.json(path)
 #'
 #' sparkR.session("local[2]", "SparkR", "/home/spark")
-#' sparkR.session("yarn-client", "SparkR", "/home/spark",
-#'                list(spark.executor.memory="4g"),
+#' sparkR.session("yarn", "SparkR", "/home/spark",
+#'                list(spark.executor.memory="4g", spark.submit.deployMode="client"),
 #'                c("one.jar", "two.jar", "three.jar"),
 #'                c("com.databricks:spark-avro_2.12:2.0.1"))
-#' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
+#' sparkR.session(spark.master = "yarn", spark.submit.deployMode = "client",
+#                 spark.executor.memory = "4g")
 #'}
 #' @note sparkR.session since 2.0.0
 sparkR.session <- function(

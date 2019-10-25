@@ -18,6 +18,7 @@
 
 import re
 import sys
+import traceback
 import inspect
 from py4j.protocol import Py4JJavaError
 
@@ -60,6 +61,11 @@ def _get_argspec(f):
         # See SPARK-23569.
         argspec = inspect.getfullargspec(f)
     return argspec
+
+
+def print_exec(stream):
+    ei = sys.exc_info()
+    traceback.print_exception(ei[0], ei[1], ei[2], None, stream)
 
 
 class VersionUtils(object):

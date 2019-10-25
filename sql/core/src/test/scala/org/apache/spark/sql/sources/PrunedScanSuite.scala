@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 class PrunedScanSource extends RelationProvider {
@@ -53,7 +53,7 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sparkSession: Spa
   }
 }
 
-class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
+class PrunedScanSuite extends DataSourceTest with SharedSparkSession {
   protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {

@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
+class DataFrameJoinSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("join - join using") {
@@ -98,25 +98,6 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(3, "3", 4) :: Nil)
   }
 
-  test("join - join using self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-
-    // self join
-    checkAnswer(
-      df.join(df, "int"),
-      Row(1, "1", "1") :: Row(2, "2", "2") :: Row(3, "3", "3") :: Nil)
-  }
-
-  test("join - self join") {
-    val df1 = testData.select(testData("key")).as('df1)
-    val df2 = testData.select(testData("key")).as('df2)
-
-    checkAnswer(
-      df1.join(df2, $"df1.key" === $"df2.key"),
-      sql("SELECT a.key, b.key FROM testData a JOIN testData b ON a.key = b.key")
-        .collect().toSeq)
-  }
-
   test("join - cross join") {
     val df1 = Seq((1, "1"), (3, "3")).toDF("int", "str")
     val df2 = Seq((2, "2"), (4, "4")).toDF("int", "str")
@@ -130,38 +111,6 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       df2.crossJoin(df1),
       Row(2, "2", 1, "1") :: Row(2, "2", 3, "3") ::
         Row(4, "4", 1, "1") :: Row(4, "4", 3, "3") :: Nil)
-  }
-
-  test("join - using aliases after self join") {
-    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("x.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-
-    checkAnswer(
-      df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").count(),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-  }
-
-  test("[SPARK-6231] join - self join auto resolve ambiguity") {
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
-    checkAnswer(
-      df.join(df, df("key") === df("key")),
-      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
-
-    checkAnswer(
-      df.join(df.filter($"value" === "2"), df("key") === df("key")),
-      Row(2, "2", 2, "2") :: Nil)
-
-    checkAnswer(
-      df.join(df, df("key") === df("key") && df("value") === 1),
-      Row(1, "1", 1, "1") :: Nil)
-
-    val left = df.groupBy("key").agg(count("*"))
-    val right = df.groupBy("key").agg(sum("key"))
-    checkAnswer(
-      left.join(right, left("key") === right("key")),
-      Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
   }
 
   test("broadcast join hint using broadcast function") {

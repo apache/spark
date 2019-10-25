@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 
 /**
  * Runs the test cases that are included in the hive distribution.
@@ -46,7 +47,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
@@ -59,13 +60,15 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Ensures that cross joins are enabled so that we can test them
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
+    // Ensures that the table insertion behaivor is consistent with Hive
+    TestHive.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, StoreAssignmentPolicy.LEGACY.toString)
     // Fix session local timezone to America/Los_Angeles for those timezone sensitive tests
     // (timestamp_*)
     TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, "America/Los_Angeles")
     RuleExecutor.resetMetrics()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
       TimeZone.setDefault(originalTimeZone)
@@ -597,7 +600,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "correlationoptimizer4",
     "multiMapJoin1",
     "orc_dictionary_threshold",
-    "udf_hash"
+    "udf_hash",
+    // Moved to HiveQuerySuite
+    "udf_radians"
   )
 
   private def commonWhiteList = Seq(
@@ -1057,7 +1062,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_positive",
     "udf_pow",
     "udf_power",
-    "udf_radians",
     "udf_rand",
     "udf_regexp",
     "udf_regexp_extract",
