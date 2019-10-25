@@ -478,16 +478,9 @@ private[ui] class SessionStatsPagedTable(
       <td> {formatDate(session.startTimestamp)} </td>
       <td> {if (session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
       <td sorttable_customkey={session.totalTime.toString}>
-        {formatDurationOption(Some(session.totalTime))} </td>
+        {formatDurationVerbose(session.totalTime)} </td>
       <td> {session.totalExecution.toString} </td>
     </tr>
-  }
-
-  /**
-   * Returns a human-readable string representing a duration such as "5 second 35 ms"
-   */
-  private def formatDurationOption(msOption: Option[Long]): String = {
-    msOption.map(formatDurationVerbose).getOrElse("-")
   }
 }
 
