@@ -1673,4 +1673,56 @@ class JDBCSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-29586 make jdbc method support date/timestamp types in partitionColumn") {
+    val expectedResult = Seq(
+      ("2018-07-06", "2018-07-06 05:50:00.0"),
+      ("2018-07-06", "2018-07-06 08:10:08.0"),
+      ("2018-07-08", "2018-07-08 13:32:01.0"),
+      ("2018-07-12", "2018-07-12 09:51:15.0")
+    ).map { case (date, timestamp) =>
+      Row(Date.valueOf(date), Timestamp.valueOf(timestamp))
+    }
+
+    // DateType partition column
+    val df1 = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.DATETIME",
+      columnName = "d",
+      lowerBound = "2018-07-06",
+      upperBound = "2018-07-20",
+      numPartitions = 3,
+      connectionProperties = new Properties()
+    )
+
+    df1.logicalPlan match {
+      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+        val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+        assert(whereClauses === Set(
+          """"D" < '2018-07-10' or "D" is null""",
+          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
+          """"D" >= '2018-07-14'"""))
+    }
+    checkAnswer(df1, expectedResult)
+
+    // TimestampType partition column
+    val df2 = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.DATETIME",
+      columnName = "t",
+      lowerBound = "2018-07-04 03:30:00.0",
+      upperBound = "2018-07-27 14:11:05.0",
+      numPartitions = 2,
+      connectionProperties = new Properties()
+    )
+
+    df2.logicalPlan match {
+      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+        val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+        assert(whereClauses === Set(
+          """"T" < '2018-07-15 20:50:32.5' or "T" is null""",
+          """"T" >= '2018-07-15 20:50:32.5'"""))
+    }
+    checkAnswer(df2, expectedResult)
+  }
 }
