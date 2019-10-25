@@ -179,18 +179,18 @@ private[ui] class StagePagedTable(
     // stageHeadersAndCssClasses has three parts: header title, tooltip information, and sortable.
     // The tooltip information could be None, which indicates it does not have a tooltip.
     // Otherwise, it has two parts: tooltip text, and position (true for left, false for default).
-    val stageHeadersAndCssClasses: Seq[(String, Option[(String, Boolean)], Boolean)] =
-      Seq(("Stage Id", None, true)) ++
-      {if (isFairScheduler) {Seq(("Pool Name", None, true))} else Seq.empty} ++
+    val stageHeadersAndCssClasses: Seq[(String, String, Boolean)] =
+      Seq(("Stage Id", null, true)) ++
+      {if (isFairScheduler) {Seq(("Pool Name", null, true))} else Seq.empty} ++
       Seq(
-        ("Description", None, true), ("Submitted", None, true), ("Duration", None, true),
-        ("Tasks: Succeeded/Total", None, false),
-        ("Input", Some((ToolTips.INPUT, false)), true),
-        ("Output", Some((ToolTips.OUTPUT, false)), true),
-        ("Shuffle Read", Some((ToolTips.SHUFFLE_READ, false)), true),
-        ("Shuffle Write", Some((ToolTips.SHUFFLE_WRITE, true)), true)
+        ("Description", null, true), ("Submitted", null, true), ("Duration", null, true),
+        ("Tasks: Succeeded/Total", null, false),
+        ("Input", ToolTips.INPUT, true),
+        ("Output", ToolTips.OUTPUT, true),
+        ("Shuffle Read", ToolTips.SHUFFLE_READ, true),
+        ("Shuffle Write", ToolTips.SHUFFLE_WRITE, true)
       ) ++
-      {if (isFailedStage) {Seq(("Failure Reason", None, false))} else Seq.empty}
+      {if (isFailedStage) {Seq(("Failure Reason", null, false))} else Seq.empty}
 
     if (!stageHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
       throw new IllegalArgumentException(s"Unknown column: $sortColumn")
@@ -200,20 +200,15 @@ private[ui] class StagePagedTable(
       stageHeadersAndCssClasses.map { case (header, tooltip, sortable) =>
         val headerSpan = tooltip.map { case (title, left) =>
           if (left) {
-            /* Place the shuffle write tooltip on the left (rather than the default position
+            /* Place the shuffle write tooltip on the auto (rather than the default position
             of on top) because the shuffle write column is the last column on the right side and
             the tooltip is wider than the column, so it doesn't fit on top. */
-            <span data-toggle="tooltip" data-placement="left" title={title}>
+            <span data-toggle="tooltip" data-placement="auto" title={title}>
               {header}
             </span>
-          } else {
-            <span data-toggle="tooltip" title={title}>
-              {header}
-            </span>
-          }
-        }.getOrElse(
+        } else {
           {header}
-        )
+        }
 
         if (header == sortColumn) {
           val headerLink = Unparsed(

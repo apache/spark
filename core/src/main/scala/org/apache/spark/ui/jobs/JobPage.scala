@@ -77,7 +77,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
          |  'start': new Date(${submissionTime}),
          |  'end': new Date(${completionTime}),
          |  'content': '<div class="job-timeline-content" data-toggle="tooltip"' +
-         |   'data-placement="top" data-html="true"' +
+         |   'data-placement="auto" data-html="true"' +
          |   'data-title="${jsEscapedName} (Stage ${stageId}.${attemptId})<br>' +
          |   'Status: ${status.toUpperCase(Locale.ROOT)}<br>' +
          |   'Submitted: ${UIUtils.formatDate(submissionTime)}' +
@@ -104,7 +104,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-toggle="tooltip" data-placement="bottom"' +
+           |    'data-toggle="tooltip" data-placement="auto"' +
            |    'data-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
            |    'data-html="true">Executor ${e.id} added</div>'
@@ -120,7 +120,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-toggle="tooltip" data-placement="auto"' +
              |    'data-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
@@ -164,7 +164,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     <span class="expand-job-timeline">
       <span class="expand-job-timeline-arrow arrow-closed"></span>
-      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="right">
+      <a data-toggle="tooltip" title={ToolTips.STAGE_TIMELINE} data-placement="auto">
         Event Timeline
       </a>
     </span> ++
