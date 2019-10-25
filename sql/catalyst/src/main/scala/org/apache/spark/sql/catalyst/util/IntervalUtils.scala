@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.regex.Pattern
+
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -119,4 +121,198 @@ object IntervalUtils {
       case _: IllegalArgumentException => null
     }
   }
+
+  private val yearMonthPattern = Pattern.compile("^([+|-])?(\\d+)-(\\d+)$")
+
+  private val dayTimePattern = Pattern.compile(
+    "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$")
+
+  def toLongWithRange(fieldName: String, s: String, minValue: Long, maxValue: Long): Long = {
+    var result = 0L
+    if (s != null) {
+      result = java.lang.Long.parseLong(s)
+      if (result < minValue || result > maxValue) {
+        throw new IllegalArgumentException(
+          s"$fieldName $result outside range [$minValue, $maxValue]")
+      }
+    }
+    result
+  }
+
+  /**
+   * Parse YearMonth string in form: [-]YYYY-MM
+   *
+   * adapted from HiveIntervalYearMonth.valueOf
+   */
+  def fromYearMonthString(input: String): CalendarInterval = {
+    if (input == null) throw new IllegalArgumentException("Interval year-month string was null")
+    val s = input.trim
+    val m = yearMonthPattern.matcher(s)
+    if (!m.matches) {
+      throw new IllegalArgumentException(
+        "Interval string does not match year-month format of 'y-m': " + s)
+    }
+
+    try {
+      val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
+      val years = toLongWithRange("year", m.group(2), 0, Integer.MAX_VALUE).toInt
+      val months = toLongWithRange("month", m.group(3), 0, 11).toInt
+      new CalendarInterval(sign * (years * 12 + months), 0)
+    } catch {
+      case e: Exception =>
+        throw new IllegalArgumentException(
+          "Error parsing interval year-month string: " + e.getMessage, e)
+    }
+  }
+
+  /**
+   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
+   *
+   * adapted from HiveIntervalDayTime.valueOf
+   */
+  def fromDayTimeString(s: String): CalendarInterval = {
+    fromDayTimeString(s, "day", "second")
+  }
+
+  /**
+   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
+   *
+   * adapted from HiveIntervalDayTime.valueOf.
+   * Below interval conversion patterns are supported:
+   * - DAY TO (HOUR|MINUTE|SECOND)
+   * - HOUR TO (MINUTE|SECOND)
+   * - MINUTE TO SECOND
+   */
+  def fromDayTimeString(input: String, from: String, to: String): CalendarInterval = {
+    if (input == null) {
+      throw new IllegalArgumentException("Interval day-time string was null")
+    }
+    val s = input.trim
+    val m = dayTimePattern.matcher(s)
+    if (!m.matches) {
+      throw new IllegalArgumentException(
+        "Interval string does not match day-time format of 'd h:m:s.n': " + s)
+    }
+    try {
+      val sign = if (m.group(1) != null && m.group(1) == "-") -1
+      else 1
+      val days = if (m.group(2) == null) 0
+      else toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE)
+      var hours: Long = 0L
+      var minutes: Long = 0L
+      var seconds: Long = 0L
+      if (m.group(5) != null || from == "minute") { // 'HH:mm:ss' or 'mm:ss minute'
+        hours = toLongWithRange("hour", m.group(5), 0, 23)
+        minutes = toLongWithRange("minute", m.group(6), 0, 59)
+        seconds = toLongWithRange("second", m.group(7), 0, 59)
+      }
+      else if (m.group(8) != null) { // 'mm:ss.nn'
+        minutes = toLongWithRange("minute", m.group(6), 0, 59)
+        seconds = toLongWithRange("second", m.group(7), 0, 59)
+      }
+      else { // 'HH:mm'
+        hours = toLongWithRange("hour", m.group(6), 0, 23)
+        minutes = toLongWithRange("second", m.group(7), 0, 59)
+      }
+      // Hive allow nanosecond precision interval
+      val nanoStr = if (m.group(9) == null) null
+      else (m.group(9) + "000000000").substring(0, 9)
+      var nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L)
+      to match {
+        case "hour" =>
+          minutes = 0
+          seconds = 0
+          nanos = 0
+        case "minute" =>
+          seconds = 0
+          nanos = 0
+        case "second" =>
+          // No-op
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Cannot support (interval '$s' $from to $to) expression")
+      }
+      var micros = days * DateTimeUtils.MICROS_PER_DAY
+      micros += hours * MICROS_PER_HOUR
+      micros += minutes * MICROS_PER_MINUTE
+      micros += seconds * DateTimeUtils.MICROS_PER_SECOND
+      micros += nanos / DateTimeUtils.NANOS_PER_MICROS
+      new CalendarInterval(0, sign * micros)
+    } catch {
+      case e: Exception =>
+        throw new IllegalArgumentException(
+          "Error parsing interval day-time string: " + e.getMessage, e)
+    }
+  }
+
+  def fromUnitStrings(units: Array[String], values: Array[String]): CalendarInterval = {
+    assert(units.length == values.length)
+    var months: Int = 0
+    var microseconds: Long = 0
+    var i = 0
+    while (i < units.length) {
+      try {
+        units(i) match {
+          case "year" =>
+            months = Math.addExact(months, Math.multiplyExact(values(i).toInt, 12))
+          case "month" =>
+            months = Math.addExact(months, values(i).toInt)
+          case "week" =>
+            val weeksUs = Math.multiplyExact(values(i).toLong, 7 * DateTimeUtils.MICROS_PER_DAY)
+            microseconds = Math.addExact(microseconds, weeksUs)
+          case "day" =>
+            val daysUs = Math.multiplyExact(values(i).toLong, DateTimeUtils.MICROS_PER_DAY)
+            microseconds = Math.addExact(microseconds, daysUs)
+          case "hour" =>
+            val hoursUs = Math.multiplyExact(values(i).toLong, MICROS_PER_HOUR)
+            microseconds = Math.addExact(microseconds, hoursUs)
+          case "minute" =>
+            val minutesUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MINUTE)
+            microseconds = Math.addExact(microseconds, minutesUs)
+          case "second" =>
+            microseconds = Math.addExact(microseconds, parseSecondNano(values(i)))
+          case "millisecond" =>
+            val millisUs = Math.multiplyExact(values(i).toLong, DateTimeUtils.MICROS_PER_MILLIS)
+            microseconds = Math.addExact(microseconds, millisUs)
+          case "microsecond" =>
+            microseconds = Math.addExact(microseconds, values(i).toLong)
+        }
+      } catch {
+        case e: Exception =>
+          throw new IllegalArgumentException("Error parsing interval string: " + e.getMessage, e)
+      }
+      i += 1
+    }
+    new CalendarInterval(months, microseconds)
+  }
+
+  /**
+   * Parse second_nano string in ss.nnnnnnnnn format to microseconds
+   */
+  def parseSecondNano(secondNano: String): Long = {
+    val parts = secondNano.split("\\.")
+    if (parts.length == 1) {
+      toLongWithRange(
+        "second",
+        parts(0),
+        Long.MinValue / DateTimeUtils.MICROS_PER_SECOND,
+        Long.MaxValue / DateTimeUtils.MICROS_PER_SECOND) * DateTimeUtils.MICROS_PER_SECOND
+    } else if (parts.length == 2) {
+      val seconds = if (parts(0) == "") {
+        0L
+      } else {
+        toLongWithRange(
+          "second",
+          parts(0),
+          Long.MinValue / DateTimeUtils.MICROS_PER_SECOND,
+          Long.MaxValue / DateTimeUtils.MICROS_PER_SECOND)
+      }
+      val nanos = toLongWithRange("nanosecond", parts(1), 0L, 999999999L)
+      seconds * DateTimeUtils.MICROS_PER_SECOND + nanos / 1000L
+    } else {
+      throw new IllegalArgumentException(
+        "Interval string does not match second-nano format of ss.nnnnnnnnn")
+    }
+  }
+
 }
