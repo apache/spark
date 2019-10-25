@@ -39,7 +39,6 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
   private val listener = parent.listener
   private val startTime = Calendar.getInstance().getTime()
-  private val emptyCell = "-"
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -200,21 +199,6 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       </div>
 
     content
-  }
-
-  /**
-   * Returns a human-readable string representing a duration such as "5 second 35 ms"
-   */
-  private def formatDurationOption(msOption: Option[Long]): String = {
-    msOption.map(formatDurationVerbose).getOrElse(emptyCell)
-  }
-
-  /** Generate HTML table from string data */
-  private def listingTable(headers: Seq[String], data: Seq[Seq[String]]) = {
-    def generateDataRow(data: Seq[String]): Seq[Node] = {
-      <tr> {data.map(d => <td>{d}</td>)} </tr>
-    }
-    UIUtils.listingTable(headers, generateDataRow, data, fixedWidth = true)
   }
 }
 
@@ -448,12 +432,8 @@ private[ui] class SessionStatsPagedTable(
     val sessionTableHeaders =
       Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration", "Total Execute")
 
-    val tooltips = Seq[Option[String]](None, None, None, None, None, None, None)
-
-    assert(sessionTableHeaders.length == tooltips.length)
-
     val headerRow: Seq[Node] = {
-      sessionTableHeaders.zip(tooltips).map { case (header, tooltip) =>
+      sessionTableHeaders.map { case header =>
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
@@ -463,21 +443,11 @@ private[ui] class SessionStatsPagedTable(
               s"#$sessionStatsTableTag")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
 
-          if (tooltip.nonEmpty) {
-            <th>
-              <a href={headerLink}>
-                <span data-toggle="tooltip" title={tooltip.get}>
-                  {header}&nbsp;{Unparsed(arrow)}
-                </span>
-              </a>
-            </th>
-          } else {
-            <th>
-              <a href={headerLink}>
-                {header}&nbsp;{Unparsed(arrow)}
-              </a>
-            </th>
-          }
+          <th>
+            <a href={headerLink}>
+              {header}&nbsp;{Unparsed(arrow)}
+            </a>
+          </th>
         } else {
           val headerLink = Unparsed(
             parameterPath +
@@ -485,21 +455,11 @@ private[ui] class SessionStatsPagedTable(
               s"&$sessionStatsTableTag.pageSize=$pageSize" +
               s"#$sessionStatsTableTag")
 
-          if(tooltip.nonEmpty) {
-            <th>
-              <a href={headerLink}>
-                <span data-toggle="tooltip" title={tooltip.get}>
-                  {header}
-                </span>
-              </a>
-            </th>
-          } else {
-            <th>
-              <a href={headerLink}>
-                {header}
-              </a>
-            </th>
-          }
+          <th>
+            <a href={headerLink}>
+              {header}
+            </a>
+          </th>
         }
       }
     }
