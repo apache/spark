@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 
 object Cast {
@@ -466,7 +466,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // IntervalConverter
   private[this] def castToInterval(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => IntervalUtils.safeFromString(s.toString))
+      buildCast[UTF8String](_, s => IntervalUtils.stringToInterval(s).orNull)
   }
 
   // LongConverter
@@ -805,7 +805,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
-    case CalendarIntervalType => castToIntervalCode(from)
+    case CalendarIntervalType => castToIntervalCode(from, ctx)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from, ctx)
     case ShortType => castToShortCode(from, ctx)
@@ -1211,15 +1211,23 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         """
   }
 
-  private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
+  private[this] def castToIntervalCode(
+      from: DataType,
+      ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      val calOpt = ctx.freshVariable("calOpt", classOf[Option[CalendarInterval]])
+
       (c, evPrim, evNull) =>
-        code"""$evPrim = $util.safeFromString($c.toString());
-           if(${evPrim} == null) {
-             ${evNull} = true;
-           }
-         """.stripMargin
+        code"""
+          scala.Option<org.apache.spark.unsafe.types.CalendarInterval> $calOpt =
+            $util.stringToInterval($c);
+          if ($calOpt.isDefined()) {
+            $evPrim = (org.apache.spark.unsafe.types.CalendarInterval) $calOpt.get();
+          } else {
+            $evNull = true;
+          }
+         """
 
   }
 
