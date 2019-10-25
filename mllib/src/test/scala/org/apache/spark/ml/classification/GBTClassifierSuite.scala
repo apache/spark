@@ -55,7 +55,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   private val eps: Double = 1e-5
   private val absEps: Double = 1e-8
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100), 2)
       .map(_.asML)
@@ -454,6 +454,22 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
         i += 1
       }
     }
+  }
+
+  test("tree params") {
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
+    val gbt = new GBTClassifier()
+      .setMaxDepth(2)
+      .setCheckpointInterval(5)
+      .setSeed(123)
+    val model = gbt.fit(df)
+
+    model.trees.foreach (i => {
+      assert(i.getMaxDepth === model.getMaxDepth)
+      assert(i.getCheckpointInterval === model.getCheckpointInterval)
+      assert(i.getSeed === model.getSeed)
+    })
   }
 
   /////////////////////////////////////////////////////////////////////////////

@@ -278,6 +278,13 @@ case class LoadDataCommand(
     val catalog = sparkSession.sessionState.catalog
     val targetTable = catalog.getTableMetadata(table)
     val tableIdentwithDB = targetTable.identifier.quotedString
+    val normalizedSpec = partition.map { spec =>
+      PartitioningUtils.normalizePartitionSpec(
+        spec,
+        targetTable.partitionColumnNames,
+        tableIdentwithDB,
+        sparkSession.sessionState.conf.resolver)
+    }
 
     if (targetTable.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $tableIdentwithDB")
@@ -296,13 +303,6 @@ case class LoadDataCommand(
           s"but number of columns in provided partition spec (${partition.get.size}) " +
           s"do not match number of partitioned columns in table " +
           s"(${targetTable.partitionColumnNames.size})")
-      }
-      partition.get.keys.foreach { colName =>
-        if (!targetTable.partitionColumnNames.contains(colName)) {
-          throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
-            s"but the specified partition spec refers to a column that is not partitioned: " +
-            s"'$colName'")
-        }
       }
     } else {
       if (partition.nonEmpty) {
@@ -353,7 +353,7 @@ case class LoadDataCommand(
       catalog.loadPartition(
         targetTable.identifier,
         loadPath.toString,
-        partition.get,
+        normalizedSpec.get,
         isOverwrite,
         inheritTableSpecs = true,
         isSrcLocal = isLocal)

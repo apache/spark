@@ -89,6 +89,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     ArrayFilter(expr, createLambda(et, cn, f)).bind(validateBinding)
   }
 
+  def filter(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
+    val ArrayType(et, cn) = expr.dataType
+    ArrayFilter(expr, createLambda(et, cn, IntegerType, false, f)).bind(validateBinding)
+  }
+
   def transformKeys(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
     val MapType(kt, vt, vcn) = expr.dataType
     TransformKeys(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
@@ -218,9 +223,11 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     val isEven: Expression => Expression = x => x % 2 === 0
     val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
+    val indexIsEven: (Expression, Expression) => Expression = { case (_, idx) => idx % 2 === 0 }
 
     checkEvaluation(filter(ai0, isEven), Seq(2))
     checkEvaluation(filter(ai0, isNullOrOdd), Seq(1, 3))
+    checkEvaluation(filter(ai0, indexIsEven), Seq(1, 3))
     checkEvaluation(filter(ai1, isEven), Seq.empty)
     checkEvaluation(filter(ai1, isNullOrOdd), Seq(1, null, 3))
     checkEvaluation(filter(ain, isEven), null)
@@ -234,13 +241,17 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val startsWithA: Expression => Expression = x => x.startsWith("a")
 
     checkEvaluation(filter(as0, startsWithA), Seq("a0", "a2"))
+    checkEvaluation(filter(as0, indexIsEven), Seq("a0", "a2"))
     checkEvaluation(filter(as1, startsWithA), Seq("a"))
+    checkEvaluation(filter(as1, indexIsEven), Seq("a", "c"))
     checkEvaluation(filter(asn, startsWithA), null)
 
     val aai = Literal.create(Seq(Seq(1, 2, 3), null, Seq(4, 5)),
       ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
     checkEvaluation(transform(aai, ix => filter(ix, isNullOrOdd)),
       Seq(Seq(1, 3), null, Seq(5)))
+    checkEvaluation(transform(aai, ix => filter(ix, indexIsEven)),
+      Seq(Seq(1, 3), null, Seq(4)))
   }
 
   test("ArrayExists") {

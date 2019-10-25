@@ -74,46 +74,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }.head
   }
 
-  test("create database") {
-    val sql =
-      """
-       |CREATE DATABASE IF NOT EXISTS database_name
-       |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
-       |COMMENT 'database_comment' LOCATION '/home/user/db'
-      """.stripMargin
-    val parsed = parser.parsePlan(sql)
-    val expected = CreateDatabaseCommand(
-      "database_name",
-      ifNotExists = true,
-      Some("/home/user/db"),
-      Some("database_comment"),
-      Map("a" -> "a", "b" -> "b", "c" -> "c"))
-    comparePlans(parsed, expected)
-  }
-
-  test("create database -- check duplicates") {
-    def createDatabase(duplicateClause: String): String = {
-      s"""
-        |CREATE DATABASE IF NOT EXISTS database_name
-        |$duplicateClause
-        |$duplicateClause
-      """.stripMargin
-    }
-    val sql1 = createDatabase("COMMENT 'database_comment'")
-    val sql2 = createDatabase("LOCATION '/home/user/db'")
-    val sql3 = createDatabase("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-
-    intercept(sql1, "Found duplicate clauses: COMMENT")
-    intercept(sql2, "Found duplicate clauses: LOCATION")
-    intercept(sql3, "Found duplicate clauses: WITH DBPROPERTIES")
-  }
-
-  test("create database - property values must be set") {
-    assertUnsupported(
-      sql = "CREATE DATABASE my_db WITH DBPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
-  }
-
   test("drop database") {
     val sql1 = "DROP DATABASE IF EXISTS database_name RESTRICT"
     val sql2 = "DROP DATABASE IF EXISTS database_name CASCADE"
@@ -182,6 +142,15 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assertUnsupported(
       sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
+  }
+
+  test("alter database set location") {
+    // ALTER (DATABASE|SCHEMA) database_name SET LOCATION
+    val sql1 = "ALTER DATABASE database_name SET LOCATION '/home/user/db'"
+    val parsed1 = parser.parsePlan(sql1)
+
+    val expected1 = AlterDatabaseSetLocationCommand("database_name", "/home/user/db")
+    comparePlans(parsed1, expected1)
   }
 
   test("describe database") {
@@ -802,17 +771,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin)
   }
 
-  test("show databases") {
-    val sql1 = "SHOW DATABASES"
-    val sql2 = "SHOW DATABASES LIKE 'defau*'"
-    val parsed1 = parser.parsePlan(sql1)
-    val expected1 = ShowDatabasesCommand(None)
-    val parsed2 = parser.parsePlan(sql2)
-    val expected2 = ShowDatabasesCommand(Some("defau*"))
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
   test("show tblproperties") {
     val parsed1 = parser.parsePlan("SHOW TBLPROPERTIES tab1")
     val expected1 = ShowTablePropertiesCommand(TableIdentifier("tab1", None), None)
@@ -870,45 +828,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
-  }
-
-
-  test("show partitions") {
-    val sql1 = "SHOW PARTITIONS t1"
-    val sql2 = "SHOW PARTITIONS db1.t1"
-    val sql3 = "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val expected1 =
-      ShowPartitionsCommand(TableIdentifier("t1", None), None)
-    val parsed2 = parser.parsePlan(sql2)
-    val expected2 =
-      ShowPartitionsCommand(TableIdentifier("t1", Some("db1")), None)
-    val expected3 =
-      ShowPartitionsCommand(TableIdentifier("t1", None),
-        Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))
-    val parsed3 = parser.parsePlan(sql3)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-  }
-
-  test("support for other types in DBPROPERTIES") {
-    val sql =
-      """
-        |CREATE DATABASE database_name
-        |LOCATION '/home/user/db'
-        |WITH DBPROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE)
-      """.stripMargin
-    val parsed = parser.parsePlan(sql)
-    val expected = CreateDatabaseCommand(
-      "database_name",
-      ifNotExists = false,
-      Some("/home/user/db"),
-      None,
-      Map("a" -> "1", "b" -> "0.1", "c" -> "true"))
-
-    comparePlans(parsed, expected)
   }
 
   test("Test CTAS #1") {
@@ -1444,15 +1363,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
     intercept(sql1, "Found duplicate clauses: COMMENT")
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
-  }
-
-  test("MSCK REPAIR table") {
-    val sql = "MSCK REPAIR TABLE tab1"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRecoverPartitionsCommand(
-      TableIdentifier("tab1", None),
-      "MSCK REPAIR TABLE")
-    comparePlans(parsed, expected)
   }
 
   test("create table like") {

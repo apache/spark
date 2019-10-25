@@ -58,7 +58,7 @@ object BinaryClassification {
       regType: RegType = L2,
       regParam: Double = 0.01) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("BinaryClassification") {

@@ -26,7 +26,7 @@ import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.{Arrays, EnumSet, Properties}
 import java.util.concurrent.{TimeoutException, TimeUnit}
-import java.util.jar.{JarEntry, JarOutputStream}
+import java.util.jar.{JarEntry, JarOutputStream, Manifest}
 import javax.net.ssl._
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
@@ -42,7 +42,6 @@ import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
@@ -98,9 +97,23 @@ private[spark] object TestUtils {
    * Create a jar file that contains this set of files. All files will be located in the specified
    * directory or at the root of the jar.
    */
-  def createJar(files: Seq[File], jarFile: File, directoryPrefix: Option[String] = None): URL = {
+  def createJar(
+      files: Seq[File],
+      jarFile: File,
+      directoryPrefix: Option[String] = None,
+      mainClass: Option[String] = None): URL = {
+    val manifest = mainClass match {
+      case Some(mc) =>
+        val m = new Manifest()
+        m.getMainAttributes.putValue("Manifest-Version", "1.0")
+        m.getMainAttributes.putValue("Main-Class", mc)
+        m
+      case None =>
+        new Manifest()
+    }
+
     val jarFileStream = new FileOutputStream(jarFile)
-    val jarStream = new JarOutputStream(jarFileStream, new java.util.jar.Manifest())
+    val jarStream = new JarOutputStream(jarFileStream, manifest)
 
     for (file <- files) {
       // The `name` for the argument in `JarEntry` should use / for its separator. This is
@@ -235,8 +248,10 @@ private[spark] object TestUtils {
       val sslCtx = SSLContext.getInstance("SSL")
       val trustManager = new X509TrustManager {
         override def getAcceptedIssuers(): Array[X509Certificate] = null
-        override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String) {}
-        override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String) {}
+        override def checkClientTrusted(x509Certificates: Array[X509Certificate],
+            s: String): Unit = {}
+        override def checkServerTrusted(x509Certificates: Array[X509Certificate],
+            s: String): Unit = {}
       }
       val verifier = new HostnameVerifier() {
         override def verify(hostname: String, session: SSLSession): Boolean = true

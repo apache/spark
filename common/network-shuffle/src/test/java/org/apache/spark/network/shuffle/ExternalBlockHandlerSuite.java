@@ -101,11 +101,27 @@ public class ExternalBlockHandlerSuite {
     when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(blockMarkers[1]);
 
     FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
-      "app0", "exec1", 0, new int[] { 0 }, new int[][] {{ 0, 1 }});
+      "app0", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 1 }}, false);
     checkOpenBlocksReceive(fetchShuffleBlocks, blockMarkers);
 
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
+    verifyOpenBlockLatencyMetrics();
+  }
+
+  @Test
+  public void testFetchShuffleBlocksInBatch() {
+    ManagedBuffer[] batchBlockMarkers = {
+      new NioManagedBuffer(ByteBuffer.wrap(new byte[10]))
+    };
+    when(blockResolver.getContinuousBlocksData(
+      "app0", "exec1", 0, 0, 0, 1)).thenReturn(batchBlockMarkers[0]);
+
+    FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
+      "app0", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 1 }}, true);
+    checkOpenBlocksReceive(fetchShuffleBlocks, batchBlockMarkers);
+
+    verify(blockResolver, times(1)).getContinuousBlocksData("app0", "exec1", 0, 0, 0, 1);
     verifyOpenBlockLatencyMetrics();
   }
 
@@ -154,7 +170,7 @@ public class ExternalBlockHandlerSuite {
 
     StreamHandle handle =
       (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
-    assertEquals(2, handle.numChunks);
+    assertEquals(blockMarkers.length, handle.numChunks);
 
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Iterator<ManagedBuffer>> stream = (ArgumentCaptor<Iterator<ManagedBuffer>>)
@@ -162,8 +178,9 @@ public class ExternalBlockHandlerSuite {
     verify(streamManager, times(1)).registerStream(anyString(), stream.capture(),
       any());
     Iterator<ManagedBuffer> buffers = stream.getValue();
-    assertEquals(blockMarkers[0], buffers.next());
-    assertEquals(blockMarkers[1], buffers.next());
+    for (ManagedBuffer blockMarker : blockMarkers) {
+      assertEquals(blockMarker, buffers.next());
+    }
     assertFalse(buffers.hasNext());
   }
 

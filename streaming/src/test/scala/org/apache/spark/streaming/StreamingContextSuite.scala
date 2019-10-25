@@ -437,7 +437,7 @@ class StreamingContextSuite
     // test whether wait exits if context is stopped
     failAfter(10.seconds) { // 10 seconds because spark takes a long time to shutdown
       t = new Thread() {
-        override def run() {
+        override def run(): Unit = {
           Thread.sleep(500)
           ssc.stop()
         }
@@ -504,7 +504,7 @@ class StreamingContextSuite
     // test whether awaitTerminationOrTimeout() return true if context is stopped
     failAfter(10.seconds) { // 10 seconds because spark takes a long time to shutdown
       t = new Thread() {
-        override def run() {
+        override def run(): Unit = {
           Thread.sleep(500)
           ssc.stop()
         }
@@ -922,9 +922,9 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
 
   var receivingThreadOption: Option[Thread] = None
 
-  def onStart() {
+  def onStart(): Unit = {
     val thread = new Thread() {
-      override def run() {
+      override def run(): Unit = {
         logInfo("Receiving started")
         while (!isStopped) {
           store(TestReceiver.counter.getAndIncrement)
@@ -936,7 +936,7 @@ class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging 
     thread.start()
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     // no clean to be done, the receiving thread should stop on it own, so just wait for it.
     receivingThreadOption.foreach(_.join())
   }
@@ -953,9 +953,9 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
   var receivingThreadOption: Option[Thread] = None
   @volatile var receivedAllRecords = false
 
-  def onStart() {
+  def onStart(): Unit = {
     val thread = new Thread() {
-      override def run() {
+      override def run(): Unit = {
         logInfo("Receiving started")
         for(i <- 1 to totalRecords) {
           Thread.sleep(1000 / recordsPerSecond)
@@ -970,7 +970,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
     SlowTestReceiver.initialized = true
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     // Simulate slow receiver by waiting for all records to be produced
     while (!receivedAllRecords) {
       Thread.sleep(100)
@@ -985,7 +985,7 @@ object SlowTestReceiver {
 
 /** Streaming application for testing DStream and RDD creation sites */
 package object testPackage extends Assertions {
-  def test() {
+  def test(): Unit = {
     val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
     val ssc = new StreamingContext(conf, Milliseconds(100))
     try {
@@ -1026,11 +1026,11 @@ package object testPackage extends Assertions {
  * This includes methods to access private methods and fields in StreamingContext and MetricsSystem
  */
 private object StreamingContextSuite extends PrivateMethodTester {
-  private val _sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+  private val _sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
   private def getSources(metricsSystem: MetricsSystem): ArrayBuffer[Source] = {
     metricsSystem.invokePrivate(_sources())
   }
-  private val _streamingSource = PrivateMethod[StreamingSource]('streamingSource)
+  private val _streamingSource = PrivateMethod[StreamingSource](Symbol("streamingSource"))
   private def getStreamingSource(streamingContext: StreamingContext): StreamingSource = {
     streamingContext.invokePrivate(_streamingSource())
   }

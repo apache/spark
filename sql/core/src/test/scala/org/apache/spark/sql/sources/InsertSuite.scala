@@ -634,6 +634,60 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("Throw exceptions on inserting out-of-range int value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b int) using parquet")
+        val outOfRangeValue1 = (Int.MaxValue + 1L).toString
+        var msg = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue1)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue1 to int causes overflow"))
+
+        val outOfRangeValue2 = (Int.MinValue - 1L).toString
+        msg = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue2)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue2 to int causes overflow"))
+      }
+    }
+  }
+
+  test("Throw exceptions on inserting out-of-range long value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b long) using parquet")
+        val outOfRangeValue1 = Math.nextUp(Long.MaxValue)
+        var msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue1}D)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue1 to long causes overflow"))
+
+        val outOfRangeValue2 = Math.nextDown(Long.MinValue)
+        msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue2}D)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue2 to long causes overflow"))
+      }
+    }
+  }
+
+  test("Throw exceptions on inserting out-of-range decimal value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b decimal(3,2)) using parquet")
+        val outOfRangeValue = "123.45"
+        val msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue})")
+        }.getCause.getMessage
+        assert(msg.contains("cannot be represented as Decimal(3, 2)"))
+      }
+    }
+  }
+
   test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
     withTempPath { path =>
       Seq((1, 1), (2, 2)).toDF("i", "part")
@@ -675,7 +729,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       spark.sessionState.catalog.createTable(newTable, false)
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      sql("INSERT INTO TABLE test_table SELECT 2, null")
+      val msg = intercept[AnalysisException] {
+        sql("INSERT INTO TABLE test_table SELECT 2, null")
+      }.getMessage
+      assert(msg.contains("Cannot write nullable values to non-null column 's'"))
     }
   }
 }

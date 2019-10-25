@@ -47,7 +47,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
   private var trainData: RDD[LabeledPoint] = _
   private var validationData: RDD[LabeledPoint] = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100), 2)
       .map(_.asML)
@@ -296,7 +296,21 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-    /////////////////////////////////////////////////////////////////////////////
+  test("tree params") {
+    val gbt = new GBTRegressor()
+      .setMaxDepth(2)
+      .setCheckpointInterval(5)
+      .setSeed(123)
+    val model = gbt.fit(trainData.toDF)
+
+    model.trees.foreach (i => {
+      assert(i.getMaxDepth === model.getMaxDepth)
+      assert(i.getCheckpointInterval === model.getCheckpointInterval)
+      assert(i.getSeed === model.getSeed)
+    })
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
