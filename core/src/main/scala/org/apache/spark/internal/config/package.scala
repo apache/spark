@@ -804,7 +804,7 @@ package object config {
       .doc("Expire time in minutes for caching preferred locations of checkpointed RDD." +
         "Caching preferred locations can relieve query loading to DFS and save the query " +
         "time. The drawback is that the cached locations can be possibly outdated and " +
-        "lose data locality. If this config is not specified or is 0, it will not cache.")
+        "lose data locality. If this config is not specified, it will not cache.")
       .timeConf(TimeUnit.MINUTES)
       .checkValue(_ > 0, "The expire time for caching preferred locations cannot be non-positive.")
       .createOptional
