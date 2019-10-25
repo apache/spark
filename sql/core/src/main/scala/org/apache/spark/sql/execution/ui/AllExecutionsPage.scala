@@ -39,7 +39,6 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     val running = new mutable.ArrayBuffer[SQLExecutionUIData]()
     val completed = new mutable.ArrayBuffer[SQLExecutionUIData]()
     val failed = new mutable.ArrayBuffer[SQLExecutionUIData]()
-
     sqlStore.executionsList().foreach { e =>
       val isRunning = e.completionTime.isEmpty ||
         e.jobs.exists { case (_, status) => status == JobExecutionStatus.RUNNING }
