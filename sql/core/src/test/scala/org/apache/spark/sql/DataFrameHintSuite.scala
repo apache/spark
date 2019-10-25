@@ -74,23 +74,11 @@ class DataFrameHintSuite extends AnalysisTest with SharedSQLContext {
       UnresolvedHint("REPARTITION", Seq(10, $"id".expr), df.logicalPlan))
 
     check(
-      df.hint("REPARTITION", $"id"),
-      UnresolvedHint("REPARTITION", Seq($"id".expr), df.logicalPlan))
+      df.hint("REPARTITION_BY_RANGE", $"id".expr),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq($"id".expr), df.logicalPlan))
 
     check(
-      df.hint("REPARTITIONBYRANGE", 10, $"id"),
-      UnresolvedHint("REPARTITIONBYRANGE", Seq(10, $"id".expr), df.logicalPlan))
-
-    check(
-      df.hint("REPARTITIONBYRANGE", $"id"),
-      UnresolvedHint("REPARTITIONBYRANGE", Seq($"id".expr), df.logicalPlan))
-
-    check(
-      df.hint("REPARTITIONBYRANGE", 10, $"id".expr),
-      UnresolvedHint("REPARTITIONBYRANGE", Seq(10, $"id".expr), df.logicalPlan))
-
-    check(
-      df.hint("REPARTITIONBYRANGE", 10, $"id"),
-      UnresolvedHint("REPARTITIONBYRANGE", Seq(10, $"id".expr), df.logicalPlan))
+      df.hint("REPARTITION_BY_RANGE", 10, $"id".expr),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(10, $"id".expr), df.logicalPlan))
   }
 }

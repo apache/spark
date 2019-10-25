@@ -137,7 +137,7 @@ object ResolveHints {
   }
 
   /**
-   * COALESCE Hint accepts names "COALESCE", "REPARTITION", and "REPARTITIONBYRANGE".
+   * COALESCE Hint accepts names "COALESCE", "REPARTITION", and "REPARTITION_BY_RANGE".
    */
   class ResolveCoalesceHints(conf: SQLConf) extends Rule[LogicalPlan] {
 
@@ -180,8 +180,8 @@ object ResolveHints {
     }
 
     /**
-     * This function handles hints for "REPARTITIONBYRANGE".
-     * The "REPARTITIONBYRANGE" hint must have column names and a partition number is optional.
+     * This function handles hints for "REPARTITION_BY_RANGE".
+     * The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional.
      */
     private def createRepartitionByRange(hint: UnresolvedHint): RepartitionByExpression = {
       val hintName = hint.name.toUpperCase(Locale.ROOT)
@@ -216,7 +216,7 @@ object ResolveHints {
             createRepartition(shuffle = true, hint)
           case "COALESCE" =>
             createRepartition(shuffle = false, hint)
-          case "REPARTITIONBYRANGE" =>
+          case "REPARTITION_BY_RANGE" =>
             createRepartitionByRange(hint)
           case _ => plan
         }
@@ -224,7 +224,7 @@ object ResolveHints {
   }
 
   object ResolveCoalesceHints {
-    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITIONBYRANGE")
+    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE")
   }
 
   /**

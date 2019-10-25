@@ -663,13 +663,13 @@ class PlanParserSuite extends AnalysisTest {
               table("t").select(star()))))))
 
     comparePlans(
-      parsePlan("SELECT /*+ REPARTITIONBYRANGE(c) */ * FROM t"),
-      UnresolvedHint("REPARTITIONBYRANGE", Seq(UnresolvedAttribute("c")),
+      parsePlan("SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t"),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("c")),
         table("t").select(star())))
 
     comparePlans(
-      parsePlan("SELECT /*+ REPARTITIONBYRANGE(100, c) */ * FROM t"),
-      UnresolvedHint("REPARTITIONBYRANGE", Seq(Literal(100), UnresolvedAttribute("c")),
+      parsePlan("SELECT /*+ REPARTITION_BY_RANGE(100, c) */ * FROM t"),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(Literal(100), UnresolvedAttribute("c")),
         table("t").select(star())))
   }
 

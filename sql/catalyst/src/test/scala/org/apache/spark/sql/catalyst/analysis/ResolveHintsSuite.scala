@@ -178,13 +178,13 @@ class ResolveHintsSuite extends AnalysisTest {
 
     checkAnalysis(
       UnresolvedHint(
-        "REPARTITIONBYRANGE", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
+        "REPARTITION_BY_RANGE", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
         Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10))
 
     checkAnalysis(
       UnresolvedHint(
-        "REPARTITIONBYRANGE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+        "REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
         Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
         testRelation, conf.numShufflePartitions))
@@ -201,22 +201,22 @@ class ResolveHintsSuite extends AnalysisTest {
         table("TaBlE")),
       Seq(errMsg2))
 
-    val errMsg3 = "REPARTITIONBYRANGE Hint parameter should include columns, but"
+    val errMsg3 = "REPARTITION_BY_RANGE Hint parameter should include columns, but"
 
     assertAnalysisError(
-      UnresolvedHint("REPARTITIONBYRANGE",
+      UnresolvedHint("REPARTITION_BY_RANGE",
         Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
         table("TaBlE")),
       Seq(errMsg3))
 
     assertAnalysisError(
-      UnresolvedHint("REPARTITIONBYRANGE",
+      UnresolvedHint("REPARTITION_BY_RANGE",
         Seq(Literal(10), Literal(10)),
         table("TaBlE")),
       Seq(errMsg3))
 
     assertAnalysisError(
-      UnresolvedHint("REPARTITIONBYRANGE",
+      UnresolvedHint("REPARTITION_BY_RANGE",
         Seq(Literal(10), Literal(10), UnresolvedAttribute("a")),
         table("TaBlE")),
       Seq(errMsg3))

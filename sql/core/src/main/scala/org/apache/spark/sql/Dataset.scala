@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
-import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -1308,16 +1307,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def hint(name: String, parameters: Any*): Dataset[T] = withTypedPlan {
-    if (ResolveHints.ResolveCoalesceHints.COALESCE_HINT_NAMES.contains(
-      name.toUpperCase(Locale.ROOT))) {
-      val newParameters = parameters.map {
-        case Column(expr) => expr
-        case other => other
-      }
-      UnresolvedHint(name, newParameters, logicalPlan)
-    } else {
-      UnresolvedHint(name, parameters, logicalPlan)
-    }
+    UnresolvedHint(name, parameters, logicalPlan)
   }
 
   /**
