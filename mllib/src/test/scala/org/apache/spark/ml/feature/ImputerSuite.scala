@@ -468,8 +468,11 @@ object ImputerSuite {
     }
   }
 
-  def verifyTransformResult(strategy: String, inputCol: String, outputCol: String,
-                            resultDF: DataFrame): Unit = {
+  def verifyTransformResult(
+      strategy: String,
+      inputCol: String,
+      outputCol: String,
+      resultDF: DataFrame): Unit = {
     // check dataType is consistent between input and output
     val inputType = resultDF.schema(inputCol).dataType
     val outputType = resultDF.schema(outputCol).dataType
