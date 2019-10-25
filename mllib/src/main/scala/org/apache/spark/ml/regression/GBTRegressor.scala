@@ -24,7 +24,6 @@ import org.json4s.JsonDSL._
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -34,7 +33,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 /**
@@ -77,6 +76,10 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   /** @group setParam */
   @Since("1.4.0")
   def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setMinWeightFractionPerNode(value: Double): this.type = set(minWeightFractionPerNode, value)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -151,29 +154,35 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     set(validationIndicatorCol, value)
   }
 
-  override protected def train(dataset: Dataset[_]): GBTRegressionModel = instrumented { instr =>
-    val categoricalFeatures: Map[Int, Int] =
-      MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+  /**
+   * Sets the value of param [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
+   * By default the weightCol is not set, so all instances have weight 1.0.
+   *
+   * @group setParam
+   */
+  @Since("3.0.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  override protected def train(dataset: Dataset[_]): GBTRegressionModel = instrumented { instr =>
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
 
     val (trainDataset, validationDataset) = if (withValidation) {
-      (
-        extractLabeledPoints(dataset.filter(not(col($(validationIndicatorCol))))),
-        extractLabeledPoints(dataset.filter(col($(validationIndicatorCol))))
-      )
+      (extractInstances(dataset.filter(not(col($(validationIndicatorCol))))),
+        extractInstances(dataset.filter(col($(validationIndicatorCol)))))
     } else {
-      (extractLabeledPoints(dataset), null)
+      (extractInstances(dataset), null)
     }
-    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, labelCol, featuresCol, predictionCol, leafCol, impurity, lossType,
-      maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
-      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy,
-      validationIndicatorCol, validationTol)
+    instr.logParams(this, labelCol, featuresCol, predictionCol, leafCol, weightCol, impurity,
+      lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
+      minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval,
+      featureSubsetStrategy, validationIndicatorCol, validationTol)
 
+    val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
         $(seed), $(featureSubsetStrategy))
@@ -323,9 +332,7 @@ class GBTRegressionModel private[ml](
    */
   @Since("2.4.0")
   def evaluateEachIteration(dataset: Dataset[_], loss: String): Array[Double] = {
-    val data = dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-      case Row(label: Double, features: Vector) => LabeledPoint(label, features)
-    }
+    val data = extractInstances(dataset)
     GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights,
       convertToOldLossType(loss), OldAlgo.Regression)
   }
@@ -368,10 +375,9 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 
-      val trees: Array[DecisionTreeRegressionModel] = treesData.map {
+      val trees = treesData.map {
         case (treeMetadata, root) =>
-          val tree =
-            new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
+          val tree = new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
           treeMetadata.getAndSetParams(tree)
           tree
       }
