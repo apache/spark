@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CacheTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowPartitionsCommand, ShowTablesCommand, TruncateTableCommand, UncacheTableCommand}
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CacheTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowCreateTableCommand, ShowPartitionsCommand, ShowTablesCommand, TruncateTableCommand, UncacheTableCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
@@ -298,6 +298,10 @@ class ResolveSessionCatalog(
       AlterTableRecoverPartitionsCommand(
         v1TableName.asTableIdentifier,
         "MSCK REPAIR TABLE")
+
+    case ShowCreateTableStatement(tableName) =>
+      val v1TableName = parseV1Table(tableName, "SHOW CREATE TABLE")
+      ShowCreateTableCommand(v1TableName.asTableIdentifier)
 
     case CacheTableStatement(tableName, plan, isLazy, options) =>
       val v1TableName = parseV1Table(tableName, "CACHE TABLE")
