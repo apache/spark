@@ -107,7 +107,6 @@ class SymmetricHashJoinStateManager(
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
       if (predicate(joinedRow)) {
         if (!keyIdxToValue.matched) {
-          // only update when matched flag is false
           keyWithIndexToValue.put(key, keyIdxToValue.valueIndex, keyIdxToValue.value,
             matched = true)
         }
@@ -134,7 +133,7 @@ class SymmetricHashJoinStateManager(
       private val allKeyToNumValues = keyToNumValues.iterator
 
       private var currentKeyToNumValue: KeyAndNumValues = null
-      private var currentValues: Iterator[KeyWithIndexAndValueWithMatched] = null
+      private var currentValues: Iterator[KeyWithIndexAndValue] = null
 
       private def currentKey = currentKeyToNumValue.key
 
@@ -412,7 +411,7 @@ class SymmetricHashJoinStateManager(
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
    */
-  private class KeyWithIndexAndValueWithMatched(
+  private class KeyWithIndexAndValue(
     var key: UnsafeRow = null,
     var valueIndex: Long = -1,
     var value: UnsafeRow = null,
@@ -520,11 +519,11 @@ class SymmetricHashJoinStateManager(
      * Get all values and indices for the provided key.
      * Should not return null.
      */
-    def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValueWithMatched] = {
-      val keyWithIndexAndValueWithMatched = new KeyWithIndexAndValueWithMatched()
+    def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
+      val keyWithIndexAndValueWithMatched = new KeyWithIndexAndValue()
       var index = 0
-      new NextIterator[KeyWithIndexAndValueWithMatched] {
-        override protected def getNext(): KeyWithIndexAndValueWithMatched = {
+      new NextIterator[KeyWithIndexAndValue] {
+        override protected def getNext(): KeyWithIndexAndValue = {
           if (index >= numValues) {
             finished = true
             null
@@ -565,8 +564,8 @@ class SymmetricHashJoinStateManager(
       }
     }
 
-    def iterator: Iterator[KeyWithIndexAndValueWithMatched] = {
-      val keyWithIndexAndValueWithMatched = new KeyWithIndexAndValueWithMatched()
+    def iterator: Iterator[KeyWithIndexAndValue] = {
+      val keyWithIndexAndValueWithMatched = new KeyWithIndexAndValue()
       stateStore.getRange(None, None).map { pair =>
         val (value, matched) = valueRowConverter.convertValue(pair.value)
         keyWithIndexAndValueWithMatched.withNew(

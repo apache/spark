@@ -299,7 +299,7 @@ case class StreamingSymmetricHashJoinExec(
             case 1 => matchesWithRightSideState(
               new UnsafeRowPair(kvAndMatched.key, kvAndMatched.value))
             case 2 => kvAndMatched.matched
-            case _ => throw new IllegalStateException("Incorrect state format version! " +
+            case _ => throw new IllegalStateException("Unexpected state format version! " +
               s"version $stateFormatVersion")
           }
         }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
@@ -318,7 +318,7 @@ case class StreamingSymmetricHashJoinExec(
             case 1 => matchesWithLeftSideState(
               new UnsafeRowPair(kvAndMatched.key, kvAndMatched.value))
             case 2 => kvAndMatched.matched
-            case _ => throw new IllegalStateException("Incorrect state format version! " +
+            case _ => throw new IllegalStateException("Unexpected state format version! " +
               s"version $stateFormatVersion")
           }
         }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
@@ -491,15 +491,7 @@ case class StreamingSymmetricHashJoinExec(
         thisRow: UnsafeRow,
         subIter: Iterator[JoinedRow])
       extends CompletionIterator[JoinedRow, Iterator[JoinedRow]](subIter) {
-      private var iteratorNotEmpty: Boolean = false
-
-      override def hasNext: Boolean = {
-        val ret = super.hasNext
-        if (ret && !iteratorNotEmpty) {
-          iteratorNotEmpty = true
-        }
-        ret
-      }
+      private val iteratorNotEmpty: Boolean = super.hasNext
 
       override def completion(): Unit = {
         val shouldAddToState = // add only if both removal predicates do not match

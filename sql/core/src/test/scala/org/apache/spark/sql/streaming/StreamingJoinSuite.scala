@@ -800,8 +800,8 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
         expr("leftId = rightId AND leftTime >= rightTime AND " +
           "leftTime <= rightTime + interval 5 seconds"),
         joinType = "rightOuter")
-      .select(col("rightId"), col("rightTime").cast("int"),
-        col("leftId"), col("leftTime").cast("int"))
+      .select(col("leftId"), col("leftTime").cast("int"),
+        col("rightId"), col("rightTime").cast("int"))
 
     // we can just flip left and right in the explanation of left outer query test
     // to assume the status of right outer query, hence skip explaining here
@@ -817,7 +817,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       AddData(inputStream, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
       CheckNewAnswer(
         Row(12, 12L, 12, 12L), Row(14, 14L, 14, 14L),
-        Row(1, 1L, null, null), Row(3, 3L, null, null)),
+        Row(null, null, 1, 1L), Row(null, null, 3, 3L)),
       assertNumStateRows(15, 7)
     )
   }
