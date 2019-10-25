@@ -20,6 +20,7 @@ package org.apache.spark.ui.storage
 import javax.servlet.http.HttpServletRequest
 
 import org.mockito.Mockito._
+import scala.xml.{Node, Text}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.StreamBlockData
@@ -74,7 +75,20 @@ class StoragePageSuite extends SparkFunSuite {
       "Fraction Cached",
       "Size in Memory",
       "Size on Disk")
-    assert((xmlNodes \\ "th").map(_.text) === headers)
+
+    val headerRow: Seq[Node] = {
+      headers.view.zipWithIndex.map { x =>
+        storagePage.tooltips(x._2) match {
+          case Some(tooltip) =>
+            <th width={""} class={""}>
+              <span data-toggle="tooltip" title={tooltip}>
+                {Text(x._1)}
+              </span>
+            </th>
+        }
+      }.toList
+    }
+    assert((xmlNodes \\ "th").map(_.text) === headerRow.map(_.text))
 
     assert((xmlNodes \\ "tr").size === 3)
     assert(((xmlNodes \\ "tr")(0) \\ "td").map(_.text.trim) ===

@@ -75,7 +75,7 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
     "Size on Disk")
 
   /** Tooltips for header fields of the RDD table */
-  private val tooltips = Seq(
+  val tooltips = Seq(
     Some(ID),
     Some(RDD_NAME),
     Some(STORAGE_LEVEL),
