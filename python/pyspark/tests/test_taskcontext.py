@@ -25,6 +25,9 @@ import unittest
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
 from pyspark.testing.utils import PySparkTestCase, SPARK_HOME
 
+if sys.version_info[0] >= 3:
+    xrange = range
+
 
 class TaskContextTests(PySparkTestCase):
 
@@ -227,9 +230,9 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
     def test_task_context_correct_with_python_worker_reuse(self):
         """Verify the task context correct when reused python worker"""
         # start a normal job first to start all workers and get all worker pids
-        worker_pids = self.sc.parallelize(range(2), 2).map(lambda x: os.getpid()).collect()
+        worker_pids = self.sc.parallelize(xrange(2), 2).map(lambda x: os.getpid()).collect()
         # the worker will reuse in this barrier job
-        rdd = self.sc.parallelize(range(10), 2)
+        rdd = self.sc.parallelize(xrange(10), 2)
 
         def context(iterator):
             tp = TaskContext.get().partitionId()
