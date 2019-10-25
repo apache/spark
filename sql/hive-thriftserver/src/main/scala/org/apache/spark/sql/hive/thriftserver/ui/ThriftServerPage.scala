@@ -393,7 +393,6 @@ private[ui] class SqlStatsPagedTable(
 
     override def sliceData(from: Int, to: Int): Seq[SqlStatsTableRow] = {
       val r = data.slice(from, to)
-      r.map(x => x)
       _slicedStartTime = r.map(_.executionInfo.startTimestamp).toSet
       r
     }
