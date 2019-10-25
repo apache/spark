@@ -529,37 +529,6 @@ private[ui] class SessionStatsPagedTable(
   private def formatDurationOption(msOption: Option[Long]): String = {
     msOption.map(formatDurationVerbose).getOrElse("-")
   }
-
-  private def errorMessageCell(errorMessage: String): Seq[Node] = {
-    val isMultiline = errorMessage.indexOf('\n') >= 0
-    val errorSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        errorMessage.substring(0, errorMessage.indexOf('\n'))
-      } else {
-        errorMessage
-      })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        + details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>
-            {errorMessage}
-          </pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
-    <td>
-      {errorSummary}{details}
-    </td>
-  }
-
-  private def jobURL(request: HttpServletRequest, jobId: String): String =
-    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
 }
 
   private[ui] class SqlStatsTableRow(
@@ -585,7 +554,6 @@ private[ui] class SessionStatsPagedTable(
 
     override def sliceData(from: Int, to: Int): Seq[SqlStatsTableRow] = {
       val r = data.slice(from, to)
-      r.map(x => x)
       _slicedStartTime = r.map(_.executionInfo.startTimestamp).toSet
       r
     }
@@ -643,7 +611,6 @@ private[ui] class SessionStatsPagedTable(
 
     override def sliceData(from: Int, to: Int): Seq[SessionInfo] = {
       val r = data.slice(from, to)
-      r.map(x => x)
       _slicedStartTime = r.map(_.startTimestamp).toSet
       r
     }
