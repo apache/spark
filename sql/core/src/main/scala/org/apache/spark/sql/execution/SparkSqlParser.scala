@@ -324,18 +324,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[DropDatabaseCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   DROP (DATABASE|SCHEMA) [IF EXISTS] database [RESTRICT|CASCADE];
-   * }}}
-   */
-  override def visitDropDatabase(ctx: DropDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DropDatabaseCommand(ctx.db.getText, ctx.EXISTS != null, ctx.CASCADE != null)
-  }
-
-  /**
    * Create a [[DescribeDatabaseCommand]] command.
    *
    * For example:

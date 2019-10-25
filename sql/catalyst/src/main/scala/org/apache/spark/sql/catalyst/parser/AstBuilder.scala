@@ -2376,6 +2376,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[DropNamespaceStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   DROP (DATABASE|SCHEMA|NAMESPACE) [IF EXISTS] ns1.ns2 [RESTRICT|CASCADE];
+   * }}}
+   */
+  override def visitDropNamespace(ctx: DropNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    DropNamespaceStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.EXISTS != null,
+      ctx.CASCADE != null)
+  }
+
+  /**
    * Create a [[ShowNamespacesStatement]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
