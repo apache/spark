@@ -61,7 +61,7 @@ function setupTooltipForSparkPlanNode(nodeId) {
     .on('mouseover', function(d) {
       var domNode = d3.select(this).node();
       $(domNode).tooltip({
-        title: nodeTooltip, trigger: "manual", container: "body", placement: "right"
+        title: nodeTooltip, trigger: "manual", container: "body", placement: "top"
       });
       $(domNode).tooltip("show");
     })
