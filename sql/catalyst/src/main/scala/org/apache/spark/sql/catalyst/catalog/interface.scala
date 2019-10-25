@@ -611,8 +611,7 @@ case class HiveTableRelation(
     dataCols: Seq[AttributeReference],
     partitionCols: Seq[AttributeReference],
     tableStats: Option[Statistics] = None,
-    @transient normalizedFilters: Seq[Expression] = Nil,
-    @transient prunedPartitions: Seq[CatalogTablePartition] = Nil)
+    @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
   extends LeafNode with MultiInstanceRelation {
   assert(tableMeta.identifier.database.isDefined)
   assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
@@ -634,8 +633,6 @@ case class HiveTableRelation(
     partitionCols = partitionCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index + dataCols.length))
     },
-    normalizedFilters = Nil,
-    prunedPartitions = Nil
   )
 
   override def computeStats(): Statistics = {

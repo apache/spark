@@ -27,7 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project, ScriptTransformation, Statistics}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CommandUtils, CreateTableCommand, DDLUtils}
@@ -238,8 +238,8 @@ case class RelationConversions(
 case class PruneHiveTablePartitions(
   session: SparkSession) extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case filter @ Filter(condition, relation: HiveTableRelation) if relation.isPartitioned =>
-      val predicates = splitConjunctivePredicates(condition)
+    case op @ PhysicalOperation(projections, predicates, relation: HiveTableRelation)
+      if predicates.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
       val normalizedFilters = predicates.map { e =>
         e transform {
           case a: AttributeReference =>
@@ -247,14 +247,13 @@ case class PruneHiveTablePartitions(
         }
       }
       val partitionSet = AttributeSet(relation.partitionCols)
-      // SPARK-24085: remove scalar subquery in partition expression then get normalized predicates
-      val pruningPredicates = normalizedFilters
-        .filterNot(SubqueryExpression.hasSubquery)
-        .filter { predicate =>
-          !predicate.references.isEmpty && predicate.references.subsetOf(partitionSet)
-        }
+      val pruningPredicates = normalizedFilters.filter { predicate =>
+        !predicate.references.isEmpty && predicate.references.subsetOf(partitionSet)
+      }
+      // SPARK-24085: scalar subquery should be skipped for partition pruning
+      val hasScalarSubquery = pruningPredicates.exists(SubqueryExpression.hasSubquery)
       val conf = session.sessionState.conf
-      if (conf.metastorePartitionPruning && pruningPredicates.nonEmpty) {
+      if (conf.metastorePartitionPruning && pruningPredicates.nonEmpty && !hasScalarSubquery) {
         val prunedPartitions = session.sharedState.externalCatalog.listPartitionsByFilter(
           relation.tableMeta.database,
           relation.tableMeta.identifier.table,
@@ -284,12 +283,13 @@ case class PruneHiveTablePartitions(
         }
         val withStats = relation.tableMeta.copy(
           stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-        val prunedHiveTableRelation = relation.copy(tableMeta = withStats,
-          normalizedFilters = pruningPredicates, prunedPartitions = prunedPartitions)
+        val prunedHiveTableRelation =
+          relation.copy(tableMeta = withStats, prunedPartitions = Some(prunedPartitions))
         val filterExpression = predicates.reduceLeft(And)
-        Filter(filterExpression, prunedHiveTableRelation)
+        val filter = Filter(filterExpression, prunedHiveTableRelation)
+        Project(projections, filter)
       } else {
-        filter
+        op
       }
   }
 }

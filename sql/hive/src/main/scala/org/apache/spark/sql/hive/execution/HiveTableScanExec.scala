@@ -171,15 +171,9 @@ case class HiveTableScanExec(
         val normalizedFilters = partitionPruningPred.map(_.transform {
           case a: AttributeReference => originalAttributes(a)
         })
-        val isFiltersEqual = normalizedFilters.zip(relation.normalizedFilters)
-          .forall { case (e1, e2) => e1.semanticEquals(e2) }
-        if (isFiltersEqual) {
-          relation.prunedPartitions
-        } else {
+        relation.prunedPartitions.getOrElse(
           sparkSession.sessionState.catalog.listPartitionsByFilter(
-            relation.tableMeta.identifier,
-            normalizedFilters)
-        }
+            relation.tableMeta.identifier, normalizedFilters))
       } else {
         sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
       }
