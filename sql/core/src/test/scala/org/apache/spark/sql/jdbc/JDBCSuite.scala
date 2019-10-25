@@ -515,15 +515,8 @@ class JDBCSuite extends QueryTest
     checkNumPartitions(df, expectedNumPartitions = 3)
     assert(df.collect().length === 4)
 
-    val df2 = spark.read.jdbc(
-      urlWithUserAndPass,
-      "TEST.EMP",
-      "THEID",
-      "0",
-      "4",
-      3,
-      new Properties()
-    )
+    val df2 =
+      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", "0", "4", 3, new Properties())
     checkNumPartitions(df2, expectedNumPartitions = 3)
     assert(df2.collect().length === 4)
 
