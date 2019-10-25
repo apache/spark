@@ -131,7 +131,7 @@ Bucket Columns      	[`a`]
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
 Table Properties    	[t=test, e=3]       	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
 
@@ -163,7 +163,7 @@ Bucket Columns      	[`a`]
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
 Table Properties    	[t=test, e=3]       	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
 
@@ -203,7 +203,7 @@ Bucket Columns      	[`a`]
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
 Table Properties    	[t=test]            	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
 
@@ -242,7 +242,7 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Table Properties    	[t=test]            	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
 
@@ -280,7 +280,7 @@ d                   	string
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
-Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
+Location [not included in comparison]/{warehouse_dir}/t/c=Us/d=1	                    
 Storage Properties  	[a=1, b=2]          	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
@@ -289,7 +289,7 @@ Last Access [not included in comparison]
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]
 
 
@@ -311,7 +311,7 @@ d                   	string
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
-Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
+Location [not included in comparison]/{warehouse_dir}/t/c=Us/d=1	                    
 Storage Properties  	[a=1, b=2]          	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
@@ -320,7 +320,7 @@ Last Access [not included in comparison]
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
-Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]
 
 

@@ -282,6 +282,10 @@ abstract class Expression extends TreeNode[Expression] {
     val childrenSQL = children.map(_.sql).mkString(", ")
     s"$prettyName($childrenSQL)"
   }
+
+  override def simpleStringWithNodeId(): String = {
+    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+  }
 }
 
 

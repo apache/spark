@@ -360,8 +360,8 @@ class DataFrameReader(OptionUtils):
                      or RDD of Strings storing CSV rows.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets a single character as a separator for each field and value.
-                    If None is set, it uses the default value, ``,``.
+        :param sep: sets a separator (one or more characters) for each field and value. If None is
+                    set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
                          it uses the default value, ``UTF-8``.
         :param quote: sets a single character used for escaping quoted values where the
@@ -533,7 +533,8 @@ class DataFrameReader(OptionUtils):
 
         :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
         :param table: the name of the table
-        :param column: the name of an integer column that will be used for partitioning;
+        :param column: the name of a column of numeric, date, or timestamp type
+                       that will be used for partitioning;
                        if this parameter is specified, then ``numPartitions``, ``lowerBound``
                        (inclusive), and ``upperBound`` (exclusive) will form partition strides
                        for generated WHERE clause expressions used to split the column
@@ -787,7 +788,7 @@ class DataFrameWriter(OptionUtils):
 
     @since(1.4)
     def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None,
-             lineSep=None, encoding=None):
+             lineSep=None, encoding=None, ignoreNullFields=None):
         """Saves the content of the :class:`DataFrame` in JSON format
         (`JSON Lines text format or newline-delimited JSON <http://jsonlines.org/>`_) at the
         specified path.
@@ -816,13 +817,15 @@ class DataFrameWriter(OptionUtils):
                         the default UTF-8 charset will be used.
         :param lineSep: defines the line separator that should be used for writing. If None is
                         set, it uses the default value, ``\\n``.
+        :param ignoreNullFields: Whether to ignore null fields when generating JSON objects.
+                        If None is set, it uses the default value, ``true``.
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         self._set_opts(
             compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
-            lineSep=lineSep, encoding=encoding)
+            lineSep=lineSep, encoding=encoding, ignoreNullFields=ignoreNullFields)
         self._jwrite.json(path)
 
     @since(1.4)
@@ -889,7 +892,7 @@ class DataFrameWriter(OptionUtils):
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
-        :param sep: sets a single character as a separator for each field and value. If None is
+        :param sep: sets a separator (one or more characters) for each field and value. If None is
                     set, it uses the default value, ``,``.
         :param quote: sets a single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default

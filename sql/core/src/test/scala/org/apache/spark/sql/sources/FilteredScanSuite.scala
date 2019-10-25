@@ -21,10 +21,9 @@ import java.util.Locale
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -133,7 +132,7 @@ object ColumnsRequired {
   var set: Set[String] = Set.empty
 }
 
-class FilteredScanSuite extends DataSourceTest with SharedSQLContext with PredicateHelper {
+class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
   protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {

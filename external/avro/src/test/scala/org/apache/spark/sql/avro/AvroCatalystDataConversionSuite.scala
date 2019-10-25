@@ -24,11 +24,11 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 class AvroCatalystDataConversionSuite extends SparkFunSuite
-  with SharedSQLContext
+  with SharedSparkSession
   with ExpressionEvalHelper {
 
   private def roundTripTest(data: Literal): Unit = {

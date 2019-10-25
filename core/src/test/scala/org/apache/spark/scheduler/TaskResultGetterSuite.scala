@@ -33,6 +33,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.TaskState.TaskState
 import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.storage.TaskResultBlockId
@@ -52,7 +53,7 @@ private class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: Task
   @volatile var removeBlockSuccessfully = false
 
   override def enqueueSuccessfulTask(
-    taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
+    taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer): Unit = {
     if (!removedResult) {
       // Only remove the result once, since we'd like to test the case where the task eventually
       // succeeds.
@@ -78,6 +79,16 @@ private class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: Task
   }
 }
 
+private class DummyTaskSchedulerImpl(sc: SparkContext)
+  extends TaskSchedulerImpl(sc, 1, true) {
+  override def handleFailedTask(
+      taskSetManager: TaskSetManager,
+      tid: Long,
+      taskState: TaskState,
+      reason: TaskFailedReason): Unit = {
+    // do nothing
+  }
+}
 
 /**
  * A [[TaskResultGetter]] that stores the [[DirectTaskResult]]s it receives from executors
@@ -128,6 +139,31 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     val RESULT_BLOCK_ID = TaskResultBlockId(0)
     assert(sc.env.blockManager.master.getLocations(RESULT_BLOCK_ID).size === 0,
       "Expect result to be removed from the block manager.")
+  }
+
+  test("handling total size of results larger than maxResultSize") {
+    sc = new SparkContext("local", "test", conf)
+    val scheduler = new DummyTaskSchedulerImpl(sc)
+    val spyScheduler = spy(scheduler)
+    val resultGetter = new TaskResultGetter(sc.env, spyScheduler)
+    scheduler.taskResultGetter = resultGetter
+    val myTsm = new TaskSetManager(spyScheduler, FakeTask.createTaskSet(2), 1) {
+      // always returns false
+      override def canFetchMoreResults(size: Long): Boolean = false
+    }
+    val indirectTaskResult = IndirectTaskResult(TaskResultBlockId(0), 0)
+    val directTaskResult = new DirectTaskResult(ByteBuffer.allocate(0), Nil, Array())
+    val ser = sc.env.closureSerializer.newInstance()
+    val serializedIndirect = ser.serialize(indirectTaskResult)
+    val serializedDirect = ser.serialize(directTaskResult)
+    resultGetter.enqueueSuccessfulTask(myTsm, 0, serializedDirect)
+    resultGetter.enqueueSuccessfulTask(myTsm, 1, serializedIndirect)
+    eventually(timeout(1.second)) {
+      verify(spyScheduler, times(1)).handleFailedTask(
+        myTsm, 0, TaskState.KILLED, TaskKilled("Tasks result size has exceeded maxResultSize"))
+      verify(spyScheduler, times(1)).handleFailedTask(
+        myTsm, 1, TaskState.KILLED, TaskKilled("Tasks result size has exceeded maxResultSize"))
+    }
   }
 
   test("task retried if result missing from block manager") {

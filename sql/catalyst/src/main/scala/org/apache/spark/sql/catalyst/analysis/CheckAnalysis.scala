@@ -17,25 +17,25 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
 trait CheckAnalysis extends PredicateHelper {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+  protected def isView(nameParts: Seq[String]): Boolean
+
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -93,6 +93,16 @@ trait CheckAnalysis extends PredicateHelper {
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
+        failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
+      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
+        u.failAnalysis(
+          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
+
+      case u: UnresolvedV2Relation =>
+        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -488,9 +498,6 @@ trait CheckAnalysis extends PredicateHelper {
             throw new IllegalStateException(
               "Internal error: logical hint operator should have been removed during analysis")
 
-          case InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-            failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
-
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
             val invalidExprSqls = PlanHelper.specialExpressionsInUnsupportedOperator(f).map(_.sql)
@@ -585,19 +592,19 @@ trait CheckAnalysis extends PredicateHelper {
           // Only certain operators are allowed to host subquery expression containing
           // outer references.
           plan match {
-            case _: Filter | _: Aggregate | _: Project | _: DeleteFromTable => // Ok
+            case _: Filter | _: Aggregate | _: Project | _: SupportsSubquery => // Ok
             case other => failAnalysis(
               "Correlated scalar sub-queries can only be used in a " +
-                s"Filter/Aggregate/Project: $plan")
+                s"Filter/Aggregate/Project and a few commands: $plan")
           }
         }
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter | _: DeleteFromTable => // Ok
+          case _: Filter | _: SupportsSubquery | _: Join => // Ok
           case _ =>
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
-                s" Filter/DeleteFromTable: $plan")
+                s" Filter/Join and a few commands: $plan")
         }
     }
 

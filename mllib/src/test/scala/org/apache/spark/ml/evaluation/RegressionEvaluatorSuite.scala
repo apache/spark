@@ -76,6 +76,10 @@ class RegressionEvaluatorSuite
     // mae
     evaluator.setMetricName("mae")
     assert(evaluator.evaluate(predictions) ~== 0.08399089 absTol 0.01)
+
+    // var
+    evaluator.setMetricName("var")
+    assert(evaluator.evaluate(predictions) ~== 63.6944519 absTol 0.01)
   }
 
   test("read/write") {

@@ -4,6 +4,9 @@ on:
   push:
     branches:
     - master
+  pull_request:
+    branches:
+    - master
 
 jobs:
   build:
@@ -12,15 +15,46 @@ jobs:
     strategy:
       matrix:
         java: [ '1.8', '11' ]
-    name: Build Spark with JDK ${{ matrix.java }}
+        hadoop: [ 'hadoop-2.7', 'hadoop-3.2' ]
+        exclude:
+        - java: '11'
+          hadoop: 'hadoop-2.7'
+    name: Build Spark with JDK ${{ matrix.java }} and ${{ matrix.hadoop }}
 
     steps:
     - uses: actions/checkout@master
     - name: Set up JDK ${{ matrix.java }}
       uses: actions/setup-java@v1
       with:
-        version: ${{ matrix.java }}
+        java-version: ${{ matrix.java }}
     - name: Build with Maven
       run: |
-        export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
-        ./build/mvn -DskipTests package
+        export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+        export MAVEN_CLI_OPTS="--no-transfer-progress"
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -P${{ matrix.hadoop }} -Phadoop-cloud -Djava.version=${{ matrix.java }} package
+
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Linters
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions/setup-java@v1
+      with:
+        java-version: '11'
+    - uses: actions/setup-python@v1
+      with:
+        python-version: '3.x'
+        architecture: 'x64'
+    - name: Scala
+      run: ./dev/lint-scala
+    - name: Java
+      run: ./dev/lint-java
+    - name: Python
+      run: |
+        pip install flake8 sphinx numpy
+        ./dev/lint-python
+    - name: License
+      run: ./dev/check-license
+    - name: Dependencies
+      run: ./dev/test-dependencies.sh

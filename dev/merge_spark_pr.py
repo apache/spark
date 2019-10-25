@@ -97,9 +97,9 @@ def fail(msg):
 def run_cmd(cmd):
     print(cmd)
     if isinstance(cmd, list):
-        return subprocess.check_output(cmd).decode(sys.getdefaultencoding())
+        return subprocess.check_output(cmd).decode('utf-8')
     else:
-        return subprocess.check_output(cmd.split(" ")).decode(sys.getdefaultencoding())
+        return subprocess.check_output(cmd.split(" ")).decode('utf-8')
 
 
 def continue_maybe(prompt):
@@ -495,7 +495,24 @@ def main():
     else:
         title = pr["title"]
 
-    body = pr["body"]
+    modified_body = re.sub(re.compile(r'<!--[^>]*-->\n?', re.DOTALL), '', pr["body"]).lstrip()
+    if modified_body != pr["body"]:
+        print("=" * 80)
+        print(modified_body)
+        print("=" * 80)
+        print("I've removed the comments from PR template like the above:")
+        result = input("Would you like to use the modified body? (y/n): ")
+        if result.lower() == "y":
+            body = modified_body
+            print("Using modified body:")
+        else:
+            body = pr["body"]
+            print("Using original body:")
+        print("=" * 80)
+        print(body)
+        print("=" * 80)
+    else:
+        body = pr["body"]
     target_ref = pr["base"]["ref"]
     user_login = pr["user"]["login"]
     base_ref = pr["head"]["ref"]

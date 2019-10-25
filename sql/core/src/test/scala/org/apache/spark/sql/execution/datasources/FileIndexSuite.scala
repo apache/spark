@@ -30,11 +30,11 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.KnownSizeEstimation
 
-class FileIndexSuite extends SharedSQLContext {
+class FileIndexSuite extends SharedSparkSession {
 
   private class TestInMemoryFileIndex(
       spark: SparkSession,
@@ -416,6 +416,35 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
+  test("Add an option to ignore block locations when listing file") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      for (i <- 1 to 8) {
+        val file = new File(partitionDirectory, i + ".txt")
+        stringToFile(file, "text")
+      }
+      val path = new Path(dir.getCanonicalPath)
+      val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+      withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
+         "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+        val withBlockLocations = fileIndex.
+          listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+
+        withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true") {
+          val withoutBlockLocations = fileIndex.
+            listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+
+          assert(withBlockLocations.size == withoutBlockLocations.size)
+          assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
+            b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
+          assert(withoutBlockLocations.forall(b => b.isInstanceOf[FileStatus] &&
+            !b.isInstanceOf[LocatedFileStatus]))
+          assert(withoutBlockLocations.forall(withBlockLocations.contains))
+        }
+      }
+    }
+  }
 }
 
 object DeletionRaceFileSystem {

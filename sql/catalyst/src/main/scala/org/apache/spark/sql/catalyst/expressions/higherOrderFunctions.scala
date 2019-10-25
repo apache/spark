@@ -344,8 +344,13 @@ case class MapFilter(
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 1);
        [1,3]
+      > SELECT _FUNC_(array(0, 2, 3), (x, i) -> x > i);
+       [2,3]
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  note = """
+    The inner function may use the index argument since 3.0.0.
+  """)
 case class ArrayFilter(
     argument: Expression,
     function: Expression)
@@ -357,10 +362,19 @@ case class ArrayFilter(
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
     val ArrayType(elementType, containsNull) = argument.dataType
-    copy(function = f(function, (elementType, containsNull) :: Nil))
+    function match {
+      case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
+        copy(function = f(function, (elementType, containsNull) :: (IntegerType, false) :: Nil))
+      case _ =>
+        copy(function = f(function, (elementType, containsNull) :: Nil))
+    }
   }
 
-  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
+  @transient lazy val (elementVar, indexVar) = {
+    val LambdaFunction(_, (elementVar: NamedLambdaVariable) +: tail, _) = function
+    val indexVar = tail.headOption.map(_.asInstanceOf[NamedLambdaVariable])
+    (elementVar, indexVar)
+  }
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
@@ -369,6 +383,9 @@ case class ArrayFilter(
     var i = 0
     while (i < arr.numElements) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
+      if (indexVar.isDefined) {
+        indexVar.get.value.set(i)
+      }
       if (f.eval(inputRow).asInstanceOf[Boolean]) {
         buffer += elementVar.value.get
       }
@@ -445,6 +462,8 @@ case class ArrayExists(
       false
     }
   }
+
+  override def prettyName: String = "exists"
 }
 
 /**
@@ -461,7 +480,7 @@ case class ArrayExists(
       > SELECT _FUNC_(array(1, null, 3), x -> x % 2 == 0);
        false
       > SELECT _FUNC_(array(2, null, 8), x -> x % 2 == 0);
-       null
+       NULL
   """,
   since = "3.0.0")
 case class ArrayForAll(
@@ -512,6 +531,8 @@ case class ArrayForAll(
       forall
     }
   }
+
+  override def prettyName: String = "forall"
 }
 
 /**

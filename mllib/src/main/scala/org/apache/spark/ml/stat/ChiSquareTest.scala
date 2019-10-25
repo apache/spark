@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.stat
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
@@ -28,14 +28,11 @@ import org.apache.spark.sql.functions.col
 
 
 /**
- * :: Experimental ::
- *
  * Chi-square hypothesis testing for categorical data.
  *
  * See <a href="http://en.wikipedia.org/wiki/Chi-squared_test">Wikipedia</a> for more information
  * on the Chi-squared test.
  */
-@Experimental
 @Since("2.2.0")
 object ChiSquareTest {
 

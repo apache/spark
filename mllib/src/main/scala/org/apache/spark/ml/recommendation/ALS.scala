@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext}
+import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -42,7 +42,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -131,7 +131,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
  * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter with HasRegParam
-  with HasPredictionCol with HasCheckpointInterval with HasSeed {
+  with HasCheckpointInterval with HasSeed {
 
   /**
    * Param for rank of the matrix factorization (positive).
@@ -564,6 +564,13 @@ object ALSModel extends MLReadable[ALSModel] {
  * r is greater than 0 and 0 if r is less than or equal to 0. The ratings then act as 'confidence'
  * values related to strength of indicated user
  * preferences rather than explicit ratings given to items.
+ *
+ * Note: the input rating dataset to the ALS implementation should be deterministic.
+ * Nondeterministic data can cause failure during fitting ALS model.
+ * For example, an order-sensitive operation like sampling after a repartition makes dataset
+ * output nondeterministic, like `dataset.repartition(2).sample(false, 0.5, 1618)`.
+ * Checkpointing sampled dataset or adding a sort before sampling can help make the dataset
+ * deterministic.
  */
 @Since("1.3.0")
 class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams
@@ -794,7 +801,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
      * Given a triangular matrix in the order of fillXtX above, compute the full symmetric square
      * matrix that it represents, storing it into destMatrix.
      */
-    private def fillAtA(triAtA: Array[Double], lambda: Double) {
+    private def fillAtA(triAtA: Array[Double], lambda: Double): Unit = {
       var i = 0
       var pos = 0
       var a = 0.0
@@ -990,16 +997,21 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         previousUserFactors.unpersist()
       }
     } else {
+      var previousCachedItemFactors: Option[RDD[(Int, FactorBlock)]] = None
       for (iter <- 0 until maxIter) {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, solver = solver)
         if (shouldCheckpoint(iter)) {
+          itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
           val deps = itemFactors.dependencies
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
           ALS.cleanShuffleDependencies(sc, deps)
           deletePreviousCheckpointFile()
+
+          previousCachedItemFactors.foreach(_.unpersist())
           previousCheckpointFile = itemFactors.getCheckpointFile
+          previousCachedItemFactors = Option(itemFactors)
         }
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, solver = solver)
@@ -1029,8 +1041,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .persist(finalRDDStorageLevel)
     if (finalRDDStorageLevel != StorageLevel.NONE) {
       userIdAndFactors.count()
-      itemFactors.unpersist()
       itemIdAndFactors.count()
+      itemFactors.unpersist()
       userInBlocks.unpersist()
       userOutBlocks.unpersist()
       itemInBlocks.unpersist()
@@ -1229,16 +1241,19 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
     // This appears to create factorizations that have a slightly better reconstruction
     // (<1%) compared picking elements uniformly at random in [0,1].
-    inBlocks.map { case (srcBlockId, inBlock) =>
-      val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
-      val factors = Array.fill(inBlock.srcIds.length) {
-        val factor = Array.fill(rank)(random.nextGaussian().toFloat)
-        val nrm = blas.snrm2(rank, factor, 1)
-        blas.sscal(rank, 1.0f / nrm, factor, 1)
-        factor
+    inBlocks.mapPartitions({ iter =>
+      iter.map {
+        case (srcBlockId, inBlock) =>
+          val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
+          val factors = Array.fill(inBlock.srcIds.length) {
+            val factor = Array.fill(rank)(random.nextGaussian().toFloat)
+            val nrm = blas.snrm2(rank, factor, 1)
+            blas.sscal(rank, 1.0f / nrm, factor, 1)
+            factor
+          }
+          (srcBlockId, factors)
       }
-      (srcBlockId, factors)
-    }
+    }, preservesPartitioning = true)
   }
 
   /**
@@ -1658,6 +1673,13 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         }
     }
     val merged = srcOut.groupByKey(new ALSPartitioner(dstInBlocks.partitions.length))
+
+    // SPARK-28927: Nondeterministic RDDs causes inconsistent in/out blocks in case of rerun.
+    // It can cause runtime error when matching in/out user/item blocks.
+    val isBlockRDDNondeterministic =
+      dstInBlocks.outputDeterministicLevel == DeterministicLevel.INDETERMINATE ||
+        srcOutBlocks.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+
     dstInBlocks.join(merged).mapValues {
       case (InBlock(dstIds, srcPtrs, srcEncodedIndices, ratings), srcFactors) =>
         val sortedSrcFactors = new Array[FactorBlock](numSrcBlocks)
@@ -1678,7 +1700,19 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
             val encoded = srcEncodedIndices(i)
             val blockId = srcEncoder.blockId(encoded)
             val localIndex = srcEncoder.localIndex(encoded)
-            val srcFactor = sortedSrcFactors(blockId)(localIndex)
+            var srcFactor: Array[Float] = null
+            try {
+              srcFactor = sortedSrcFactors(blockId)(localIndex)
+            } catch {
+              case a: ArrayIndexOutOfBoundsException if isBlockRDDNondeterministic =>
+                val errMsg = "A failure detected when matching In/Out blocks of users/items. " +
+                  "Because at least one In/Out block RDD is found to be nondeterministic now, " +
+                  "the issue is probably caused by nondeterministic input data. You can try to " +
+                  "checkpoint training data to make it deterministic. If you do `repartition` + " +
+                  "`sample` or `randomSplit`, you can also try to sort it before `sample` or " +
+                  "`randomSplit` to make it deterministic."
+                throw new SparkException(errMsg, a)
+            }
             val rating = ratings(i)
             if (implicitPrefs) {
               // Extension to the original paper to handle rating < 0. confidence is a function

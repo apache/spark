@@ -65,10 +65,26 @@ trait DataSourceScanExec extends LeafExecNode {
       s"$nodeNamePrefix$nodeName${truncatedString(output, "[", ",", "]", maxFields)}$metadataStr")
   }
 
+  override def verboseStringWithOperatorId(): String = {
+    val metadataStr = metadata.toSeq.sorted.filterNot {
+      case (_, value) if (value.isEmpty || value.equals("[]")) => true
+      case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
+      case (_, _) => false
+    }.map {
+      case (key, value) => s"$key: ${redact(value)}"
+    }
+
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+       |${metadataStr.mkString("\n")}
+     """.stripMargin
+  }
+
   /**
    * Shorthand for calling redactString() without specifying redacting rules
    */
-  private def redact(text: String): String = {
+  protected def redact(text: String): String = {
     Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
   }
 
@@ -125,7 +141,7 @@ case class RowDataSourceScanExec(
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
   override def doCanonicalize(): SparkPlan =
     copy(
-      fullOutput.map(QueryPlan.normalizeExprId(_, fullOutput)),
+      fullOutput.map(QueryPlan.normalizeExpressions(_, fullOutput)),
       rdd = null,
       tableIdentifier = None)
 }
@@ -184,19 +200,50 @@ case class FileSourceScanExec(
       metrics.filter(e => driverMetrics.contains(e._1)).values.toSeq)
   }
 
+  private def isDynamicPruningFilter(e: Expression): Boolean =
+    e.find(_.isInstanceOf[PlanExpression[_]]).isDefined
+
   @transient private lazy val selectedPartitions: Array[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
-    val ret = relation.location.listFiles(partitionFilters, dataFilters)
+    val ret =
+      relation.location.listFiles(
+        partitionFilters.filterNot(isDynamicPruningFilter), dataFilters)
     if (relation.partitionSchemaOption.isDefined) {
       driverMetrics("numPartitions") = ret.length
     }
-    driverMetrics("numFiles") = ret.map(_.files.size.toLong).sum
+    setFilesNumAndSizeMetric(ret, true)
     val timeTakenMs = NANOSECONDS.toMillis(
       (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
     driverMetrics("metadataTime") = timeTakenMs
     ret
   }.toArray
+
+  // We can only determine the actual partitions at runtime when a dynamic partition filter is
+  // present. This is because such a filter relies on information that is only available at run
+  // time (for instance the keys used in the other side of a join).
+  @transient private lazy val dynamicallySelectedPartitions: Array[PartitionDirectory] = {
+    val dynamicPartitionFilters = partitionFilters.filter(isDynamicPruningFilter)
+
+    if (dynamicPartitionFilters.nonEmpty) {
+      val startTime = System.nanoTime()
+      // call the file index for the files matching all filters except dynamic partition filters
+      val predicate = dynamicPartitionFilters.reduce(And)
+      val partitionColumns = relation.partitionSchema
+      val boundPredicate = newPredicate(predicate.transform {
+        case a: AttributeReference =>
+          val index = partitionColumns.indexWhere(a.name == _.name)
+          BoundReference(index, partitionColumns(index).dataType, nullable = true)
+      }, Nil)
+      val ret = selectedPartitions.filter(p => boundPredicate.eval(p.values))
+      setFilesNumAndSizeMetric(ret, false)
+      val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
+      driverMetrics("pruningTime") = timeTakenMs
+      ret
+    } else {
+      selectedPartitions
+    }
+  }
 
   /**
    * [[partitionFilters]] can contain subqueries whose results are available only at runtime so
@@ -311,6 +358,31 @@ case class FileSourceScanExec(
     withSelectedBucketsCount
   }
 
+  override def verboseStringWithOperatorId(): String = {
+    val metadataStr = metadata.toSeq.sorted.filterNot {
+      case (_, value) if (value.isEmpty || value.equals("[]")) => true
+      case (key, _) if (key.equals("DataFilters") || key.equals("Format")) => true
+      case (_, _) => false
+    }.map {
+      case (key, _) if (key.equals("Location")) =>
+        val location = relation.location
+        val numPaths = location.rootPaths.length
+        val abbreviatedLoaction = if (numPaths <= 1) {
+          location.rootPaths.mkString("[", ", ", "]")
+        } else {
+          "[" + location.rootPaths.head + s", ... ${numPaths - 1} entries]"
+        }
+        s"$key: ${location.getClass.getSimpleName} ${redact(abbreviatedLoaction)}"
+      case (key, value) => s"$key: ${redact(value)}"
+    }
+
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+       |${metadataStr.mkString("\n")}
+     """.stripMargin
+  }
+
   lazy val inputRDD: RDD[InternalRow] = {
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
@@ -324,9 +396,9 @@ case class FileSourceScanExec(
 
     val readRDD = relation.bucketSpec match {
       case Some(bucketing) if relation.sparkSession.sessionState.conf.bucketingEnabled =>
-        createBucketedReadRDD(bucketing, readFile, selectedPartitions, relation)
+        createBucketedReadRDD(bucketing, readFile, dynamicallySelectedPartitions, relation)
       case _ =>
-        createNonBucketedReadRDD(readFile, selectedPartitions, relation)
+        createNonBucketedReadRDD(readFile, dynamicallySelectedPartitions, relation)
     }
     sendDriverMetrics()
     readRDD
@@ -336,10 +408,36 @@ case class FileSourceScanExec(
     inputRDD :: Nil
   }
 
+  /** SQL metrics generated only for scans using dynamic partition pruning. */
+  private lazy val staticMetrics = if (partitionFilters.filter(isDynamicPruningFilter).nonEmpty) {
+    Map("staticFilesNum" -> SQLMetrics.createMetric(sparkContext, "static number of files read"),
+      "staticFilesSize" -> SQLMetrics.createSizeMetric(sparkContext, "static size of files read"))
+  } else {
+    Map.empty[String, SQLMetric]
+  }
+
+  /** Helper for computing total number and size of files in selected partitions. */
+  private def setFilesNumAndSizeMetric(
+      partitions: Seq[PartitionDirectory],
+      static: Boolean): Unit = {
+    val filesNum = partitions.map(_.files.size.toLong).sum
+    val filesSize = partitions.map(_.files.map(_.getLen).sum).sum
+    if (!static || partitionFilters.filter(isDynamicPruningFilter).isEmpty) {
+      driverMetrics("numFiles") = filesNum
+      driverMetrics("filesSize") = filesSize
+    } else {
+      driverMetrics("staticFilesNum") = filesNum
+      driverMetrics("staticFilesSize") = filesSize
+    }
+  }
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
-    "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time")
+    "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time"),
+    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read"),
+    "pruningTime" ->
+      SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time")
   ) ++ {
     // Tracking scan time has overhead, we can't afford to do it for each row, and can only do
     // it for each batch.
@@ -354,7 +452,7 @@ case class FileSourceScanExec(
     } else {
       None
     }
-  }
+  } ++ staticMetrics
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -491,7 +589,7 @@ case class FileSourceScanExec(
   override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
-      output.map(QueryPlan.normalizeExprId(_, output)),
+      output.map(QueryPlan.normalizeExpressions(_, output)),
       requiredSchema,
       QueryPlan.normalizePredicates(partitionFilters, output),
       optionalBucketSet,

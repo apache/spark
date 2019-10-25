@@ -68,10 +68,12 @@ class ExtractPythonUDFFromJoinConditionSuite extends PlanTest {
 
   private def comparePlanWithCrossJoinEnable(query: LogicalPlan, expected: LogicalPlan): Unit = {
     // AnalysisException thrown by CheckCartesianProducts while spark.sql.crossJoin.enabled=false
-    val exception = intercept[AnalysisException] {
-      Optimize.execute(query.analyze)
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "false") {
+      val exception = intercept[AnalysisException] {
+        Optimize.execute(query.analyze)
+      }
+      assert(exception.message.startsWith("Detected implicit cartesian product"))
     }
-    assert(exception.message.startsWith("Detected implicit cartesian product"))
 
     // pull out the python udf while set spark.sql.crossJoin.enabled=true
     withSQLConf(CROSS_JOINS_ENABLED.key -> "true") {

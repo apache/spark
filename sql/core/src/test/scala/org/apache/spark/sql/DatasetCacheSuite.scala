@@ -22,11 +22,11 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
 
 
-class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits {
+class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimits {
   import testImplicits._
 
   /**

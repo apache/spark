@@ -51,7 +51,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     userClassPath: Seq[URL],
     env: SparkEnv,
     resourcesFileOpt: Option[String])
-  extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
+  extends IsolatedRpcEndpoint with ExecutorBackend with Logging {
 
   private implicit val formats = DefaultFormats
 
@@ -70,7 +70,7 @@ private[spark] class CoarseGrainedExecutorBackend(
    */
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
-  override def onStart() {
+  override def onStart(): Unit = {
     logInfo("Connecting to driver: " + driverUrl)
     val resources = parseOrFindResources(resourcesFileOpt)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
@@ -186,7 +186,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
   }
 
-  override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
+  override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
     val resources = taskResources.getOrElse(taskId, Map.empty[String, ResourceInformation])
     val msg = StatusUpdate(executorId, taskId, state, data, resources)
     if (TaskState.isFinished(state)) {
@@ -355,8 +355,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
     }
 
-    if (driverUrl == null || executorId == null || hostname == null || cores <= 0 ||
-      appId == null) {
+    if (hostname == null) {
+      hostname = Utils.localHostName()
+      log.info(s"Executor hostname is not provided, will use '$hostname' to advertise itself")
+    }
+
+    if (driverUrl == null || executorId == null || cores <= 0 || appId == null) {
       printUsageAndExit(classNameForEntry)
     }
 

@@ -30,9 +30,9 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val random = new scala.util.Random
@@ -174,7 +174,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("hive-hash for date type") {
     def checkHiveHashForDateType(dateString: String, expected: Long): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToDate(UTF8String.fromString(dateString)).get,
+        DateTimeUtils.stringToDate(UTF8String.fromString(dateString), ZoneOffset.UTC).get,
         DateType,
         expected)
     }
@@ -252,7 +252,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("hive-hash for CalendarInterval type") {
     def checkHiveHashForIntervalType(interval: String, expected: Long): Unit = {
-      checkHiveHash(CalendarInterval.fromString(interval), CalendarIntervalType, expected)
+      checkHiveHash(IntervalUtils.fromString(interval), CalendarIntervalType, expected)
     }
 
     // ----- MICROSEC -----

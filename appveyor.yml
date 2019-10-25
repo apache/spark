@@ -43,15 +43,20 @@ install:
   - ps: .\dev\appveyor-install-dependencies.ps1
   # Required package for R unit tests
   - cmd: R -e "install.packages(c('knitr', 'rmarkdown', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
+  # Use Arrow R 0.14.1 for now. 0.15.0 seems not working for now. See SPARK-29378.
+  - cmd: R -e "install.packages(c('assertthat', 'bit64', 'fs', 'purrr', 'R6', 'tidyselect'), repos='https://cloud.r-project.org/')"
+  - cmd: R -e "install.packages('https://cran.r-project.org/src/contrib/Archive/arrow/arrow_0.14.1.tar.gz', repos=NULL, type='source')"
   # Here, we use the fixed version of testthat. For more details, please see SPARK-22817.
   # As of devtools 2.1.0, it requires testthat higher then 2.1.1 as a dependency. SparkR test requires testthat 1.0.2.
   # Therefore, we don't use devtools but installs it directly from the archive including its dependencies.
   - cmd: R -e "install.packages(c('crayon', 'praise', 'R6'), repos='https://cloud.r-project.org/')"
   - cmd: R -e "install.packages('https://cloud.r-project.org/src/contrib/Archive/testthat/testthat_1.0.2.tar.gz', repos=NULL, type='source')"
-  - cmd: R -e "packageVersion('knitr'); packageVersion('rmarkdown'); packageVersion('testthat'); packageVersion('e1071'); packageVersion('survival')"
+  - cmd: R -e "packageVersion('knitr'); packageVersion('rmarkdown'); packageVersion('testthat'); packageVersion('e1071'); packageVersion('survival'); packageVersion('arrow')"
 
 build_script:
-  - cmd: mvn -DskipTests -Psparkr -Phive package
+  # '-Djna.nosys=true' is required to avoid kernel32.dll load failure.
+  # See SPARK-28759.
+  - cmd: mvn -DskipTests -Psparkr -Phive -Djna.nosys=true package
 
 environment:
   NOT_CRAN: true

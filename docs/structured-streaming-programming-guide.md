@@ -1505,7 +1505,6 @@ Additional details on supported joins:
 
   - Cannot use mapGroupsWithState and flatMapGroupsWithState in Update mode before joins.
 
-
 ### Streaming Deduplication
 You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
 
@@ -1583,10 +1582,18 @@ be tolerated for stateful operations. You specify these thresholds using
 ``withWatermarks("eventTime", delay)`` on each of the input streams. For example, consider
 a query with stream-stream joins between `inputStream1` and `inputStream2`.
     
-  inputStream1.withWatermark("eventTime1", "1 hour")
-    .join(
-      inputStream2.withWatermark("eventTime2", "2 hours"),
-      joinCondition)
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+inputStream1.withWatermark("eventTime1", "1 hour")
+  .join(
+    inputStream2.withWatermark("eventTime2", "2 hours"),
+    joinCondition)
+{% endhighlight %}
+
+</div>
+</div>
 
 While executing the query, Structured Streaming individually tracks the maximum
 event time seen in each input stream, calculates watermarks based on the corresponding delay,
@@ -1607,6 +1614,8 @@ this configuration judiciously.
 
 ### Arbitrary Stateful Operations
 Many usecases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)).
+
+Though Spark cannot check and force it, the state function should be implemented with respect to the semantics of the output mode. For example, in Update mode Spark doesn't expect that the state function will emit rows which are older than current watermark plus allowed late record delay, whereas in Append mode the state function can emit these rows.
 
 ### Unsupported Operations
 There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
@@ -1638,6 +1647,26 @@ there are others which are fundamentally hard to implement on streaming data eff
 For example, sorting on the input stream is not supported, as it requires keeping 
 track of all the data received in the stream. This is therefore fundamentally hard to execute 
 efficiently.
+
+### Limitation of global watermark
+
+In Append mode, if a stateful operation emits rows older than current watermark plus allowed late record delay,
+they will be "late rows" in downstream stateful operations (as Spark uses global watermark). Note that these rows may be discarded.
+This is a limitation of a global watermark, and it could potentially cause a correctness issue.
+
+Spark will check the logical plan of query and log a warning when Spark detects such a pattern.
+
+Any of the stateful operation(s) after any of below stateful operations can have this issue:
+
+* streaming aggregation in Append mode
+* stream-stream outer join
+* `mapGroupsWithState` and `flatMapGroupsWithState` in Append mode (depending on the implementation of the state function)
+
+As Spark cannot check the state function of `mapGroupsWithState`/`flatMapGroupsWithState`, Spark assumes that the state function
+emits late rows if the operator uses Append mode.
+
+There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
+end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
@@ -1843,7 +1872,7 @@ Here are the details of all the sinks in Spark.
     <td><b>Foreach Sink</b></td>
     <td>Append, Update, Complete</td>
     <td>None</td>
-    <td>Depends on ForeachWriter implementation</td>
+    <td>Yes (at-least-once)</td>
     <td>More details in the <a href="#using-foreach-and-foreachbatch">next section</a></td>
   </tr>
   <tr>
@@ -2251,13 +2280,11 @@ When the streaming query is started, Spark calls the function or the object’s 
 
 - The close() method (if it exists) is called if an open() method exists and returns successfully (irrespective of the return value), except if the JVM or Python process crashes in the middle.
 
-- **Note:** The partitionId and epochId in the open() method can be used to deduplicate generated data 
-  when failures cause reprocessing of some input data. This depends on the execution mode of the query. 
-  If the streaming query is being executed in the micro-batch mode, then every partition represented 
-  by a unique tuple (partition_id, epoch_id) is guaranteed to have the same data. 
-  Hence, (partition_id, epoch_id) can be used to deduplicate and/or transactionally commit 
-  data and achieve exactly-once guarantees. However, if the streaming query is being executed 
-  in the continuous mode, then this guarantee does not hold and therefore should not be used for deduplication.
+- **Note:** Spark does not guarantee same output for (partitionId, epochId), so deduplication
+  cannot be achieved with (partitionId, epochId). e.g. source provides different number of
+  partitions for some reasons, Spark optimization changes number of partitions, etc.
+  See [SPARK-28650](https://issues.apache.org/jira/browse/SPARK-28650) for more details.
+  If you need deduplication on output, try out `foreachBatch` instead.
 
 #### Triggers
 The trigger settings of a streaming query define the timing of streaming data processing, whether

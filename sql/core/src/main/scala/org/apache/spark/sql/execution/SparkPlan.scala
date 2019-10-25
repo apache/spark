@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.ExecutionContext
 
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
@@ -46,6 +48,11 @@ object SparkPlan {
 
   /** The [[LogicalPlan]] inherited from its ancestor. */
   val LOGICAL_PLAN_INHERITED_TAG = TreeNodeTag[LogicalPlan]("logical_plan_inherited")
+
+  private val nextPlanId = new AtomicInteger(0)
+
+  /** Register a new SparkPlan, returning its SparkPlan ID */
+  private[execution] def newPlanId(): Int = nextPlanId.getAndIncrement()
 }
 
 /**
@@ -63,6 +70,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   @transient final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
 
   protected def sparkContext = sqlContext.sparkContext
+
+  val id: Int = SparkPlan.newPlanId()
 
   // sqlContext will be null when SparkPlan nodes are created without the active sessions.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
@@ -498,11 +507,26 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     newOrdering(order, Seq.empty)
   }
+
+  /**
+   * Cleans up the resources used by the physical operator (if any). In general, all the resources
+   * should be cleaned up when the task finishes but operators like SortMergeJoinExec and LimitExec
+   * may want eager cleanup to free up tight resources (e.g., memory).
+   */
+  protected[sql] def cleanupResources(): Unit = {
+    children.foreach(_.cleanupResources())
+  }
 }
 
 trait LeafExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Output: ${producedAttributes.mkString("[", ", ", "]")}
+     """.stripMargin
+  }
 }
 
 object UnaryExecNode {
@@ -516,6 +540,12 @@ trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
   override final def children: Seq[SparkPlan] = child :: Nil
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Input: ${child.output.mkString("[", ", ", "]")}
+     """.stripMargin
+  }
 }
 
 trait BinaryExecNode extends SparkPlan {
@@ -523,4 +553,11 @@ trait BinaryExecNode extends SparkPlan {
   def right: SparkPlan
 
   override final def children: Seq[SparkPlan] = Seq(left, right)
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Left output: ${left.output.mkString("[", ", ", "]")}
+       |Right output: ${right.output.mkString("[", ", ", "]")}
+     """.stripMargin
+  }
 }

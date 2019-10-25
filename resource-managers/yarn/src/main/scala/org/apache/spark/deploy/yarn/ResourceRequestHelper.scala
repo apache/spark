@@ -143,17 +143,28 @@ private object ResourceRequestHelper extends Logging {
     require(resource != null, "Resource parameter should not be null!")
 
     logDebug(s"Custom resources requested: $resources")
+    if (resources.isEmpty) {
+      // no point in going forward, as we don't have anything to set
+      return
+    }
+
     if (!isYarnResourceTypesAvailable()) {
-      if (resources.nonEmpty) {
-        logWarning("Ignoring custom resource requests because " +
-            "the version of YARN does not support it!")
-      }
+      logWarning("Ignoring custom resource requests because " +
+          "the version of YARN does not support it!")
       return
     }
 
     val resInfoClass = Utils.classForName(RESOURCE_INFO_CLASS)
     val setResourceInformationMethod =
-      resource.getClass.getMethod("setResourceInformation", classOf[String], resInfoClass)
+      try {
+        resource.getClass.getMethod("setResourceInformation", classOf[String], resInfoClass)
+      } catch {
+        case e: NoSuchMethodException =>
+          throw new SparkException(
+            s"Cannot find setResourceInformation in ${resource.getClass}. " +
+              "This is likely due to a JAR conflict between different YARN versions.", e)
+      }
+
     resources.foreach { case (name, rawAmount) =>
       try {
         val AMOUNT_AND_UNIT_REGEX(amountPart, unitPart) = rawAmount

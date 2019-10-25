@@ -33,9 +33,9 @@ import org.apache.spark.util.ManualClock
 
 class ExecutorMonitorSuite extends SparkFunSuite {
 
-  private val idleTimeoutMs = TimeUnit.SECONDS.toMillis(60L)
-  private val storageTimeoutMs = TimeUnit.SECONDS.toMillis(120L)
-  private val shuffleTimeoutMs = TimeUnit.SECONDS.toMillis(240L)
+  private val idleTimeoutNs = TimeUnit.SECONDS.toNanos(60L)
+  private val storageTimeoutNs = TimeUnit.SECONDS.toNanos(120L)
+  private val shuffleTimeoutNs = TimeUnit.SECONDS.toNanos(240L)
 
   private val conf = new SparkConf()
     .set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "60s")
@@ -111,8 +111,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, taskInfo("1", 1),
       new ExecutorMetrics, null))
     assert(monitor.isExecutorIdle("1"))
-    assert(monitor.timedOutExecutors(clock.getTimeMillis()).isEmpty)
-    assert(monitor.timedOutExecutors(clock.getTimeMillis() + idleTimeoutMs + 1) === Seq("1"))
+    assert(monitor.timedOutExecutors(clock.nanoTime()).isEmpty)
+    assert(monitor.timedOutExecutors(clock.nanoTime() + idleTimeoutNs + 1) === Seq("1"))
   }
 
   test("use appropriate time out depending on whether blocks are stored") {
@@ -166,7 +166,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     // originally went idle.
     clock.setTime(idleDeadline)
     monitor.onUnpersistRDD(SparkListenerUnpersistRDD(2))
-    assert(monitor.timedOutExecutors(clock.getTimeMillis()) === Seq("1"))
+    assert(monitor.timedOutExecutors(clock.nanoTime()) === Seq("1"))
   }
 
   test("handle timeouts correctly with multiple executors") {
@@ -186,7 +186,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     // start exec 3 at 60s (should idle timeout at 120s, exec 1 should time out)
     clock.setTime(TimeUnit.SECONDS.toMillis(60))
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "3", null))
-    assert(monitor.timedOutExecutors(clock.getTimeMillis()) === Seq("1"))
+    assert(monitor.timedOutExecutors(clock.nanoTime()) === Seq("1"))
 
     // store block on exec 3 (should now idle time out at 180s)
     monitor.onBlockUpdated(rddUpdate(1, 0, "3"))
@@ -196,11 +196,11 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     // advance to 140s, remove block from exec 3 (time out immediately)
     clock.setTime(TimeUnit.SECONDS.toMillis(140))
     monitor.onBlockUpdated(rddUpdate(1, 0, "3", level = StorageLevel.NONE))
-    assert(monitor.timedOutExecutors(clock.getTimeMillis()).toSet === Set("1", "3"))
+    assert(monitor.timedOutExecutors(clock.nanoTime()).toSet === Set("1", "3"))
 
     // advance to 150s, now exec 2 should time out
     clock.setTime(TimeUnit.SECONDS.toMillis(150))
-    assert(monitor.timedOutExecutors(clock.getTimeMillis()).toSet === Set("1", "2", "3"))
+    assert(monitor.timedOutExecutors(clock.nanoTime()).toSet === Set("1", "2", "3"))
   }
 
   test("SPARK-27677: don't track blocks stored on disk when using shuffle service") {
@@ -333,6 +333,19 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(idleDeadline) === Seq("1"))
   }
 
+
+  test("SPARK-28839: Avoids NPE in context cleaner when shuffle service is on") {
+    val bus = mockListenerBus()
+    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING, true).set(SHUFFLE_SERVICE_ENABLED, true)
+    monitor = new ExecutorMonitor(conf, client, bus, clock) {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        throw new IllegalStateException("No event should be sent.")
+      }
+    }
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", null))
+    monitor.shuffleCleaned(0)
+  }
+
   test("shuffle tracking with multiple executors and concurrent jobs") {
     val bus = mockListenerBus()
     conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING, true).set(SHUFFLE_SERVICE_ENABLED, false)
@@ -397,9 +410,9 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
   }
 
-  private def idleDeadline: Long = clock.getTimeMillis() + idleTimeoutMs + 1
-  private def storageDeadline: Long = clock.getTimeMillis() + storageTimeoutMs + 1
-  private def shuffleDeadline: Long = clock.getTimeMillis() + shuffleTimeoutMs + 1
+  private def idleDeadline: Long = clock.nanoTime() + idleTimeoutNs + 1
+  private def storageDeadline: Long = clock.nanoTime() + storageTimeoutNs + 1
+  private def shuffleDeadline: Long = clock.nanoTime() + shuffleTimeoutNs + 1
 
   private def stageInfo(id: Int, shuffleId: Int = -1): StageInfo = {
     new StageInfo(id, 0, s"stage$id", 1, Nil, Nil, "",

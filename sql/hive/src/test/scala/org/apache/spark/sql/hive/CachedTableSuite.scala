@@ -216,7 +216,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
-    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
+    sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
     // Refresh the table. REFRESH TABLE command should not make a uncached
@@ -237,7 +237,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     tempPath.delete()
     table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
     sql("DROP TABLE IF EXISTS refreshTable")
-    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
+    sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
     checkAnswer(
       table("refreshTable"),
       table("src").collect())
@@ -256,7 +256,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
-    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
+    sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
     // Refresh the table. REFRESH command should not make a uncached
@@ -300,7 +300,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         val e = intercept[ParseException] {
           sql(s"CACHE TABLE $db.cachedTable AS SELECT 1")
         }.getMessage
-        assert(e.contains("It is not allowed to add database prefix ") &&
+        assert(e.contains("It is not allowed to add catalog/namespace prefix ") &&
           e.contains("to the table name in CACHE TABLE AS SELECT"))
       }
     }

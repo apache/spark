@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
 
 /**
@@ -45,6 +46,7 @@ import org.apache.spark.util.Utils
  * expected version under this local directory, e.g. `/tmp/spark-test/spark-2.0.3`, we will skip the
  * downloading for this spark version.
  */
+@ExtendedHiveTest
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private val isTestAtLeastJava9 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")

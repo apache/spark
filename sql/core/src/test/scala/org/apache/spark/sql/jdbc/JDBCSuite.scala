@@ -36,12 +36,12 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends QueryTest
-  with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
+  with BeforeAndAfter with PrivateMethodTester with SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -450,15 +450,6 @@ class JDBCSuite extends QueryTest
       urlWithUserAndPass, "TEST.PEOPLE", new Properties()).collect().length === 3)
   }
 
-  test("Basic API with illegal fetchsize") {
-    val properties = new Properties()
-    properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "-1")
-    val e = intercept[IllegalArgumentException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
-    }.getMessage
-    assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
-  }
-
   test("Missing partition columns") {
     withView("tempPeople") {
       val e = intercept[IllegalArgumentException] {
@@ -743,7 +734,7 @@ class JDBCSuite extends QueryTest
   }
 
   test("compile filters") {
-    val compileFilter = PrivateMethod[Option[String]]('compileFilter)
+    val compileFilter = PrivateMethod[Option[String]](Symbol("compileFilter"))
     def doCompileFilter(f: Filter): String =
       JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
     assert(doCompileFilter(EqualTo("col0", 3)) === """"col0" = 3""")
@@ -1031,8 +1022,10 @@ class JDBCSuite extends QueryTest
   }
 
   test("Hide credentials in show create table") {
+    val userName = "testUser"
     val password = "testPass"
     val tableName = "tab1"
+    val dbTable = "TEST.PEOPLE"
     withTable(tableName) {
       sql(
         s"""
@@ -1040,18 +1033,30 @@ class JDBCSuite extends QueryTest
            |USING org.apache.spark.sql.jdbc
            |OPTIONS (
            | url '$urlWithUserAndPass',
-           | dbtable 'TEST.PEOPLE',
-           | user 'testUser',
+           | dbtable '$dbTable',
+           | user '$userName',
            | password '$password')
          """.stripMargin)
 
       val show = ShowCreateTableCommand(TableIdentifier(tableName))
       spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
         assert(!r.toString.contains(password))
+        assert(r.toString.contains(dbTable))
+        assert(r.toString.contains(userName))
       }
 
       sql(s"SHOW CREATE TABLE $tableName").collect().foreach { r =>
-        assert(!r.toString().contains(password))
+        assert(!r.toString.contains(password))
+        assert(r.toString.contains(dbTable))
+        assert(r.toString.contains(userName))
+      }
+
+      withSQLConf(SQLConf.SQL_OPTIONS_REDACTION_PATTERN.key -> "(?i)dbtable|user") {
+        spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+          assert(!r.toString.contains(password))
+          assert(!r.toString.contains(dbTable))
+          assert(!r.toString.contains(userName))
+        }
       }
     }
   }

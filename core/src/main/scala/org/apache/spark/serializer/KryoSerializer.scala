@@ -259,14 +259,14 @@ class KryoSerializationStream(
     this
   }
 
-  override def flush() {
+  override def flush(): Unit = {
     if (output == null) {
       throw new IOException("Stream is closed")
     }
     output.flush()
   }
 
-  override def close() {
+  override def close(): Unit = {
     if (output != null) {
       try {
         output.close()
@@ -301,7 +301,7 @@ class KryoDeserializationStream(
     }
   }
 
-  override def close() {
+  override def close(): Unit = {
     if (input != null) {
       try {
         // Kryo's Input automatically closes the input stream it is using.

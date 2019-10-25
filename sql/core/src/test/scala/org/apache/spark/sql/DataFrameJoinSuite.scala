@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
+class DataFrameJoinSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("join - join using") {

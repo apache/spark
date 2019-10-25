@@ -23,11 +23,11 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
-import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
@@ -39,7 +39,7 @@ abstract class FileTable(
     userSpecifiedSchema: Option[StructType])
   extends Table with SupportsRead with SupportsWrite {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   lazy val fileIndex: PartitioningAwareFileIndex = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap

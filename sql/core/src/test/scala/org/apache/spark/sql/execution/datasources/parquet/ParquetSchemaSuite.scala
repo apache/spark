@@ -28,10 +28,10 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
+abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
 
   /**
    * Checks whether the reflected Parquet message type for product type `T` conforms `messageType`.

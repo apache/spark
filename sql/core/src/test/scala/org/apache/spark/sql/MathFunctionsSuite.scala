@@ -21,14 +21,14 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 private object MathFunctionsTestData {
   case class DoubleData(a: java.lang.Double, b: java.lang.Double)
   case class NullDoubles(a: java.lang.Double)
 }
 
-class MathFunctionsSuite extends QueryTest with SharedSQLContext {
+class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   import MathFunctionsTestData._
   import testImplicits._
 

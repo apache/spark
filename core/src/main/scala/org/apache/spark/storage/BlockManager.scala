@@ -446,7 +446,7 @@ private[spark] class BlockManager(
     }
   }
 
-  private def registerWithExternalShuffleServer() {
+  private def registerWithExternalShuffleServer(): Unit = {
     logInfo("Registering executor with local external shuffle service.")
     val shuffleConfig = new ExecutorShuffleInfo(
       diskBlockManager.localDirsString,
@@ -548,7 +548,7 @@ private[spark] class BlockManager(
    */
   override def getBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+      shuffleManager.shuffleBlockResolver.getBlockData(blockId)
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
@@ -853,7 +853,6 @@ private[spark] class BlockManager(
    * @param bufferTransformer this transformer expected to open the file if the block is backed by a
    *                          file by this it is guaranteed the whole content can be loaded
    * @tparam T result type
-   * @return
    */
   private[spark] def getRemoteBlock[T](
       blockId: BlockId,
@@ -1725,15 +1724,23 @@ private[spark] class BlockManager(
    * lock on the block.
    */
   private def removeBlockInternal(blockId: BlockId, tellMaster: Boolean): Unit = {
+    val blockStatus = if (tellMaster) {
+      val blockInfo = blockInfoManager.assertBlockIsLockedForWriting(blockId)
+      Some(getCurrentBlockStatus(blockId, blockInfo))
+    } else None
+
     // Removals are idempotent in disk store and memory store. At worst, we get a warning.
     val removedFromMemory = memoryStore.remove(blockId)
     val removedFromDisk = diskStore.remove(blockId)
     if (!removedFromMemory && !removedFromDisk) {
       logWarning(s"Block $blockId could not be removed as it was not found on disk or in memory")
     }
+
     blockInfoManager.removeBlock(blockId)
     if (tellMaster) {
-      reportBlockStatus(blockId, BlockStatus.empty)
+      // Only update storage level from the captured block status before deleting, so that
+      // memory size and disk size are being kept for calculating delta.
+      reportBlockStatus(blockId, blockStatus.get.copy(storageLevel = StorageLevel.NONE))
     }
   }
 
@@ -1831,7 +1838,7 @@ private[spark] object BlockManager {
     private val POLL_TIMEOUT = 1000
     @volatile private var stopped = false
 
-    private val cleaningThread = new Thread() { override def run() { keepCleaning() } }
+    private val cleaningThread = new Thread() { override def run(): Unit = { keepCleaning() } }
     cleaningThread.setDaemon(true)
     cleaningThread.setName("RemoteBlock-temp-file-clean-thread")
     cleaningThread.start()

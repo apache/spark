@@ -139,20 +139,26 @@ private[spark] class Executor(
   private val executorPlugins: Seq[ExecutorPlugin] = {
     val pluginNames = conf.get(EXECUTOR_PLUGINS)
     if (pluginNames.nonEmpty) {
-      logDebug(s"Initializing the following plugins: ${pluginNames.mkString(", ")}")
+      logInfo(s"Initializing the following plugins: ${pluginNames.mkString(", ")}")
 
       // Plugins need to load using a class loader that includes the executor's user classpath
       val pluginList: Seq[ExecutorPlugin] =
         Utils.withContextClassLoader(replClassLoader) {
           val plugins = Utils.loadExtensions(classOf[ExecutorPlugin], pluginNames, conf)
           plugins.foreach { plugin =>
-            plugin.init()
-            logDebug(s"Successfully loaded plugin " + plugin.getClass().getCanonicalName())
+            val pluginSource = new ExecutorPluginSource(plugin.getClass().getSimpleName())
+            val pluginContext = new ExecutorPluginContext(pluginSource.metricRegistry, conf,
+              executorId, executorHostname, isLocal)
+            plugin.init(pluginContext)
+            logInfo("Successfully loaded plugin " + plugin.getClass().getCanonicalName())
+            if (pluginSource.metricRegistry.getNames.size() > 0) {
+              env.metricsSystem.registerSource(pluginSource)
+            }
           }
           plugins
         }
 
-      logDebug("Finished initializing plugins")
+      logInfo("Finished initializing plugins")
       pluginList
     } else {
       Nil
@@ -623,6 +629,11 @@ private[spark] class Executor(
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
+        case t: Throwable if env.isStopped =>
+          // Log the expected exception after executor.stop without stack traces
+          // see: SPARK-19147
+          logError(s"Exception in $taskName (TID $taskId): ${t.getMessage}")
+
         case t: Throwable =>
           // Attempt to exit cleanly by informing the driver of our failure.
           // If anything goes wrong (or this was a fatal exception), we will delegate to
@@ -846,7 +857,7 @@ private[spark] class Executor(
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
-  private def updateDependencies(newFiles: Map[String, Long], newJars: Map[String, Long]) {
+  private def updateDependencies(newFiles: Map[String, Long], newJars: Map[String, Long]): Unit = {
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies

@@ -28,7 +28,7 @@ import org.mockito.ArgumentMatchers.{any, anyInt, anyLong, anyString, eq => meq}
 import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.mesos.{config => mesosConfig}
@@ -587,6 +587,30 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
   }
 
+  test("SPARK-28778 '--hostname' shouldn't be set for executor when virtual network is enabled") {
+    setBackend()
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+    val offer = createOffer("o1", "s1", mem, cpu)
+
+    assert(backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+
+    setBackend(Map("spark.executor.uri" -> "hdfs://test/executor.jar"))
+    assert(backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+
+    setBackend(Map("spark.mesos.network.name" -> "test"))
+    assert(!backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+
+    setBackend(Map(
+      "spark.mesos.network.name" -> "test",
+      "spark.executor.uri" -> "hdfs://test/executor.jar"
+    ))
+    assert(!backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+  }
+
   test("supports spark.scheduler.minRegisteredResourcesRatio") {
     val expectedCores = 1
     setBackend(Map(
@@ -785,7 +809,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     }
   }
 
-  private def setBackend(sparkConfVars: Map[String, String] = null, home: String = "/path") {
+  private def setBackend(sparkConfVars: Map[String, String] = null,
+      home: String = "/path"): Unit = {
     initializeSparkConf(sparkConfVars, home)
     sc = new SparkContext(sparkConf)
 

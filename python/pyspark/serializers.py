@@ -69,7 +69,7 @@ else:
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
-from pyspark.util import _exception_message
+from pyspark.util import _exception_message, print_exec
 
 
 __all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]
@@ -401,6 +401,32 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         return "ArrowStreamPandasUDFSerializer"
 
 
+class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
+
+    def load_stream(self, stream):
+        """
+        Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and yield as two
+        lists of pandas.Series.
+        """
+        import pyarrow as pa
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 2:
+                batch1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                yield (
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()]
+                )
+
+            elif dataframes_in_group != 0:
+                raise ValueError(
+                    'Invalid number of pandas.DataFrames in group {0}'.format(dataframes_in_group))
+
+
 class BatchedSerializer(Serializer):
 
     """
@@ -690,7 +716,7 @@ class CloudPickleSerializer(PickleSerializer):
                 msg = "Object too large to serialize: %s" % emsg
             else:
                 msg = "Could not serialize object: %s: %s" % (e.__class__.__name__, emsg)
-            cloudpickle.print_exec(sys.stderr)
+            print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
 
 
