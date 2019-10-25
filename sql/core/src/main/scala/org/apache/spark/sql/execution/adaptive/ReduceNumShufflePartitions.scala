@@ -70,7 +70,8 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
     }
     // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
     // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
-    if (!shuffleStages.forall(_.plan.canChangeNumPartitions)) {
+    if (!shuffleStages.forall(_.plan.canChangeNumPartitions) ||
+      shuffleStages.exists(_.isLocalShuffle == true)) {
       plan
     } else {
       val shuffleMetrics = shuffleStages.map { stage =>
