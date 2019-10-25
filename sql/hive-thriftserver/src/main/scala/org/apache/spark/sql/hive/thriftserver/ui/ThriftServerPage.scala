@@ -159,8 +159,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         UIUtils.decodeURLParameter(sortColumn)
       }.getOrElse("Start Time")
       val sessionTableSortDesc = Option(parameterSessionTableSortDesc).map(_.toBoolean).getOrElse(
-        // Old session should be shown above new session by default.
-        !(sessionTableSortColumn == "Start Time")
+        // New session should be shown above old session by default.
+        (sessionTableSortColumn == "Start Time")
       )
       val sessionTablePageSize = Option(parameterSessionPageSize).map(_.toInt).getOrElse(100)
 
