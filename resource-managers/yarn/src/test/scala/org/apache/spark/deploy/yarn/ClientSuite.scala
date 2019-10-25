@@ -181,6 +181,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       .set(MAX_APP_ATTEMPTS, 42)
       .set("spark.app.name", "foo-test-app")
       .set(QUEUE_NAME, "staging-queue")
+      .set(APPLICATION_PRIORITY, 1)
     val args = new ClientArguments(Array())
 
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
@@ -202,6 +203,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       tags.asScala.count(_.nonEmpty) should be (4)
     }
     appContext.getMaxAppAttempts should be (42)
+    appContext.getPriority should be (1)
   }
 
   test("spark.yarn.jars with multiple paths and globs") {

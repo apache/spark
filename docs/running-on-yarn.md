@@ -420,6 +420,14 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.app.priority</code></td>
+  <td>(none)</td>
+  <td>
+  Priority for YARN to define pending applications ordering policy, those with higher
+  priority have a better opportunity to be activated. YARN CapacityScheduler only.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.config.gatewayPath</code></td>
   <td>(none)</td>
   <td>
