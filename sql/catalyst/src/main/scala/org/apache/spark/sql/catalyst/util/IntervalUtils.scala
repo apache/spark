@@ -192,7 +192,11 @@ object IntervalUtils {
           currentValue = 0
         case POSITIVE_VALUE_TO_LONG | NEGATIVE_VALUE_TO_LONG =>
           if ('0' <= b && b <= '9') {
-            currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
+            try {
+              currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
+            } catch {
+              case _: ArithmeticException => return None
+            }
           } else if (b == ' ') {
             if (state == NEGATIVE_VALUE_TO_LONG) {
               currentValue = -currentValue
@@ -204,45 +208,51 @@ object IntervalUtils {
           if (b == ' ') {
             i += 1
           } else {
-            b match {
-              case 'y' if s.matchAt(yearStr, i) =>
-                months = Math.addExact(months, Math.multiplyExact(12, currentValue))
-                i += yearStr.numBytes()
-              case 'w' if s.matchAt(weekStr, i) =>
-                val daysUs = Math.multiplyExact(
-                  Math.multiplyExact(7, currentValue),
-                  DateTimeUtils.MICROS_PER_DAY)
-                microseconds = Math.addExact(microseconds, daysUs)
-                i += weekStr.numBytes()
-              case 'd' if s.matchAt(dayStr, i) =>
-                val daysUs = Math.multiplyExact(currentValue, DateTimeUtils.MICROS_PER_DAY)
-                microseconds = Math.addExact(microseconds, daysUs)
-                i += dayStr.numBytes()
-              case 'h' if s.matchAt(hourStr, i) =>
-                val hoursUs = Math.multiplyExact(currentValue, MICROS_PER_HOUR)
-                microseconds = Math.addExact(microseconds, hoursUs)
-                i += hourStr.numBytes()
-              case 's' if s.matchAt(secondStr, i) =>
-                val secondsUs = Math.multiplyExact(currentValue, DateTimeUtils.MICROS_PER_SECOND)
-                microseconds = Math.addExact(microseconds, secondsUs)
-                i += secondStr.numBytes()
-              case 'm' =>
-                if (s.matchAt(monthStr, i)) {
-                  months = Math.addExact(months, currentValue)
-                  i += monthStr.numBytes()
-                } else if (s.matchAt(minuteStr, i)) {
-                  val minutesUs = Math.multiplyExact(currentValue, MICROS_PER_MINUTE)
-                  microseconds = Math.addExact(microseconds, minutesUs)
-                  i += minuteStr.numBytes()
-                } else if (s.matchAt(millisStr, i)) {
-                  val millisUs = Math.multiplyExact(currentValue, DateTimeUtils.MICROS_PER_MILLIS)
-                  microseconds = Math.addExact(microseconds, millisUs)
-                  i += millisStr.numBytes()
-                } else if (s.matchAt(microsStr, i)) {
-                  microseconds = Math.addExact(microseconds, currentValue)
-                  i += microsStr.numBytes()
-                } else return None
-              case _ => return None
+            try {
+              b match {
+                case 'y' if s.matchAt(yearStr, i) =>
+                  months = Math.addExact(months, Math.multiplyExact(12, currentValue))
+                  i += yearStr.numBytes()
+                case 'w' if s.matchAt(weekStr, i) =>
+                  val daysUs = Math.multiplyExact(
+                    Math.multiplyExact(7, currentValue),
+                    DateTimeUtils.MICROS_PER_DAY)
+                  microseconds = Math.addExact(microseconds, daysUs)
+                  i += weekStr.numBytes()
+                case 'd' if s.matchAt(dayStr, i) =>
+                  val daysUs = Math.multiplyExact(currentValue, DateTimeUtils.MICROS_PER_DAY)
+                  microseconds = Math.addExact(microseconds, daysUs)
+                  i += dayStr.numBytes()
+                case 'h' if s.matchAt(hourStr, i) =>
+                  val hoursUs = Math.multiplyExact(currentValue, MICROS_PER_HOUR)
+                  microseconds = Math.addExact(microseconds, hoursUs)
+                  i += hourStr.numBytes()
+                case 's' if s.matchAt(secondStr, i) =>
+                  val secondsUs = Math.multiplyExact(currentValue, DateTimeUtils.MICROS_PER_SECOND)
+                  microseconds = Math.addExact(microseconds, secondsUs)
+                  i += secondStr.numBytes()
+                case 'm' =>
+                  if (s.matchAt(monthStr, i)) {
+                    months = Math.addExact(months, currentValue)
+                    i += monthStr.numBytes()
+                  } else if (s.matchAt(minuteStr, i)) {
+                    val minutesUs = Math.multiplyExact(currentValue, MICROS_PER_MINUTE)
+                    microseconds = Math.addExact(microseconds, minutesUs)
+                    i += minuteStr.numBytes()
+                  } else if (s.matchAt(millisStr, i)) {
+                    val millisUs = Math.multiplyExact(
+                      currentValue,
+                      DateTimeUtils.MICROS_PER_MILLIS)
+                    microseconds = Math.addExact(microseconds, millisUs)
+                    i += millisStr.numBytes()
+                  } else if (s.matchAt(microsStr, i)) {
+                    microseconds = Math.addExact(microseconds, currentValue)
+                    i += microsStr.numBytes()
+                  } else return None
+                case _ => return None
+              }
+            } catch {
+              case _: ArithmeticException => return None
             }
             state = UNIT_NAME_SUFFIX
           }
