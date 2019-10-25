@@ -76,39 +76,41 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
   test("Add config to retry spark streaming's meta log when it met") {
     val s = MemoryStream[Int]
     // Specified checkpointLocation manually to init metadata file
-    val tmp =
-      new File(System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getCanonicalPath
-    testStream(s.toDF())(
-      StartStream(checkpointLocation = tmp)
-    )
+    withTempDir { f =>
+      val tmp = f.getAbsolutePath
 
-    // fail with less retries
-    withSQLConf(
-      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
-        classOf[FakeFileSystemBasedCheckpointFileManager].getName,
-      SQLConf.STREAMING_META_DATA_NUM_RETRIES.key ->
-        1.toString) {
-      val e = intercept[Throwable] {
+      testStream(s.toDF())(
+        StartStream(checkpointLocation = tmp)
+      )
+
+      // fail with less retries
+      withSQLConf(
+        SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+          classOf[FakeFileSystemBasedCheckpointFileManager].getName,
+        SQLConf.STREAMING_META_DATA_NUM_RETRIES.key ->
+          1.toString) {
+        val e = intercept[Throwable] {
+          testStream(s.toDF())(
+            StartStream(checkpointLocation = tmp),
+            AddData(s, 1),
+            CheckAnswer(1)
+          )
+        }
+        assert(e.getMessage.contains("Failed to write meta data log after retry"))
+      }
+
+      // ok with enough retries
+      withSQLConf(
+        SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+          classOf[FakeFileSystemBasedCheckpointFileManager].getName,
+        SQLConf.STREAMING_META_DATA_NUM_RETRIES.key ->
+          SQLConf.STREAMING_META_DATA_NUM_RETRIES.defaultValue.get.toString) {
         testStream(s.toDF())(
           StartStream(checkpointLocation = tmp),
           AddData(s, 1),
-          CheckAnswer(1)
+          CheckAnswer(1, 1)
         )
       }
-      assert(e.getMessage.contains("Failed to write meta data log after retry"))
-    }
-
-    // ok with enough retries
-    withSQLConf(
-      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
-        classOf[FakeFileSystemBasedCheckpointFileManager].getName,
-      SQLConf.STREAMING_META_DATA_NUM_RETRIES.key ->
-        SQLConf.STREAMING_META_DATA_NUM_RETRIES.defaultValue.get.toString) {
-      testStream(s.toDF())(
-        StartStream(checkpointLocation = tmp),
-        AddData(s, 1),
-        CheckAnswer(1, 1)
-      )
     }
   }
 }
