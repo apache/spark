@@ -49,24 +49,22 @@ class SparkSQLEnvSuite extends SparkFunSuite {
   }
 
   private def withSystemProperties(pairs: (String, String)*)(f: => Unit): Unit = {
-    val oldValues = pairs.map { kv => kv._1 -> System.getProperty(kv._1) }.toMap
-    try {
-      pairs.foreach { case (key, value) =>
+    def setProperties(properties: Seq[(String, String)]): Unit = {
+      properties.foreach { case (key, value) =>
         if (value != null) {
           System.setProperty(key, value)
         } else {
           System.clearProperty(key)
         }
       }
+    }
+
+    val oldValues = pairs.map { kv => kv._1 -> System.getProperty(kv._1) }
+    try {
+      setProperties(pairs)
       f
     } finally {
-      oldValues.foreach { case (key, value) =>
-        if (value != null) {
-          System.setProperty(key, value)
-        } else {
-          System.clearProperty(key)
-        }
-      }
+      setProperties(oldValues)
     }
   }
 }
