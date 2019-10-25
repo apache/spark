@@ -47,12 +47,11 @@ CREATE OR REPLACE TEMPORARY VIEW bitwise_test AS SELECT * FROM VALUES
   (7, 7, 7, 3L) AS bitwise_test(b1, b2, b3, b4);
 
 -- empty case
-SELECT BIT_AND(b1) AS n1, BIT_OR(b2) AS n2, BIT_XOR(b3) AS n3 FROM bitwise_test where 1 = 0;
+SELECT BIT_AND(b1) AS n1, BIT_OR(b2)  AS n2 FROM bitwise_test where 1 = 0;
 
 -- null case
-SELECT BIT_AND(b4) AS n1, BIT_OR(b4)  AS n2, BIT_XOR(b4) AS n3 FROM bitwise_test where b4 is null;
+SELECT BIT_AND(b4) AS n1, BIT_OR(b4)  AS n2 FROM bitwise_test where b4 is null;
 
--- the suffix numbers show the expected answer
 SELECT
  BIT_AND(cast(b1 as tinyint)) AS a1,
  BIT_AND(cast(b2 as smallint)) AS b1,
@@ -61,16 +60,11 @@ SELECT
  BIT_OR(cast(b1 as tinyint))  AS e7,
  BIT_OR(cast(b2 as smallint))  AS f7,
  BIT_OR(b3)  AS g7,
- BIT_OR(b4)  AS h3,
- BIT_XOR(cast(b1 as tinyint))  AS i5,
- BIT_XOR(cast(b2 as smallint))  AS j5,
- BIT_XOR(b3)  AS k5,
- BIT_XOR(b4)  AS l2,
- BIT_XOR(distinct b4) AS m2
+ BIT_OR(b4)  AS h3
 FROM bitwise_test;
 
 -- group by
-SELECT b1 , bit_and(b2), bit_or(b4), bit_xor(b3) FROM bitwise_test GROUP BY b1;
+SELECT b1 , bit_and(b2), bit_or(b4) FROM bitwise_test GROUP BY b1;
 
 --having
 SELECT b1, bit_and(b2) FROM bitwise_test GROUP BY b1 HAVING bit_and(b2) < 7;
@@ -78,7 +72,6 @@ SELECT b1, bit_and(b2) FROM bitwise_test GROUP BY b1 HAVING bit_and(b2) < 7;
 -- window
 SELECT b1, b2, bit_and(b2) OVER (PARTITION BY b1 ORDER BY b2) FROM bitwise_test;
 SELECT b1, b2, bit_or(b2) OVER (PARTITION BY b1 ORDER BY b2) FROM bitwise_test;
-SELECT b1, b2, bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2) FROM bitwise_test;
 
 --
 -- test boolean aggregates
