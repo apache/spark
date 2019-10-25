@@ -39,6 +39,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     val running = new mutable.ArrayBuffer[SQLExecutionUIData]()
     val completed = new mutable.ArrayBuffer[SQLExecutionUIData]()
     val failed = new mutable.ArrayBuffer[SQLExecutionUIData]()
+    
     sqlStore.executionsList().foreach { e =>
       val isRunning = e.completionTime.isEmpty ||
         e.jobs.exists { case (_, status) => status == JobExecutionStatus.RUNNING }
@@ -302,8 +303,8 @@ private[ui] class ExecutionPagedTable(
           "Failed Job IDs" -> "IDs of failed jobs.")
       } else if (showSucceededJobs && showFailedJobs) {
         headerNameWithTooltips += (
-          "Succeeded Job IDs" -> "Id's of succeeded jobs.",
-          "Failed Job IDs" -> "Id's of failed jobs.")
+          "Succeeded Job IDs" -> "IDs of succeeded jobs.",
+          "Failed Job IDs" -> "IDs of failed jobs.")
       } else {
         headerNameWithTooltips += ("Job IDs" -> "Job IDs")
       }
