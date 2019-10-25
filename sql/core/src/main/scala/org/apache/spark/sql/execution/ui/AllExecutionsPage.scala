@@ -290,6 +290,11 @@ private[ui] class ExecutionPagedTable(
         }
       }
 
+    val headerNameWithTooltips: Map[String, String] = Map(
+      "ID" -> "Execution ID of the SQL query.",
+      "Description" -> "The description links to the query details page",
+      "Duration" -> "Difference between start time and close time.")
+
     val sortableColumnHeaders = executionHeadersAndCssClasses.filter {
       case (_, sortable) => sortable
     }.map { case (title, _) => title }
@@ -298,6 +303,7 @@ private[ui] class ExecutionPagedTable(
 
     val headerRow: Seq[Node] = {
       executionHeadersAndCssClasses.map { case (header, sortable) =>
+        val headerTooltip = headerNameWithTooltips.getOrElse(header,"")
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
@@ -309,7 +315,8 @@ private[ui] class ExecutionPagedTable(
 
           <th>
             <a href={headerLink}>
-              {header}<span>
+              <span data-toggle="tooltip" data-placement="top" title={headerTooltip}>
+                {header}</span><span>
               &nbsp;{Unparsed(arrow)}
             </span>
             </a>
@@ -324,12 +331,16 @@ private[ui] class ExecutionPagedTable(
 
             <th>
               <a href={headerLink}>
-                {header}
+                <span data-toggle="tooltip" data-placement="top" title={headerTooltip}>
+                  {header}
+                </span>
               </a>
             </th>
           } else {
             <th>
-              {header}
+              <span data-toggle="tooltip" data-placement="top" title={headerTooltip}>
+                {header}
+              </span>
             </th>
           }
         }
@@ -397,9 +408,16 @@ private[ui] class ExecutionPagedTable(
 
     val desc = if (execution.description != null && execution.description.nonEmpty) {
       <a href={executionURL(execution.executionId)} class="description-input">
-        {execution.description}</a>
+        <span
+        data-toggle="tooltip" data-placement="top" title="Click to navigate query details page.">
+          {execution.description}
+        </span></a>
     } else {
-      <a href={executionURL(execution.executionId)}>{execution.executionId}</a>
+      <a href={executionURL(execution.executionId)}>
+        <span
+        data-toggle="tooltip" data-placement="top" title="Click to navigate query details page.">
+          {execution.executionId}
+        </span></a>
     }
 
     <div>{desc}{details}</div>
