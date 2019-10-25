@@ -131,11 +131,10 @@
         <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
         <plugins>
             <plugin>
-                <groupId>org.apache.thrift.tools</groupId>
-                <artifactId>maven-thrift-plugin</artifactId>
-                <version>0.1.11</version>
+                <groupId>org.apache.thrift</groupId>
+                <artifactId>thrift-maven-plugin</artifactId>
+                <version>0.10.0</version>
                 <configuration>
-                    <thriftExecutable>/usr/local/opt/thrift@0.9/bin/thrift</thriftExecutable>
                     <thriftSourceRoot>../thriftserver/if</thriftSourceRoot>
                 </configuration>
                 <executions>
