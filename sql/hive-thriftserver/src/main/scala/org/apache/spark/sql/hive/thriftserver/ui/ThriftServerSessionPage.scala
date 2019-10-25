@@ -105,7 +105,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
         Some(new SqlStatsPagedTable(
           request,
           parent,
-          listener.getExecutionList,
+          executionList,
           "sqlserver/session",
           UIUtils.prependBaseUri(request, parent.basePath),
           parameterOtherTable,
