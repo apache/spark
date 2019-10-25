@@ -1072,6 +1072,12 @@ class DDLParserSuite extends AnalysisTest {
         Some(Map("ds" -> "2017-06-10"))))
   }
 
+  test("SHOW CREATE table") {
+    comparePlans(
+      parsePlan("SHOW CREATE TABLE a.b.c"),
+      ShowCreateTableStatement(Seq("a", "b", "c")))
+  }
+
   test("CACHE TABLE") {
     comparePlans(
       parsePlan("CACHE TABLE a.b.c"),

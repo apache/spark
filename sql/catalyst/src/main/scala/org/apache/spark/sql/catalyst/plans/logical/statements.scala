@@ -341,6 +341,11 @@ case class LoadDataStatement(
     partition: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
+ * A SHOW CREATE TABLE statement, as parsed from SQL.
+ */
+case class ShowCreateTableStatement(tableName: Seq[String]) extends ParsedStatement
+
+/**
  * A CACHE TABLE statement, as parsed from SQL
  */
 case class CacheTableStatement(
