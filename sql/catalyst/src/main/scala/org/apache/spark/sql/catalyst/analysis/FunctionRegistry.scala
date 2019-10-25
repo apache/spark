@@ -525,6 +525,9 @@ object FunctionRegistry {
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
     expression[BitwiseCount]("bit_count"),
+    expression[BitAndAgg]("bit_and"),
+    expression[BitOrAgg]("bit_or"),
+    expression[BitXorAgg]("bit_xor"),
 
     // json
     expression[StructsToJson]("to_json"),

@@ -283,6 +283,19 @@ case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[S
   extends ParsedStatement
 
 /**
+ * A CREATE NAMESPACE statement, as parsed from SQL.
+ */
+case class CreateNamespaceStatement(
+    namespace: Seq[String],
+    ifNotExists: Boolean,
+    properties: Map[String, String]) extends ParsedStatement
+
+object CreateNamespaceStatement {
+  val COMMENT_PROPERTY_KEY: String = "comment"
+  val LOCATION_PROPERTY_KEY: String = "location"
+}
+
+/**
  * A SHOW NAMESPACES statement, as parsed from SQL.
  */
 case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
@@ -311,3 +324,43 @@ case class AnalyzeColumnStatement(
   require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
     "mutually exclusive. Only one of them should be specified.")
 }
+
+/**
+ * A REPAIR TABLE statement, as parsed from SQL
+ */
+case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
+
+/**
+ * A CACHE TABLE statement, as parsed from SQL
+ */
+case class CacheTableStatement(
+    tableName: Seq[String],
+    plan: Option[LogicalPlan],
+    isLazy: Boolean,
+    options: Map[String, String]) extends ParsedStatement
+
+/**
+ * An UNCACHE TABLE statement, as parsed from SQL
+ */
+case class UncacheTableStatement(
+    tableName: Seq[String],
+    ifExists: Boolean) extends ParsedStatement
+
+/**
+ * A TRUNCATE TABLE statement, as parsed from SQL
+ */
+case class TruncateTableStatement(
+    tableName: Seq[String],
+    partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
+
+/**
+ * A SHOW PARTITIONS statement, as parsed from SQL
+ */
+case class ShowPartitionsStatement(
+    tableName: Seq[String],
+    partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
+
+/**
+ * A REFRESH TABLE statement, as parsed from SQL
+ */
+case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
