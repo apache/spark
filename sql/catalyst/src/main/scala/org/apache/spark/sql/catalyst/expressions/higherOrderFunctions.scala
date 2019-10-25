@@ -312,16 +312,12 @@ case class ArrayTransform(
 case class ArraySort(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with ArraySortLike with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
   def this(argument: Expression) = this(argument, Literal(true))
 
   @transient lazy val argumentsType: DataType =
     argument.dataType.asInstanceOf[ArrayType].elementType
-
-  override protected def arrayExpression: Expression = argument
-
-  override protected def nullOrder: NullOrder = NullOrder.Greatest
 
   override def dataType: ArrayType = argument.dataType.asInstanceOf[ArrayType]
 
@@ -378,6 +374,34 @@ case class ArraySort(
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
     sortEval(arr, if (function.dataType == BooleanType) lt else comparator(inputRow))
+  }
+
+  def sortEval(array: Any, comparator: Comparator[Any]): Any = {
+    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](argumentsType)
+    if (argumentsType != NullType) {
+      java.util.Arrays.sort(data, comparator)
+    }
+    new GenericArrayData(data.asInstanceOf[Array[Any]])
+  }
+
+  @transient lazy val lt: Comparator[Any] = {
+    val ordering = argument.dataType match {
+      case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
+    }
+
+    (o1: Any, o2: Any) => {
+      if (o1 == null && o2 == null) {
+        0
+      } else if (o1 == null) {
+        1
+      } else if (o2 == null) {
+        -1
+      } else {
+        ordering.compare(o1, o2)
+      }
+    }
   }
 
   override def prettyName: String = "array_sort"

@@ -765,14 +765,6 @@ trait ArraySortLike extends ExpectsInputTypes {
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 
-  def sortEval(array: Any, comparator: Comparator[Any]): Any = {
-    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
-    if (elementType != NullType) {
-      java.util.Arrays.sort(data, comparator)
-    }
-    new GenericArrayData(data.asInstanceOf[Array[Any]])
-  }
-
   def sortCodegen(ctx: CodegenContext, ev: ExprCode, base: String, order: String): String = {
     val genericArrayData = classOf[GenericArrayData].getName
     val unsafeArrayData = classOf[UnsafeArrayData].getName
