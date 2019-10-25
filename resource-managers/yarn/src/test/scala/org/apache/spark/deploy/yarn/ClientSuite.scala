@@ -203,7 +203,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       tags.asScala.count(_.nonEmpty) should be (4)
     }
     appContext.getMaxAppAttempts should be (42)
-    appContext.getPriority should be (1)
+    appContext.getPriority.getPriority should be (1)
   }
 
   test("spark.yarn.jars with multiple paths and globs") {
