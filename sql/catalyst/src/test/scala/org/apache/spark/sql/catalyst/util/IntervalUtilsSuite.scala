@@ -19,16 +19,80 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.concurrent.TimeUnit
 
-import org.scalatest.Matchers
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.catalyst.util.IntervalUtils.fromString
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.CalendarInterval._
 
-class IntervalUtilsSuite extends SparkFunSuite with Matchers {
+class IntervalUtilsSuite extends SparkFunSuite {
+
+  test("fromString: basic") {
+    testSingleUnit("YEAR", 3, 36, 0)
+    testSingleUnit("Month", 3, 3, 0)
+    testSingleUnit("Week", 3, 0, 3 * MICROS_PER_WEEK)
+    testSingleUnit("DAY", 3, 0, 3 * MICROS_PER_DAY)
+    testSingleUnit("HouR", 3, 0, 3 * MICROS_PER_HOUR)
+    testSingleUnit("MiNuTe", 3, 0, 3 * MICROS_PER_MINUTE)
+    testSingleUnit("Second", 3, 0, 3 * MICROS_PER_SECOND)
+    testSingleUnit("MilliSecond", 3, 0, 3 * MICROS_PER_MILLI)
+    testSingleUnit("MicroSecond", 3, 0, 3)
+
+    for (input <- Seq(null, "", " ")) {
+      try {
+        fromString(input)
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          val msg = e.getMessage
+          if (input == null) {
+            assert(msg.contains("cannot be null"))
+          }
+      }
+    }
+
+    for (input <- Seq("interval", "interval1 day", "foo", "foo 1 day")) {
+      try {
+        fromString(input)
+        fail("Expected to throw an exception for the invalid input")
+      } catch {
+        case e: IllegalArgumentException =>
+          val msg = e.getMessage
+          assert(msg.contains("Invalid interval string"))
+      }
+    }
+  }
+
+  test("fromString: random order field") {
+    val input = "1 day 1 year"
+    val result = new CalendarInterval(12, MICROS_PER_DAY)
+    assert(fromString(input) == result)
+  }
+
+  test("fromString: duplicated fields") {
+    val input = "1 day 1 day"
+    val result = new CalendarInterval(0, 2 * MICROS_PER_DAY)
+    assert(fromString(input) == result)
+  }
+
+  test("fromString: value with +/-") {
+    val input = "+1 year -1 day"
+    val result = new CalendarInterval(12, -MICROS_PER_DAY)
+    assert(fromString(input) == result)
+  }
+
+  private def testSingleUnit(unit: String, number: Int, months: Int, microseconds: Long): Unit = {
+    for (prefix <- Seq("interval ", "")) {
+      val input1 = prefix + number + " " + unit
+      val input2 = prefix + number + " " + unit + "s"
+      val result = new CalendarInterval(months, microseconds)
+      assert(fromString(input1) == result)
+      assert(fromString(input2) == result)
+    }
+  }
+
   test("interval duration") {
     def duration(s: String, unit: TimeUnit, daysPerMonth: Int): Long = {
-      getDuration(CalendarInterval.fromString(s), unit, daysPerMonth)
+      IntervalUtils.getDuration(fromString(s), unit, daysPerMonth)
     }
 
     assert(duration("0 seconds", TimeUnit.MILLISECONDS, 31) === 0)
@@ -47,7 +111,7 @@ class IntervalUtilsSuite extends SparkFunSuite with Matchers {
 
   test("negative interval") {
     def isNegative(s: String, daysPerMonth: Int): Boolean = {
-      IntervalUtils.isNegative(CalendarInterval.fromString(s), daysPerMonth)
+      IntervalUtils.isNegative(fromString(s), daysPerMonth)
     }
 
     assert(isNegative("-1 months", 28))
@@ -58,6 +122,5 @@ class IntervalUtilsSuite extends SparkFunSuite with Matchers {
     assert(!isNegative("0 months", 28))
     assert(!isNegative("1 year -360 days", 31))
     assert(!isNegative("-1 year 380 days", 31))
-
   }
 }

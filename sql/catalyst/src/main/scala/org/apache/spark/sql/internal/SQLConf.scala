@@ -626,8 +626,8 @@ object SQLConf {
     .createWithDefault("snappy")
 
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
-    .doc("When native, use the native version of ORC support instead of the ORC library in Hive " +
-      "1.2.1. It is 'hive' by default prior to Spark 2.4.")
+    .doc("When native, use the native version of ORC support instead of the ORC library in Hive." +
+      "It is 'hive' by default prior to Spark 2.4.")
     .internal()
     .stringConf
     .checkValues(Set("hive", "native"))
@@ -980,7 +980,9 @@ object SQLConf {
       .createWithDefault(true)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
-    .doc("The maximum number of bytes to pack into a single partition when reading files.")
+    .doc("The maximum number of bytes to pack into a single partition when reading files. " +
+      "This configuration is effective only when using file-based sources such as Parquet, JSON " +
+      "and ORC.")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(128 * 1024 * 1024) // parquet.block.size
 
@@ -989,19 +991,24 @@ object SQLConf {
     .doc("The estimated cost to open a file, measured by the number of bytes could be scanned in" +
       " the same time. This is used when putting multiple files into a partition. It's better to" +
       " over estimated, then the partitions with small files will be faster than partitions with" +
-      " bigger files (which is scheduled first).")
+      " bigger files (which is scheduled first). This configuration is effective only when using" +
+      " file-based sources such as Parquet, JSON and ORC.")
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
-      "encountering corrupted files and the contents that have been read will still be returned.")
+      "encountering corrupted files and the contents that have been read will still be returned. " +
+      "This configuration is effective only when using file-based sources such as Parquet, JSON " +
+      "and ORC.")
     .booleanConf
     .createWithDefault(false)
 
   val IGNORE_MISSING_FILES = buildConf("spark.sql.files.ignoreMissingFiles")
     .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
-      "encountering missing files and the contents that have been read will still be returned.")
+      "encountering missing files and the contents that have been read will still be returned. " +
+      "This configuration is effective only when using file-based sources such as Parquet, JSON " +
+      "and ORC.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1189,9 +1196,11 @@ object SQLConf {
 
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
-      .doc("If false, JacksonGenerator will generate null for null fields in Struct.")
-      .stringConf
-      .createWithDefault("true")
+      .doc("Whether to ignore null fields when generating JSON objects in JSON data source and " +
+        "JSON functions such as to_json. " +
+        "If false, it generates null for null fields in JSON objects.")
+      .booleanConf
+      .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -2385,7 +2394,7 @@ class SQLConf extends Serializable with Logging {
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
-  def jsonGeneratorIgnoreNullFields: String = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
+  def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)

@@ -19,21 +19,24 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
 
 object IntervalUtils {
-  val MONTHS_PER_YEAR: Int = 12
-  val MONTHS_PER_QUARTER: Byte = 3
-  val YEARS_PER_MILLENNIUM: Int = 1000
-  val YEARS_PER_CENTURY: Int = 100
-  val YEARS_PER_DECADE: Int = 10
-  val MICROS_PER_HOUR: Long = DateTimeUtils.MILLIS_PER_HOUR * DateTimeUtils.MICROS_PER_MILLIS
-  val MICROS_PER_MINUTE: Long = DateTimeUtils.MILLIS_PER_MINUTE * DateTimeUtils.MICROS_PER_MILLIS
-  val DAYS_PER_MONTH: Byte = 30
-  val MICROS_PER_MONTH: Long = DAYS_PER_MONTH * DateTimeUtils.SECONDS_PER_DAY
+  final val MONTHS_PER_YEAR: Int = 12
+  final val MONTHS_PER_QUARTER: Byte = 3
+  final val YEARS_PER_MILLENNIUM: Int = 1000
+  final val YEARS_PER_CENTURY: Int = 100
+  final val YEARS_PER_DECADE: Int = 10
+  final val MICROS_PER_HOUR: Long =
+    DateTimeUtils.MILLIS_PER_HOUR * DateTimeUtils.MICROS_PER_MILLIS
+  final val MICROS_PER_MINUTE: Long =
+    DateTimeUtils.MILLIS_PER_MINUTE * DateTimeUtils.MICROS_PER_MILLIS
+  final val DAYS_PER_MONTH: Byte = 30
+  final val MICROS_PER_MONTH: Long = DAYS_PER_MONTH * DateTimeUtils.SECONDS_PER_DAY
   /* 365.25 days per year assumes leap year every four years */
-  val MICROS_PER_YEAR: Long = (36525L * DateTimeUtils.MICROS_PER_DAY) / 100
+  final val MICROS_PER_YEAR: Long = (36525L * DateTimeUtils.MICROS_PER_DAY) / 100
 
   def getYears(interval: CalendarInterval): Int = {
     interval.months / MONTHS_PER_YEAR
@@ -89,6 +92,34 @@ object IntervalUtils {
     result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
     result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
     Decimal(result, 18, 6)
+  }
+
+  /**
+   * Converts a string to [[CalendarInterval]] case-insensitively.
+   *
+   * @throws IllegalArgumentException if the input string is not in valid interval format.
+   */
+  def fromString(str: String): CalendarInterval = {
+    if (str == null) throw new IllegalArgumentException("Interval string cannot be null")
+    try {
+      CatalystSqlParser.parseInterval(str)
+    } catch {
+      case e: ParseException =>
+        val ex = new IllegalArgumentException(s"Invalid interval string: $str\n" + e.message)
+        ex.setStackTrace(e.getStackTrace)
+        throw ex
+    }
+  }
+
+  /**
+   * A safe version of `fromString`. It returns null for invalid input string.
+   */
+  def safeFromString(str: String): CalendarInterval = {
+    try {
+      fromString(str)
+    } catch {
+      case _: IllegalArgumentException => null
+    }
   }
 
   /**

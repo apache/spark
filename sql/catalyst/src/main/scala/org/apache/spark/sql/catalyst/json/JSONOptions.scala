@@ -78,8 +78,8 @@ private[sql] class JSONOptions(
   val dropFieldIfAllNull = parameters.get("dropFieldIfAllNull").map(_.toBoolean).getOrElse(false)
 
   // Whether to ignore null fields during json generating
-  val ignoreNullFields = parameters.getOrElse("ignoreNullFields",
-    SQLConf.get.jsonGeneratorIgnoreNullFields).toBoolean
+  val ignoreNullFields = parameters.get("ignoreNullFields").map(_.toBoolean)
+    .getOrElse(SQLConf.get.jsonGeneratorIgnoreNullFields)
 
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
