@@ -160,8 +160,8 @@ public class CalendarIntervalSuite {
     assertEquals(new CalendarInterval(-123 * 42, -456 * 42), interval.multiply(42));
 
     assertEquals(
-      fromString("interval 1 month 22 days 12 hours"),
-      fromString("interval 1 month 5 days").multiply(1.5));
+      new CalendarInterval(1, 22 * MICROS_PER_DAY + 12 * MICROS_PER_HOUR),
+      new CalendarInterval(1, 5 * MICROS_PER_DAY).multiply(1.5));
 
     try {
       interval = new CalendarInterval(2, 0);
@@ -177,13 +177,21 @@ public class CalendarIntervalSuite {
       CalendarInterval interval = new CalendarInterval(0, 0);
       assertEquals(interval, interval.divide(10));
 
-      interval = fromString("1 month 30 seconds");
-      assertEquals(fromString("15 days 15 seconds"), interval.divide(2));
-      assertEquals(fromString("2 months 1 minute"), interval.divide(0.5));
+      interval = new CalendarInterval(1, 30 * MICROS_PER_SECOND);
+      assertEquals(
+        new CalendarInterval(0, 15 * MICROS_PER_DAY + 15 * MICROS_PER_SECOND),
+        interval.divide(2));
+      assertEquals(
+        new CalendarInterval(2, MICROS_PER_MINUTE),
+        interval.divide(0.5));
 
-      interval = fromString("-1 month -30 seconds");
-      assertEquals(fromString("-15 days -15 seconds"), interval.divide(2));
-      assertEquals(fromString("-2 months -1 minute"), interval.divide(0.5));
+      interval = new CalendarInterval(-1, -30 * MICROS_PER_SECOND);
+      assertEquals(
+        new CalendarInterval(0, -15 * MICROS_PER_DAY - 15 * MICROS_PER_SECOND),
+        interval.divide(2));
+      assertEquals(
+        new CalendarInterval(-2, -1 * MICROS_PER_MINUTE),
+        interval.divide(0.5));
 
       try {
         interval = new CalendarInterval(123, 456);
