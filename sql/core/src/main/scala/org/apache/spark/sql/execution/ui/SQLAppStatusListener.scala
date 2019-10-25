@@ -146,7 +146,7 @@ class SQLAppStatusListener(
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     event.accumUpdates.foreach { case (taskId, stageId, attemptId, accumUpdates) =>
-      updateStageMetrics(stageId, attemptId, taskId, SQLAppStatusListener.UNKNOWN_PARTITION,
+      updateStageMetrics(stageId, attemptId, taskId, SQLAppStatusListener.UNKNOWN_INDEX,
         accumUpdates, false)
     }
   }
@@ -246,12 +246,12 @@ class SQLAppStatusListener(
       stageId: Int,
       attemptId: Int,
       taskId: Long,
-      partIdx: Int,
+      taskIdx: Int,
       accumUpdates: Seq[AccumulableInfo],
       succeeded: Boolean): Unit = {
     Option(stageMetrics.get(stageId)).foreach { metrics =>
       if (metrics.attemptId == attemptId) {
-        metrics.updateTaskMetrics(taskId, partIdx, succeeded, accumUpdates)
+        metrics.updateTaskMetrics(taskId, taskIdx, succeeded, accumUpdates)
       }
     }
   }
@@ -438,32 +438,32 @@ private class LiveStageMetrics(
     val accumulatorIds: Set[Long]) {
 
   /**
-   * Mapping of task IDs to the partition index they're computing. Note this may contain more
-   * elements than the stage's number of tasks, if speculative execution is on.
+   * Mapping of task IDs to their respective index. Note this may contain more elements than the
+   * stage's number of tasks, if speculative execution is on.
    */
   private val taskIndices = new OpenHashMap[Long, Int]()
 
-  /** Bit set tracking which partition indices have been successfully computed. */
-  private val completedParts = new mutable.BitSet()
+  /** Bit set tracking which indices have been successfully computed. */
+  private val completedIndices = new mutable.BitSet()
 
   /**
    * Task metrics values for the stage. Maps the metric ID to the metric values for each
-   * partition. For each metric ID, there will be the same number of values as the number
-   * of partitions. This relies on `SQLMetrics.stringValue` treating 0 as a neutral value,
+   * index. For each metric ID, there will be the same number of values as the number
+   * of indices. This relies on `SQLMetrics.stringValue` treating 0 as a neutral value,
    * independent of the actual metric type.
    */
   private val taskMetrics = new ConcurrentHashMap[Long, Array[Long]]()
 
-  def registerTask(taskId: Long, partIdx: Int): Unit = {
-    taskIndices.update(taskId, partIdx)
+  def registerTask(taskId: Long, taskIdx: Int): Unit = {
+    taskIndices.update(taskId, taskIdx)
   }
 
   def updateTaskMetrics(
       taskId: Long,
-      eventPartIdx: Int,
+      eventIdx: Int,
       finished: Boolean,
       accumUpdates: Seq[AccumulableInfo]): Unit = {
-    val partIdx = if (eventPartIdx == SQLAppStatusListener.UNKNOWN_PARTITION) {
+    val taskIdx = if (eventIdx == SQLAppStatusListener.UNKNOWN_INDEX) {
       if (!taskIndices.contains(taskId)) {
         // We probably missed the start event for the task, just ignore it.
         return
@@ -471,11 +471,11 @@ private class LiveStageMetrics(
       taskIndices(taskId)
     } else {
       // Here we can recover from a missing task start event. Just register the task again.
-      registerTask(taskId, eventPartIdx)
-      eventPartIdx
+      registerTask(taskId, eventIdx)
+      eventIdx
     }
 
-    if (completedParts.contains(partIdx)) {
+    if (completedIndices.contains(taskIdx)) {
       return
     }
 
@@ -492,11 +492,11 @@ private class LiveStageMetrics(
         }
 
         val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
-        metricValues(partIdx) = value
+        metricValues(taskIdx) = value
       }
 
     if (finished) {
-      completedParts += partIdx
+      completedIndices += taskIdx
     }
   }
 
@@ -504,5 +504,5 @@ private class LiveStageMetrics(
 }
 
 private object SQLAppStatusListener {
-  val UNKNOWN_PARTITION = -1
+  val UNKNOWN_INDEX = -1
 }
