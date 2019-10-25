@@ -491,14 +491,8 @@ class JDBCSuite extends QueryTest
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
-    val df = spark.read.jdbc(urlWithUserAndPass,
-      "TEST.PEOPLE",
-      "THEID",
-      "0",
-      "4",
-      3,
-      new Properties()
-    )
+    val df =
+      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", "0", "4", 3, new Properties())
     checkNumPartitions(df, expectedNumPartitions = 3)
     assert(df.collect().length === 3)
   }
