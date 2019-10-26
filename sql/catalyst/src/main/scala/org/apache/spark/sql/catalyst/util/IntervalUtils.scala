@@ -150,7 +150,7 @@ object IntervalUtils {
     val m = yearMonthPattern.matcher(s)
     if (!m.matches) {
       throw new IllegalArgumentException(
-        "Interval string does not match year-month format of 'y-m': " + s)
+        s"Interval string does not match year-month format of 'y-m': $s")
     }
 
     try {
@@ -191,7 +191,7 @@ object IntervalUtils {
     val m = dayTimePattern.matcher(s)
     if (!m.matches) {
       throw new IllegalArgumentException(
-        "Interval string does not match day-time format of 'd h:m:s.n': " + s)
+        s"Interval string does not match day-time format of 'd h:m:s.n': $s")
     }
     try {
       val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
