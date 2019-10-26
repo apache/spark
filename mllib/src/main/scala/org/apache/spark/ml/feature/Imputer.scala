@@ -146,11 +146,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
     transformSchema(dataset.schema, logging = true)
     val spark = dataset.sparkSession
 
-    val inputColumns = if (isSet(inputCols)) {
-      $(inputCols)
-    } else {
-      Array($(inputCol))
-    }
+    val (inputColumns, _) = getInOutCols()
 
     val cols = inputColumns.map { inputCol =>
       when(col(inputCol).equalTo($(missingValue)), null)
