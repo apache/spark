@@ -145,13 +145,10 @@ object IntervalUtils {
    * adapted from HiveIntervalYearMonth.valueOf
    */
   def fromYearMonthString(input: String): CalendarInterval = {
-    if (input == null) throw new IllegalArgumentException("Interval year-month string was null")
+    require(input != null, "Interval year-month string must be not null")
     val s = input.trim
     val m = yearMonthPattern.matcher(s)
-    if (!m.matches) {
-      throw new IllegalArgumentException(
-        s"Interval string does not match year-month format of 'y-m': $s")
-    }
+    require(m.matches, s"Interval string must match year-month format of 'y-m': $s")
 
     try {
       val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
@@ -161,7 +158,7 @@ object IntervalUtils {
     } catch {
       case e: Exception =>
         throw new IllegalArgumentException(
-          "Error parsing interval year-month string: " + e.getMessage, e)
+          s"Error parsing interval year-month string: ${e.getMessage}", e)
     }
   }
 
@@ -184,15 +181,11 @@ object IntervalUtils {
    * - MINUTE TO SECOND
    */
   def fromDayTimeString(input: String, from: String, to: String): CalendarInterval = {
-    if (input == null) {
-      throw new IllegalArgumentException("Interval day-time string was null")
-    }
+    require(input != null, "Interval day-time string must be not null")
     val s = input.trim
     val m = dayTimePattern.matcher(s)
-    if (!m.matches) {
-      throw new IllegalArgumentException(
-        s"Interval string does not match day-time format of 'd h:m:s.n': $s")
-    }
+    require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $s")
+
     try {
       val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
       val days = if (m.group(2) == null) {
@@ -242,7 +235,7 @@ object IntervalUtils {
     } catch {
       case e: Exception =>
         throw new IllegalArgumentException(
-          "Error parsing interval day-time string: " + e.getMessage, e)
+          s"Error parsing interval day-time string: ${e.getMessage}", e)
     }
   }
 
@@ -280,7 +273,7 @@ object IntervalUtils {
         }
       } catch {
         case e: Exception =>
-          throw new IllegalArgumentException("Error parsing interval string: " + e.getMessage, e)
+          throw new IllegalArgumentException(s"Error parsing interval string: ${e.getMessage}", e)
       }
       i += 1
     }
