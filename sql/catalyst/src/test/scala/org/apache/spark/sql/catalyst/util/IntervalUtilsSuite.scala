@@ -106,15 +106,14 @@ class IntervalUtilsSuite extends SparkFunSuite {
       new CalendarInterval(
         0,
         5 * MICROS_PER_DAY +
-          12 * MICROS_PER_HOUR +
-          40 * MICROS_PER_MINUTE +
-          30 * MICROS_PER_SECOND + 999999L))
+        12 * MICROS_PER_HOUR +
+        40 * MICROS_PER_MINUTE +
+        30 * MICROS_PER_SECOND + 999999L))
     assert(fromDayTimeString("10 0:12:0.888") ===
       new CalendarInterval(
         0,
         10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLI))
-    assert(fromDayTimeString("-3 0:0:0") ===
-      new CalendarInterval(0, -3 * MICROS_PER_DAY))
+    assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3 * MICROS_PER_DAY))
 
     try {
       fromDayTimeString("5 30:12:20")
