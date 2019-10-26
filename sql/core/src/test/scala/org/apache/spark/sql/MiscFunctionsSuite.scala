@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark._
+import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
@@ -36,7 +36,7 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
   test("version") {
     checkAnswer(
       Seq("").toDF("a").selectExpr("version()"),
-      Row(SPARK_VERSION + " " + SPARK_REVISION))
+      Row(SPARK_VERSION_SHORT + " " + SPARK_REVISION))
   }
 }
 
