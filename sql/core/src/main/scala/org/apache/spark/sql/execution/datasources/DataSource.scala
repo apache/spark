@@ -749,21 +749,21 @@ object DataSource extends Logging {
     // for globbed paths.
     val (globPaths, nonGlobPaths) = qualifiedPaths.partition(SparkHadoopUtil.get.isGlobPath)
 
-    val globbedPaths = Try({
-      ThreadUtils.parmap(globPaths, "globPath", 20) { globPath =>
-        val fs = globPath.getFileSystem(hadoopConf)
-        val globResult = SparkHadoopUtil.get.globPath(fs, globPath)
+    val globbedPaths =
+      try {
+        ThreadUtils.parmap(globPaths, "globPath", 20) { globPath =>
+          val fs = globPath.getFileSystem(hadoopConf)
+          val globResult = SparkHadoopUtil.get.globPath(fs, globPath)
 
-        if (checkEmptyGlobPath && globResult.isEmpty) {
-          throw new AnalysisException(s"Path does not exist: $globPath")
-        }
+          if (checkEmptyGlobPath && globResult.isEmpty) {
+            throw new AnalysisException(s"Path does not exist: $globPath")
+          }
 
-        globResult
-      }.flatten
-    }).recoverWith({
-      case e: SparkException => throw e.getCause
-    }).get
-
+          globResult
+        }.flatten
+      } catch {
+        case e: SparkException => throw e.getCause
+      }
 
     if (checkFilesExist) {
       try {
