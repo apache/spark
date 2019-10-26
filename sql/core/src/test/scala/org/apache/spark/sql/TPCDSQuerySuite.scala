@@ -82,11 +82,6 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSSchema {
     "q3", "q7", "q10", "q19", "q27", "q34", "q42", "q43", "q46", "q52", "q53", "q55", "q59",
     "q63", "q65", "q68", "q73", "q79", "q89", "q98", "ss_max")
 
-  // List up the known queries having too large code in a generated function.
-  // A JIRA file for `modified-q3` is as follows;
-  // [SPARK-29128] Split predicate code in OR expressions
-  val blackListForMethodCodeSizeCheck = Set("modified-q3")
-
   modifiedTPCDSQueries.foreach { name =>
     val queryString = resourceToString(s"tpcds-modifiedQueries/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
@@ -94,7 +89,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSSchema {
     test(testName) {
       // check the plans can be properly generated
       val plan = sql(queryString).queryExecution.executedPlan
-      checkGeneratedCode(plan, !blackListForMethodCodeSizeCheck.contains(testName))
+      checkGeneratedCode(plan)
     }
   }
 }
