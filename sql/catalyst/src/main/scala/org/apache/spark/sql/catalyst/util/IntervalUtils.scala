@@ -314,5 +314,4 @@ object IntervalUtils {
         "Interval string does not match second-nano format of ss.nnnnnnnnn")
     }
   }
-
 }
