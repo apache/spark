@@ -32,7 +32,6 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{BinaryType, DataType}
 import org.apache.spark.util.Utils
 
-
 /**
  * This is a temporary port of KafkaSinkSuite, since we do not yet have a V2 memory stream.
  * Once we have one, this will be changed to a specialization of KafkaSinkSuite and we won't have
@@ -196,7 +195,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    runAndVerifyStreamingQueryException(inputTopic, "null topic present in the data.") {
+    runAndVerifyException[StreamingQueryException](inputTopic, "null topic present in the data.") {
       createKafkaWriter(input.toDF())(withSelectExpr = "CAST(null as STRING) as topic", "value")
     }
   }
@@ -215,9 +214,9 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    assertWrongSchema(input, Seq("value as key", "value"),
+    assertWrongSchema(topic, input, Seq("value as key", "value"),
       "topic option required when no 'topic' attribute is present")
-    assertWrongSchema(input, Seq(s"'$topic' as topic", "value as key"),
+    assertWrongSchema(topic, input, Seq(s"'$topic' as topic", "value as key"),
       "required attribute 'value' not found")
   }
 
@@ -237,13 +236,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    assertWrongSchema(input, Seq("CAST('1' as INT) as topic", "value"),
+    assertWrongSchema(topic, input, Seq("CAST('1' as INT) as topic", "value"),
       "topic must be a(n) string")
-    assertWrongSchema(input, Seq(s"'$topic' as topic", "CAST(value as INT) as value"),
+    assertWrongSchema(topic, input, Seq(s"'$topic' as topic", "CAST(value as INT) as value"),
       "value must be a(n) string or binary")
-    assertWrongSchema(input, Seq(s"'$topic' as topic", "CAST(value as INT) as key", "value"),
+    assertWrongSchema(topic, input, Seq(s"'$topic' as topic", "CAST(value as INT) as key", "value"),
       "key must be a(n) string or binary")
-    assertWrongSchema(input, Seq(s"'$topic' as topic", "value as partition", "value"),
+    assertWrongSchema(topic, input, Seq(s"'$topic' as topic", "value as partition", "value"),
       "partition must be a(n) int")
   }
 
@@ -260,7 +259,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
       .load()
     val topic = newTopic()
 
-    runAndVerifyStreamingQueryException(inputTopic, "job aborted") {
+    runAndVerifyException[StreamingQueryException](inputTopic, "job aborted") {
       createKafkaWriter(input.toDF(), withTopic = Some(topic))()
     }
   }
@@ -277,9 +276,9 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
       .option("subscribe", inputTopic)
       .load()
 
-    assertWrongOption(input.toDF(), Map("kafka.key.serializer" -> "foo"),
+    assertWrongOption(inputTopic, input.toDF(), Map("kafka.key.serializer" -> "foo"),
       "kafka option 'key.serializer' is not supported")
-    assertWrongOption(input.toDF(), Map("kafka.value.serializer" -> "foo"),
+    assertWrongOption(inputTopic, input.toDF(), Map("kafka.value.serializer" -> "foo"),
       "kafka option 'value.serializer' is not supported")
   }
 
@@ -350,13 +349,13 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     stream.start()
   }
 
-  private def runAndVerifyStreamingQueryException(
+  private def runAndVerifyException[T <: Exception : ClassTag](
       inputTopic: String,
       expectErrorMsg: String)(
       writerFn: => StreamingQuery): Unit = {
     var writer: StreamingQuery = null
     val ex: Exception = try {
-      intercept[StreamingQueryException] {
+      intercept[T] {
         writer = writerFn
         testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
         eventually(timeout(streamingTimeout)) {
@@ -367,36 +366,30 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     } finally {
       if (writer != null) writer.stop()
     }
-    assert(ex.getCause.getCause.getMessage.toLowerCase(Locale.ROOT).contains(expectErrorMsg))
-  }
-
-  private def verifyException[T <: Exception : ClassTag](
-      expectErrorMsg: String)(
-      writerFn: => StreamingQuery): Unit = {
-    var writer: StreamingQuery = null
-    val ex: Exception = try {
-      intercept[T] {
-        writer = writerFn
-      }
-    } finally {
-      if (writer != null) writer.stop()
+    val rootException = ex match {
+      case e: StreamingQueryException => e.getCause.getCause
+      case e => e
     }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(expectErrorMsg))
+    assert(rootException.getMessage.toLowerCase(Locale.ROOT).contains(expectErrorMsg))
   }
 
   private def assertWrongSchema(
+      inputTopic: String,
       input: DataFrame,
       selectExpr: Seq[String],
       expectErrorMsg: String): Unit = {
-    verifyException[AnalysisException](expectErrorMsg)(
-      createKafkaWriter(input)(withSelectExpr = selectExpr: _*))
+    runAndVerifyException[AnalysisException](inputTopic, expectErrorMsg) {
+      createKafkaWriter(input)(withSelectExpr = selectExpr: _*)
+    }
   }
 
   private def assertWrongOption(
+      inputTopic: String,
       input: DataFrame,
       options: Map[String, String],
       expectErrorMsg: String): Unit = {
-    verifyException[IllegalArgumentException](expectErrorMsg)(
-      createKafkaWriter(input, withOptions = options)())
+    runAndVerifyException[IllegalArgumentException](inputTopic, expectErrorMsg) {
+      createKafkaWriter(input, withOptions = options)()
+    }
   }
 }

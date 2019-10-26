@@ -85,8 +85,9 @@ private[kafka010] object KafkaWriter extends Logging {
   }
 
   def keyExpression(schema: Seq[Attribute]): Expression = {
-    expression(schema, KEY_ATTRIBUTE_NAME, Seq(StringType, BinaryType))(
-      Literal(null, BinaryType))
+    expression(schema, KEY_ATTRIBUTE_NAME, Seq(StringType, BinaryType)) {
+      Literal(null, BinaryType)
+    }
   }
 
   def valueExpression(schema: Seq[Attribute]): Expression = {
@@ -96,13 +97,16 @@ private[kafka010] object KafkaWriter extends Logging {
   }
 
   def headersExpression(schema: Seq[Attribute]): Expression = {
-    expression(schema, HEADERS_ATTRIBUTE_NAME, Seq(KafkaRecordToRowConverter.headersType))(
+    expression(schema, HEADERS_ATTRIBUTE_NAME, Seq(KafkaRecordToRowConverter.headersType)) {
       Literal(CatalystTypeConverters.convertToCatalyst(null),
-        KafkaRecordToRowConverter.headersType))
+        KafkaRecordToRowConverter.headersType)
+    }
   }
 
   def partitionExpression(schema: Seq[Attribute]): Expression = {
-    expression(schema, PARTITION_ATTRIBUTE_NAME, Seq(IntegerType))(Literal(null, IntegerType))
+    expression(schema, PARTITION_ATTRIBUTE_NAME, Seq(IntegerType)) {
+      Literal(null, IntegerType)
+    }
   }
 
   private def expression(
