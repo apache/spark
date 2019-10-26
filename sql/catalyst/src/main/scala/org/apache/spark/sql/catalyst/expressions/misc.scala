@@ -166,7 +166,7 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release or snapshot version and the second being a git revision.""",
+  usage = """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.""",
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class Version() extends LeafExpression with CodegenFallback {
