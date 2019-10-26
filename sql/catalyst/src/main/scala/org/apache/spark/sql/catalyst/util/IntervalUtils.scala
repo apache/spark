@@ -132,14 +132,10 @@ object IntervalUtils {
       s: String,
       minValue: Long,
       maxValue: Long): Long = {
-    var result = 0L
-    if (s != null) {
-      result = java.lang.Long.parseLong(s)
-      if (result < minValue || result > maxValue) {
-        throw new IllegalArgumentException(
-          s"$fieldName $result outside range [$minValue, $maxValue]")
-      }
-    }
+    val result = if (s == null) 0L else s.toLong
+    require(minValue <= result && result <= maxValue,
+      s"$fieldName $result outside range [$minValue, $maxValue]")
+
     result
   }
 
