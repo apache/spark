@@ -294,7 +294,7 @@ object IntervalUtils {
   /**
    * Parse second_nano string in ss.nnnnnnnnn format to microseconds
    */
-  def parseSecondNano(secondNano: String): Long = {
+  private def parseSecondNano(secondNano: String): Long = {
     val parts = secondNano.split("\\.")
     if (parts.length == 1) {
       toLongWithRange(
