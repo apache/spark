@@ -1268,6 +1268,14 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SHOW CREATE TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      testV1Command("SHOW CREATE TABLE", t)
+    }
+  }
+
   test("CACHE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
