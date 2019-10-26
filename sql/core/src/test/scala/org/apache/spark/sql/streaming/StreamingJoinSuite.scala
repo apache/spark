@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.util.UUID
+import java.util.{Locale, UUID}
 
 import scala.util.Random
 
@@ -419,6 +419,63 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       AddData(input1, 1.to(1000): _*),
       AddData(input2, 1.to(1000): _*),
       CheckAnswer(1.to(1000): _*))
+  }
+
+  test("SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {
+    val inputStream = MemoryStream[(Int, Long)]
+    val df = inputStream.toDS()
+      .select(col("_1").as("value"), col("_2").cast("timestamp").as("timestamp"))
+
+    val leftStream = df.select(col("value").as("leftId"), col("timestamp").as("leftTime"))
+
+    val rightStream = df
+      // Introduce misses for ease of debugging
+      .where(col("value") % 2 === 0)
+      .select(col("value").as("rightId"), col("timestamp").as("rightTime"))
+
+    val query = leftStream
+      .withWatermark("leftTime", "5 seconds")
+      .join(
+        rightStream.withWatermark("rightTime", "5 seconds"),
+        expr("rightId = leftId AND rightTime >= leftTime AND " +
+          "rightTime <= leftTime + interval 5 seconds"),
+        joinType = "inner")
+      .select(col("leftId"), col("leftTime").cast("int"),
+        col("rightId"), col("rightTime").cast("int"))
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.4.0-streaming-join/").toURI
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    inputStream.addData((1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L))
+
+    testStream(query)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+      /*
+      Note: The checkpoint was generated using the following input in Spark version 2.4.0
+      AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+      // batch 1 - global watermark = 0
+      // states
+      // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
+      // right: (2, 2L), (4, 4L)
+      CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
+      assertNumStateRows(7, 7),
+      */
+      AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
+      // batch 2: same result as above test
+      CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
+      assertNumStateRows(11, 6),
+      Execute { query =>
+        // Verify state format = 1
+        val f = query.lastExecution.executedPlan.collect {
+          case f: StreamingSymmetricHashJoinExec => f
+        }
+        assert(f.size == 1)
+        assert(f.head.stateFormatVersion == 1)
+      }
+    )
   }
 }
 
@@ -822,7 +879,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     )
   }
 
-  test("SPARK-26187 restore the stream-stream join query from Spark 2.4") {
+  test("SPARK-26187 restore the stream-stream outer join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
     val df = inputStream.toDS()
       .select(col("_1").as("value"), col("_2").cast("timestamp").as("timestamp"))
@@ -851,9 +908,8 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
     inputStream.addData((1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L))
-    testStream(query)(
-      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-      /*
+
+    /*
       Note: The checkpoint was generated using the following input in Spark version 2.4.0
       AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
       // batch 1 - global watermark = 0
@@ -863,28 +919,19 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
       assertNumStateRows(7, 7),
       */
-      AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
-      // batch 2: same result as above test
-      CheckNewAnswer((6, 6L, 6, 6L), (8, 8L, 8, 8L), (10, 10L, 10, 10L)),
-      assertNumStateRows(13, 8),
-      Execute { query =>
-        // Verify state format = 1
-        val f = query.lastExecution.executedPlan.collect {
-          case f: StreamingSymmetricHashJoinExec => f
-        }
-        assert(f.size == 1)
-        assert(f.head.stateFormatVersion == 1)
-      },
-      AddData(inputStream, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
-      // batch 3: global watermark, remaining rows in states, evicted rows are all same
-      // The query is running with old format, which SPARK-26187 is not fixed.
-      // Hence (2, 2L, null, null) is also emitted as output as well.
-      CheckNewAnswer(
-        Row(12, 12L, 12, 12L), Row(14, 14L, 14, 14L),
-        Row(1, 1L, null, null), Row(3, 3L, null, null),
-        Row(2, 2L, null, null)),
-      assertNumStateRows(15, 7)
-    )
+
+    // we just fail the query if the checkpoint was create from less than Spark 3.0
+    val e = intercept[StreamingQueryException] {
+      val writer = query.writeStream.format("console")
+        .option("checkpointLocation", checkpointDir.getAbsolutePath).start()
+      inputStream.addData((7, 7L), (8, 8L))
+      eventually(timeout(streamingTimeout)) {
+        assert(writer.exception.isDefined)
+      }
+      throw writer.exception.get
+    }
+    assert(e.getMessage.toLowerCase(Locale.ROOT)
+      .contains("the query is using stream-stream outer join with state format version 1"))
   }
 }
 
