@@ -152,9 +152,9 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   if (stateFormatVersion < 2 && joinType != Inner) {
-    logError(s"The query is using stream-stream outer join with state format version" +
-      s" ${stateFormatVersion} - correctness issue is discovered. Please discard the checkpoint" +
-      " and rerun the query. See SPARK-26154 for more details.")
+    throw new IllegalArgumentException("The query is using stream-stream outer join with state" +
+      s" format version ${stateFormatVersion} - correctness issue is discovered. Please discard" +
+      " the checkpoint and rerun the query. See SPARK-26154 for more details.")
   }
 
   private def throwBadJoinTypeException(): Nothing = {
