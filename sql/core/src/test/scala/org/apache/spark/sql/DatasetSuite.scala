@@ -1213,12 +1213,9 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
 
-  test("better error message when use java reserved keyword as field name") {
-    val e = intercept[UnsupportedOperationException] {
-      Seq(InvalidInJava(1)).toDS()
-    }
-    assert(e.getMessage.contains(
-      "`abstract` is a reserved keyword and cannot be used as field name"))
+  test("SPARK-29594: Create a Dataset from a sequence of Case class with java keywords" +
+    " and starting with numbers as field names") {
+    checkDataset(Seq(InvalidInJava(1, "HelloWorld!")).toDS(), 1, "HelloWorld!")
   }
 
   test("Dataset should support flat input object to be null") {
@@ -1900,7 +1897,7 @@ case class ClassNullableData(a: String, b: Integer)
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
 
-case class InvalidInJava(`abstract`: Int)
+case class InvalidInJava(`abstract`: Int, `1a`: String)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
