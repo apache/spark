@@ -478,4 +478,30 @@ class DataTypeSuite extends SparkFunSuite {
 
     assert(result === expected)
   }
+
+  test("SPARK-29594: Create Dataset from fields that start with number or are java keywords") {
+    val numberType : DataType = StructType(Seq(
+      StructField("1a", DataTypes.IntegerType),
+      StructField("2b", DataTypes.IntegerType)))
+
+    val keywordType : DataType = StructType(Seq(
+      StructField("abstract", DataTypes.IntegerType),
+      StructField("default", DataTypes.StringType)))
+
+    val builder = new StringBuilder
+
+    MapType(numberType, keywordType).buildFormattedString(prefix = "", builder = builder)
+
+    val result = builder.toString()
+    val expected =
+      """-- key: struct
+        |    |-- `1a: integer (nullable = true)
+        |    |-- `2b`: integer (nullable = true)
+        |-- value: struct (valueContainsNull = true)
+        |    |-- `abstract`: integer (nullable = true)
+        |    |-- `default`: String (nullable = true)
+        |""".stripMargin
+
+    assert(result === expected)
+  }
 }

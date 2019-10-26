@@ -132,6 +132,17 @@ object ScalaReflection extends ScalaReflection {
     }
     ObjectType(cls)
   }
+  /*
+   * This method transforms the field names that are either java keywords or starting with
+   * numbers, to the field names with ``. Example: abstract -> `abstract`
+   */
+  private def transformFieldNames(fields: Seq[(String, Type)]): Seq[(String, Type)] = {
+    fields.map { case (fieldName, fieldType) =>
+      if (javaKeywords.contains(fieldName) || fieldName.head.isDigit) {
+        (s"`$fieldName`", fieldType)
+      } else (fieldName, fieldType)
+    }
+  }
 
   /**
    * Returns true if the value of this data type is same between internal and external.
@@ -537,13 +548,9 @@ object ScalaReflection extends ScalaReflection {
             s"cannot have circular references in class, but got the circular reference of class $t")
         }
 
-        val params = getConstructorParameters(t)
-        val fields = params.map { case (fieldName, fieldType) =>
-          if (javaKeywords.contains(fieldName)) {
-            throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
-              "cannot be used as field name\n" + walkedTypePath)
-          }
+        val params = transformFieldNames(getConstructorParameters(t))
 
+        val fields = params.map { case (fieldName, fieldType) =>
           // SPARK-26730 inputObject won't be null with If's guard below. And KnownNotNul
           // is necessary here. Because for a nullable nested inputObject with struct data
           // type, e.g. StructType(IntegerType, StringType), it will return nullable=true
