@@ -127,7 +127,11 @@ object IntervalUtils {
   private val dayTimePattern = Pattern.compile(
     "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$")
 
-  def toLongWithRange(fieldName: String, s: String, minValue: Long, maxValue: Long): Long = {
+  private def toLongWithRange(
+      fieldName: String,
+      s: String,
+      minValue: Long,
+      maxValue: Long): Long = {
     var result = 0L
     if (s != null) {
       result = java.lang.Long.parseLong(s)
