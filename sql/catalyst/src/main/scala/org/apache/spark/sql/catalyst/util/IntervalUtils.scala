@@ -198,10 +198,12 @@ object IntervalUtils {
         "Interval string does not match day-time format of 'd h:m:s.n': " + s)
     }
     try {
-      val sign = if (m.group(1) != null && m.group(1) == "-") -1
-      else 1
-      val days = if (m.group(2) == null) 0
-      else toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE)
+      val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
+      val days = if (m.group(2) == null) {
+        0
+      } else {
+        toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE)
+      }
       var hours: Long = 0L
       var minutes: Long = 0L
       var seconds: Long = 0L
@@ -209,18 +211,19 @@ object IntervalUtils {
         hours = toLongWithRange("hour", m.group(5), 0, 23)
         minutes = toLongWithRange("minute", m.group(6), 0, 59)
         seconds = toLongWithRange("second", m.group(7), 0, 59)
-      }
-      else if (m.group(8) != null) { // 'mm:ss.nn'
+      } else if (m.group(8) != null) { // 'mm:ss.nn'
         minutes = toLongWithRange("minute", m.group(6), 0, 59)
         seconds = toLongWithRange("second", m.group(7), 0, 59)
-      }
-      else { // 'HH:mm'
+      } else { // 'HH:mm'
         hours = toLongWithRange("hour", m.group(6), 0, 23)
         minutes = toLongWithRange("second", m.group(7), 0, 59)
       }
       // Hive allow nanosecond precision interval
-      val nanoStr = if (m.group(9) == null) null
-      else (m.group(9) + "000000000").substring(0, 9)
+      val nanoStr = if (m.group(9) == null) {
+        null
+      } else {
+        (m.group(9) + "000000000").substring(0, 9)
+      }
       var nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L)
       to match {
         case "hour" =>
