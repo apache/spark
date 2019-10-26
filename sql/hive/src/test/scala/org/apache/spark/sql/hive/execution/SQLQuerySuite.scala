@@ -42,7 +42,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -1181,51 +1180,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     read.json(ds).createOrReplaceTempView("t")
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
-  }
-
-  test("Convert hive interval term into Literal of CalendarIntervalType") {
-    checkAnswer(sql("select interval '0 0:0:0.1' day to second"),
-      Row(CalendarInterval.fromString("interval 100 milliseconds")))
-    checkAnswer(sql("select interval '10-9' year to month"),
-      Row(CalendarInterval.fromString("interval 10 years 9 months")))
-    checkAnswer(sql("select interval '20 15:40:32.99899999' day to hour"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours")))
-    checkAnswer(sql("select interval '20 15:40:32.99899999' day to minute"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes")))
-    checkAnswer(sql("select interval '20 15:40:32.99899999' day to second"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 15 hours 40 minutes " +
-        "32 seconds 998 milliseconds 999 microseconds")))
-    checkAnswer(sql("select interval '15:40:32.99899999' hour to minute"),
-      Row(CalendarInterval.fromString("interval 15 hours 40 minutes")))
-    checkAnswer(sql("select interval '15:40.99899999' hour to second"),
-      Row(CalendarInterval.fromString("interval 15 minutes 40 seconds 998 milliseconds " +
-        "999 microseconds")))
-    checkAnswer(sql("select interval '15:40' hour to second"),
-      Row(CalendarInterval.fromString("interval 15 hours 40 minutes")))
-    checkAnswer(sql("select interval '15:40:32.99899999' hour to second"),
-      Row(CalendarInterval.fromString("interval 15 hours 40 minutes 32 seconds 998 milliseconds " +
-        "999 microseconds")))
-    checkAnswer(sql("select interval '20 40:32.99899999' minute to second"),
-      Row(CalendarInterval.fromString("interval 2 weeks 6 days 40 minutes 32 seconds " +
-        "998 milliseconds 999 microseconds")))
-    checkAnswer(sql("select interval '40:32.99899999' minute to second"),
-      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds 998 milliseconds " +
-        "999 microseconds")))
-    checkAnswer(sql("select interval '40:32' minute to second"),
-      Row(CalendarInterval.fromString("interval 40 minutes 32 seconds")))
-    checkAnswer(sql("select interval '30' year"),
-      Row(CalendarInterval.fromString("interval 30 years")))
-    checkAnswer(sql("select interval '25' month"),
-      Row(CalendarInterval.fromString("interval 25 months")))
-    checkAnswer(sql("select interval '-100' day"),
-      Row(CalendarInterval.fromString("interval -14 weeks -2 days")))
-    checkAnswer(sql("select interval '40' hour"),
-      Row(CalendarInterval.fromString("interval 40 hours")))
-    checkAnswer(sql("select interval '80' minute"),
-      Row(CalendarInterval.fromString("interval 1 hour 20 minutes")))
-    checkAnswer(sql("select interval '299.889987299' second"),
-      Row(CalendarInterval.fromString(
-        "interval 4 minutes 59 seconds 889 milliseconds 987 microseconds")))
   }
 
   test("specifying database name for a temporary view is not allowed") {

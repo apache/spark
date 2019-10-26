@@ -577,15 +577,15 @@ select count(*) from tenk1 a, tenk1 b
 -- regression test for 8.2 bug with improper re-ordering of left joins
 --
 
-DROP TABLE IF EXISTS tt3;
-CREATE TABLE tt3(f1 int, f2 string) USING parquet;
-INSERT INTO tt3 SELECT x.id, repeat('xyzzy', 100) FROM range(1,10001) x;
+create or replace temporary view tt3 as select * from
+  (SELECT cast(x.id as int), repeat('xyzzy', 100) FROM range(1,10001) x)
+  as v(f1, f2);
 -- create index tt3i on tt3(f1);
 -- analyze tt3;
 
-DROP TABLE IF EXISTS tt4;
-CREATE TABLE tt4(f1 int) USING parquet;
-INSERT INTO tt4 VALUES (0),(1),(9999);
+create or replace temporary view tt4 as select * from
+  (values (0), (1), (9999))
+  as v(f1);
 -- analyze tt4;
 
 SELECT a.f1

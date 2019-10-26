@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.Duration
 
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -30,7 +31,7 @@ private object Triggers {
   }
 
   def convert(interval: String): Long = {
-    val cal = CalendarInterval.fromCaseInsensitiveString(interval)
+    val cal = IntervalUtils.fromString(interval)
     if (cal.months > 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }
