@@ -170,7 +170,7 @@ statement
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
     | ALTER TABLE multipartIdentifier SET locationSpec                 #setTableLocation
     | ALTER TABLE tableIdentifier partitionSpec SET locationSpec       #setPartitionLocation
-    | ALTER TABLE tableIdentifier RECOVER PARTITIONS                   #recoverPartitions
+    | ALTER TABLE multipartIdentifier RECOVER PARTITIONS               #recoverPartitions
     | DROP TABLE (IF EXISTS)? multipartIdentifier PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? multipartIdentifier                       #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?

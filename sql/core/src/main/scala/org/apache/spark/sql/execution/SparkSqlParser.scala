@@ -547,19 +547,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AlterTableRecoverPartitionsCommand]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table RECOVER PARTITIONS;
-   * }}}
-   */
-  override def visitRecoverPartitions(
-      ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRecoverPartitionsCommand(visitTableIdentifier(ctx.tableIdentifier))
-  }
-
-  /**
    * Create an [[AlterTableSetLocationCommand]] command for a partition.
    *
    * For example:

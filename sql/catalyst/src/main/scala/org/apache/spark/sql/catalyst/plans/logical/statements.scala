@@ -182,6 +182,12 @@ case class AlterTableSetLocationStatement(
     location: String) extends ParsedStatement
 
 /**
+ * ALTER TABLE ... RECOVER PARTITIONS command, as parsed from SQL.
+ */
+case class AlterTableRecoverPartitionsStatement(
+    tableName: Seq[String]) extends ParsedStatement
+
+/**
  * ALTER VIEW ... SET TBLPROPERTIES command, as parsed from SQL.
  */
 case class AlterViewSetPropertiesStatement(
