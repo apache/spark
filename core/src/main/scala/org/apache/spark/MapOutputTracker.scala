@@ -153,6 +153,15 @@ private class ShuffleStatus(numPartitions: Int) {
   }
 
   /**
+   * Removes all map outputs associated with these specified executors. Note that this will also
+   * remove outputs which are served by an external shuffle server (if one exists), as they are
+   * still registered with these execIds.
+   */
+  def removeOutputsOnExecutors(execIds: Seq[String]): Unit = withWriteLock {
+    removeOutputsByFilter(x => execIds.contains(x.executorId))
+  }
+
+  /**
    * Removes all shuffle outputs which satisfies the filter. Note that this will also
    * remove outputs which are served by an external shuffle server (if one exists).
    */
@@ -519,12 +528,30 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /**
+   * Get all executors registered on this host.
+   */
+  def getExecutorsRegisteredOnHost(host: String): Array[String] = {
+    shuffleStatuses.valuesIterator.flatMap(_.mapStatuses.map(_.location).filter(_ == host)
+      .map(_.executorId)).toSet.toArray
+  }
+
+  /**
    * Removes all shuffle outputs associated with this executor. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists), as they are still
    * registered with this execId.
    */
   def removeOutputsOnExecutor(execId: String): Unit = {
     shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnExecutor(execId) }
+    incrementEpoch()
+  }
+
+  /**
+   * Removes all shuffle outputs associated with these executors. Note that this will also remove
+   * outputs which are served by an external shuffle server (if one exists), as they are still
+   * registered with these execIds.
+   */
+  def removeOutputsOnExecutors(execIds: Seq[String]): Unit = {
+    shuffleStatuses.valuesIterator.foreach{ _.removeOutputsOnExecutors(execIds) }
     incrementEpoch()
   }
 

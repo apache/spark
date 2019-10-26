@@ -35,6 +35,7 @@ import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
+import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
@@ -1668,8 +1669,9 @@ private[spark] class DAGScheduler(
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
+            val executorNotRegistered = failureMessage.contains("Executor is not registered")
             val hostToUnregisterOutputs = if (env.blockManager.externalShuffleServiceEnabled &&
-              unRegisterOutputOnHostOnFetchFailure) {
+              (unRegisterOutputOnHostOnFetchFailure || executorNotRegistered)) {
               // We had a fetch failure with the external shuffle service, so we
               // assume all shuffle data on the node is bad.
               Some(bmAddress.host)
@@ -1682,7 +1684,8 @@ private[spark] class DAGScheduler(
               execId = bmAddress.executorId,
               fileLost = true,
               hostToUnregisterOutputs = hostToUnregisterOutputs,
-              maybeEpoch = Some(task.epoch))
+              maybeEpoch = Some(task.epoch),
+              unRegisterOutputOnHostOnFetchFailure)
           }
         }
 
@@ -1838,18 +1841,36 @@ private[spark] class DAGScheduler(
       execId: String,
       fileLost: Boolean,
       hostToUnregisterOutputs: Option[String],
-      maybeEpoch: Option[Long] = None): Unit = {
+      maybeEpoch: Option[Long] = None,
+      unRegisterOutputOnHost: Boolean = false): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
       failedEpoch(execId) = currentEpoch
       logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
       blockManagerMaster.removeExecutor(execId)
       if (fileLost) {
-        hostToUnregisterOutputs match {
-          case Some(host) =>
+        (hostToUnregisterOutputs, unRegisterOutputOnHost) match {
+          case (Some(host), false) =>
+            val execIdsOnHost = mapOutputTracker.getExecutorsRegisteredOnHost(host)
+            val port = SparkEnv.get.conf.get(config.SHUFFLE_SERVICE_PORT)
+            try {
+              val status = SparkEnv.get.blockManager.blockStoreClient
+                .asInstanceOf[ExternalBlockStoreClient]
+                .queryExecutorStatus(host, port, execIdsOnHost).array()
+              if (status.size == execIdsOnHost.size) {
+                val execIdsNotRegistered = execIdsOnHost.zip(status).filter(_._2 == 0).map(_._1)
+                logInfo("Shuffle files lost for executors: %s (epoch %d)"
+                  .format(execIdsNotRegistered.toString, currentEpoch))
+                mapOutputTracker.removeOutputsOnExecutors(execIdsNotRegistered)
+              }
+            } catch {
+              case e: Exception =>
+                logInfo("Exception thrown when querying executor status", e)
+            }
+          case (Some(host), true) =>
             logInfo("Shuffle files lost for host: %s (epoch %d)".format(host, currentEpoch))
             mapOutputTracker.removeOutputsOnHost(host)
-          case None =>
+          case (None, _) =>
             logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
             mapOutputTracker.removeOutputsOnExecutor(execId)
         }

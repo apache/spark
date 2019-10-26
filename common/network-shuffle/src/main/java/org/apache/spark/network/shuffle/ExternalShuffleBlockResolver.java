@@ -18,6 +18,7 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
@@ -162,6 +163,19 @@ public class ExternalShuffleBlockResolver {
       logger.error("Error saving registered executors", e);
     }
     executors.put(fullId, executorInfo);
+  }
+
+  /**
+   * Judge whether these executors are registered.
+   */
+  public ByteBuffer areExecutorsRegistered(String appId, String[] execIds) {
+    byte[] result = new byte[execIds.length];
+    for (int i = 0; i< execIds.length; i++) {
+      if(executors.containsKey(new AppExecId(appId, execIds[i]))) {
+        result[i] = 1;
+      }
+    }
+    return ByteBuffer.wrap(result);
   }
 
   /**
