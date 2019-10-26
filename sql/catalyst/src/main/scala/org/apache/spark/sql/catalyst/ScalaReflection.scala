@@ -136,7 +136,7 @@ object ScalaReflection extends ScalaReflection {
    * This method transforms the field names that are either java keywords or starting with
    * numbers, to the field names with ``. Example: abstract -> `abstract`
    */
-  private def transformFieldNames(fields: Seq[(String, Type)]): Seq[(String, Type)] = {
+  private def transformFieldNames(fields: Seq[(String, `Type`)]): Seq[(String, `Type`)] = {
     fields.map { case (fieldName, fieldType) =>
       if (javaKeywords.contains(fieldName) || fieldName.head.isDigit) {
         (s"`$fieldName`", fieldType)

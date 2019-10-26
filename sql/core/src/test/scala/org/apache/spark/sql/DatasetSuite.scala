@@ -1215,7 +1215,9 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-29594: Create a Dataset from a sequence of Case class with java keywords" +
     " and starting with numbers as field names") {
-    checkDataset(Seq(InvalidInJava(1, "HelloWorld!")).toDS(), 1, "HelloWorld!")
+    val cc = InvalidInJava(1, "HelloWorld!")
+    val ds: Dataset[InvalidInJava] = Seq(cc).toDS()
+    assert(ds.collect() sameElements  Array(cc))
   }
 
   test("Dataset should support flat input object to be null") {
