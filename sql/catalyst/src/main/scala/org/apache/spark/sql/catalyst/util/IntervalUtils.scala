@@ -134,7 +134,7 @@ object IntervalUtils {
       maxValue: Long): Long = {
     val result = if (s == null) 0L else s.toLong
     require(minValue <= result && result <= maxValue,
-      s"$fieldName $result outside range [$minValue, $maxValue]")
+      s"$fieldName $result must be in the range [$minValue, $maxValue]")
 
     result
   }
