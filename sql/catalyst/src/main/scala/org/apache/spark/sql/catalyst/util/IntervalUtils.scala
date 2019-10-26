@@ -232,12 +232,10 @@ object IntervalUtils {
           throw new IllegalArgumentException(
             s"Cannot support (interval '$s' $from to $to) expression")
       }
-      var micros = days * DateTimeUtils.MICROS_PER_DAY
-      micros += hours * MICROS_PER_HOUR
-      micros += minutes * MICROS_PER_MINUTE
-      micros += seconds * DateTimeUtils.MICROS_PER_SECOND
-      micros += nanos / DateTimeUtils.NANOS_PER_MICROS
-      new CalendarInterval(0, sign * micros)
+      new CalendarInterval(0, sign * (
+        days * DateTimeUtils.MICROS_PER_DAY + hours * MICROS_PER_HOUR +
+        minutes * MICROS_PER_MINUTE + seconds * DateTimeUtils.MICROS_PER_SECOND +
+        nanos / 1000L))
     } catch {
       case e: Exception =>
         throw new IllegalArgumentException(
