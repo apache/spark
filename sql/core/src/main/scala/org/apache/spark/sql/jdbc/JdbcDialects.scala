@@ -61,9 +61,9 @@ abstract class JdbcDialect extends Serializable {
    * The tag of the database, it must be lowercase，the subsequent will match
    * the corresponding dialect through this tag, so it must be strictly one-to-one
    * correspondence with jdbc url,such as:
-   * mysql  url:  jdbc:mysql://localhost/db  --> mysql
-   * oracle url:  jdbc:oracle://localhost/db --> oracle
-   * db2    url:  jdbc:db2://localhost/db    --> db2
+   * mysql  url:  jdbc:mysql://localhost/db  dbTag: mysql
+   * oracle url:  jdbc:oracle://localhost/db dbTag: oracle
+   * db2    url:  jdbc:db2://localhost/db    dbTag: db2
    * ......
    */
   def dbTag: String
