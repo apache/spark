@@ -303,7 +303,7 @@ private[ui] class ExecutionPagedTable(
 
     val headerRow: Seq[Node] = {
       executionHeadersAndCssClasses.map { case (header, sortable) =>
-        val headerTooltip = headerNameWithTooltips.getOrElse(header,"")
+        val headerTooltip = headerNameWithTooltips.getOrElse(header, "")
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
