@@ -1268,7 +1268,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-<<<<<<< HEAD
   test("LOAD DATA INTO TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
