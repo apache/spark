@@ -1792,71 +1792,16 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     override def getFileStatus(f: Path): FileStatus = throw new NotImplementedError
   }
 
-  test("FileStreamSourceCleaner - archive - destinations match against source pattern") {
+  test("FileStreamSourceCleaner - archive - base archive path depth <= 2") {
     val fakeFileSystem = new FakeFileSystem("fake")
 
     val sourcePatternPath = new Path("/hello*/h{e,f}ll?")
     val baseArchiveDirPath = new Path("/hello")
 
-    val sourceCleaner = new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
-      Some(fakeFileSystem), Some(baseArchiveDirPath))
-
-    // file 1: /hello/helln
-    // final destination = /hello/hello/helln
-    // parent directory of final destination matches source pattern
-    val sourcePath1 = new Path("/hello/helln")
-    sourceCleaner.archive(FileEntry(sourcePath1.toUri.getPath, 0, 0))
-
-    assertNoMove(fakeFileSystem)
-
-    fakeFileSystem.clearRecords()
-
-    // file 2: /hello/hfllo/spark
-    // final destination = /hello/hello/hfllo/spark
-    // no match
-    val sourcePath2 = new Path("/hello/hfllo/spark")
-    val expectedDestPath2 = new Path("/hello/hello/hfllo/spark")
-    sourceCleaner.archive(FileEntry(sourcePath2.toUri.getPath, 0, 0))
-
-    assertMoveFile(fakeFileSystem, sourcePath2, expectedDestPath2)
-
-    fakeFileSystem.clearRecords()
-
-    // file 3: /hello1/hflln
-    // final destination = /hello/hello1/hflln
-    // no match
-    val sourcePath3 = new Path("/hello1/hflln")
-    val expectedDestPath3 = new Path("/hello/hello1/hflln")
-    sourceCleaner.archive(FileEntry(sourcePath3.toUri.getPath, 0, 0))
-
-    assertMoveFile(fakeFileSystem, sourcePath3, expectedDestPath3)
-
-    fakeFileSystem.clearRecords()
-
-    // corner case: this should end up with all archive destinations to be
-    // matched against source pattern
-    val baseArchiveDirPath2 = new Path("/")
-
-    val sourceCleaner2 = new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
-      Some(fakeFileSystem), Some(baseArchiveDirPath2))
-
-    // file 4 (& final destination): /hello/helln
-    // final destination matches source pattern
-    val sourcePath4 = new Path("/hello/helln")
-    sourceCleaner2.archive(FileEntry(sourcePath4.toUri.getPath, 0, 0))
-
-    assertNoMove(fakeFileSystem)
-
-    fakeFileSystem.clearRecords()
-
-    // file 5 (& final destination): /hello/hfllo/spark
-    // final destination matches source pattern
-    val sourcePath5 = new Path("/hello/hfllo/spark")
-    sourceCleaner2.archive(FileEntry(sourcePath5.toUri.getPath, 0, 0))
-
-    assertNoMove(fakeFileSystem)
-
-    fakeFileSystem.clearRecords()
+    intercept[IllegalArgumentException] {
+      new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
+        Some(fakeFileSystem), Some(baseArchiveDirPath))
+    }
   }
 
   test("FileStreamSourceCleaner - archive - different filesystems between source and archive") {
@@ -1866,14 +1811,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val sourcePatternPath = new Path("/hello*/h{e,f}ll?")
     val baseArchiveDirPath = new Path("/hello")
 
-    val sourceCleaner = new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
-      Some(fakeFileSystem2), Some(baseArchiveDirPath))
-
-    val sourcePath = new Path("/hello/hfllo/spark")
-    sourceCleaner.archive(FileEntry(sourcePath.toUri.getPath, 0, 0))
-
-    assertNoMove(fakeFileSystem)
-    assertNoMove(fakeFileSystem2)
+    intercept[IllegalArgumentException] {
+      new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
+        Some(fakeFileSystem2), Some(baseArchiveDirPath))
+    }
   }
 
   private def assertNoMove(fs: FakeFileSystem): Unit = {

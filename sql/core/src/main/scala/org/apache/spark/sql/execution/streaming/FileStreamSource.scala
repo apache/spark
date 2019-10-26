@@ -368,52 +368,55 @@ object FileStreamSource {
       sourcePath: Path,
       baseArchiveFileSystem: Option[FileSystem],
       baseArchivePath: Option[Path]) extends Logging {
-    require(baseArchiveFileSystem.isDefined == baseArchivePath.isDefined)
+    assertParameters()
 
-    private val sourceGlobFilters: Seq[GlobFilter] = buildSourceGlobFilters(sourcePath)
+    private def assertParameters(): Unit = {
+      require(baseArchiveFileSystem.isDefined == baseArchivePath.isDefined)
 
-    private val sameFsSourceAndArchive: Boolean = {
-      baseArchiveFileSystem.exists { fs =>
-        if (fileSystem.getUri != fs.getUri) {
-          logWarning("Base archive path is located to the different filesystem with source, " +
-            s"which is not supported. source path: ${sourcePath} / base archive path: " +
-            s"${baseArchivePath.get}")
-          false
-        } else {
-          true
-        }
+      baseArchiveFileSystem.foreach { fs =>
+        require(fileSystem.getUri == fs.getUri, "Base archive path is located to the different" +
+          s" filesystem with source, which is not supported. source path: $sourcePath" +
+          s" / base archive path: ${baseArchivePath.get}")
+      }
+
+      baseArchivePath.foreach { path =>
+
+        /**
+         * FileStreamSource reads the files which one of below conditions is met:
+         * 1) file itself is matched with source path
+         * 2) parent directory is matched with source path
+         *
+         * Checking with glob pattern is costly, so set this requirement to eliminate the cases
+         * where the archive path can be matched with source path. For example, when file is moved
+         * to archive directory, destination path will retain input file's path as suffix, so
+         * destination path can't be matched with source path if archive directory's depth is longer
+         * than 2, as neither file nor parent directory of destination path can be matched with
+         * source path.
+         */
+        require(path.depth() > 2, "Base archive path must have a depth of at least 2 " +
+          "subdirectories. e.g. '/data/archive'")
       }
     }
-
-    /**
-     * This is a flag to skip matching archived path with source path.
-     *
-     * FileStreamSource reads the files which one of below conditions is met:
-     * 1) file itself is matched with source path
-     * 2) parent directory is matched with source path
-     *
-     * Checking with glob pattern is costly, so this flag leverages above information to prune
-     * the cases where the file cannot be matched with source path. For example, when file is
-     * moved to archive directory, destination path will retain input file's path as suffix,
-     * so destination path can't be matched with source path if archive directory's depth is
-     * longer than 2, as neither file nor parent directory of destination path can be matched
-     * with source path.
-     */
-    private val skipCheckingGlob: Boolean = baseArchivePath.exists(_.depth() > 2)
 
     def archive(entry: FileEntry): Unit = {
       require(baseArchivePath.isDefined)
 
-      if (sameFsSourceAndArchive) {
-        val curPath = new Path(new URI(entry.path))
-        val newPath = new Path(baseArchivePath.get, curPath.toUri.getPath.stripPrefix("/"))
+      val curPath = new Path(new URI(entry.path))
+      val newPath = new Path(baseArchivePath.get, curPath.toUri.getPath.stripPrefix("/"))
 
-        if (!skipCheckingGlob && pathMatchesSourcePattern(newPath)) {
-          logWarning(s"Skip moving $curPath to $newPath - destination matches " +
-            s"to source path/pattern.")
-        } else {
-          doArchive(curPath, newPath)
+      try {
+        logDebug(s"Creating directory if it doesn't exist ${newPath.getParent}")
+        if (!fileSystem.exists(newPath.getParent)) {
+          fileSystem.mkdirs(newPath.getParent)
         }
+
+        logDebug(s"Archiving completed file $curPath to $newPath")
+        if (!fileSystem.rename(curPath, newPath)) {
+          logWarning(s"Fail to move $curPath to $newPath / skip moving file.")
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Fail to move $curPath to $newPath / skip moving file.", e)
       }
     }
 
@@ -431,70 +434,5 @@ object FileStreamSource {
           logWarning(s"Fail to remove $curPath / skip removing file.", e)
       }
     }
-
-    private def buildSourceGlobFilters(sourcePath: Path): Seq[GlobFilter] = {
-      val filters = new scala.collection.mutable.MutableList[GlobFilter]()
-
-      var currentPath = sourcePath
-      while (!currentPath.isRoot) {
-        filters += new GlobFilter(currentPath.getName)
-        currentPath = currentPath.getParent
-      }
-
-      filters.toList
-    }
-
-    /**
-     * This method checks whether the destination of archive file will be under the source path
-     * (which contains glob) to prevent the possibility of overwriting/re-reading as input.
-     */
-    private def pathMatchesSourcePattern(archiveFile: Path): Boolean = {
-      var matched = true
-
-      // new path will never match against source path when the depth is not a range of
-      // the depth of source path ~ (the depth of source path + 1)
-      // because the source files are picked when they match against source pattern or
-      // their parent directories match against source pattern
-      val depthSourcePattern = sourceGlobFilters.length
-      val depthArchiveFile = archiveFile.depth()
-
-      var pathToCompare = if (depthArchiveFile == depthSourcePattern + 1) {
-        archiveFile.getParent
-      } else {
-        archiveFile
-      }
-
-      // Now pathToCompare should have same depth as sourceGlobFilters.length
-      var index = 0
-      do {
-        // GlobFilter only matches against its name, not full path so it's safe to compare
-        if (!sourceGlobFilters(index).accept(pathToCompare)) {
-          matched = false
-        } else {
-          pathToCompare = pathToCompare.getParent
-          index += 1
-        }
-      } while (matched && !pathToCompare.isRoot)
-
-      matched
-    }
-
-    private def doArchive(sourcePath: Path, archivePath: Path): Unit = {
-      try {
-        logDebug(s"Creating directory if it doesn't exist ${archivePath.getParent}")
-        if (!fileSystem.exists(archivePath.getParent)) {
-          fileSystem.mkdirs(archivePath.getParent)
-        }
-
-        logDebug(s"Archiving completed file $sourcePath to $archivePath")
-        if (!fileSystem.rename(sourcePath, archivePath)) {
-          logWarning(s"Fail to move $sourcePath to $archivePath / skip moving file.")
-        }
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Fail to move $sourcePath to $archivePath / skip moving file.", e)
-      }
-    }
-
   }
 }
