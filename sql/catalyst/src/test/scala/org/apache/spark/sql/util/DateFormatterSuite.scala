@@ -113,7 +113,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
         assert(formatter.parse("Yesterday") === today - 1)
         assert(formatter.parse("now") === today)
         assert(formatter.parse("today ") === today)
-        assert(formatter.parse("tomorrow UTC") === today + 1)
+        assert(formatter.parse(s"tomorrow ${zoneId.getId}") === today + 1)
       }
     }
   }
