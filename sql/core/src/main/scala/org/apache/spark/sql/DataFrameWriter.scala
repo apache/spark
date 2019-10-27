@@ -311,34 +311,44 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
+   * Inserts the content of the `DataFrame` to the specified table.
+   * This method match columns between `DataFrame` and target table by column name.
+   * @param tableName   name of the target table.
+   */
+  def insertInto(tableName: String): Unit = {
+    insertInto(tableName, false)
+  }
+
+  /**
    * Inserts the content of the `DataFrame` to the specified table. It requires that
-   * the schema of the `DataFrame` is the same as the schema of the table.
-   *
-   * @note Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
-   * resolution. For example:
+   * the `DataFrame` has same number of columns as the target table.
    *
    * @note SaveMode.ErrorIfExists and SaveMode.Ignore behave as SaveMode.Append in `insertInto` as
    *       `insertInto` is not a table creating operation.
    *
-   * {{{
-   *    scala> Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("t1")
-   *    scala> Seq((3, 4)).toDF("j", "i").write.insertInto("t1")
-   *    scala> Seq((5, 6)).toDF("a", "b").write.insertInto("t1")
-   *    scala> sql("select * from t1").show
-   *    +---+---+
-   *    |  i|  j|
-   *    +---+---+
-   *    |  5|  6|
-   *    |  3|  4|
-   *    |  1|  2|
-   *    +---+---+
-   * }}}
-   *
    * Because it inserts data to an existing table, format or options will be ignored.
-   *
+   * @param tableName    name of the target table.
+   * @param byName       Whether to match the columns between the `DataFrame` and the target table
+   *                     by column name. If false, then `insertInto` ignores the column names
+   *                     and just uses position-based resolution. For example:
+   *                     {{{
+   *                     scala> Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("t1")
+   *                     scala> Seq((3, 4)).toDF("j", "i").write.insertInto("t1")
+   *                     scala> Seq((5, 6)).toDF("a", "b").write.insertInto("t1")
+   *                     scala> sql("select * from t1").show
+   *                     +---+---+
+   *                     |  i|  j|
+   *                     +---+---+
+   *                     |  5|  6|
+   *                     |  3|  4|
+   *                     |  1|  2|
+   *                     +---+---+
+   *                     }}};
+   *                     If true, then `insertInto` matches the columns between the `DataFrame`
+   *                     and target table by name.
    * @since 1.4.0
    */
-  def insertInto(tableName: String): Unit = {
+  def insertInto(tableName: String, byName: Boolean): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     import org.apache.spark.sql.connector.catalog.CatalogV2Util._
@@ -358,43 +368,57 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case CatalogObjectIdentifier(catalog, ident) if !isSessionCatalog(catalog) =>
-        insertInto(catalog, ident)
+        insertInto(catalog, ident, byName)
 
       case CatalogObjectIdentifier(catalog, ident)
-          if isSessionCatalog(catalog) && canUseV2 && ident.namespace().length <= 1 =>
-        insertInto(catalog, ident)
+        if isSessionCatalog(catalog) && canUseV2 && ident.namespace().length <= 1 =>
+        insertInto(catalog, ident, byName)
 
       case AsTableIdentifier(tableIdentifier) =>
-        insertInto(tableIdentifier)
+        insertInto(tableIdentifier, byName)
       case other =>
         throw new AnalysisException(
           s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
     }
   }
 
-  private def insertInto(catalog: CatalogPlugin, ident: Identifier): Unit = {
+  private def insertInto(catalog: CatalogPlugin, ident: Identifier, byName: Boolean): Unit = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val table = catalog.asTableCatalog.loadTable(ident) match {
       case _: V1Table =>
-        return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
+        insertInto(TableIdentifier(ident.name(), ident.namespace().headOption), byName)
+        return
       case t =>
         DataSourceV2Relation.create(t)
     }
 
     val command = mode match {
       case SaveMode.Append | SaveMode.ErrorIfExists | SaveMode.Ignore =>
-        AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap)
+        if (byName) {
+          AppendData.byName(table, df.logicalPlan, extraOptions.toMap)
+        } else {
+          AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap)
+        }
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
-        val dynamicPartitionOverwrite = table.table.partitioning.size > 0 &&
+        val dynamicPartitionOverwrite = table.table.partitioning.length > 0 &&
           conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
         if (dynamicPartitionOverwrite) {
-          OverwritePartitionsDynamic.byPosition(table, df.logicalPlan, extraOptions.toMap)
+          if (byName) {
+            OverwritePartitionsDynamic.byName(table, df.logicalPlan, extraOptions.toMap)
+          } else {
+            OverwritePartitionsDynamic.byPosition(table, df.logicalPlan, extraOptions.toMap)
+          }
         } else {
-          OverwriteByExpression.byPosition(table, df.logicalPlan, Literal(true), extraOptions.toMap)
+          if (byName) {
+            OverwriteByExpression.byName(table, df.logicalPlan, Literal(true), extraOptions.toMap)
+          } else {
+            OverwriteByExpression.byPosition(
+              table, df.logicalPlan, Literal(true), extraOptions.toMap)
+          }
         }
     }
 
@@ -403,14 +427,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def insertInto(tableIdent: TableIdentifier): Unit = {
+  private def insertInto(tableIdent: TableIdentifier, byName: Boolean): Unit = {
     runCommand(df.sparkSession, "insertInto") {
       InsertIntoStatement(
         table = UnresolvedRelation(tableIdent),
         partitionSpec = Map.empty[String, Option[String]],
         query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
-        ifPartitionNotExists = false)
+        ifPartitionNotExists = false,
+        matchColumnsByName = byName)
     }
   }
 

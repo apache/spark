@@ -676,7 +676,7 @@ class Analyzer(
         lookupV2Relation(u.multipartIdentifier)
           .getOrElse(u)
 
-      case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
@@ -755,8 +755,8 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case i @ InsertIntoStatement(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
-          if child.resolved =>
+      case i @ InsertIntoStatement(u @ UnresolvedRelation(AsTableIdentifier(ident)),
+      _, child, _, _, _) if child.resolved =>
         EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
           case v: View =>
             u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
@@ -800,7 +800,7 @@ class Analyzer(
 
   object ResolveInsertInto extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _) if i.query.resolved =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
           throw new AnalysisException(

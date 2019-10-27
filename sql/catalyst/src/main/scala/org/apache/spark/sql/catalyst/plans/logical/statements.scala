@@ -260,13 +260,16 @@ case class UpdateTableStatement(
  *                             would have Map('a' -> Some('1'), 'b' -> None).
  * @param ifPartitionNotExists If true, only write if the partition does not exist.
  *                             Only valid for static partitions.
+ * @param matchColumnsByName   If true, match columns between `DataFrame` and target table;
+ *                            Otherwise, match columns only by position.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
     partitionSpec: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends ParsedStatement {
+    ifPartitionNotExists: Boolean,
+    matchColumnsByName: Boolean = false) extends ParsedStatement {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")

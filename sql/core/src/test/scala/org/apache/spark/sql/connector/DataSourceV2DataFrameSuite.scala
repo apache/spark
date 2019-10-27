@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import java.util.Properties
+
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 
 class DataSourceV2DataFrameSuite
@@ -59,6 +61,20 @@ class DataSourceV2DataFrameSuite
       df.write.insertInto(t1)
       spark.table(t1).write.insertInto(t2)
       checkAnswer(spark.table(t2), df)
+    }
+  }
+
+  test("insertInto: mismatch of column names between data frame and target table") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("col1", "col2")
+
+      val e = intercept[AnalysisException] {
+        df.write.insertInto(t1, true)
+      }.getMessage
+      assert(e.contains("Cannot find data for output column 'id'") &&
+        e.contains("Cannot find data for output column 'data'"))
     }
   }
 
