@@ -1358,6 +1358,29 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SHOW COLUMNS") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      val e1 = intercept[AnalysisException] {
+        sql(s"SHOW COLUMNS FROM $t")
+      }
+      assert(e1.message.contains(s"Table name should have at most two parts: $t"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"SHOW COLUMNS IN $t")
+      }
+      assert(e2.message.contains(s"Table name should have at most two parts: $t"))
+
+      val e3 = intercept[AnalysisException] {
+        sql(s"SHOW COLUMNS FROM tbl IN testcat.ns1.ns2")
+      }
+      assert(e3.message.contains("Namespace name should have " +
+        "only one part if specified: testcat.ns1.ns2"))
+    }
+  }
+
  test("ALTER TABLE RECOVER PARTITIONS") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {

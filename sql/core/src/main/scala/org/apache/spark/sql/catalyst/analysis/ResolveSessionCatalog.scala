@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CacheTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropDatabaseCommand, DropTableCommand, LoadDataCommand, ShowCreateTableCommand, ShowPartitionsCommand, ShowTablesCommand, TruncateTableCommand, UncacheTableCommand}
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CacheTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropDatabaseCommand, DropTableCommand, LoadDataCommand, ShowColumnsCommand, ShowCreateTableCommand, ShowPartitionsCommand, ShowTablesCommand, TruncateTableCommand, UncacheTableCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
@@ -338,6 +338,18 @@ class ResolveSessionCatalog(
       ShowPartitionsCommand(
         v1TableName.asTableIdentifier,
         partitionSpec)
+
+    case ShowColumnsStatement(table, namespace) =>
+      val sql = "SHOW COLUMNS"
+      val v1TableName = parseV1Table(table, sql).asTableIdentifier
+      val resolver = conf.resolver
+      val db = namespace match {
+        case Some(db) if (v1TableName.database.exists(!resolver(_, db.head))) =>
+          throw new AnalysisException(
+            s"SHOW COLUMNS with conflicting databases: '$db' != '${v1TableName.database.get}'")
+        case _ => namespace.map(_.head)
+      }
+      ShowColumnsCommand(db, v1TableName)
 
     case AlterTableRecoverPartitionsStatement(tableName) =>
       val v1TableName = parseV1Table(tableName, "ALTER TABLE RECOVER PARTITIONS")
