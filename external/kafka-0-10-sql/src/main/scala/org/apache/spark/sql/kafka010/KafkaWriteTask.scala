@@ -27,7 +27,7 @@ import org.apache.kafka.common.header.internals.RecordHeader
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
-import org.apache.spark.sql.types.{BinaryType, StringType}
+import org.apache.spark.sql.types.{BinaryType, IntegerType, StringType}
 
 /**
  * Writes out data in a single Spark task, without any concerns about how
@@ -92,8 +92,10 @@ private[kafka010] abstract class KafkaRowWriter(
       throw new NullPointerException(s"null topic present in the data. Use the " +
         s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
     }
+    val partition: Integer =
+      if (projectedRow.isNullAt(4)) null else projectedRow.getInt(4)
     val record = if (projectedRow.isNullAt(3)) {
-      new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, null, key, value)
+      new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, partition, key, value)
     } else {
       val headerArray = projectedRow.getArray(3)
       val headers = (0 until headerArray.numElements()).map { i =>
@@ -101,7 +103,8 @@ private[kafka010] abstract class KafkaRowWriter(
         new RecordHeader(struct.getUTF8String(0).toString, struct.getBinary(1))
           .asInstanceOf[Header]
       }
-      new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, null, key, value, headers.asJava)
+      new ProducerRecord[Array[Byte], Array[Byte]](
+        topic.toString, partition, key, value, headers.asJava)
     }
     producer.send(record, callback)
   }
@@ -156,12 +159,23 @@ private[kafka010] abstract class KafkaRowWriter(
         throw new IllegalStateException(s"${KafkaWriter.HEADERS_ATTRIBUTE_NAME} " +
           s"attribute unsupported type ${t.catalogString}")
     }
+    val partitionExpression =
+      inputSchema.find(_.name == KafkaWriter.PARTITION_ATTRIBUTE_NAME)
+        .getOrElse(Literal(null, IntegerType))
+    partitionExpression.dataType match {
+      case IntegerType => // good
+      case t =>
+        throw new IllegalStateException(s"${KafkaWriter.PARTITION_ATTRIBUTE_NAME} " +
+          s"attribute unsupported type $t. ${KafkaWriter.PARTITION_ATTRIBUTE_NAME} " +
+          s"must be a ${IntegerType.catalogString}")
+    }
     UnsafeProjection.create(
       Seq(
         topicExpression,
         Cast(keyExpression, BinaryType),
         Cast(valueExpression, BinaryType),
-        headersExpression
+        headersExpression,
+        partitionExpression
       ),
       inputSchema
     )

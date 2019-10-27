@@ -28,7 +28,7 @@ import scala.xml.{Node, Unparsed}
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState, SessionInfo}
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, SessionInfo}
 import org.apache.spark.sql.hive.thriftserver.ui.ToolTips._
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
@@ -339,11 +339,12 @@ private[ui] class SqlStatsPagedTable(
       <td>
         {if (info.closeTimestamp > 0) formatDate(info.closeTimestamp)}
       </td>
+      <!-- Returns a human-readable string representing a duration such as "5 second 35 ms"-->
       <td >
-        {UIUtils.formatDuration(executionTime)}
+        {formatDurationVerbose(executionTime)}
       </td>
       <td >
-        {UIUtils.formatDuration(duration)}
+        {formatDurationVerbose(duration)}
       </td>
       <td>
         {info.statement}
