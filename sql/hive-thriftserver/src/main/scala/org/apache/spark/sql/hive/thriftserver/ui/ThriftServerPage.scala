@@ -433,8 +433,10 @@ private[ui] class SessionStatsPagedTable(
     val sessionTableHeaders =
       Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration", "Total Execute")
 
+    val colWidthAttr = s"${100.toDouble / headers.size}%"
+
     val headerRow: Seq[Node] = {
-      sessionTableHeaders.map { case header =>
+      sessionTableHeaders.map { header =>
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
@@ -444,7 +446,7 @@ private[ui] class SessionStatsPagedTable(
               s"#$sessionStatsTableTag")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
 
-          <th>
+          <th width={colWidthAttr}>
             <a href={headerLink}>
               {header}&nbsp;{Unparsed(arrow)}
             </a>
@@ -456,7 +458,7 @@ private[ui] class SessionStatsPagedTable(
               s"&$sessionStatsTableTag.pageSize=$pageSize" +
               s"#$sessionStatsTableTag")
 
-          <th>
+          <th width={colWidthAttr}>
             <a href={headerLink}>
               {header}
             </a>
@@ -478,8 +480,7 @@ private[ui] class SessionStatsPagedTable(
       <td> <a href={sessionLink}> {session.sessionId} </a> </td>
       <td> {formatDate(session.startTimestamp)} </td>
       <td> {if (session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
-      <td sorttable_customkey={session.totalTime.toString}>
-        {formatDurationVerbose(session.totalTime)} </td>
+      <td> {formatDurationVerbose(session.totalTime)} </td>
       <td> {session.totalExecution.toString} </td>
     </tr>
   }
