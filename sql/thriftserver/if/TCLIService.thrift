@@ -32,8 +32,8 @@
 // * Service names begin with the letter "T", use a capital letter for each
 //   new word (with no underscores), and end with the word "Service".
 
-namespace java org.apache.spark.service.rpc.thrift
-namespace cpp apache.spark.service.rpc.thrift
+namespace java org.apache.spark.sql.thriftserver.cli.thrift
+namespace cpp apache.spark.sql.thriftserver.cli.thrift
 
 // List of protocol versions. A new token should be
 // added to the end of this list every time a change is made.
