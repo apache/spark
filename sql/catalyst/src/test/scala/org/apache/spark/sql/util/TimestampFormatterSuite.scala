@@ -149,11 +149,9 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
         val today = instantToMicros(LocalDateTime.now(zoneId)
           .`with`(LocalTime.MIDNIGHT)
           .atZone(zoneId).toInstant)
-        formatter.parse(s"yesterday ${zoneId.getId}") should be
-          (today - MICROS_PER_DAY +- tolerance)
+        formatter.parse("yesterday CET") should be (today - MICROS_PER_DAY +- tolerance)
         formatter.parse(" TODAY ") should be (today +- tolerance)
-        formatter.parse(s"Tomorrow ${zoneId.getId}") should be
-          (today + MICROS_PER_DAY +- tolerance)
+        formatter.parse("Tomorrow ") should be (today + MICROS_PER_DAY +- tolerance)
       }
     }
   }
