@@ -770,7 +770,8 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
-  val THRIFTSERVER_RESULT_ESCAPE_STRUCT_STRING = buildConf("spark.sql.thriftserver.result.escapeStructString.enabled")
+  val THRIFTSERVER_RESULT_ESCAPE_STRUCT_STRING =
+    buildConf("spark.sql.thriftserver.result.escapeStructString.enabled")
     .doc("When true, escape string when needed to ensure the result returned is a valid json.")
     .booleanConf
     .createWithDefault(false)
