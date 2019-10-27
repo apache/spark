@@ -32,8 +32,7 @@ object TableOutputResolver {
       expected: Seq[Attribute],
       query: LogicalPlan,
       byName: Boolean,
-      conf: SQLConf,
-      storeAssignmentPolicy: StoreAssignmentPolicy.Value): LogicalPlan = {
+      conf: SQLConf): LogicalPlan = {
 
     if (expected.size < query.output.size) {
       throw new AnalysisException(
@@ -47,8 +46,7 @@ object TableOutputResolver {
       expected.flatMap { tableAttr =>
         query.resolve(Seq(tableAttr.name), conf.resolver) match {
           case Some(queryExpr) =>
-            checkField(
-              tableAttr, queryExpr, byName, conf, storeAssignmentPolicy, err => errors += err)
+            checkField(tableAttr, queryExpr, byName, conf, err => errors += err)
           case None =>
             errors += s"Cannot find data for output column '${tableAttr.name}'"
             None
@@ -66,8 +64,7 @@ object TableOutputResolver {
 
       query.output.zip(expected).flatMap {
         case (queryExpr, tableAttr) =>
-          checkField(
-            tableAttr, queryExpr, byName, conf, storeAssignmentPolicy, err => errors += err)
+          checkField(tableAttr, queryExpr, byName, conf, err => errors += err)
       }
     }
 
@@ -88,9 +85,9 @@ object TableOutputResolver {
       queryExpr: NamedExpression,
       byName: Boolean,
       conf: SQLConf,
-      storeAssignmentPolicy: StoreAssignmentPolicy.Value,
       addError: String => Unit): Option[NamedExpression] = {
 
+    val storeAssignmentPolicy = conf.storeAssignmentPolicy
     lazy val outputField = if (tableAttr.dataType.sameType(queryExpr.dataType) &&
       tableAttr.name == queryExpr.name &&
       tableAttr.metadata == queryExpr.metadata) {

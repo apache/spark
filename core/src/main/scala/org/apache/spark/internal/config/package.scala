@@ -179,6 +179,21 @@ package object config {
   private[spark] val EVENT_LOG_CALLSITE_LONG_FORM =
     ConfigBuilder("spark.eventLog.longForm.enabled").booleanConf.createWithDefault(false)
 
+  private[spark] val EVENT_LOG_ENABLE_ROLLING =
+    ConfigBuilder("spark.eventLog.rolling.enabled")
+      .doc("Whether rolling over event log files is enabled.  If set to true, it cuts down " +
+        "each event log file to the configured size.")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_ROLLING_MAX_FILE_SIZE =
+    ConfigBuilder("spark.eventLog.rolling.maxFileSize")
+      .doc("The max size of event log file to be rolled over.")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
+        "configured to be at least 10 MiB.")
+      .createWithDefaultString("128m")
+
   private[spark] val EXECUTOR_ID =
     ConfigBuilder("spark.executor.id").stringConf.createOptional
 
@@ -782,6 +797,17 @@ package object config {
         "spark.io.compression.codec.")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME =
+    ConfigBuilder("spark.rdd.checkpoint.cachePreferredLocsExpireTime")
+      .internal()
+      .doc("Expire time in minutes for caching preferred locations of checkpointed RDD." +
+        "Caching preferred locations can relieve query loading to DFS and save the query " +
+        "time. The drawback is that the cached locations can be possibly outdated and " +
+        "lose data locality. If this config is not specified, it will not cache.")
+      .timeConf(TimeUnit.MINUTES)
+      .checkValue(_ > 0, "The expire time for caching preferred locations cannot be non-positive.")
+      .createOptional
 
   private[spark] val SHUFFLE_ACCURATE_BLOCK_THRESHOLD =
     ConfigBuilder("spark.shuffle.accurateBlockThreshold")

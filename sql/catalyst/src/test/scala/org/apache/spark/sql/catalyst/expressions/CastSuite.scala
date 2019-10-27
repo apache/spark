@@ -672,6 +672,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       "interval 1 years 3 months -3 days")
     checkEvaluation(Cast(Literal("INTERVAL 1 Second 1 microsecond"), CalendarIntervalType),
       new CalendarInterval(0, 1000001))
+    checkEvaluation(Cast(Literal("1 MONTH 1 Microsecond"), CalendarIntervalType),
+      new CalendarInterval(1, 1))
   }
 
   test("cast string to boolean") {

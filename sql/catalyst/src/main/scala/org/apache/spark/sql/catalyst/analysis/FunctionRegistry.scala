@@ -314,8 +314,10 @@ object FunctionRegistry {
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
     expression[EveryAgg]("every"),
+    expression[EveryAgg]("bool_and"),
     expression[AnyAgg]("any"),
-    expression[SomeAgg]("some"),
+    expression[AnyAgg]("some"),
+    expression[AnyAgg]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -484,6 +486,7 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method"),
+    expression[Version]("version"),
 
     // grouping sets
     expression[Cube]("cube"),
@@ -522,6 +525,10 @@ object FunctionRegistry {
     expression[BitwiseNot]("~"),
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
+    expression[BitwiseCount]("bit_count"),
+    expression[BitAndAgg]("bit_and"),
+    expression[BitOrAgg]("bit_or"),
+    expression[BitXorAgg]("bit_xor"),
 
     // json
     expression[StructsToJson]("to_json"),

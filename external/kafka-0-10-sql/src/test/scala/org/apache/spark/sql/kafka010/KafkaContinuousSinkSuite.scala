@@ -286,6 +286,15 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     }
     assert(ex3.getMessage.toLowerCase(Locale.ROOT).contains(
       "key attribute type must be a string or binary"))
+
+    val ex4 = intercept[AnalysisException] {
+      /* partition field wrong type */
+      createKafkaWriter(input.toDF())(
+        withSelectExpr = s"'$topic' as topic", "value as partition", "value"
+      )
+    }
+    assert(ex4.getMessage.toLowerCase(Locale.ROOT).contains(
+      "partition attribute type must be an int"))
   }
 
   test("streaming - write to non-existing topic") {

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.sql.{DriverManager, Statement, Timestamp}
+import java.sql.{DriverManager, SQLException, Statement, Timestamp}
 import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.{Random, Try}
@@ -75,16 +75,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  override def sparkConf: SparkConf = super.sparkConf
-    // Hive Thrift server should not executes SQL queries in an asynchronous way
-    // because we may set session configuration.
-    .set(HiveUtils.HIVE_THRIFT_SERVER_ASYNC, false)
-
   override val isTestWithConfigSets = false
 
   /** List of test cases to ignore, in lower cases. */
-  override def blackList: Set[String] = Set(
-    "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
+  override def blackList: Set[String] = super.blackList ++ Set(
     // Missing UDF
     "postgreSQL/boolean.sql",
     "postgreSQL/case.sql",
@@ -206,6 +200,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
             output.output.contains("Format specifier") =>
             assert(expected.output.contains(classOf[MissingFormatArgumentException].getName) &&
               expected.output.contains("Format specifier"),
+              s"Exception did not match for query #$i\n${expected.sql}, " +
+                s"expected: ${expected.output}, but got: ${output.output}")
+
+          // SQLException should not exactly match. We only assert the result contains Exception.
+          case _ if output.output.startsWith(classOf[SQLException].getName) =>
+            assert(expected.output.contains("Exception"),
               s"Exception did not match for query #$i\n${expected.sql}, " +
                 s"expected: ${expected.output}, but got: ${output.output}")
 
