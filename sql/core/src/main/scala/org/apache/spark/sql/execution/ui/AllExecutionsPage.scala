@@ -408,10 +408,7 @@ private[ui] class ExecutionPagedTable(
 
     val desc = if (execution.description != null && execution.description.nonEmpty) {
       <a href={executionURL(execution.executionId)} class="description-input">
-        <span
-        data-toggle="tooltip" data-placement="top" title="Click to navigate query details page.">
-          {execution.description}
-        </span></a>
+        {execution.description}</a>
     } else {
       <a href={executionURL(execution.executionId)}>
         <span
