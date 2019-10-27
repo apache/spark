@@ -433,7 +433,7 @@ private[ui] class SessionStatsPagedTable(
     val sessionTableHeaders =
       Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration", "Total Execute")
 
-    val colWidthAttr = s"${100.toDouble / headers.size}%"
+    val colWidthAttr = s"${100.toDouble / sessionTableHeaders.size}%"
 
     val headerRow: Seq[Node] = {
       sessionTableHeaders.map { header =>
