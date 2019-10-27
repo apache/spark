@@ -591,8 +591,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
         .atZone(zoneId).toInstant)
       toTimestamp(" Yesterday", zoneId).get should be (today - MICROS_PER_DAY +- tolerance)
       toTimestamp("Today ", zoneId).get should be (today +- tolerance)
-      toTimestamp(s" tomorrow ${zoneId.getId} ", zoneId).get should be
-        (today + MICROS_PER_DAY +- tolerance)
+      toTimestamp(" tomorrow CET ", zoneId).get should be (today + MICROS_PER_DAY +- tolerance)
     }
   }
 
@@ -604,7 +603,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
       assert(toDate(" Now ", zoneId).get === today)
       assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
       assert(toDate("today", zoneId).get === today)
-      assert(toDate(s"tomorrow ${zoneId.getId} ", zoneId).get === today + 1)
+      assert(toDate("tomorrow CET ", zoneId).get === today + 1)
     }
   }
 }
