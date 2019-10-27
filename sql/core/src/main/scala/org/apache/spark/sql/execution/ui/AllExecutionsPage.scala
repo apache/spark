@@ -410,11 +410,7 @@ private[ui] class ExecutionPagedTable(
       <a href={executionURL(execution.executionId)} class="description-input">
         {execution.description}</a>
     } else {
-      <a href={executionURL(execution.executionId)}>
-        <span
-        data-toggle="tooltip" data-placement="top" title="Click to navigate query details page.">
-          {execution.executionId}
-        </span></a>
+      <a href={executionURL(execution.executionId)}>{execution.executionId}</a>
     }
 
     <div>{desc}{details}</div>
