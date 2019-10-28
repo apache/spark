@@ -92,7 +92,6 @@ class IntervalUtilsSuite extends SparkFunSuite {
     assert(fromYearMonthString("99-10") === new CalendarInterval(99 * 12 + 10, 0L))
     assert(fromYearMonthString("+99-10") === new CalendarInterval(99 * 12 + 10, 0L))
     assert(fromYearMonthString("-8-10") === new CalendarInterval(-8 * 12 - 10, 0L))
-    assert(fromYearMonthString("  1-1  ") === new CalendarInterval(12 + 1, 0L))
 
     try {
       fromYearMonthString("99-15")

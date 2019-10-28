@@ -136,7 +136,7 @@ object IntervalUtils {
     result
   }
 
-  private val yearMonthPattern = "^\\s*([+|-])?(\\d+)-(\\d+)\\s*$".r
+  private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
 
   /**
    * Parse YearMonth string in form: [+|-]YYYY-MM
@@ -157,6 +157,7 @@ object IntervalUtils {
             s"Error parsing interval year-month string: ${e.getMessage}", e)
       }
     }
+    assert(input.length == input.trim.length)
     input match {
       case yearMonthPattern("-", yearStr, monthStr) =>
         toInterval(yearStr, monthStr).negate()
