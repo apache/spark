@@ -15,14 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
-# $example on$
-from pyspark.ml.clustering import KMeans
-# $example off$
-
-from pyspark.sql import SparkSession
-
 """
 An example demonstrating k-means clustering.
 Run with:
@@ -30,6 +22,14 @@ Run with:
 
 This example requires NumPy (http://www.numpy.org/).
 """
+from __future__ import print_function
+
+# $example on$
+from pyspark.ml.clustering import KMeans
+from pyspark.ml.evaluation import ClusteringEvaluator
+# $example off$
+
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     spark = SparkSession\
@@ -45,9 +45,14 @@ if __name__ == "__main__":
     kmeans = KMeans().setK(2).setSeed(1)
     model = kmeans.fit(dataset)
 
-    # Evaluate clustering by computing Within Set Sum of Squared Errors.
-    wssse = model.computeCost(dataset)
-    print("Within Set Sum of Squared Errors = " + str(wssse))
+    # Make predictions
+    predictions = model.transform(dataset)
+
+    # Evaluate clustering by computing Silhouette score
+    evaluator = ClusteringEvaluator()
+
+    silhouette = evaluator.evaluate(predictions)
+    print("Silhouette with squared euclidean distance = " + str(silhouette))
 
     # Shows the result.
     centers = model.clusterCenters()

@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -33,7 +32,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.memory.StaticMemoryManager
+import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
@@ -90,7 +89,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
 
     blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf))), conf, true)
+        new LiveListenerBus(conf), None)), conf, true)
 
     storageLevel = StorageLevel.MEMORY_ONLY_SER
     blockManager = createBlockManager(blockManagerSize, conf)
@@ -199,7 +198,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
 
       val cleanupThreshTime = 3000L
       handler.cleanupOldBlocks(cleanupThreshTime)
-      eventually(timeout(10000 millis), interval(10 millis)) {
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
         getWriteAheadLogFiles().size should be < preCleanupLogFiles.size
       }
     }
@@ -214,9 +213,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
 
   test("Test Block - isFullyConsumed") {
     val sparkConf = new SparkConf().set("spark.app.id", "streaming-test")
-    sparkConf.set("spark.storage.unrollMemoryThreshold", "512")
-    // spark.storage.unrollFraction set to 0.4 for BlockManager
-    sparkConf.set("spark.storage.unrollFraction", "0.4")
+    sparkConf.set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 
     sparkConf.set(IO_ENCRYPTION_ENABLED, enableEncryption)
     // Block Manager with 12000 * 0.4 = 4800 bytes of free space for unroll
@@ -245,7 +242,8 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     }
   }
 
-  private def testCountWithBlockManagerBasedBlockHandler(isBlockManagerBasedBlockHandler: Boolean) {
+  private def testCountWithBlockManagerBasedBlockHandler(
+      isBlockManagerBasedBlockHandler: Boolean): Unit = {
     // ByteBufferBlock-MEMORY_ONLY
     testRecordcount(isBlockManagerBasedBlockHandler, StorageLevel.MEMORY_ONLY,
       ByteBufferBlock(ByteBuffer.wrap(Array.tabulate(100)(i => i.toByte))), blockManager, None)
@@ -282,10 +280,10 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       maxMem: Long,
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
+    val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
-      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
     memManager.setMemoryStore(blockManager.memoryStore)
     blockManager.initialize("app-id")
     blockManagerBuffer += blockManager
@@ -301,7 +299,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       receivedBlock: ReceivedBlock,
       bManager: BlockManager,
       expectedNumRecords: Option[Long]
-      ) {
+      ): Unit = {
     blockManager = bManager
     storageLevel = sLevel
     var bId: StreamBlockId = null
@@ -338,10 +336,11 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
    * using the given verification function
    */
   private def testBlockStoring(receivedBlockHandler: ReceivedBlockHandler)
-      (verifyFunc: (Seq[String], Seq[StreamBlockId], Seq[ReceivedBlockStoreResult]) => Unit) {
+      (verifyFunc: (Seq[String], Seq[StreamBlockId], Seq[ReceivedBlockStoreResult]) => Unit)
+      : Unit = {
     val data = Seq.tabulate(100) { _.toString }
 
-    def storeAndVerify(blocks: Seq[ReceivedBlock]) {
+    def storeAndVerify(blocks: Seq[ReceivedBlock]): Unit = {
       blocks should not be empty
       val (blockIds, storeResults) = storeBlocks(receivedBlockHandler, blocks)
       withClue(s"Testing with ${blocks.head.getClass.getSimpleName}s:") {
@@ -364,7 +363,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   }
 
   /** Test error handling when blocks that cannot be stored */
-  private def testErrorHandling(receivedBlockHandler: ReceivedBlockHandler) {
+  private def testErrorHandling(receivedBlockHandler: ReceivedBlockHandler): Unit = {
     // Handle error in iterator (e.g. divide-by-zero error)
     intercept[Exception] {
       val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
@@ -379,12 +378,14 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   }
 
   /** Instantiate a BlockManagerBasedBlockHandler and run a code with it */
-  private def withBlockManagerBasedBlockHandler(body: BlockManagerBasedBlockHandler => Unit) {
+  private def withBlockManagerBasedBlockHandler(
+      body: BlockManagerBasedBlockHandler => Unit): Unit = {
     body(new BlockManagerBasedBlockHandler(blockManager, storageLevel))
   }
 
   /** Instantiate a WriteAheadLogBasedBlockHandler and run a code with it */
-  private def withWriteAheadLogBasedBlockHandler(body: WriteAheadLogBasedBlockHandler => Unit) {
+  private def withWriteAheadLogBasedBlockHandler(
+      body: WriteAheadLogBasedBlockHandler => Unit): Unit = {
     require(WriteAheadLogUtils.getRollingIntervalSecs(conf, isDriver = false) === 1)
     val receivedBlockHandler = new WriteAheadLogBasedBlockHandler(blockManager, serializerManager,
       1, storageLevel, conf, hadoopConf, tempDirectory.toString, manualClock)

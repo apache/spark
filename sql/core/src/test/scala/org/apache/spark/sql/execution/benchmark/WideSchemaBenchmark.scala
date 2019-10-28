@@ -15,55 +15,36 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.benchmark
 
-import java.io.{File, FileOutputStream, OutputStream}
+import java.io.File
 
-import org.scalatest.BeforeAndAfterEach
-
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.functions._
-import org.apache.spark.util.{Benchmark, Utils}
+import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.util.Utils
 
 /**
  * Benchmark for performance with very wide and nested DataFrames.
- * To run this:
- *  build/sbt "sql/test-only *WideSchemaBenchmark"
- *
- * Results will be written to "sql/core/benchmarks/WideSchemaBenchmark-results.txt".
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/WideSchemaBenchmark-results.txt".
+ * }}}
  */
-class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
+object WideSchemaBenchmark extends SqlBasedBenchmark {
   private val scaleFactor = 100000
   private val widthsToTest = Seq(1, 100, 2500)
   private val depthsToTest = Seq(1, 100, 250)
   assert(scaleFactor > widthsToTest.max)
 
-  private lazy val sparkSession = SparkSession.builder
-    .master("local[1]")
-    .appName("microbenchmark")
-    .getOrCreate()
-
-  import sparkSession.implicits._
+  import spark.implicits._
 
   private var tmpFiles: List[File] = Nil
-  private var out: OutputStream = null
 
-  override def beforeAll() {
-    super.beforeAll()
-    out = new FileOutputStream(new File("benchmarks/WideSchemaBenchmark-results.txt"))
-  }
-
-  override def afterAll() {
-    super.afterAll()
-    out.close()
-  }
-
-  override def afterEach() {
-    super.afterEach()
-    for (tmpFile <- tmpFiles) {
-      Utils.deleteRecursively(tmpFile)
-    }
-  }
+  private def deleteTmpFiles(): Unit = tmpFiles.foreach(Utils.deleteRecursively)
 
   /**
    * Writes the given DataFrame to parquet at a temporary location, and returns a DataFrame
@@ -75,7 +56,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     tmpFile.delete()
     df.write.parquet(tmpFile.getAbsolutePath)
     assert(tmpFile.isDirectory())
-    sparkSession.read.parquet(tmpFile.getAbsolutePath)
+    spark.read.parquet(tmpFile.getAbsolutePath)
   }
 
   /**
@@ -101,33 +82,33 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  ignore("parsing large select expressions") {
-    val benchmark = new Benchmark("parsing large select", 1, output = Some(out))
+  def parsingLargeSelectExpressions(): Unit = {
+    val benchmark = new Benchmark("parsing large select", 1, output = output)
     for (width <- widthsToTest) {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
       benchmark.addCase(s"$width select expressions") { iter =>
-        sparkSession.range(1).toDF.selectExpr(selectExpr: _*)
+        spark.range(1).toDF.selectExpr(selectExpr: _*)
       }
     }
     benchmark.run()
   }
 
-  ignore("many column field read and write") {
-    val benchmark = new Benchmark("many column field r/w", scaleFactor, output = Some(out))
+  def manyColumnFieldReadAndWrite(): Unit = {
+    val benchmark = new Benchmark("many column field r/w", scaleFactor, output = output)
     for (width <- widthsToTest) {
       // normalize by width to keep constant data size
       val numRows = scaleFactor / width
       val selectExpr = (1 to width).map(i => s"id as a_$i")
-      val df = sparkSession.range(numRows).toDF.selectExpr(selectExpr: _*).cache()
+      val df = spark.range(numRows).toDF.selectExpr(selectExpr: _*).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$width cols x $numRows rows", "a_1")
     }
     benchmark.run()
   }
 
-  ignore("wide shallowly nested struct field read and write") {
+  def wideShallowlyNestedStructFieldReadAndWrite(): Unit = {
     val benchmark = new Benchmark(
-      "wide shallowly nested struct field r/w", scaleFactor, output = Some(out))
+      "wide shallowly nested struct field r/w", scaleFactor, output = output)
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
       var datum: String = "{"
@@ -140,15 +121,15 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
       }
       datum += "}"
       datum = s"""{"a": {"b": {"c": $datum, "d": $datum}, "e": $datum}}"""
-      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum)).cache()
+      val df = spark.read.json(spark.range(numRows).map(_ => datum)).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$width wide x $numRows rows", "a.b.c.value_1")
     }
     benchmark.run()
   }
 
-  ignore("deeply nested struct field read and write") {
-    val benchmark = new Benchmark("deeply nested struct field r/w", scaleFactor, output = Some(out))
+  def deeplyNestedStructFieldReadAndWrite(): Unit = {
+    val benchmark = new Benchmark("deeply nested struct field r/w", scaleFactor, output = output)
     for (depth <- depthsToTest) {
       val numRows = scaleFactor / depth
       var datum: String = "{\"value\": 1}"
@@ -157,15 +138,15 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
         datum = "{\"value\": " + datum + "}"
         selector = selector + ".value"
       }
-      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum)).cache()
+      val df = spark.read.json(spark.range(numRows).map(_ => datum)).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$depth deep x $numRows rows", selector)
     }
     benchmark.run()
   }
 
-  ignore("bushy struct field read and write") {
-    val benchmark = new Benchmark("bushy struct field r/w", scaleFactor, output = Some(out))
+  def bushyStructFieldReadAndWrite(): Unit = {
+    val benchmark = new Benchmark("bushy struct field r/w", scaleFactor, output = output)
     for (width <- Seq(1, 100, 1000)) {
       val numRows = scaleFactor / width
       var numNodes = 1
@@ -180,15 +161,16 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
       }
       // TODO(ekl) seems like the json parsing is actually the majority of the time, perhaps
       // we should benchmark that too separately.
-      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum)).cache()
+      val df = spark.read.json(spark.range(numRows).map(_ => datum)).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$numNodes x $depth deep x $numRows rows", selector)
     }
     benchmark.run()
   }
 
-  ignore("wide array field read and write") {
-    val benchmark = new Benchmark("wide array field r/w", scaleFactor, output = Some(out))
+
+  def wideArrayFieldReadAndWrite(): Unit = {
+    val benchmark = new Benchmark("wide array field r/w", scaleFactor, output = output)
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
       var datum: String = "{\"value\": ["
@@ -200,22 +182,60 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
         }
       }
       datum += "]}"
-      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum)).cache()
+      val df = spark.read.json(spark.range(numRows).map(_ => datum)).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$width wide x $numRows rows", "value[0]")
     }
     benchmark.run()
   }
 
-  ignore("wide map field read and write") {
-    val benchmark = new Benchmark("wide map field r/w", scaleFactor, output = Some(out))
+  def wideMapFieldReadAndWrite(): Unit = {
+    val benchmark = new Benchmark("wide map field r/w", scaleFactor, output = output)
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
       val datum = Tuple1((1 to width).map(i => ("value_" + i -> 1)).toMap)
-      val df = sparkSession.range(numRows).map(_ => datum).toDF.cache()
+      val df = spark.range(numRows).map(_ => datum).toDF.cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$width wide x $numRows rows", "_1[\"value_1\"]")
     }
     benchmark.run()
+  }
+
+  def runBenchmarkWithDeleteTmpFiles(benchmarkName: String)(func: => Any): Unit = {
+    runBenchmark(benchmarkName) {
+      func
+    }
+    deleteTmpFiles()
+  }
+
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+
+    runBenchmarkWithDeleteTmpFiles("parsing large select expressions") {
+      parsingLargeSelectExpressions()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("many column field read and write") {
+      manyColumnFieldReadAndWrite()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("wide shallowly nested struct field read and write") {
+      wideShallowlyNestedStructFieldReadAndWrite()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("deeply nested struct field read and write") {
+      deeplyNestedStructFieldReadAndWrite()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("bushy struct field read and write") {
+      bushyStructFieldReadAndWrite()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("wide array field read and write") {
+      wideArrayFieldReadAndWrite()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("wide map field read and write") {
+      wideMapFieldReadAndWrite()
+    }
   }
 }

@@ -17,9 +17,11 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.Locale
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.param.{BooleanParam, ParamMap, StringArrayParam}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -84,7 +86,43 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   @Since("1.5.0")
   def getCaseSensitive: Boolean = $(caseSensitive)
 
-  setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"), caseSensitive -> false)
+  /**
+   * Locale of the input for case insensitive matching. Ignored when [[caseSensitive]]
+   * is true.
+   * Default: the string of default locale (`Locale.getDefault`), or `Locale.US` if default locale
+   * is not in available locales in JVM.
+   * @group param
+   */
+  @Since("2.4.0")
+  val locale: Param[String] = new Param[String](this, "locale",
+    "Locale of the input for case insensitive matching. Ignored when caseSensitive is true.",
+    ParamValidators.inArray[String](Locale.getAvailableLocales.map(_.toString)))
+
+  /** @group setParam */
+  @Since("2.4.0")
+  def setLocale(value: String): this.type = set(locale, value)
+
+  /** @group getParam */
+  @Since("2.4.0")
+  def getLocale: String = $(locale)
+
+  /**
+   * Returns system default locale, or `Locale.US` if the default locale is not in available locales
+   * in JVM.
+   */
+  private val getDefaultOrUS: Locale = {
+    if (Locale.getAvailableLocales.contains(Locale.getDefault)) {
+      Locale.getDefault
+    } else {
+      logWarning(s"Default locale set was [${Locale.getDefault.toString}]; however, it was " +
+        "not found in available locales in JVM, falling back to en_US locale. Set param `locale` " +
+        "in order to respect another locale.")
+      Locale.US
+    }
+  }
+
+  setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"),
+    caseSensitive -> false, locale -> getDefaultOrUS.toString)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -95,8 +133,10 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
         terms.filter(s => !stopWordsSet.contains(s))
       }
     } else {
-      // TODO: support user locale (SPARK-15064)
-      val toLower = (s: String) => if (s != null) s.toLowerCase else s
+      val lc = new Locale($(locale))
+      // scalastyle:off caselocale
+      val toLower = (s: String) => if (s != null) s.toLowerCase(lc) else s
+      // scalastyle:on caselocale
       val lowerStopWords = $(stopWords).map(toLower(_)).toSet
       udf { terms: Seq[String] =>
         terms.filter(s => !lowerStopWords.contains(toLower(s)))
@@ -109,8 +149,8 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
-    require(inputType.sameType(ArrayType(StringType)),
-      s"Input type must be ArrayType(StringType) but got $inputType.")
+    require(inputType.sameType(ArrayType(StringType)), "Input type must be " +
+      s"${ArrayType(StringType).catalogString} but got ${inputType.catalogString}.")
     SchemaUtils.appendColumn(schema, $(outputCol), inputType, schema($(inputCol)).nullable)
   }
 

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.optim
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -26,8 +26,8 @@ import org.apache.spark.rdd.RDD
 
 class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  private var instances1: RDD[Instance] = _
-  private var instances2: RDD[Instance] = _
+  private var instances1: RDD[OffsetInstance] = _
+  private var instances2: RDD[OffsetInstance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -39,10 +39,10 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
        w <- c(1, 2, 3, 4)
      */
     instances1 = sc.parallelize(Seq(
-      Instance(1.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
-      Instance(0.0, 2.0, Vectors.dense(1.0, 2.0)),
-      Instance(1.0, 3.0, Vectors.dense(2.0, 1.0)),
-      Instance(0.0, 4.0, Vectors.dense(3.0, 3.0))
+      OffsetInstance(1.0, 1.0, 0.0, Vectors.dense(0.0, 5.0).toSparse),
+      OffsetInstance(0.0, 2.0, 0.0, Vectors.dense(1.0, 2.0)),
+      OffsetInstance(1.0, 3.0, 0.0, Vectors.dense(2.0, 1.0)),
+      OffsetInstance(0.0, 4.0, 0.0, Vectors.dense(3.0, 3.0))
     ), 2)
     /*
        R code:
@@ -52,10 +52,10 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
        w <- c(1, 2, 3, 4)
      */
     instances2 = sc.parallelize(Seq(
-      Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
-      Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
-      Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
-      Instance(9.0, 4.0, Vectors.dense(3.0, 13.0))
+      OffsetInstance(2.0, 1.0, 0.0, Vectors.dense(0.0, 5.0).toSparse),
+      OffsetInstance(8.0, 2.0, 0.0, Vectors.dense(1.0, 7.0)),
+      OffsetInstance(3.0, 3.0, 0.0, Vectors.dense(2.0, 11.0)),
+      OffsetInstance(9.0, 4.0, 0.0, Vectors.dense(3.0, 13.0))
     ), 2)
   }
 
@@ -156,7 +156,7 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
       val initial = new WeightedLeastSquares(fitIntercept, regParam = 0.0, elasticNetParam = 0.0,
-        standardizeFeatures = false, standardizeLabel = false).fit(instances2)
+        standardizeFeatures = false, standardizeLabel = false).fit(instances2.map(_.toInstance))
       val irls = new IterativelyReweightedLeastSquares(initial, L1RegressionReweightFunc,
         fitIntercept, regParam = 0.0, maxIter = 200, tol = 1e-7).fit(instances2)
       val actual = Vectors.dense(irls.intercept, irls.coefficients(0), irls.coefficients(1))
@@ -169,29 +169,29 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
 object IterativelyReweightedLeastSquaresSuite {
 
   def BinomialReweightFunc(
-      instance: Instance,
+      instance: OffsetInstance,
       model: WeightedLeastSquaresModel): (Double, Double) = {
-    val eta = model.predict(instance.features)
+    val eta = model.predict(instance.features) + instance.offset
     val mu = 1.0 / (1.0 + math.exp(-1.0 * eta))
-    val z = eta + (instance.label - mu) / (mu * (1.0 - mu))
+    val z = eta - instance.offset + (instance.label - mu) / (mu * (1.0 - mu))
     val w = mu * (1 - mu) * instance.weight
     (z, w)
   }
 
   def PoissonReweightFunc(
-      instance: Instance,
+      instance: OffsetInstance,
       model: WeightedLeastSquaresModel): (Double, Double) = {
-    val eta = model.predict(instance.features)
+    val eta = model.predict(instance.features) + instance.offset
     val mu = math.exp(eta)
-    val z = eta + (instance.label - mu) / mu
+    val z = eta - instance.offset + (instance.label - mu) / mu
     val w = mu * instance.weight
     (z, w)
   }
 
   def L1RegressionReweightFunc(
-      instance: Instance,
+      instance: OffsetInstance,
       model: WeightedLeastSquaresModel): (Double, Double) = {
-    val eta = model.predict(instance.features)
+    val eta = model.predict(instance.features) + instance.offset
     val e = math.max(math.abs(eta - instance.label), 1e-7)
     val w = 1 / e
     val y = instance.label

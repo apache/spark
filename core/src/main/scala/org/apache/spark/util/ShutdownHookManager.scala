@@ -70,7 +70,7 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   // Register the path to be deleted via shutdown hook
-  def registerShutdownDeleteDir(file: File) {
+  def registerShutdownDeleteDir(file: File): Unit = {
     val absolutePath = file.getAbsolutePath()
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths += absolutePath
@@ -78,7 +78,7 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   // Remove the path to be deleted via shutdown hook
-  def removeShutdownDeleteDir(file: File) {
+  def removeShutdownDeleteDir(file: File): Unit = {
     val absolutePath = file.getAbsolutePath()
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths.remove(absolutePath)
@@ -120,7 +120,7 @@ private[spark] object ShutdownHookManager extends Logging {
   def inShutdown(): Boolean = {
     try {
       val hook = new Thread {
-        override def run() {}
+        override def run(): Unit = {}
       }
       // scalastyle:off runtimeaddshutdownhook
       Runtime.getRuntime.addShutdownHook(hook)
@@ -143,7 +143,7 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   /**
-   * Adds a shutdown hook with the given priority. Hooks with lower priority values run
+   * Adds a shutdown hook with the given priority. Hooks with higher priority values run
    * first.
    *
    * @param hook The code to run during shutdown.

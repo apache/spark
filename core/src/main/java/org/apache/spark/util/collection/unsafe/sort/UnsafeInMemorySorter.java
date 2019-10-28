@@ -24,6 +24,7 @@ import org.apache.avro.reflect.Nullable;
 
 import org.apache.spark.TaskContext;
 import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UnsafeAlignedOffset;
@@ -61,12 +62,13 @@ public final class UnsafeInMemorySorter {
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
       if (prefixComparisonResult == 0) {
         final Object baseObject1 = memoryManager.getPage(r1.recordPointer);
-        // skip length
         final long baseOffset1 = memoryManager.getOffsetInPage(r1.recordPointer) + uaoSize;
+        final int baseLength1 = UnsafeAlignedOffset.getSize(baseObject1, baseOffset1 - uaoSize);
         final Object baseObject2 = memoryManager.getPage(r2.recordPointer);
-        // skip length
         final long baseOffset2 = memoryManager.getOffsetInPage(r2.recordPointer) + uaoSize;
-        return recordComparator.compare(baseObject1, baseOffset1, baseObject2, baseOffset2);
+        final int baseLength2 = UnsafeAlignedOffset.getSize(baseObject2, baseOffset2 - uaoSize);
+        return recordComparator.compare(baseObject1, baseOffset1, baseLength1, baseObject2,
+          baseOffset2, baseLength2);
       } else {
         return prefixComparisonResult;
       }
@@ -123,7 +125,7 @@ public final class UnsafeInMemorySorter {
     int initialSize,
     boolean canUseRadixSort) {
     this(consumer, memoryManager, recordComparator, prefixComparator,
-      consumer.allocateArray(initialSize * 2), canUseRadixSort);
+      consumer.allocateArray(initialSize * 2L), canUseRadixSort);
   }
 
   public UnsafeInMemorySorter(
@@ -162,7 +164,9 @@ public final class UnsafeInMemorySorter {
    */
   public void free() {
     if (consumer != null) {
-      consumer.freeArray(array);
+      if (array != null) {
+        consumer.freeArray(array);
+      }
       array = null;
     }
   }
@@ -170,6 +174,15 @@ public final class UnsafeInMemorySorter {
   public void reset() {
     if (consumer != null) {
       consumer.freeArray(array);
+      // the call to consumer.allocateArray may trigger a spill which in turn access this instance
+      // and eventually re-enter this method and try to free the array again.  by setting the array
+      // to null and its length to 0 we effectively make the spill code-path a no-op.  setting the
+      // array to null also indicates that it has already been de-allocated which prevents a double
+      // de-allocation in free().
+      array = null;
+      usableCapacity = 0;
+      pos = 0;
+      nullBoundaryPos = 0;
       array = consumer.allocateArray(initialSize);
       usableCapacity = getUsableCapacity();
     }
@@ -201,7 +214,9 @@ public final class UnsafeInMemorySorter {
 
   public void expandPointerArray(LongArray newArray) {
     if (newArray.size() < array.size()) {
-      throw new OutOfMemoryError("Not enough memory to grow pointer array");
+      // checkstyle.off: RegexpSinglelineJava
+      throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
+      // checkstyle.on: RegexpSinglelineJava
     }
     Platform.copyMemory(
       array.getBaseObject(),

@@ -35,7 +35,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
  */
 // scalastyle:on
 object PageViewStream {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 3) {
       System.err.println("Usage: PageViewStream <metric> <host> <port>")
       System.err.println("<metric> must be one of pageCounts, slidingPageCounts," +
@@ -104,8 +104,8 @@ object PageViewStream {
           .foreachRDD((rdd, time) => rdd.join(userList)
             .map(_._2._2)
             .take(10)
-            .foreach(u => println("Saw user %s at time %s".format(u, time))))
-      case _ => println("Invalid metric entered: " + metric)
+            .foreach(u => println(s"Saw user $u at time $time")))
+      case _ => println(s"Invalid metric entered: $metric")
     }
 
     ssc.start()

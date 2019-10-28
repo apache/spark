@@ -32,4 +32,5 @@ create temporary view D(d, vd) as select * from nt1;
 
 -- Allowed since cross join with C is explicit
 select * from ((A join B on (a = b)) cross join C) join D on (a = d);
-
+-- Cross joins with non-equal predicates
+SELECT * FROM nt1 CROSS JOIN nt2 ON (nt1.k > nt2.k);

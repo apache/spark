@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.Locale
+
 import org.apache.spark.util.Utils
 
 
@@ -42,6 +44,7 @@ object StaticSQLConf {
   val GLOBAL_TEMP_DATABASE = buildStaticConf("spark.sql.globalTempDatabase")
     .internal()
     .stringConf
+    .transform(_.toLowerCase(Locale.ROOT))
     .createWithDefault("global_temp")
 
   // This is used to control when we will split a schema's JSON string to multiple pieces
@@ -66,6 +69,22 @@ object StaticSQLConf {
       .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
       .createWithDefault(1000)
 
+  val CODEGEN_CACHE_MAX_ENTRIES = buildStaticConf("spark.sql.codegen.cache.maxEntries")
+      .internal()
+      .doc("When nonzero, enable caching of generated classes for operators and expressions. " +
+        "All jobs share the cache that can use up to the specified number for generated classes.")
+      .intConf
+      .checkValue(maxEntries => maxEntries >= 0, "The maximum must not be negative")
+      .createWithDefault(100)
+
+  val CODEGEN_COMMENTS = buildStaticConf("spark.sql.codegen.comments")
+    .internal()
+    .doc("When true, put comment in the generated code. Since computing huge comments " +
+      "can be extremely expensive in certain cases, such as deeply-nested expressions which " +
+      "operate over inputs with wide schemas, default is false.")
+    .booleanConf
+    .createWithDefault(false)
+
   // When enabling the debug, Spark SQL internal table properties are not filtered out; however,
   // some related DDL commands (e.g., ANALYZE TABLE and CREATE TABLE LIKE) might not work properly.
   val DEBUG_MODE = buildStaticConf("spark.sql.debug")
@@ -83,8 +102,63 @@ object StaticSQLConf {
       .createWithDefault(false)
 
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
-    .doc("Name of the class used to configure Spark Session extensions. The class should " +
-      "implement Function1[SparkSessionExtension, Unit], and must have a no-args constructor.")
+    .doc("A comma-separated list of classes that implement " +
+      "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +
+      "classes must have a no-args constructor. If multiple extensions are specified, they are " +
+      "applied in the specified order. For the case of rules and planner strategies, they are " +
+      "applied in the specified order. For the case of parsers, the last parser is used and each " +
+      "parser can delegate to its predecessor. For the case of function name conflicts, the last " +
+      "registered function name is used.")
     .stringConf
+    .toSequence
     .createOptional
+
+  val QUERY_EXECUTION_LISTENERS = buildStaticConf("spark.sql.queryExecutionListeners")
+    .doc("List of class names implementing QueryExecutionListener that will be automatically " +
+      "added to newly created sessions. The classes should have either a no-arg constructor, " +
+      "or a constructor that expects a SparkConf argument.")
+    .stringConf
+    .toSequence
+    .createOptional
+
+  val STREAMING_QUERY_LISTENERS = buildStaticConf("spark.sql.streaming.streamingQueryListeners")
+    .doc("List of class names implementing StreamingQueryListener that will be automatically " +
+      "added to newly created sessions. The classes should have either a no-arg constructor, " +
+      "or a constructor that expects a SparkConf argument.")
+    .stringConf
+    .toSequence
+    .createOptional
+
+  val UI_RETAINED_EXECUTIONS =
+    buildStaticConf("spark.sql.ui.retainedExecutions")
+      .doc("Number of executions to retain in the Spark UI.")
+      .intConf
+      .createWithDefault(1000)
+
+  val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism to fetch and broadcast the table. " +
+        "If we encounter memory issue like frequently full GC or OOM when broadcast table " +
+        "we can decrease this number in order to reduce memory usage. " +
+        "Notice the number should be carefully chosen since decreasing parallelism might " +
+        "cause longer waiting for other broadcasting. Also, increasing parallelism may " +
+        "cause memory problem.")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in [0,128].")
+      .createWithDefault(128)
+
+  val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
+    .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
+      "event. Defaults to no truncation. If set to 0, callsite will be logged instead.")
+    .intConf
+    .checkValue(_ >= 0, "Must be set greater or equal to zero")
+    .createWithDefault(Int.MaxValue)
+
+  val SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS =
+    buildStaticConf("spark.sql.legacy.sessionInitWithConfigDefaults")
+      .doc("Flag to revert to legacy behavior where a cloned SparkSession receives SparkConf " +
+        "defaults, dropping any overrides in its parent SparkSession.")
+      .booleanConf
+      .createWithDefault(false)
 }

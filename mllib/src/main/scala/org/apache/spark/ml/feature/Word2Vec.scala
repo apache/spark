@@ -19,8 +19,8 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
@@ -230,7 +230,7 @@ class Word2VecModel private[ml] (
    * Find "num" number of words closest in similarity to the given word, not
    * including the word itself.
    * @return a dataframe with columns "word" and "similarity" of the word and the cosine
-   * similarities between the synonyms and the given word vector.
+   * similarities between the synonyms and the given word.
    */
   @Since("1.5.0")
   def findSynonyms(word: String, num: Int): DataFrame = {
@@ -338,14 +338,17 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
 
       val wordVectors = instance.wordVectors.getVectors
-      val dataSeq = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }
       val dataPath = new Path(path, "data").toString
       val bufferSizeInBytes = Utils.byteStringAsBytes(
-        sc.conf.get("spark.kryoserializer.buffer.max", "64m"))
+        sc.conf.get(KRYO_SERIALIZER_MAX_BUFFER_SIZE.key, "64m"))
       val numPartitions = Word2VecModelWriter.calculateNumberOfPartitions(
         bufferSizeInBytes, instance.wordVectors.wordIndex.size, instance.getVectorSize)
-      sparkSession.createDataFrame(dataSeq)
+      val spark = sparkSession
+      import spark.implicits._
+      spark.createDataset[(String, Array[Float])](wordVectors.toSeq)
         .repartition(numPartitions)
+        .map { case (word, vector) => Data(word, vector) }
+        .toDF()
         .write
         .parquet(dataPath)
     }
@@ -408,7 +411,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       }
 
       val model = new Word2VecModel(metadata.uid, oldModel)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

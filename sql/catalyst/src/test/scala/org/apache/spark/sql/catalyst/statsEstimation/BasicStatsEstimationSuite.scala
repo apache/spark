@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 
-class BasicStatsEstimationSuite extends StatsEstimationTestBase {
+class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   val attribute = attr("key")
-  val colStat = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-    nullCount = 0, avgLen = 4, maxLen = 4)
+  val colStat = ColumnStat(distinctCount = Some(10), min = Some(1), max = Some(10),
+    nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
 
   val plan = StatsTestPlan(
     outputList = Seq(attribute),
@@ -35,22 +38,22 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
     // row count * (overhead + column size)
     size = Some(10 * (8 + 4)))
 
-  test("BroadcastHint estimation") {
-    val filter = Filter(Literal(true), plan)
-    val filterStatsCboOn = Statistics(sizeInBytes = 10 * (8 +4),
-      rowCount = Some(10), attributeStats = AttributeMap(Seq(attribute -> colStat)))
-    val filterStatsCboOff = Statistics(sizeInBytes = 10 * (8 +4))
+  test("range") {
+    val range = Range(1, 5, 1, None)
+    val rangeStats = Statistics(sizeInBytes = 4 * 8)
     checkStats(
-      filter,
-      expectedStatsCboOn = filterStatsCboOn,
-      expectedStatsCboOff = filterStatsCboOff)
+      range,
+      expectedStatsCboOn = rangeStats,
+      expectedStatsCboOff = rangeStats)
+  }
 
-    val broadcastHint = ResolvedHint(filter, HintInfo(broadcast = true))
+  test("windows") {
+    val windows = plan.window(Seq(min(attribute).as('sum_attr)), Seq(attribute), Nil)
+    val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
     checkStats(
-      broadcastHint,
-      expectedStatsCboOn = filterStatsCboOn.copy(hints = HintInfo(broadcast = true)),
-      expectedStatsCboOff = filterStatsCboOff.copy(hints = HintInfo(broadcast = true))
-    )
+      windows,
+      expectedStatsCboOn = windowsStats,
+      expectedStatsCboOff = windowsStats)
   }
 
   test("limit estimation: limit < child's rowCount") {
@@ -95,13 +98,17 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
         sizeInBytes = 40,
         rowCount = Some(10),
         attributeStats = AttributeMap(Seq(
-          AttributeReference("c1", IntegerType)() -> ColumnStat(10, Some(1), Some(10), 0, 4, 4))))
+          AttributeReference("c1", IntegerType)() -> ColumnStat(distinctCount = Some(10),
+            min = Some(1), max = Some(10),
+            nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)))))
     val expectedCboStats =
       Statistics(
         sizeInBytes = 4,
         rowCount = Some(1),
         attributeStats = AttributeMap(Seq(
-          AttributeReference("c1", IntegerType)() -> ColumnStat(1, Some(5), Some(5), 0, 4, 4))))
+          AttributeReference("c1", IntegerType)() -> ColumnStat(distinctCount = Some(10),
+            min = Some(5), max = Some(5),
+            nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)))))
 
     val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
     checkStats(
@@ -113,18 +120,15 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
       plan: LogicalPlan,
       expectedStatsCboOn: Statistics,
       expectedStatsCboOff: Statistics): Unit = {
-    val originalValue = SQLConf.get.getConf(SQLConf.CBO_ENABLED)
-    try {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       // Invalidate statistics
       plan.invalidateStatsCache()
-      SQLConf.get.setConf(SQLConf.CBO_ENABLED, true)
       assert(plan.stats == expectedStatsCboOn)
+    }
 
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
       plan.invalidateStatsCache()
-      SQLConf.get.setConf(SQLConf.CBO_ENABLED, false)
       assert(plan.stats == expectedStatsCboOff)
-    } finally {
-      SQLConf.get.setConf(SQLConf.CBO_ENABLED, originalValue)
     }
   }
 
@@ -139,9 +143,10 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
  */
 private case class DummyLogicalPlan(
     defaultStats: Statistics,
-    cboStats: Statistics) extends LogicalPlan {
+    cboStats: Statistics)
+  extends LeafNode {
+
   override def output: Seq[Attribute] = Nil
-  override def children: Seq[LogicalPlan] = Nil
-  override def computeStats: Statistics =
-    if (conf.cboEnabled) cboStats else defaultStats
+
+  override def computeStats(): Statistics = if (conf.cboEnabled) cboStats else defaultStats
 }

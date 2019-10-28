@@ -115,7 +115,12 @@ class FileStreamSourceLog(
       Map.empty[Long, Option[Array[FileEntry]]]
     }
 
-    (existedBatches ++ retrievedBatches).map(i => i._1 -> i._2.get).toArray.sortBy(_._1)
+    val batches =
+      (existedBatches ++ retrievedBatches).map(i => i._1 -> i._2.get).toArray.sortBy(_._1)
+    if (startBatchId <= endBatchId) {
+      HDFSMetadataLog.verifyBatchIds(batches.map(_._1), startId, endId)
+    }
+    batches
   }
 }
 

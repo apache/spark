@@ -35,8 +35,8 @@ final class UnsafeSorterSpillMerger {
         prefixComparator.compare(left.getKeyPrefix(), right.getKeyPrefix());
       if (prefixComparisonResult == 0) {
         return recordComparator.compare(
-          left.getBaseObject(), left.getBaseOffset(),
-          right.getBaseObject(), right.getBaseOffset());
+          left.getBaseObject(), left.getBaseOffset(), left.getRecordLength(),
+          right.getBaseObject(), right.getBaseOffset(), right.getRecordLength());
       } else {
         return prefixComparisonResult;
       }
@@ -51,7 +51,7 @@ final class UnsafeSorterSpillMerger {
     if (spillReader.hasNext()) {
       // We only add the spillReader to the priorityQueue if it is not empty. We do this to
       // make sure the hasNext method of UnsafeSorterIterator returned by getSortedIterator
-      // does not return wrong result because hasNext will returns true
+      // does not return wrong result because hasNext will return true
       // at least priorityQueue.size() times. If we allow n spillReaders in the
       // priorityQueue, we will have n extra empty records in the result of UnsafeSorterIterator.
       spillReader.loadNext();

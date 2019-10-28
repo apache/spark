@@ -14,15 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.sql.Row
 
-class MaxAbsScalerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class MaxAbsScalerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -45,9 +44,10 @@ class MaxAbsScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
       .setOutputCol("scaled")
 
     val model = scaler.fit(df)
-    model.transform(df).select("expected", "scaled").collect()
-      .foreach { case Row(vector1: Vector, vector2: Vector) =>
-      assert(vector1.equals(vector2), s"MaxAbsScaler ut error: $vector2 should be $vector1")
+    testTransformer[(Vector, Vector)](df, model, "expected", "scaled") {
+      case Row(expectedVec: Vector, actualVec: Vector) =>
+        assert(expectedVec === actualVec,
+          s"MaxAbsScaler error: Expected $expectedVec but computed $actualVec")
     }
 
     MLTestingUtils.checkCopyAndUids(scaler, model)

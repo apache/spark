@@ -17,10 +17,16 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 /**
  * A set of tests that validates support for Hive Explain command.
@@ -29,21 +35,32 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   import testImplicits._
 
   test("show cost in explain command") {
+    val explainCostCommand = "EXPLAIN COST  SELECT * FROM src"
     // For readability, we only show optimized plan and physical plan in explain cost command
-    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "),
+    checkKeywordsExist(sql(explainCostCommand),
       "Optimized Logical Plan", "Physical Plan")
-    checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "),
+    checkKeywordsNotExist(sql(explainCostCommand),
       "Parsed Logical Plan", "Analyzed Logical Plan")
 
-    // Only has sizeInBytes before ANALYZE command
-    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes")
-    checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "), "rowCount")
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      // Only has sizeInBytes before ANALYZE command
+      checkKeywordsExist(sql(explainCostCommand), "sizeInBytes")
+      checkKeywordsNotExist(sql(explainCostCommand), "rowCount")
 
-    // Has both sizeInBytes and rowCount after ANALYZE command
-    sql("ANALYZE TABLE src COMPUTE STATISTICS")
-    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes", "rowCount")
+      // Has both sizeInBytes and rowCount after ANALYZE command
+      sql("ANALYZE TABLE src COMPUTE STATISTICS")
+      checkKeywordsExist(sql(explainCostCommand), "sizeInBytes", "rowCount")
+    }
 
-    // No cost information
+    spark.sessionState.catalog.refreshTable(TableIdentifier("src"))
+
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+      // Don't show rowCount if cbo is disabled
+      checkKeywordsExist(sql(explainCostCommand), "sizeInBytes")
+      checkKeywordsNotExist(sql(explainCostCommand), "rowCount")
+    }
+
+    // No statistics information if "cost" is not specified
     checkKeywordsNotExist(sql("EXPLAIN  SELECT * FROM src "), "sizeInBytes", "rowCount")
   }
 
@@ -115,40 +132,39 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "src")
   }
 
-  test("SPARK-17409: The EXPLAIN output of CTAS only shows the analyzed plan") {
-    withTempView("jt") {
-      val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str$i"}""").toDS()
-      spark.read.json(ds).createOrReplaceTempView("jt")
-      val outputs = sql(
-        s"""
-           |EXPLAIN EXTENDED
-           |CREATE TABLE t1
-           |AS
-           |SELECT * FROM jt
-         """.stripMargin).collect().map(_.mkString).mkString
-
-      val shouldContain =
-        "== Parsed Logical Plan ==" :: "== Analyzed Logical Plan ==" :: "Subquery" ::
-        "== Optimized Logical Plan ==" :: "== Physical Plan ==" ::
-        "CreateHiveTableAsSelect" :: "InsertIntoHiveTable" :: "jt" :: Nil
-      for (key <- shouldContain) {
-        assert(outputs.contains(key), s"$key doesn't exist in result")
-      }
-
-      val physicalIndex = outputs.indexOf("== Physical Plan ==")
-      assert(outputs.substring(physicalIndex).contains("Subquery"),
-        "Physical Plan should contain SubqueryAlias since the query should not be optimized")
-    }
+  test("explain output of physical plan should contain proper codegen stage ID") {
+    checkKeywordsExist(sql(
+      """
+        |EXPLAIN SELECT t1.id AS a, t2.id AS b FROM
+        |(SELECT * FROM range(3)) t1 JOIN
+        |(SELECT * FROM range(10)) t2 ON t1.id == t2.id % 3
+      """.stripMargin),
+      "== Physical Plan ==",
+      "*(2) Project ",
+      "+- *(2) BroadcastHashJoin ",
+      "   :- BroadcastExchange ",
+      "   :  +- *(1) Range ",
+      "   +- *(2) Range "
+    )
   }
 
   test("EXPLAIN CODEGEN command") {
-    checkKeywordsExist(sql("EXPLAIN CODEGEN SELECT 1"),
-      "WholeStageCodegen",
-      "Generated code:",
-      "/* 001 */ public Object generate(Object[] references) {",
-      "/* 002 */   return new GeneratedIterator(references);",
-      "/* 003 */ }"
-    )
+    // the generated class name in this test should stay in sync with
+    //   org.apache.spark.sql.execution.WholeStageCodegenExec.generatedClassName()
+    for ((useIdInClassName, expectedClassName) <- Seq(
+           ("true", "GeneratedIteratorForCodegenStage1"),
+           ("false", "GeneratedIterator"))) {
+      withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME.key -> useIdInClassName) {
+        checkKeywordsExist(sql("EXPLAIN CODEGEN SELECT 1"),
+          "WholeStageCodegen",
+          "Generated code:",
+           "/* 001 */ public Object generate(Object[] references) {",
+          s"/* 002 */   return new $expectedClassName(references);",
+           "/* 003 */ }"
+        )
+      }
+    }
 
     checkKeywordsNotExist(sql("EXPLAIN CODEGEN SELECT 1"),
       "== Physical Plan =="
@@ -156,6 +172,64 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     intercept[ParseException] {
       sql("EXPLAIN EXTENDED CODEGEN SELECT 1")
+    }
+  }
+
+  test("SPARK-23034 show relation names in Hive table scan nodes") {
+    val tableName = "tab"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(c1 int) USING hive")
+      val output = new java.io.ByteArrayOutputStream()
+      Console.withOut(output) {
+        spark.table(tableName).explain(extended = false)
+      }
+      assert(output.toString.contains(s"Scan hive default.$tableName"))
+    }
+  }
+
+  test("SPARK-26661: Show actual class name of the writing command in CTAS explain") {
+    Seq(true, false).foreach { convertCTAS =>
+      withSQLConf(
+          HiveUtils.CONVERT_METASTORE_CTAS.key -> convertCTAS.toString,
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertCTAS.toString) {
+
+        val df = sql(s"EXPLAIN CREATE TABLE tab1 STORED AS PARQUET AS SELECT * FROM range(2)")
+        val keywords = if (convertCTAS) {
+          Seq(
+            s"Execute ${Utils.getSimpleName(classOf[OptimizedCreateHiveTableAsSelectCommand])}",
+            Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand]))
+        } else {
+          Seq(
+            s"Execute ${Utils.getSimpleName(classOf[CreateHiveTableAsSelectCommand])}",
+            Utils.getSimpleName(classOf[InsertIntoHiveTable]))
+        }
+        checkKeywordsExist(df, keywords: _*)
+      }
+    }
+  }
+
+  test("SPARK-28595: explain should not trigger partition listing") {
+    Seq(true, false).foreach { legacyBucketedScan =>
+      withSQLConf(
+        SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING.key -> legacyBucketedScan.toString) {
+        HiveCatalogMetrics.reset()
+        withTable("t") {
+          sql(
+            """
+              |CREATE TABLE t USING json
+              |PARTITIONED BY (j)
+              |CLUSTERED BY (i) SORTED BY (i) INTO 4 BUCKETS
+              |AS SELECT 1 i, 2 j
+            """.stripMargin)
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == 0)
+          spark.table("t").sort($"i").explain()
+          if (legacyBucketedScan) {
+            assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount > 0)
+          } else {
+            assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == 0)
+          }
+        }
+      }
     }
   }
 }

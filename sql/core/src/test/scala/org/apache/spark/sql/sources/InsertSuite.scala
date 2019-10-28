@@ -18,12 +18,40 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.sql.Date
 
-import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.SparkException
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class InsertSuite extends DataSourceTest with SharedSQLContext {
+class SimpleInsertSource extends SchemaRelationProvider {
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: StructType): BaseRelation = {
+    SimpleInsert(schema)(sqlContext.sparkSession)
+  }
+}
+
+case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSession: SparkSession)
+  extends BaseRelation with InsertableRelation {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
+
+  override def schema: StructType = userSpecifiedSchema
+
+  override def insert(input: DataFrame, overwrite: Boolean): Unit = {
+    input.collect
+  }
+}
+
+class InsertSuite extends DataSourceTest with SharedSparkSession {
   import testImplicits._
 
   protected override lazy val sql = spark.sql _
@@ -143,7 +171,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     // Writing the table to more part files.
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 10)
-    spark.read.json(rdd1.toDS()).createOrReplaceTempView("jt2")
+    spark.read.json(rdd2.toDS()).createOrReplaceTempView("jt2")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
@@ -364,6 +392,347 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       checkAnswer(
         spark.sql("SELECT custom_fields.id, custom_fields.value FROM tab1"),
         Row(Array(1, 2), Array("a", "b")))
+    }
+  }
+
+  test("insert overwrite directory") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val v1 =
+        s"""
+           | INSERT OVERWRITE DIRECTORY '${path}'
+           | USING json
+           | OPTIONS (a 1, b 0.1, c TRUE)
+           | SELECT 1 as a, 'c' as b
+         """.stripMargin
+
+      spark.sql(v1)
+
+      checkAnswer(
+        spark.read.json(dir.getCanonicalPath),
+        sql("SELECT 1 as a, 'c' as b"))
+    }
+  }
+
+  test("insert overwrite directory with path in options") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val v1 =
+        s"""
+           | INSERT OVERWRITE DIRECTORY
+           | USING json
+           | OPTIONS ('path' '${path}')
+           | SELECT 1 as a, 'c' as b
+         """.stripMargin
+
+      spark.sql(v1)
+
+      checkAnswer(
+        spark.read.json(dir.getCanonicalPath),
+        sql("SELECT 1 as a, 'c' as b"))
+    }
+  }
+
+  test("Insert overwrite directory using Hive serde without turning on Hive support") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '$path'
+             |STORED AS orc
+             |SELECT 1, 2
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains(
+        "Hive support is required to INSERT OVERWRITE DIRECTORY with the Hive format"))
+    }
+  }
+
+  test("insert overwrite directory to data source not providing FileFormat") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val v1 =
+        s"""
+           | INSERT OVERWRITE DIRECTORY '${path}'
+           | USING JDBC
+           | OPTIONS (a 1, b 0.1, c TRUE)
+           | SELECT 1 as a, 'c' as b
+         """.stripMargin
+      val e = intercept[SparkException] {
+        spark.sql(v1)
+      }.getMessage
+
+      assert(e.contains("Only Data Sources providing FileFormat are supported"))
+    }
+  }
+
+  test("SPARK-20236: dynamic partition overwrite without catalog table") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTempPath { path =>
+        Seq((1, 1, 1)).toDF("i", "part1", "part2")
+          .write.partitionBy("part1", "part2").parquet(path.getAbsolutePath)
+        checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 1, 1))
+
+        Seq((2, 1, 1)).toDF("i", "part1", "part2")
+          .write.partitionBy("part1", "part2").mode("overwrite").parquet(path.getAbsolutePath)
+        checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(2, 1, 1))
+
+        Seq((2, 2, 2)).toDF("i", "part1", "part2")
+          .write.partitionBy("part1", "part2").mode("overwrite").parquet(path.getAbsolutePath)
+        checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-20236: dynamic partition overwrite") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTable("t") {
+        sql(
+          """
+            |create table t(i int, part1 int, part2 int) using parquet
+            |partitioned by (part1, part2)
+          """.stripMargin)
+
+        sql("insert into t partition(part1=1, part2=1) select 1")
+        checkAnswer(spark.table("t"), Row(1, 1, 1))
+
+        sql("insert overwrite table t partition(part1=1, part2=1) select 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1))
+
+        sql("insert overwrite table t partition(part1=2, part2) select 2, 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2=2) select 3")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
+        checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-20236: dynamic partition overwrite with customer partition path") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTable("t") {
+        sql(
+          """
+            |create table t(i int, part1 int, part2 int) using parquet
+            |partitioned by (part1, part2)
+          """.stripMargin)
+
+        val path1 = Utils.createTempDir()
+        sql(s"alter table t add partition(part1=1, part2=1) location '$path1'")
+        sql(s"insert into t partition(part1=1, part2=1) select 1")
+        checkAnswer(spark.table("t"), Row(1, 1, 1))
+
+        sql("insert overwrite table t partition(part1=1, part2=1) select 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1))
+
+        sql("insert overwrite table t partition(part1=2, part2) select 2, 2")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+
+        val path2 = Utils.createTempDir()
+        sql(s"alter table t add partition(part1=1, part2=2) location '$path2'")
+        sql("insert overwrite table t partition(part1=1, part2=2) select 3")
+        checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+
+        sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
+        checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("Throw exception on unsafe cast with strict casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        var msg = intercept[AnalysisException] {
+          sql("insert into t select 1L, 2")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1, 2.0")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'd': DecimalType(2,1) to DoubleType"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1, 2.0D, 3")
+        }.getMessage
+        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
+          "columns as the target table: target table has 2 column(s)" +
+          " but the inserted data has 3 column(s)"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1")
+        }.getMessage
+        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
+          "columns as the target table: target table has 2 column(s)" +
+          " but the inserted data has 1 column(s)"))
+
+        // Insert into table successfully.
+        sql("insert into t select 1, 2.0D")
+        checkAnswer(sql("select * from t"), Row(1, 2.0D))
+      }
+    }
+  }
+
+  test("Throw exception on unsafe cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        var msg = intercept[AnalysisException] {
+          sql("insert into t values('a', 'b')")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+        msg = intercept[AnalysisException] {
+          sql("insert into t values(now(), now())")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': TimestampType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': TimestampType to DoubleType"))
+        msg = intercept[AnalysisException] {
+          sql("insert into t values(true, false)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+      }
+    }
+  }
+
+  test("Allow on writing any numeric value to numeric type with ANSI policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, d float) using parquet")
+        sql("insert into t values(1L, 2.0)")
+        sql("insert into t values(3.0, 4)")
+        sql("insert into t values(5.0, 6L)")
+        checkAnswer(sql("select * from t"), Seq(Row(1, 2.0F), Row(3, 4.0F), Row(5, 6.0F)))
+      }
+    }
+  }
+
+  test("Allow on writing timestamp value to date type with ANSI policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i date) using parquet")
+        sql("insert into t values(TIMESTAMP('2010-09-02 14:10:10'))")
+        checkAnswer(sql("select * from t"), Seq(Row(Date.valueOf("2010-09-02"))))
+      }
+    }
+  }
+
+  test("Throw exceptions on inserting out-of-range int value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b int) using parquet")
+        val outOfRangeValue1 = (Int.MaxValue + 1L).toString
+        var msg = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue1)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue1 to int causes overflow"))
+
+        val outOfRangeValue2 = (Int.MinValue - 1L).toString
+        msg = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue2)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue2 to int causes overflow"))
+      }
+    }
+  }
+
+  test("Throw exceptions on inserting out-of-range long value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b long) using parquet")
+        val outOfRangeValue1 = Math.nextUp(Long.MaxValue)
+        var msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue1}D)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue1 to long causes overflow"))
+
+        val outOfRangeValue2 = Math.nextDown(Long.MinValue)
+        msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue2}D)")
+        }.getCause.getMessage
+        assert(msg.contains(s"Casting $outOfRangeValue2 to long causes overflow"))
+      }
+    }
+  }
+
+  test("Throw exceptions on inserting out-of-range decimal value with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(b decimal(3,2)) using parquet")
+        val outOfRangeValue = "123.45"
+        val msg = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue})")
+        }.getCause.getMessage
+        assert(msg.contains("cannot be represented as Decimal(3, 2)"))
+      }
+    }
+  }
+
+  test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
+    withTempPath { path =>
+      Seq((1, 1), (2, 2)).toDF("i", "part")
+        .write.partitionBy("part")
+        .parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 1) :: Row(2, 2) :: Nil)
+
+      Seq((1, 2), (1, 3)).toDF("i", "part")
+        .write.partitionBy("part").mode("overwrite")
+        .option("partitionOverwriteMode", "dynamic").parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath),
+        Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
+
+      Seq((1, 2), (1, 3)).toDF("i", "part")
+        .write.partitionBy("part").mode("overwrite")
+        .option("partitionOverwriteMode", "static").parquet(path.getAbsolutePath)
+      checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 2) :: Row(1, 3) :: Nil)
+    }
+  }
+
+  test("SPARK-24583 Wrong schema type in InsertIntoDataSourceCommand") {
+    withTable("test_table") {
+      val schema = new StructType()
+        .add("i", LongType, false)
+        .add("s", StringType, false)
+      val newTable = CatalogTable(
+        identifier = TableIdentifier("test_table", None),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = None,
+          outputFormat = None,
+          serde = None,
+          compressed = false,
+          properties = Map.empty),
+        schema = schema,
+        provider = Some(classOf[SimpleInsertSource].getName))
+
+      spark.sessionState.catalog.createTable(newTable, false)
+
+      sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
+      val msg = intercept[AnalysisException] {
+        sql("INSERT INTO TABLE test_table SELECT 2, null")
+      }.getMessage
+      assert(msg.contains("Cannot write nullable values to non-null column 's'"))
     }
   }
 }

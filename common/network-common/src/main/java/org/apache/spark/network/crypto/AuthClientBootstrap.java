@@ -20,6 +20,7 @@ package org.apache.spark.network.crypto;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
+import java.util.concurrent.TimeoutException;
 
 import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
@@ -50,7 +51,6 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
 
   private final TransportConf conf;
   private final String appId;
-  private final String authUser;
   private final SecretKeyHolder secretKeyHolder;
 
   public AuthClientBootstrap(
@@ -65,7 +65,6 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
     // required by the protocol. At some point, though, it would be better for the actual app ID
     // to be provided here.
     this.appId = appId;
-    this.authUser = secretKeyHolder.getSaslUser(appId);
     this.secretKeyHolder = secretKeyHolder;
   }
 
@@ -84,21 +83,27 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
     } catch (RuntimeException e) {
       // There isn't a good exception that can be caught here to know whether it's really
       // OK to switch back to SASL (because the server doesn't speak the new protocol). So
-      // try it anyway, and in the worst case things will fail again.
-      if (conf.saslFallback()) {
-        LOG.warn("New auth protocol failed, trying SASL.", e);
-        doSaslAuth(client, channel);
-      } else {
+      // try it anyway, unless it's a timeout, which is locally fatal. In the worst case
+      // things will fail again.
+      if (!conf.saslFallback() || e.getCause() instanceof TimeoutException) {
         throw e;
       }
+
+      if (LOG.isDebugEnabled()) {
+        Throwable cause = e.getCause() != null ? e.getCause() : e;
+        LOG.debug("New auth protocol failed, trying SASL.", cause);
+      } else {
+        LOG.info("New auth protocol failed, trying SASL.");
+      }
+      doSaslAuth(client, channel);
     }
   }
 
   private void doSparkAuth(TransportClient client, Channel channel)
     throws GeneralSecurityException, IOException {
 
-    String secretKey = secretKeyHolder.getSecretKey(authUser);
-    try (AuthEngine engine = new AuthEngine(authUser, secretKey, conf)) {
+    String secretKey = secretKeyHolder.getSecretKey(appId);
+    try (AuthEngine engine = new AuthEngine(appId, secretKey, conf)) {
       ClientChallenge challenge = engine.challenge();
       ByteBuf challengeData = Unpooled.buffer(challenge.encodedLength());
       challenge.encode(challengeData);

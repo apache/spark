@@ -476,6 +476,9 @@ class DenseMatrix @Since("2.0.0") (
 @Since("2.0.0")
 object DenseMatrix {
 
+  private[ml] def unapply(dm: DenseMatrix): Option[(Int, Int, Array[Double], Boolean)] =
+    Some((dm.numRows, dm.numCols, dm.values, dm.isTransposed))
+
   /**
    * Generate a `DenseMatrix` consisting of zeros.
    * @param numRows number of rows of the matrix
@@ -827,6 +830,10 @@ class SparseMatrix @Since("2.0.0") (
 @Since("2.0.0")
 object SparseMatrix {
 
+  private[ml] def unapply(
+       sm: SparseMatrix): Option[(Int, Int, Array[Int], Array[Int], Array[Double], Boolean)] =
+    Some((sm.numRows, sm.numCols, sm.colPtrs, sm.rowIndices, sm.values, sm.isTransposed))
+
   /**
    * Generate a `SparseMatrix` from Coordinate List (COO) format. Input must be an array of
    * (i, j, value) tuples. Entries that have duplicate values of i and j are
@@ -856,7 +863,7 @@ object SparseMatrix {
     var prevRow = -1
     var prevVal = 0.0
     // Append a dummy entry to include the last one at the end of the loop.
-    (sortedEntries.view :+ (numRows, numCols, 1.0)).foreach { case (i, j, v) =>
+    (sortedEntries.view :+ ((numRows, numCols, 1.0))).foreach { case (i, j, v) =>
       if (v != 0) {
         if (i == prevRow && j == prevCol) {
           prevVal += v

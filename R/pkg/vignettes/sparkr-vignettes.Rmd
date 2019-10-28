@@ -27,9 +27,26 @@ vignette: >
  limitations under the License.
 -->
 
+```{r setup, include=FALSE}
+library(knitr)
+opts_hooks$set(eval = function(options) {
+  # override eval to FALSE only on windows
+  if (.Platform$OS.type == "windows") {
+    options$eval = FALSE
+  }
+  options
+})
+r_tmp_dir <- tempdir()
+tmp_arg <- paste0("-Djava.io.tmpdir=", r_tmp_dir)
+sparkSessionConfig <- list(spark.driver.extraJavaOptions = tmp_arg,
+                           spark.executor.extraJavaOptions = tmp_arg)
+old_java_opt <- Sys.getenv("_JAVA_OPTIONS")
+Sys.setenv("_JAVA_OPTIONS" = paste("-XX:-UsePerfData", old_java_opt, sep = " "))
+```
+
 ## Overview
 
-SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. With Spark `r packageVersion("SparkR")`, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](http://spark.apache.org/mllib/).
+SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. With Spark `r packageVersion("SparkR")`, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](https://spark.apache.org/mllib/).
 
 ## Getting Started
 
@@ -40,13 +57,27 @@ First, let's load and attach the package.
 library(SparkR)
 ```
 
+```{r, include=FALSE}
+# disable eval if java version not supported
+override_eval <- tryCatch(!is.numeric(SparkR:::checkJavaVersion()),
+          error = function(e) { TRUE },
+          warning = function(e) { TRUE })
+
+if (override_eval) {
+  opts_hooks$set(eval = function(options) {
+    options$eval = FALSE
+    options
+  })
+}
+```
+
 `SparkSession` is the entry point into SparkR which connects your R program to a Spark cluster. You can create a `SparkSession` using `sparkR.session` and pass in options such as the application name, any Spark packages depended on, etc.
 
 We use default settings in which it runs in local mode. It auto downloads Spark package in the background if no previous installation is found. For more details about setup, see [Spark Session](#SetupSparkSession).
 
 ```{r, include=FALSE}
 install.spark()
-sparkR.session(master = "local[1]")
+sparkR.session(master = "local[1]", sparkConfig = sparkSessionConfig, enableHiveSupport = FALSE)
 ```
 ```{r, eval=FALSE}
 sparkR.session()
@@ -115,7 +146,7 @@ sparkR.session.stop()
 
 Different from many other R packages, to use SparkR, you need an additional installation of Apache Spark. The Spark installation will be used to run a backend process that will compile and execute SparkR programs.
 
-After installing the SparkR package, you can call `sparkR.session` as explained in the previous section to start and it will check for the Spark installation. If you are working with SparkR from an interactive shell (eg. R, RStudio) then Spark is downloaded and cached automatically if it is not found. Alternatively, we provide an easy-to-use function `install.spark` for running this manually. If you don't have Spark installed on the computer, you may download it from [Apache Spark Website](http://spark.apache.org/downloads.html).
+After installing the SparkR package, you can call `sparkR.session` as explained in the previous section to start and it will check for the Spark installation. If you are working with SparkR from an interactive shell (eg. R, RStudio) then Spark is downloaded and cached automatically if it is not found. Alternatively, we provide an easy-to-use function `install.spark` for running this manually. If you don't have Spark installed on the computer, you may download it from [Apache Spark Website](https://spark.apache.org/downloads.html).
 
 ```{r, eval=FALSE}
 install.spark()
@@ -130,7 +161,7 @@ sparkR.session(sparkHome = "/HOME/spark")
 ### Spark Session {#SetupSparkSession}
 
 
-In addition to `sparkHome`, many other options can be specified in `sparkR.session`. For a complete list, see [Starting up: SparkSession](http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession) and [SparkR API doc](http://spark.apache.org/docs/latest/api/R/sparkR.session.html).
+In addition to `sparkHome`, many other options can be specified in `sparkR.session`. For a complete list, see [Starting up: SparkSession](https://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession) and [SparkR API doc](https://spark.apache.org/docs/latest/api/R/sparkR.session.html).
 
 In particular, the following Spark driver properties can be set in `sparkConfig`.
 
@@ -140,8 +171,8 @@ Property Name | Property group | spark-submit equivalent
 `spark.driver.extraClassPath` | Runtime Environment | `--driver-class-path`
 `spark.driver.extraJavaOptions` | Runtime Environment | `--driver-java-options`
 `spark.driver.extraLibraryPath` | Runtime Environment | `--driver-library-path`
-`spark.yarn.keytab` | Application Properties | `--keytab`
-`spark.yarn.principal` | Application Properties | `--principal`
+`spark.kerberos.keytab` | Application Properties | `--keytab`
+`spark.kerberos.principal` | Application Properties | `--principal`
 
 **For Windows users**: Due to different file prefixes across operating systems, to avoid the issue of potential wrong prefix, a current workaround is to specify `spark.sql.warehouse.dir` when starting the `SparkSession`.
 
@@ -152,7 +183,7 @@ sparkR.session(spark.sql.warehouse.dir = spark_warehouse_path)
 
 
 #### Cluster Mode
-SparkR can connect to remote Spark clusters. [Cluster Mode Overview](http://spark.apache.org/docs/latest/cluster-overview.html) is a good introduction to different Spark cluster modes.
+SparkR can connect to remote Spark clusters. [Cluster Mode Overview](https://spark.apache.org/docs/latest/cluster-overview.html) is a good introduction to different Spark cluster modes.
 
 When connecting SparkR to a remote Spark cluster, make sure that the Spark version and Hadoop version on the machine match the corresponding versions on the cluster. Current SparkR package is compatible with
 ```{r, echo=FALSE, tidy = TRUE}
@@ -160,7 +191,7 @@ paste("Spark", packageVersion("SparkR"))
 ```
 It should be used both on the local computer and on the remote cluster.
 
-To connect, pass the URL of the master node to `sparkR.session`. A complete list can be seen in [Spark Master URLs](http://spark.apache.org/docs/latest/submitting-applications.html#master-urls).
+To connect, pass the URL of the master node to `sparkR.session`. A complete list can be seen in [Spark Master URLs](https://spark.apache.org/docs/latest/submitting-applications.html#master-urls).
 For example, to connect to a local standalone Spark master, we can call
 
 ```{r, eval=FALSE}
@@ -188,7 +219,7 @@ SparkR supports operating on a variety of data sources through the `SparkDataFra
 The general method for creating `SparkDataFrame` from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active Spark Session will be used automatically. SparkR supports reading CSV, JSON and Parquet files natively and through Spark Packages you can find data source connectors for popular file formats like Avro. These packages can be added with `sparkPackages` parameter when initializing SparkSession using `sparkR.session`.
 
 ```{r, eval=FALSE}
-sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
+sparkR.session(sparkPackages = "com.databricks:spark-avro_2.12:3.0.0")
 ```
 
 We can see how to use data sources using an example CSV input file. For more information please refer to SparkR [read.df](https://spark.apache.org/docs/latest/api/R/read.df.html) API documentation.
@@ -300,7 +331,7 @@ A common flow of grouping and aggregation is
 
 2. Feed the `GroupedData` object to `agg` or `summarize` functions, with some provided aggregation functions to compute a number within each group.
 
-A number of widely used functions are supported to aggregate data after grouping, including `avg`, `countDistinct`, `count`, `first`, `kurtosis`, `last`, `max`, `mean`, `min`, `sd`, `skewness`, `stddev_pop`, `stddev_samp`, `sumDistinct`, `sum`, `var_pop`, `var_samp`, `var`. See the [API doc for `mean`](http://spark.apache.org/docs/latest/api/R/mean.html) and other `agg_funcs` linked there.
+A number of widely used functions are supported to aggregate data after grouping, including `avg`, `countDistinct`, `count`, `first`, `kurtosis`, `last`, `max`, `mean`, `min`, `sd`, `skewness`, `stddev_pop`, `stddev_samp`, `sumDistinct`, `sum`, `var_pop`, `var_samp`, `var`. See the [API doc for aggregate functions](https://spark.apache.org/docs/latest/api/R/column_aggregate_functions.html) linked there.
 
 For example we can compute a histogram of the number of cylinders in the `mtcars` dataset as shown below.
 
@@ -374,8 +405,7 @@ We convert `mpg` to `kmpg` (kilometers per gallon). `carsSubDF` is a `SparkDataF
 
 ```{r}
 carsSubDF <- select(carsDF, "model", "mpg")
-schema <- structType(structField("model", "string"), structField("mpg", "double"),
-                     structField("kmpg", "double"))
+schema <- "model STRING, mpg DOUBLE, kmpg DOUBLE"
 out <- dapply(carsSubDF, function(x) { x <- cbind(x, x$mpg * 1.61) }, schema)
 head(collect(out))
 ```
@@ -519,6 +549,8 @@ SparkR supports the following machine learning models and algorithms.
 
 * Latent Dirichlet Allocation (LDA)
 
+* Power Iteration Clustering (PIC)
+
 #### Collaborative Filtering
 
 * Alternating Least Squares (ALS)
@@ -526,6 +558,7 @@ SparkR supports the following machine learning models and algorithms.
 #### Frequent Pattern Mining
 
 * FP-growth
+* PrefixSpan
 
 #### Statistics
 
@@ -574,6 +607,7 @@ summary(model)
 Predict values on training data
 ```{r}
 prediction <- predict(model, training)
+head(select(prediction, "Class", "Sex", "Age", "Freq", "Survived", "prediction"))
 ```
 
 #### Logistic Regression
@@ -597,6 +631,7 @@ summary(model)
 Predict values on training data
 ```{r}
 fitted <- predict(model, training)
+head(select(fitted, "Class", "Sex", "Age", "Freq", "Survived", "prediction"))
 ```
 
 Multinomial logistic regression against three classes
@@ -636,7 +671,7 @@ We use Titanic data set to show how to use `spark.mlp` in classification.
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
 # fit a Multilayer Perceptron Classification Model
-model <- spark.mlp(training, Survived ~ Age + Sex, blockSize = 128, layers = c(2, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c( 0, 0, 0, 5, 5, 5, 9, 9, 9))
+model <- spark.mlp(training, Survived ~ Age + Sex, blockSize = 128, layers = c(2, 2), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c( 0, 0, 5, 5, 9, 9))
 ```
 
 To avoid lengthy display, we only present partial results of the model summary. You can check the full result from your sparkR shell.
@@ -791,6 +826,7 @@ df <- createDataFrame(t)
 dtModel <- spark.decisionTree(df, Survived ~ ., type = "classification", maxDepth = 2)
 summary(dtModel)
 predictions <- predict(dtModel, df)
+head(select(predictions, "Class", "Sex", "Age", "Freq", "Survived", "prediction"))
 ```
 
 #### Gradient-Boosted Trees
@@ -806,6 +842,7 @@ df <- createDataFrame(t)
 gbtModel <- spark.gbt(df, Survived ~ ., type = "classification", maxDepth = 2, maxIter = 2)
 summary(gbtModel)
 predictions <- predict(gbtModel, df)
+head(select(predictions, "Class", "Sex", "Age", "Freq", "Survived", "prediction"))
 ```
 
 #### Random Forest
@@ -821,6 +858,7 @@ df <- createDataFrame(t)
 rfModel <- spark.randomForest(df, Survived ~ ., type = "classification", maxDepth = 2, numTrees = 2)
 summary(rfModel)
 predictions <- predict(rfModel, df)
+head(select(predictions, "Class", "Sex", "Age", "Freq", "Survived", "prediction"))
 ```
 
 #### Bisecting k-Means
@@ -919,7 +957,7 @@ perplexity
 
 #### Alternating Least Squares
 
-`spark.als` learns latent factors in [collaborative filtering](https://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering) via [alternating least squares](http://dl.acm.org/citation.cfm?id=1608614).
+`spark.als` learns latent factors in [collaborative filtering](https://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering) via [alternating least squares](https://dl.acm.org/citation.cfm?id=1608614).
 
 There are multiple options that can be configured in `spark.als`, including `rank`, `reg`, and `nonnegative`. For a complete list, refer to the help file.
 
@@ -944,6 +982,18 @@ Make predictions.
 ```{r, eval=FALSE}
 predicted <- predict(model, df)
 head(predicted)
+```
+
+#### Power Iteration Clustering
+
+Power Iteration Clustering (PIC) is a scalable graph clustering algorithm. `spark.assignClusters` method runs the PIC algorithm and returns a cluster assignment for each input vertex.
+
+```{r}
+df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
+                           list(1L, 2L, 1.0), list(3L, 4L, 1.0),
+                           list(4L, 0L, 0.1)),
+                      schema = c("src", "dst", "weight"))
+head(spark.assignClusters(df, initMode = "degree", weightCol = "weight"))
 ```
 
 #### FP-growth
@@ -975,6 +1025,19 @@ We can make predictions based on the `antecedent`.
 
 ```{r}
 head(predict(fpm, df))
+```
+
+#### PrefixSpan
+
+`spark.findFrequentSequentialPatterns` method can be used to find the complete set of frequent sequential patterns in the input sequences of itemsets.
+
+```{r}
+df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
+                           list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+                           list(list(list(1L, 2L), list(5L))),
+                           list(list(list(6L)))),
+                      schema = c("sequence"))
+head(spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L))
 ```
 
 #### Kolmogorov-Smirnov Test
@@ -1026,7 +1089,7 @@ unlink(modelPath)
 
 ## Structured Streaming
 
-SparkR supports the Structured Streaming API (experimental).
+SparkR supports the Structured Streaming API.
 
 You can check the Structured Streaming Programming Guide for [an introduction](https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html#programming-model) to its programming model and basic concepts.
 
@@ -1155,14 +1218,18 @@ env | map
 
 ## References
 
-* [Spark Cluster Mode Overview](http://spark.apache.org/docs/latest/cluster-overview.html)
+* [Spark Cluster Mode Overview](https://spark.apache.org/docs/latest/cluster-overview.html)
 
-* [Submitting Spark Applications](http://spark.apache.org/docs/latest/submitting-applications.html)
+* [Submitting Spark Applications](https://spark.apache.org/docs/latest/submitting-applications.html)
 
-* [Machine Learning Library Guide (MLlib)](http://spark.apache.org/docs/latest/ml-guide.html)
+* [Machine Learning Library Guide (MLlib)](https://spark.apache.org/docs/latest/ml-guide.html)
 
 * [SparkR: Scaling R Programs with Spark](https://people.csail.mit.edu/matei/papers/2016/sigmod_sparkr.pdf), Shivaram Venkataraman, Zongheng Yang, Davies Liu, Eric Liang, Hossein Falaki, Xiangrui Meng, Reynold Xin, Ali Ghodsi, Michael Franklin, Ion Stoica, and Matei Zaharia. SIGMOD 2016. June 2016.
 
 ```{r, echo=FALSE}
 sparkR.session.stop()
+```
+
+```{r cleanup, include=FALSE}
+SparkR:::uninstallDownloadedSpark()
 ```

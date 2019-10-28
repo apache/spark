@@ -25,7 +25,8 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
+import org.apache.spark.ml.util.Instrumentation
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -57,7 +58,8 @@ class BisectingKMeans private (
     private var k: Int,
     private var maxIterations: Int,
     private var minDivisibleClusterSize: Double,
-    private var seed: Long) extends Logging {
+    private var seed: Long,
+    private var distanceMeasure: String) extends Logging {
 
   import BisectingKMeans._
 
@@ -65,7 +67,7 @@ class BisectingKMeans private (
    * Constructs with the default configuration
    */
   @Since("1.6.0")
-  def this() = this(4, 20, 1.0, classOf[BisectingKMeans].getName.##)
+  def this() = this(4, 20, 1.0, classOf[BisectingKMeans].getName.##, DistanceMeasure.EUCLIDEAN)
 
   /**
    * Sets the desired number of leaf clusters (default: 4).
@@ -135,23 +137,39 @@ class BisectingKMeans private (
   def getSeed: Long = this.seed
 
   /**
-   * Runs the bisecting k-means algorithm.
-   * @param input RDD of vectors
-   * @return model for the bisecting kmeans
+   * The distance suite used by the algorithm.
    */
-  @Since("1.6.0")
-  def run(input: RDD[Vector]): BisectingKMeansModel = {
+  @Since("2.4.0")
+  def getDistanceMeasure: String = distanceMeasure
+
+  /**
+   * Set the distance suite used by the algorithm.
+   */
+  @Since("2.4.0")
+  def setDistanceMeasure(distanceMeasure: String): this.type = {
+    DistanceMeasure.validateDistanceMeasure(distanceMeasure)
+    this.distanceMeasure = distanceMeasure
+    this
+  }
+
+
+  private[spark] def run(
+      input: RDD[Vector],
+      instr: Option[Instrumentation]): BisectingKMeansModel = {
     if (input.getStorageLevel == StorageLevel.NONE) {
       logWarning(s"The input RDD ${input.id} is not directly cached, which may hurt performance if"
         + " its parent RDDs are also not cached.")
     }
     val d = input.map(_.size).first()
     logInfo(s"Feature dimension: $d.")
+
+    val dMeasure: DistanceMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
     // Compute and cache vector norms for fast distance computation.
     val norms = input.map(v => Vectors.norm(v, 2.0)).persist(StorageLevel.MEMORY_AND_DISK)
     val vectors = input.zip(norms).map { case (x, norm) => new VectorWithNorm(x, norm) }
     var assignments = vectors.map(v => (ROOT_INDEX, v))
-    var activeClusters = summarize(d, assignments)
+    var activeClusters = summarize(d, assignments, dMeasure)
+    instr.foreach(_.logNumExamples(activeClusters.values.map(_.size).sum))
     val rootSummary = activeClusters(ROOT_INDEX)
     val n = rootSummary.size
     logInfo(s"Number of points: $n.")
@@ -184,22 +202,25 @@ class BisectingKMeans private (
         val divisibleIndices = divisibleClusters.keys.toSet
         logInfo(s"Dividing ${divisibleIndices.size} clusters on level $level.")
         var newClusterCenters = divisibleClusters.flatMap { case (index, summary) =>
-          val (left, right) = splitCenter(summary.center, random)
+          val (left, right) = splitCenter(summary.center, random, dMeasure)
           Iterator((leftChildIndex(index), left), (rightChildIndex(index), right))
         }.map(identity) // workaround for a Scala bug (SI-7005) that produces a not serializable map
         var newClusters: Map[Long, ClusterSummary] = null
         var newAssignments: RDD[(Long, VectorWithNorm)] = null
         for (iter <- 0 until maxIterations) {
-          newAssignments = updateAssignments(assignments, divisibleIndices, newClusterCenters)
+          newAssignments = updateAssignments(assignments, divisibleIndices, newClusterCenters,
+              dMeasure)
             .filter { case (index, _) =>
             divisibleIndices.contains(parentIndex(index))
           }
-          newClusters = summarize(d, newAssignments)
+          newClusters = summarize(d, newAssignments, dMeasure)
           newClusterCenters = newClusters.mapValues(_.center).map(identity)
         }
-        if (preIndices != null) preIndices.unpersist()
+        if (preIndices != null) {
+          preIndices.unpersist()
+        }
         preIndices = indices
-        indices = updateAssignments(assignments, divisibleIndices, newClusterCenters).keys
+        indices = updateAssignments(assignments, divisibleIndices, newClusterCenters, dMeasure).keys
           .persist(StorageLevel.MEMORY_AND_DISK)
         assignments = indices.zip(vectors)
         inactiveClusters ++= activeClusters
@@ -212,10 +233,27 @@ class BisectingKMeans private (
       }
       level += 1
     }
-    if(indices != null) indices.unpersist()
+    if (preIndices != null) {
+      preIndices.unpersist()
+    }
+    if (indices != null) {
+      indices.unpersist()
+    }
+    norms.unpersist()
     val clusters = activeClusters ++ inactiveClusters
-    val root = buildTree(clusters)
-    new BisectingKMeansModel(root)
+    val root = buildTree(clusters, dMeasure)
+    val totalCost = root.leafNodes.map(_.cost).sum
+    new BisectingKMeansModel(root, this.distanceMeasure, totalCost)
+  }
+
+  /**
+   * Runs the bisecting k-means algorithm.
+   * @param input RDD of vectors
+   * @return model for the bisecting kmeans
+   */
+  @Since("1.6.0")
+  def run(input: RDD[Vector]): BisectingKMeansModel = {
+    run(input, None)
   }
 
   /**
@@ -258,8 +296,9 @@ private object BisectingKMeans extends Serializable {
    */
   private def summarize(
       d: Int,
-      assignments: RDD[(Long, VectorWithNorm)]): Map[Long, ClusterSummary] = {
-    assignments.aggregateByKey(new ClusterSummaryAggregator(d))(
+      assignments: RDD[(Long, VectorWithNorm)],
+      distanceMeasure: DistanceMeasure): Map[Long, ClusterSummary] = {
+    assignments.aggregateByKey(new ClusterSummaryAggregator(d, distanceMeasure))(
         seqOp = (agg, v) => agg.add(v),
         combOp = (agg1, agg2) => agg1.merge(agg2)
       ).mapValues(_.summary)
@@ -270,7 +309,8 @@ private object BisectingKMeans extends Serializable {
    * Cluster summary aggregator.
    * @param d feature dimension
    */
-  private class ClusterSummaryAggregator(val d: Int) extends Serializable {
+  private class ClusterSummaryAggregator(val d: Int, val distanceMeasure: DistanceMeasure)
+      extends Serializable {
     private var n: Long = 0L
     private val sum: Vector = Vectors.zeros(d)
     private var sumSq: Double = 0.0
@@ -280,7 +320,7 @@ private object BisectingKMeans extends Serializable {
       n += 1L
       // TODO: use a numerically stable approach to estimate cost
       sumSq += v.norm * v.norm
-      BLAS.axpy(1.0, v.vector, sum)
+      distanceMeasure.updateClusterSum(v, sum)
       this
     }
 
@@ -288,19 +328,15 @@ private object BisectingKMeans extends Serializable {
     def merge(other: ClusterSummaryAggregator): this.type = {
       n += other.n
       sumSq += other.sumSq
-      BLAS.axpy(1.0, other.sum, sum)
+      distanceMeasure.updateClusterSum(new VectorWithNorm(other.sum), sum)
       this
     }
 
     /** Returns the summary. */
     def summary: ClusterSummary = {
-      val mean = sum.copy
-      if (n > 0L) {
-        BLAS.scal(1.0 / n, mean)
-      }
-      val center = new VectorWithNorm(mean)
-      val cost = math.max(sumSq - n * center.norm * center.norm, 0.0)
-      new ClusterSummary(n, center, cost)
+      val center = distanceMeasure.centroid(sum.copy, n)
+      val cost = distanceMeasure.clusterCost(center, new VectorWithNorm(sum), n, sumSq)
+      ClusterSummary(n, center, cost)
     }
   }
 
@@ -313,16 +349,13 @@ private object BisectingKMeans extends Serializable {
    */
   private def splitCenter(
       center: VectorWithNorm,
-      random: Random): (VectorWithNorm, VectorWithNorm) = {
+      random: Random,
+      distanceMeasure: DistanceMeasure): (VectorWithNorm, VectorWithNorm) = {
     val d = center.vector.size
     val norm = center.norm
     val level = 1e-4 * norm
     val noise = Vectors.dense(Array.fill(d)(random.nextDouble()))
-    val left = center.vector.copy
-    BLAS.axpy(-level, noise, left)
-    val right = center.vector.copy
-    BLAS.axpy(level, noise, right)
-    (new VectorWithNorm(left), new VectorWithNorm(right))
+    distanceMeasure.symmetricCentroids(level, noise, center.vector)
   }
 
   /**
@@ -335,16 +368,20 @@ private object BisectingKMeans extends Serializable {
   private def updateAssignments(
       assignments: RDD[(Long, VectorWithNorm)],
       divisibleIndices: Set[Long],
-      newClusterCenters: Map[Long, VectorWithNorm]): RDD[(Long, VectorWithNorm)] = {
+      newClusterCenters: Map[Long, VectorWithNorm],
+      distanceMeasure: DistanceMeasure): RDD[(Long, VectorWithNorm)] = {
     assignments.map { case (index, v) =>
       if (divisibleIndices.contains(index)) {
         val children = Seq(leftChildIndex(index), rightChildIndex(index))
-        val newClusterChildren = children.filter(newClusterCenters.contains(_))
+        val newClusterChildren = children.filter(newClusterCenters.contains)
+        val newClusterChildrenCenterToId =
+          newClusterChildren.map(id => newClusterCenters(id) -> id).toMap
+        val newClusterChildrenCenters = newClusterChildrenCenterToId.keys.toArray
         if (newClusterChildren.nonEmpty) {
-          val selected = newClusterChildren.minBy { child =>
-            KMeans.fastSquaredDistance(newClusterCenters(child), v)
-          }
-          (selected, v)
+          val selected = distanceMeasure.findClosest(newClusterChildrenCenters, v)._1
+          val center = newClusterChildrenCenters(selected)
+          val id = newClusterChildrenCenterToId(center)
+          (id, v)
         } else {
           (index, v)
         }
@@ -359,7 +396,9 @@ private object BisectingKMeans extends Serializable {
    * @param clusters a map from cluster indices to corresponding cluster summaries
    * @return the root node of the clustering tree
    */
-  private def buildTree(clusters: Map[Long, ClusterSummary]): ClusteringTreeNode = {
+  private def buildTree(
+      clusters: Map[Long, ClusterSummary],
+      distanceMeasure: DistanceMeasure): ClusteringTreeNode = {
     var leafIndex = 0
     var internalIndex = -1
 
@@ -377,11 +416,11 @@ private object BisectingKMeans extends Serializable {
         internalIndex -= 1
         val leftIndex = leftChildIndex(rawIndex)
         val rightIndex = rightChildIndex(rawIndex)
-        val indexes = Seq(leftIndex, rightIndex).filter(clusters.contains(_))
-        val height = math.sqrt(indexes.map { childIndex =>
-          KMeans.fastSquaredDistance(center, clusters(childIndex).center)
-        }.max)
-        val children = indexes.map(buildSubTree(_)).toArray
+        val indexes = Seq(leftIndex, rightIndex).filter(clusters.contains)
+        val height = indexes.map { childIndex =>
+          distanceMeasure.distance(center, clusters(childIndex).center)
+        }.max
+        val children = indexes.map(buildSubTree).toArray
         new ClusteringTreeNode(index, size, center, cost, height, children)
       } else {
         val index = leafIndex
@@ -433,41 +472,45 @@ private[clustering] class ClusteringTreeNode private[clustering] (
   def center: Vector = centerWithNorm.vector
 
   /** Predicts the leaf cluster node index that the input point belongs to. */
-  def predict(point: Vector): Int = {
-    val (index, _) = predict(new VectorWithNorm(point))
+  def predict(point: Vector, distanceMeasure: DistanceMeasure): Int = {
+    val (index, _) = predict(new VectorWithNorm(point), distanceMeasure)
     index
   }
 
   /** Returns the full prediction path from root to leaf. */
-  def predictPath(point: Vector): Array[ClusteringTreeNode] = {
-    predictPath(new VectorWithNorm(point)).toArray
+  def predictPath(point: Vector, distanceMeasure: DistanceMeasure): Array[ClusteringTreeNode] = {
+    predictPath(new VectorWithNorm(point), distanceMeasure).toArray
   }
 
   /** Returns the full prediction path from root to leaf. */
-  private def predictPath(pointWithNorm: VectorWithNorm): List[ClusteringTreeNode] = {
+  private def predictPath(
+      pointWithNorm: VectorWithNorm,
+      distanceMeasure: DistanceMeasure): List[ClusteringTreeNode] = {
     if (isLeaf) {
       this :: Nil
     } else {
       val selected = children.minBy { child =>
-        KMeans.fastSquaredDistance(child.centerWithNorm, pointWithNorm)
+        distanceMeasure.distance(child.centerWithNorm, pointWithNorm)
       }
-      selected :: selected.predictPath(pointWithNorm)
+      selected :: selected.predictPath(pointWithNorm, distanceMeasure)
     }
   }
 
   /**
-   * Computes the cost (squared distance to the predicted leaf cluster center) of the input point.
+   * Computes the cost of the input point.
    */
-  def computeCost(point: Vector): Double = {
-    val (_, cost) = predict(new VectorWithNorm(point))
+  def computeCost(point: Vector, distanceMeasure: DistanceMeasure): Double = {
+    val (_, cost) = predict(new VectorWithNorm(point), distanceMeasure)
     cost
   }
 
   /**
    * Predicts the cluster index and the cost of the input point.
    */
-  private def predict(pointWithNorm: VectorWithNorm): (Int, Double) = {
-    predict(pointWithNorm, KMeans.fastSquaredDistance(centerWithNorm, pointWithNorm))
+  private def predict(
+      pointWithNorm: VectorWithNorm,
+      distanceMeasure: DistanceMeasure): (Int, Double) = {
+    predict(pointWithNorm, distanceMeasure.cost(centerWithNorm, pointWithNorm), distanceMeasure)
   }
 
   /**
@@ -477,14 +520,17 @@ private[clustering] class ClusteringTreeNode private[clustering] (
    * @return (predicted leaf cluster index, cost)
    */
   @tailrec
-  private def predict(pointWithNorm: VectorWithNorm, cost: Double): (Int, Double) = {
+  private def predict(
+      pointWithNorm: VectorWithNorm,
+      cost: Double,
+      distanceMeasure: DistanceMeasure): (Int, Double) = {
     if (isLeaf) {
       (index, cost)
     } else {
       val (selectedChild, minCost) = children.map { child =>
-        (child, KMeans.fastSquaredDistance(child.centerWithNorm, pointWithNorm))
+        (child, distanceMeasure.cost(child.centerWithNorm, pointWithNorm))
       }.minBy(_._2)
-      selectedChild.predict(pointWithNorm, minCost)
+      selectedChild.predict(pointWithNorm, minCost, distanceMeasure)
     }
   }
 

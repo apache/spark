@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{TaskCommitDenied, TaskFailedReason}
+import org.apache.spark.TaskCommitDenied
 
 /**
  * Exception thrown when a task attempts to commit output to HDFS but is denied by the driver.
@@ -29,5 +29,5 @@ private[spark] class CommitDeniedException(
     attemptNumber: Int)
   extends Exception(msg) {
 
-  def toTaskFailedReason: TaskFailedReason = TaskCommitDenied(jobID, splitID, attemptNumber)
+  def toTaskCommitDeniedReason: TaskCommitDenied = TaskCommitDenied(jobID, splitID, attemptNumber)
 }

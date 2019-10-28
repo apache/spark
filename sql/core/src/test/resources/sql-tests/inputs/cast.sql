@@ -40,6 +40,23 @@ SELECT CAST('-9223372036854775809' AS long);
 SELECT CAST('9223372036854775807' AS long);
 SELECT CAST('9223372036854775808' AS long);
 
+-- cast string to its binary representation
+SELECT HEX(CAST('abc' AS binary));
+
+-- cast integral values to their corresponding binary representation
+SELECT HEX(CAST(CAST(123 AS byte) AS binary));
+SELECT HEX(CAST(CAST(-123 AS byte) AS binary));
+SELECT HEX(CAST(123S AS binary));
+SELECT HEX(CAST(-123S AS binary));
+SELECT HEX(CAST(123 AS binary));
+SELECT HEX(CAST(-123 AS binary));
+SELECT HEX(CAST(123L AS binary));
+SELECT HEX(CAST(-123L AS binary));
+
 DESC FUNCTION boolean;
 DESC FUNCTION EXTENDED boolean;
 -- TODO: migrate all cast tests here.
+
+-- cast string to interval and interval to string
+SELECT CAST('interval 3 month 1 hour' AS interval);
+SELECT CAST(interval 3 month 1 hour AS string);

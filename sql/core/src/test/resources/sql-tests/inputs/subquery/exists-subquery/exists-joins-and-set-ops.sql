@@ -1,5 +1,9 @@
 -- Tests EXISTS subquery support. Tests Exists subquery
 -- used in Joins (Both when joins occurs in outer and suquery blocks)
+-- List of configuration the test suite is run against:
+--SET spark.sql.autoBroadcastJoinThreshold=10485760
+--SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
+--SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
 
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),

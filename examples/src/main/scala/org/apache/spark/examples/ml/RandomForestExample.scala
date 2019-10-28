@@ -64,7 +64,7 @@ object RandomForestExample {
       checkpointDir: Option[String] = None,
       checkpointInterval: Int = 10) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("RandomForestExample") {
@@ -198,7 +198,7 @@ object RandomForestExample {
           .setCheckpointInterval(params.checkpointInterval)
           .setFeatureSubsetStrategy(params.featureSubsetStrategy)
           .setNumTrees(params.numTrees)
-      case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
+      case _ => throw new IllegalArgumentException(s"Algo ${params.algo} not supported.")
     }
     stages += dt
     val pipeline = new Pipeline().setStages(stages.toArray)
@@ -225,7 +225,7 @@ object RandomForestExample {
         } else {
           println(rfModel) // Print model summary.
         }
-      case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
+      case _ => throw new IllegalArgumentException(s"Algo ${params.algo} not supported.")
     }
 
     // Evaluate model on training, test data.
@@ -241,7 +241,7 @@ object RandomForestExample {
         println("Test data results:")
         DecisionTreeExample.evaluateRegressionModel(pipelineModel, test, labelColName)
       case _ =>
-        throw new IllegalArgumentException("Algo ${params.algo} not supported.")
+        throw new IllegalArgumentException(s"Algo ${params.algo} not supported.")
     }
 
     spark.stop()

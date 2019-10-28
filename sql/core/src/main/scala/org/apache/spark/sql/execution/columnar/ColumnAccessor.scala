@@ -24,6 +24,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
 
 /**
@@ -35,7 +36,7 @@ import org.apache.spark.sql.types._
 private[columnar] trait ColumnAccessor {
   initialize()
 
-  protected def initialize()
+  protected def initialize(): Unit
 
   def hasNext: Boolean
 
@@ -49,7 +50,7 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
     protected val columnType: ColumnType[JvmType])
   extends ColumnAccessor {
 
-  protected def initialize() {}
+  protected def initialize(): Unit = {}
 
   override def hasNext: Boolean = buffer.hasRemaining
 
@@ -122,7 +123,7 @@ private[columnar] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
   extends BasicColumnAccessor[UnsafeMapData](buffer, MAP(dataType))
   with NullableColumnAccessor
 
-private[columnar] object ColumnAccessor {
+private[sql] object ColumnAccessor {
   @tailrec
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
     val buf = buffer.order(ByteOrder.nativeOrder)
@@ -148,5 +149,23 @@ private[columnar] object ColumnAccessor {
       case other =>
         throw new Exception(s"not support type: $other")
     }
+  }
+
+  def decompress(columnAccessor: ColumnAccessor, columnVector: WritableColumnVector, numRows: Int):
+      Unit = {
+    if (columnAccessor.isInstanceOf[NativeColumnAccessor[_]]) {
+      val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
+      nativeAccessor.decompress(columnVector, numRows)
+    } else {
+      throw new RuntimeException("Not support non-primitive type now")
+    }
+  }
+
+  def decompress(
+      array: Array[Byte], columnVector: WritableColumnVector, dataType: DataType, numRows: Int):
+      Unit = {
+    val byteBuffer = ByteBuffer.wrap(array)
+    val columnAccessor = ColumnAccessor(dataType, byteBuffer)
+    decompress(columnAccessor, columnVector, numRows)
   }
 }

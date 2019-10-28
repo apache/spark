@@ -23,10 +23,11 @@ import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 /**
@@ -61,7 +62,7 @@ class UISeleniumSuite
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
-      .set("spark.ui.enabled", "true")
+      .set(UI_ENABLED, true)
     val ssc = new StreamingContext(conf, Seconds(1))
     assert(ssc.sc.ui.isDefined, "Spark UI is not started!")
     ssc
@@ -77,7 +78,12 @@ class UISeleniumSuite
     inputStream.foreachRDD { rdd =>
       rdd.foreach(_ => {})
       try {
-        rdd.foreach(_ => throw new RuntimeException("Oops"))
+        rdd.foreach { _ =>
+          // Failing the task with id 15 to ensure only one task fails
+          if (TaskContext.get.taskAttemptId() % 15 == 0) {
+            throw new RuntimeException("Oops")
+          }
+        }
       } catch {
         case e: SparkException if e.getMessage.contains("Oops") =>
       }
@@ -91,12 +97,14 @@ class UISeleniumSuite
 
       val sparkUI = ssc.sparkContext.ui.get
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      sparkUI.getDelegatingHandlers.count(_.getContextPath.contains("/streaming")) should be (5)
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))
         find(cssSelector( """ul li a[href*="streaming"]""")) should not be (None)
       }
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         // check whether streaming page exists
         go to (sparkUI.webUrl.stripSuffix("/") + "/streaming")
         val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
@@ -121,11 +129,11 @@ class UISeleniumSuite
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
             "Output Ops: Succeeded/Total", "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
             "Total Delay (?)", "Output Ops: Succeeded/Total")
         }
 
@@ -166,7 +174,7 @@ class UISeleniumSuite
 
         // Check job progress
         findAll(cssSelector(""".progress-cell""")).map(_.text).toList should be (
-          List("4/4", "4/4", "4/4", "0/4 (1 failed)"))
+          List("4/4", "4/4", "4/4", "3/4 (1 failed)"))
 
         // Check stacktrace
         val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.underlying).toSeq
@@ -190,12 +198,14 @@ class UISeleniumSuite
 
       ssc.stop(false)
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      sparkUI.getDelegatingHandlers.count(_.getContextPath.contains("/streaming")) should be (0)
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))
         find(cssSelector( """ul li a[href*="streaming"]""")) should be(None)
       }
 
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/") + "/streaming")
         val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
         h3Text should not contain("Streaming Statistics")

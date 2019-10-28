@@ -20,6 +20,7 @@ package org.apache.spark
 import java.util.Properties
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
@@ -27,8 +28,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
+
 
 /**
  * A [[TaskContext]] implementation.
@@ -41,15 +44,17 @@ import org.apache.spark.util._
  * `TaskMetrics` & `MetricsSystem` objects are not thread safe.
  */
 private[spark] class TaskContextImpl(
-    val stageId: Int,
-    val partitionId: Int,
+    override val stageId: Int,
+    override val stageAttemptNumber: Int,
+    override val partitionId: Int,
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
     localProperties: Properties,
     @transient private val metricsSystem: MetricsSystem,
     // The default value is only used in tests.
-    override val taskMetrics: TaskMetrics = TaskMetrics.empty)
+    override val taskMetrics: TaskMetrics = TaskMetrics.empty,
+    override val resources: Map[String, ResourceInformation] = Map.empty)
   extends TaskContext
   with Logging {
 
@@ -97,9 +102,12 @@ private[spark] class TaskContextImpl(
     this
   }
 
-  /** Marks the task as failed and triggers the failure listeners. */
+  override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {
+    resources.asJava
+  }
+
   @GuardedBy("this")
-  private[spark] def markTaskFailed(error: Throwable): Unit = synchronized {
+  private[spark] override def markTaskFailed(error: Throwable): Unit = synchronized {
     if (failed) return
     failed = true
     failure = error
@@ -108,9 +116,8 @@ private[spark] class TaskContextImpl(
     }
   }
 
-  /** Marks the task as completed and triggers the completion listeners. */
   @GuardedBy("this")
-  private[spark] def markTaskCompleted(error: Option[Throwable]): Unit = synchronized {
+  private[spark] override def markTaskCompleted(error: Option[Throwable]): Unit = synchronized {
     if (completed) return
     completed = true
     invokeListeners(onCompleteCallbacks, "TaskCompletionListener", error) {
@@ -139,8 +146,7 @@ private[spark] class TaskContextImpl(
     }
   }
 
-  /** Marks the task for interruption, i.e. cancellation. */
-  private[spark] def markInterrupted(reason: String): Unit = {
+  private[spark] override def markInterrupted(reason: String): Unit = {
     reasonIfKilled = Some(reason)
   }
 
@@ -158,8 +164,6 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   override def isCompleted(): Boolean = synchronized(completed)
 
-  override def isRunningLocally(): Boolean = false
-
   override def isInterrupted(): Boolean = reasonIfKilled.isDefined
 
   override def getLocalProperty(key: String): String = localProperties.getProperty(key)
@@ -175,6 +179,7 @@ private[spark] class TaskContextImpl(
     this._fetchFailedException = Option(fetchFailed)
   }
 
-  private[spark] def fetchFailed: Option[FetchFailedException] = _fetchFailedException
+  private[spark] override def fetchFailed: Option[FetchFailedException] = _fetchFailedException
 
+  private[spark] override def getLocalProperties(): Properties = localProperties
 }

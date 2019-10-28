@@ -33,7 +33,6 @@ from pyspark import SparkContext, since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
-from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
 from pyspark.streaming import DStream
@@ -131,9 +130,9 @@ class BisectingKMeans(object):
     clusters, larger clusters get higher priority.
 
     Based on
-    U{http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf}
-    Steinbach, Karypis, and Kumar, A comparison of document clustering
-    techniques, KDD Workshop on Text Mining, 2000.
+    `Steinbach, Karypis, and Kumar, A comparison of document clustering
+    techniques, KDD Workshop on Text Mining, 2000
+    <http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf>`_.
 
     .. versionadded:: 2.0.0
     """
@@ -184,7 +183,7 @@ class KMeansModel(Saveable, Loader):
     >>> model.k
     2
     >>> model.computeCost(sc.parallelize(data))
-    2.0000000000000004
+    2.0
     >>> model = KMeans.train(sc.parallelize(data), 2)
     >>> sparse_data = [
     ...     SparseVector(3, {1: 1.0}),
@@ -305,7 +304,7 @@ class KMeans(object):
 
     @classmethod
     @since('0.9.0')
-    def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
+    def train(cls, rdd, k, maxIterations=100, initializationMode="k-means||",
               seed=None, initializationSteps=2, epsilon=1e-4, initialModel=None):
         """
         Train a k-means clustering model.
@@ -318,8 +317,6 @@ class KMeans(object):
         :param maxIterations:
           Maximum number of iterations allowed.
           (default: 100)
-        :param runs:
-          This param has no effect since Spark 2.0.0.
         :param initializationMode:
           The initialization algorithm. This can be either "random" or
           "k-means||".
@@ -343,8 +340,6 @@ class KMeans(object):
           rather than using the random or k-means|| initializationModel.
           (default: None)
         """
-        if runs != 1:
-            warnings.warn("The param `runs` has no effect since Spark 2.0.0.")
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):
@@ -352,7 +347,7 @@ class KMeans(object):
                                 "to be of <type 'KMeansModel'>")
             clusterInitialModel = [_convert_to_vector(c) for c in initialModel.clusterCenters]
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
-                              runs, initializationMode, seed, initializationSteps, epsilon,
+                              initializationMode, seed, initializationSteps, epsilon,
                               clusterInitialModel)
         centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
@@ -384,11 +379,11 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> model.predict([-0.1,-0.05])
     0
     >>> softPredicted = model.predictSoft([-0.1,-0.05])
-    >>> abs(softPredicted[0] - 1.0) < 0.001
+    >>> abs(softPredicted[0] - 1.0) < 0.03
     True
-    >>> abs(softPredicted[1] - 0.0) < 0.001
+    >>> abs(softPredicted[1] - 0.0) < 0.03
     True
-    >>> abs(softPredicted[2] - 0.0) < 0.001
+    >>> abs(softPredicted[2] - 0.0) < 0.03
     True
 
     >>> path = tempfile.mkdtemp()
@@ -636,7 +631,7 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 class PowerIterationClustering(object):
     """
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm
-    developed by [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]].
+    developed by [[http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf Lin and Cohen]].
     From the abstract: PIC finds a very low-dimensional embedding of a
     dataset using truncated power iteration on a normalized pair-wise
     similarity matrix of the data.
@@ -647,7 +642,7 @@ class PowerIterationClustering(object):
     @classmethod
     @since('1.5.0')
     def train(cls, rdd, k, maxIterations=100, initMode="random"):
-        """
+        r"""
         :param rdd:
           An RDD of (i, j, s\ :sub:`ij`\) tuples representing the
           affinity matrix, which is the matrix A in the PIC paper.  The
@@ -1042,13 +1037,19 @@ class LDA(object):
 
 def _test():
     import doctest
+    import numpy
     import pyspark.mllib.clustering
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.mllib.clustering.__dict__.copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

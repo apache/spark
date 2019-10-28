@@ -1,55 +1,37 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 
-@deprecated("This suite is deprecated to silent compiler deprecation warnings", "2.0.0")
 class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
 
   object DummyRule extends Rule[LogicalPlan] {
     def apply(p: LogicalPlan): LogicalPlan = p
   }
 
-  test("getOrCreate instantiates SQLContext") {
-    val sqlContext = SQLContext.getOrCreate(sc)
-    assert(sqlContext != null, "SQLContext.getOrCreate returned null")
-    assert(SQLContext.getOrCreate(sc).eq(sqlContext),
-      "SQLContext created by SQLContext.getOrCreate not returned by SQLContext.getOrCreate")
-  }
-
-  test("getOrCreate return the original SQLContext") {
-    val sqlContext = SQLContext.getOrCreate(sc)
-    val newSession = sqlContext.newSession()
-    assert(SQLContext.getOrCreate(sc).eq(sqlContext),
-      "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
-    SparkSession.setActiveSession(newSession.sparkSession)
-    assert(SQLContext.getOrCreate(sc).eq(newSession),
-      "SQLContext.getOrCreate after explicitly setActive() did not return the active context")
-  }
-
   test("Sessions of SQLContext") {
-    val sqlContext = SQLContext.getOrCreate(sc)
+    val sqlContext = SparkSession.builder().sparkContext(sc).getOrCreate().sqlContext
     val session1 = sqlContext.newSession()
     val session2 = sqlContext.newSession()
 
@@ -77,13 +59,13 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("Catalyst optimization passes are modifiable at runtime") {
-    val sqlContext = SQLContext.getOrCreate(sc)
+    val sqlContext = SparkSession.builder().sparkContext(sc).getOrCreate().sqlContext
     sqlContext.experimental.extraOptimizations = Seq(DummyRule)
     assert(sqlContext.sessionState.optimizer.batches.flatMap(_.rules).contains(DummyRule))
   }
 
   test("get all tables") {
-    val sqlContext = SQLContext.getOrCreate(sc)
+    val sqlContext = SparkSession.builder().sparkContext(sc).getOrCreate().sqlContext
     val df = sqlContext.range(10)
     df.createOrReplaceTempView("listtablessuitetable")
     assert(
@@ -100,7 +82,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("getting all tables with a database name has no impact on returned table names") {
-    val sqlContext = SQLContext.getOrCreate(sc)
+    val sqlContext = SparkSession.builder().sparkContext(sc).getOrCreate().sqlContext
     val df = sqlContext.range(10)
     df.createOrReplaceTempView("listtablessuitetable")
     assert(
@@ -117,7 +99,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("query the returned DataFrame of tables") {
-    val sqlContext = SQLContext.getOrCreate(sc)
+    val sqlContext = SparkSession.builder().sparkContext(sc).getOrCreate().sqlContext
     val df = sqlContext.range(10)
     df.createOrReplaceTempView("listtablessuitetable")
 
@@ -127,7 +109,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
         StructField("isTemporary", BooleanType, false) :: Nil)
 
     Seq(sqlContext.tables(), sqlContext.sql("SHOW TABLes")).foreach {
-      case tableDF =>
+      tableDF =>
         assert(expectedSchema === tableDF.schema)
 
         tableDF.createOrReplaceTempView("tables")

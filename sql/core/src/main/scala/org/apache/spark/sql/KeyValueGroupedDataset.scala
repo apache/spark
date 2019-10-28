@@ -19,26 +19,22 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
 
 /**
- * :: Experimental ::
  * A [[Dataset]] has been logically grouped by a user specified grouping key.  Users should not
  * construct a [[KeyValueGroupedDataset]] directly, but should instead call `groupByKey` on
  * an existing [[Dataset]].
  *
  * @since 2.0.0
  */
-@Experimental
-@InterfaceStability.Evolving
 class KeyValueGroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
     vEncoder: Encoder[V],
@@ -221,7 +217,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
-   * ::Experimental::
    * (Scala-specific)
    * Applies the given function to each group of data, while maintaining a user-defined per-group
    * state. The result Dataset will represent the objects returned by the function.
@@ -237,8 +232,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def mapGroupsWithState[S: Encoder, U: Encoder](
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
     val flatMapFunc = (key: K, it: Iterator[V], s: GroupState[S]) => Iterator(func(key, it, s))
@@ -255,7 +248,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
-   * ::Experimental::
    * (Scala-specific)
    * Applies the given function to each group of data, while maintaining a user-defined per-group
    * state. The result Dataset will represent the objects returned by the function.
@@ -272,8 +264,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def mapGroupsWithState[S: Encoder, U: Encoder](
       timeoutConf: GroupStateTimeout)(
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
@@ -291,7 +281,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
-   * ::Experimental::
    * (Java-specific)
    * Applies the given function to each group of data, while maintaining a user-defined per-group
    * state. The result Dataset will represent the objects returned by the function.
@@ -309,8 +298,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def mapGroupsWithState[S, U](
       func: MapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
@@ -321,7 +308,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
-   * ::Experimental::
    * (Java-specific)
    * Applies the given function to each group of data, while maintaining a user-defined per-group
    * state. The result Dataset will represent the objects returned by the function.
@@ -340,8 +326,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def mapGroupsWithState[S, U](
       func: MapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
@@ -353,7 +337,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
-   * ::Experimental::
    * (Scala-specific)
    * Applies the given function to each group of data, while maintaining a user-defined per-group
    * state. The result Dataset will represent the objects returned by the function.
@@ -371,8 +354,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
       timeoutConf: GroupStateTimeout)(
@@ -393,7 +374,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
-   * ::Experimental::
    * (Java-specific)
    * Applies the given function to each group of data, while maintaining a user-defined per-group
    * state. The result Dataset will represent the objects returned by the function.
@@ -413,8 +393,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def flatMapGroupsWithState[S, U](
       func: FlatMapGroupsWithStateFunction[K, V, S, U],
       outputMode: OutputMode,
@@ -458,9 +436,13 @@ class KeyValueGroupedDataset[K, V] private[sql](
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(_.withInputType(vExprEnc, dataAttributes).named)
-    val keyColumn = if (kExprEnc.flat) {
+    val keyColumn = if (!kExprEnc.isSerializedAsStructForTopLevel) {
       assert(groupingAttributes.length == 1)
-      groupingAttributes.head
+      if (SQLConf.get.nameNonStructGroupingKeyAsValue) {
+        groupingAttributes.head
+      } else {
+        Alias(groupingAttributes.head, "key")()
+      }
     } else {
       Alias(CreateStruct(groupingAttributes), "key")()
     }
@@ -517,6 +499,71 @@ class KeyValueGroupedDataset[K, V] private[sql](
     aggUntyped(col1, col2, col3, col4).asInstanceOf[Dataset[(K, U1, U2, U3, U4)]]
 
   /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
+   * and the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.0.0
+   */
+  def agg[U1, U2, U3, U4, U5](
+      col1: TypedColumn[V, U1],
+      col2: TypedColumn[V, U2],
+      col3: TypedColumn[V, U3],
+      col4: TypedColumn[V, U4],
+      col5: TypedColumn[V, U5]): Dataset[(K, U1, U2, U3, U4, U5)] =
+    aggUntyped(col1, col2, col3, col4, col5).asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5)]]
+
+  /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
+   * and the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.0.0
+   */
+  def agg[U1, U2, U3, U4, U5, U6](
+      col1: TypedColumn[V, U1],
+      col2: TypedColumn[V, U2],
+      col3: TypedColumn[V, U3],
+      col4: TypedColumn[V, U4],
+      col5: TypedColumn[V, U5],
+      col6: TypedColumn[V, U6]): Dataset[(K, U1, U2, U3, U4, U5, U6)] =
+    aggUntyped(col1, col2, col3, col4, col5, col6)
+      .asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5, U6)]]
+
+  /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
+   * and the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.0.0
+   */
+  def agg[U1, U2, U3, U4, U5, U6, U7](
+      col1: TypedColumn[V, U1],
+      col2: TypedColumn[V, U2],
+      col3: TypedColumn[V, U3],
+      col4: TypedColumn[V, U4],
+      col5: TypedColumn[V, U5],
+      col6: TypedColumn[V, U6],
+      col7: TypedColumn[V, U7]): Dataset[(K, U1, U2, U3, U4, U5, U6, U7)] =
+    aggUntyped(col1, col2, col3, col4, col5, col6, col7)
+      .asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5, U6, U7)]]
+
+  /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
+   * and the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.0.0
+   */
+  def agg[U1, U2, U3, U4, U5, U6, U7, U8](
+      col1: TypedColumn[V, U1],
+      col2: TypedColumn[V, U2],
+      col3: TypedColumn[V, U3],
+      col4: TypedColumn[V, U4],
+      col5: TypedColumn[V, U5],
+      col6: TypedColumn[V, U6],
+      col7: TypedColumn[V, U7],
+      col8: TypedColumn[V, U8]): Dataset[(K, U1, U2, U3, U4, U5, U6, U7, U8)] =
+    aggUntyped(col1, col2, col3, col4, col5, col6, col7, col8)
+      .asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5, U6, U7, U8)]]
+
+  /**
    * Returns a [[Dataset]] that contains a tuple with each key and the number of items present
    * for that key.
    *
@@ -563,5 +610,26 @@ class KeyValueGroupedDataset[K, V] private[sql](
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] = {
     cogroup(other)((key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
+  }
+
+  override def toString: String = {
+    val builder = new StringBuilder
+    val kFields = kExprEnc.schema.map {
+      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+    }
+    val vFields = vExprEnc.schema.map {
+      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+    }
+    builder.append("KeyValueGroupedDataset: [key: [")
+    builder.append(kFields.take(2).mkString(", "))
+    if (kFields.length > 2) {
+      builder.append(" ... " + (kFields.length - 2) + " more field(s)")
+    }
+    builder.append("], value: [")
+    builder.append(vFields.take(2).mkString(", "))
+    if (vFields.length > 2) {
+      builder.append(" ... " + (vFields.length - 2) + " more field(s)")
+    }
+    builder.append("]]").toString()
   }
 }

@@ -2,6 +2,21 @@
 layout: global
 title: "ML Tuning"
 displayTitle: "ML Tuning: model selection and hyperparameter tuning"
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 `\[
@@ -55,6 +70,8 @@ for multiclass problems. The default metric used to choose the best `ParamMap` c
 method in each of these evaluators.
 
 To help construct the parameter grid, users can use the [`ParamGridBuilder`](api/scala/index.html#org.apache.spark.ml.tuning.ParamGridBuilder) utility.
+By default, sets of parameters from the parameter grid are evaluated in serial. Parameter evaluation can be done in parallel by setting `parallelism` with a value of 2 or more (a value of 1 will be serial) before running model selection with `CrossValidator` or `TrainValidationSplit`.
+The value of `parallelism` should be chosen carefully to maximize parallelism without exceeding cluster resources, and larger values may not always lead to improved performance.  Generally speaking, a value up to 10 should be sufficient for most clusters.
 
 # Cross-Validation
 
@@ -101,7 +118,7 @@ Refer to the [`CrossValidator` Python docs](api/python/pyspark.ml.html#pyspark.m
 
 In addition to  `CrossValidator` Spark also offers `TrainValidationSplit` for hyper-parameter tuning.
 `TrainValidationSplit` only evaluates each combination of parameters once, as opposed to k times in
- the case of `CrossValidator`. It is therefore less expensive,
+ the case of `CrossValidator`. It is, therefore, less expensive,
  but will not produce as reliable results when the training dataset is not sufficiently large.
 
 Unlike `CrossValidator`, `TrainValidationSplit` creates a single (training, test) dataset pair.

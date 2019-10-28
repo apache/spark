@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.util.TimeZone
+import java.time.{ZoneId, ZoneOffset}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -27,11 +27,12 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val random = new scala.util.Random
@@ -173,7 +174,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("hive-hash for date type") {
     def checkHiveHashForDateType(dateString: String, expected: Long): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToDate(UTF8String.fromString(dateString)).get,
+        DateTimeUtils.stringToDate(UTF8String.fromString(dateString), ZoneOffset.UTC).get,
         DateType,
         expected)
     }
@@ -182,7 +183,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHashForDateType("2017-01-01", 17167)
 
     // boundary cases
-    checkHiveHashForDateType("0000-01-01", -719530)
+    checkHiveHashForDateType("0000-01-01", -719528)
     checkHiveHashForDateType("9999-12-31", 2932896)
 
     // epoch
@@ -207,9 +208,9 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     def checkHiveHashForTimestampType(
         timestamp: String,
         expected: Long,
-        timeZone: TimeZone = TimeZone.getTimeZone("UTC")): Unit = {
+        zoneId: ZoneId = ZoneOffset.UTC): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), timeZone).get,
+        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), zoneId).get,
         TimestampType,
         expected)
     }
@@ -222,10 +223,10 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // with different timezone
     checkHiveHashForTimestampType("2017-02-24 10:56:29", 1445732471,
-      TimeZone.getTimeZone("US/Pacific"))
+      DateTimeUtils.getZoneId("US/Pacific"))
 
     // boundary cases
-    checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645926784)
+    checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645969984)
     checkHiveHashForTimestampType("9999-01-01 00:00:00", -1081818240)
 
     // epoch
@@ -251,7 +252,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("hive-hash for CalendarInterval type") {
     def checkHiveHashForIntervalType(interval: String, expected: Long): Unit = {
-      checkHiveHash(CalendarInterval.fromString(interval), CalendarIntervalType, expected)
+      checkHiveHash(IntervalUtils.fromString(interval), CalendarIntervalType, expected)
     }
 
     // ----- MICROSEC -----
@@ -620,23 +621,64 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-18207: Compute hash for a lot of expressions") {
+    def checkResult(schema: StructType, input: InternalRow): Unit = {
+      val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
+        BoundReference(i, f.dataType, true)
+      }
+      val murmur3HashExpr = Murmur3Hash(exprs, 42)
+      val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
+      val murmursHashEval = Murmur3Hash(exprs, 42).eval(input)
+      assert(murmur3HashPlan(input).getInt(0) == murmursHashEval)
+
+      val xxHash64Expr = XxHash64(exprs, 42)
+      val xxHash64Plan = GenerateMutableProjection.generate(Seq(xxHash64Expr))
+      val xxHash64Eval = XxHash64(exprs, 42).eval(input)
+      assert(xxHash64Plan(input).getLong(0) == xxHash64Eval)
+
+      val hiveHashExpr = HiveHash(exprs)
+      val hiveHashPlan = GenerateMutableProjection.generate(Seq(hiveHashExpr))
+      val hiveHashEval = HiveHash(exprs).eval(input)
+      assert(hiveHashPlan(input).getInt(0) == hiveHashEval)
+    }
+
     val N = 1000
     val wideRow = new GenericInternalRow(
       Seq.tabulate(N)(i => UTF8String.fromString(i.toString)).toArray[Any])
-    val schema = StructType((1 to N).map(i => StructField("", StringType)))
+    val schema = StructType((1 to N).map(i => StructField(i.toString, StringType)))
+    checkResult(schema, wideRow)
 
+    val nestedRow = InternalRow(wideRow)
+    val nestedSchema = new StructType().add("nested", schema)
+    checkResult(nestedSchema, nestedRow)
+  }
+
+  test("SPARK-22284: Compute hash for nested structs") {
+    val M = 80
+    val N = 10
+    val L = M * N
+    val O = 50
+    val seed = 42
+
+    val wideRow = new GenericInternalRow(Seq.tabulate(O)(k =>
+      new GenericInternalRow(Seq.tabulate(M)(j =>
+        new GenericInternalRow(Seq.tabulate(N)(i =>
+          new GenericInternalRow(Array[Any](
+            UTF8String.fromString((k * L + j * N + i).toString))))
+          .toArray[Any])).toArray[Any])).toArray[Any])
+    val inner = new StructType(
+      (0 until N).map(_ => StructField("structOfString", structOfString)).toArray)
+    val outer = new StructType(
+      (0 until M).map(_ => StructField("structOfStructOfString", inner)).toArray)
+    val schema = new StructType(
+      (0 until O).map(_ => StructField("structOfStructOfStructOfString", outer)).toArray)
     val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
     }
     val murmur3HashExpr = Murmur3Hash(exprs, 42)
     val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
+
     val murmursHashEval = Murmur3Hash(exprs, 42).eval(wideRow)
     assert(murmur3HashPlan(wideRow).getInt(0) == murmursHashEval)
-
-    val hiveHashExpr = HiveHash(exprs)
-    val hiveHashPlan = GenerateMutableProjection.generate(Seq(hiveHashExpr))
-    val hiveHashEval = HiveHash(exprs).eval(wideRow)
-    assert(hiveHashPlan(wideRow).getInt(0) == hiveHashEval)
   }
 
   private def testHash(inputSchema: StructType): Unit = {

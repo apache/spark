@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
  */
 @ExpressionDescription(
   usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - Calls a method with reflection.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('java.util.UUID', 'randomUUID');
        c33fb387-8500-4bfa-81d2-6e0e3e930df2
@@ -76,7 +76,7 @@ case class CallMethodViaReflection(children: Seq[Expression])
     }
   }
 
-  override def deterministic: Boolean = false
+  override lazy val deterministic: Boolean = false
   override def nullable: Boolean = true
   override val dataType: DataType = StringType
 

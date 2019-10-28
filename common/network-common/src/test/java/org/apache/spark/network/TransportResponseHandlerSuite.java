@@ -17,6 +17,7 @@
 
 package org.apache.spark.network;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import io.netty.channel.Channel;
@@ -127,7 +128,7 @@ public class TransportResponseHandlerSuite {
 
     StreamResponse response = new StreamResponse("stream", 1234L, null);
     StreamCallback cb = mock(StreamCallback.class);
-    handler.addStreamCallback(cb);
+    handler.addStreamCallback("stream", cb);
     assertEquals(1, handler.numOutstandingRequests());
     handler.handle(response);
     assertEquals(1, handler.numOutstandingRequests());
@@ -135,9 +136,35 @@ public class TransportResponseHandlerSuite {
     assertEquals(0, handler.numOutstandingRequests());
 
     StreamFailure failure = new StreamFailure("stream", "uh-oh");
-    handler.addStreamCallback(cb);
+    handler.addStreamCallback("stream", cb);
     assertEquals(1, handler.numOutstandingRequests());
     handler.handle(failure);
     assertEquals(0, handler.numOutstandingRequests());
+  }
+
+  @Test
+  public void failOutstandingStreamCallbackOnClose() throws Exception {
+    Channel c = new LocalChannel();
+    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    StreamCallback cb = mock(StreamCallback.class);
+    handler.addStreamCallback("stream-1", cb);
+    handler.channelInactive();
+
+    verify(cb).onFailure(eq("stream-1"), isA(IOException.class));
+  }
+
+  @Test
+  public void failOutstandingStreamCallbackOnException() throws Exception {
+    Channel c = new LocalChannel();
+    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    StreamCallback cb = mock(StreamCallback.class);
+    handler.addStreamCallback("stream-1", cb);
+    handler.exceptionCaught(new IOException("Oops!"));
+
+    verify(cb).onFailure(eq("stream-1"), isA(IOException.class));
   }
 }

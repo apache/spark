@@ -28,14 +28,13 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{RangePartitioner, SparkContext}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.RangePartitioner
 
 /**
  * Regression model for isotonic regression.
@@ -161,8 +160,6 @@ class IsotonicRegressionModel @Since("1.3.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     IsotonicRegressionModel.SaveLoadV1_0.save(sc, path, boundaries, predictions, isotonic)
   }
-
-  override protected def formatVersion: String = "1.0"
 }
 
 @Since("1.4.0")

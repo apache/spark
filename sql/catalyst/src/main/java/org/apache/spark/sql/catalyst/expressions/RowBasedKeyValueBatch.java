@@ -16,9 +16,11 @@
  */
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.io.Closeable;
 import java.io.IOException;
 
 import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -45,7 +47,7 @@ import org.slf4j.LoggerFactory;
  * page requires an average size for key value pairs to be larger than 1024 bytes.
  *
  */
-public abstract class RowBasedKeyValueBatch extends MemoryConsumer {
+public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Closeable {
   protected final Logger logger = LoggerFactory.getLogger(RowBasedKeyValueBatch.class);
 
   private static final int DEFAULT_CAPACITY = 1 << 16;
@@ -125,7 +127,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer {
   private boolean acquirePage(long requiredSize) {
     try {
       page = allocatePage(requiredSize);
-    } catch (OutOfMemoryError e) {
+    } catch (SparkOutOfMemoryError e) {
       logger.warn("Failed to allocate page ({} bytes).", requiredSize);
       return false;
     }

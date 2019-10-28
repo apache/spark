@@ -32,11 +32,8 @@ object JacksonUtils {
     }
   }
 
-  /**
-   * Verify if the schema is supported in JSON parsing.
-   */
-  def verifySchema(schema: StructType): Unit = {
-    def verifyType(name: String, dataType: DataType): Unit = dataType match {
+  def verifyType(name: String, dataType: DataType): Unit = {
+    dataType match {
       case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType |
            DoubleType | StringType | TimestampType | DateType | BinaryType | _: DecimalType =>
 
@@ -44,15 +41,22 @@ object JacksonUtils {
 
       case at: ArrayType => verifyType(name, at.elementType)
 
-      case mt: MapType => verifyType(name, mt.keyType)
+      // For MapType, its keys are treated as a string (i.e. calling `toString`) basically when
+      // generating JSON, so we only care if the values are valid for JSON.
+      case mt: MapType => verifyType(name, mt.valueType)
 
       case udt: UserDefinedType[_] => verifyType(name, udt.sqlType)
 
       case _ =>
         throw new UnsupportedOperationException(
-          s"Unable to convert column $name of type ${dataType.simpleString} to JSON.")
+          s"Unable to convert column $name of type ${dataType.catalogString} to JSON.")
     }
+  }
 
+  /**
+   * Verify if the schema is supported in JSON parsing.
+   */
+  def verifySchema(schema: StructType): Unit = {
     schema.foreach(field => verifyType(field.name, field.dataType))
   }
 }

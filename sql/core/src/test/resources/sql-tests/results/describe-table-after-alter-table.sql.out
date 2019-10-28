@@ -23,12 +23,13 @@ d                   	string
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	table_with_comment  	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	added               	                    
-Location [not included in comparison]sql/core/spark-warehouse/table_with_comment
+Location [not included in comparison]/{warehouse_dir}/table_with_comment
 
 
 -- !query 2
@@ -52,13 +53,14 @@ d                   	string
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	table_with_comment  	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	modified comment    	                    
 Table Properties    	[type=parquet]      	                    
-Location [not included in comparison]sql/core/spark-warehouse/table_with_comment
+Location [not included in comparison]/{warehouse_dir}/table_with_comment
 
 
 -- !query 4
@@ -88,11 +90,12 @@ b                   	int
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	table_comment       	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
-Location [not included in comparison]sql/core/spark-warehouse/table_comment
+Location [not included in comparison]/{warehouse_dir}/table_comment
 
 
 -- !query 7
@@ -114,12 +117,13 @@ b                   	int
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	table_comment       	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	added comment       	                    
-Location [not included in comparison]sql/core/spark-warehouse/table_comment
+Location [not included in comparison]/{warehouse_dir}/table_comment
 
 
 -- !query 9
@@ -141,11 +145,12 @@ b                   	int
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	table_comment       	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
-Location [not included in comparison]sql/core/spark-warehouse/table_comment
+Location [not included in comparison]/{warehouse_dir}/table_comment
 
 
 -- !query 11

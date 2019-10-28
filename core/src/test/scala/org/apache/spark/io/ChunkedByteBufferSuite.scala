@@ -21,11 +21,12 @@ import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.internal.config
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.util.io.ChunkedByteBuffer
 
-class ChunkedByteBufferSuite extends SparkFunSuite {
+class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
 
   test("no chunks") {
     val emptyChunkedByteBuffer = new ChunkedByteBuffer(Array.empty[ByteBuffer])
@@ -33,7 +34,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     assert(emptyChunkedByteBuffer.getChunks().isEmpty)
     assert(emptyChunkedByteBuffer.toArray === Array.empty)
     assert(emptyChunkedByteBuffer.toByteBuffer.capacity() === 0)
-    assert(emptyChunkedByteBuffer.toNetty.capacity() === 0)
+    assert(emptyChunkedByteBuffer.toNetty.count() === 0)
     emptyChunkedByteBuffer.toInputStream(dispose = false).close()
     emptyChunkedByteBuffer.toInputStream(dispose = true).close()
   }
@@ -54,6 +55,18 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.allocate(8)))
     chunkedByteBuffer.writeFully(new ByteArrayWritableChannel(chunkedByteBuffer.size.toInt))
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
+  }
+
+  test("SPARK-24107: writeFully() write buffer which is larger than bufferWriteChunkSize") {
+    try {
+      sc.conf.set(config.BUFFER_WRITE_CHUNK_SIZE, 32L * 1024L * 1024L)
+      val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.allocate(40 * 1024 * 1024)))
+      val byteArrayWritableChannel = new ByteArrayWritableChannel(chunkedByteBuffer.size.toInt)
+      chunkedByteBuffer.writeFully(byteArrayWritableChannel)
+      assert(byteArrayWritableChannel.length() === chunkedByteBuffer.size)
+    } finally {
+      sc.conf.remove(config.BUFFER_WRITE_CHUNK_SIZE)
+    }
   }
 
   test("toArray()") {
@@ -77,7 +90,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     val empty = ByteBuffer.wrap(Array.empty[Byte])
     val bytes1 = ByteBuffer.wrap(Array.tabulate(256)(_.toByte))
     val bytes2 = ByteBuffer.wrap(Array.tabulate(128)(_.toByte))
-    val chunkedByteBuffer = new ChunkedByteBuffer(Array(empty, bytes1, bytes2))
+    val chunkedByteBuffer = new ChunkedByteBuffer(Array(empty, bytes1, empty, bytes2))
     assert(chunkedByteBuffer.size === bytes1.limit() + bytes2.limit())
 
     val inputStream = chunkedByteBuffer.toInputStream(dispose = false)

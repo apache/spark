@@ -159,24 +159,21 @@ object ExternalCatalogUtils {
       }
     }
   }
+
+  /**
+   * Returns true if `spec1` is a partial partition spec w.r.t. `spec2`, e.g. PARTITION (a=1) is a
+   * partial partition spec w.r.t. PARTITION (a=1,b=2).
+   */
+  def isPartialPartitionSpec(
+      spec1: TablePartitionSpec,
+      spec2: TablePartitionSpec): Boolean = {
+    spec1.forall {
+      case (partitionColumn, value) => spec2(partitionColumn) == value
+    }
+  }
 }
 
 object CatalogUtils {
-  /**
-   * Masking credentials in the option lists. For example, in the sql plan explain output
-   * for JDBC data sources.
-   */
-  def maskCredentials(options: Map[String, String]): Map[String, String] = {
-    options.map {
-      case (key, _) if key.toLowerCase(Locale.ROOT) == "password" => (key, "###")
-      case (key, value)
-        if key.toLowerCase(Locale.ROOT) == "url" &&
-          value.toLowerCase(Locale.ROOT).contains("password") =>
-        (key, "###")
-      case o => o
-    }
-  }
-
   def normalizePartCols(
       tableName: String,
       tableCols: Seq[String],

@@ -24,7 +24,7 @@ object SQLDataSourceExample {
 
   case class Person(name: String, age: Long)
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
       .appName("Spark SQL data sources example")
@@ -49,6 +49,26 @@ object SQLDataSourceExample {
     val peopleDF = spark.read.format("json").load("examples/src/main/resources/people.json")
     peopleDF.select("name", "age").write.format("parquet").save("namesAndAges.parquet")
     // $example off:manual_load_options$
+    // $example on:manual_load_options_csv$
+    val peopleDFCsv = spark.read.format("csv")
+      .option("sep", ";")
+      .option("inferSchema", "true")
+      .option("header", "true")
+      .load("examples/src/main/resources/people.csv")
+    // $example off:manual_load_options_csv$
+    // $example on:load_with_path_glob_filter$
+    val partitionedUsersDF = spark.read.format("orc")
+      .option("pathGlobFilter", "*.orc")
+      .load("examples/src/main/resources/partitioned_users.orc")
+    // $example off:load_with_path_glob_filter$
+    // $example on:manual_save_options_orc$
+    usersDF.write.format("orc")
+      .option("orc.bloom.filter.columns", "favorite_color")
+      .option("orc.dictionary.key.threshold", "1.0")
+      .option("orc.column.encoding.direct", "name")
+      .save("users_with_options.orc")
+    // $example off:manual_save_options_orc$
+
     // $example on:direct_sql$
     val sqlDF = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
     // $example off:direct_sql$
@@ -59,15 +79,15 @@ object SQLDataSourceExample {
     usersDF.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
     // $example off:write_partitioning$
     // $example on:write_partition_and_bucket$
-    peopleDF
+    usersDF
       .write
       .partitionBy("favorite_color")
       .bucketBy(42, "name")
-      .saveAsTable("people_partitioned_bucketed")
+      .saveAsTable("users_partitioned_bucketed")
     // $example off:write_partition_and_bucket$
 
     spark.sql("DROP TABLE IF EXISTS people_bucketed")
-    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
+    spark.sql("DROP TABLE IF EXISTS users_partitioned_bucketed")
   }
 
   private def runBasicParquetExample(spark: SparkSession): Unit = {
@@ -184,6 +204,10 @@ object SQLDataSourceExample {
     connectionProperties.put("user", "username")
     connectionProperties.put("password", "password")
     val jdbcDF2 = spark.read
+      .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
+    // Specifying the custom data types of the read schema
+    connectionProperties.put("customSchema", "id DECIMAL(38, 0), name STRING")
+    val jdbcDF3 = spark.read
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
 
     // Saving data to a JDBC source

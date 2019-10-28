@@ -112,6 +112,80 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     assert(!set.contains(10000L))
   }
 
+  test("primitive float") {
+    val set = new OpenHashSet[Float]
+    assert(set.size === 0)
+    assert(!set.contains(10.1F))
+    assert(!set.contains(50.5F))
+    assert(!set.contains(999.9F))
+    assert(!set.contains(10000.1F))
+
+    set.add(10.1F)
+    assert(set.size === 1)
+    assert(set.contains(10.1F))
+    assert(!set.contains(50.5F))
+    assert(!set.contains(999.9F))
+    assert(!set.contains(10000.1F))
+
+    set.add(50.5F)
+    assert(set.size === 2)
+    assert(set.contains(10.1F))
+    assert(set.contains(50.5F))
+    assert(!set.contains(999.9F))
+    assert(!set.contains(10000.1F))
+
+    set.add(999.9F)
+    assert(set.size === 3)
+    assert(set.contains(10.1F))
+    assert(set.contains(50.5F))
+    assert(set.contains(999.9F))
+    assert(!set.contains(10000.1F))
+
+    set.add(50.5F)
+    assert(set.size === 3)
+    assert(set.contains(10.1F))
+    assert(set.contains(50.5F))
+    assert(set.contains(999.9F))
+    assert(!set.contains(10000.1F))
+  }
+
+  test("primitive double") {
+    val set = new OpenHashSet[Double]
+    assert(set.size === 0)
+    assert(!set.contains(10.1D))
+    assert(!set.contains(50.5D))
+    assert(!set.contains(999.9D))
+    assert(!set.contains(10000.1D))
+
+    set.add(10.1D)
+    assert(set.size === 1)
+    assert(set.contains(10.1D))
+    assert(!set.contains(50.5D))
+    assert(!set.contains(999.9D))
+    assert(!set.contains(10000.1D))
+
+    set.add(50.5D)
+    assert(set.size === 2)
+    assert(set.contains(10.1D))
+    assert(set.contains(50.5D))
+    assert(!set.contains(999.9D))
+    assert(!set.contains(10000.1D))
+
+    set.add(999.9D)
+    assert(set.size === 3)
+    assert(set.contains(10.1D))
+    assert(set.contains(50.5D))
+    assert(set.contains(999.9D))
+    assert(!set.contains(10000.1D))
+
+    set.add(50.5D)
+    assert(set.size === 3)
+    assert(set.contains(10.1D))
+    assert(set.contains(50.5D))
+    assert(set.contains(999.9D))
+    assert(!set.contains(10000.1D))
+  }
+
   test("non-primitive") {
     val set = new OpenHashSet[String]
     assert(set.size === 0)
@@ -180,5 +254,18 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
   test("SPARK-18200 Support zero as an initial set size") {
     val set = new OpenHashSet[Long](0)
     assert(set.size === 0)
+  }
+
+  test("support for more than 12M items") {
+    val cnt = 12000000 // 12M
+    val set = new OpenHashSet[Int](cnt)
+    for (i <- 0 until cnt) {
+      set.add(i)
+      assert(set.contains(i))
+
+      val pos1 = set.getPos(i)
+      val pos2 = set.addWithoutResize(i) & OpenHashSet.POSITION_MASK
+      assert(pos1 == pos2)
+    }
   }
 }

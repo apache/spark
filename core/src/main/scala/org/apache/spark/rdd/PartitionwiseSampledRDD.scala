@@ -22,8 +22,8 @@ import java.util.Random
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
-import org.apache.spark.util.random.RandomSampler
 import org.apache.spark.util.Utils
+import org.apache.spark.util.random.RandomSampler
 
 private[spark]
 class PartitionwiseSampledRDDPartition(val prev: Partition, val seed: Long)
@@ -66,5 +66,13 @@ private[spark] class PartitionwiseSampledRDD[T: ClassTag, U: ClassTag](
     val thisSampler = sampler.clone
     thisSampler.setSeed(split.seed)
     thisSampler.sample(firstParent[T].iterator(split.prev, context))
+  }
+
+  override protected def getOutputDeterministicLevel = {
+    if (prev.outputDeterministicLevel == DeterministicLevel.UNORDERED) {
+      DeterministicLevel.INDETERMINATE
+    } else {
+      super.getOutputDeterministicLevel
+    }
   }
 }

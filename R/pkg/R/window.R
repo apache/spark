@@ -29,7 +29,6 @@
 #' @rdname windowPartitionBy
 #' @name windowPartitionBy
 #' @aliases windowPartitionBy,character-method
-#' @export
 #' @examples
 #' \dontrun{
 #'   ws <- orderBy(windowPartitionBy("key1", "key2"), "key3")
@@ -52,7 +51,6 @@ setMethod("windowPartitionBy",
 #' @rdname windowPartitionBy
 #' @name windowPartitionBy
 #' @aliases windowPartitionBy,Column-method
-#' @export
 #' @note windowPartitionBy(Column) since 2.0.0
 setMethod("windowPartitionBy",
           signature(col = "Column"),
@@ -78,7 +76,6 @@ setMethod("windowPartitionBy",
 #' @rdname windowOrderBy
 #' @name windowOrderBy
 #' @aliases windowOrderBy,character-method
-#' @export
 #' @examples
 #' \dontrun{
 #'   ws <- windowOrderBy("key1", "key2")
@@ -101,7 +98,6 @@ setMethod("windowOrderBy",
 #' @rdname windowOrderBy
 #' @name windowOrderBy
 #' @aliases windowOrderBy,Column-method
-#' @export
 #' @note windowOrderBy(Column) since 2.0.0
 setMethod("windowOrderBy",
           signature(col = "Column"),

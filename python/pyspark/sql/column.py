@@ -16,7 +16,6 @@
 #
 
 import sys
-import warnings
 import json
 
 if sys.version >= '3':
@@ -44,8 +43,14 @@ def _create_column_from_name(name):
 def _to_java_column(col):
     if isinstance(col, Column):
         jcol = col._jc
-    else:
+    elif isinstance(col, basestring):
         jcol = _create_column_from_name(col)
+    else:
+        raise TypeError(
+            "Invalid argument, not a string or column: "
+            "{0} of type {1}. "
+            "For column literals, use 'lit', 'array', 'struct' or 'create_map' "
+            "function.".format(col, type(col)))
     return jcol
 
 
@@ -406,8 +411,14 @@ class Column(object):
         [Row(col=u'Ali'), Row(col=u'Bob')]
         """
         if type(startPos) != type(length):
-            raise TypeError("Can not mix the type")
-        if isinstance(startPos, (int, long)):
+            raise TypeError(
+                "startPos and length must be the same type. "
+                "Got {startPos_t} and {length_t}, respectively."
+                .format(
+                    startPos_t=type(startPos),
+                    length_t=type(length),
+                ))
+        if isinstance(startPos, int):
             jc = self._jc.substr(startPos, length)
         elif isinstance(startPos, Column):
             jc = self._jc.substr(startPos._jc, length._jc)
@@ -436,24 +447,72 @@ class Column(object):
 
     # order
     _asc_doc = """
-    Returns a sort expression based on the ascending order of the given column name
+    Returns a sort expression based on ascending order of the column.
 
     >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.asc()).collect()
     [Row(name=u'Alice'), Row(name=u'Tom')]
     """
-    _desc_doc = """
-    Returns a sort expression based on the descending order of the given column name.
+    _asc_nulls_first_doc = """
+    Returns a sort expression based on ascending order of the column, and null values
+    return before non-null values.
 
     >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.asc_nulls_first()).collect()
+    [Row(name=None), Row(name=u'Alice'), Row(name=u'Tom')]
+
+    .. versionadded:: 2.4
+    """
+    _asc_nulls_last_doc = """
+    Returns a sort expression based on ascending order of the column, and null values
+    appear after non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.asc_nulls_last()).collect()
+    [Row(name=u'Alice'), Row(name=u'Tom'), Row(name=None)]
+
+    .. versionadded:: 2.4
+    """
+    _desc_doc = """
+    Returns a sort expression based on the descending order of the column.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
     >>> df.select(df.name).orderBy(df.name.desc()).collect()
     [Row(name=u'Tom'), Row(name=u'Alice')]
     """
+    _desc_nulls_first_doc = """
+    Returns a sort expression based on the descending order of the column, and null values
+    appear before non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.desc_nulls_first()).collect()
+    [Row(name=None), Row(name=u'Tom'), Row(name=u'Alice')]
+
+    .. versionadded:: 2.4
+    """
+    _desc_nulls_last_doc = """
+    Returns a sort expression based on the descending order of the column, and null values
+    appear after non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.desc_nulls_last()).collect()
+    [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)]
+
+    .. versionadded:: 2.4
+    """
 
     asc = ignore_unicode_prefix(_unary_op("asc", _asc_doc))
+    asc_nulls_first = ignore_unicode_prefix(_unary_op("asc_nulls_first", _asc_nulls_first_doc))
+    asc_nulls_last = ignore_unicode_prefix(_unary_op("asc_nulls_last", _asc_nulls_last_doc))
     desc = ignore_unicode_prefix(_unary_op("desc", _desc_doc))
+    desc_nulls_first = ignore_unicode_prefix(_unary_op("desc_nulls_first", _desc_nulls_first_doc))
+    desc_nulls_last = ignore_unicode_prefix(_unary_op("desc_nulls_last", _desc_nulls_last_doc))
 
     _isNull_doc = """
     True if the current expression is null.
@@ -609,9 +668,17 @@ class Column(object):
         :return: a Column
 
         >>> from pyspark.sql import Window
-        >>> window = Window.partitionBy("name").orderBy("age").rowsBetween(-1, 1)
+        >>> window = Window.partitionBy("name").orderBy("age") \
+                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
         >>> from pyspark.sql.functions import rank, min
-        >>> # df.select(rank().over(window), min('age').over(window))
+        >>> df.withColumn("rank", rank().over(window)) \
+                .withColumn("min", min('age').over(window)).show()
+        +---+-----+----+---+
+        |age| name|rank|min|
+        +---+-----+----+---+
+        |  5|  Bob|   1|  5|
+        |  2|Alice|   1|  2|
+        +---+-----+----+---+
         """
         from pyspark.sql.window import WindowSpec
         if not isinstance(window, WindowSpec):
@@ -648,7 +715,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -21,17 +21,16 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
+import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
+  DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
-class DecisionTreeClassifierSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   import DecisionTreeClassifierSuite.compareAPIs
   import testImplicits._
@@ -43,7 +42,9 @@ class DecisionTreeClassifierSuite
   private var continuousDataPointsForMulticlassRDD: RDD[LabeledPoint] = _
   private var categoricalDataPointsForMulticlassForOrderedFeaturesRDD: RDD[LabeledPoint] = _
 
-  override def beforeAll() {
+  private val seed = 42
+
+  override def beforeAll(): Unit = {
     super.beforeAll()
     categoricalDataPointsRDD =
       sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints()).map(_.asML)
@@ -251,17 +252,33 @@ class DecisionTreeClassifierSuite
 
     MLTestingUtils.checkCopyAndUids(dt, newTree)
 
-    val predictions = newTree.transform(newData)
-      .select(newTree.getPredictionCol, newTree.getRawPredictionCol, newTree.getProbabilityCol)
-      .collect()
-
-    predictions.foreach { case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
-      assert(pred === rawPred.argmax,
-        s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
-      val sum = rawPred.toArray.sum
-      assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
-        "probability prediction mismatch")
+    testTransformer[(Vector, Double, Double)](newData, newTree,
+      "prediction", "rawPrediction", "probability") {
+      case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
+        assert(pred === rawPred.argmax,
+          s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
+        val sum = rawPred.toArray.sum
+        assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
+          "probability prediction mismatch")
     }
+
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, DecisionTreeClassificationModel](this, newTree, newData)
+  }
+
+  test("prediction on single instance") {
+    val rdd = continuousDataPointsForMulticlassRDD
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(4)
+      .setMaxBins(100)
+    val categoricalFeatures = Map(0 -> 3)
+    val numClasses = 3
+
+    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val newTree = dt.fit(newData)
+
+    testPredictionModelSinglePrediction(newTree, newData)
   }
 
   test("training with 1-category categorical feature") {
@@ -275,44 +292,6 @@ class DecisionTreeClassifierSuite
     val df = TreeTests.setMetadata(data, Map(0 -> 1), 2)
     val dt = new DecisionTreeClassifier().setMaxDepth(3)
     dt.fit(df)
-  }
-
-  test("Use soft prediction for binary classification with ordered categorical features") {
-    // The following dataset is set up such that the best split is {1} vs. {0, 2}.
-    // If the hard prediction is used to order the categories, then {0} vs. {1, 2} is chosen.
-    val arr = Array(
-      LabeledPoint(0.0, Vectors.dense(0.0)),
-      LabeledPoint(0.0, Vectors.dense(0.0)),
-      LabeledPoint(0.0, Vectors.dense(0.0)),
-      LabeledPoint(1.0, Vectors.dense(0.0)),
-      LabeledPoint(0.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0)),
-      LabeledPoint(1.0, Vectors.dense(2.0)))
-    val data = sc.parallelize(arr)
-    val df = TreeTests.setMetadata(data, Map(0 -> 3), 2)
-
-    // Must set maxBins s.t. the feature will be treated as an ordered categorical feature.
-    val dt = new DecisionTreeClassifier()
-      .setImpurity("gini")
-      .setMaxDepth(1)
-      .setMaxBins(3)
-    val model = dt.fit(df)
-    model.rootNode match {
-      case n: InternalNode =>
-        n.split match {
-          case s: CategoricalSplit =>
-            assert(s.leftCategories === Array(1.0))
-          case other =>
-            fail(s"All splits should be categorical, but got ${other.getClass.getName}: $other.")
-        }
-      case other =>
-        fail(s"Root node should be an internal node, but got ${other.getClass.getName}: $other.")
-    }
   }
 
   test("Feature importance with toy data") {
@@ -336,6 +315,24 @@ class DecisionTreeClassifierSuite
     assert(importances.toArray.forall(_ >= 0.0))
   }
 
+  test("model support predict leaf index") {
+    val model = new DecisionTreeClassificationModel("dtc", TreeTests.root0, 3, 2)
+    model.setLeafCol("predictedLeafId")
+      .setRawPredictionCol("")
+      .setPredictionCol("")
+      .setProbabilityCol("")
+
+    val data = TreeTests.getSingleTreeLeafData
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect()
+      .foreach { case Row(leafId: Double, predictedLeafId: Double) =>
+        assert(leafId === predictedLeafId)
+    }
+  }
+
   test("should support all NumericType labels and not support other types") {
     val dt = new DecisionTreeClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[DecisionTreeClassificationModel, DecisionTreeClassifier](
@@ -348,6 +345,49 @@ class DecisionTreeClassifierSuite
     val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val dt = new DecisionTreeClassifier().setMaxDepth(1)
     dt.fit(df)
+  }
+
+  test("training with sample weights") {
+    val df = {
+      val nPoints = 100
+      val coefficients = Array(
+        -0.57997, 0.912083, -0.371077,
+        -0.16624, -0.84355, -0.048509)
+
+      val xMean = Array(5.843, 3.057)
+      val xVariance = Array(0.6856, 0.1899)
+
+      val testData = LogisticRegressionSuite.generateMultinomialLogisticInput(
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, seed)
+
+      sc.parallelize(testData, 4).toDF()
+    }
+    val numClasses = 3
+    val predEquals = (x: Double, y: Double) => x == y
+    // (impurity, maxDepth)
+    val testParams = Seq(
+      ("gini", 10),
+      ("entropy", 10),
+      ("gini", 5)
+    )
+    for ((impurity, maxDepth) <- testParams) {
+      val estimator = new DecisionTreeClassifier()
+        .setMaxDepth(maxDepth)
+        .setSeed(seed)
+        .setMinWeightFractionPerNode(0.049)
+        .setImpurity(impurity)
+
+      MLTestingUtils.testArbitrarilyScaledWeights[DecisionTreeClassificationModel,
+        DecisionTreeClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.7))
+      MLTestingUtils.testOutliersWithSmallWeights[DecisionTreeClassificationModel,
+        DecisionTreeClassifier](df.as[LabeledPoint], estimator,
+        numClasses, MLTestingUtils.modelPredictionEquals(df, predEquals, 0.8),
+        outlierRatio = 2)
+      MLTestingUtils.testOversamplingVsWeighting[DecisionTreeClassificationModel,
+        DecisionTreeClassifier](df.as[LabeledPoint], estimator,
+        MLTestingUtils.modelPredictionEquals(df, predEquals, 0.7), seed)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -373,7 +413,6 @@ class DecisionTreeClassifierSuite
       TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
     testEstimatorAndModelReadWrite(dt, categoricalData, allParamSettings,
       allParamSettings, checkModelData)
-
     // Continuous splits with tree depth 2
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)

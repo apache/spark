@@ -20,7 +20,6 @@ package org.apache.spark.sql.internal
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
@@ -277,34 +276,29 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * :: Experimental ::
    * Creates a table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    *
    * @group ddl_ops
    * @since 2.2.0
    */
-  @Experimental
   override def createTable(tableName: String, path: String): DataFrame = {
     val dataSourceName = sparkSession.sessionState.conf.defaultDataSourceName
     createTable(tableName, path, dataSourceName)
   }
 
   /**
-   * :: Experimental ::
    * Creates a table from the given path and returns the corresponding
    * DataFrame.
    *
    * @group ddl_ops
    * @since 2.2.0
    */
-  @Experimental
   override def createTable(tableName: String, path: String, source: String): DataFrame = {
     createTable(tableName, source, Map("path" -> path))
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Creates a table based on the dataset in a data source and a set of options.
    * Then, returns the corresponding DataFrame.
@@ -312,7 +306,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @group ddl_ops
    * @since 2.2.0
    */
-  @Experimental
   override def createTable(
       tableName: String,
       source: String,
@@ -321,7 +314,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Creates a table based on the dataset in a data source, a schema and a set of options.
    * Then, returns the corresponding DataFrame.
@@ -329,7 +321,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @group ddl_ops
    * @since 2.2.0
    */
-  @Experimental
   override def createTable(
       tableName: String,
       source: String,
@@ -364,7 +355,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
-      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, viewDef, blocking = true)
+      sparkSession.sharedState.cacheManager.uncacheQuery(
+        sparkSession, viewDef, cascade = false)
       sessionCatalog.dropTempView(viewName)
     }
   }
@@ -379,7 +371,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropGlobalTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getGlobalTempView(viewName).exists { viewDef =>
-      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, viewDef, blocking = true)
+      sparkSession.sharedState.cacheManager.uncacheQuery(
+        sparkSession, viewDef, cascade = false)
       sessionCatalog.dropGlobalTempView(viewName)
     }
   }
@@ -438,7 +431,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def uncacheTable(tableName: String): Unit = {
-    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
+    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    val cascade = !sessionCatalog.isTemporaryTable(tableIdent)
+    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName), cascade)
   }
 
   /**
@@ -474,18 +469,31 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    // Temp tables: refresh (or invalidate) any metadata/data cached in the plan recursively.
-    // Non-temp tables: refresh the metadata cache.
-    sessionCatalog.refreshTable(tableIdent)
+    val tableMetadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
+    val table = sparkSession.table(tableIdent)
+
+    if (tableMetadata.tableType == CatalogTableType.VIEW) {
+      // Temp or persistent views: refresh (or invalidate) any metadata/data cached
+      // in the plan recursively.
+      table.queryExecution.analyzed.refresh()
+    } else {
+      // Non-temp tables: refresh the metadata cache.
+      sessionCatalog.refreshTable(tableIdent)
+    }
 
     // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
-    val table = sparkSession.table(tableIdent)
-    if (isCached(table)) {
-      // Uncache the logicalPlan.
-      sparkSession.sharedState.cacheManager.uncacheQuery(table, blocking = true)
-      // Cache it again.
-      sparkSession.sharedState.cacheManager.cacheQuery(table, Some(tableIdent.table))
+    val cache = sparkSession.sharedState.cacheManager.lookupCachedData(table)
+    if (cache.nonEmpty) {
+      // save the cache name and cache level for recreation
+      val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
+      val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
+
+      // uncache the logical plan.
+      sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true)
+
+      // recache with the same name and cache level.
+      sparkSession.sharedState.cacheManager.cacheQuery(table, cacheName, cacheLevel)
     }
   }
 

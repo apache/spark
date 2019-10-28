@@ -2,6 +2,21 @@
 layout: global
 title: Isotonic regression - RDD-based API
 displayTitle: Regression - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 ## Isotonic regression
@@ -9,7 +24,7 @@ displayTitle: Regression - RDD-based API
 belongs to the family of regression algorithms. Formally isotonic regression is a problem where
 given a finite set of real numbers `$Y = {y_1, y_2, ..., y_n}$` representing observed responses
 and `$X = {x_1, x_2, ..., x_n}$` the unknown response values to be fitted
-finding a function that minimises
+finding a function that minimizes
 
 `\begin{equation}
   f(x) = \sum_{i=1}^n w_i (y_i - x_i)^2
@@ -24,11 +39,11 @@ Essentially isotonic regression is a
 best fitting the original data points.
 
 `spark.mllib` supports a
-[pool adjacent violators algorithm](http://doi.org/10.1198/TECH.2010.10111)
+[pool adjacent violators algorithm](https://doi.org/10.1198/TECH.2010.10111)
 which uses an approach to
-[parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
+[parallelizing isotonic regression](https://doi.org/10.1007/978-3-642-99789-1_10).
 The training input is an RDD of tuples of three double values that represent
-label, feature and weight in this order. Additionally IsotonicRegression algorithm has one
+label, feature and weight in this order. Additionally, IsotonicRegression algorithm has one
 optional parameter called $isotonic$ defaulting to true.
 This argument specifies if the isotonic regression is
 isotonic (monotonically increasing) or antitonic (monotonically decreasing).

@@ -1,4 +1,6 @@
+flake8==3.5.0
 jira==1.0.3
 PyGithub==1.26.0
 Unidecode==0.04.19
 pypandoc==1.3.3
+sphinx

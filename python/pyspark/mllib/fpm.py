@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-import numpy
-from numpy import array
+import sys
+
 from collections import namedtuple
 
-from pyspark import SparkContext, since
+from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc
@@ -130,7 +130,7 @@ class PrefixSpan(object):
     A parallel PrefixSpan algorithm to mine frequent sequential patterns.
     The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan:
     Mining Sequential Patterns Efficiently by Prefix-Projected Pattern Growth
-    ([[http://doi.org/10.1109/ICDE.2001.914830]]).
+    ([[https://doi.org/10.1109/ICDE.2001.914830]]).
 
     .. versionadded:: 1.6.0
     """
@@ -197,7 +197,7 @@ def _test():
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,21 @@
 layout: global
 title: Data Types - RDD-based API
 displayTitle: Data Types - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -317,7 +332,7 @@ Refer to the [`Matrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.
 from pyspark.mllib.linalg import Matrix, Matrices
 
 # Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
-dm2 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
+dm2 = Matrices.dense(3, 2, [1, 3, 5, 2, 4, 6])
 
 # Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
 sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 2, 1], [9, 6, 8])
@@ -350,7 +365,7 @@ which is a tuple of `(Int, Int, Matrix)`.
 ***Note***
 
 The underlying RDDs of a distributed matrix must be deterministic, because we cache the matrix size.
-In general the use of non-deterministic RDDs can lead to errors.
+In general, the use of non-deterministic RDDs can lead to errors.
 
 ### RowMatrix
 
@@ -624,7 +639,7 @@ from pyspark.mllib.linalg.distributed import CoordinateMatrix, MatrixEntry
 
 # Create an RDD of coordinate entries.
 #   - This can be done explicitly with the MatrixEntry class:
-entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(6, 1, 3.7)])
+entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(2, 1, 3.7)])
 #   - or using (long, long, float) tuples:
 entries = sc.parallelize([(0, 0, 1.2), (1, 0, 2.1), (2, 1, 3.7)])
 

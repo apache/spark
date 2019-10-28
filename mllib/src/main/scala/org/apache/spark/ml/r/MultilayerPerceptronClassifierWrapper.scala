@@ -62,7 +62,7 @@ private[r] object MultilayerPerceptronClassifierWrapper
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
-  def fit(
+  def fit(  // scalastyle:ignore
       data: DataFrame,
       formula: String,
       blockSize: Int,
@@ -72,11 +72,13 @@ private[r] object MultilayerPerceptronClassifierWrapper
       tol: Double,
       stepSize: Double,
       seed: String,
-      initialWeights: Array[Double]
+      initialWeights: Array[Double],
+      handleInvalid: String
      ): MultilayerPerceptronClassifierWrapper = {
     val rFormula = new RFormula()
       .setFormula(formula)
       .setForceIndexLabel(true)
+      .setHandleInvalid(handleInvalid)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema

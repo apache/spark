@@ -223,4 +223,15 @@ class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
       assert(verts.collect().toSeq === data) // test checkpointed RDD
     }
   }
+
+  test("count") {
+    withSpark { sc =>
+      val empty = VertexRDD(sc.emptyRDD[(Long, Unit)])
+      assert(empty.count === 0)
+
+      val n = 100
+      val nonempty = vertices(sc, n)
+      assert(nonempty.count === n + 1)
+    }
+  }
 }

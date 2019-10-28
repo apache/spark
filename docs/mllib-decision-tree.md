@@ -2,6 +2,21 @@
 layout: global
 title: Decision Trees - RDD-based API
 displayTitle: Decision Trees - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -91,7 +106,7 @@ For a categorical feature with `$M$` possible values (categories), one could com
 `$2^{M-1}-1$` split candidates. For binary (0/1) classification and regression,
 we can reduce the number of split candidates to `$M-1$` by ordering the
 categorical feature values by the average label. (See Section 9.2.4 in
-[Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
+[Elements of Statistical Machine Learning](https://web.stanford.edu/~hastie/ElemStatLearn/) for
 details.) For example, for a binary classification problem with one categorical feature with three
 categories A, B and C whose corresponding proportions of label 1 are 0.2, 0.6 and 0.4, the categorical
 features are ordered as A, C, B. The two split candidates are A \| C, B
@@ -149,7 +164,7 @@ These parameters may be tuned.  Be careful to validate on held-out test data whe
   * Note that the `maxBins` parameter must be at least the maximum number of categories `$M$` for any categorical feature.
 
 * **`maxMemoryInMB`**: Amount of memory to be used for collecting sufficient statistics.
-  * The default value is conservatively chosen to be 256 MB to allow the decision algorithm to work in most scenarios.  Increasing `maxMemoryInMB` can lead to faster training (if the memory is available) by allowing fewer passes over the data.  However, there may be decreasing returns as `maxMemoryInMB` grows since the amount of communication on each iteration can be proportional to `maxMemoryInMB`.
+  * The default value is conservatively chosen to be 256 MiB to allow the decision algorithm to work in most scenarios.  Increasing `maxMemoryInMB` can lead to faster training (if the memory is available) by allowing fewer passes over the data.  However, there may be decreasing returns as `maxMemoryInMB` grows since the amount of communication on each iteration can be proportional to `maxMemoryInMB`.
   * *Implementation details*: For faster processing, the decision tree algorithm collects statistics about groups of nodes to split (rather than 1 node at a time).  The number of nodes which can be handled in one group is determined by the memory requirements (which vary per features).  The `maxMemoryInMB` parameter specifies the memory limit in terms of megabytes which each worker can use for these statistics.
 
 * **`subsamplingRate`**: Fraction of the training data used for learning the decision tree.  This parameter is most relevant for training ensembles of trees (using [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest$) and [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees)), where it can be useful to subsample the original data.  For training a single decision tree, this parameter is less useful since the number of training instances is generally not the main constraint.

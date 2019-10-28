@@ -113,6 +113,20 @@ write.df(namesAndAges, "namesAndAges.parquet", "parquet")
 # $example off:manual_load_options$
 
 
+# $example on:manual_load_options_csv$
+df <- read.df("examples/src/main/resources/people.csv", "csv", sep = ";", inferSchema = TRUE, header = TRUE)
+namesAndAges <- select(df, "name", "age")
+# $example off:manual_load_options_csv$
+
+# $example on:load_with_path_glob_filter$
+df <- read.df("examples/src/main/resources/partitioned_users.orc", "orc", pathGlobFilter = "*.orc")
+# $example off:load_with_path_glob_filter$
+
+# $example on:manual_save_options_orc$
+df <- read.df("examples/src/main/resources/users.orc", "orc")
+write.orc(df, "users_with_options.orc", orc.bloom.filter.columns = "favorite_color", orc.dictionary.key.threshold = 1.0, orc.column.encoding.direct = "name")
+# $example off:manual_save_options_orc$
+
 # $example on:direct_sql$
 df <- sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
 # $example off:direct_sql$

@@ -18,7 +18,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -147,7 +146,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
     this.reader = new ParquetFileReader(
         configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    for (BlockMetaData block : blocks) {
+    // use the blocks from the reader in case some do not match filters and will not be read
+    for (BlockMetaData block : reader.getRowGroups()) {
       this.totalRowCount += block.getRowCount();
     }
 
@@ -170,7 +170,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    * Returns the list of files at 'path' recursively. This skips files that are ignored normally
    * by MapReduce.
    */
-  public static List<String> listDirectory(File path) throws IOException {
+  public static List<String> listDirectory(File path) {
     List<String> result = new ArrayList<>();
     if (path.isDirectory()) {
       for (File f: path.listFiles()) {
@@ -197,8 +197,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     Configuration config = new Configuration();
     config.set("spark.sql.parquet.binaryAsString", "false");
     config.set("spark.sql.parquet.int96AsTimestamp", "false");
-    config.set("spark.sql.parquet.writeLegacyFormat", "false");
-    config.set("spark.sql.parquet.int64AsTimestampMillis", "false");
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
@@ -224,16 +222,17 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         this.requestedSchema = ParquetSchemaConverter.EMPTY_MESSAGE();
       }
     }
-    this.sparkSchema = new ParquetSchemaConverter(config).convert(requestedSchema);
+    this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(
         config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    for (BlockMetaData block : blocks) {
+    // use the blocks from the reader in case some do not match filters and will not be read
+    for (BlockMetaData block : reader.getRowGroups()) {
       this.totalRowCount += block.getRowCount();
     }
   }
 
   @Override
-  public Void getCurrentKey() throws IOException, InterruptedException {
+  public Void getCurrentKey() {
     return null;
   }
 
@@ -261,7 +260,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     }
 
     @Override
-    int nextInt() throws IOException {
+    int nextInt() {
       return delegate.readInteger();
     }
   }
@@ -281,21 +280,21 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   protected static final class NullIntIterator extends IntIterator {
     @Override
-    int nextInt() throws IOException { return 0; }
+    int nextInt() { return 0; }
   }
 
   /**
    * Creates a reader for definition and repetition levels, returning an optimized one if
    * the levels are not needed.
    */
-  protected static IntIterator createRLEIterator(int maxLevel, BytesInput bytes,
-                                              ColumnDescriptor descriptor) throws IOException {
+  protected static IntIterator createRLEIterator(
+      int maxLevel, BytesInput bytes, ColumnDescriptor descriptor) throws IOException {
     try {
       if (maxLevel == 0) return new NullIntIterator();
       return new RLEIntIterator(
           new RunLengthBitPackingHybridDecoder(
               BytesUtils.getWidthFromMaxInt(maxLevel),
-              new ByteArrayInputStream(bytes.toByteArray())));
+              bytes.toInputStream()));
     } catch (IOException e) {
       throw new IOException("could not read levels in page for col " + descriptor, e);
     }

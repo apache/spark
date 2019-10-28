@@ -59,14 +59,14 @@ private[spark] class Pool(
     }
   }
 
-  override def addSchedulable(schedulable: Schedulable) {
+  override def addSchedulable(schedulable: Schedulable): Unit = {
     require(schedulable != null)
     schedulableQueue.add(schedulable)
     schedulableNameToSchedulable.put(schedulable.name, schedulable)
     schedulable.parent = this
   }
 
-  override def removeSchedulable(schedulable: Schedulable) {
+  override def removeSchedulable(schedulable: Schedulable): Unit = {
     schedulableQueue.remove(schedulable)
     schedulableNameToSchedulable.remove(schedulable.name)
   }
@@ -84,7 +84,7 @@ private[spark] class Pool(
     null
   }
 
-  override def executorLost(executorId: String, host: String, reason: ExecutorLossReason) {
+  override def executorLost(executorId: String, host: String, reason: ExecutorLossReason): Unit = {
     schedulableQueue.asScala.foreach(_.executorLost(executorId, host, reason))
   }
 
@@ -97,7 +97,7 @@ private[spark] class Pool(
   }
 
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
-    var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
+    val sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
     val sortedSchedulableQueue =
       schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
     for (schedulable <- sortedSchedulableQueue) {
@@ -106,14 +106,14 @@ private[spark] class Pool(
     sortedTaskSetQueue
   }
 
-  def increaseRunningTasks(taskNum: Int) {
+  def increaseRunningTasks(taskNum: Int): Unit = {
     runningTasks += taskNum
     if (parent != null) {
       parent.increaseRunningTasks(taskNum)
     }
   }
 
-  def decreaseRunningTasks(taskNum: Int) {
+  def decreaseRunningTasks(taskNum: Int): Unit = {
     runningTasks -= taskNum
     if (parent != null) {
       parent.decreaseRunningTasks(taskNum)

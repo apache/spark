@@ -19,7 +19,7 @@ package org.apache.spark.launcher
 
 import java.net.{InetAddress, Socket}
 
-import org.apache.spark.SPARK_VERSION
+import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.launcher.LauncherProtocol._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -36,10 +36,15 @@ private[spark] abstract class LauncherBackend {
   private var lastState: SparkAppHandle.State = _
   @volatile private var _isConnected = false
 
+  protected def conf: SparkConf
+
   def connect(): Unit = {
-    val port = sys.env.get(LauncherProtocol.ENV_LAUNCHER_PORT).map(_.toInt)
-    val secret = sys.env.get(LauncherProtocol.ENV_LAUNCHER_SECRET)
-    if (port != None && secret != None) {
+    val port = conf.getOption(LauncherProtocol.CONF_LAUNCHER_PORT)
+      .orElse(sys.env.get(LauncherProtocol.ENV_LAUNCHER_PORT))
+      .map(_.toInt)
+    val secret = conf.getOption(LauncherProtocol.CONF_LAUNCHER_SECRET)
+      .orElse(sys.env.get(LauncherProtocol.ENV_LAUNCHER_SECRET))
+    if (port.isDefined && secret.isDefined) {
       val s = new Socket(InetAddress.getLoopbackAddress(), port.get)
       connection = new BackendConnection(s)
       connection.send(new Hello(secret.get, SPARK_VERSION))
@@ -62,13 +67,13 @@ private[spark] abstract class LauncherBackend {
   }
 
   def setAppId(appId: String): Unit = {
-    if (connection != null) {
+    if (connection != null && isConnected) {
       connection.send(new SetAppId(appId))
     }
   }
 
   def setState(state: SparkAppHandle.State): Unit = {
-    if (connection != null && lastState != state) {
+    if (connection != null && isConnected && lastState != state) {
       connection.send(new SetState(state))
       lastState = state
     }
@@ -89,11 +94,8 @@ private[spark] abstract class LauncherBackend {
   protected def onDisconnected() : Unit = { }
 
   private def fireStopRequest(): Unit = {
-    val thread = LauncherBackend.threadFactory.newThread(new Runnable() {
-      override def run(): Unit = Utils.tryLogNonFatalError {
-        onStopRequest()
-      }
-    })
+    val thread = LauncherBackend.threadFactory.newThread(
+      () => Utils.tryLogNonFatalError { onStopRequest() })
     thread.start()
   }
 
@@ -109,10 +111,10 @@ private[spark] abstract class LauncherBackend {
 
     override def close(): Unit = {
       try {
+        _isConnected = false
         super.close()
       } finally {
         onDisconnected()
-        _isConnected = false
       }
     }
 

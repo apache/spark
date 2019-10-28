@@ -120,7 +120,7 @@ private[spark] class StandaloneAppClient(
      *
      * nthRetry means this is the nth attempt to register with master.
      */
-    private def registerWithMaster(nthRetry: Int) {
+    private def registerWithMaster(nthRetry: Int): Unit = {
       registerMasterFutures.set(tryRegisterAllMasters())
       registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
@@ -170,7 +170,7 @@ private[spark] class StandaloneAppClient(
 
       case ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) =>
         val fullId = appId + "/" + id
-        logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, hostPort,
+        logInfo("Executor added: %s on %s (%s) with %d core(s)".format(fullId, workerId, hostPort,
           cores))
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
 
@@ -246,14 +246,14 @@ private[spark] class StandaloneAppClient(
     /**
      * Notify the listener that we disconnected, if we hadn't already done so before.
      */
-    def markDisconnected() {
+    def markDisconnected(): Unit = {
       if (!alreadyDisconnected) {
         listener.disconnected()
         alreadyDisconnected = true
       }
     }
 
-    def markDead(reason: String) {
+    def markDead(reason: String): Unit = {
       if (!alreadyDead.get) {
         listener.dead(reason)
         alreadyDead.set(true)
@@ -271,12 +271,12 @@ private[spark] class StandaloneAppClient(
 
   }
 
-  def start() {
+  def start(): Unit = {
     // Just launch an rpcEndpoint; it will call back into the listener.
     endpoint.set(rpcEnv.setupEndpoint("AppClient", new ClientEndpoint(rpcEnv)))
   }
 
-  def stop() {
+  def stop(): Unit = {
     if (endpoint.get != null) {
       try {
         val timeout = RpcUtils.askRpcTimeout(conf)

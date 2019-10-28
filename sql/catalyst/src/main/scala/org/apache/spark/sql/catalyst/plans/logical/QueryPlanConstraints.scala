@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions._
 
 
-trait QueryPlanConstraints { self: LogicalPlan =>
+trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 
   /**
    * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
@@ -32,7 +32,7 @@ trait QueryPlanConstraints { self: LogicalPlan =>
       ExpressionSet(
         validConstraints
           .union(inferAdditionalConstraints(validConstraints))
-          .union(constructIsNotNullConstraints(validConstraints))
+          .union(constructIsNotNullConstraints(validConstraints, output))
           .filter { c =>
             c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
           }
@@ -50,14 +50,43 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    *
    * See [[Canonicalize]] for more details.
    */
-  protected def validConstraints: Set[Expression] = Set.empty
+  protected lazy val validConstraints: Set[Expression] = Set.empty
+}
+
+trait ConstraintHelper {
+
+  /**
+   * Infers an additional set of constraints from a given set of equality constraints.
+   * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
+   * additional constraint of the form `b = 5`.
+   */
+  def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    var inferredConstraints = Set.empty[Expression]
+    constraints.foreach {
+      case eq @ EqualTo(l: Attribute, r: Attribute) =>
+        val candidateConstraints = constraints - eq
+        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
+        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+      case _ => // No inference
+    }
+    inferredConstraints -- constraints
+  }
+
+  private def replaceConstraints(
+      constraints: Set[Expression],
+      source: Expression,
+      destination: Attribute): Set[Expression] = constraints.map(_ transform {
+    case e: Expression if e.semanticEquals(source) => destination
+  })
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
    * non-nullable attributes. For e.g., if an expression is of the form (`a > 5`), this
    * returns a constraint of the form `isNotNull(a)`
    */
-  private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
+  def constructIsNotNullConstraints(
+      constraints: Set[Expression],
+      output: Seq[Attribute]): Set[Expression] = {
     // First, we propagate constraints from the null intolerant expressions.
     var isNotNullConstraints: Set[Expression] = constraints.flatMap(inferIsNotNullConstraints)
 
@@ -92,105 +121,5 @@ trait QueryPlanConstraints { self: LogicalPlan =>
     case a: Attribute => Seq(a)
     case _: NullIntolerant => expr.children.flatMap(scanNullIntolerantAttribute)
     case _ => Seq.empty[Attribute]
-  }
-
-  // Collect aliases from expressions of the whole tree rooted by the current QueryPlan node, so
-  // we may avoid producing recursive constraints.
-  private lazy val aliasMap: AttributeMap[Expression] = AttributeMap(
-    expressions.collect {
-      case a: Alias => (a.toAttribute, a.child)
-    } ++ children.flatMap(_.asInstanceOf[QueryPlanConstraints].aliasMap))
-    // Note: the explicit cast is necessary, since Scala compiler fails to infer the type.
-
-  /**
-   * Infers an additional set of constraints from a given set of equality constraints.
-   * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
-   * additional constraint of the form `b = 5`.
-   *
-   * [SPARK-17733] We explicitly prevent producing recursive constraints of the form `a = f(a, b)`
-   * as they are often useless and can lead to a non-converging set of constraints.
-   */
-  private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
-    val constraintClasses = generateEquivalentConstraintClasses(constraints)
-
-    var inferredConstraints = Set.empty[Expression]
-    constraints.foreach {
-      case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = constraints - eq
-        inferredConstraints ++= candidateConstraints.map(_ transform {
-          case a: Attribute if a.semanticEquals(l) &&
-            !isRecursiveDeduction(r, constraintClasses) => r
-        })
-        inferredConstraints ++= candidateConstraints.map(_ transform {
-          case a: Attribute if a.semanticEquals(r) &&
-            !isRecursiveDeduction(l, constraintClasses) => l
-        })
-      case _ => // No inference
-    }
-    inferredConstraints -- constraints
-  }
-
-  /**
-   * Generate a sequence of expression sets from constraints, where each set stores an equivalence
-   * class of expressions. For example, Set(`a = b`, `b = c`, `e = f`) will generate the following
-   * expression sets: (Set(a, b, c), Set(e, f)). This will be used to search all expressions equal
-   * to an selected attribute.
-   */
-  private def generateEquivalentConstraintClasses(
-      constraints: Set[Expression]): Seq[Set[Expression]] = {
-    var constraintClasses = Seq.empty[Set[Expression]]
-    constraints.foreach {
-      case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        // Transform [[Alias]] to its child.
-        val left = aliasMap.getOrElse(l, l)
-        val right = aliasMap.getOrElse(r, r)
-        // Get the expression set for an equivalence constraint class.
-        val leftConstraintClass = getConstraintClass(left, constraintClasses)
-        val rightConstraintClass = getConstraintClass(right, constraintClasses)
-        if (leftConstraintClass.nonEmpty && rightConstraintClass.nonEmpty) {
-          // Combine the two sets.
-          constraintClasses = constraintClasses
-            .diff(leftConstraintClass :: rightConstraintClass :: Nil) :+
-            (leftConstraintClass ++ rightConstraintClass)
-        } else if (leftConstraintClass.nonEmpty) { // && rightConstraintClass.isEmpty
-          // Update equivalence class of `left` expression.
-          constraintClasses = constraintClasses
-            .diff(leftConstraintClass :: Nil) :+ (leftConstraintClass + right)
-        } else if (rightConstraintClass.nonEmpty) { // && leftConstraintClass.isEmpty
-          // Update equivalence class of `right` expression.
-          constraintClasses = constraintClasses
-            .diff(rightConstraintClass :: Nil) :+ (rightConstraintClass + left)
-        } else { // leftConstraintClass.isEmpty && rightConstraintClass.isEmpty
-          // Create new equivalence constraint class since neither expression presents
-          // in any classes.
-          constraintClasses = constraintClasses :+ Set(left, right)
-        }
-      case _ => // Skip
-    }
-
-    constraintClasses
-  }
-
-  /**
-   * Get all expressions equivalent to the selected expression.
-   */
-  private def getConstraintClass(
-      expr: Expression,
-      constraintClasses: Seq[Set[Expression]]): Set[Expression] =
-    constraintClasses.find(_.contains(expr)).getOrElse(Set.empty[Expression])
-
-  /**
-   * Check whether replace by an [[Attribute]] will cause a recursive deduction. Generally it
-   * has the form like: `a -> f(a, b)`, where `a` and `b` are expressions and `f` is a function.
-   * Here we first get all expressions equal to `attr` and then check whether at least one of them
-   * is a child of the referenced expression.
-   */
-  private def isRecursiveDeduction(
-      attr: Attribute,
-      constraintClasses: Seq[Set[Expression]]): Boolean = {
-    val expr = aliasMap.getOrElse(attr, attr)
-    getConstraintClass(expr, constraintClasses).exists { e =>
-      expr.children.exists(_.semanticEquals(e))
-    }
   }
 }

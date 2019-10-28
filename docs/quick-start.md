@@ -2,6 +2,21 @@
 layout: global
 title: Quick Start
 description: Quick start tutorial for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -11,11 +26,16 @@ This tutorial provides a quick introduction to using Spark. We will first introd
 interactive shell (in Python or Scala),
 then show how to write applications in Java, Scala, and Python.
 
-To follow along with this guide, first download a packaged release of Spark from the
-[Spark website](http://spark.apache.org/downloads.html). Since we won't be using HDFS,
+To follow along with this guide, first, download a packaged release of Spark from the
+[Spark website](https://spark.apache.org/downloads.html). Since we won't be using HDFS,
 you can download a package for any version of Hadoop.
 
-Note that, before Spark 2.0, the main programming interface of Spark was the Resilient Distributed Dataset (RDD). After Spark 2.0, RDDs are replaced by Dataset, which is strongly-typed like an RDD, but with richer optimizations under the hood. The RDD interface is still supported, and you can get a more complete reference at the [RDD programming guide](rdd-programming-guide.html). However, we highly recommend you to switch to use Dataset, which has better performance than RDD. See the [SQL programming guide](sql-programming-guide.html) to get more information about Dataset.
+Note that, before Spark 2.0, the main programming interface of Spark was the Resilient Distributed Dataset (RDD). After Spark 2.0, RDDs are replaced by Dataset, which is strongly-typed like an RDD, but with richer optimizations under the hood. The RDD interface is still supported, and you can get a more detailed reference at the [RDD programming guide](rdd-programming-guide.html). However, we highly recommend you to switch to use Dataset, which has better performance than RDD. See the [SQL programming guide](sql-programming-guide.html) to get more information about Dataset.
+
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) before running Spark.
 
 # Interactive Analysis with the Spark Shell
 
@@ -47,7 +67,7 @@ scala> textFile.first() // First item in this Dataset
 res1: String = # Apache Spark
 {% endhighlight %}
 
-Now let's transform this Dataset to a new one. We call `filter` to return a new Dataset with a subset of the items in the file.
+Now let's transform this Dataset into a new one. We call `filter` to return a new Dataset with a subset of the items in the file.
 
 {% highlight scala %}
 scala> val linesWithSpark = textFile.filter(line => line.contains("Spark"))
@@ -65,6 +85,11 @@ res3: Long = 15
 <div data-lang="python" markdown="1">
 
     ./bin/pyspark
+
+
+Or if PySpark is installed with pip in your current environment:
+
+    pyspark
 
 Spark's primary abstraction is a distributed collection of items called a Dataset. Datasets can be created from Hadoop InputFormats (such as HDFS files) or by transforming other Datasets. Due to Python's dynamic nature, we don't need the Dataset to be strongly-typed in Python. As a result, all Datasets in Python are Dataset[Row], and we call it `DataFrame` to be consistent with the data frame concept in Pandas and R. Let's make a new DataFrame from the text of the README file in the Spark source directory:
 
@@ -148,10 +173,10 @@ This first maps a line to an integer value and aliases it as "numWords", creatin
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
 {% highlight python %}
->>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).as("word")).groupBy("word").count()
+>>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
 {% endhighlight %}
 
-Here, we use the `explode` function in `select`, to transfrom a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:
+Here, we use the `explode` function in `select`, to transform a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:
 
 {% highlight python %}
 >>> wordCounts.collect()
@@ -206,7 +231,7 @@ a cluster, as described in the [RDD programming guide](rdd-programming-guide.htm
 
 # Self-Contained Applications
 Suppose we wish to write a self-contained application using the Spark API. We will walk through a
-simple application in Scala (with sbt), Java (with Maven), and Python.
+simple application in Scala (with sbt), Java (with Maven), and Python (pip).
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -292,12 +317,13 @@ We'll create a very simple Spark application, `SimpleApp.java`:
 {% highlight java %}
 /* SimpleApp.java */
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.Dataset;
 
 public class SimpleApp {
   public static void main(String[] args) {
     String logFile = "YOUR_SPARK_HOME/README.md"; // Should be some file on your system
     SparkSession spark = SparkSession.builder().appName("Simple Application").getOrCreate();
-    Dataset<String> logData = spark.read.textFile(logFile).cache();
+    Dataset<String> logData = spark.read().textFile(logFile).cache();
 
     long numAs = logData.filter(s -> s.contains("a")).count();
     long numBs = logData.filter(s -> s.contains("b")).count();
@@ -330,6 +356,7 @@ Note that Spark artifacts are tagged with a Scala version.
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_{{site.SCALA_BINARY_VERSION}}</artifactId>
       <version>{{site.SPARK_VERSION}}</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 </project>
@@ -367,6 +394,16 @@ Lines with a: 46, Lines with b: 23
 
 Now we will show how to write an application using the Python API (PySpark).
 
+
+If you are building a packaged PySpark application or library you can add it to your setup.py file as:
+
+{% highlight python %}
+    install_requires=[
+        'pyspark=={site.SPARK_VERSION}'
+    ]
+{% endhighlight %}
+
+
 As an example, we'll create a simple Spark application, `SimpleApp.py`:
 
 {% highlight python %}
@@ -374,7 +411,7 @@ As an example, we'll create a simple Spark application, `SimpleApp.py`:
 from pyspark.sql import SparkSession
 
 logFile = "YOUR_SPARK_HOME/README.md"  # Should be some file on your system
-spark = SparkSession.builder().appName(appName).master(master).getOrCreate()
+spark = SparkSession.builder.appName("SimpleApp").getOrCreate()
 logData = spark.read.text(logFile).cache()
 
 numAs = logData.filter(logData.value.contains('a')).count()
@@ -402,6 +439,15 @@ We can run this application using the `bin/spark-submit` script:
 $ YOUR_SPARK_HOME/bin/spark-submit \
   --master local[4] \
   SimpleApp.py
+...
+Lines with a: 46, Lines with b: 23
+{% endhighlight %}
+
+If you have PySpark pip installed into your environment (e.g., `pip install pyspark`), you can run your application with the regular Python interpreter or use the provided 'spark-submit' as you prefer.
+
+{% highlight bash %}
+# Use the Python interpreter to run your application
+$ python SimpleApp.py
 ...
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}

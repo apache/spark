@@ -20,11 +20,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
 // writer abstractions. Revisit.
-class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContext {
+class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSession {
   import testImplicits._
 
   val ROW = ((1).toByte, 2, 3L, "abc")
@@ -40,7 +40,9 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
         List.fill(n)(ROW).toDF.repartition(1).write.parquet(dir.getCanonicalPath)
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
 
-        val reader = new VectorizedParquetRecordReader
+        val conf = sqlContext.conf
+        val reader = new VectorizedParquetRecordReader(
+          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -65,7 +67,9 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
         data.repartition(1).write.parquet(dir.getCanonicalPath)
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
 
-        val reader = new VectorizedParquetRecordReader
+        val conf = sqlContext.conf
+        val reader = new VectorizedParquetRecordReader(
+          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -94,7 +98,9 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
         data.toDF("f").coalesce(1).write.parquet(dir.getCanonicalPath)
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).asScala.head
 
-        val reader = new VectorizedParquetRecordReader
+        val conf = sqlContext.conf
+        val reader = new VectorizedParquetRecordReader(
+          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file, null /* set columns to null to project all columns */)
         val column = reader.resultBatch().column(0)
         assert(reader.nextBatch())

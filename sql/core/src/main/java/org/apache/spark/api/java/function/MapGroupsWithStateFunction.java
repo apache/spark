@@ -20,8 +20,8 @@ package org.apache.spark.api.java.function;
 import java.io.Serializable;
 import java.util.Iterator;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.annotation.Experimental;
-import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.streaming.GroupState;
 
 /**
@@ -32,7 +32,7 @@ import org.apache.spark.sql.streaming.GroupState;
  * @since 2.1.1
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 public interface MapGroupsWithStateFunction<K, V, S, R> extends Serializable {
   R call(K key, Iterator<V> values, GroupState<S> state) throws Exception;
 }

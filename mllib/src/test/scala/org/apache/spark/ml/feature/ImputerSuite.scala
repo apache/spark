@@ -16,13 +16,14 @@
  */
 package org.apache.spark.ml.feature
 
-import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.SparkException
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
-class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class ImputerSuite extends MLTest with DefaultReadWriteTest {
 
   test("Imputer for Double with default missing Value NaN") {
     val df = spark.createDataFrame( Seq(
@@ -43,7 +44,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (0, 1.0, 1.0, 1.0),
       (1, 3.0, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN),
-      (3, -1.0, 2.0, 3.0)
+      (3, -1.0, 2.0, 1.0)
     )).toDF("id", "value", "expected_mean_value", "expected_median_value")
     val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
       .setMissingValue(-1.0)
@@ -74,6 +75,28 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     val df = rawDf.selectExpr("*", "IF(rawValue=-1.0, null, rawValue) as value")
     val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
     ImputerSuite.iterateStrategyTest(imputer, df)
+  }
+
+  test("Imputer should work with Structured Streaming") {
+    val localSpark = spark
+    import localSpark.implicits._
+    val df = Seq[(java.lang.Double, Double)](
+      (4.0, 4.0),
+      (10.0, 10.0),
+      (10.0, 10.0),
+      (Double.NaN, 8.0),
+      (null, 8.0)
+    ).toDF("value", "expected_mean_value")
+    val imputer = new Imputer()
+      .setInputCols(Array("value"))
+      .setOutputCols(Array("out"))
+      .setStrategy("mean")
+    val model = imputer.fit(df)
+    testTransformer[(java.lang.Double, Double)](df, model, "expected_mean_value", "out") {
+      case Row(exp: java.lang.Double, out: Double) =>
+        assert((exp.isNaN && out.isNaN) || (exp == out),
+          s"Imputed values differ. Expected: $exp, actual: $out")
+    }
   }
 
   test("Imputer throws exception when surrogate cannot be computed") {
@@ -155,6 +178,48 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     assert(newInstance.surrogateDF.collect() === instance.surrogateDF.collect())
   }
 
+  test("Imputer for IntegerType with default missing value null") {
+
+    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer)](
+      (1, 1, 1),
+      (11, 11, 11),
+      (3, 3, 3),
+      (null, 5, 3)
+    )).toDF("value1", "expected_mean_value1", "expected_median_value1")
+
+    val imputer = new Imputer()
+      .setInputCols(Array("value1"))
+      .setOutputCols(Array("out1"))
+
+    val types = Seq(IntegerType, LongType)
+    for (mType <- types) {
+      // cast all columns to desired data type for testing
+      val df2 = df.select(df.columns.map(c => col(c).cast(mType)): _*)
+      ImputerSuite.iterateStrategyTest(imputer, df2)
+    }
+  }
+
+  test("Imputer for IntegerType with missing value -1") {
+
+    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer)](
+      (1, 1, 1),
+      (11, 11, 11),
+      (3, 3, 3),
+      (-1, 5, 3)
+    )).toDF("value1", "expected_mean_value1", "expected_median_value1")
+
+    val imputer = new Imputer()
+      .setInputCols(Array("value1"))
+      .setOutputCols(Array("out1"))
+      .setMissingValue(-1.0)
+
+    val types = Seq(IntegerType, LongType)
+    for (mType <- types) {
+      // cast all columns to desired data type for testing
+      val df2 = df.select(df.columns.map(c => col(c).cast(mType)): _*)
+      ImputerSuite.iterateStrategyTest(imputer, df2)
+    }
+  }
 }
 
 object ImputerSuite {
@@ -164,19 +229,30 @@ object ImputerSuite {
    * @param df DataFrame with columns "id", "value", "expected_mean", "expected_median"
    */
   def iterateStrategyTest(imputer: Imputer, df: DataFrame): Unit = {
-    val inputCols = imputer.getInputCols
-
     Seq("mean", "median").foreach { strategy =>
       imputer.setStrategy(strategy)
       val model = imputer.fit(df)
       val resultDF = model.transform(df)
       imputer.getInputCols.zip(imputer.getOutputCols).foreach { case (inputCol, outputCol) =>
+
+        // check dataType is consistent between input and output
+        val inputType = resultDF.schema(inputCol).dataType
+        val outputType = resultDF.schema(outputCol).dataType
+        assert(inputType == outputType, "Output type is not the same as input type.")
+
+        // check value
         resultDF.select(s"expected_${strategy}_$inputCol", outputCol).collect().foreach {
           case Row(exp: Float, out: Float) =>
             assert((exp.isNaN && out.isNaN) || (exp == out),
               s"Imputed values differ. Expected: $exp, actual: $out")
           case Row(exp: Double, out: Double) =>
             assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
+              s"Imputed values differ. Expected: $exp, actual: $out")
+          case Row(exp: Integer, out: Integer) =>
+            assert(exp == out,
+              s"Imputed values differ. Expected: $exp, actual: $out")
+          case Row(exp: Long, out: Long) =>
+            assert(exp == out,
               s"Imputed values differ. Expected: $exp, actual: $out")
         }
       }

@@ -40,7 +40,7 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
 
   import StreamingQueryListener._
 
-  sparkListenerBus.addListener(this)
+  sparkListenerBus.addToQueue(this, StreamingQueryListenerBus.STREAM_EVENT_QUERY)
 
   /**
    * RunIds of active queries whose events are supposed to be forwarded by this ListenerBus
@@ -63,7 +63,7 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
    * are dispatched to Spark listener bus. This method is guaranteed to be called by queries in
    * the same SparkSession as this listener.
    */
-  def post(event: StreamingQueryListener.Event) {
+  def post(event: StreamingQueryListener.Event): Unit = {
     event match {
       case s: QueryStartedEvent =>
         activeQueryRunIds.synchronized { activeQueryRunIds += s.runId }
@@ -129,4 +129,8 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
       case _ =>
     }
   }
+}
+
+object StreamingQueryListenerBus {
+  val STREAM_EVENT_QUERY = "streams"
 }

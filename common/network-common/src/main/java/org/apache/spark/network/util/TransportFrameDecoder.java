@@ -19,6 +19,7 @@ package org.apache.spark.network.util;
 
 import java.util.LinkedList;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
@@ -29,7 +30,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 /**
  * A customized frame decoder that allows intercepting raw data.
  * <p>
- * This behaves like Netty's frame decoder (with harcoded parameters that match this library's
+ * This behaves like Netty's frame decoder (with hard coded parameters that match this library's
  * needs), except it allows an interceptor to be installed to read data directly before it's
  * framed.
  * <p>
@@ -48,13 +49,29 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
   private static final int LENGTH_SIZE = 8;
   private static final int MAX_FRAME_SIZE = Integer.MAX_VALUE;
   private static final int UNKNOWN_FRAME_SIZE = -1;
+  private static final long CONSOLIDATE_THRESHOLD = 20 * 1024 * 1024;
 
   private final LinkedList<ByteBuf> buffers = new LinkedList<>();
   private final ByteBuf frameLenBuf = Unpooled.buffer(LENGTH_SIZE, LENGTH_SIZE);
+  private final long consolidateThreshold;
+
+  private CompositeByteBuf frameBuf = null;
+  private long consolidatedFrameBufSize = 0;
+  private int consolidatedNumComponents = 0;
 
   private long totalSize = 0;
   private long nextFrameSize = UNKNOWN_FRAME_SIZE;
+  private int frameRemainingBytes = UNKNOWN_FRAME_SIZE;
   private volatile Interceptor interceptor;
+
+  public TransportFrameDecoder() {
+    this(CONSOLIDATE_THRESHOLD);
+  }
+
+  @VisibleForTesting
+  TransportFrameDecoder(long consolidateThreshold) {
+    this.consolidateThreshold = consolidateThreshold;
+  }
 
   @Override
   public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
@@ -121,32 +138,58 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     return nextFrameSize;
   }
 
-  private ByteBuf decodeNext() throws Exception {
+  private ByteBuf decodeNext() {
     long frameSize = decodeFrameSize();
-    if (frameSize == UNKNOWN_FRAME_SIZE || totalSize < frameSize) {
+    if (frameSize == UNKNOWN_FRAME_SIZE) {
       return null;
     }
 
-    // Reset size for next frame.
+    if (frameBuf == null) {
+      Preconditions.checkArgument(frameSize < MAX_FRAME_SIZE,
+          "Too large frame: %s", frameSize);
+      Preconditions.checkArgument(frameSize > 0,
+          "Frame length should be positive: %s", frameSize);
+      frameRemainingBytes = (int) frameSize;
+
+      // If buffers is empty, then return immediately for more input data.
+      if (buffers.isEmpty()) {
+        return null;
+      }
+      // Otherwise, if the first buffer holds the entire frame, we attempt to
+      // build frame with it and return.
+      if (buffers.getFirst().readableBytes() >= frameRemainingBytes) {
+        // Reset buf and size for next frame.
+        frameBuf = null;
+        nextFrameSize = UNKNOWN_FRAME_SIZE;
+        return nextBufferForFrame(frameRemainingBytes);
+      }
+      // Other cases, create a composite buffer to manage all the buffers.
+      frameBuf = buffers.getFirst().alloc().compositeBuffer(Integer.MAX_VALUE);
+    }
+
+    while (frameRemainingBytes > 0 && !buffers.isEmpty()) {
+      ByteBuf next = nextBufferForFrame(frameRemainingBytes);
+      frameRemainingBytes -= next.readableBytes();
+      frameBuf.addComponent(true, next);
+    }
+    // If the delta size of frameBuf exceeds the threshold, then we do consolidation
+    // to reduce memory consumption.
+    if (frameBuf.capacity() - consolidatedFrameBufSize > consolidateThreshold) {
+      int newNumComponents = frameBuf.numComponents() - consolidatedNumComponents;
+      frameBuf.consolidate(consolidatedNumComponents, newNumComponents);
+      consolidatedFrameBufSize = frameBuf.capacity();
+      consolidatedNumComponents = frameBuf.numComponents();
+    }
+    if (frameRemainingBytes > 0) {
+      return null;
+    }
+
+    // Reset buf and size for next frame.
+    ByteBuf frame = frameBuf;
+    frameBuf = null;
+    consolidatedFrameBufSize = 0;
+    consolidatedNumComponents = 0;
     nextFrameSize = UNKNOWN_FRAME_SIZE;
-
-    Preconditions.checkArgument(frameSize < MAX_FRAME_SIZE, "Too large frame: %s", frameSize);
-    Preconditions.checkArgument(frameSize > 0, "Frame length should be positive: %s", frameSize);
-
-    // If the first buffer holds the entire frame, return it.
-    int remaining = (int) frameSize;
-    if (buffers.getFirst().readableBytes() >= remaining) {
-      return nextBufferForFrame(remaining);
-    }
-
-    // Otherwise, create a composite buffer.
-    CompositeByteBuf frame = buffers.getFirst().alloc().compositeBuffer(Integer.MAX_VALUE);
-    while (remaining > 0) {
-      ByteBuf next = nextBufferForFrame(remaining);
-      remaining -= next.readableBytes();
-      frame.addComponent(next).writerIndex(frame.writerIndex() + next.readableBytes());
-    }
-    assert remaining == 0;
     return frame;
   }
 

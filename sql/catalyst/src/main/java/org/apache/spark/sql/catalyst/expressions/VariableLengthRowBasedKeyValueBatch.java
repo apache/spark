@@ -41,7 +41,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
   @Override
   public UnsafeRow appendRow(Object kbase, long koff, int klen,
                              Object vbase, long voff, int vlen) {
-    final long recordLength = 8 + klen + vlen + 8;
+    final long recordLength = 8L + klen + vlen + 8;
     // if run out of max supported rows or page size, return null
     if (numRows >= capacity || page == null || page.size() - pageCursor < recordLength) {
       return null;
@@ -65,7 +65,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
 
     keyRowId = numRows;
     keyRow.pointTo(base, recordOffset + 8, klen);
-    valueRow.pointTo(base, recordOffset + 8 + klen, vlen + 4);
+    valueRow.pointTo(base, recordOffset + 8 + klen, vlen);
     numRows++;
     return valueRow;
   }
@@ -102,7 +102,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
     long offset = keyRow.getBaseOffset();
     int klen = keyRow.getSizeInBytes();
     int vlen = Platform.getInt(base, offset - 8) - klen - 4;
-    valueRow.pointTo(base, offset + klen, vlen + 4);
+    valueRow.pointTo(base, offset + klen, vlen);
     return valueRow;
   }
 
@@ -146,7 +146,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
         currentvlen = totalLength - currentklen;
 
         key.pointTo(base, offsetInPage + 8, currentklen);
-        value.pointTo(base, offsetInPage + 8 + currentklen, currentvlen + 4);
+        value.pointTo(base, offsetInPage + 8 + currentklen, currentvlen);
 
         offsetInPage += 8 + totalLength + 8;
         recordsInPage -= 1;

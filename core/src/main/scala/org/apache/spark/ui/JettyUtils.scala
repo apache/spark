@@ -18,14 +18,16 @@
 package org.apache.spark.ui
 
 import java.net.{URI, URL}
+import java.util.EnumSet
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
 
+import org.eclipse.jetty.client.HttpClient
 import org.eclipse.jetty.client.api.Response
+import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP
 import org.eclipse.jetty.proxy.ProxyServlet
 import org.eclipse.jetty.server._
 import org.eclipse.jetty.server.handler._
@@ -38,6 +40,7 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.Utils
 
 /**
@@ -52,7 +55,7 @@ private[spark] object JettyUtils extends Logging {
   // implicit conversion from many types of functions to jetty Handlers.
   type Responder[T] = HttpServletRequest => T
 
-  class ServletParams[T <% AnyRef](val responder: Responder[T],
+  class ServletParams[T <: AnyRef](val responder: Responder[T],
     val contentType: String,
     val extractFn: T => String = (in: Any) => in.toString) {}
 
@@ -66,35 +69,16 @@ private[spark] object JettyUtils extends Logging {
   implicit def textResponderToServlet(responder: Responder[String]): ServletParams[String] =
     new ServletParams(responder, "text/plain")
 
-  def createServlet[T <% AnyRef](
+  private def createServlet[T <: AnyRef](
       servletParams: ServletParams[T],
-      securityMgr: SecurityManager,
       conf: SparkConf): HttpServlet = {
-
-    // SPARK-10589 avoid frame-related click-jacking vulnerability, using X-Frame-Options
-    // (see http://tools.ietf.org/html/rfc7034). By default allow framing only from the
-    // same origin, but allow framing for a specific named URI.
-    // Example: spark.ui.allowFramingFrom = https://example.com/
-    val allowFramingFrom = conf.getOption("spark.ui.allowFramingFrom")
-    val xFrameOptionsValue =
-      allowFramingFrom.map(uri => s"ALLOW-FROM $uri").getOrElse("SAMEORIGIN")
-
     new HttpServlet {
-      override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
+      override def doGet(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         try {
-          if (securityMgr.checkUIViewPermissions(request.getRemoteUser)) {
-            response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
-            response.setStatus(HttpServletResponse.SC_OK)
-            val result = servletParams.responder(request)
-            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-            response.setHeader("X-Frame-Options", xFrameOptionsValue)
-            response.getWriter.print(servletParams.extractFn(result))
-          } else {
-            response.setStatus(HttpServletResponse.SC_FORBIDDEN)
-            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-            response.sendError(HttpServletResponse.SC_FORBIDDEN,
-              "User is not authorized to access this page.")
-          }
+          response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
+          response.setStatus(HttpServletResponse.SC_OK)
+          val result = servletParams.responder(request)
+          response.getWriter.print(servletParams.extractFn(result))
         } catch {
           case e: IllegalArgumentException =>
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
@@ -111,13 +95,12 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /** Create a context handler that responds to a request with the given path prefix */
-  def createServletHandler[T <% AnyRef](
+  def createServletHandler[T <: AnyRef](
       path: String,
       servletParams: ServletParams[T],
-      securityMgr: SecurityManager,
       conf: SparkConf,
       basePath: String = ""): ServletContextHandler = {
-    createServletHandler(path, createServlet(servletParams, securityMgr, conf), basePath)
+    createServletHandler(path, createServlet(servletParams, conf), basePath)
   }
 
   /** Create a context handler that responds to a request with the given path prefix */
@@ -192,20 +175,35 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /** Create a handler for proxying request to Workers and Application Drivers */
-  def createProxyHandler(
-      prefix: String,
-      target: String): ServletContextHandler = {
+  def createProxyHandler(idToUiAddress: String => Option[String]): ServletContextHandler = {
     val servlet = new ProxyServlet {
       override def rewriteTarget(request: HttpServletRequest): String = {
-        val rewrittenURI = createProxyURI(
-          prefix, target, request.getRequestURI(), request.getQueryString())
-        if (rewrittenURI == null) {
-          return null
+        val path = request.getPathInfo
+        if (path == null) return null
+
+        val prefixTrailingSlashIndex = path.indexOf('/', 1)
+        val prefix = if (prefixTrailingSlashIndex == -1) {
+          path
+        } else {
+          path.substring(0, prefixTrailingSlashIndex)
         }
-        if (!validateDestination(rewrittenURI.getHost(), rewrittenURI.getPort())) {
-          return null
-        }
-        rewrittenURI.toString()
+        val id = prefix.drop(1)
+
+        // Query master state for id's corresponding UI address
+        // If that address exists, try to turn it into a valid, target URI string
+        // Otherwise, return null
+        idToUiAddress(id)
+          .map(createProxyURI(prefix, _, path, request.getQueryString))
+          .filter(uri => uri != null && validateDestination(uri.getHost, uri.getPort))
+          .map(_.toString)
+          .orNull
+      }
+
+      override def newHttpClient(): HttpClient = {
+        // SPARK-21176: Use the Jetty logic to calculate the number of selector threads (#CPUs/2),
+        // but limit it to 8 max.
+        val numSelectors = math.max(1, math.min(8, Runtime.getRuntime().availableProcessors() / 2))
+        new HttpClient(new HttpClientTransportOverHTTP(numSelectors), null)
       }
 
       override def filterServerResponseHeader(
@@ -214,8 +212,8 @@ private[spark] object JettyUtils extends Logging {
           headerName: String,
           headerValue: String): String = {
         if (headerName.equalsIgnoreCase("location")) {
-          val newHeader = createProxyLocationHeader(
-            prefix, headerValue, clientRequest, serverResponse.getRequest().getURI())
+          val newHeader = createProxyLocationHeader(headerValue, clientRequest,
+            serverResponse.getRequest().getURI())
           if (newHeader != null) {
             return newHeader
           }
@@ -227,39 +225,9 @@ private[spark] object JettyUtils extends Logging {
 
     val contextHandler = new ServletContextHandler
     val holder = new ServletHolder(servlet)
-    contextHandler.setContextPath(prefix)
-    contextHandler.addServlet(holder, "/")
+    contextHandler.setContextPath("/proxy")
+    contextHandler.addServlet(holder, "/*")
     contextHandler
-  }
-
-  /** Add filters, if any, to the given list of ServletContextHandlers */
-  def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
-    val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
-    filters.foreach {
-      case filter : String =>
-        if (!filter.isEmpty) {
-          logInfo("Adding filter: " + filter)
-          val holder : FilterHolder = new FilterHolder()
-          holder.setClassName(filter)
-          // Get any parameters for each filter
-          conf.get("spark." + filter + ".params", "").split(',').map(_.trim()).toSet.foreach {
-            param: String =>
-              if (!param.isEmpty) {
-                val parts = param.split("=")
-                if (parts.length == 2) holder.setInitParameter(parts(0), parts(1))
-             }
-          }
-
-          val prefix = s"spark.$filter.param."
-          conf.getAll
-            .filter { case (k, v) => k.length() > prefix.length() && k.startsWith(prefix) }
-            .foreach { case (k, v) => holder.setInitParameter(k.substring(prefix.length()), v) }
-
-          val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
-            DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)
-          handlers.foreach { case(handler) => handler.addFilter(holder, "/*", enumDispatcher) }
-        }
-    }
   }
 
   /**
@@ -273,11 +241,8 @@ private[spark] object JettyUtils extends Logging {
       hostName: String,
       port: Int,
       sslOptions: SSLOptions,
-      handlers: Seq[ServletContextHandler],
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
-
-    addFilters(handlers, conf)
 
     // Start the server first, with no connectors.
     val pool = new QueuedThreadPool
@@ -318,24 +283,30 @@ private[spark] object JettyUtils extends Logging {
           -1,
           connectionFactories: _*)
         connector.setPort(port)
-        connector.start()
+        connector.setHost(hostName)
+        connector.setReuseAddress(!Utils.isWindows)
 
         // Currently we only use "SelectChannelConnector"
         // Limit the max acceptor number to 8 so that we don't waste a lot of threads
         connector.setAcceptQueueSize(math.min(connector.getAcceptors, 8))
-        connector.setHost(hostName)
+
+        connector.start()
         // The number of selectors always equals to the number of acceptors
         minThreads += connector.getAcceptors * 2
 
         (connector, connector.getLocalPort())
       }
+      val httpConfig = new HttpConfiguration()
+      val requestHeaderSize = conf.get(UI_REQUEST_HEADER_SIZE).toInt
+      logDebug(s"Using requestHeaderSize: $requestHeaderSize")
+      httpConfig.setRequestHeaderSize(requestHeaderSize)
 
       // If SSL is configured, create the secure connector first.
       val securePort = sslOptions.createJettySslContextFactory().map { factory =>
         val securePort = sslOptions.port.getOrElse(if (port > 0) Utils.userPort(port, 400) else 0)
         val secureServerName = if (serverName.nonEmpty) s"$serverName (HTTPS)" else serverName
         val connectionFactories = AbstractConnectionFactory.getFactories(factory,
-          new HttpConnectionFactory())
+          new HttpConnectionFactory(httpConfig))
 
         def sslConnect(currentPort: Int): (ServerConnector, Int) = {
           newConnector(connectionFactories, currentPort)
@@ -350,7 +321,7 @@ private[spark] object JettyUtils extends Logging {
 
       // Bind the HTTP port.
       def httpConnect(currentPort: Int): (ServerConnector, Int) = {
-        newConnector(Array(new HttpConnectionFactory()), currentPort)
+        newConnector(Array(new HttpConnectionFactory(httpConfig)), currentPort)
       }
 
       val (httpConnector, httpPort) = Utils.startServiceOnPort[ServerConnector](port, httpConnect,
@@ -369,18 +340,8 @@ private[spark] object JettyUtils extends Logging {
       }
 
       server.addConnector(httpConnector)
-
-      // Add all the known handlers now that connectors are configured.
-      handlers.foreach { h =>
-        h.setVirtualHosts(toVirtualHosts(SPARK_CONNECTOR_NAME))
-        val gzipHandler = new GzipHandler()
-        gzipHandler.setHandler(h)
-        collection.addHandler(gzipHandler)
-        gzipHandler.start()
-      }
-
       pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
-      ServerInfo(server, httpPort, securePort, collection)
+      ServerInfo(server, httpPort, securePort, conf, collection)
     } catch {
       case e: Exception =>
         server.stop()
@@ -426,7 +387,7 @@ private[spark] object JettyUtils extends Logging {
     val rest = path.substring(prefix.length())
 
     if (!rest.isEmpty()) {
-      if (!rest.startsWith("/")) {
+      if (!rest.startsWith("/") && !uri.endsWith("/")) {
         uri.append("/")
       }
       uri.append(rest)
@@ -446,17 +407,28 @@ private[spark] object JettyUtils extends Logging {
   }
 
   def createProxyLocationHeader(
-      prefix: String,
       headerValue: String,
       clientRequest: HttpServletRequest,
       targetUri: URI): String = {
     val toReplace = targetUri.getScheme() + "://" + targetUri.getAuthority()
     if (headerValue.startsWith(toReplace)) {
-      clientRequest.getScheme() + "://" + clientRequest.getHeader("host") +
-          prefix + headerValue.substring(toReplace.length())
+      val id = clientRequest.getPathInfo.substring("/proxy/".length).takeWhile(_ != '/')
+      val headerPath = headerValue.substring(toReplace.length)
+
+      s"${clientRequest.getScheme}://${clientRequest.getHeader("host")}/proxy/$id$headerPath"
     } else {
       null
     }
+  }
+
+  def addFilter(
+      handler: ServletContextHandler,
+      filter: String,
+      params: Map[String, String]): Unit = {
+    val holder = new FilterHolder()
+    holder.setClassName(filter)
+    params.foreach { case (k, v) => holder.setInitParameter(k, v) }
+    handler.addFilter(holder, "/*", EnumSet.allOf(classOf[DispatcherType]))
   }
 
   // Create a new URI from the arguments, handling IPv6 host encoding and default ports.
@@ -479,18 +451,37 @@ private[spark] case class ServerInfo(
     server: Server,
     boundPort: Int,
     securePort: Option[Int],
-    private val rootHandler: ContextHandlerCollection) {
+    private val conf: SparkConf,
+    private val rootHandler: ContextHandlerCollection) extends Logging {
 
-  def addHandler(handler: ContextHandler): Unit = {
+  def addHandler(
+      handler: ServletContextHandler,
+      securityMgr: SecurityManager): Unit = synchronized {
     handler.setVirtualHosts(JettyUtils.toVirtualHosts(JettyUtils.SPARK_CONNECTOR_NAME))
-    rootHandler.addHandler(handler)
+    addFilters(handler, securityMgr)
+
+    val gzipHandler = new GzipHandler()
+    gzipHandler.setHandler(handler)
+    rootHandler.addHandler(gzipHandler)
+
     if (!handler.isStarted()) {
       handler.start()
     }
+    gzipHandler.start()
   }
 
-  def removeHandler(handler: ContextHandler): Unit = {
-    rootHandler.removeHandler(handler)
+  def removeHandler(handler: ServletContextHandler): Unit = synchronized {
+    // Since addHandler() always adds a wrapping gzip handler, find the container handler
+    // and remove it.
+    rootHandler.getHandlers()
+      .find { h =>
+        h.isInstanceOf[GzipHandler] && h.asInstanceOf[GzipHandler].getHandler() == handler
+      }
+      .foreach { h =>
+        rootHandler.removeHandler(h)
+        h.stop()
+      }
+
     if (handler.isStarted) {
       handler.stop()
     }
@@ -505,4 +496,33 @@ private[spark] case class ServerInfo(
       threadPool.asInstanceOf[LifeCycle].stop
     }
   }
+
+  /**
+   * Add filters, if any, to the given ServletContextHandlers. Always adds a filter at the end
+   * of the chain to perform security-related functions.
+   */
+  private def addFilters(handler: ServletContextHandler, securityMgr: SecurityManager): Unit = {
+    conf.get(UI_FILTERS).foreach { filter =>
+      logInfo(s"Adding filter to ${handler.getContextPath()}: $filter")
+      val oldParams = conf.getOption(s"spark.$filter.params").toSeq
+        .flatMap(Utils.stringToSeq)
+        .flatMap { param =>
+          val parts = param.split("=")
+          if (parts.length == 2) Some(parts(0) -> parts(1)) else None
+        }
+        .toMap
+
+      val newParams = conf.getAllWithPrefix(s"spark.$filter.param.").toMap
+
+      JettyUtils.addFilter(handler, filter, oldParams ++ newParams)
+    }
+
+    // This filter must come after user-installed filters, since that's where authentication
+    // filters are installed. This means that custom filters will see the request before it's
+    // been validated by the security filter.
+    val securityFilter = new HttpSecurityFilter(conf, securityMgr)
+    val holder = new FilterHolder(securityFilter)
+    handler.addFilter(holder, "/*", EnumSet.allOf(classOf[DispatcherType]))
+  }
+
 }

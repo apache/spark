@@ -50,6 +50,7 @@ import org.apache.spark.util.PeriodicCheckpointer
  * {{{
  *  val (graph1, graph2, graph3, ...) = ...
  *  val cp = new PeriodicGraphCheckpointer(2, sc)
+ *  cp.updateGraph(graph1)
  *  graph1.vertices.count(); graph1.edges.count()
  *  // persisted: graph1
  *  cp.updateGraph(graph2)
@@ -97,7 +98,7 @@ private[spark] class PeriodicGraphCheckpointer[VD, ED](
     }
   }
 
-  override protected def unpersist(data: Graph[VD, ED]): Unit = data.unpersist(blocking = false)
+  override protected def unpersist(data: Graph[VD, ED]): Unit = data.unpersist()
 
   override protected def getCheckpointFiles(data: Graph[VD, ED]): Iterable[String] = {
     data.getCheckpointFiles

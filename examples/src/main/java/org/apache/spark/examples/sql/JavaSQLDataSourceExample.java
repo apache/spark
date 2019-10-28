@@ -116,6 +116,25 @@ public class JavaSQLDataSourceExample {
       spark.read().format("json").load("examples/src/main/resources/people.json");
     peopleDF.select("name", "age").write().format("parquet").save("namesAndAges.parquet");
     // $example off:manual_load_options$
+    // $example on:manual_load_options_csv$
+    Dataset<Row> peopleDFCsv = spark.read().format("csv")
+      .option("sep", ";")
+      .option("inferSchema", "true")
+      .option("header", "true")
+      .load("examples/src/main/resources/people.csv");
+    // $example off:manual_load_options_csv$
+    // $example on:load_with_path_glob_filter$
+    Dataset<Row> partitionedUsersDF = spark.read().format("orc")
+      .option("pathGlobFilter", "*.orc")
+      .load("examples/src/main/resources/partitioned_users.orc");
+    // $example off:load_with_path_glob_filter$
+    // $example on:manual_save_options_orc$
+    usersDF.write().format("orc")
+      .option("orc.bloom.filter.columns", "favorite_color")
+      .option("orc.dictionary.key.threshold", "1.0")
+      .option("orc.column.encoding.direct", "name")
+      .save("users_with_options.orc");
+    // $example off:manual_save_options_orc$
     // $example on:direct_sql$
     Dataset<Row> sqlDF =
       spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`");

@@ -98,7 +98,7 @@ class InMemoryCatalog(
   // Databases
   // --------------------------------------------------------------------------
 
-  override protected def doCreateDatabase(
+  override def createDatabase(
       dbDefinition: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = synchronized {
     if (catalog.contains(dbDefinition.name)) {
@@ -119,7 +119,7 @@ class InMemoryCatalog(
     }
   }
 
-  override protected def doDropDatabase(
+  override def dropDatabase(
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = synchronized {
@@ -180,7 +180,7 @@ class InMemoryCatalog(
   // Tables
   // --------------------------------------------------------------------------
 
-  override protected def doCreateTable(
+  override def createTable(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
     assert(tableDefinition.identifier.database.isDefined)
@@ -221,7 +221,7 @@ class InMemoryCatalog(
     }
   }
 
-  override protected def doDropTable(
+  override def dropTable(
       db: String,
       table: String,
       ignoreIfNotExists: Boolean,
@@ -264,7 +264,7 @@ class InMemoryCatalog(
     }
   }
 
-  override protected def doRenameTable(
+  override def renameTable(
       db: String,
       oldName: String,
       newName: String): Unit = synchronized {
@@ -303,13 +303,14 @@ class InMemoryCatalog(
     catalog(db).tables(tableDefinition.identifier.table).table = newTableDefinition
   }
 
-  override def alterTableSchema(
+  override def alterTableDataSchema(
       db: String,
       table: String,
-      schema: StructType): Unit = synchronized {
+      newDataSchema: StructType): Unit = synchronized {
     requireTableExists(db, table)
     val origTable = catalog(db).tables(table).table
-    catalog(db).tables(table).table = origTable.copy(schema = schema)
+    val newSchema = StructType(newDataSchema ++ origTable.partitionSchema)
+    catalog(db).tables(table).table = origTable.copy(schema = newSchema)
   }
 
   override def alterTableStats(
@@ -326,8 +327,9 @@ class InMemoryCatalog(
     catalog(db).tables(table).table
   }
 
-  override def getTableOption(db: String, table: String): Option[CatalogTable] = synchronized {
-    if (!tableExists(db, table)) None else Option(catalog(db).tables(table).table)
+  override def getTablesByName(db: String, tables: Seq[String]): Seq[CatalogTable] = {
+    requireDbExists(db)
+    tables.flatMap(catalog(db).tables.get).map(_.table)
   }
 
   override def tableExists(db: String, table: String): Boolean = synchronized {
@@ -553,18 +555,6 @@ class InMemoryCatalog(
     }
   }
 
-  /**
-   * Returns true if `spec1` is a partial partition spec w.r.t. `spec2`, e.g. PARTITION (a=1) is a
-   * partial partition spec w.r.t. PARTITION (a=1,b=2).
-   */
-  private def isPartialPartitionSpec(
-      spec1: TablePartitionSpec,
-      spec2: TablePartitionSpec): Boolean = {
-    spec1.forall {
-      case (partitionColumn, value) => spec2(partitionColumn) == value
-    }
-  }
-
   override def listPartitionsByFilter(
       db: String,
       table: String,
@@ -579,18 +569,24 @@ class InMemoryCatalog(
   // Functions
   // --------------------------------------------------------------------------
 
-  override protected def doCreateFunction(db: String, func: CatalogFunction): Unit = synchronized {
+  override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
     requireFunctionNotExists(db, func.identifier.funcName)
     catalog(db).functions.put(func.identifier.funcName, func)
   }
 
-  override protected def doDropFunction(db: String, funcName: String): Unit = synchronized {
+  override def dropFunction(db: String, funcName: String): Unit = synchronized {
     requireFunctionExists(db, funcName)
     catalog(db).functions.remove(funcName)
   }
 
-  override protected def doRenameFunction(
+  override def alterFunction(db: String, func: CatalogFunction): Unit = synchronized {
+    requireDbExists(db)
+    requireFunctionExists(db, func.identifier.funcName)
+    catalog(db).functions.put(func.identifier.funcName, func)
+  }
+
+  override def renameFunction(
       db: String,
       oldName: String,
       newName: String): Unit = synchronized {

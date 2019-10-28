@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
  * Helper class to compute approximate quantile summary.
  * This implementation is based on the algorithm proposed in the paper:
  * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
- * and Khanna, Sanjeev. (http://dx.doi.org/10.1145/375663.375670)
+ * and Khanna, Sanjeev. (https://doi.org/10.1145/375663.375670)
  *
  * In order to optimize for speed, it maintains an internal buffer of the last seen samples,
  * and only inserts them after crossing a certain size threshold. This guarantees a near-constant
@@ -40,12 +40,14 @@ import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
  *   See the G-K article for more details.
  * @param count the count of all the elements *inserted in the sampled buffer*
  *              (excluding the head buffer)
+ * @param compressed whether the statistics have been compressed
  */
 class QuantileSummaries(
     val compressThreshold: Int,
     val relativeError: Double,
     val sampled: Array[Stats] = Array.empty,
-    val count: Long = 0L) extends Serializable {
+    val count: Long = 0L,
+    var compressed: Boolean = false) extends Serializable {
 
   // a buffer of latest samples seen so far
   private val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty
@@ -60,6 +62,7 @@ class QuantileSummaries(
    */
   def insert(x: Double): QuantileSummaries = {
     headSampled += x
+    compressed = false
     if (headSampled.size >= defaultHeadSize) {
       val result = this.withHeadBufferInserted
       if (result.sampled.length >= compressThreshold) {
@@ -105,7 +108,7 @@ class QuantileSummaries(
         if (newSamples.isEmpty || (sampleIdx == sampled.length && opsIdx == sorted.length - 1)) {
           0
         } else {
-          math.floor(2 * relativeError * currentCount).toInt
+          math.floor(2 * relativeError * currentCount).toLong
         }
 
       val tuple = Stats(currentSample, 1, delta)
@@ -135,11 +138,11 @@ class QuantileSummaries(
     assert(inserted.count == count + headSampled.size)
     val compressed =
       compressImmut(inserted.sampled, mergeThreshold = 2 * relativeError * inserted.count)
-    new QuantileSummaries(compressThreshold, relativeError, compressed, inserted.count)
+    new QuantileSummaries(compressThreshold, relativeError, compressed, inserted.count, true)
   }
 
   private def shallowCopy: QuantileSummaries = {
-    new QuantileSummaries(compressThreshold, relativeError, sampled, count)
+    new QuantileSummaries(compressThreshold, relativeError, sampled, count, compressed)
   }
 
   /**
@@ -156,14 +159,72 @@ class QuantileSummaries(
       other.shallowCopy
     } else {
       // Merge the two buffers.
-      // The GK algorithm is a bit unclear about it, but it seems there is no need to adjust the
-      // statistics during the merging: the invariants are still respected after the merge.
-      // TODO: could replace full sort by ordered merge, the two lists are known to be sorted
-      // already.
-      val res = (sampled ++ other.sampled).sortBy(_.value)
-      val comp = compressImmut(res, mergeThreshold = 2 * relativeError * count)
-      new QuantileSummaries(
-        other.compressThreshold, other.relativeError, comp, other.count + count)
+      // The GK algorithm is a bit unclear about it, but we need to adjust the statistics during the
+      // merging. The main idea is that samples that come from one side will suffer from the lack of
+      // precision of the other.
+      // As a concrete example, take two QuantileSummaries whose samples (value, g, delta) are:
+      // `a = [(0, 1, 0), (20, 99, 0)]` and `b = [(10, 1, 0), (30, 49, 0)]`
+      // This means `a` has 100 values, whose minimum is 0 and maximum is 20,
+      // while `b` has 50 values, between 10 and 30.
+      // The resulting samples of the merge will be:
+      // a+b = [(0, 1, 0), (10, 1, ??), (20, 99, ??), (30, 49, 0)]
+      // The values of `g` do not change, as they represent the minimum number of values between two
+      // consecutive samples. The values of `delta` should be adjusted, however.
+      // Take the case of the sample `10` from `b`. In the original stream, it could have appeared
+      // right after `0` (as expressed by `g=1`) or right before `20`, so `delta=99+0-1=98`.
+      // In the GK algorithm's style of working in terms of maximum bounds, one can observe that the
+      // maximum additional uncertainty over samples comming from `b` is `max(g_a + delta_a) =
+      // floor(2 * eps_a * n_a)`. Likewise, additional uncertainty over samples from `a` is
+      // `floor(2 * eps_b * n_b)`.
+      // Only samples that interleave the other side are affected. That means that samples from
+      // one side that are lesser (or greater) than all samples from the other side are just copied
+      // unmodifed.
+      // If the merging instances have different `relativeError`, the resulting instance will cary
+      // the largest one: `eps_ab = max(eps_a, eps_b)`.
+      // The main invariant of the GK algorithm is kept:
+      // `max(g_ab + delta_ab) <= floor(2 * eps_ab * (n_a + n_b))` since
+      // `max(g_ab + delta_ab) <= floor(2 * eps_a * n_a) + floor(2 * eps_b * n_b)`
+      // Finally, one can see how the `insert(x)` operation can be expressed as `merge([(x, 1, 0])`
+
+      val mergedSampled = new ArrayBuffer[Stats]()
+      val mergedRelativeError = math.max(relativeError, other.relativeError)
+      val mergedCount = count + other.count
+      val additionalSelfDelta = math.floor(2 * other.relativeError * other.count).toLong
+      val additionalOtherDelta = math.floor(2 * relativeError * count).toLong
+
+      // Do a merge of two sorted lists until one of the lists is fully consumed
+      var selfIdx = 0
+      var otherIdx = 0
+      while (selfIdx < sampled.length && otherIdx < other.sampled.length) {
+        val selfSample = sampled(selfIdx)
+        val otherSample = other.sampled(otherIdx)
+
+        // Detect next sample
+        val (nextSample, additionalDelta) = if (selfSample.value < otherSample.value) {
+          selfIdx += 1
+          (selfSample, if (otherIdx > 0) additionalSelfDelta else 0)
+        } else {
+          otherIdx += 1
+          (otherSample, if (selfIdx > 0) additionalOtherDelta else 0)
+        }
+
+        // Insert it
+        mergedSampled += nextSample.copy(delta = nextSample.delta + additionalDelta)
+      }
+
+      // Copy the remaining samples from the other list
+      // (by construction, at most one `while` loop will run)
+      while (selfIdx < sampled.length) {
+        mergedSampled += sampled(selfIdx)
+        selfIdx += 1
+      }
+      while (otherIdx < other.sampled.length) {
+        mergedSampled += other.sampled(otherIdx)
+        otherIdx += 1
+      }
+
+      val comp = compressImmut(mergedSampled, 2 * mergedRelativeError * mergedCount)
+      new QuantileSummaries(other.compressThreshold, mergedRelativeError, comp, mergedCount, true)
     }
   }
 
@@ -192,11 +253,11 @@ class QuantileSummaries(
     }
 
     // Target rank
-    val rank = math.ceil(quantile * count).toInt
-    val targetError = math.ceil(relativeError * count)
+    val rank = math.ceil(quantile * count).toLong
+    val targetError = relativeError * count
     // Minimum rank at current sample
-    var minRank = 0
-    var i = 1
+    var minRank = 0L
+    var i = 0
     while (i < sampled.length - 1) {
       val curSample = sampled(i)
       minRank += curSample.g
@@ -235,7 +296,7 @@ object QuantileSummaries {
    * @param g the minimum rank jump from the previous value's minimum rank
    * @param delta the maximum span of the rank.
    */
-  case class Stats(value: Double, g: Int, delta: Int)
+  case class Stats(value: Double, g: Long, delta: Long)
 
   private def compressImmut(
       currentSamples: IndexedSeq[Stats],

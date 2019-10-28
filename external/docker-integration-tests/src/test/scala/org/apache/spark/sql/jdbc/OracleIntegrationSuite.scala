@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Timestamp}
-import java.util.Properties
 import java.math.BigDecimal
+import java.sql.{Connection, Date, Timestamp}
+import java.util.{Properties, TimeZone}
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCRelation}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -35,23 +39,26 @@ import org.apache.spark.tags.DockerTest
  * while Spark QA test run.
  *
  * The following would be the steps to test this
- * 1. Pull oracle 11g image - docker pull wnameless/oracle-xe-11g
- * 2. Start docker - sudo service docker start
- * 3. Download oracle 11g driver jar and put it in maven local repo:
+ * 1. Build Oracle database in Docker, please refer below link about how to.
+ *    https://github.com/oracle/docker-images/blob/master/OracleDatabase/SingleInstance/README.md
+ * 2. export ORACLE_DOCKER_IMAGE_NAME=$ORACLE_DOCKER_IMAGE_NAME
+ *    Pull oracle $ORACLE_DOCKER_IMAGE_NAME image - docker pull $ORACLE_DOCKER_IMAGE_NAME
+ * 3. Start docker - sudo service docker start
+ * 4. Download oracle 11g driver jar and put it in maven local repo:
  *    (com/oracle/ojdbc6/11.2.0.2.0/ojdbc6-11.2.0.2.0.jar)
- * 4. The timeout and interval parameter to be increased from 60,1 to a high value for oracle test
+ * 5. The timeout and interval parameter to be increased from 60,1 to a high value for oracle test
  *    in DockerJDBCIntegrationSuite.scala (Locally tested with 200,200 and executed successfully).
- * 5. Run spark test - ./build/sbt "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ * 6. Run spark test - ./build/sbt "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
  * All tests in this suite are ignored because of the dependency with the oracle jar from maven
  * repository.
  */
 @DockerTest
-class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLContext {
+class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "wnameless/oracle-xe-11g:14.04.4"
+    override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
     override val env = Map(
       "ORACLE_ROOT_PASSWORD" -> "oracle"
     )
@@ -71,10 +78,21 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.commit()
 
-    conn.prepareStatement("CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)")
-        .executeUpdate()
-    conn.prepareStatement("INSERT INTO ts_with_timezone VALUES (1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))")
-        .executeUpdate()
+    conn.prepareStatement(
+      "CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO ts_with_timezone VALUES " +
+        "(1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO ts_with_timezone VALUES " +
+        "(2, to_timestamp_tz('1999-12-01 12:00:00 PST','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement(
+      "CREATE TABLE tableWithCustomSchema (id NUMBER, n1 NUMBER(1), n2 NUMBER(1))").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO tableWithCustomSchema values(12312321321321312312312312123, 1, 0)")
+      .executeUpdate()
     conn.commit()
 
     sql(
@@ -96,15 +114,39 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       """.stripMargin.replaceAll("\n", " "))
 
 
-    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))").executeUpdate();
+    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))")
+      .executeUpdate()
     conn.prepareStatement(
-      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate();
-    conn.commit();
+      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement("CREATE TABLE oracle_types (d BINARY_DOUBLE, f BINARY_FLOAT)")
+      .executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement("CREATE TABLE datetimePartitionTest (id NUMBER(10), d DATE, t TIMESTAMP)")
+      .executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetimePartitionTest VALUES
+        |(1, {d '2018-07-06'}, {ts '2018-07-06 05:50:00'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetimePartitionTest VALUES
+        |(2, {d '2018-07-06'}, {ts '2018-07-06 08:10:08'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetimePartitionTest VALUES
+        |(3, {d '2018-07-08'}, {ts '2018-07-08 13:32:01'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetimePartitionTest VALUES
+        |(4, {d '2018-07-12'}, {ts '2018-07-12 09:51:15'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.commit()
   }
 
-
-  test("SPARK-16625 : Importing Oracle numeric types") { 
-    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties);
+  test("SPARK-16625 : Importing Oracle numeric types") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
     val rows = df.collect()
     assert(rows.size == 1)
     val row = rows(0)
@@ -115,7 +157,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     // A value with fractions from DECIMAL(3, 2) is correct:
     assert(row.getDecimal(1).compareTo(BigDecimal.valueOf(1.23)) == 0)
     // A value > Int.MaxValue from DECIMAL(10) is correct:
-    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999l)) == 0)
+    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999L)) == 0)
   }
 
 
@@ -222,5 +264,253 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val rows = dfRead.collect()
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(1).equals("class java.sql.Timestamp"))
+  }
+
+  test("Column type TIMESTAMP with SESSION_LOCAL_TIMEZONE is different from default") {
+    val defaultJVMTimeZone = TimeZone.getDefault
+    // Pick the timezone different from the current default time zone of JVM
+    val sofiaTimeZone = TimeZone.getTimeZone("Europe/Sofia")
+    val shanghaiTimeZone = TimeZone.getTimeZone("Asia/Shanghai")
+    val localSessionTimeZone =
+      if (defaultJVMTimeZone == shanghaiTimeZone) sofiaTimeZone else shanghaiTimeZone
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
+      val e = intercept[java.sql.SQLException] {
+        val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+        dfRead.collect()
+      }.getMessage
+      assert(e.contains("Unrecognized SQL type -101"))
+    }
+  }
+
+  /**
+   * Change the Time Zone `timeZoneId` of JVM before executing `f`, then switches back to the
+   * original after `f` returns.
+   * @param timeZoneId the ID for a TimeZone, either an abbreviation such as "PST", a full name such
+   *                   as "America/Los_Angeles", or a custom ID such as "GMT-8:00".
+   */
+  private def withTimeZone(timeZoneId: String)(f: => Unit): Unit = {
+    val originalLocale = TimeZone.getDefault
+    try {
+      // Add Locale setting
+      TimeZone.setDefault(TimeZone.getTimeZone(timeZoneId))
+      f
+    } finally {
+      TimeZone.setDefault(originalLocale)
+    }
+  }
+
+  test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
+    def checkRow(row: Row, ts: String): Unit = {
+      assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
+    }
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
+      val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+      withTimeZone("PST") {
+        assert(dfRead.collect().toSet ===
+          Set(
+            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
+            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
+      }
+
+      withTimeZone("UTC") {
+        assert(dfRead.collect().toSet ===
+          Set(
+            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
+            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 20:00:00"))))
+      }
+    }
+  }
+
+  test("SPARK-18004: Make sure date or timestamp related predicate is pushed down correctly") {
+    val props = new Properties()
+    props.put("oracle.jdbc.mapDateToTimestamp", "false")
+
+    val schema = StructType(Seq(
+      StructField("date_type", DateType, true),
+      StructField("timestamp_type", TimestampType, true)
+    ))
+
+    val tableName = "test_date_timestamp_pushdown"
+    val dateVal = Date.valueOf("2017-06-22")
+    val timestampVal = Timestamp.valueOf("2017-06-22 21:30:07")
+
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(dateVal, timestampVal)
+    ))
+
+    val dfWrite = spark.createDataFrame(data, schema)
+    dfWrite.write.jdbc(jdbcUrl, tableName, props)
+
+    val dfRead = spark.read.jdbc(jdbcUrl, tableName, props)
+
+    val millis = System.currentTimeMillis()
+    val dt = new java.sql.Date(millis)
+    val ts = new java.sql.Timestamp(millis)
+
+    // Query Oracle table with date and timestamp predicates
+    // which should be pushed down to Oracle.
+    val df = dfRead.filter(dfRead.col("date_type").lt(dt))
+      .filter(dfRead.col("timestamp_type").lt(ts))
+
+    val parentPlan = df.queryExecution.executedPlan
+    assert(parentPlan.isInstanceOf[WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[WholeStageCodegenExec]
+    val metadata = node.child.asInstanceOf[RowDataSourceScanExec].metadata
+    // The "PushedFilters" part should exist in Dataframe's
+    // physical plan and the existence of right literals in
+    // "PushedFilters" is used to prove that the predicates
+    // pushing down have been effective.
+    assert(metadata.get("PushedFilters").isDefined)
+    assert(metadata("PushedFilters").contains(dt.toString))
+    assert(metadata("PushedFilters").contains(ts.toString))
+
+    val row = df.collect()(0)
+    assert(row.getDate(0).equals(dateVal))
+    assert(row.getTimestamp(1).equals(timestampVal))
+  }
+
+  test("SPARK-20427/SPARK-20921: read table use custom schema by jdbc api") {
+    // default will throw IllegalArgumentException
+    val e = intercept[org.apache.spark.SparkException] {
+      spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
+    }
+    assert(e.getCause().isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
+
+    // custom schema can read data
+    val props = new Properties()
+    props.put("customSchema",
+      s"ID DECIMAL(${DecimalType.MAX_PRECISION}, 0), N1 INT, N2 BOOLEAN")
+    val dfRead = spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", props)
+
+    val rows = dfRead.collect()
+    // verify the data type
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(0).equals("class java.math.BigDecimal"))
+    assert(types(1).equals("class java.lang.Integer"))
+    assert(types(2).equals("class java.lang.Boolean"))
+
+    // verify the value
+    val values = rows(0)
+    assert(values.getDecimal(0).equals(new java.math.BigDecimal("12312321321321312312312312123")))
+    assert(values.getInt(1).equals(1))
+    assert(values.getBoolean(2).equals(false))
+  }
+
+  test("SPARK-22303: handle BINARY_DOUBLE and BINARY_FLOAT as DoubleType and FloatType") {
+    val tableName = "oracle_types"
+    val schema = StructType(Seq(
+      StructField("d", DoubleType, true),
+      StructField("f", FloatType, true)))
+    val props = new Properties()
+
+    // write it back to the table (append mode)
+    val data = spark.sparkContext.parallelize(Seq(Row(1.1, 2.2f)))
+    val dfWrite = spark.createDataFrame(data, schema)
+    dfWrite.write.mode(SaveMode.Append).jdbc(jdbcUrl, tableName, props)
+
+    // read records from oracle_types
+    val dfRead = sqlContext.read.jdbc(jdbcUrl, tableName, new Properties)
+    val rows = dfRead.collect()
+    assert(rows.size == 1)
+
+    // check data types
+    val types = dfRead.schema.map(field => field.dataType)
+    assert(types(0).equals(DoubleType))
+    assert(types(1).equals(FloatType))
+
+    // check values
+    val values = rows(0)
+    assert(values.getDouble(0) === 1.1)
+    assert(values.getFloat(1) === 2.2f)
+  }
+
+  test("SPARK-22814 support date/timestamp types in partitionColumn") {
+    val expectedResult = Set(
+      (1, "2018-07-06", "2018-07-06 05:50:00"),
+      (2, "2018-07-06", "2018-07-06 08:10:08"),
+      (3, "2018-07-08", "2018-07-08 13:32:01"),
+      (4, "2018-07-12", "2018-07-12 09:51:15")
+    ).map { case (id, date, timestamp) =>
+      Row(BigDecimal.valueOf(id), Date.valueOf(date), Timestamp.valueOf(timestamp))
+    }
+
+    // DateType partition column
+    val df1 = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "datetimePartitionTest")
+      .option("partitionColumn", "d")
+      .option("lowerBound", "2018-07-06")
+      .option("upperBound", "2018-07-20")
+      .option("numPartitions", 3)
+      // oracle.jdbc.mapDateToTimestamp defaults to true. If this flag is not disabled, column d
+      // (Oracle DATE) will be resolved as Catalyst Timestamp, which will fail bound evaluation of
+      // the partition column. E.g. 2018-07-06 cannot be evaluated as Timestamp, and the error
+      // message says: Timestamp format must be yyyy-mm-dd hh:mm:ss[.fffffffff].
+      .option("oracle.jdbc.mapDateToTimestamp", "false")
+      .option("sessionInitStatement", "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'")
+      .load()
+
+    df1.logicalPlan match {
+      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+        val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+        assert(whereClauses === Set(
+          """"D" < '2018-07-10' or "D" is null""",
+          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
+          """"D" >= '2018-07-14'"""))
+    }
+    assert(df1.collect.toSet === expectedResult)
+
+    // TimestampType partition column
+    val df2 = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "datetimePartitionTest")
+      .option("partitionColumn", "t")
+      .option("lowerBound", "2018-07-04 03:30:00.0")
+      .option("upperBound", "2018-07-27 14:11:05.0")
+      .option("numPartitions", 2)
+      .option("oracle.jdbc.mapDateToTimestamp", "false")
+      .option("sessionInitStatement",
+        "ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS.FF'")
+      .load()
+
+    df2.logicalPlan match {
+      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+        val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+        assert(whereClauses === Set(
+          """"T" < '2018-07-15 20:50:32.5' or "T" is null""",
+          """"T" >= '2018-07-15 20:50:32.5'"""))
+    }
+    assert(df2.collect.toSet === expectedResult)
+  }
+
+  test("query JDBC option") {
+    val expectedResult = Set(
+      (1, "1991-11-09", "1996-01-01 01:23:45")
+    ).map { case (id, date, timestamp) =>
+      Row(BigDecimal.valueOf(id), Date.valueOf(date), Timestamp.valueOf(timestamp))
+    }
+
+    val query = "SELECT id, d, t FROM datetime WHERE id = 1"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .option("oracle.jdbc.mapDateToTimestamp", "false")
+      .load()
+    assert(df.collect.toSet === expectedResult)
+
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$jdbcUrl',
+         |   query '$query',
+         |   oracle.jdbc.mapDateToTimestamp false)
+       """.stripMargin.replaceAll("\n", " "))
+    assert(sql("select id, d, t from queryOption").collect.toSet == expectedResult)
   }
 }

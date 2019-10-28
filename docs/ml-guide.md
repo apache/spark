@@ -2,6 +2,21 @@
 layout: global
 title: "MLlib: Main Guide"
 displayTitle: "Machine Learning Library (MLlib) Guide"
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 MLlib is Spark's machine learning (ML) library.
@@ -18,7 +33,7 @@ At a high level, it provides tools such as:
 
 **The MLlib RDD-based API is now in maintenance mode.**
 
-As of Spark 2.0, the [RDD](programming-guide.html#resilient-distributed-datasets-rdds)-based APIs in the `spark.mllib` package have entered maintenance mode.
+As of Spark 2.0, the [RDD](rdd-programming-guide.html#resilient-distributed-datasets-rdds)-based APIs in the `spark.mllib` package have entered maintenance mode.
 The primary Machine Learning API for Spark is now the [DataFrame](sql-programming-guide.html)-based API in the `spark.ml` package.
 
 *What are the implications?*
@@ -61,69 +76,44 @@ To configure `netlib-java` / Breeze to use system optimised binaries, include
 project and read the [netlib-java](https://github.com/fommil/netlib-java) documentation for your
 platform's additional installation instructions.
 
+The most popular native BLAS such as [Intel MKL](https://software.intel.com/en-us/mkl), [OpenBLAS](http://www.openblas.net), can use multiple threads in a single operation, which can conflict with Spark's execution model.
+
+Configuring these BLAS implementations to use a single thread for operations may actually improve performance (see [SPARK-21305](https://issues.apache.org/jira/browse/SPARK-21305)). It is usually optimal to match this to the number of cores each Spark task is configured to use, which is 1 by default and typically left at 1.
+
+Please refer to resources like the following to understand how to configure the number of threads these BLAS implementations use: [Intel MKL](https://software.intel.com/en-us/articles/recommended-settings-for-calling-intel-mkl-routines-from-multi-threaded-applications) and [OpenBLAS](https://github.com/xianyi/OpenBLAS/wiki/faq#multi-threaded).
+
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
 [^1]: To learn more about the benefits and background of system optimised natives, you may wish to
     watch Sam Halliday's ScalaX talk on [High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/#/).
 
-# Highlights in 2.2
+# Highlights in 2.3
 
-The list below highlights some of the new features and enhancements added to MLlib in the `2.2`
+The list below highlights some of the new features and enhancements added to MLlib in the `2.3`
 release of Spark:
 
-* [`ALS`](ml-collaborative-filtering.html) methods for _top-k_ recommendations for all
- users or items, matching the functionality in `mllib`
- ([SPARK-19535](https://issues.apache.org/jira/browse/SPARK-19535)).
- Performance was also improved for both `ml` and `mllib`
- ([SPARK-11968](https://issues.apache.org/jira/browse/SPARK-11968) and
- [SPARK-20587](https://issues.apache.org/jira/browse/SPARK-20587))
-* [`Correlation`](ml-statistics.html#correlation) and
- [`ChiSquareTest`](ml-statistics.html#hypothesis-testing) stats functions for `DataFrames`
- ([SPARK-19636](https://issues.apache.org/jira/browse/SPARK-19636) and
- [SPARK-19635](https://issues.apache.org/jira/browse/SPARK-19635))
-* [`FPGrowth`](ml-frequent-pattern-mining.html#fp-growth) algorithm for frequent pattern mining
- ([SPARK-14503](https://issues.apache.org/jira/browse/SPARK-14503))
-* `GLM` now supports the full `Tweedie` family
- ([SPARK-18929](https://issues.apache.org/jira/browse/SPARK-18929))
-* [`Imputer`](ml-features.html#imputer) feature transformer to impute missing values in a dataset
- ([SPARK-13568](https://issues.apache.org/jira/browse/SPARK-13568))
-* [`LinearSVC`](ml-classification-regression.html#linear-support-vector-machine)
- for linear Support Vector Machine classification
- ([SPARK-14709](https://issues.apache.org/jira/browse/SPARK-14709))
-* Logistic regression now supports constraints on the coefficients during training
- ([SPARK-20047](https://issues.apache.org/jira/browse/SPARK-20047))
+* Built-in support for reading images into a `DataFrame` was added
+([SPARK-21866](https://issues.apache.org/jira/browse/SPARK-21866)).
+* [`OneHotEncoderEstimator`](ml-features.html#onehotencoderestimator) was added, and should be
+used instead of the existing `OneHotEncoder` transformer. The new estimator supports
+transforming multiple columns.
+* Multiple column support was also added to `QuantileDiscretizer` and `Bucketizer`
+([SPARK-22397](https://issues.apache.org/jira/browse/SPARK-22397) and
+[SPARK-20542](https://issues.apache.org/jira/browse/SPARK-20542))
+* A new [`FeatureHasher`](ml-features.html#featurehasher) transformer was added
+ ([SPARK-13969](https://issues.apache.org/jira/browse/SPARK-13969)).
+* Added support for evaluating multiple models in parallel when performing cross-validation using
+[`TrainValidationSplit` or `CrossValidator`](ml-tuning.html)
+([SPARK-19357](https://issues.apache.org/jira/browse/SPARK-19357)).
+* Improved support for custom pipeline components in Python (see
+[SPARK-21633](https://issues.apache.org/jira/browse/SPARK-21633) and 
+[SPARK-21542](https://issues.apache.org/jira/browse/SPARK-21542)).
+* `DataFrame` functions for descriptive summary statistics over vector columns
+([SPARK-19634](https://issues.apache.org/jira/browse/SPARK-19634)).
+* Robust linear regression with Huber loss
+([SPARK-3181](https://issues.apache.org/jira/browse/SPARK-3181)).
 
-# Migration guide
+# Migration Guide
 
-MLlib is under active development.
-The APIs marked `Experimental`/`DeveloperApi` may change in future releases,
-and the migration guide below will explain all changes between releases.
+The migration guide is now archived [on this page](ml-migration-guide.html).
 
-## From 2.1 to 2.2
-
-### Breaking changes
-
-There are no breaking changes.
-
-### Deprecations and changes of behavior
-
-**Deprecations**
-
-There are no deprecations.
-
-**Changes of behavior**
-
-* [SPARK-19787](https://issues.apache.org/jira/browse/SPARK-19787):
- Default value of `regParam` changed from `1.0` to `0.1` for `ALS.train` method (marked `DeveloperApi`).
- **Note** this does _not affect_ the `ALS` Estimator or Model, nor MLlib's `ALS` class.
-* [SPARK-14772](https://issues.apache.org/jira/browse/SPARK-14772):
- Fixed inconsistency between Python and Scala APIs for `Param.copy` method.
-* [SPARK-11569](https://issues.apache.org/jira/browse/SPARK-11569):
- `StringIndexer` now handles `NULL` values in the same way as unseen values. Previously an exception
- would always be thrown regardless of the setting of the `handleInvalid` parameter.
-  
-## Previous Spark versions
-
-Earlier migration guides are archived [on this page](ml-migration-guides.html).
-
----

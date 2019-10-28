@@ -17,18 +17,19 @@
 
 package org.apache.spark.deploy
 
+import java.io.File
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.Logging
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.crypto.AuthServerBootstrap
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
-import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
+import org.apache.spark.network.shuffle.ExternalBlockHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -43,35 +44,57 @@ private[deploy]
 class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
   extends Logging {
   protected val masterMetricsSystem =
-    MetricsSystem.createMetricsSystem("shuffleService", sparkConf, securityManager)
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.SHUFFLE_SERVICE,
+      sparkConf, securityManager)
 
-  private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
-  private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
+  private val enabled = sparkConf.get(config.SHUFFLE_SERVICE_ENABLED)
+  private val port = sparkConf.get(config.SHUFFLE_SERVICE_PORT)
+
+  private val registeredExecutorsDB = "registeredExecutors.ldb"
 
   private val transportConf =
     SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
   private val blockHandler = newShuffleBlockHandler(transportConf)
-  private val transportContext: TransportContext =
-    new TransportContext(transportConf, blockHandler, true)
+  private var transportContext: TransportContext = _
 
   private var server: TransportServer = _
 
-  private val shuffleServiceSource = new ExternalShuffleServiceSource(blockHandler)
+  private val shuffleServiceSource = new ExternalShuffleServiceSource
+
+  protected def findRegisteredExecutorsDBFile(dbName: String): File = {
+    val localDirs = sparkConf.getOption("spark.local.dir").map(_.split(",")).getOrElse(Array())
+    if (localDirs.length >= 1) {
+      new File(localDirs.find(new File(_, dbName).exists()).getOrElse(localDirs(0)), dbName)
+    } else {
+      logWarning(s"'spark.local.dir' should be set first when we use db in " +
+        s"ExternalShuffleService. Note that this only affects standalone mode.")
+      null
+    }
+  }
+
+  /** Get blockhandler  */
+  def getBlockHandler: ExternalBlockHandler = {
+    blockHandler
+  }
 
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
-  protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
-    new ExternalShuffleBlockHandler(conf, null)
+  protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
+    if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
+      new ExternalBlockHandler(conf, findRegisteredExecutorsDBFile(registeredExecutorsDB))
+    } else {
+      new ExternalBlockHandler(conf, null)
+    }
   }
 
   /** Starts the external shuffle service if the user has configured us to. */
-  def startIfEnabled() {
+  def startIfEnabled(): Unit = {
     if (enabled) {
       start()
     }
   }
 
   /** Start the external shuffle service */
-  def start() {
+  def start(): Unit = {
     require(server == null, "Shuffle server already started")
     val authEnabled = securityManager.isAuthenticationEnabled()
     logInfo(s"Starting shuffle service on port $port (auth enabled = $authEnabled)")
@@ -81,8 +104,13 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
       } else {
         Nil
       }
+    transportContext = new TransportContext(transportConf, blockHandler, true)
     server = transportContext.createServer(port, bootstraps.asJava)
 
+    shuffleServiceSource.registerMetricSet(server.getAllMetrics)
+    blockHandler.getAllMetrics.getMetrics.put("numRegisteredConnections",
+        server.getRegisteredConnections)
+    shuffleServiceSource.registerMetricSet(blockHandler.getAllMetrics)
     masterMetricsSystem.registerSource(shuffleServiceSource)
     masterMetricsSystem.start()
   }
@@ -92,10 +120,19 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     blockHandler.applicationRemoved(appId, true /* cleanupLocalDirs */)
   }
 
-  def stop() {
+  /** Clean up all the non-shuffle files associated with an executor that has exited. */
+  def executorRemoved(executorId: String, appId: String): Unit = {
+    blockHandler.executorRemoved(executorId, appId)
+  }
+
+  def stop(): Unit = {
     if (server != null) {
       server.close()
       server = null
+    }
+    if (transportContext != null) {
+      transportContext.close()
+      transportContext = null
     }
   }
 }
@@ -124,7 +161,7 @@ object ExternalShuffleService extends Logging {
 
     // we override this value since this service is started from the command line
     // and we assume the user really wants it to be running
-    sparkConf.set("spark.shuffle.service.enabled", "true")
+    sparkConf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
     server = newShuffleService(sparkConf, securityManager)
     server.start()
 

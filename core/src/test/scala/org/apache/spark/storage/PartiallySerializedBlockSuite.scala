@@ -24,7 +24,6 @@ import scala.reflect.ClassTag
 import org.mockito.Mockito
 import org.mockito.Mockito.atLeastOnce
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
@@ -44,9 +43,10 @@ class PartiallySerializedBlockSuite
   private val memoryStore = Mockito.mock(classOf[MemoryStore], Mockito.RETURNS_SMART_NULLS)
   private val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
 
-  private val getSerializationStream = PrivateMethod[SerializationStream]('serializationStream)
+  private val getSerializationStream =
+    PrivateMethod[SerializationStream](Symbol("serializationStream"))
   private val getRedirectableOutputStream =
-    PrivateMethod[RedirectableOutputStream]('redirectableOutputStream)
+    PrivateMethod[RedirectableOutputStream](Symbol("redirectableOutputStream"))
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
@@ -59,11 +59,9 @@ class PartiallySerializedBlockSuite
 
     val bbos: ChunkedByteBufferOutputStream = {
       val spy = Mockito.spy(new ChunkedByteBufferOutputStream(128, ByteBuffer.allocate))
-      Mockito.doAnswer(new Answer[ChunkedByteBuffer] {
-        override def answer(invocationOnMock: InvocationOnMock): ChunkedByteBuffer = {
-          Mockito.spy(invocationOnMock.callRealMethod().asInstanceOf[ChunkedByteBuffer])
-        }
-      }).when(spy).toChunkedByteBuffer
+      Mockito.doAnswer { (invocationOnMock: InvocationOnMock) =>
+        Mockito.spy(invocationOnMock.callRealMethod().asInstanceOf[ChunkedByteBuffer])
+      }.when(spy).toChunkedByteBuffer
       spy
     }
 

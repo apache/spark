@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -21,9 +21,17 @@ from __future__ import print_function
 import os
 import sys
 import json
-import urllib2
 import functools
 import subprocess
+if sys.version < '3':
+    from urllib2 import urlopen
+    from urllib2 import Request
+    from urllib2 import HTTPError, URLError
+else:
+    from urllib.request import urlopen
+    from urllib.request import Request
+    from urllib.error import HTTPError, URLError
+
 
 from sparktestsupport import SPARK_HOME, ERROR_CODES
 from sparktestsupport.shellutils import run_cmd
@@ -39,29 +47,30 @@ def print_err(msg):
 def post_message_to_github(msg, ghprb_pull_id):
     print("Attempting to post to Github...")
 
-    url = "https://api.github.com/repos/apache/spark/issues/" + ghprb_pull_id + "/comments"
+    api_url = os.getenv("GITHUB_API_BASE", "https://api.github.com/repos/apache/spark")
+    url = api_url + "/issues/" + ghprb_pull_id + "/comments"
     github_oauth_key = os.environ["GITHUB_OAUTH_KEY"]
 
     posted_message = json.dumps({"body": msg})
-    request = urllib2.Request(url,
-                              headers={
-                                  "Authorization": "token %s" % github_oauth_key,
-                                  "Content-Type": "application/json"
-                              },
-                              data=posted_message)
+    request = Request(url,
+                      headers={
+                          "Authorization": "token %s" % github_oauth_key,
+                          "Content-Type": "application/json"
+                      },
+                      data=posted_message.encode('utf-8'))
     try:
-        response = urllib2.urlopen(request)
+        response = urlopen(request)
 
         if response.getcode() == 201:
             print(" > Post successful.")
-    except urllib2.HTTPError as http_e:
+    except HTTPError as http_e:
         print_err("Failed to post message to Github.")
         print_err(" > http_code: %s" % http_e.code)
         print_err(" > api_response: %s" % http_e.read())
         print_err(" > data: %s" % posted_message)
-    except urllib2.URLError as url_e:
+    except URLError as url_e:
         print_err("Failed to post message to Github.")
-        print_err(" > urllib2_status: %s" % url_e.reason[1])
+        print_err(" > urllib_status: %s" % url_e.reason[1])
         print_err(" > data: %s" % posted_message)
 
 
@@ -115,7 +124,8 @@ def run_tests(tests_timeout):
                                          os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
 
     failure_note_by_errcode = {
-        1: 'executing the `dev/run-tests` script',  # error to denote run-tests script failures
+        # error to denote run-tests script failures:
+        1: 'executing the `dev/run-tests` script',
         ERROR_CODES["BLOCK_GENERAL"]: 'some tests',
         ERROR_CODES["BLOCK_RAT"]: 'RAT tests',
         ERROR_CODES["BLOCK_SCALA_STYLE"]: 'Scala style tests',
@@ -130,7 +140,7 @@ def run_tests(tests_timeout):
         ERROR_CODES["BLOCK_PYSPARK_UNIT_TESTS"]: 'PySpark unit tests',
         ERROR_CODES["BLOCK_PYSPARK_PIP_TESTS"]: 'PySpark pip packaging tests',
         ERROR_CODES["BLOCK_SPARKR_UNIT_TESTS"]: 'SparkR unit tests',
-        ERROR_CODES["BLOCK_TIMEOUT"]: 'from timeout after a configured wait of \`%s\`' % (
+        ERROR_CODES["BLOCK_TIMEOUT"]: 'from timeout after a configured wait of `%s`' % (
             tests_timeout)
     }
 
@@ -158,7 +168,7 @@ def main():
     #     against master.
     ghprb_pull_id = os.environ["ghprbPullId"]
     ghprb_actual_commit = os.environ["ghprbActualCommit"]
-    ghprb_pull_title = os.environ["ghprbPullTitle"]
+    ghprb_pull_title = os.environ["ghprbPullTitle"].lower()
     sha1 = os.environ["sha1"]
 
     # Marks this build as a pull request build.
@@ -171,18 +181,22 @@ def main():
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.6"
     if "test-hadoop2.7" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.7"
+    if "test-hadoop3.2" in ghprb_pull_title:
+        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop3.2"
 
     build_display_name = os.environ["BUILD_DISPLAY_NAME"]
     build_url = os.environ["BUILD_URL"]
 
-    commit_url = "https://github.com/apache/spark/commit/" + ghprb_actual_commit
+    project_url = os.getenv("SPARK_PROJECT_URL", "https://github.com/apache/spark")
+    commit_url = project_url + "/commit/" + ghprb_actual_commit
 
     # GitHub doesn't auto-link short hashes when submitted via the API, unfortunately. :(
     short_commit_hash = ghprb_actual_commit[0:7]
 
     # format: http://linux.die.net/man/1/timeout
-    # must be less than the timeout configured on Jenkins (currently 300m)
-    tests_timeout = "250m"
+    # must be less than the timeout configured on Jenkins. Usually Jenkins's timeout is higher
+    # then this. Please consult with the build manager or a committer when it should be increased.
+    tests_timeout = "400m"
 
     # Array to capture all test names to run on the pull request. These tests are represented
     # by their file equivalents in the dev/tests/ directory.

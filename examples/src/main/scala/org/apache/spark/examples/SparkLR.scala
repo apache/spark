@@ -51,7 +51,7 @@ object SparkLR {
     Array.tabulate(N)(generatePoint)
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use org.apache.spark.ml.classification.LogisticRegression
@@ -59,7 +59,7 @@ object SparkLR {
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     showWarning()
 
@@ -72,18 +72,18 @@ object SparkLR {
     val points = spark.sparkContext.parallelize(generateData, numSlices).cache()
 
     // Initialize w to a random value
-    var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
-    println("Initial w: " + w)
+    val w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
+    println(s"Initial w: $w")
 
     for (i <- 1 to ITERATIONS) {
-      println("On iteration " + i)
+      println(s"On iteration $i")
       val gradient = points.map { p =>
         p.x * (1 / (1 + exp(-p.y * (w.dot(p.x)))) - 1) * p.y
       }.reduce(_ + _)
       w -= gradient
     }
 
-    println("Final w: " + w)
+    println(s"Final w: $w")
 
     spark.stop()
   }

@@ -38,7 +38,7 @@ public final class RpcRequest extends AbstractMessage implements RequestMessage 
   }
 
   @Override
-  public Type type() { return Type.RpcRequest; }
+  public Message.Type type() { return Type.RpcRequest; }
 
   @Override
   public int encodedLength() {

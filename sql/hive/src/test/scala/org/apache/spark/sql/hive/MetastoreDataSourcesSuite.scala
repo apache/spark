@@ -23,14 +23,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
-import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -518,13 +516,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         }
 
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
-          sparkSession.catalog.createExternalTable("createdJsonTable", tempPath.toString)
+          sparkSession.catalog.createTable("createdJsonTable", tempPath.toString)
           assert(table("createdJsonTable").schema === df.schema)
           checkAnswer(sql("SELECT * FROM createdJsonTable"), df)
 
           assert(
             intercept[AnalysisException] {
-              sparkSession.catalog.createExternalTable("createdJsonTable", jsonFilePath.toString)
+              sparkSession.catalog.createTable("createdJsonTable", jsonFilePath.toString)
             }.getMessage.contains("Table createdJsonTable already exists."),
             "We should complain that createdJsonTable already exists")
         }
@@ -536,7 +534,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         // Try to specify the schema.
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           val schema = StructType(StructField("b", StringType, true) :: Nil)
-          sparkSession.catalog.createExternalTable(
+          sparkSession.catalog.createTable(
             "createdJsonTable",
             "org.apache.spark.sql.json",
             schema,
@@ -555,7 +553,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("path required error") {
     assert(
       intercept[AnalysisException] {
-        sparkSession.catalog.createExternalTable(
+        sparkSession.catalog.createTable(
           "createdJsonTable",
           "org.apache.spark.sql.json",
           Map.empty[String, String])
@@ -583,7 +581,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: HadoopFsRelation, _, _) => // OK
+            case LogicalRelation(p: HadoopFsRelation, _, _, _) => // OK
             case _ =>
               fail(s"test_parquet_ctas should have be converted to ${classOf[HadoopFsRelation]}")
           }
@@ -593,7 +591,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("Pre insert nullability check (ArrayType)") {
-    withTable("arrayInParquet") {
+    withTable("array") {
       {
         val df = (Tuple1(Seq(Int.box(1), null: Integer)) :: Nil).toDF("a")
         val expectedSchema =
@@ -606,9 +604,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(df.schema === expectedSchema)
 
         df.write
-          .format("parquet")
           .mode(SaveMode.Overwrite)
-          .saveAsTable("arrayInParquet")
+          .saveAsTable("array")
       }
 
       {
@@ -623,25 +620,24 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(df.schema === expectedSchema)
 
         df.write
-          .format("parquet")
           .mode(SaveMode.Append)
-          .insertInto("arrayInParquet")
+          .insertInto("array")
       }
 
       (Tuple1(Seq(4, 5)) :: Nil).toDF("a")
         .write
         .mode(SaveMode.Append)
-        .saveAsTable("arrayInParquet") // This one internally calls df2.insertInto.
+        .saveAsTable("array") // This one internally calls df2.insertInto.
 
       (Tuple1(Seq(Int.box(6), null: Integer)) :: Nil).toDF("a")
         .write
         .mode(SaveMode.Append)
-        .saveAsTable("arrayInParquet")
+        .saveAsTable("array")
 
-      sparkSession.catalog.refreshTable("arrayInParquet")
+      sparkSession.catalog.refreshTable("array")
 
       checkAnswer(
-        sql("SELECT a FROM arrayInParquet"),
+        sql("SELECT a FROM array"),
         Row(ArrayBuffer(1, null)) ::
           Row(ArrayBuffer(2, 3)) ::
           Row(ArrayBuffer(4, 5)) ::
@@ -650,7 +646,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("Pre insert nullability check (MapType)") {
-    withTable("mapInParquet") {
+    withTable("map") {
       {
         val df = (Tuple1(Map(1 -> (null: Integer))) :: Nil).toDF("a")
         val expectedSchema =
@@ -663,9 +659,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(df.schema === expectedSchema)
 
         df.write
-          .format("parquet")
           .mode(SaveMode.Overwrite)
-          .saveAsTable("mapInParquet")
+          .saveAsTable("map")
       }
 
       {
@@ -680,27 +675,24 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(df.schema === expectedSchema)
 
         df.write
-          .format("parquet")
           .mode(SaveMode.Append)
-          .insertInto("mapInParquet")
+          .insertInto("map")
       }
 
       (Tuple1(Map(4 -> 5)) :: Nil).toDF("a")
         .write
-        .format("parquet")
         .mode(SaveMode.Append)
-        .saveAsTable("mapInParquet") // This one internally calls df2.insertInto.
+        .saveAsTable("map") // This one internally calls df2.insertInto.
 
       (Tuple1(Map(6 -> null.asInstanceOf[Integer])) :: Nil).toDF("a")
         .write
-        .format("parquet")
         .mode(SaveMode.Append)
-        .saveAsTable("mapInParquet")
+        .saveAsTable("map")
 
-      sparkSession.catalog.refreshTable("mapInParquet")
+      sparkSession.catalog.refreshTable("map")
 
       checkAnswer(
-        sql("SELECT a FROM mapInParquet"),
+        sql("SELECT a FROM map"),
         Row(Map(1 -> null)) ::
           Row(Map(2 -> 3)) ::
           Row(Map(4 -> 5)) ::
@@ -741,7 +733,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = new StructType,
+        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
         provider = Some("json"),
         storage = CatalogStorageFormat(
           locationUri = None,
@@ -854,52 +846,52 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
     }
 
-    withTable("insertParquet") {
-      createDF(0, 9).write.format("parquet").saveAsTable("insertParquet")
+    withTable("t") {
+      createDF(0, 9).write.saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM insertParquet p WHERE p.c1 > 5"),
+        sql("SELECT p.c1, p.c2 FROM t p WHERE p.c1 > 5"),
         (6 to 9).map(i => Row(i, s"str$i")))
 
       intercept[AnalysisException] {
-        createDF(10, 19).write.format("parquet").saveAsTable("insertParquet")
+        createDF(10, 19).write.saveAsTable("t")
       }
 
-      createDF(10, 19).write.mode(SaveMode.Append).format("parquet").saveAsTable("insertParquet")
+      createDF(10, 19).write.mode(SaveMode.Append).saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM insertParquet p WHERE p.c1 > 5"),
+        sql("SELECT p.c1, p.c2 FROM t p WHERE p.c1 > 5"),
         (6 to 19).map(i => Row(i, s"str$i")))
 
-      createDF(20, 29).write.mode(SaveMode.Append).format("parquet").saveAsTable("insertParquet")
+      createDF(20, 29).write.mode(SaveMode.Append).saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 25"),
+        sql("SELECT p.c1, c2 FROM t p WHERE p.c1 > 5 AND p.c1 < 25"),
         (6 to 24).map(i => Row(i, s"str$i")))
 
       intercept[AnalysisException] {
-        createDF(30, 39).write.saveAsTable("insertParquet")
+        createDF(30, 39).write.saveAsTable("t")
       }
 
-      createDF(30, 39).write.mode(SaveMode.Append).saveAsTable("insertParquet")
+      createDF(30, 39).write.mode(SaveMode.Append).saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 35"),
+        sql("SELECT p.c1, c2 FROM t p WHERE p.c1 > 5 AND p.c1 < 35"),
         (6 to 34).map(i => Row(i, s"str$i")))
 
-      createDF(40, 49).write.mode(SaveMode.Append).insertInto("insertParquet")
+      createDF(40, 49).write.mode(SaveMode.Append).insertInto("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 5 AND p.c1 < 45"),
+        sql("SELECT p.c1, c2 FROM t p WHERE p.c1 > 5 AND p.c1 < 45"),
         (6 to 44).map(i => Row(i, s"str$i")))
 
-      createDF(50, 59).write.mode(SaveMode.Overwrite).saveAsTable("insertParquet")
+      createDF(50, 59).write.mode(SaveMode.Overwrite).saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p WHERE p.c1 > 51 AND p.c1 < 55"),
+        sql("SELECT p.c1, c2 FROM t p WHERE p.c1 > 51 AND p.c1 < 55"),
         (52 to 54).map(i => Row(i, s"str$i")))
-      createDF(60, 69).write.mode(SaveMode.Ignore).saveAsTable("insertParquet")
+      createDF(60, 69).write.mode(SaveMode.Ignore).saveAsTable("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p"),
+        sql("SELECT p.c1, c2 FROM t p"),
         (50 to 59).map(i => Row(i, s"str$i")))
 
-      createDF(70, 79).write.mode(SaveMode.Overwrite).insertInto("insertParquet")
+      createDF(70, 79).write.mode(SaveMode.Overwrite).insertInto("t")
       checkAnswer(
-        sql("SELECT p.c1, c2 FROM insertParquet p"),
+        sql("SELECT p.c1, c2 FROM t p"),
         (70 to 79).map(i => Row(i, s"str$i")))
     }
   }
@@ -915,30 +907,28 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
       }
       assert(e.getMessage.contains(
-        "The format of the existing table default.appendOrcToParquet is `ParquetFileFormat`. " +
-          "It doesn't match the specified format `OrcFileFormat`"))
+        "The format of the existing table default.appendOrcToParquet is `Parquet"))
     }
 
     withTable("appendParquetToJson") {
       createDF(0, 9).write.format("json").saveAsTable("appendParquetToJson")
-      val e = intercept[AnalysisException] {
+      val msg = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
           .saveAsTable("appendParquetToJson")
-      }
-      assert(e.getMessage.contains(
-        "The format of the existing table default.appendParquetToJson is `JsonFileFormat`. " +
-        "It doesn't match the specified format `ParquetFileFormat`"))
+      }.getMessage
+
+      assert(msg.contains(
+        "The format of the existing table default.appendParquetToJson is `Json"))
     }
 
     withTable("appendTextToJson") {
       createDF(0, 9).write.format("json").saveAsTable("appendTextToJson")
-      val e = intercept[AnalysisException] {
+      val msg = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("text")
           .saveAsTable("appendTextToJson")
-      }
-      assert(e.getMessage.contains(
-        "The format of the existing table default.appendTextToJson is `JsonFileFormat`. " +
-        "It doesn't match the specified format `TextFileFormat`"))
+      }.getMessage
+      // The format of the existing table can be JsonDataSourceV2 or JsonFileFormat.
+      assert(msg.contains("The format of the existing table default.appendTextToJson is `Json"))
     }
   }
 
@@ -976,6 +966,74 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("append a table with file source V2 provider using the v1 file format") {
+    def createDF(from: Int, to: Int): DataFrame = {
+      (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
+    }
+
+    withTable("appendCSV") {
+      createDF(0, 9)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2")
+        .saveAsTable("appendCSV")
+      createDF(10, 19)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.csv.CSVFileFormat")
+        .saveAsTable("appendCSV")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendCSV p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+
+    withTable("appendCSV") {
+      createDF(0, 9).write.mode(SaveMode.Append).format("csv").saveAsTable("appendCSV")
+      createDF(10, 19)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.csv.CSVFileFormat")
+        .saveAsTable("appendCSV")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendCSV p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+  }
+
+  test("append a table with v1 file format provider using file source V2 format") {
+    def createDF(from: Int, to: Int): DataFrame = {
+      (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
+    }
+
+    withTable("appendCSV") {
+      createDF(0, 9)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.csv.CSVFileFormat")
+        .saveAsTable("appendCSV")
+      createDF(10, 19)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2")
+        .saveAsTable("appendCSV")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendCSV p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+
+    withTable("appendCSV") {
+      createDF(0, 9)
+        .write
+        .mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.csv.CSVFileFormat")
+        .saveAsTable("appendCSV")
+      createDF(10, 19).write.mode(SaveMode.Append).format("csv").saveAsTable("appendCSV")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendCSV p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+  }
+
   test("SPARK-8156:create table to specific database by 'use dbname' ") {
 
     val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
@@ -992,7 +1050,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     spark.sql("""use default""")
     spark.sql("""drop database if exists testdb8156 CASCADE""")
   }
-
 
   test("skip hive metadata on table creation") {
     withTempDir { tempPath =>
@@ -1154,7 +1211,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   test("create a temp view using hive") {
     val tableName = "tab1"
-    withTable(tableName) {
+    withTempView(tableName) {
       val e = intercept[AnalysisException] {
         sql(
           s"""
@@ -1267,7 +1324,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier("t", Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = new StructType,
+        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
         provider = Some("json"),
         storage = CatalogStorageFormat.empty,
         properties = Map(
@@ -1352,32 +1409,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       f
     } finally {
       sparkSession.sparkContext.conf.set(DEBUG_MODE, previousValue)
-    }
-  }
-
-  test("SPARK-18464: support old table which doesn't store schema in table properties") {
-    withTable("old") {
-      withTempPath { path =>
-        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getAbsolutePath)
-        val tableDesc = CatalogTable(
-          identifier = TableIdentifier("old", Some("default")),
-          tableType = CatalogTableType.EXTERNAL,
-          storage = CatalogStorageFormat.empty.copy(
-            properties = Map("path" -> path.getAbsolutePath)
-          ),
-          schema = new StructType(),
-          provider = Some("parquet"),
-          properties = Map(
-            HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet"))
-        hiveClient.createTable(tableDesc, ignoreIfExists = false)
-
-        checkAnswer(spark.table("old"), Row(1, "a"))
-
-        val expectedSchema = StructType(Seq(
-          StructField("i", IntegerType, nullable = true),
-          StructField("j", StringType, nullable = true)))
-        assert(table("old").schema === expectedSchema)
-      }
     }
   }
 }

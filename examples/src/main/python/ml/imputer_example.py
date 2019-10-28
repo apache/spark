@@ -15,16 +15,15 @@
 # limitations under the License.
 #
 
-# $example on$
-from pyspark.ml.feature import Imputer
-# $example off$
-from pyspark.sql import SparkSession
-
 """
 An example demonstrating Imputer.
 Run with:
   bin/spark-submit examples/src/main/python/ml/imputer_example.py
 """
+# $example on$
+from pyspark.ml.feature import Imputer
+# $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     spark = SparkSession\

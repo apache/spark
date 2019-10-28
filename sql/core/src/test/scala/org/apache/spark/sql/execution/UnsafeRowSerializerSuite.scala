@@ -21,16 +21,17 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
 import java.util.Properties
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{LocalSparkSession, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.util.Utils
 
 /**
  * used to test close InputStream in UnsafeRowSerializer
@@ -43,7 +44,7 @@ class ClosableByteArrayInputStream(buf: Array[Byte]) extends ByteArrayInputStrea
   }
 }
 
-class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
+class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
 
   private def toUnsafeRow(row: Row, schema: Array[DataType]): UnsafeRow = {
     val converter = unsafeRowConverter(schema)
@@ -58,7 +59,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("toUnsafeRow() test helper method") {
-    // This currently doesnt work because the generic getter throws an exception.
+    // This currently doesn't work because the generic getter throws an exception.
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
     assert(row.getString(0) === unsafeRow.getUTF8String(0).toString)
@@ -97,65 +98,52 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("SPARK-10466: external sorter spilling with unsafe row serializer") {
-    var sc: SparkContext = null
-    var outputFile: File = null
-    val oldEnv = SparkEnv.get // save the old SparkEnv, as it will be overwritten
-    Utils.tryWithSafeFinally {
-      val conf = new SparkConf()
-        .set("spark.shuffle.spill.initialMemoryThreshold", "1")
-        .set("spark.shuffle.sort.bypassMergeThreshold", "0")
-        .set("spark.testing.memory", "80000")
+    val conf = new SparkConf()
+      .set(SHUFFLE_SPILL_INITIAL_MEM_THRESHOLD, 1L)
+      .set(SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD, 0)
+      .set(TEST_MEMORY, 80000L)
 
-      sc = new SparkContext("local", "test", conf)
-      outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
-      // prepare data
-      val converter = unsafeRowConverter(Array(IntegerType))
-      val data = (1 to 10000).iterator.map { i =>
-        (i, converter(Row(i)))
-      }
-      val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0)
-      val taskContext = new TaskContextImpl(0, 0, 0, 0, taskMemoryManager, new Properties, null)
-
-      val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
-        taskContext,
-        partitioner = Some(new HashPartitioner(10)),
-        serializer = new UnsafeRowSerializer(numFields = 1))
-
-      // Ensure we spilled something and have to merge them later
-      assert(sorter.numSpills === 0)
-      sorter.insertAll(data)
-      assert(sorter.numSpills > 0)
-
-      // Merging spilled files should not throw assertion error
-      sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), outputFile)
-    } {
-      // Clean up
-      if (sc != null) {
-        sc.stop()
-      }
-
-      // restore the spark env
-      SparkEnv.set(oldEnv)
-
-      if (outputFile != null) {
-        outputFile.delete()
-      }
+    spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
+    val outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
+    outputFile.deleteOnExit()
+    // prepare data
+    val converter = unsafeRowConverter(Array(IntegerType))
+    val data = (1 to 10000).iterator.map { i =>
+      (i, converter(Row(i)))
     }
+    val taskMemoryManager = new TaskMemoryManager(spark.sparkContext.env.memoryManager, 0)
+    val taskContext = new TaskContextImpl(0, 0, 0, 0, 0, taskMemoryManager, new Properties, null)
+
+    val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
+      taskContext,
+      partitioner = Some(new HashPartitioner(10)),
+      serializer = new UnsafeRowSerializer(numFields = 1))
+
+    // Ensure we spilled something and have to merge them later
+    assert(sorter.numSpills === 0)
+    sorter.insertAll(data)
+    assert(sorter.numSpills > 0)
+
+    // Merging spilled files should not throw assertion error
+    sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), outputFile)
   }
 
   test("SPARK-10403: unsafe row serializer with SortShuffleManager") {
-    val conf = new SparkConf().set("spark.shuffle.manager", "sort")
-    sc = new SparkContext("local", "test", conf)
+    val conf = new SparkConf().set(SHUFFLE_MANAGER, "sort")
+    spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
-    val rowsRDD = sc.parallelize(Seq((0, unsafeRow), (1, unsafeRow), (0, unsafeRow)))
-      .asInstanceOf[RDD[Product2[Int, InternalRow]]]
+    val rowsRDD = spark.sparkContext.parallelize(
+      Seq((0, unsafeRow), (1, unsafeRow), (0, unsafeRow))
+    ).asInstanceOf[RDD[Product2[Int, InternalRow]]]
     val dependency =
       new ShuffleDependency[Int, InternalRow, InternalRow](
         rowsRDD,
         new PartitionIdPassthrough(2),
         new UnsafeRowSerializer(2))
-    val shuffled = new ShuffledRowRDD(dependency)
+    val shuffled = new ShuffledRowRDD(
+      dependency,
+      SQLShuffleReadMetricsReporter.createShuffleReadMetrics(spark.sparkContext))
     shuffled.count()
   }
 }

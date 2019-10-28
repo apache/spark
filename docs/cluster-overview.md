@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Cluster Mode Overview
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 This document gives a short overview of how Spark runs on clusters, to make it easier to understand
@@ -45,18 +60,18 @@ There are several useful things to note about this architecture:
 
 # Cluster Manager Types
 
-The system currently supports three cluster managers:
+The system currently supports several cluster managers:
 
 * [Standalone](spark-standalone.html) -- a simple cluster manager included with Spark that makes it
   easy to set up a cluster.
 * [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
   and service applications.
 * [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.
-* [Kubernetes (experimental)](https://github.com/apache-spark-on-k8s/spark) -- In addition to the above,
-there is experimental support for Kubernetes. Kubernetes is an open-source platform
-for providing container-centric infrastructure. Kubernetes support is being actively
-developed in an [apache-spark-on-k8s](https://github.com/apache-spark-on-k8s/) Github organization. 
-For documentation, refer to that project's README.
+* [Kubernetes](running-on-kubernetes.html) -- an open-source system for automating deployment, scaling,
+  and management of containerized applications.
+
+A third-party project (not supported by the Spark project) exists to add support for
+[Nomad](https://github.com/hashicorp/nomad-spark) as a cluster manager.
 
 # Submitting Applications
 

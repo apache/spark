@@ -2,6 +2,21 @@
 layout: global
 title: Basic Statistics - RDD-based API
 displayTitle: Basic Statistics - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -239,7 +254,7 @@ Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.ml
 ### Streaming Significance Testing
 `spark.mllib` provides online implementations of some tests to support use cases
 like A/B testing. These tests may be performed on a Spark Streaming
-`DStream[(Boolean,Double)]` where the first element of each tuple
+`DStream[(Boolean, Double)]` where the first element of each tuple
 indicates control group (`false`) or treatment group (`true`) and the
 second element is the value of an observation.
 

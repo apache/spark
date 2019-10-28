@@ -17,6 +17,10 @@
 
 package org.apache
 
+import java.util.Properties
+
+import org.apache.spark.util.VersionUtils
+
 /**
  * Core Spark functionality. [[org.apache.spark.SparkContext]] serves as the main entry point to
  * Spark, while [[org.apache.spark.rdd.RDD]] is the data type representing a distributed collection,
@@ -40,9 +44,6 @@ package org.apache
  * Developer API</span> are intended for advanced users want to extend Spark through lower
  * level interfaces. These are subject to changes or removal in minor releases.
  */
-
-import java.util.Properties
-
 package object spark {
 
   private object SparkBuildInfo {
@@ -57,6 +58,9 @@ package object spark {
 
       val resourceStream = Thread.currentThread().getContextClassLoader.
         getResourceAsStream("spark-version-info.properties")
+      if (resourceStream == null) {
+        throw new SparkException("Could not find spark-version-info.properties")
+      }
 
       try {
         val unknownProp = "<unknown>"
@@ -71,8 +75,6 @@ package object spark {
           props.getProperty("date", unknownProp)
         )
       } catch {
-        case npe: NullPointerException =>
-          throw new SparkException("Error while locating file spark-version-info.properties", npe)
         case e: Exception =>
           throw new SparkException("Error loading properties from spark-version-info.properties", e)
       } finally {
@@ -89,6 +91,7 @@ package object spark {
   }
 
   val SPARK_VERSION = SparkBuildInfo.spark_version
+  val SPARK_VERSION_SHORT = VersionUtils.shortVersion(SparkBuildInfo.spark_version)
   val SPARK_BRANCH = SparkBuildInfo.spark_branch
   val SPARK_REVISION = SparkBuildInfo.spark_revision
   val SPARK_BUILD_USER = SparkBuildInfo.spark_build_user

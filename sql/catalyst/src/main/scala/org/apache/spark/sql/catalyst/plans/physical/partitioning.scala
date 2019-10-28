@@ -22,47 +22,104 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * Specifies how tuples that share common expressions will be distributed when a query is executed
- * in parallel on many machines.  Distribution can be used to refer to two distinct physical
- * properties:
- *  - Inter-node partitioning of data: In this case the distribution describes how tuples are
- *    partitioned across physical machines in a cluster.  Knowing this property allows some
- *    operators (e.g., Aggregate) to perform partition local operations instead of global ones.
- *  - Intra-partition ordering of data: In this case the distribution describes guarantees made
- *    about how tuples are distributed within a single partition.
+ * in parallel on many machines.
+ *
+ * Distribution here refers to inter-node partitioning of data. That is, it describes how tuples
+ * are partitioned across physical machines in a cluster. Knowing this property allows some
+ * operators (e.g., Aggregate) to perform partition local operations instead of global ones.
  */
-sealed trait Distribution
+sealed trait Distribution {
+  /**
+   * The required number of partitions for this distribution. If it's None, then any number of
+   * partitions is allowed for this distribution.
+   */
+  def requiredNumPartitions: Option[Int]
+
+  /**
+   * Creates a default partitioning for this distribution, which can satisfy this distribution while
+   * matching the given number of partitions.
+   */
+  def createPartitioning(numPartitions: Int): Partitioning
+}
 
 /**
  * Represents a distribution where no promises are made about co-location of data.
  */
-case object UnspecifiedDistribution extends Distribution
+case object UnspecifiedDistribution extends Distribution {
+  override def requiredNumPartitions: Option[Int] = None
+
+  override def createPartitioning(numPartitions: Int): Partitioning = {
+    throw new IllegalStateException("UnspecifiedDistribution does not have default partitioning.")
+  }
+}
 
 /**
  * Represents a distribution that only has a single partition and all tuples of the dataset
  * are co-located.
  */
-case object AllTuples extends Distribution
+case object AllTuples extends Distribution {
+  override def requiredNumPartitions: Option[Int] = Some(1)
+
+  override def createPartitioning(numPartitions: Int): Partitioning = {
+    assert(numPartitions == 1, "The default partitioning of AllTuples can only have 1 partition.")
+    SinglePartition
+  }
+}
 
 /**
  * Represents data where tuples that share the same values for the `clustering`
- * [[Expression Expressions]] will be co-located. Based on the context, this
- * can mean such tuples are either co-located in the same partition or they will be contiguous
- * within a single partition.
+ * [[Expression Expressions]] will be co-located in the same partition.
  */
-case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution {
+case class ClusteredDistribution(
+    clustering: Seq[Expression],
+    requiredNumPartitions: Option[Int] = None) extends Distribution {
   require(
     clustering != Nil,
     "The clustering expressions of a ClusteredDistribution should not be Nil. " +
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
+
+  override def createPartitioning(numPartitions: Int): Partitioning = {
+    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
+      s"This ClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
+        s"the actual number of partitions is $numPartitions.")
+    HashPartitioning(clustering, numPartitions)
+  }
+}
+
+/**
+ * Represents data where tuples have been clustered according to the hash of the given
+ * `expressions`. The hash function is defined as `HashPartitioning.partitionIdExpression`, so only
+ * [[HashPartitioning]] can satisfy this distribution.
+ *
+ * This is a strictly stronger guarantee than [[ClusteredDistribution]]. Given a tuple and the
+ * number of partitions, this distribution strictly requires which partition the tuple should be in.
+ */
+case class HashClusteredDistribution(
+    expressions: Seq[Expression],
+    requiredNumPartitions: Option[Int] = None) extends Distribution {
+  require(
+    expressions != Nil,
+    "The expressions for hash of a HashClusteredDistribution should not be Nil. " +
+      "An AllTuples should be used to represent a distribution that only has " +
+      "a single partition.")
+
+  override def createPartitioning(numPartitions: Int): Partitioning = {
+    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
+      s"This HashClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
+        s"the actual number of partitions is $numPartitions.")
+    HashPartitioning(expressions, numPartitions)
+  }
 }
 
 /**
  * Represents data where tuples have been ordered according to the `ordering`
- * [[Expression Expressions]].  This is a strictly stronger guarantee than
- * [[ClusteredDistribution]] as an ordering will ensure that tuples that share the
- * same value for the ordering expressions are contiguous and will never be split across
- * partitions.
+ * [[Expression Expressions]]. Its requirement is defined as the following:
+ *   - Given any 2 adjacent partitions, all the rows of the second partition must be larger than or
+ *     equal to any row in the first partition, according to the `ordering` expressions.
+ *
+ * In other words, this distribution requires the rows to be ordered across partitions, but not
+ * necessarily within a partition.
  */
 case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   require(
@@ -71,48 +128,33 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 
-  // TODO: This is not really valid...
-  def clustering: Set[Expression] = ordering.map(_.child).toSet
+  override def requiredNumPartitions: Option[Int] = None
+
+  override def createPartitioning(numPartitions: Int): Partitioning = {
+    RangePartitioning(ordering, numPartitions)
+  }
 }
 
 /**
  * Represents data where tuples are broadcasted to every node. It is quite common that the
  * entire set of tuples is transformed into different data structure.
  */
-case class BroadcastDistribution(mode: BroadcastMode) extends Distribution
+case class BroadcastDistribution(mode: BroadcastMode) extends Distribution {
+  override def requiredNumPartitions: Option[Int] = Some(1)
+
+  override def createPartitioning(numPartitions: Int): Partitioning = {
+    assert(numPartitions == 1,
+      "The default partitioning of BroadcastDistribution can only have 1 partition.")
+    BroadcastPartitioning(mode)
+  }
+}
 
 /**
- * Describes how an operator's output is split across partitions. The `compatibleWith`,
- * `guarantees`, and `satisfies` methods describe relationships between child partitionings,
- * target partitionings, and [[Distribution]]s. These relations are described more precisely in
- * their individual method docs, but at a high level:
- *
- *  - `satisfies` is a relationship between partitionings and distributions.
- *  - `compatibleWith` is relationships between an operator's child output partitionings.
- *  - `guarantees` is a relationship between a child's existing output partitioning and a target
- *     output partitioning.
- *
- *  Diagrammatically:
- *
- *            +--------------+
- *            | Distribution |
- *            +--------------+
- *                    ^
- *                    |
- *               satisfies
- *                    |
- *            +--------------+                  +--------------+
- *            |    Child     |                  |    Target    |
- *       +----| Partitioning |----guarantees--->| Partitioning |
- *       |    +--------------+                  +--------------+
- *       |            ^
- *       |            |
- *       |     compatibleWith
- *       |            |
- *       +------------+
- *
+ * Describes how an operator's output is split across partitions. It has 2 major properties:
+ *   1. number of partitions.
+ *   2. if it can satisfy a given distribution.
  */
-sealed trait Partitioning {
+trait Partitioning {
   /** Returns the number of partitions that the data is split across */
   val numPartitions: Int
 
@@ -121,112 +163,45 @@ sealed trait Partitioning {
    * to satisfy the partitioning scheme mandated by the `required` [[Distribution]],
    * i.e. the current dataset does not need to be re-partitioned for the `required`
    * Distribution (it is possible that tuples within a partition need to be reorganized).
+   *
+   * A [[Partitioning]] can never satisfy a [[Distribution]] if its `numPartitions` does't match
+   * [[Distribution.requiredNumPartitions]].
    */
-  def satisfies(required: Distribution): Boolean
-
-  /**
-   * Returns true iff we can say that the partitioning scheme of this [[Partitioning]]
-   * guarantees the same partitioning scheme described by `other`.
-   *
-   * Compatibility of partitionings is only checked for operators that have multiple children
-   * and that require a specific child output [[Distribution]], such as joins.
-   *
-   * Intuitively, partitionings are compatible if they route the same partitioning key to the same
-   * partition. For instance, two hash partitionings are only compatible if they produce the same
-   * number of output partitionings and hash records according to the same hash function and
-   * same partitioning key schema.
-   *
-   * Put another way, two partitionings are compatible with each other if they satisfy all of the
-   * same distribution guarantees.
-   */
-  def compatibleWith(other: Partitioning): Boolean
-
-  /**
-   * Returns true iff we can say that the partitioning scheme of this [[Partitioning]] guarantees
-   * the same partitioning scheme described by `other`. If a `A.guarantees(B)`, then repartitioning
-   * the child's output according to `B` will be unnecessary. `guarantees` is used as a performance
-   * optimization to allow the exchange planner to avoid redundant repartitionings. By default,
-   * a partitioning only guarantees partitionings that are equal to itself (i.e. the same number
-   * of partitions, same strategy (range or hash), etc).
-   *
-   * In order to enable more aggressive optimization, this strict equality check can be relaxed.
-   * For example, say that the planner needs to repartition all of an operator's children so that
-   * they satisfy the [[AllTuples]] distribution. One way to do this is to repartition all children
-   * to have the [[SinglePartition]] partitioning. If one of the operator's children already happens
-   * to be hash-partitioned with a single partition then we do not need to re-shuffle this child;
-   * this repartitioning can be avoided if a single-partition [[HashPartitioning]] `guarantees`
-   * [[SinglePartition]].
-   *
-   * The SinglePartition example given above is not particularly interesting; guarantees' real
-   * value occurs for more advanced partitioning strategies. SPARK-7871 will introduce a notion
-   * of null-safe partitionings, under which partitionings can specify whether rows whose
-   * partitioning keys contain null values will be grouped into the same partition or whether they
-   * will have an unknown / random distribution. If a partitioning does not require nulls to be
-   * clustered then a partitioning which _does_ cluster nulls will guarantee the null clustered
-   * partitioning. The converse is not true, however: a partitioning which clusters nulls cannot
-   * be guaranteed by one which does not cluster them. Thus, in general `guarantees` is not a
-   * symmetric relation.
-   *
-   * Another way to think about `guarantees`: if `A.guarantees(B)`, then any partitioning of rows
-   * produced by `A` could have also been produced by `B`.
-   */
-  def guarantees(other: Partitioning): Boolean = this == other
-}
-
-object Partitioning {
-  def allCompatible(partitionings: Seq[Partitioning]): Boolean = {
-    // Note: this assumes transitivity
-    partitionings.sliding(2).map {
-      case Seq(a) => true
-      case Seq(a, b) =>
-        if (a.numPartitions != b.numPartitions) {
-          assert(!a.compatibleWith(b) && !b.compatibleWith(a))
-          false
-        } else {
-          a.compatibleWith(b) && b.compatibleWith(a)
-        }
-    }.forall(_ == true)
+  final def satisfies(required: Distribution): Boolean = {
+    required.requiredNumPartitions.forall(_ == numPartitions) && satisfies0(required)
   }
-}
 
-case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
-  override def satisfies(required: Distribution): Boolean = required match {
+  /**
+   * The actual method that defines whether this [[Partitioning]] can satisfy the given
+   * [[Distribution]], after the `numPartitions` check.
+   *
+   * By default a [[Partitioning]] can satisfy [[UnspecifiedDistribution]], and [[AllTuples]] if
+   * the [[Partitioning]] only have one partition. Implementations can also overwrite this method
+   * with special logic.
+   */
+  protected def satisfies0(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
+    case AllTuples => numPartitions == 1
     case _ => false
   }
-
-  override def compatibleWith(other: Partitioning): Boolean = false
-
-  override def guarantees(other: Partitioning): Boolean = false
 }
+
+case class UnknownPartitioning(numPartitions: Int) extends Partitioning
 
 /**
  * Represents a partitioning where rows are distributed evenly across output partitions
  * by starting from a random target partition number and distributing rows in a round-robin
  * fashion. This partitioning is used when implementing the DataFrame.repartition() operator.
  */
-case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning {
-  override def satisfies(required: Distribution): Boolean = required match {
-    case UnspecifiedDistribution => true
-    case _ => false
-  }
-
-  override def compatibleWith(other: Partitioning): Boolean = false
-
-  override def guarantees(other: Partitioning): Boolean = false
-}
+case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning
 
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
 
-  override def satisfies(required: Distribution): Boolean = required match {
+  override def satisfies0(required: Distribution): Boolean = required match {
     case _: BroadcastDistribution => false
     case _ => true
   }
-
-  override def compatibleWith(other: Partitioning): Boolean = other.numPartitions == 1
-
-  override def guarantees(other: Partitioning): Boolean = other.numPartitions == 1
 }
 
 /**
@@ -241,21 +216,18 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
-  override def satisfies(required: Distribution): Boolean = required match {
-    case UnspecifiedDistribution => true
-    case ClusteredDistribution(requiredClustering) =>
-      expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-    case _ => false
-  }
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning => this.semanticEquals(o)
-    case _ => false
-  }
-
-  override def guarantees(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning => this.semanticEquals(o)
-    case _ => false
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
+      required match {
+        case h: HashClusteredDistribution =>
+          expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
+            case (l, r) => l.semanticEquals(r)
+          }
+        case ClusteredDistribution(requiredClustering, _) =>
+          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case _ => false
+      }
+    }
   }
 
   /**
@@ -267,12 +239,12 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
 /**
  * Represents a partitioning where rows are split across partitions based on some total ordering of
- * the expressions specified in `ordering`.  When data is partitioned in this manner the following
- * two conditions are guaranteed to hold:
- *  - All row where the expressions in `ordering` evaluate to the same values will be in the same
- *    partition.
- *  - Each partition will have a `min` and `max` row, relative to the given ordering.  All rows
- *    that are in between `min` and `max` in this `ordering` will reside in this partition.
+ * the expressions specified in `ordering`.  When data is partitioned in this manner, it guarantees:
+ * Given any 2 adjacent partitions, all the rows of the second partition must be larger than any row
+ * in the first partition, according to the `ordering` expressions.
+ *
+ * This is a strictly stronger guarantee than what `OrderedDistribution(ordering)` requires, as
+ * there is no overlap between partitions.
  *
  * This class extends expression primarily so that transformations over expression will descend
  * into its child.
@@ -284,24 +256,33 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
-  override def satisfies(required: Distribution): Boolean = required match {
-    case UnspecifiedDistribution => true
-    case OrderedDistribution(requiredOrdering) =>
-      val minSize = Seq(requiredOrdering.size, ordering.size).min
-      requiredOrdering.take(minSize) == ordering.take(minSize)
-    case ClusteredDistribution(requiredClustering) =>
-      ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
-    case _ => false
-  }
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case o: RangePartitioning => this.semanticEquals(o)
-    case _ => false
-  }
-
-  override def guarantees(other: Partitioning): Boolean = other match {
-    case o: RangePartitioning => this.semanticEquals(o)
-    case _ => false
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
+      required match {
+        case OrderedDistribution(requiredOrdering) =>
+          // If `ordering` is a prefix of `requiredOrdering`:
+          //   Let's say `ordering` is [a, b] and `requiredOrdering` is [a, b, c]. According to the
+          //   RangePartitioning definition, any [a, b] in a previous partition must be smaller
+          //   than any [a, b] in the following partition. This also means any [a, b, c] in a
+          //   previous partition must be smaller than any [a, b, c] in the following partition.
+          //   Thus `RangePartitioning(a, b)` satisfies `OrderedDistribution(a, b, c)`.
+          //
+          // If `requiredOrdering` is a prefix of `ordering`:
+          //   Let's say `ordering` is [a, b, c] and `requiredOrdering` is [a, b]. According to the
+          //   RangePartitioning definition, any [a, b, c] in a previous partition must be smaller
+          //   than any [a, b, c] in the following partition. If there is a [a1, b1] from a previous
+          //   partition which is larger than a [a2, b2] from the following partition, then there
+          //   must be a [a1, b1 c1] larger than [a2, b2, c2], which violates RangePartitioning
+          //   definition. So it's guaranteed that, any [a, b] in a previous partition must not be
+          //   greater(i.e. smaller or equal to) than any [a, b] in the following partition. Thus
+          //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
+          val minSize = Seq(requiredOrdering.size, ordering.size).min
+          requiredOrdering.take(minSize) == ordering.take(minSize)
+        case ClusteredDistribution(requiredClustering, _) =>
+          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case _ => false
+      }
+    }
   }
 }
 
@@ -339,22 +320,8 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
    * Returns true if any `partitioning` of this collection satisfies the given
    * [[Distribution]].
    */
-  override def satisfies(required: Distribution): Boolean =
+  override def satisfies0(required: Distribution): Boolean =
     partitionings.exists(_.satisfies(required))
-
-  /**
-   * Returns true if any `partitioning` of this collection is compatible with
-   * the given [[Partitioning]].
-   */
-  override def compatibleWith(other: Partitioning): Boolean =
-    partitionings.exists(_.compatibleWith(other))
-
-  /**
-   * Returns true if any `partitioning` of this collection guarantees
-   * the given [[Partitioning]].
-   */
-  override def guarantees(other: Partitioning): Boolean =
-    partitionings.exists(_.guarantees(other))
 
   override def toString: String = {
     partitionings.map(_.toString).mkString("(", " or ", ")")
@@ -368,13 +335,8 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
   override val numPartitions: Int = 1
 
-  override def satisfies(required: Distribution): Boolean = required match {
+  override def satisfies0(required: Distribution): Boolean = required match {
     case BroadcastDistribution(m) if m == mode => true
-    case _ => false
-  }
-
-  override def compatibleWith(other: Partitioning): Boolean = other match {
-    case BroadcastPartitioning(m) if m == mode => true
     case _ => false
   }
 }

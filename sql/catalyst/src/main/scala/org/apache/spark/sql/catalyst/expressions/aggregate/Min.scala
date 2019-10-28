@@ -18,12 +18,19 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the minimum value of `expr`.")
+  usage = "_FUNC_(expr) - Returns the minimum value of `expr`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (10), (-1), (20) AS tab(col);
+       -1
+  """,
+  since = "1.0.0")
 case class Min(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
@@ -45,12 +52,12 @@ case class Min(child: Expression) extends DeclarativeAggregate {
   )
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
-    /* min = */ Least(Seq(min, child))
+    /* min = */ least(min, child)
   )
 
   override lazy val mergeExpressions: Seq[Expression] = {
     Seq(
-      /* min = */ Least(Seq(min.left, min.right))
+      /* min = */ least(min.left, min.right)
     )
   }
 

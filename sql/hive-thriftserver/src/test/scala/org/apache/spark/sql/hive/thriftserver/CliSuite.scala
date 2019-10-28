@@ -31,6 +31,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -200,10 +201,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Commands using SerDe provided in --jars") {
-    val jarFile =
-      "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
-        .split("/")
-        .mkString(File.separator)
+    val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
 
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
@@ -219,11 +217,37 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
-      "SELECT count(key) FROM t1;"
-        -> "5",
+      "SELECT collect_list(array(val)) FROM t1;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
       "DROP TABLE t1;"
         -> "",
       "DROP TABLE sourceTable;"
+        -> ""
+    )
+  }
+
+  test("SPARK-29022: Commands using SerDe provided in --hive.aux.jars.path") {
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+    runCliWithin(
+      3.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      """CREATE TABLE addJarWithHiveAux(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+      """.stripMargin
+        -> "",
+      "CREATE TABLE sourceTableForWithHiveAux (key INT, val STRING);"
+        -> "",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithHiveAux;"
+        -> "",
+      "INSERT INTO TABLE addJarWithHiveAux SELECT key, val FROM sourceTableForWithHiveAux;"
+        -> "",
+      "SELECT collect_list(array(val)) FROM addJarWithHiveAux;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+      "DROP TABLE addJarWithHiveAux;"
+        -> "",
+      "DROP TABLE sourceTableForWithHiveAux;"
         -> ""
     )
   }
@@ -281,6 +305,92 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SET conf2;" -> "1",
       "SET conf3=${hiveconf:conf1};" -> "conftest",
       "SET conf3;" -> "conftest"
+    )
+  }
+
+  test("SPARK-21451: spark.sql.warehouse.dir should respect options in --hiveconf") {
+    runCliWithin(1.minute)("set spark.sql.warehouse.dir;" -> warehousePath.getAbsolutePath)
+  }
+
+  test("SPARK-21451: Apply spark.hadoop.* configurations") {
+    val tmpDir = Utils.createTempDir(namePrefix = "SPARK-21451")
+    runCliWithin(
+      1.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$tmpDir"))(
+      "set spark.sql.warehouse.dir;" -> tmpDir.getAbsolutePath)
+    tmpDir.delete()
+  }
+
+  test("Support hive.aux.jars.path") {
+    val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      "CREATE TEMPORARY FUNCTION example_format AS " +
+        "'org.apache.hadoop.hive.contrib.udf.example.UDFExampleFormat';" -> "",
+      "SELECT example_format('%o', 93);" -> "135"
+    )
+  }
+
+  test("SPARK-28840 test --jars command") {
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--jars", s"$jarFile"))(
+      "CREATE TEMPORARY FUNCTION testjar AS" +
+        " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840"
+    )
+  }
+
+  test("SPARK-28840 test --jars and hive.aux.jars.path command") {
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--jars", s"$jarFile", "--conf",
+        s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      "CREATE TEMPORARY FUNCTION testjar AS" +
+        " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840",
+      "CREATE TEMPORARY FUNCTION example_max AS " +
+        "'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax';" -> "",
+      "SELECT concat_ws(',', 'First', example_max(1234321), 'Third');" -> "First,1234321,Third"
+    )
+  }
+
+  test("SPARK-29022 Commands using SerDe provided in ADD JAR sql") {
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+    runCliWithin(
+      3.minute)(
+      s"ADD JAR ${hiveContribJar};" -> "",
+      """CREATE TABLE addJarWithSQL(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+      """.stripMargin
+        -> "",
+      "CREATE TABLE sourceTableForWithSQL(key INT, val STRING);"
+        -> "",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithSQL;"
+        -> "",
+      "INSERT INTO TABLE addJarWithSQL SELECT key, val FROM sourceTableForWithSQL;"
+        -> "",
+      "SELECT collect_list(array(val)) FROM addJarWithSQL;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+      "DROP TABLE addJarWithSQL;"
+        -> "",
+      "DROP TABLE sourceTableForWithSQL;"
+        -> ""
+    )
+  }
+
+  test("SPARK-26321 Should not split semicolon within quoted string literals") {
+    runCliWithin(3.minute)(
+      """select 'Test1', "^;^";""" -> "Test1\t^;^",
+      """select 'Test2', "\";";""" -> "Test2\t\";",
+      """select 'Test3', "\';";""" -> "Test3\t';",
+      "select concat('Test4', ';');" -> "Test4;"
     )
   }
 }

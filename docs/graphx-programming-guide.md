@@ -3,6 +3,21 @@ layout: global
 displayTitle: GraphX Programming Guide
 title: GraphX
 description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -27,7 +42,7 @@ description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 [EdgeContext]: api/scala/index.html#org.apache.spark.graphx.EdgeContext
 [GraphOps.collectNeighborIds]: api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighborIds(EdgeDirection):VertexRDD[Array[VertexId]]
 [GraphOps.collectNeighbors]: api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighbors(EdgeDirection):VertexRDD[Array[(VertexId,VD)]]
-[RDD Persistence]: programming-guide.html#rdd-persistence
+[RDD Persistence]: rdd-programming-guide.html#rdd-persistence
 [Graph.cache]: api/scala/index.html#org.apache.spark.graphx.Graph@cache():Graph[VD,ED]
 [GraphOps.pregel]: api/scala/index.html#org.apache.spark.graphx.GraphOps@pregel[A](A,Int,EdgeDirection)((VertexId,VD,A)⇒VD,(EdgeTriplet[VD,ED])⇒Iterator[(VertexId,A)],(A,A)⇒A)(ClassTag[A]):Graph[VD,ED]
 [PartitionStrategy]: api/scala/index.html#org.apache.spark.graphx.PartitionStrategy$
@@ -168,11 +183,11 @@ code constructs a graph from a collection of RDDs:
 val sc: SparkContext
 // Create an RDD for the vertices
 val users: RDD[(VertexId, (String, String))] =
-  sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
+  sc.parallelize(Seq((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
                        (5L, ("franklin", "prof")), (2L, ("istoica", "prof"))))
 // Create an RDD for edges
 val relationships: RDD[Edge[String]] =
-  sc.parallelize(Array(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
+  sc.parallelize(Seq(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
                        Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi")))
 // Define a default user in case there are relationship with missing user
 val defaultUser = ("John Doe", "Missing")
@@ -283,7 +298,7 @@ class Graph[VD, ED] {
   // Functions for caching graphs ==================================================================
   def persist(newLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, ED]
   def cache(): Graph[VD, ED]
-  def unpersistVertices(blocking: Boolean = true): Graph[VD, ED]
+  def unpersistVertices(blocking: Boolean = false): Graph[VD, ED]
   // Change the partitioning heuristic  ============================================================
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
   // Transform vertex and edge attributes ==========================================================
@@ -317,7 +332,7 @@ class Graph[VD, ED] {
   // Iterative graph-parallel computation ==========================================================
   def pregel[A](initialMsg: A, maxIterations: Int, activeDirection: EdgeDirection)(
       vprog: (VertexId, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED]
   // Basic graph algorithms ========================================================================
@@ -405,12 +420,12 @@ interest or eliminate broken links. For example in the following code we remove 
 {% highlight scala %}
 // Create an RDD for the vertices
 val users: RDD[(VertexId, (String, String))] =
-  sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
+  sc.parallelize(Seq((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
                        (5L, ("franklin", "prof")), (2L, ("istoica", "prof")),
                        (4L, ("peter", "student"))))
 // Create an RDD for edges
 val relationships: RDD[Edge[String]] =
-  sc.parallelize(Array(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
+  sc.parallelize(Seq(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
                        Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi"),
                        Edge(4L, 0L, "student"),   Edge(5L, 0L, "colleague")))
 // Define a default user in case there are relationship with missing user
@@ -491,7 +506,7 @@ val joinedGraph = graph.joinVertices(uniqueCosts)(
 The more general [`outerJoinVertices`][Graph.outerJoinVertices] behaves similarly to `joinVertices`
 except that the user defined `map` function is applied to all vertices and can change the vertex
 property type.  Because not all vertices may have a matching value in the input RDD the `map`
-function takes an `Option` type.  For example, we can setup a graph for PageRank by initializing
+function takes an `Option` type.  For example, we can set up a graph for PageRank by initializing
 vertex properties with their `outDegree`.
 
 
@@ -522,7 +537,7 @@ val joinedGraph = graph.joinVertices(uniqueCosts,
 
 A key step in many graph analytics tasks is aggregating information about the neighborhood of each
 vertex.
-For example, we might want to know the number of followers each user has or the average age of the
+For example, we might want to know the number of followers each user has or the average age of
 the followers of each user.  Many iterative graph algorithms (e.g., PageRank, Shortest Path, and
 connected components) repeatedly aggregate properties of neighboring vertices (e.g., current
 PageRank Value, shortest path to the source, and smallest reachable vertex id).
@@ -700,7 +715,7 @@ a new value for the vertex property, and then send messages to neighboring verti
 super step.  Unlike Pregel, messages are computed in parallel as a
 function of the edge triplet and the message computation has access to both the source and
 destination vertex attributes.  Vertices that do not receive a message are skipped within a super
-step.  The Pregel operators terminates iteration and returns the final graph when there are no
+step.  The Pregel operator terminates iteration and returns the final graph when there are no
 messages remaining.
 
 > Note, unlike more standard Pregel implementations, vertices in GraphX can only send messages to
@@ -708,7 +723,7 @@ messages remaining.
 > messaging function.  These constraints allow additional optimization within GraphX.
 
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
-of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodcally
+of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodically
 checkpoint graph and messages by setting "spark.graphx.pregel.checkpointInterval" to a positive number,
 say 10. And set checkpoint directory as well using SparkContext.setCheckpointDir(directory: String)):
 
@@ -726,7 +741,7 @@ class GraphOps[VD, ED] {
     var g = mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
 
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
+    var messages = GraphXUtils.mapReduceTriplets(g, sendMsg, mergeMsg)
     var activeMessages = messages.count()
     // Loop until no messages remain or maxIterations is achieved
     var i = 0
@@ -928,7 +943,7 @@ switch to 2D-partitioning or other heuristics included in GraphX.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-Once the edges have be partitioned the key challenge to efficient graph-parallel computation is
+Once the edges have been partitioned the key challenge to efficient graph-parallel computation is
 efficiently joining vertex attributes with the edges.  Because real-world graphs typically have more
 edges than vertices, we move vertex attributes to the edges.  Because not all partitions will
 contain edges adjacent to all vertices we internally maintain a routing table which identifies where
@@ -969,7 +984,7 @@ A vertex is part of a triangle when it has two adjacent vertices with an edge be
 # Examples
 
 Suppose I want to build a graph from some text files, restrict the graph
-to important relationships and users, run page-rank on the sub-graph, and
+to important relationships and users, run page-rank on the subgraph, and
 then finally return attributes associated with the top users.  I can do
 all of this in just a few lines with GraphX:
 

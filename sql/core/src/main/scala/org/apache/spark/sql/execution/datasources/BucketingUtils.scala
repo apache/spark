@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+
 object BucketingUtils {
   // The file name of bucketed data should have 3 parts:
   //   1. some other information in the head of file name
@@ -33,6 +36,17 @@ object BucketingUtils {
   def getBucketId(fileName: String): Option[Int] = fileName match {
     case bucketedFileName(bucketId) => Some(bucketId.toInt)
     case other => None
+  }
+
+  // Given bucketColumn, numBuckets and value, returns the corresponding bucketId
+  def getBucketIdFromValue(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
+    val mutableInternalRow = new SpecificInternalRow(Seq(bucketColumn.dataType))
+    mutableInternalRow.update(0, value)
+
+    val bucketIdGenerator = UnsafeProjection.create(
+      HashPartitioning(Seq(bucketColumn), numBuckets).partitionIdExpression :: Nil,
+      bucketColumn :: Nil)
+    bucketIdGenerator(mutableInternalRow).getInt(0)
   }
 
   def bucketIdToString(id: Int): String = f"_$id%05d"

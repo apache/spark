@@ -37,7 +37,7 @@ if __name__ == "__main__":
     # Fit the model
     lsvcModel = lsvc.fit(training)
 
-    # Print the coefficients and intercept for linearsSVC
+    # Print the coefficients and intercept for linear SVC
     print("Coefficients: " + str(lsvcModel.coefficients))
     print("Intercept: " + str(lsvcModel.intercept))
 

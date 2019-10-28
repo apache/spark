@@ -21,12 +21,12 @@ import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -261,7 +261,8 @@ private[ml] class FeatureEncoder(numFeatures: Array[Int]) extends Serializable {
    */
   def foreachNonzeroOutput(value: Any, f: (Int, Double) => Unit): Unit = value match {
     case d: Double =>
-      assert(numFeatures.length == 1, "DoubleType columns should only contain one feature.")
+      assert(numFeatures.length == 1,
+        s"${DoubleType.catalogString} columns should only contain one feature.")
       val numOutputCols = numFeatures.head
       if (numOutputCols > 1) {
         assert(

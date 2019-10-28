@@ -66,9 +66,24 @@ test_that("spark.svmLinear", {
   feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
   data <- as.data.frame(cbind(label, feature))
   df <- createDataFrame(data)
-  model <- spark.svmLinear(df, label ~ feature, regParam = 0.1)
+  model <- spark.svmLinear(df, label ~ feature, regParam = 0.1, maxIter = 5)
   prediction <- collect(select(predict(model, df), "prediction"))
   expect_equal(sort(prediction$prediction), c("0.0", "0.0", "0.0", "1.0", "1.0"))
+
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+  someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                            stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.svmLinear(traindf, clicked ~ ., regParam = 0.1, maxIter = 5)
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.svmLinear(traindf, clicked ~ ., regParam = 0.1,
+                           handleInvalid = "skip", maxIter = 5)
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "list")
 
 })
 
@@ -109,7 +124,7 @@ test_that("spark.logit", {
   # Petal.Width   0.42122607
   # nolint end
 
-  # Test multinomial logistic regression againt three classes
+  # Test multinomial logistic regression against three classes
   df <- suppressWarnings(createDataFrame(iris))
   model <- spark.logit(df, Species ~ ., regParam = 0.5)
   summary <- summary(model)
@@ -181,7 +196,7 @@ test_that("spark.logit", {
   #
   # nolint end
 
-  # Test multinomial logistic regression againt two classes
+  # Test multinomial logistic regression against two classes
   df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
   model <- spark.logit(training, Species ~ ., regParam = 0.5, family = "multinomial")
@@ -193,7 +208,7 @@ test_that("spark.logit", {
   expect_true(all(abs(versicolorCoefsR - versicolorCoefs) < 0.1))
   expect_true(all(abs(virginicaCoefsR - virginicaCoefs) < 0.1))
 
-  # Test binomial logistic regression againt two classes
+  # Test binomial logistic regression against two classes
   model <- spark.logit(training, Species ~ ., regParam = 0.5)
   summary <- summary(model)
   coefsR <- c(-6.08, 0.25, 0.16, 0.48, 1.04)
@@ -224,7 +239,7 @@ test_that("spark.logit", {
   prediction2 <- collect(select(predict(model2, df2), "prediction"))
   expect_equal(sort(prediction2$prediction), c("0.0", "0.0", "0.0", "0.0", "0.0"))
 
-  # Test binomial logistic regression againt two classes with upperBoundsOnCoefficients
+  # Test binomial logistic regression against two classes with upperBoundsOnCoefficients
   # and upperBoundsOnIntercepts
   u <- matrix(c(1.0, 0.0, 1.0, 0.0), nrow = 1, ncol = 4)
   model <- spark.logit(training, Species ~ ., upperBoundsOnCoefficients = u,
@@ -237,7 +252,7 @@ test_that("spark.logit", {
   expect_error(spark.logit(training, Species ~ ., upperBoundsOnCoefficients = as.array(c(1, 2)),
                            upperBoundsOnIntercepts = 1.0))
 
-  # Test binomial logistic regression againt two classes with lowerBoundsOnCoefficients
+  # Test binomial logistic regression against two classes with lowerBoundsOnCoefficients
   # and lowerBoundsOnIntercepts
   l <- matrix(c(0.0, -1.0, 0.0, -1.0), nrow = 1, ncol = 4)
   model <- spark.logit(training, Species ~ ., lowerBoundsOnCoefficients = l,
@@ -263,13 +278,28 @@ test_that("spark.logit", {
   virginicaCoefs <- summary$coefficients[, "virginica"]
   expect_true(all(abs(versicolorCoefsR - versicolorCoefs) < 0.1))
   expect_true(all(abs(virginicaCoefsR - virginicaCoefs) < 0.1))
+
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+  someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                            stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.logit(traindf, clicked ~ ., regParam = 0.5)
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.logit(traindf, clicked ~ ., regParam = 0.5, handleInvalid = "keep")
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "character")
+
 })
 
 test_that("spark.mlp", {
   df <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                 source = "libsvm")
   model <- spark.mlp(df, label ~ features, blockSize = 128, layers = c(4, 5, 4, 3),
-                     solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1)
+                     solver = "l-bfgs", maxIter = 100, tol = 0.00001, stepSize = 1, seed = 1)
 
   # Test summary method
   summary <- summary(model)
@@ -277,13 +307,13 @@ test_that("spark.mlp", {
   expect_equal(summary$numOfOutputs, 3)
   expect_equal(summary$layers, c(4, 5, 4, 3))
   expect_equal(length(summary$weights), 64)
-  expect_equal(head(summary$weights, 5), list(-0.878743, 0.2154151, -1.16304, -0.6583214, 1.009825),
-               tolerance = 1e-6)
+  expect_equal(head(summary$weights, 5), list(-24.28415, 107.8701, 16.86376, 1.103736, 9.244488),
+               tolerance = 1e-1)
 
   # Test predict method
   mlpTestDF <- df
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
-  expect_equal(head(mlpPredictions$prediction, 6), c("1.0", "0.0", "0.0", "0.0", "0.0", "0.0"))
+  expect_equal(head(mlpPredictions$prediction, 6), c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0"))
 
   # Test model save/load
   if (windows_with_hadoop()) {
@@ -318,12 +348,12 @@ test_that("spark.mlp", {
 
   # Test random seed
   # default seed
-  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 10)
+  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 100)
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10),
                c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
   # seed equals 10
-  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 10, seed = 10)
+  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 100, seed = 10)
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10),
                c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
@@ -344,6 +374,21 @@ test_that("spark.mlp", {
   expect_equal(summary$numOfOutputs, 3)
   expect_equal(summary$layers, c(4, 3))
   expect_equal(length(summary$weights), 15)
+
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+  someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                            stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 2))
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 2), handleInvalid = "skip")
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "list")
+
 })
 
 test_that("spark.naiveBayes", {
@@ -427,6 +472,20 @@ test_that("spark.naiveBayes", {
   expect_equal(as.double(s$apriori[1, 1]), 0.5833333, tolerance = 1e-6)
   expect_equal(sum(s$apriori), 1)
   expect_equal(as.double(s$tables[1, "Age_Adult"]), 0.5714286, tolerance = 1e-6)
+
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+  someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                            stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.naiveBayes(traindf, clicked ~ ., smoothing = 0.0)
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.naiveBayes(traindf, clicked ~ ., smoothing = 0.0, handleInvalid = "keep")
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "character")
 })
 
 sparkR.session.stop()

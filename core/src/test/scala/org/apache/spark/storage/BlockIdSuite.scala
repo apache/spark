@@ -22,26 +22,21 @@ import java.util.UUID
 import org.apache.spark.SparkFunSuite
 
 class BlockIdSuite extends SparkFunSuite {
-  def assertSame(id1: BlockId, id2: BlockId) {
+  def assertSame(id1: BlockId, id2: BlockId): Unit = {
     assert(id1.name === id2.name)
     assert(id1.hashCode === id2.hashCode)
     assert(id1 === id2)
   }
 
-  def assertDifferent(id1: BlockId, id2: BlockId) {
+  def assertDifferent(id1: BlockId, id2: BlockId): Unit = {
     assert(id1.name != id2.name)
     assert(id1.hashCode != id2.hashCode)
     assert(id1 != id2)
   }
 
   test("test-bad-deserialization") {
-    try {
-      // Try to deserialize an invalid block id.
+    intercept[UnrecognizedBlockId] {
       BlockId("myblock")
-      fail()
-    } catch {
-      case e: IllegalStateException => // OK
-      case _: Throwable => fail()
     }
   }
 
@@ -65,6 +60,20 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.shuffleId === 1)
     assert(id.mapId === 2)
     assert(id.reduceId === 3)
+    assert(id.isShuffle)
+    assertSame(id, BlockId(id.toString))
+  }
+
+  test("shuffle batch") {
+    val id = ShuffleBlockBatchId(1, 2, 3, 4)
+    assertSame(id, ShuffleBlockBatchId(1, 2, 3, 4))
+    assertDifferent(id, ShuffleBlockBatchId(2, 2, 3, 4))
+    assert(id.name === "shuffle_1_2_3_4")
+    assert(id.asRDDId === None)
+    assert(id.shuffleId === 1)
+    assert(id.mapId === 2)
+    assert(id.startReduceId === 3)
+    assert(id.endReduceId === 4)
     assert(id.isShuffle)
     assertSame(id, BlockId(id.toString))
   }
@@ -139,6 +148,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.id.getMostSignificantBits() === 5)
     assert(id.id.getLeastSignificantBits() === 2)
     assert(!id.isShuffle)
+    assertSame(id, BlockId(id.toString))
   }
 
   test("temp shuffle") {
@@ -151,6 +161,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.id.getMostSignificantBits() === 1)
     assert(id.id.getLeastSignificantBits() === 2)
     assert(!id.isShuffle)
+    assertSame(id, BlockId(id.toString))
   }
 
   test("test") {

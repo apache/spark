@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.IMetaStoreClient
 import org.apache.hadoop.hive.metastore.api.{EnvironmentContext, Function => HiveFunction, FunctionType}
 import org.apache.hadoop.hive.metastore.api.{MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
@@ -40,12 +41,14 @@ import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegralType, StringType}
+import org.apache.spark.sql.types.{AtomicType, IntegralType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -158,6 +161,8 @@ private[client] sealed abstract class Shim {
     method
   }
 
+  def getMSC(hive: Hive): IMetaStoreClient
+
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
   }
@@ -168,6 +173,17 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   protected lazy val holdDDLTime = JBoolean.FALSE
   // deletes the underlying data along with metadata
   protected lazy val deleteDataInDropIndex = JBoolean.TRUE
+
+  protected lazy val getMSCMethod = {
+    // Since getMSC() in Hive 0.12 is private, findMethod() could not work here
+    val msc = classOf[Hive].getDeclaredMethod("getMSC")
+    msc.setAccessible(true)
+    msc
+  }
+
+  override def getMSC(hive: Hive): IMetaStoreClient = {
+    getMSCMethod.invoke(hive).asInstanceOf[IMetaStoreClient]
+  }
 
   private lazy val startMethod =
     findStaticMethod(
@@ -341,7 +357,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   }
 
   override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
-    conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000
+    conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000L
   }
 
   override def loadPartition(
@@ -514,7 +530,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       f.className,
       null,
       PrincipalType.USER,
-      (System.currentTimeMillis / 1000).toInt,
+      TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis).toInt,
       FunctionType.JAVA,
       resourceUris.asJava)
   }
@@ -583,24 +599,141 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
    * Unsupported predicates are skipped.
    */
   def convertFilters(table: Table, filters: Seq[Expression]): String = {
-    // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
-    lazy val varcharKeys = table.getPartitionKeys.asScala
-      .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
-        col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
-      .map(col => col.getName).toSet
+    /**
+     * An extractor that matches all binary comparison operators except null-safe equality.
+     *
+     * Null-safe equality is not supported by Hive metastore partition predicate pushdown
+     */
+    object SpecialBinaryComparison {
+      def unapply(e: BinaryComparison): Option[(Expression, Expression)] = e match {
+        case _: EqualNullSafe => None
+        case _ => Some((e.left, e.right))
+      }
+    }
 
-    filters.collect {
-      case op @ BinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
-        s"${a.name} ${op.symbol} $v"
-      case op @ BinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
-        s"$v ${op.symbol} ${a.name}"
-      case op @ BinaryComparison(a: Attribute, Literal(v, _: StringType))
-          if !varcharKeys.contains(a.name) =>
-        s"""${a.name} ${op.symbol} ${quoteStringLiteral(v.toString)}"""
-      case op @ BinaryComparison(Literal(v, _: StringType), a: Attribute)
-          if !varcharKeys.contains(a.name) =>
-        s"""${quoteStringLiteral(v.toString)} ${op.symbol} ${a.name}"""
-    }.mkString(" and ")
+    object ExtractableLiteral {
+      def unapply(expr: Expression): Option[String] = expr match {
+        case Literal(null, _) => None // `null`s can be cast as other types; we want to avoid NPEs.
+        case Literal(value, _: IntegralType) => Some(value.toString)
+        case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString))
+        case _ => None
+      }
+    }
+
+    object ExtractableLiterals {
+      def unapply(exprs: Seq[Expression]): Option[Seq[String]] = {
+        // SPARK-24879: The Hive metastore filter parser does not support "null", but we still want
+        // to push down as many predicates as we can while still maintaining correctness.
+        // In SQL, the `IN` expression evaluates as follows:
+        //  > `1 in (2, NULL)` -> NULL
+        //  > `1 in (1, NULL)` -> true
+        //  > `1 in (2)` -> false
+        // Since Hive metastore filters are NULL-intolerant binary operations joined only by
+        // `AND` and `OR`, we can treat `NULL` as `false` and thus rewrite `1 in (2, NULL)` as
+        // `1 in (2)`.
+        // If the Hive metastore begins supporting NULL-tolerant predicates and Spark starts
+        // pushing down these predicates, then this optimization will become incorrect and need
+        // to be changed.
+        val extractables = exprs
+            .filter {
+              case Literal(null, _) => false
+              case _ => true
+            }.map(ExtractableLiteral.unapply)
+        if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
+          Some(extractables.map(_.get))
+        } else {
+          None
+        }
+      }
+    }
+
+    object ExtractableValues {
+      private lazy val valueToLiteralString: PartialFunction[Any, String] = {
+        case value: Byte => value.toString
+        case value: Short => value.toString
+        case value: Int => value.toString
+        case value: Long => value.toString
+        case value: UTF8String => quoteStringLiteral(value.toString)
+      }
+
+      def unapply(values: Set[Any]): Option[Seq[String]] = {
+        val extractables = values.toSeq.map(valueToLiteralString.lift)
+        if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
+          Some(extractables.map(_.get))
+        } else {
+          None
+        }
+      }
+    }
+
+    object NonVarcharAttribute {
+      // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
+      private val varcharKeys = table.getPartitionKeys.asScala
+        .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
+          col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
+        .map(col => col.getName).toSet
+
+      def unapply(attr: Attribute): Option[String] = {
+        if (varcharKeys.contains(attr.name)) {
+          None
+        } else {
+          Some(attr.name)
+        }
+      }
+    }
+
+    def convertInToOr(name: String, values: Seq[String]): String = {
+      values.map(value => s"$name = $value").mkString("(", " or ", ")")
+    }
+
+    val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
+
+    object ExtractAttribute {
+      def unapply(expr: Expression): Option[Attribute] = {
+        expr match {
+          case attr: Attribute => Some(attr)
+          case Cast(child @ AtomicType(), dt: AtomicType, _)
+              if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
+          case _ => None
+        }
+      }
+    }
+
+    def convert(expr: Expression): Option[String] = expr match {
+      case In(ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiterals(values))
+          if useAdvanced =>
+        Some(convertInToOr(name, values))
+
+      case InSet(ExtractAttribute(NonVarcharAttribute(name)), ExtractableValues(values))
+          if useAdvanced =>
+        Some(convertInToOr(name, values))
+
+      case op @ SpecialBinaryComparison(
+          ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiteral(value)) =>
+        Some(s"$name ${op.symbol} $value")
+
+      case op @ SpecialBinaryComparison(
+          ExtractableLiteral(value), ExtractAttribute(NonVarcharAttribute(name))) =>
+        Some(s"$value ${op.symbol} $name")
+
+      case And(expr1, expr2) if useAdvanced =>
+        val converted = convert(expr1) ++ convert(expr2)
+        if (converted.isEmpty) {
+          None
+        } else {
+          Some(converted.mkString("(", " and ", ")"))
+        }
+
+      case Or(expr1, expr2) if useAdvanced =>
+        for {
+          left <- convert(expr1)
+          right <- convert(expr2)
+        } yield s"($left or $right)"
+
+      case _ => None
+    }
+
+    filters.flatMap(convert).mkString(" and ")
   }
 
   private def quoteStringLiteral(str: String): String = {
@@ -793,9 +926,7 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
 
 }
 
-private[client] class Shim_v1_0 extends Shim_v0_14 {
-
-}
+private[client] class Shim_v1_0 extends Shim_v0_14
 
 private[client] class Shim_v1_1 extends Shim_v1_0 {
 
@@ -871,7 +1002,7 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       part: JList[String],
       deleteData: Boolean,
       purge: Boolean): Unit = {
-    val dropOptions = dropOptionsClass.newInstance().asInstanceOf[Object]
+    val dropOptions = dropOptionsClass.getConstructor().newInstance().asInstanceOf[Object]
     dropOptionsDeleteData.setBoolean(dropOptions, deleteData)
     dropOptionsPurge.setBoolean(dropOptions, purge)
     dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)
@@ -1059,3 +1190,134 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
     alterPartitionsMethod.invoke(hive, tableName, newParts, environmentContextInAlterTable)
   }
 }
+
+private[client] class Shim_v2_2 extends Shim_v2_1
+
+private[client] class Shim_v2_3 extends Shim_v2_1
+
+private[client] class Shim_v3_0 extends Shim_v2_3 {
+  // Spark supports only non-ACID operations
+  protected lazy val isAcidIUDoperation = JBoolean.FALSE
+
+  // Writer ID can be 0 for non-ACID operations
+  protected lazy val writeIdInLoadTableOrPartition: JLong = 0L
+
+  // Statement ID
+  protected lazy val stmtIdInLoadTableOrPartition: JInteger = 0
+
+  protected lazy val listBucketingLevel: JInteger = 0
+
+  private lazy val clazzLoadFileType = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.ql.plan.LoadTableDesc$LoadFileType")
+
+  private lazy val loadPartitionMethod =
+    findMethod(
+      classOf[Hive],
+      "loadPartition",
+      classOf[Path],
+      classOf[Table],
+      classOf[JMap[String, String]],
+      clazzLoadFileType,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      classOf[JLong],
+      JInteger.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadTableMethod =
+    findMethod(
+      classOf[Hive],
+      "loadTable",
+      classOf[Path],
+      classOf[String],
+      clazzLoadFileType,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      classOf[JLong],
+      JInteger.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadDynamicPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "loadDynamicPartitions",
+      classOf[Path],
+      classOf[String],
+      classOf[JMap[String, String]],
+      clazzLoadFileType,
+      JInteger.TYPE,
+      JInteger.TYPE,
+      JBoolean.TYPE,
+      JLong.TYPE,
+      JInteger.TYPE,
+      JBoolean.TYPE,
+      classOf[AcidUtils.Operation],
+      JBoolean.TYPE)
+
+  override def loadPartition(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    val session = SparkSession.getActiveSession
+    assert(session.nonEmpty)
+    val database = session.get.sessionState.catalog.getCurrentDatabase
+    val table = hive.getTable(database, tableName)
+    val loadFileType = if (replace) {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
+    } else {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("KEEP_EXISTING"))
+    }
+    assert(loadFileType.isDefined)
+    loadPartitionMethod.invoke(hive, loadPath, table, partSpec, loadFileType.get,
+      inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
+      isSrcLocal: JBoolean, isAcid, hasFollowingStatsTask,
+      writeIdInLoadTableOrPartition, stmtIdInLoadTableOrPartition, replace: JBoolean)
+  }
+
+  override def loadTable(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      replace: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    val loadFileType = if (replace) {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
+    } else {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("KEEP_EXISTING"))
+    }
+    assert(loadFileType.isDefined)
+    loadTableMethod.invoke(hive, loadPath, tableName, loadFileType.get, isSrcLocal: JBoolean,
+      isSkewedStoreAsSubdir, isAcidIUDoperation, hasFollowingStatsTask,
+      writeIdInLoadTableOrPartition, stmtIdInLoadTableOrPartition: JInteger, replace: JBoolean)
+  }
+
+  override def loadDynamicPartitions(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      numDP: Int,
+      listBucketingEnabled: Boolean): Unit = {
+    val loadFileType = if (replace) {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
+    } else {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("KEEP_EXISTING"))
+    }
+    assert(loadFileType.isDefined)
+    loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, loadFileType.get,
+      numDP: JInteger, listBucketingLevel, isAcid, writeIdInLoadTableOrPartition,
+      stmtIdInLoadTableOrPartition, hasFollowingStatsTask, AcidUtils.Operation.NOT_ACID,
+      replace: JBoolean)
+  }
+}
+
+private[client] class Shim_v3_1 extends Shim_v3_0

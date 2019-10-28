@@ -52,7 +52,7 @@ object TestingUtils {
   /**
    * Private helper function for comparing two values using absolute tolerance.
    */
-  private def AbsoluteErrorComparison(x: Double, y: Double, eps: Double): Boolean = {
+  private[ml] def AbsoluteErrorComparison(x: Double, y: Double, eps: Double): Boolean = {
     // Special case for NaNs
     if (x.isNaN && y.isNaN) {
       return true

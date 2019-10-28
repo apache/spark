@@ -101,9 +101,22 @@ class UnsafeRowSuite extends SparkFunSuite {
         MemoryAllocator.UNSAFE.free(offheapRowPage)
       }
     }
+    val (bytesFromArrayBackedRowWithOffset, field0StringFromArrayBackedRowWithOffset) = {
+      val baos = new ByteArrayOutputStream()
+      val numBytes = arrayBackedUnsafeRow.getSizeInBytes
+      val bytesWithOffset = new Array[Byte](numBytes + 100)
+      System.arraycopy(arrayBackedUnsafeRow.getBaseObject.asInstanceOf[Array[Byte]], 0,
+        bytesWithOffset, 100, numBytes)
+      val arrayBackedRow = new UnsafeRow(arrayBackedUnsafeRow.numFields())
+      arrayBackedRow.pointTo(bytesWithOffset, Platform.BYTE_ARRAY_OFFSET + 100, numBytes)
+      arrayBackedRow.writeToStream(baos, null)
+      (baos.toByteArray, arrayBackedRow.getString(0))
+    }
 
     assert(bytesFromArrayBackedRow === bytesFromOffheapRow)
     assert(field0StringFromArrayBackedRow === field0StringFromOffheapRow)
+    assert(bytesFromArrayBackedRow === bytesFromArrayBackedRowWithOffset)
+    assert(field0StringFromArrayBackedRow === field0StringFromArrayBackedRowWithOffset)
   }
 
   test("calling getDouble() and getFloat() on null columns") {

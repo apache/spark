@@ -23,6 +23,7 @@ import io.netty.buffer.Unpooled;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.protocol.Encoders;
 import org.apache.spark.network.protocol.AbstractMessage;
+import org.apache.spark.network.protocol.Message;
 
 /**
  * Encodes a Sasl-related message which is attempting to authenticate using some credentials tagged
@@ -46,7 +47,7 @@ class SaslMessage extends AbstractMessage {
   }
 
   @Override
-  public Type type() { return Type.User; }
+  public Message.Type type() { return Type.User; }
 
   @Override
   public int encodedLength() {

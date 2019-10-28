@@ -29,11 +29,11 @@ export LC_ALL=C
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
 # NOTE: These should match those in the release publishing script
-HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pyarn -Phive"
+HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive"
 MVN="build/mvn"
 HADOOP_PROFILES=(
-    hadoop-2.6
     hadoop-2.7
+    hadoop-3.2
 )
 
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to
@@ -46,7 +46,7 @@ OLD_VERSION=$($MVN -q \
     -Dexec.executable="echo" \
     -Dexec.args='${project.version}' \
     --non-recursive \
-    org.codehaus.mojo:exec-maven-plugin:1.5.0:exec)
+    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec)
 if [ $? != 0 ]; then
     echo -e "Error while getting version string from Maven:\n$OLD_VERSION"
     exit 1
@@ -75,7 +75,7 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
 
   echo "Generating dependency manifest for $HADOOP_PROFILE"
   mkdir -p dev/pr-deps
-  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly \
+  $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly -am \
     | grep "Dependencies classpath:" -A 1 \
     | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
     | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE

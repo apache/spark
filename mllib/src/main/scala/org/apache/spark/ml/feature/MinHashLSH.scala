@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasSeed
@@ -29,8 +29,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: Experimental ::
- *
  * Model produced by [[MinHashLSH]], where multiple hash functions are stored. Each hash function
  * is picked from the following family of hash functions, where a_i and b_i are randomly chosen
  * integers less than prime:
@@ -44,26 +42,31 @@ import org.apache.spark.sql.types.StructType
  *
  * @param randCoefficients Pairs of random coefficients. Each pair is used by one hash function.
  */
-@Experimental
 @Since("2.1.0")
 class MinHashLSHModel private[ml](
     override val uid: String,
     private[ml] val randCoefficients: Array[(Int, Int)])
   extends LSHModel[MinHashLSHModel] {
 
+  /** @group setParam */
+  @Since("2.4.0")
+  override def setInputCol(value: String): this.type = super.set(inputCol, value)
+
+  /** @group setParam */
+  @Since("2.4.0")
+  override def setOutputCol(value: String): this.type = super.set(outputCol, value)
+
   @Since("2.1.0")
-  override protected[ml] val hashFunction: Vector => Array[Vector] = {
-    elems: Vector => {
-      require(elems.numNonzeros > 0, "Must have at least 1 non zero entry.")
-      val elemsList = elems.toSparse.indices.toList
-      val hashValues = randCoefficients.map { case (a, b) =>
-        elemsList.map { elem: Int =>
-          ((1 + elem) * a + b) % MinHashLSH.HASH_PRIME
-        }.min.toDouble
-      }
-      // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-      hashValues.map(Vectors.dense(_))
+  override protected[ml] def hashFunction(elems: Vector): Array[Vector] = {
+    require(elems.numNonzeros > 0, "Must have at least 1 non zero entry.")
+    val elemsList = elems.toSparse.indices.toList
+    val hashValues = randCoefficients.map { case (a, b) =>
+      elemsList.map { elem: Int =>
+        ((1L + elem) * a + b) % MinHashLSH.HASH_PRIME
+      }.min.toDouble
     }
+    // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
+    hashValues.map(Vectors.dense(_))
   }
 
   @Since("2.1.0")
@@ -96,8 +99,6 @@ class MinHashLSHModel private[ml](
 }
 
 /**
- * :: Experimental ::
- *
  * LSH class for Jaccard distance.
  *
  * The input can be dense or sparse vectors, but it is more efficient if it is sparse. For example,
@@ -109,7 +110,6 @@ class MinHashLSHModel private[ml](
  * References:
  * <a href="https://en.wikipedia.org/wiki/MinHash">Wikipedia on MinHash</a>
  */
-@Experimental
 @Since("2.1.0")
 class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with HasSeed {
 
@@ -197,7 +197,7 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
         .map(tuple => (tuple(0), tuple(1))).toArray
       val model = new MinHashLSHModel(metadata.uid, randCoefficients)
 
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

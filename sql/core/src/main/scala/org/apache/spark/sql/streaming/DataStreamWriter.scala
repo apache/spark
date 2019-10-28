@@ -21,12 +21,18 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
+import org.apache.spark.annotation.Evolving
+import org.apache.spark.api.java.function.VoidFunction2
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, TableProvider}
+import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -34,21 +40,23 @@ import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, Memory
  *
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()
 
   /**
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
-   *   - `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
-   *                            written to the sink
-   *   - `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
-   *                              to the sink every time these is some updates
-   *   - `OutputMode.Update()`: only the rows that were updated in the streaming DataFrame/Dataset
-   *                            will be written to the sink every time there are some updates. If
-   *                            the query doesn't contain aggregations, it will be equivalent to
-   *                            `OutputMode.Append()` mode.
+   * <ul>
+   * <li> `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
+   * written to the sink.</li>
+   * <li> `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
+   * to the sink every time there are some updates.</li>
+   * <li> `OutputMode.Update()`: only the rows that were updated in the streaming
+   * DataFrame/Dataset will be written to the sink every time there are some updates.
+   * If the query doesn't contain aggregations, it will be equivalent to
+   * `OutputMode.Append()` mode.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
@@ -59,13 +67,16 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
-   *   - `append`:   only the new rows in the streaming DataFrame/Dataset will be written to
-   *                 the sink
-   *   - `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
-   *                 every time these is some updates
-   *   - `update`:   only the rows that were updated in the streaming DataFrame/Dataset will
-   *                 be written to the sink every time there are some updates. If the query doesn't
-   *                 contain aggregations, it will be equivalent to `append` mode.
+   * <ul>
+   * <li> `append`: only the new rows in the streaming DataFrame/Dataset will be written to
+   * the sink.</li>
+   * <li> `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
+   * every time there are some updates.</li>
+   * <li> `update`: only the rows that were updated in the streaming DataFrame/Dataset will
+   * be written to the sink every time there are some updates. If the query doesn't
+   * contain aggregations, it will be equivalent to `append` mode.</li>
+   * </ul>
+   *
    * @since 2.0.0
    */
   def outputMode(outputMode: String): DataStreamWriter[T] = {
@@ -126,8 +137,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
    * partition a dataset by year and then month, the directory layout would look like:
    *
-   *   - year=2016/month=01/
-   *   - year=2016/month=02/
+   * <ul>
+   * <li> year=2016/month=01/</li>
+   * <li> year=2016/month=02/</li>
+   * </ul>
    *
    * Partitioning is one of the most widely used techniques to optimize physical data layout.
    * It provides a coarse-grained index for skipping unnecessary data reads when queries have
@@ -240,14 +253,15 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
-      val sink = new MemorySink(df.schema, outputMode)
-      val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
+      val sink = new MemorySink()
+      val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink, df.schema.toAttributes))
       val chkpointLoc = extraOptions.get("checkpointLocation")
       val recoverFromChkpoint = outputMode == OutputMode.Complete()
       val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         chkpointLoc,
         df,
+        extraOptions.toMap,
         sink,
         outputMode,
         useTempCheckpointLocation = true,
@@ -257,84 +271,78 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       query
     } else if (source == "foreach") {
       assertNotPartitioned("foreach")
-      val sink = new ForeachSink[T](foreachWriter)(ds.exprEnc)
+      val sink = ForeachWriterTable[T](foreachWriter, ds.exprEnc)
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         extraOptions.get("checkpointLocation"),
         df,
+        extraOptions.toMap,
+        sink,
+        outputMode,
+        useTempCheckpointLocation = true,
+        trigger = trigger)
+    } else if (source == "foreachBatch") {
+      assertNotPartitioned("foreachBatch")
+      if (trigger.isInstanceOf[ContinuousTrigger]) {
+        throw new AnalysisException("'foreachBatch' is not supported with continuous trigger")
+      }
+      val sink = new ForeachBatchSink[T](foreachBatchWriter, ds.exprEnc)
+      df.sparkSession.sessionState.streamingQueryManager.startQuery(
+        extraOptions.get("queryName"),
+        extraOptions.get("checkpointLocation"),
+        df,
+        extraOptions.toMap,
         sink,
         outputMode,
         useTempCheckpointLocation = true,
         trigger = trigger)
     } else {
-      val (useTempCheckpointLocation, recoverFromCheckpointLocation) =
-        if (source == "console") {
-          (true, false)
-        } else {
-          (false, true)
+      val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
+      val disabledSources = df.sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
+      val useV1Source = disabledSources.contains(cls.getCanonicalName)
+
+      val sink = if (classOf[TableProvider].isAssignableFrom(cls) && !useV1Source) {
+        val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+          source = provider, conf = df.sparkSession.sessionState.conf)
+        val options = sessionOptions ++ extraOptions
+        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+        provider.getTable(dsOptions) match {
+          case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
+            table
+          case _ => createV1Sink()
         }
-      val dataSource =
-        DataSource(
-          df.sparkSession,
-          className = source,
-          options = extraOptions.toMap,
-          partitionColumns = normalizedParCols.getOrElse(Nil))
+      } else {
+        createV1Sink()
+      }
+
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         extraOptions.get("checkpointLocation"),
         df,
-        dataSource.createSink(outputMode),
+        extraOptions.toMap,
+        sink,
         outputMode,
-        useTempCheckpointLocation = useTempCheckpointLocation,
-        recoverFromCheckpointLocation = recoverFromCheckpointLocation,
+        useTempCheckpointLocation = source == "console" || source == "noop",
+        recoverFromCheckpointLocation = true,
         trigger = trigger)
     }
   }
 
+  private def createV1Sink(): Sink = {
+    val ds = DataSource(
+      df.sparkSession,
+      className = source,
+      options = extraOptions.toMap,
+      partitionColumns = normalizedParCols.getOrElse(Nil))
+    ds.createSink(outputMode)
+  }
+
   /**
-   * Starts the execution of the streaming query, which will continually send results to the given
-   * `ForeachWriter` as new data arrives. The `ForeachWriter` can be used to send the data
-   * generated by the `DataFrame`/`Dataset` to an external system.
-   *
-   * Scala example:
-   * {{{
-   *   datasetOfString.writeStream.foreach(new ForeachWriter[String] {
-   *
-   *     def open(partitionId: Long, version: Long): Boolean = {
-   *       // open connection
-   *     }
-   *
-   *     def process(record: String) = {
-   *       // write string to connection
-   *     }
-   *
-   *     def close(errorOrNull: Throwable): Unit = {
-   *       // close the connection
-   *     }
-   *   }).start()
-   * }}}
-   *
-   * Java example:
-   * {{{
-   *  datasetOfString.writeStream().foreach(new ForeachWriter<String>() {
-   *
-   *    @Override
-   *    public boolean open(long partitionId, long version) {
-   *      // open connection
-   *    }
-   *
-   *    @Override
-   *    public void process(String value) {
-   *      // write string to connection
-   *    }
-   *
-   *    @Override
-   *    public void close(Throwable errorOrNull) {
-   *      // close the connection
-   *    }
-   *  }).start();
-   * }}}
-   *
+   * Sets the output of the streaming query to be processed using the provided writer object.
+   * object. See [[org.apache.spark.sql.ForeachWriter]] for more details on the lifecycle and
+   * semantics.
    * @since 2.0.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
@@ -345,6 +353,45 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       throw new IllegalArgumentException("foreach writer cannot be null")
     }
     this
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * (Scala-specific) Sets the output of the streaming query to be processed using the provided
+   * function. This is supported only the in the micro-batch execution modes (that is, when the
+   * trigger is not continuous). In every micro-batch, the provided function will be called in
+   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
+   * The batchId can be used deduplicate and transactionally write the output
+   * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
+   * to exactly same for the same batchId (assuming all operations are deterministic in the query).
+   *
+   * @since 2.4.0
+   */
+  @Evolving
+  def foreachBatch(function: (Dataset[T], Long) => Unit): DataStreamWriter[T] = {
+    this.source = "foreachBatch"
+    if (function == null) throw new IllegalArgumentException("foreachBatch function cannot be null")
+    this.foreachBatchWriter = function
+    this
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * (Java-specific) Sets the output of the streaming query to be processed using the provided
+   * function. This is supported only the in the micro-batch execution modes (that is, when the
+   * trigger is not continuous). In every micro-batch, the provided function will be called in
+   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
+   * The batchId can be used deduplicate and transactionally write the output
+   * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
+   * to exactly same for the same batchId (assuming all operations are deterministic in the query).
+   *
+   * @since 2.4.0
+   */
+  @Evolving
+  def foreachBatch(function: VoidFunction2[Dataset[T], java.lang.Long]): DataStreamWriter[T] = {
+    foreachBatch((batchDs: Dataset[T], batchId: Long) => function.call(batchDs, batchId))
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
@@ -382,6 +429,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
   private var foreachWriter: ForeachWriter[T] = null
+
+  private var foreachBatchWriter: (Dataset[T], Long) => Unit = null
 
   private var partitioningColumns: Option[Seq[String]] = None
 }

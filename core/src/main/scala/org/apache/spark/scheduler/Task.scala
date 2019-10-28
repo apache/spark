@@ -25,6 +25,8 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.rdd.InputFileBlockHolder
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util._
 
 /**
@@ -49,6 +51,8 @@ import org.apache.spark.util._
  * @param jobId id of the job this task belongs to
  * @param appId id of the app this task belongs to
  * @param appAttemptId attempt id of the app this task belongs to
+ * @param isBarrier whether this task belongs to a barrier stage. Spark must launch all the tasks
+ *                  at the same time for a barrier stage.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
@@ -60,7 +64,8 @@ private[spark] abstract class Task[T](
       SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
-    val appAttemptId: Option[String] = None) extends Serializable {
+    val appAttemptId: Option[String] = None,
+    val isBarrier: Boolean = false) extends Serializable {
 
   @transient lazy val metrics: TaskMetrics =
     SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
@@ -70,22 +75,36 @@ private[spark] abstract class Task[T](
    *
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
+   * @param resources other host resources (like gpus) that this task attempt can access
    * @return the result of the task along with updates of Accumulators.
    */
   final def run(
       taskAttemptId: Long,
       attemptNumber: Int,
-      metricsSystem: MetricsSystem): T = {
+      metricsSystem: MetricsSystem,
+      resources: Map[String, ResourceInformation]): T = {
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
-    context = new TaskContextImpl(
+    // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
+    // the stage is barrier.
+    val taskContext = new TaskContextImpl(
       stageId,
+      stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
       partitionId,
       taskAttemptId,
       attemptNumber,
       taskMemoryManager,
       localProperties,
       metricsSystem,
-      metrics)
+      metrics,
+      resources)
+
+    context = if (isBarrier) {
+      new BarrierTaskContext(taskContext)
+    } else {
+      taskContext
+    }
+
+    InputFileBlockHolder.initialize()
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
@@ -141,6 +160,7 @@ private[spark] abstract class Task[T](
           // Though we unset the ThreadLocal here, the context member variable itself is still
           // queried directly in the TaskRunner to check for FetchFailedExceptions.
           TaskContext.unset()
+          InputFileBlockHolder.unset()
         }
       }
     }
@@ -160,7 +180,7 @@ private[spark] abstract class Task[T](
   var epoch: Long = -1
 
   // Task context, to be initialized in run().
-  @transient var context: TaskContextImpl = _
+  @transient var context: TaskContext = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _
@@ -169,7 +189,7 @@ private[spark] abstract class Task[T](
   // context is not yet initialized when kill() is invoked.
   @volatile @transient private var _reasonIfKilled: String = null
 
-  protected var _executorDeserializeTime: Long = 0
+  protected var _executorDeserializeTimeNs: Long = 0
   protected var _executorDeserializeCpuTime: Long = 0
 
   /**
@@ -180,7 +200,7 @@ private[spark] abstract class Task[T](
   /**
    * Returns the amount of time spent deserializing the RDD and function to be run.
    */
-  def executorDeserializeTime: Long = _executorDeserializeTime
+  def executorDeserializeTimeNs: Long = _executorDeserializeTimeNs
   def executorDeserializeCpuTime: Long = _executorDeserializeCpuTime
 
   /**
@@ -205,7 +225,7 @@ private[spark] abstract class Task[T](
    * be called multiple times.
    * If interruptThread is true, we will also call Thread.interrupt() on the Task's executor thread.
    */
-  def kill(interruptThread: Boolean, reason: String) {
+  def kill(interruptThread: Boolean, reason: String): Unit = {
     require(reason != null)
     _reasonIfKilled = reason
     if (context != null) {

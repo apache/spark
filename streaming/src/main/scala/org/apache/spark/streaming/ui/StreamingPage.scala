@@ -148,7 +148,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val resources = generateLoadResources()
+    val resources = generateLoadResources(request)
     val basicInfo = generateBasicInfo()
     val content = resources ++
       basicInfo ++
@@ -156,17 +156,17 @@ private[ui] class StreamingPage(parent: StreamingTab)
         generateStatTable() ++
           generateBatchListTables()
       }
-    SparkUIUtils.headerSparkPage("Streaming Statistics", content, parent, Some(5000))
+    SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent)
   }
 
   /**
    * Generate html that will load css/js files for StreamingPage
    */
-  private def generateLoadResources(): Seq[Node] = {
+  private def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
-    <script src={SparkUIUtils.prependBaseUri("/static/d3.min.js")}></script>
-      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri("/static/streaming/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri("/static/streaming/streaming-page.js")}></script>
+    <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
+      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming/streaming-page.css")} type="text/css"/>
+      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming/streaming-page.js")}></script>
     // scalastyle:on
   }
 
@@ -490,15 +490,40 @@ private[ui] class StreamingPage(parent: StreamingTab)
       sortBy(_.batchTime.milliseconds).reverse
 
     val activeBatchesContent = {
-      <h4 id="active">Active Batches ({runningBatches.size + waitingBatches.size})</h4> ++
-        new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq
+      <div class="row-fluid">
+        <div class="span12">
+          <span id="activeBatches" class="collapse-aggregated-activeBatches collapse-table"
+                onClick="collapseTable('collapse-aggregated-activeBatches',
+                'aggregated-activeBatches')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Active Batches ({runningBatches.size + waitingBatches.size})</a>
+            </h4>
+          </span>
+          <div class="aggregated-activeBatches collapsible-table">
+            {new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq}
+          </div>
+        </div>
+      </div>
     }
 
     val completedBatchesContent = {
-      <h4 id="completed">
-        Completed Batches (last {completedBatches.size} out of {listener.numTotalCompletedBatches})
-      </h4> ++
-        new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq
+      <div class="row-fluid">
+        <div class="span12">
+          <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
+                onClick="collapseTable('collapse-aggregated-completedBatches',
+                'aggregated-completedBatches')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Completed Batches (last {completedBatches.size}
+                out of {listener.numTotalCompletedBatches})</a>
+            </h4>
+          </span>
+          <div class="aggregated-completedBatches collapsible-table">
+            {new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq}
+          </div>
+        </div>
+      </div>
     }
 
     activeBatchesContent ++ completedBatchesContent

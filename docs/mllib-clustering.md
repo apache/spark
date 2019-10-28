@@ -2,6 +2,21 @@
 layout: global
 title: Clustering - RDD-based API
 displayTitle: Clustering - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 [Clustering](https://en.wikipedia.org/wiki/Cluster_analysis) is an unsupervised learning problem whereby we aim to group subsets
@@ -42,7 +57,7 @@ The following code snippets can be executed in `spark-shell`.
 In the following example after loading and parsing data, we use the
 [`KMeans`](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) object to cluster the data
 into two clusters. The number of desired clusters is passed to the algorithm. We then compute Within
-Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In fact the
+Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In fact, the
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) and [`KMeansModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeansModel) for details on the API.
@@ -134,7 +149,7 @@ Refer to the [`GaussianMixture` Python docs](api/python/pyspark.mllib.html#pyspa
 
 Power iteration clustering (PIC) is a scalable and efficient algorithm for clustering vertices of a
 graph given pairwise similarities as edge properties,
-described in [Lin and Cohen, Power Iteration Clustering](http://www.icml2010.org/papers/387.pdf).
+described in [Lin and Cohen, Power Iteration Clustering](http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf).
 It computes a pseudo-eigenvector of the normalized affinity matrix of the graph via
 [power iteration](http://en.wikipedia.org/wiki/Power_iteration)  and uses it to cluster vertices.
 `spark.mllib` includes an implementation of PIC using GraphX as its backend.
@@ -222,7 +237,7 @@ LDA supports different inference algorithms via `setOptimizer` function.
 on the likelihood function and yields comprehensive results, while
 `OnlineLDAOptimizer` uses iterative mini-batch sampling for [online
 variational
-inference](https://www.cs.princeton.edu/~blei/papers/HoffmanBleiBach2010b.pdf)
+inference](https://mimno.infosci.cornell.edu/info6150/readings/HoffmanBleiBach2010b.pdf)
 and is generally memory friendly.
 
 LDA takes in a collection of documents as vectors of word counts and the

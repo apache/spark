@@ -42,7 +42,7 @@ def parsePoint(line):
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: logistic_regression <file> <iterations>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
     sc = SparkContext(appName="PythonLR")
     points = sc.textFile(sys.argv[1]).map(parsePoint)
     iterations = int(sys.argv[2])

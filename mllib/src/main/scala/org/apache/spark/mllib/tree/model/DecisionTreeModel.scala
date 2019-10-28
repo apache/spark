@@ -126,14 +126,10 @@ class DecisionTreeModel @Since("1.0.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     DecisionTreeModel.SaveLoadV1_0.save(sc, path, this)
   }
-
-  override protected def formatVersion: String = DecisionTreeModel.formatVersion
 }
 
 @Since("1.3.0")
 object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
-
-  private[spark] def formatVersion: String = "1.0"
 
   private[tree] object SaveLoadV1_0 {
 

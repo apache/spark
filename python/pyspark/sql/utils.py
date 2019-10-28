@@ -16,15 +16,25 @@
 #
 
 import py4j
+import sys
+
+if sys.version_info.major >= 3:
+    unicode = str
 
 
 class CapturedException(Exception):
-    def __init__(self, desc, stackTrace):
+    def __init__(self, desc, stackTrace, cause=None):
         self.desc = desc
         self.stackTrace = stackTrace
+        self.cause = convert_exception(cause) if cause is not None else None
 
     def __str__(self):
-        return repr(self.desc)
+        desc = self.desc
+        # encode unicode instance for python2 for human readable description
+        if sys.version_info.major < 3 and isinstance(desc, unicode):
+            return str(desc.encode('utf-8'))
+        else:
+            return str(desc)
 
 
 class AnalysisException(CapturedException):
@@ -57,27 +67,41 @@ class QueryExecutionException(CapturedException):
     """
 
 
+class UnknownException(CapturedException):
+    """
+    None of the above exceptions.
+    """
+
+
+def convert_exception(e):
+    s = e.toString()
+    stackTrace = '\n\t at '.join(map(lambda x: x.toString(), e.getStackTrace()))
+    c = e.getCause()
+    if s.startswith('org.apache.spark.sql.AnalysisException: '):
+        return AnalysisException(s.split(': ', 1)[1], stackTrace, c)
+    if s.startswith('org.apache.spark.sql.catalyst.analysis'):
+        return AnalysisException(s.split(': ', 1)[1], stackTrace, c)
+    if s.startswith('org.apache.spark.sql.catalyst.parser.ParseException: '):
+        return ParseException(s.split(': ', 1)[1], stackTrace, c)
+    if s.startswith('org.apache.spark.sql.streaming.StreamingQueryException: '):
+        return StreamingQueryException(s.split(': ', 1)[1], stackTrace, c)
+    if s.startswith('org.apache.spark.sql.execution.QueryExecutionException: '):
+        return QueryExecutionException(s.split(': ', 1)[1], stackTrace, c)
+    if s.startswith('java.lang.IllegalArgumentException: '):
+        return IllegalArgumentException(s.split(': ', 1)[1], stackTrace, c)
+    return UnknownException(s, stackTrace, c)
+
+
 def capture_sql_exception(f):
     def deco(*a, **kw):
         try:
             return f(*a, **kw)
         except py4j.protocol.Py4JJavaError as e:
-            s = e.java_exception.toString()
-            stackTrace = '\n\t at '.join(map(lambda x: x.toString(),
-                                             e.java_exception.getStackTrace()))
-            if s.startswith('org.apache.spark.sql.AnalysisException: '):
-                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis'):
-                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.parser.ParseException: '):
-                raise ParseException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.streaming.StreamingQueryException: '):
-                raise StreamingQueryException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.execution.QueryExecutionException: '):
-                raise QueryExecutionException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('java.lang.IllegalArgumentException: '):
-                raise IllegalArgumentException(s.split(': ', 1)[1], stackTrace)
-            raise
+            converted = convert_exception(e.java_exception)
+            if not isinstance(converted, UnknownException):
+                raise converted
+            else:
+                raise
     return deco
 
 
@@ -110,3 +134,98 @@ def toJArray(gateway, jtype, arr):
     for i in range(0, len(arr)):
         jarr[i] = arr[i]
     return jarr
+
+
+def require_minimum_pandas_version():
+    """ Raise ImportError if minimum version of Pandas is not installed
+    """
+    # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
+    minimum_pandas_version = "0.23.2"
+
+    from distutils.version import LooseVersion
+    try:
+        import pandas
+        have_pandas = True
+    except ImportError:
+        have_pandas = False
+    if not have_pandas:
+        raise ImportError("Pandas >= %s must be installed; however, "
+                          "it was not found." % minimum_pandas_version)
+    if LooseVersion(pandas.__version__) < LooseVersion(minimum_pandas_version):
+        raise ImportError("Pandas >= %s must be installed; however, "
+                          "your version was %s." % (minimum_pandas_version, pandas.__version__))
+
+
+def require_minimum_pyarrow_version():
+    """ Raise ImportError if minimum version of pyarrow is not installed
+    """
+    # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
+    minimum_pyarrow_version = "0.12.1"
+
+    from distutils.version import LooseVersion
+    try:
+        import pyarrow
+        have_arrow = True
+    except ImportError:
+        have_arrow = False
+    if not have_arrow:
+        raise ImportError("PyArrow >= %s must be installed; however, "
+                          "it was not found." % minimum_pyarrow_version)
+    if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
+        raise ImportError("PyArrow >= %s must be installed; however, "
+                          "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
+
+
+def require_test_compiled():
+    """ Raise Exception if test classes are not compiled
+    """
+    import os
+    import glob
+    try:
+        spark_home = os.environ['SPARK_HOME']
+    except KeyError:
+        raise RuntimeError('SPARK_HOME is not defined in environment')
+
+    test_class_path = os.path.join(
+        spark_home, 'sql', 'core', 'target', '*', 'test-classes')
+    paths = glob.glob(test_class_path)
+
+    if len(paths) == 0:
+        raise RuntimeError(
+            "%s doesn't exist. Spark sql test classes are not compiled." % test_class_path)
+
+
+class ForeachBatchFunction(object):
+    """
+    This is the Python implementation of Java interface 'ForeachBatchFunction'. This wraps
+    the user-defined 'foreachBatch' function such that it can be called from the JVM when
+    the query is active.
+    """
+
+    def __init__(self, sql_ctx, func):
+        self.sql_ctx = sql_ctx
+        self.func = func
+
+    def call(self, jdf, batch_id):
+        from pyspark.sql.dataframe import DataFrame
+        try:
+            self.func(DataFrame(jdf, self.sql_ctx), batch_id)
+        except Exception as e:
+            self.error = e
+            raise e
+
+    class Java:
+        implements = ['org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction']
+
+
+def to_str(value):
+    """
+    A wrapper over str(), but converts bool values to lower case strings.
+    If None is given, just returns None, instead of converting it to string "None".
+    """
+    if isinstance(value, bool):
+        return str(value).lower()
+    elif value is None:
+        return value
+    else:
+        return str(value)

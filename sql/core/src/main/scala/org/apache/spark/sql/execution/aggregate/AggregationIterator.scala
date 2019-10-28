@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
  *    is used to generate result.
  */
 abstract class AggregationIterator(
+    partIndex: Int,
     groupingExpressions: Seq[NamedExpression],
     inputAttributes: Seq[Attribute],
     aggregateExpressions: Seq[AggregateExpression],
@@ -73,19 +74,19 @@ abstract class AggregationIterator(
       startingInputBufferOffset: Int): Array[AggregateFunction] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = startingInputBufferOffset
-    val expressionsLength = expressions.length
-    val functions = new Array[AggregateFunction](expressionsLength)
+    val functions = new Array[AggregateFunction](expressions.length)
     var i = 0
-    while (i < expressionsLength) {
-      val func = expressions(i).aggregateFunction
-      val funcWithBoundReferences: AggregateFunction = expressions(i).mode match {
+    val inputAttributeSeq: AttributeSeq = inputAttributes
+    for (expression <- expressions) {
+      val func = expression.aggregateFunction
+      val funcWithBoundReferences: AggregateFunction = expression.mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
           // We need to create BoundReferences if the function is not an
           // expression-based aggregate function (it does not support code-gen) and the mode of
           // this function is Partial or Complete because we will call eval of this
           // function's children in the update method of this aggregate function.
           // Those eval calls require BoundReferences to work.
-          BindReferences.bindReference(func, inputAttributes)
+          BindReferences.bindReference(func, inputAttributeSeq)
         case _ =>
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.
@@ -156,9 +157,9 @@ abstract class AggregationIterator(
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
-      val mergeExpressions = functions.zipWithIndex.flatMap {
-        case (ae: DeclarativeAggregate, i) =>
-          expressions(i).mode match {
+      val mergeExpressions = functions.zip(expressions).flatMap {
+        case (ae: DeclarativeAggregate, expression) =>
+          expression.mode match {
             case Partial | Complete => ae.updateExpressions
             case PartialMerge | Final => ae.mergeExpressions
           }
@@ -217,6 +218,7 @@ abstract class AggregationIterator(
 
       val resultProjection =
         UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateAttributes)
+      resultProjection.initialize(partIndex)
 
       (currentGroupingKey: UnsafeRow, currentBuffer: InternalRow) => {
         // Generate results for all expression-based aggregate functions.
@@ -235,6 +237,7 @@ abstract class AggregationIterator(
       val resultProjection = UnsafeProjection.create(
         groupingAttributes ++ bufferAttributes,
         groupingAttributes ++ bufferAttributes)
+      resultProjection.initialize(partIndex)
 
       // TypedImperativeAggregate stores generic object in aggregation buffer, and requires
       // calling serialization before shuffling. See [[TypedImperativeAggregate]] for more info.
@@ -256,6 +259,7 @@ abstract class AggregationIterator(
     } else {
       // Grouping-only: we only output values based on grouping expressions.
       val resultProjection = UnsafeProjection.create(resultExpressions, groupingAttributes)
+      resultProjection.initialize(partIndex)
       (currentGroupingKey: UnsafeRow, currentBuffer: InternalRow) => {
         resultProjection(currentGroupingKey)
       }

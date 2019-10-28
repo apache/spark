@@ -20,9 +20,14 @@
 #' S4 class that represents a FPGrowthModel
 #'
 #' @param jobj a Java object reference to the backing Scala FPGrowthModel
-#' @export
 #' @note FPGrowthModel since 2.2.0
 setClass("FPGrowthModel", slots = list(jobj = "jobj"))
+
+#' S4 class that represents a PrefixSpan
+#'
+#' @param jobj a Java object reference to the backing Scala PrefixSpan
+#' @note PrefixSpan since 3.0.0
+setClass("PrefixSpan", slots = list(jobj = "jobj"))
 
 #' FP-growth
 #'
@@ -45,7 +50,6 @@ setClass("FPGrowthModel", slots = list(jobj = "jobj"))
 #' @rdname spark.fpGrowth
 #' @name spark.fpGrowth
 #' @aliases spark.fpGrowth,SparkDataFrame-method
-#' @export
 #' @examples
 #' \dontrun{
 #' raw_data <- read.df(
@@ -109,7 +113,6 @@ setMethod("spark.fpGrowth", signature(data = "SparkDataFrame"),
 #'         and \code{freq} (frequency of the itemset).
 #' @rdname spark.fpGrowth
 #' @aliases freqItemsets,FPGrowthModel-method
-#' @export
 #' @note spark.freqItemsets(FPGrowthModel) since 2.2.0
 setMethod("spark.freqItemsets", signature(object = "FPGrowthModel"),
           function(object) {
@@ -119,13 +122,13 @@ setMethod("spark.freqItemsets", signature(object = "FPGrowthModel"),
 # Get association rules.
 
 #' @return A \code{SparkDataFrame} with association rules.
-#'         The \code{SparkDataFrame} contains three columns:
+#'         The \code{SparkDataFrame} contains four columns:
 #'         \code{antecedent} (an array of the same type as the input column),
 #'         \code{consequent} (an array of the same type as the input column),
-#'         and \code{condfidence} (confidence).
+#'         \code{condfidence} (confidence for the rule)
+#'         and \code{lift} (lift for the rule)
 #' @rdname spark.fpGrowth
 #' @aliases associationRules,FPGrowthModel-method
-#' @export
 #' @note spark.associationRules(FPGrowthModel) since 2.2.0
 setMethod("spark.associationRules", signature(object = "FPGrowthModel"),
           function(object) {
@@ -138,7 +141,6 @@ setMethod("spark.associationRules", signature(object = "FPGrowthModel"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted values.
 #' @rdname spark.fpGrowth
 #' @aliases predict,FPGrowthModel-method
-#' @export
 #' @note predict(FPGrowthModel) since 2.2.0
 setMethod("predict", signature(object = "FPGrowthModel"),
           function(object, newData) {
@@ -153,10 +155,68 @@ setMethod("predict", signature(object = "FPGrowthModel"),
 #'                  if the output path exists.
 #' @rdname spark.fpGrowth
 #' @aliases write.ml,FPGrowthModel,character-method
-#' @export
 #' @seealso \link{read.ml}
 #' @note write.ml(FPGrowthModel, character) since 2.2.0
 setMethod("write.ml", signature(object = "FPGrowthModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
           })
+
+#' PrefixSpan
+#'
+#' A parallel PrefixSpan algorithm to mine frequent sequential patterns.
+#' \code{spark.findFrequentSequentialPatterns} returns a complete set of frequent sequential
+#' patterns.
+#' For more details, see
+#' \href{https://spark.apache.org/docs/latest/mllib-frequent-pattern-mining.html#prefixspan}{
+#' PrefixSpan}.
+#'
+#  Find frequent sequential patterns.
+#' @param data A SparkDataFrame.
+#' @param minSupport Minimal support level.
+#' @param maxPatternLength Maximal pattern length.
+#' @param maxLocalProjDBSize Maximum number of items (including delimiters used in the internal
+#'                           storage format) allowed in a projected database before local
+#'                           processing.
+#' @param sequenceCol name of the sequence column in dataset.
+#' @param ... additional argument(s) passed to the method.
+#' @return A complete set of frequent sequential patterns in the input sequences of itemsets.
+#'         The returned \code{SparkDataFrame} contains columns of sequence and corresponding
+#'         frequency. The schema of it will be:
+#'         \code{sequence: ArrayType(ArrayType(T))}, \code{freq: integer}
+#'         where T is the item type
+#' @rdname spark.prefixSpan
+#' @aliases findFrequentSequentialPatterns,PrefixSpan,SparkDataFrame-method
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
+#'                            list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+#'                            list(list(list(1L, 2L), list(5L))),
+#'                            list(list(list(6L)))),
+#'                       schema = c("sequence"))
+#' frequency <- spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L,
+#'                                                   maxLocalProjDBSize = 32000000L)
+#' showDF(frequency)
+#' }
+#' @note spark.findFrequentSequentialPatterns(SparkDataFrame) since 3.0.0
+setMethod("spark.findFrequentSequentialPatterns",
+          signature(data = "SparkDataFrame"),
+          function(data, minSupport = 0.1, maxPatternLength = 10L,
+            maxLocalProjDBSize = 32000000L, sequenceCol = "sequence") {
+              if (!is.numeric(minSupport) || minSupport < 0) {
+                stop("minSupport should be a number with value >= 0.")
+              }
+              if (!is.integer(maxPatternLength) || maxPatternLength <= 0) {
+                stop("maxPatternLength should be a number with value > 0.")
+              }
+              if (!is.numeric(maxLocalProjDBSize) || maxLocalProjDBSize <= 0) {
+                stop("maxLocalProjDBSize should be a number with value > 0.")
+              }
+
+              jobj <- callJStatic("org.apache.spark.ml.r.PrefixSpanWrapper", "getPrefixSpan",
+                                  as.numeric(minSupport), as.integer(maxPatternLength),
+                                  as.numeric(maxLocalProjDBSize), as.character(sequenceCol))
+              object <- new("PrefixSpan", jobj = jobj)
+              dataFrame(callJMethod(object@jobj, "findFrequentSequentialPatterns", data@sdf))
+            }
+          )

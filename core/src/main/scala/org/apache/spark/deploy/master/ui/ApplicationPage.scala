@@ -23,6 +23,7 @@ import scala.xml.Node
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.ExecutorState
+import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourceRequirements, formatResourcesAddresses}
 import org.apache.spark.deploy.master.ExecutorDesc
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -33,17 +34,17 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
   /** Executor details for a particular application */
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val appId = UIUtils.stripXSS(request.getParameter("appId"))
+    val appId = request.getParameter("appId")
     val state = master.askSync[MasterStateResponse](RequestMasterState)
     val app = state.activeApps.find(_.id == appId)
       .getOrElse(state.completedApps.find(_.id == appId).orNull)
     if (app == null) {
       val msg = <div class="row-fluid">No running application with ID {appId}</div>
-      return UIUtils.basicSparkPage(msg, "Not Found")
+      return UIUtils.basicSparkPage(request, msg, "Not Found")
     }
 
-    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "State", "Logs")
+    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "Resources",
+      "State", "Logs")
     val allExecutors = (app.executors.values ++ app.removedExecutors).toSet.toSeq
     // This includes executors that are either still running or have exited cleanly
     val executors = allExecutors.filter { exec =>
@@ -84,6 +85,10 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
               <strong>Executor Memory:</strong>
               {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
             </li>
+            <li>
+              <strong>Executor Resources:</strong>
+              {formatResourceRequirements(app.desc.resourceReqsPerExecutor)}
+            </li>
             <li><strong>Submit Date:</strong> {UIUtils.formatDate(app.submitDate)}</li>
             <li><strong>State:</strong> {app.state}</li>
             {
@@ -100,17 +105,34 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
       <div class="row-fluid"> <!-- Executors -->
         <div class="span12">
-          <h4> Executor Summary ({allExecutors.length}) </h4>
-          {executorsTable}
+          <span class="collapse-aggregated-executors collapse-table"
+              onClick="collapseTable('collapse-aggregated-executors','aggregated-executors')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Executor Summary ({allExecutors.length})</a>
+            </h4>
+          </span>
+          <div class="aggregated-executors collapsible-table">
+            {executorsTable}
+          </div>
           {
             if (removedExecutors.nonEmpty) {
-              <h4> Removed Executors ({removedExecutors.length}) </h4> ++
-              removedExecutorsTable
+              <span class="collapse-aggregated-removedExecutors collapse-table"
+                  onClick="collapseTable('collapse-aggregated-removedExecutors',
+                  'aggregated-removedExecutors')">
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Removed Executors ({removedExecutors.length})</a>
+                </h4>
+              </span> ++
+              <div class="aggregated-removedExecutors collapsible-table">
+                {removedExecutorsTable}
+              </div>
             }
           }
         </div>
       </div>;
-    UIUtils.basicSparkPage(content, "Application: " + app.desc.name)
+    UIUtils.basicSparkPage(request, content, "Application: " + app.desc.name)
   }
 
   private def executorRow(executor: ExecutorDesc): Seq[Node] = {
@@ -123,12 +145,13 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       </td>
       <td>{executor.cores}</td>
       <td>{executor.memory}</td>
+      <td>{formatResourcesAddresses(executor.resources)}</td>
       <td>{executor.state}</td>
       <td>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
-          .format(workerUrlRef, executor.application.id, executor.id)}>stdout</a>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
-          .format(workerUrlRef, executor.application.id, executor.id)}>stderr</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+          id}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+          id}&logType=stderr"}>stderr</a>
       </td>
     </tr>
   }

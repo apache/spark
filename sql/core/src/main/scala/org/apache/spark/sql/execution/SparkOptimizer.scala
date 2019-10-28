@@ -19,23 +19,52 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.optimizer._
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning}
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
-import org.apache.spark.sql.execution.python.ExtractPythonUDFFromAggregate
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.datasources.SchemaPruning
+import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs}
 
 class SparkOptimizer(
+    catalogManager: CatalogManager,
     catalog: SessionCatalog,
-    conf: SQLConf,
     experimentalMethods: ExperimentalMethods)
-  extends Optimizer(catalog, conf) {
+  extends Optimizer(catalogManager) {
 
-  override def batches: Seq[Batch] = (preOptimizationBatches ++ super.batches :+
-    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog, conf)) :+
-    Batch("Extract Python UDF from Aggregate", Once, ExtractPythonUDFFromAggregate) :+
-    Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions)) ++
+  override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
+    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
+    Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
+    Batch("Schema Pruning", Once, SchemaPruning) :+
+    Batch("PartitionPruning", Once,
+      PartitionPruning,
+      OptimizeSubqueries) :+
+    Batch("Pushdown Filters from PartitionPruning", fixedPoint,
+      PushDownPredicates) :+
+    Batch("Cleanup filters that cannot be pushed down", Once,
+      CleanupDynamicPruningFilters,
+      PruneFilters)) ++
     postHocOptimizationBatches :+
+    Batch("Extract Python UDFs", Once,
+      ExtractPythonUDFFromJoinCondition,
+      // `ExtractPythonUDFFromJoinCondition` can convert a join to a cartesian product.
+      // Here, we rerun cartesian product check.
+      CheckCartesianProducts,
+      ExtractPythonUDFFromAggregate,
+      // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
+      ExtractGroupingPythonUDFFromAggregate,
+      ExtractPythonUDFs,
+      // The eval-python node may be between Project/Filter and the scan node, which breaks
+      // column pruning and filter push-down. Here we rerun the related optimizer rules.
+      ColumnPruning,
+      PushPredicateThroughNonJoin,
+      RemoveNoopOperators) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
+
+  override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
+    ExtractPythonUDFFromJoinCondition.ruleName :+
+    ExtractPythonUDFFromAggregate.ruleName :+ ExtractGroupingPythonUDFFromAggregate.ruleName :+
+    ExtractPythonUDFs.ruleName
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before
@@ -47,6 +76,8 @@ class SparkOptimizer(
    * Optimization batches that are executed after the regular optimization batches, but before the
    * batch executing the [[ExperimentalMethods]] optimizer rules. This hook can be used to add
    * custom optimizer batches to the Spark optimizer.
+   *
+   * Note that 'Extract Python UDFs' batch is an exception and ran after the batches defined here.
    */
    def postHocOptimizationBatches: Seq[Batch] = Nil
 }

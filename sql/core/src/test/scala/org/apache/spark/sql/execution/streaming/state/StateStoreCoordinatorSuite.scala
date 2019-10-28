@@ -27,6 +27,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
 import org.apache.spark.util.Utils
 
 class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
@@ -41,8 +42,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       assert(coordinatorRef.getLocation(id) === None)
 
       coordinatorRef.reportActiveInstance(id, "hostX", "exec1")
-      eventually(timeout(5 seconds)) {
-        assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === true)
+      eventually(timeout(5.seconds)) {
+        assert(coordinatorRef.verifyIfInstanceActive(id, "exec1"))
         assert(
           coordinatorRef.getLocation(id) ===
             Some(ExecutorCacheTaskLocation("hostX", "exec1").toString))
@@ -50,9 +51,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
       coordinatorRef.reportActiveInstance(id, "hostX", "exec2")
 
-      eventually(timeout(5 seconds)) {
+      eventually(timeout(5.seconds)) {
         assert(coordinatorRef.verifyIfInstanceActive(id, "exec1") === false)
-        assert(coordinatorRef.verifyIfInstanceActive(id, "exec2") === true)
+        assert(coordinatorRef.verifyIfInstanceActive(id, "exec2"))
 
         assert(
           coordinatorRef.getLocation(id) ===
@@ -75,16 +76,16 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       coordinatorRef.reportActiveInstance(id2, host, exec)
       coordinatorRef.reportActiveInstance(id3, host, exec)
 
-      eventually(timeout(5 seconds)) {
-        assert(coordinatorRef.verifyIfInstanceActive(id1, exec) === true)
-        assert(coordinatorRef.verifyIfInstanceActive(id2, exec) === true)
-        assert(coordinatorRef.verifyIfInstanceActive(id3, exec) === true)
+      eventually(timeout(5.seconds)) {
+        assert(coordinatorRef.verifyIfInstanceActive(id1, exec))
+        assert(coordinatorRef.verifyIfInstanceActive(id2, exec))
+        assert(coordinatorRef.verifyIfInstanceActive(id3, exec))
       }
 
       coordinatorRef.deactivateInstances(runId1)
 
       assert(coordinatorRef.verifyIfInstanceActive(id1, exec) === false)
-      assert(coordinatorRef.verifyIfInstanceActive(id2, exec) === true)
+      assert(coordinatorRef.verifyIfInstanceActive(id2, exec))
       assert(coordinatorRef.verifyIfInstanceActive(id3, exec) === false)
 
       assert(coordinatorRef.getLocation(id1) === None)
@@ -107,8 +108,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
       coordRef1.reportActiveInstance(id, "hostX", "exec1")
 
-      eventually(timeout(5 seconds)) {
-        assert(coordRef2.verifyIfInstanceActive(id, "exec1") === true)
+      eventually(timeout(5.seconds)) {
+        assert(coordRef2.verifyIfInstanceActive(id, "exec1"))
         assert(
           coordRef2.getLocation(id) ===
             Some(ExecutorCacheTaskLocation("hostX", "exec1").toString))
@@ -124,7 +125,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       import spark.implicits._
       coordRef = spark.streams.stateStoreCoordinator
       implicit val sqlContext = spark.sqlContext
-      spark.conf.set("spark.sql.shuffle.partitions", "1")
+      spark.conf.set(SHUFFLE_PARTITIONS.key, "1")
 
       // Start a query and run a batch to load state stores
       val inputData = MemoryStream[Int]

@@ -31,7 +31,7 @@ class EliminateMapObjectsSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = {
       Batch("EliminateMapObjects", FixedPoint(50),
-        NullPropagation(conf),
+        NullPropagation,
         SimplifyCasts,
         EliminateMapObjects) :: Nil
     }

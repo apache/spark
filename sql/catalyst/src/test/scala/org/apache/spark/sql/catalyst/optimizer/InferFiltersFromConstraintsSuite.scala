@@ -31,13 +31,28 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val batches =
       Batch("InferAndPushDownFilters", FixedPoint(100),
         PushPredicateThroughJoin,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         InferFiltersFromConstraints,
         CombineFilters,
-        BooleanSimplification) :: Nil
+        SimplifyBinaryComparison,
+        BooleanSimplification,
+        PruneFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+
+  private def testConstraintsAfterJoin(
+      x: LogicalPlan,
+      y: LogicalPlan,
+      expectedLeft: LogicalPlan,
+      expectedRight: LogicalPlan,
+      joinType: JoinType) = {
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y, joinType, condition).analyze
+    val correctAnswer = expectedLeft.join(expectedRight, joinType, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
 
   test("filter: filter out constraints in condition") {
     val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
@@ -151,44 +166,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull('b) && 'a <=> 'a && 'b <=> 'b &&'a === 'b)
+      .where(IsNotNull('a) && IsNotNull('b) &&'a === 'b)
       .select('a, 'b.as('d)).as("t")
-      .join(t2.where(IsNotNull('a) && 'a <=> 'a), Inner,
+      .join(t2.where(IsNotNull('a)), Inner,
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
-      .analyze
-    val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("inner join with alias: don't generate constraints for recursive functions") {
-    val t1 = testRelation.subquery('t1)
-    val t2 = testRelation.subquery('t2)
-
-    // We should prevent `Coalese(a, b)` from recursively creating complicated constraints through
-    // the constraint inference procedure.
-    val originalQuery = t1.select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col))
-      // We hide an `Alias` inside the child's child's expressions, to cover the situation reported
-      // in [SPARK-20700].
-      .select('int_col, 'd, 'a).as("t")
-      .join(t2, Inner,
-        Some("t.a".attr === "t2.a".attr
-          && "t.d".attr === "t2.a".attr
-          && "t.int_col".attr === "t2.a".attr))
-      .analyze
-    val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-        && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a))
-        && Coalesce(Seq('b, 'b)) <=> 'a && 'a === 'b && IsNotNull(Coalesce(Seq('a, 'b)))
-        && 'a === Coalesce(Seq('a, 'b)) && Coalesce(Seq('a, 'b)) === 'b
-        && IsNotNull('b) && IsNotNull(Coalesce(Seq('b, 'b)))
-        && 'b === Coalesce(Seq('b, 'b)) && 'b <=> Coalesce(Seq('b, 'b)))
-      .select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col))
-      .select('int_col, 'd, 'a).as("t")
-      .join(t2
-        .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-          && 'a <=> Coalesce(Seq('a, 'a)) && 'a === Coalesce(Seq('a, 'a)) && 'a <=> 'a), Inner,
-        Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr
-          && "t.int_col".attr === "t2.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
@@ -206,13 +187,80 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("No inferred filter when constraint propagation is disabled") {
-    try {
-      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, false)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
-    } finally {
-      SQLConf.get.unsetConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED)
     }
+  }
+
+  test("constraints should be inferred from aliased literals") {
+    val originalLeft = testRelation.subquery('left).as("left")
+    val optimizedLeft = testRelation.subquery('left).where(IsNotNull('a) && 'a <=> 2).as("left")
+
+    val right = Project(Seq(Literal(2).as("two")), testRelation.subquery('right)).as("right")
+    val condition = Some("left.a".attr === "right.two".attr)
+
+    val original = originalLeft.join(right, Inner, condition)
+    val correct = optimizedLeft.join(right, Inner, condition)
+
+    comparePlans(Optimize.execute(original.analyze), correct.analyze)
+  }
+
+  test("SPARK-23405: left-semi equal-join should filter out null join keys on both sides") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y.where(IsNotNull('a)), LeftSemi)
+  }
+
+  test("SPARK-21479: Outer join after-join filters push down to null-supplying side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y, LeftOuter, condition).where("x.a".attr === 2).analyze
+    val left = x.where(IsNotNull('a) && 'a === 2)
+    val right = y.where(IsNotNull('a) && 'a === 2)
+    val correctAnswer = left.join(right, LeftOuter, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-21479: Outer join pre-existing filters push down to null-supplying side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y.where("y.a".attr > 5), RightOuter, condition).analyze
+    val left = x.where(IsNotNull('a) && 'a > 5)
+    val right = y.where(IsNotNull('a) && 'a > 5)
+    val correctAnswer = left.join(right, RightOuter, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-21479: Outer join no filter push down to preserved side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(
+      x, y.where("a".attr === 1),
+      x, y.where(IsNotNull('a) && 'a === 1),
+      LeftOuter)
+  }
+
+  test("SPARK-23564: left anti join should filter out null join keys on right side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(x, y, x, y.where(IsNotNull('a)), LeftAnti)
+  }
+
+  test("SPARK-23564: left outer join should filter out null join keys on right side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(x, y, x, y.where(IsNotNull('a)), LeftOuter)
+  }
+
+  test("SPARK-23564: right outer join should filter out null join keys on left side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
   }
 }

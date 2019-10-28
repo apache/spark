@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -29,12 +30,13 @@ import org.apache.spark.sql.types.{IntegerType, NullType}
 class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("SimplifyConditionals", FixedPoint(50), SimplifyConditionals) :: Nil
+    val batches = Batch("SimplifyConditionals", FixedPoint(50),
+      BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
-    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation).analyze
-    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation).analyze)
+    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
+    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
     comparePlans(actual, correctAnswer)
   }
 
@@ -42,6 +44,10 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   private val normalBranch = (NonFoldableLiteral(true), Literal(10))
   private val unreachableBranch = (FalseLiteral, Literal(20))
   private val nullBranch = (Literal.create(null, NullType), Literal(30))
+
+  val isNotNullCond = IsNotNull(UnresolvedAttribute(Seq("a")))
+  val isNullCond = IsNull(UnresolvedAttribute("b"))
+  val notCond = Not(UnresolvedAttribute("c"))
 
   test("simplify if") {
     assertEquivalent(
@@ -55,6 +61,23 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     assertEquivalent(
       If(Literal.create(null, NullType), Literal(10), Literal(20)),
       Literal(20))
+  }
+
+  test("remove unnecessary if when the outputs are semantic equivalence") {
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")),
+        Subtract(Literal(10), Literal(1)),
+        Add(Literal(6), Literal(3))),
+      Literal(9))
+
+    // For non-deterministic condition, we don't remove the `If` statement.
+    assertEquivalent(
+      If(GreaterThan(Rand(0), Literal(0.5)),
+        Subtract(Literal(10), Literal(1)),
+        Add(Literal(6), Literal(3))),
+      If(GreaterThan(Rand(0), Literal(0.5)),
+        Literal(9),
+        Literal(9)))
   }
 
   test("remove unreachable branches") {
@@ -99,5 +122,48 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Nil,
         None),
       CaseWhen(normalBranch :: trueBranch :: Nil, None))
+  }
+
+  test("simplify CaseWhen if all the outputs are semantic equivalence") {
+    // When the conditions in `CaseWhen` are all deterministic, `CaseWhen` can be removed.
+    assertEquivalent(
+      CaseWhen((isNotNullCond, Subtract(Literal(3), Literal(2))) ::
+        (isNullCond, Literal(1)) ::
+        (notCond, Add(Literal(6), Literal(-5))) ::
+        Nil,
+        Add(Literal(2), Literal(-1))),
+      Literal(1)
+    )
+
+    // For non-deterministic conditions, we don't remove the `CaseWhen` statement.
+    assertEquivalent(
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Subtract(Literal(3), Literal(2))) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+        (EqualTo(Rand(2), Literal(0.5)), Add(Literal(6), Literal(-5))) ::
+        Nil,
+        Add(Literal(2), Literal(-1))),
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+        (EqualTo(Rand(2), Literal(0.5)), Literal(1)) ::
+        Nil,
+        Literal(1))
+    )
+
+    // When we have mixture of deterministic and non-deterministic conditions, we remove
+    // the deterministic conditions from the tail until a non-deterministic one is seen.
+    assertEquivalent(
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Subtract(Literal(3), Literal(2))) ::
+        (NonFoldableLiteral(true), Add(Literal(2), Literal(-1))) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+        (NonFoldableLiteral(true), Add(Literal(6), Literal(-5))) ::
+        (NonFoldableLiteral(false), Literal(1)) ::
+        Nil,
+        Add(Literal(2), Literal(-1))),
+      CaseWhen((GreaterThan(Rand(0), Literal(0.5)), Literal(1)) ::
+        (NonFoldableLiteral(true), Literal(1)) ::
+        (LessThan(Rand(1), Literal(0.5)), Literal(1)) ::
+        Nil,
+        Literal(1))
+    )
   }
 }

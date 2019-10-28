@@ -19,9 +19,10 @@ package org.apache.spark.ml.util
 
 import java.io.{File, IOException}
 
+import org.json4s.JNothing
 import org.scalatest.Suite
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -55,7 +56,6 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     instance.write.overwrite().save(path)
     val loader = instance.getClass.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
     val newInstance = loader.load(path)
-
     assert(newInstance.uid === instance.uid)
     if (testParams) {
       instance.params.foreach { p =>
@@ -130,6 +130,8 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
 class MyParams(override val uid: String) extends Params with MLWritable {
 
   final val intParamWithDefault: IntParam = new IntParam(this, "intParamWithDefault", "doc")
+  final val shouldNotSetIfSetintParamWithDefault: IntParam =
+    new IntParam(this, "shouldNotSetIfSetintParamWithDefault", "doc")
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")
   final val floatParam: FloatParam = new FloatParam(this, "floatParam", "doc")
   final val doubleParam: DoubleParam = new DoubleParam(this, "doubleParam", "doc")
@@ -151,6 +153,13 @@ class MyParams(override val uid: String) extends Params with MLWritable {
   set(doubleArrayParam -> Array(8.0, 9.0))
   set(stringArrayParam -> Array("10", "11"))
 
+  def checkExclusiveParams(): Unit = {
+    if (isSet(shouldNotSetIfSetintParamWithDefault) && isSet(intParamWithDefault)) {
+      throw new SparkException("intParamWithDefault and shouldNotSetIfSetintParamWithDefault " +
+        "shouldn't be set at the same time")
+    }
+  }
+
   override def copy(extra: ParamMap): Params = defaultCopy(extra)
 
   override def write: MLWriter = new DefaultParamsWriter(this)
@@ -169,5 +178,66 @@ class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext
   test("default read/write") {
     val myParams = new MyParams("my_params")
     testDefaultReadWrite(myParams)
+  }
+
+  test("default param shouldn't become user-supplied param after persistence") {
+    val myParams = new MyParams("my_params")
+    myParams.set(myParams.shouldNotSetIfSetintParamWithDefault, 1)
+    myParams.checkExclusiveParams()
+    val loadedMyParams = testDefaultReadWrite(myParams)
+    loadedMyParams.checkExclusiveParams()
+    assert(loadedMyParams.getDefault(loadedMyParams.intParamWithDefault) ==
+      myParams.getDefault(myParams.intParamWithDefault))
+
+    loadedMyParams.set(myParams.intParamWithDefault, 1)
+    intercept[SparkException] {
+      loadedMyParams.checkExclusiveParams()
+    }
+  }
+
+  test("User-supplied value for default param should be kept after persistence") {
+    val myParams = new MyParams("my_params")
+    myParams.set(myParams.intParamWithDefault, 100)
+    val loadedMyParams = testDefaultReadWrite(myParams)
+    assert(loadedMyParams.get(myParams.intParamWithDefault).get == 100)
+  }
+
+  test("Read metadata without default field prior to 2.4") {
+    // default params are saved in `paramMap` field in metadata file prior to Spark 2.4.
+    val metadata = """{"class":"org.apache.spark.ml.util.MyParams",
+      |"timestamp":1518852502761,"sparkVersion":"2.3.0",
+      |"uid":"my_params",
+      |"paramMap":{"intParamWithDefault":0}}""".stripMargin
+    val parsedMetadata = DefaultParamsReader.parseMetadata(metadata)
+    val myParams = new MyParams("my_params")
+    assert(!myParams.isSet(myParams.intParamWithDefault))
+    parsedMetadata.getAndSetParams(myParams)
+
+    // The behavior prior to Spark 2.4, default params are set in loaded ML instance.
+    assert(myParams.isSet(myParams.intParamWithDefault))
+  }
+
+  test("Should raise error when read metadata without default field after Spark 2.4") {
+    val myParams = new MyParams("my_params")
+
+    val metadata1 = """{"class":"org.apache.spark.ml.util.MyParams",
+      |"timestamp":1518852502761,"sparkVersion":"2.4.0",
+      |"uid":"my_params",
+      |"paramMap":{"intParamWithDefault":0}}""".stripMargin
+    val parsedMetadata1 = DefaultParamsReader.parseMetadata(metadata1)
+    val err1 = intercept[IllegalArgumentException] {
+      parsedMetadata1.getAndSetParams(myParams)
+    }
+    assert(err1.getMessage().contains("Cannot recognize JSON metadata"))
+
+    val metadata2 = """{"class":"org.apache.spark.ml.util.MyParams",
+      |"timestamp":1518852502761,"sparkVersion":"3.0.0",
+      |"uid":"my_params",
+      |"paramMap":{"intParamWithDefault":0}}""".stripMargin
+    val parsedMetadata2 = DefaultParamsReader.parseMetadata(metadata2)
+    val err2 = intercept[IllegalArgumentException] {
+      parsedMetadata2.getAndSetParams(myParams)
+    }
+    assert(err2.getMessage().contains("Cannot recognize JSON metadata"))
   }
 }

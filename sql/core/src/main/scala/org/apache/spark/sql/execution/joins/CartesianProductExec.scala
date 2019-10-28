@@ -22,7 +22,8 @@ import org.apache.spark.rdd.{CartesianPartition, CartesianRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.sql.execution.{BinaryExecNode, ExternalAppendOnlyUnsafeRowArray, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.execution.{BinaryExecNode, ExplainUtils, ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.CompletionIterator
 
@@ -35,11 +36,12 @@ class UnsafeCartesianRDD(
     left : RDD[UnsafeRow],
     right : RDD[UnsafeRow],
     numFieldsOfRight: Int,
+    inMemoryBufferThreshold: Int,
     spillThreshold: Int)
   extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
-    val rowArray = new ExternalAppendOnlyUnsafeRowArray(spillThreshold)
+    val rowArray = new ExternalAppendOnlyUnsafeRowArray(inMemoryBufferThreshold, spillThreshold)
 
     val partition = split.asInstanceOf[CartesianPartition]
     rdd2.iterator(partition.s2, context).foreach(rowArray.add)
@@ -65,15 +67,29 @@ case class CartesianProductExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
+  override def verboseStringWithOperatorId(): String = {
+    val joinCondStr = if (condition.isDefined) {
+      s"${condition.get}"
+    } else "None"
+
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Join condition: ${joinCondStr}
+     """.stripMargin
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
     val leftResults = left.execute().asInstanceOf[RDD[UnsafeRow]]
     val rightResults = right.execute().asInstanceOf[RDD[UnsafeRow]]
 
-    val spillThreshold = sqlContext.conf.cartesianProductExecBufferSpillThreshold
-
-    val pair = new UnsafeCartesianRDD(leftResults, rightResults, right.output.size, spillThreshold)
+    val pair = new UnsafeCartesianRDD(
+      leftResults,
+      rightResults,
+      right.output.size,
+      sqlContext.conf.cartesianProductExecBufferInMemoryThreshold,
+      sqlContext.conf.cartesianProductExecBufferSpillThreshold)
     pair.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {

@@ -18,14 +18,14 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.net.URI
-
-import scala.collection.JavaConverters._
+import java.util.concurrent.TimeUnit._
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.types.StructType
 
@@ -47,9 +47,10 @@ class FileStreamSource(
 
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
+  @transient private val fs = new Path(path).getFileSystem(hadoopConf)
+
   private val qualifiedBasePath: Path = {
-    val fs = new Path(path).getFileSystem(hadoopConf)
-    fs.makeQualified(new Path(path))  // can contains glob patterns
+    fs.makeQualified(new Path(path))  // can contain glob patterns
   }
 
   private val optionsWithPartitionBasePath = sourceOptions.optionMapWithoutPath ++ {
@@ -165,13 +166,13 @@ class FileStreamSource(
     val newDataSource =
       DataSource(
         sparkSession,
-        paths = files.map(_.path),
+        paths = files.map(f => new Path(new URI(f.path)).toString),
         userSpecifiedSchema = Some(schema),
         partitionColumns = partitionColumns,
         className = fileFormatClassName,
         options = optionsWithPartitionBasePath)
     Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
-      checkFilesExist = false)))
+      checkFilesExist = false), isStreaming = true))
   }
 
   /**
@@ -187,7 +188,7 @@ class FileStreamSource(
     if (SparkHadoopUtil.get.isGlobPath(new Path(path))) Some(false) else None
 
   private def allFilesUsingInMemoryFileIndex() = {
-    val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
+    val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(fs, qualifiedBasePath)
     val fileIndex = new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
     fileIndex.allFiles()
   }
@@ -195,7 +196,8 @@ class FileStreamSource(
   private def allFilesUsingMetadataLogFileIndex() = {
     // Note if `sourceHasMetadata` holds, then `qualifiedBasePath` is guaranteed to be a
     // non-glob path
-    new MetadataLogFileIndex(sparkSession, qualifiedBasePath).allFiles()
+    new MetadataLogFileIndex(sparkSession, qualifiedBasePath,
+      CaseInsensitiveMap(options), None).allFiles()
   }
 
   /**
@@ -207,7 +209,7 @@ class FileStreamSource(
     var allFiles: Seq[FileStatus] = null
     sourceHasMetadata match {
       case None =>
-        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
           sourceHasMetadata = Some(true)
           allFiles = allFilesUsingMetadataLogFileIndex()
         } else {
@@ -219,7 +221,7 @@ class FileStreamSource(
             // double check whether source has metadata, preventing the extreme corner case that
             // metadata log and data files are only generated after the previous
             // `FileStreamSink.hasMetadata` check
-            if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+            if (FileStreamSink.hasMetadata(Seq(path), hadoopConf, sparkSession.sessionState.conf)) {
               sourceHasMetadata = Some(true)
               allFiles = allFilesUsingMetadataLogFileIndex()
             } else {
@@ -236,7 +238,7 @@ class FileStreamSource(
       (status.getPath.toUri.toString, status.getModificationTime)
     }
     val endTime = System.nanoTime
-    val listingTimeMs = (endTime.toDouble - startTime) / 1000000
+    val listingTimeMs = NANOSECONDS.toMillis(endTime - startTime)
     if (listingTimeMs > 2000) {
       // Output a warning when listing files uses more than 2 seconds.
       logWarning(s"Listed ${files.size} file(s) in $listingTimeMs ms")
@@ -260,7 +262,7 @@ class FileStreamSource(
     // and the value of the maxFileAge parameter.
   }
 
-  override def stop() {}
+  override def stop(): Unit = {}
 }
 
 

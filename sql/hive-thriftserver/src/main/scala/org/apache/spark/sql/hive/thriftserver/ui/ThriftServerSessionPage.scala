@@ -20,14 +20,13 @@ package org.apache.spark.sql.hive.thriftserver.ui
 import java.util.Calendar
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.JavaConverters._
 import scala.xml.Node
 
-import org.apache.commons.lang3.StringEscapeUtils
-
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState}
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
+import org.apache.spark.util.Utils
 
 /** Page for Spark Web UI that shows statistics of jobs running in the thrift server */
 private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
@@ -35,12 +34,10 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
   private val listener = parent.listener
   private val startTime = Calendar.getInstance().getTime()
-  private val emptyCell = "-"
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val content =
@@ -56,9 +53,9 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
         Session created at {formatDate(sessionStat.startTimestamp)},
         Total run {sessionStat.totalExecution} SQL
         </h4> ++
-        generateSQLStatsTable(sessionStat.sessionId)
+        generateSQLStatsTable(request, sessionStat.sessionId)
       }
-    UIUtils.headerSparkPage("JDBC/ODBC Session", content, parent, Some(5000))
+    UIUtils.headerSparkPage(request, "JDBC/ODBC Session", content, parent)
   }
 
   /** Generate basic stats of the thrift server program */
@@ -75,39 +72,57 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
   }
 
   /** Generate stats of batch statements of the thrift server program */
-  private def generateSQLStatsTable(sessionID: String): Seq[Node] = {
+  private def generateSQLStatsTable(request: HttpServletRequest, sessionID: String): Seq[Node] = {
     val executionList = listener.getExecutionList
       .filter(_.sessionId == sessionID)
     val numStatement = executionList.size
     val table = if (numStatement > 0) {
-      val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
-        "Statement", "State", "Detail")
-      val dataRows = executionList.sortBy(_.startTimestamp).reverse
 
-      def generateDataRow(info: ExecutionInfo): Seq[Node] = {
-        val jobLink = info.jobId.map { id: String =>
-          <a href={"%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), id)}>
-            [{id}]
-          </a>
+      val sqlTableTag = "sqlsessionstat"
+
+      val parameterOtherTable = request.getParameterMap().asScala
+        .filterNot(_._1.startsWith(sqlTableTag))
+        .map { case (name, vals) =>
+          name + "=" + vals(0)
         }
-        val detail = if (info.state == ExecutionState.FAILED) info.detail else info.executePlan
-        <tr>
-          <td>{info.userName}</td>
-          <td>
-            {jobLink}
-          </td>
-          <td>{info.groupId}</td>
-          <td>{formatDate(info.startTimestamp)}</td>
-          <td>{formatDate(info.finishTimestamp)}</td>
-          <td>{formatDurationOption(Some(info.totalTime))}</td>
-          <td>{info.statement}</td>
-          <td>{info.state}</td>
-          {errorMessageCell(detail)}
-        </tr>
-      }
 
-      Some(UIUtils.listingTable(headerRow, generateDataRow,
-        dataRows, false, None, Seq(null), false))
+      val parameterSqlTablePage = request.getParameter(s"$sqlTableTag.page")
+      val parameterSqlTableSortColumn = request.getParameter(s"$sqlTableTag.sort")
+      val parameterSqlTableSortDesc = request.getParameter(s"$sqlTableTag.desc")
+      val parameterSqlPageSize = request.getParameter(s"$sqlTableTag.pageSize")
+
+      val sqlTablePage = Option(parameterSqlTablePage).map(_.toInt).getOrElse(1)
+      val sqlTableSortColumn = Option(parameterSqlTableSortColumn).map { sortColumn =>
+        UIUtils.decodeURLParameter(sortColumn)
+      }.getOrElse("Start Time")
+      val sqlTableSortDesc = Option(parameterSqlTableSortDesc).map(_.toBoolean).getOrElse(
+        // New executions should be shown above old executions by default.
+        sqlTableSortColumn == "Start Time"
+      )
+      val sqlTablePageSize = Option(parameterSqlPageSize).map(_.toInt).getOrElse(100)
+
+      try {
+        Some(new SqlStatsPagedTable(
+          request,
+          parent,
+          executionList,
+          "sqlserver/session",
+          UIUtils.prependBaseUri(request, parent.basePath),
+          parameterOtherTable,
+          sqlTableTag,
+          pageSize = sqlTablePageSize,
+          sortColumn = sqlTableSortColumn,
+          desc = sqlTableSortDesc
+        ).table(sqlTablePage))
+      } catch {
+        case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
+          Some(<div class="alert alert-error">
+            <p>Error while rendering job table:</p>
+            <pre>
+              {Utils.exceptionString(e)}
+            </pre>
+          </div>)
+      }
     } else {
       None
     }
@@ -121,44 +136,5 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
         </div>
 
     content
-  }
-
-  private def errorMessageCell(errorMessage: String): Seq[Node] = {
-    val isMultiline = errorMessage.indexOf('\n') >= 0
-    val errorSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        errorMessage.substring(0, errorMessage.indexOf('\n'))
-      } else {
-        errorMessage
-      })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        + details
-      </span> ++
-      <div class="stacktrace-details collapsed">
-        <pre>{errorMessage}</pre>
-      </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
-    <td>{errorSummary}{details}</td>
-  }
-
-  /**
-   * Returns a human-readable string representing a duration such as "5 second 35 ms"
-   */
-  private def formatDurationOption(msOption: Option[Long]): String = {
-    msOption.map(formatDurationVerbose).getOrElse(emptyCell)
-  }
-
-  /** Generate HTML table from string data */
-  private def listingTable(headers: Seq[String], data: Seq[Seq[String]]) = {
-    def generateDataRow(data: Seq[String]): Seq[Node] = {
-      <tr> {data.map(d => <td>{d}</td>)} </tr>
-    }
-    UIUtils.listingTable(headers, generateDataRow, data, fixedWidth = true)
   }
 }

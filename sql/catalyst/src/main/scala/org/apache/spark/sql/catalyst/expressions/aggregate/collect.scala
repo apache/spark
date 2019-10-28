@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import scala.collection.generic.Growable
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 /**
@@ -44,7 +44,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
   // actual order of input rows.
-  override def deterministic: Boolean = false
+  override lazy val deterministic: Boolean = false
 
   override def update(buffer: T, input: InternalRow): T = {
     val value = child.eval(input)
@@ -52,7 +52,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
     // Do not allow null values. We follow the semantics of Hive's collect_list/collect_set here.
     // See: org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMkCollectionEvaluator
     if (value != null) {
-      buffer += value
+      buffer += InternalRow.copyValue(value)
     }
     buffer
   }
@@ -86,7 +86,13 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
  * Collect a list of elements.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.")
+  usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (1) AS tab(col);
+       [1,2,1]
+  """,
+  since = "2.0.0")
 case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
@@ -109,7 +115,13 @@ case class CollectList(
  * Collect a set of unique elements.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Collects and returns a set of unique elements.")
+  usage = "_FUNC_(expr) - Collects and returns a set of unique elements.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (1) AS tab(col);
+       [1,2]
+  """,
+  since = "2.0.0")
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,

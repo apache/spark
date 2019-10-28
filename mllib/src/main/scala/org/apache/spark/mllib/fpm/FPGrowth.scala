@@ -48,9 +48,14 @@ import org.apache.spark.storage.StorageLevel
  * @tparam Item item type
  */
 @Since("1.3.0")
-class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
-    @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]])
+class FPGrowthModel[Item: ClassTag] @Since("2.4.0") (
+    @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]],
+    @Since("2.4.0") val itemSupport: Map[Item, Double])
   extends Saveable with Serializable {
+
+  @Since("1.3.0")
+  def this(freqItemsets: RDD[FreqItemset[Item]]) = this(freqItemsets, Map.empty)
+
   /**
    * Generates association rules for the `Item`s in [[freqItemsets]].
    * @param confidence minimal confidence of the rules produced
@@ -58,7 +63,7 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
   @Since("1.5.0")
   def generateAssociationRules(confidence: Double): RDD[AssociationRules.Rule[Item]] = {
     val associationRules = new AssociationRules(confidence)
-    associationRules.run(freqItemsets)
+    associationRules.run(freqItemsets, itemSupport)
   }
 
   /**
@@ -79,8 +84,6 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     FPGrowthModel.SaveLoadV1_0.save(this, path)
   }
-
-  override protected val formatVersion: String = "1.0"
 }
 
 @Since("2.0.0")
@@ -147,10 +150,10 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
 /**
  * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
- * <a href="http://dx.doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
+ * <a href="https://doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
  * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
  * independent group of mining tasks. The FP-Growth algorithm is described in
- * <a href="http://dx.doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
+ * <a href="https://doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
  * candidate generation</a>.
  *
  * @param minSupport the minimal support level of the frequent pattern, any pattern that appears
@@ -162,7 +165,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
  *
  */
 @Since("1.3.0")
-class FPGrowth private (
+class FPGrowth private[spark] (
     private var minSupport: Double,
     private var numPartitions: Int) extends Logging with Serializable {
 
@@ -213,9 +216,12 @@ class FPGrowth private (
     val minCount = math.ceil(minSupport * count).toLong
     val numParts = if (numPartitions > 0) numPartitions else data.partitions.length
     val partitioner = new HashPartitioner(numParts)
-    val freqItems = genFreqItems(data, minCount, partitioner)
-    val freqItemsets = genFreqItemsets(data, minCount, freqItems, partitioner)
-    new FPGrowthModel(freqItemsets)
+    val freqItemsCount = genFreqItems(data, minCount, partitioner)
+    val freqItemsets = genFreqItemsets(data, minCount, freqItemsCount.map(_._1), partitioner)
+    val itemSupport = freqItemsCount.map {
+      case (item, cnt) => item -> cnt.toDouble / count
+    }.toMap
+    new FPGrowthModel(freqItemsets, itemSupport)
   }
 
   /**
@@ -231,12 +237,12 @@ class FPGrowth private (
    * Generates frequent items by filtering the input data using minimal support level.
    * @param minCount minimum count for frequent itemsets
    * @param partitioner partitioner used to distribute items
-   * @return array of frequent pattern ordered by their frequencies
+   * @return array of frequent patterns and their frequencies ordered by their frequencies
    */
   private def genFreqItems[Item: ClassTag](
       data: RDD[Array[Item]],
       minCount: Long,
-      partitioner: Partitioner): Array[Item] = {
+      partitioner: Partitioner): Array[(Item, Long)] = {
     data.flatMap { t =>
       val uniq = t.toSet
       if (t.length != uniq.size) {
@@ -248,7 +254,6 @@ class FPGrowth private (
       .filter(_._2 >= minCount)
       .collect()
       .sortBy(-_._2)
-      .map(_._1)
   }
 
   /**

@@ -27,7 +27,7 @@ import java.nio.file.StandardOpenOption;
  * to read a file to avoid extra copy of data between Java and
  * native memory which happens when using {@link java.io.BufferedInputStream}.
  * Unfortunately, this is not something already available in JDK,
- * {@link sun.nio.ch.ChannelInputStream} supports reading a file using nio,
+ * {@code sun.nio.ch.ChannelInputStream} supports reading a file using nio,
  * but does not support buffering.
  */
 public final class NioBufferedFileInputStream extends InputStream {
@@ -51,7 +51,6 @@ public final class NioBufferedFileInputStream extends InputStream {
   /**
    * Checks weather data is left to be read from the input stream.
    * @return true if data is left, false otherwise
-   * @throws IOException
    */
   private boolean refill() throws IOException {
     if (!byteBuffer.hasRemaining()) {
@@ -130,10 +129,9 @@ public final class NioBufferedFileInputStream extends InputStream {
     StorageUtils.dispose(byteBuffer);
   }
 
-  //checkstyle.off: NoFinalizer
+  @SuppressWarnings("deprecation")
   @Override
   protected void finalize() throws IOException {
     close();
   }
-  //checkstyle.on: NoFinalizer
 }
