@@ -35,6 +35,8 @@ class StreamQueryStoreSuite extends SparkFunSuite with Matchers {
     when(query2.id).thenReturn(id1)
     when(query1.name).thenReturn("query1")
     when(query2.name).thenReturn("query2")
+    when(query1.isActive).thenReturn(true)
+    when(query2.isActive).thenReturn(true)
     store.putIfAbsent(query1)
     store.putIfAbsent(query2)
 
@@ -48,9 +50,10 @@ class StreamQueryStoreSuite extends SparkFunSuite with Matchers {
     assert(store.allStreamQueries.map(_._1.name).sorted === Seq("query1", "query2"))
 
     store.terminate(id2)
+    when(query2.isActive).thenReturn(false)
     assert(store.allStreamQueries.size === 2)
     assert(store.allStreamQueries.map(_._1.name).sorted === Seq("query1", "query2"))
-    assert(store.allStreamQueries.filter(q => q._1.isActive) === 1)
-    assert(store.allStreamQueries.filter(q => !q._1.isActive) === 1)
+    assert(store.allStreamQueries.count(q => q._1.isActive) === 1)
+    assert(store.allStreamQueries.count(q => !q._1.isActive) === 1)
   }
 }
