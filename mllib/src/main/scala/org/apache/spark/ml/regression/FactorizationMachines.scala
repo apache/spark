@@ -58,7 +58,7 @@ private[regression] trait FactorizationMachinesParams
    */
   @Since("3.0.0")
   final val numFactors: IntParam = new IntParam(this, "numFactors",
-    "dimensionality of the factor vectors, " +
+    "Dimensionality of the factor vectors, " +
       "which are used to get pairwise interactions between variables",
     ParamValidators.gt(0))
 
@@ -96,9 +96,7 @@ private[regression] trait FactorizationMachinesParams
    */
   @Since("3.0.0")
   final val regParam: DoubleParam = new DoubleParam(this, "regParam",
-    "the parameter of l2-regularization term, " +
-      "which prevents overfitting by adding sum of squares of all the parameters",
-    ParamValidators.gtEq(0))
+    "the magnitude of L2-regularization", ParamValidators.gtEq(0))
 
   /** @group getParam */
   @Since("3.0.0")
@@ -156,7 +154,26 @@ private[regression] trait FactorizationMachinesParams
 }
 
 /**
- * Factorization Machines
+ * Factorization Machines learning algorithm for regression.
+ * It supports normal gradient descent and AdamW solver.
+ *
+ * The implementation is based upon:
+ * <a href="https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf">
+ * S. Rendle. "Factorization machines" 2010<a>.
+ *
+ * FM is able to estimate interactions even in problems with huge sparsity
+ * (like advertising and recommendation system).
+ * FM formula is:
+ * {{{
+ *   y = w_0 + \sum\limits^n_{i-1} w_i x_i +
+ *     \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
+ * }}}
+ * First two terms denote global bias and linear term (as same as linear regression),
+ * and last term denotes pairwise interactions term. {{{v_i}}} describes the i-th variable
+ * with k factors.
+ *
+ * FM regression model uses MSE loss which can be solved by gradient descent method, and
+ * regularization terms like L2 are usually added to the loss function to prevent overfitting.
  */
 @Since("3.0.0")
 class FactorizationMachines @Since("3.0.0") (
@@ -315,8 +332,8 @@ class FactorizationMachines @Since("3.0.0") (
       (if ($(fitBias)) 1 else 0)
     val initialCoefficients =
       Vectors.dense(Array.fill($(numFactors) * numFeatures)(Random.nextGaussian() * $(initStd)) ++
-        (if ($(fitLinear)) Array.fill(numFeatures)(0.0) else Array.empty[Double]) ++
-        (if ($(fitBias)) Array.fill(1)(0.0) else Array.empty[Double]))
+        (if ($(fitLinear)) new Array[Double](numFeatures) else Array.empty[Double]) ++
+        (if ($(fitBias)) new Array[Double](1) else Array.empty[Double]))
 
     val data = instances.map { case OldLabeledPoint(label, features) => (label, features) }
 
@@ -472,11 +489,11 @@ object FactorizationMachinesModel extends MLReadable[FactorizationMachinesModel]
  * Factorization Machines raw formula:
  * {{{
  *   y_{fm} = w_0 + \sum\limits^n_{i-1} w_i x_i +
- *     \sum\limits^n_{i=1} \sum\limits^n_{j=i+1}  x_i x_j
+ *     \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
  * }}}
  * the pairwise interactions (2-way term) can be reformulated:
  * {{{
- *   \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} <v_i, v_j> x_i x_j
+ *   \sum\limits^n_{i=1} \sum\limits^n_{j=i+1} \langle v_i, v_j \rangle x_i x_j
  *   = \frac{1}{2}\sum\limits^k_{f=1}
  *   \left(\left( \sum\limits^n_{i=1}v_{i,f}x_i \right)^2 -
  *     \sum\limits^n_{i=1}v_{i,f}^2x_i^2 \right)

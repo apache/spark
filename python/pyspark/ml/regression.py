@@ -2168,7 +2168,7 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
     .. versionadded:: 3.0.0
     """
 
-    numFactors = Param(Params._dummy(), "numFactors", "dimensionality of the factor vectors, " +
+    numFactors = Param(Params._dummy(), "numFactors", "Dimensionality of the factor vectors, " +
                        "which are used to get pairwise interactions between variables",
                        typeConverter=TypeConverters.toInt)
 
@@ -2178,8 +2178,7 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
     fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
                       typeConverter=TypeConverters.toBoolean)
 
-    regParam = Param(Params._dummy(), "regParam", "the parameter of l2-regularization term, " +
-                     "which prevents overfitting by adding sum of squares of all the parameters",
+    regParam = Param(Params._dummy(), "regParam", "the magnitude of L2-regularization",
                      typeConverter=TypeConverters.toFloat)
 
     miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "fraction of the input data " +
