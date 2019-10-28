@@ -31,21 +31,21 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.thriftserver.{CompositeService, SparkThriftServer2}
 import org.apache.spark.sql.thriftserver.cli.{SessionHandle, SparkThriftServerSQLException}
 import org.apache.spark.sql.thriftserver.cli.operation.OperationManager
-import org.apache.spark.sql.thriftserver.server.{ThreadFactoryWithGarbageCleanup, ThreadWithGarbageCleanup}
 import org.apache.spark.sql.thriftserver.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.thriftserver.server.SparkThriftServer
+import org.apache.spark.sql.thriftserver.server.ThreadFactoryWithGarbageCleanup
 
-class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
+private[thriftserver] class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   extends CompositeService(classOf[SessionManager].getSimpleName)
-    with Logging {
+  with Logging {
 
-  private var hiveConf: HiveConf = null
+  private var hiveConf: HiveConf = _
   private val handleToSession: ConcurrentHashMap[SessionHandle, ThriftServerSession] =
     new ConcurrentHashMap[SessionHandle, ThriftServerSession]
   private val operationManager: OperationManager = new OperationManager()
-  private var backgroundOperationPool: ThreadPoolExecutor = null
+  private var backgroundOperationPool: ThreadPoolExecutor = _
   private var isOperationLogEnabled: Boolean = false
-  private var operationLogRootDir: File = null
+  private var operationLogRootDir: File = _
 
   private var checkInterval: Long = 0L
   private var sessionTimeout: Long = 0L
@@ -58,9 +58,9 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
     this.hiveConf = hiveConf
     // Create operation log root directory, if operation logging is enabled
     if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
-      initOperationLogRootDir
+      initOperationLogRootDir()
     }
-    createBackgroundOperationPool
+    createBackgroundOperationPool()
     addService(operationManager)
     super.init(hiveConf)
   }

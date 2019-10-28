@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.StructType
 
 private[thriftserver] class OperationManager
   extends AbstractService(classOf[OperationManager].getSimpleName)
-    with Logging {
+  with Logging {
 
   private[this] lazy val logSchema: StructType = new StructType().add("operation_log", "string")
   private[this] val handleToOperation = new ConcurrentHashMap[OperationHandle, Operation]

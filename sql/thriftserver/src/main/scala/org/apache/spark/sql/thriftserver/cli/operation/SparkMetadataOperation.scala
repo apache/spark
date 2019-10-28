@@ -24,12 +24,16 @@ import org.apache.hadoop.hive.ql.security.authorization.plugin._
 import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
 import org.apache.spark.sql.thriftserver.cli.{CLOSED, OperationType, SparkThriftServerSQLException}
 import org.apache.spark.sql.thriftserver.cli.session.ThriftServerSession
 import org.apache.spark.sql.types.StructType
 
 
-abstract class SparkMetadataOperation(session: ThriftServerSession, opType: OperationType)
+private[thriftserver] abstract class SparkMetadataOperation(
+    session: ThriftServerSession,
+    opType: OperationType)
   extends Operation(session, opType, false) with Logging {
 
   protected val DEFAULT_HIVE_CATALOG: String = ""
@@ -45,6 +49,13 @@ abstract class SparkMetadataOperation(session: ThriftServerSession, opType: Oper
   override def close(): Unit = {
     setState(CLOSED)
     cleanupOperationLog()
+  }
+
+  def tableTypeString(tableType: CatalogTableType): String = tableType match {
+    case EXTERNAL | MANAGED => "TABLE"
+    case VIEW => "VIEW"
+    case t =>
+      throw new IllegalArgumentException(s"Unknown table type is found: $t")
   }
 
   /**

@@ -42,16 +42,10 @@ private[thriftserver] class SparkGetTableTypesOperation(
     sqlContext: SQLContext,
     parentSession: ThriftServerSession)
   extends SparkMetadataOperation(parentSession, GET_TABLE_TYPES)
-  with SparkMetadataOperationUtils with Logging {
+  with Logging {
 
   RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TABLE_TYPE", StringType))
-
-  private var tableTypeMapping: TableTypeMapping = {
-    val tableMappingStr =
-      parentSession.getHiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING)
-    TableTypeMappingFactory.getTableTypeMapping(tableMappingStr)
-  }
 
   private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
 

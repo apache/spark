@@ -45,7 +45,7 @@ abstract class AbstractService(val name: String) extends Service with Logging {
   /**
    * The configuration. Will be null until the service is initialized.
    */
-  private var hiveConf: HiveConf = null
+  private var hiveConf: HiveConf = _
   /**
    * List of state change listeners; it is final to ensure
    * that it will never be null.

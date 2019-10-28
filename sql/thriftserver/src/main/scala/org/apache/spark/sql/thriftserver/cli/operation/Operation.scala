@@ -31,9 +31,10 @@ import org.apache.spark.sql.thriftserver.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-abstract class Operation(session: ThriftServerSession,
-                         opType: OperationType,
-                         runInBackground: Boolean) extends Logging {
+private[thriftserver] abstract class Operation(
+    session: ThriftServerSession,
+    opType: OperationType,
+    runInBackground: Boolean) extends Logging {
   private[this] var _state: OperationState = INITIALIZED
   private[this] val _opHandle: OperationHandle =
     new OperationHandle(opType, session.getProtocolVersion)
@@ -282,8 +283,8 @@ abstract class Operation(session: ThriftServerSession,
   }
 
   protected def toSQLException(
-     prefix: String,
-     response: CommandProcessorResponse): SparkThriftServerSQLException = {
+                                prefix: String,
+                                response: CommandProcessorResponse): SparkThriftServerSQLException = {
     val ex = new SparkThriftServerSQLException(prefix + ": " +
       response.getErrorMessage, response.getSQLState, response.getResponseCode)
     if (response.getException != null) {

@@ -50,7 +50,7 @@ class ThriftServerSessionImpl(_protocol: TProtocolVersion,
   private var _operationManager: OperationManager = new OperationManager()
   private val _opHandleSet: util.Set[OperationHandle] = new util.HashSet[OperationHandle]()
   private var _isOperationLogEnabled: Boolean = false
-  private var _sessionLogDir: File = null
+  private var _sessionLogDir: File = _
   private var _lastAccessTime: Long = 0L
   private var _lastIdleTime: Long = 0L
 
@@ -217,7 +217,7 @@ class ThriftServerSessionImpl(_protocol: TProtocolVersion,
     } catch {
       case e: SparkThriftServerSQLException =>
         // Referring to SQLOperation.java, there is no chance that a
-        // HiveSQLException throws and the asyn background operation
+        // SparkThriftServerSQLException throws and the asyn background operation
         // submits to thread pool successfully at the same time. So, Cleanup
         // opHandle directly when got SparkThriftServerSQLException
         operationManager.closeOperation(opHandle)

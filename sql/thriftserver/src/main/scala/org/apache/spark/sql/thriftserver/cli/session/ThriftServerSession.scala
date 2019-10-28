@@ -21,7 +21,7 @@ import org.apache.spark.sql.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.thriftserver.cli._
 import org.apache.spark.sql.types.StructType
 
-trait ThriftServerSession extends ThriftServerSessionBase {
+private[thriftserver] trait ThriftServerSession extends ThriftServerSessionBase {
 
   @throws[SparkThriftServerSQLException]
   def open(sessionConfMap: Map[String, String]): Unit

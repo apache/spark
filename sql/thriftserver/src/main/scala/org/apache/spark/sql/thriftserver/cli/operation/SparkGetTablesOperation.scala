@@ -54,7 +54,7 @@ private[thriftserver] class SparkGetTablesOperation(
     tableName: String,
     tableTypes: JList[String])
   extends SparkMetadataOperation(parentSession, GET_TABLES)
-    with SparkMetadataOperationUtils with Logging {
+  with Logging {
 
   RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TABLE_CAT", StringType))
@@ -64,12 +64,6 @@ private[thriftserver] class SparkGetTablesOperation(
     .add(StructField("REMARKS", StringType))
 
   private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
-
-  private val tableTypeMapping: TableTypeMapping = {
-    val tableMappingStr = parentSession.getHiveConf
-      .getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING)
-    TableTypeMappingFactory.getTableTypeMapping(tableMappingStr)
-  }
 
   override def close(): Unit = {
     super.close()
