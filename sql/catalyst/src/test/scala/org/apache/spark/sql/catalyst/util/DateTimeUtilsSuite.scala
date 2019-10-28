@@ -586,12 +586,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
       val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
       toTimestamp("NOW", zoneId).get should be (now +- tolerance)
       assert(toTimestamp("now UTC", zoneId) === None)
-      val today = instantToMicros(LocalDateTime.now(zoneId)
+      val localToday = LocalDateTime.now(zoneId)
         .`with`(LocalTime.MIDNIGHT)
-        .atZone(zoneId).toInstant)
-      toTimestamp(" Yesterday", zoneId).get should be (today - MICROS_PER_DAY +- tolerance)
+        .atZone(zoneId)
+      val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
+      toTimestamp(" Yesterday", zoneId).get should be (yesterday +- tolerance)
+      val today = instantToMicros(localToday.toInstant)
       toTimestamp("Today ", zoneId).get should be (today +- tolerance)
-      toTimestamp(" tomorrow CET ", zoneId).get should be (today + MICROS_PER_DAY +- tolerance)
+      val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
+      toTimestamp(" tomorrow CET ", zoneId).get should be (tomorrow +- tolerance)
     }
   }
 
