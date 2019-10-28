@@ -192,9 +192,9 @@ object IntervalUtils {
    */
   def fromDayTimeString(input: String, from: String, to: String): CalendarInterval = {
     require(input != null, "Interval day-time string must be not null")
-    val s = input.trim
-    val m = dayTimePattern.pattern.matcher(s)
-    require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $s")
+    assert(input.length == input.trim.length)
+    val m = dayTimePattern.pattern.matcher(input)
+    require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input")
 
     try {
       val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
@@ -236,7 +236,7 @@ object IntervalUtils {
           // No-op
         case _ =>
           throw new IllegalArgumentException(
-            s"Cannot support (interval '$s' $from to $to) expression")
+            s"Cannot support (interval '$input' $from to $to) expression")
       }
       new CalendarInterval(0, sign * (
         days * DateTimeUtils.MICROS_PER_DAY + hours * MICROS_PER_HOUR +
