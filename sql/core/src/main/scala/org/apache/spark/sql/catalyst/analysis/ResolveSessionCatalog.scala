@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CacheTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, LoadDataCommand, ShowCreateTableCommand, ShowPartitionsCommand, ShowTablesCommand, TruncateTableCommand, UncacheTableCommand}
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CacheTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropDatabaseCommand, DropTableCommand, LoadDataCommand, ShowCreateTableCommand, ShowPartitionsCommand, ShowTablesCommand, TruncateTableCommand, UncacheTableCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
@@ -270,6 +270,13 @@ class ResolveSessionCatalog(
         CreateNamespaceStatement.COMMENT_PROPERTY_KEY -
         CreateNamespaceStatement.LOCATION_PROPERTY_KEY
       CreateDatabaseCommand(nameParts.head, c.ifNotExists, location, comment, newProperties)
+
+    case d @ DropNamespaceStatement(SessionCatalog(_, nameParts), _, _) =>
+      if (nameParts.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${nameParts.quoted}")
+      }
+      DropDatabaseCommand(nameParts.head, d.ifExists, d.cascade)
 
     case ShowTablesStatement(Some(SessionCatalog(catalog, nameParts)), pattern) =>
       if (nameParts.length != 1) {
