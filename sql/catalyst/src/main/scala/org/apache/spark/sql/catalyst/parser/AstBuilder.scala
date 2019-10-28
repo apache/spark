@@ -2883,7 +2883,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *
    * For example:
    * {{{
-   *   ALTER TABLE table RECOVER PARTITIONS;
+   *   ALTER TABLE multi_part_name RECOVER PARTITIONS;
    * }}}
    */
   override def visitRecoverPartitions(
