@@ -21,11 +21,11 @@ package org.apache.spark.resource
  * A task resource request. This is used in conjuntion with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level. The amount is specified as a Double to allow for saying you want more then
- * 1 task per resource. Valid values are <= 0.5 or whole numbers.
+ * 1 task per resource. Valid values are less than or equal to 0.5 or whole numbers.
  *
  * @param resourceName Name of the resource
  * @param amount Amount requesting as a Double to support fractional resource requests.
- *               Valid values are <= 0.5 or whole numbers.
+ *               Valid values are less than or equal to 0.5 or whole numbers.
 
  * This api is currently private until the rest of the pieces are in place and then it
  * will become public.
