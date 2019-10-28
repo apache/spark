@@ -238,10 +238,12 @@ object IntervalUtils {
           throw new IllegalArgumentException(
             s"Cannot support (interval '$input' $from to $to) expression")
       }
-      new CalendarInterval(0, sign * (
-        days * DateTimeUtils.MICROS_PER_DAY + hours * MICROS_PER_HOUR +
-        minutes * MICROS_PER_MINUTE + seconds * DateTimeUtils.MICROS_PER_SECOND +
-        nanos / DateTimeUtils.NANOS_PER_MICROS))
+      var micros = nanos / DateTimeUtils.NANOS_PER_MICROS
+      micros = Math.addExact(micros, Math.multiplyExact(days, DateTimeUtils.MICROS_PER_DAY))
+      micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
+      micros = Math.addExact(micros, Math.multiplyExact(minutes, MICROS_PER_MINUTE))
+      micros = Math.addExact(micros, Math.multiplyExact(seconds, DateTimeUtils.MICROS_PER_SECOND))
+      new CalendarInterval(0, sign * micros)
     } catch {
       case e: Exception =>
         throw new IllegalArgumentException(
