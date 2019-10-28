@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType
  * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params
-  with HasHandleInvalid with HasInputCol with HasOutputCol {
+  with HasHandleInvalid with HasInputCol with HasOutputCol with HasInputCols with HasOutputCols {
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
@@ -129,8 +129,7 @@ private[feature] trait QuantileDiscretizerBase extends Params
  */
 @Since("1.6.0")
 final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val uid: String)
-  extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable
-    with HasInputCols with HasOutputCols {
+  extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("quantileDiscretizer"))
@@ -180,13 +179,13 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     if (isSet(inputCols)) {
       require(getInputCols.length == getOutputCols.length,
         s"QuantileDiscretizer $this has mismatched Params " +
-          s"for multi-column transform.  Params (inputCols, outputCols) should have " +
+          s"for multi-column transform. Params (inputCols, outputCols) should have " +
           s"equal lengths, but they have different lengths: " +
           s"(${getInputCols.length}, ${getOutputCols.length}).")
       if (isSet(numBucketsArray)) {
         require(getInputCols.length == getNumBucketsArray.length,
           s"QuantileDiscretizer $this has mismatched Params " +
-            s"for multi-column transform.  Params (inputCols, outputCols, numBucketsArray) " +
+            s"for multi-column transform. Params (inputCols, outputCols, numBucketsArray) " +
             s"should have equal lengths, but they have different lengths: " +
             s"(${getInputCols.length}, ${getOutputCols.length}, ${getNumBucketsArray.length}).")
         require(!isSet(numBuckets),
@@ -199,12 +198,12 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     } else {
       (Seq($(inputCol)), Seq($(outputCol)))
     }
-    val existingFields = schema.fields
-    var outputFields = existingFields
+
+    var outputFields = schema.fields
     inputColNames.zip(outputColNames).foreach { case (inputColName, outputColName) =>
       SchemaUtils.checkNumericType(schema, inputColName)
-      require(existingFields.forall(_.name != outputColName),
-        s"Output column ${outputColName} already exists.")
+      require(!schema.fieldNames.contains(outputColName),
+        s"Output column $outputColName already exists.")
       val attr = NominalAttribute.defaultAttr.withName(outputColName)
       outputFields :+= attr.toStructField()
     }

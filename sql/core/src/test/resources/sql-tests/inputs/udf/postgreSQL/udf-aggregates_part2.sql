@@ -43,42 +43,28 @@ create temporary view int4_tbl as select * from values
 --
 -- test for bitwise integer aggregates
 --
--- CREATE TEMPORARY TABLE bitwise_test(
---   i2 INT2,
---   i4 INT4,
---   i8 INT8,
---   i INTEGER,
---   x INT2,
---   y BIT(4)
--- );
+CREATE OR REPLACE TEMPORARY VIEW bitwise_test AS SELECT * FROM VALUES
+  (1, 1, 1, 1L),
+  (3, 3, 3, null),
+  (7, 7, 7, 3L) AS bitwise_test(b1, b2, b3, b4);
 
 -- empty case
--- SELECT
---   BIT_AND(i2) AS "?",
---   BIT_OR(i4)  AS "?"
--- FROM bitwise_test;
+SELECT BIT_AND(b1) AS n1, BIT_OR(b2)  AS n2 FROM bitwise_test where 1 = 0;
 
--- COPY bitwise_test FROM STDIN NULL 'null';
--- 1	1	1	1	1	B0101
--- 3	3	3	null	2	B0100
--- 7	7	7	3	4	B1100
--- \.
+-- null case
+SELECT BIT_AND(b4) AS n1, BIT_OR(b4)  AS n2 FROM bitwise_test where b4 is null;
 
--- SELECT
---   BIT_AND(i2) AS "1",
---   BIT_AND(i4) AS "1",
---   BIT_AND(i8) AS "1",
---   BIT_AND(i)  AS "?",
---   BIT_AND(x)  AS "0",
---   BIT_AND(y)  AS "0100",
---
---   BIT_OR(i2)  AS "7",
---   BIT_OR(i4)  AS "7",
---   BIT_OR(i8)  AS "7",
---   BIT_OR(i)   AS "?",
---   BIT_OR(x)   AS "7",
---   BIT_OR(y)   AS "1101"
--- FROM bitwise_test;
+
+SELECT
+ BIT_AND(cast(b1 as tinyint)) AS a1,
+ BIT_AND(cast(b2 as smallint)) AS b1,
+ BIT_AND(b3) AS c1,
+ BIT_AND(b4) AS d1,
+ BIT_OR(cast(b1 as tinyint))  AS e7,
+ BIT_OR(cast(b2 as smallint))  AS f7,
+ BIT_OR(b3)  AS g7,
+ BIT_OR(b4)  AS h3
+FROM bitwise_test;
 
 --
 -- test boolean aggregates
@@ -116,50 +102,40 @@ SELECT
   NOT (FALSE OR FALSE) AS `t`;
 
 -- [SPARK-27880] Implement boolean aggregates(BOOL_AND, BOOL_OR and EVERY)
--- CREATE TEMPORARY TABLE bool_test(
---   b1 BOOL,
---   b2 BOOL,
---   b3 BOOL,
---   b4 BOOL);
+CREATE OR REPLACE TEMPORARY VIEW bool_test AS SELECT * FROM VALUES
+  (TRUE, null, FALSE, null),
+  (FALSE, TRUE, null, null),
+  (null, TRUE, FALSE, null) AS bool_test(b1, b2, b3, b4);
 
 -- empty case
--- SELECT
---   BOOL_AND(b1)   AS "n",
---   BOOL_OR(b3)    AS "n"
--- FROM bool_test;
+SELECT BOOL_AND(b1) AS n1, BOOL_OR(b3) AS n2 FROM bool_test WHERE 1 = 0;
 
--- COPY bool_test FROM STDIN NULL 'null';
--- TRUE	null	FALSE	null
--- FALSE	TRUE	null	null
--- null	TRUE	FALSE	null
--- \.
+SELECT
+  BOOL_AND(b1)     AS f1,
+  BOOL_AND(b2)     AS t2,
+  BOOL_AND(b3)     AS f3,
+  BOOL_AND(b4)     AS n4,
+  BOOL_AND(NOT b2) AS f5,
+  BOOL_AND(NOT b3) AS t6
+FROM bool_test;
 
--- SELECT
---   BOOL_AND(b1)     AS "f",
---   BOOL_AND(b2)     AS "t",
---   BOOL_AND(b3)     AS "f",
---   BOOL_AND(b4)     AS "n",
---   BOOL_AND(NOT b2) AS "f",
---   BOOL_AND(NOT b3) AS "t"
--- FROM bool_test;
+SELECT
+  EVERY(b1)     AS f1,
+  EVERY(b2)     AS t2,
+  EVERY(b3)     AS f3,
+  EVERY(b4)     AS n4,
+  EVERY(NOT b2) AS f5,
+  EVERY(NOT b3) AS t6
+FROM bool_test;
 
--- SELECT
---   EVERY(b1)     AS "f",
---   EVERY(b2)     AS "t",
---   EVERY(b3)     AS "f",
---   EVERY(b4)     AS "n",
---   EVERY(NOT b2) AS "f",
---   EVERY(NOT b3) AS "t"
--- FROM bool_test;
-
--- SELECT
---   BOOL_OR(b1)      AS "t",
---   BOOL_OR(b2)      AS "t",
---   BOOL_OR(b3)      AS "f",
---   BOOL_OR(b4)      AS "n",
---   BOOL_OR(NOT b2)  AS "f",
---   BOOL_OR(NOT b3)  AS "t"
--- FROM bool_test;
+SELECT
+  BOOL_OR(b1)      AS t1,
+  BOOL_OR(b2)      AS t2,
+  BOOL_OR(b3)      AS f3,
+  BOOL_OR(b4)      AS n4,
+  BOOL_OR(NOT b2)  AS f5,
+  BOOL_OR(NOT b3)  AS t6
+FROM bool_test;
 
 --
 -- Test cases that should be optimized into indexscans instead of

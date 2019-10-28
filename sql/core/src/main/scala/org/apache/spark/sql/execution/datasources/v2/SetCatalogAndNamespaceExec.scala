@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.LeafExecNode
 
 /**
  * Physical plan node for setting the current catalog and/or namespace.
@@ -31,14 +28,14 @@ case class SetCatalogAndNamespaceExec(
     catalogManager: CatalogManager,
     catalogName: Option[String],
     namespace: Option[Seq[String]])
-    extends LeafExecNode {
-  override protected def doExecute(): RDD[InternalRow] = {
+    extends V2CommandExec {
+  override protected def run(): Seq[InternalRow] = {
     // The catalog is updated first because CatalogManager resets the current namespace
     // when the current catalog is set.
     catalogName.map(catalogManager.setCurrentCatalog)
     namespace.map(ns => catalogManager.setCurrentNamespace(ns.toArray))
 
-    sqlContext.sparkContext.parallelize(Seq.empty, 1)
+    Seq.empty
   }
 
   override def output: Seq[Attribute] = Seq.empty

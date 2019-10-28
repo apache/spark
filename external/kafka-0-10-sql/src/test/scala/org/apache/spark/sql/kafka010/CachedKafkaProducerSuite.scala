@@ -46,7 +46,7 @@ class CachedKafkaProducerSuite extends SharedSparkSession with PrivateMethodTest
     val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams)
     assert(producer == producer2)
 
-    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
+    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]](Symbol("getAsMap"))
     val map = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map.size == 1)
   }
@@ -63,7 +63,7 @@ class CachedKafkaProducerSuite extends SharedSparkSession with PrivateMethodTest
     // With updated conf, a new producer instance should be created.
     assert(producer != producer2)
 
-    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
+    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]](Symbol("getAsMap"))
     val map = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map.size == 2)
 

@@ -79,22 +79,25 @@ singleTableSchema
     : colTypeList EOF
     ;
 
+singleInterval
+    : INTERVAL? (intervalValue intervalUnit)+ EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE NAMESPACE? multipartIdentifier                               #use
-    | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
+    | CREATE (database | NAMESPACE) (IF NOT EXISTS)? multipartIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
-         (WITH DBPROPERTIES tablePropertyList))*                       #createDatabase
+         (WITH (DBPROPERTIES | PROPERTIES) tablePropertyList))*        #createNamespace
     | ALTER database db=errorCapturingIdentifier
         SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
     | ALTER database db=errorCapturingIdentifier
         SET locationSpec                                               #setDatabaseLocation
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
-    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
-    | SHOW NAMESPACES ((FROM | IN) multipartIdentifier)?
+    | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
@@ -125,7 +128,7 @@ statement
         (COMMENT comment=STRING) |
         (TBLPROPERTIES tableProps=tablePropertyList))*
         (AS? query)?                                                   #replaceTable
-    | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
+    | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
@@ -195,25 +198,25 @@ statement
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) tableIdentifier
         ((FROM | IN) db=errorCapturingIdentifier)?                     #showColumns
-    | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
+    | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
-    | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
+    | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
-        multipartIdentifier partitionSpec? describeColName?                #describeTable
+        multipartIdentifier partitionSpec? describeColName?            #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
-    | REFRESH TABLE tableIdentifier                                    #refreshTable
+    | REFRESH TABLE multipartIdentifier                                #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
-    | CACHE LAZY? TABLE tableIdentifier
+    | CACHE LAZY? TABLE multipartIdentifier
         (OPTIONS options=tablePropertyList)? (AS? query)?              #cacheTable
-    | UNCACHE TABLE (IF EXISTS)? tableIdentifier                       #uncacheTable
+    | UNCACHE TABLE (IF EXISTS)? multipartIdentifier                   #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData
-    | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
-    | MSCK REPAIR TABLE tableIdentifier                                #repairTable
+    | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
+    | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
@@ -910,7 +913,7 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
-// When `spark.sql.parser.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
+// When `spark.sql.ansi.enabled=true`, there are 2 kinds of keywords in Spark SQL.
 // - Reserved keywords:
 //     Keywords that are reserved and can't be used as identifiers for table, view, column,
 //     function, alias, etc.
@@ -1040,6 +1043,7 @@ ansiNonReserved
     | POSITION
     | PRECEDING
     | PRINCIPALS
+    | PROPERTIES
     | PURGE
     | QUERY
     | RANGE
@@ -1107,9 +1111,9 @@ ansiNonReserved
     | YEARS
     ;
 
-// When `spark.sql.parser.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
+// When `spark.sql.ansi.enabled=false`, there are 2 kinds of keywords in Spark SQL.
 // - Non-reserved keywords:
-//     Same definition as the one when `spark.sql.parser.ansi.enabled=true`.
+//     Same definition as the one when `spark.sql.ansi.enabled=true`.
 // - Strict-non-reserved keywords:
 //     A strict version of non-reserved keywords, which can not be used as table alias.
 // You can find the full keywords list by searching "Start of the keywords list" in this file.
@@ -1300,6 +1304,7 @@ nonReserved
     | PRECEDING
     | PRIMARY
     | PRINCIPALS
+    | PROPERTIES
     | PURGE
     | QUERY
     | RANGE
@@ -1565,6 +1570,7 @@ POSITION: 'POSITION';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
 PRINCIPALS: 'PRINCIPALS';
+PROPERTIES: 'PROPERTIES';
 PURGE: 'PURGE';
 QUERY: 'QUERY';
 RANGE: 'RANGE';

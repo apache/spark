@@ -293,7 +293,7 @@ struct<>
 -- !query 31
 SELECT udf(every(v)), udf(some(v)), any(v) FROM test_agg WHERE 1 = 0
 -- !query 31 schema
-struct<CAST(udf(cast(every(v) as string)) AS BOOLEAN):boolean,CAST(udf(cast(some(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
+struct<CAST(udf(cast(every(v) as string)) AS BOOLEAN):boolean,CAST(udf(cast(any(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
 -- !query 31 output
 NULL	NULL	NULL
 
@@ -301,7 +301,7 @@ NULL	NULL	NULL
 -- !query 32
 SELECT udf(every(udf(v))), some(v), any(v) FROM test_agg WHERE k = 4
 -- !query 32 schema
-struct<CAST(udf(cast(every(cast(udf(cast(v as string)) as boolean)) as string)) AS BOOLEAN):boolean,some(v):boolean,any(v):boolean>
+struct<CAST(udf(cast(every(cast(udf(cast(v as string)) as boolean)) as string)) AS BOOLEAN):boolean,any(v):boolean,any(v):boolean>
 -- !query 32 output
 NULL	NULL	NULL
 
@@ -309,7 +309,7 @@ NULL	NULL	NULL
 -- !query 33
 SELECT every(v), udf(some(v)), any(v) FROM test_agg WHERE k = 5
 -- !query 33 schema
-struct<every(v):boolean,CAST(udf(cast(some(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
+struct<every(v):boolean,CAST(udf(cast(any(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
 -- !query 33 output
 false	true	true
 
@@ -317,7 +317,7 @@ false	true	true
 -- !query 34
 SELECT udf(k), every(v), udf(some(v)), any(v) FROM test_agg GROUP BY udf(k)
 -- !query 34 schema
-struct<CAST(udf(cast(k as string)) AS INT):int,every(v):boolean,CAST(udf(cast(some(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
+struct<CAST(udf(cast(k as string)) AS INT):int,every(v):boolean,CAST(udf(cast(any(v) as string)) AS BOOLEAN):boolean,any(v):boolean>
 -- !query 34 output
 1	false	true	true
 2	true	true	true
@@ -389,7 +389,7 @@ SELECT some(udf(1S))
 struct<>
 -- !query 40 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'some(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: Input to function 'some' should have been boolean, but it's [smallint].; line 1 pos 7
+cannot resolve 'any(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: Input to function 'any' should have been boolean, but it's [smallint].; line 1 pos 7
 
 
 -- !query 41
@@ -430,7 +430,7 @@ struct<k:int,v:boolean,every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST 
 -- !query 44
 SELECT k, udf(udf(v)), some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query 44 schema
-struct<k:int,CAST(udf(cast(cast(udf(cast(v as string)) as boolean) as string)) AS BOOLEAN):boolean,some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,CAST(udf(cast(cast(udf(cast(v as string)) as boolean) as string)) AS BOOLEAN):boolean,any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query 44 output
 1	false	false
 1	true	true

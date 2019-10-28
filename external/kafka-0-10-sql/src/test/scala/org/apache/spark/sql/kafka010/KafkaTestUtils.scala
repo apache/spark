@@ -67,6 +67,8 @@ class KafkaTestUtils(
     secure: Boolean = false) extends Logging {
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
+  private val IBM_KRB_DEBUG_CONFIG = "com.ibm.security.krb5.Krb5Debug"
+  private val SUN_KRB_DEBUG_CONFIG = "sun.security.krb5.debug"
 
   private val localCanonicalHostName = InetAddress.getLoopbackAddress().getCanonicalHostName()
   logInfo(s"Local host name is $localCanonicalHostName")
@@ -133,6 +135,7 @@ class KafkaTestUtils(
   private def setUpMiniKdc(): Unit = {
     val kdcDir = Utils.createTempDir()
     val kdcConf = MiniKdc.createConf()
+    kdcConf.setProperty(MiniKdc.DEBUG, "true")
     kdc = new MiniKdc(kdcConf, kdcDir)
     kdc.start()
     kdcReady = true
@@ -238,6 +241,7 @@ class KafkaTestUtils(
     }
 
     if (secure) {
+      setupKrbDebug()
       setUpMiniKdc()
       val jaasConfigFile = createKeytabsAndJaasConfigFile()
       System.setProperty(JAVA_AUTH_CONFIG, jaasConfigFile)
@@ -249,6 +253,14 @@ class KafkaTestUtils(
     setupEmbeddedKafkaServer()
     eventually(timeout(1.minute)) {
       assert(zkUtils.getAllBrokersInCluster().nonEmpty, "Broker was not up in 60 seconds")
+    }
+  }
+
+  private def setupKrbDebug(): Unit = {
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      System.setProperty(IBM_KRB_DEBUG_CONFIG, "all")
+    } else {
+      System.setProperty(SUN_KRB_DEBUG_CONFIG, "true")
     }
   }
 
@@ -303,6 +315,15 @@ class KafkaTestUtils(
       kdc.stop()
     }
     UserGroupInformation.reset()
+    teardownKrbDebug()
+  }
+
+  private def teardownKrbDebug(): Unit = {
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      System.clearProperty(IBM_KRB_DEBUG_CONFIG)
+    } else {
+      System.clearProperty(SUN_KRB_DEBUG_CONFIG)
+    }
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
