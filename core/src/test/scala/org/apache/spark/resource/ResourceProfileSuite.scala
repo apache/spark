@@ -53,8 +53,6 @@ class ResourceProfileSuite extends SparkFunSuite {
     conf.set("spark.task.resource.gpu.amount", "1")
     conf.set(s"$SPARK_EXECUTOR_PREFIX.resource.gpu.amount", "1")
     conf.set(s"$SPARK_EXECUTOR_PREFIX.resource.gpu.discoveryScript", "nameOfScript")
-    val all = conf.getAllWithPrefix(s"$SPARK_EXECUTOR_PREFIX.$RESOURCE_DOT")
-    logInfo("tests ids are: " + all.mkString(","))
     val rprof = ResourceProfile.getOrCreateDefaultProfile(conf)
     assert(rprof.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val execResources = rprof.executorResources
@@ -132,7 +130,6 @@ class ResourceProfileSuite extends SparkFunSuite {
   }
 
   test("Test TaskResourceRequest fractional") {
-
     val rprof = new ResourceProfile()
     val taskReq = new TaskResourceRequest("resource.gpu", 0.33)
     rprof.require(taskReq)

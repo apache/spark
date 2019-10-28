@@ -18,7 +18,7 @@
 package org.apache.spark.resource
 
 /**
- * An task resource request. This is used in conjuntion with the ResourceProfile to
+ * A task resource request. This is used in conjuntion with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level. The amount is specified as a Double to allow for saying you want more then
  * 1 task per resource. Valid values are <= 0.5 or whole numbers.
