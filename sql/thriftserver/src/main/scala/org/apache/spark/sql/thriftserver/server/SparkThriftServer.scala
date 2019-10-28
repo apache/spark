@@ -18,6 +18,7 @@
 package org.apache.spark.sql.thriftserver.server
 
 import java.util
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
@@ -36,6 +37,10 @@ import org.apache.spark.util.ShutdownHookManager
 class SparkThriftServer(sqlContext: SQLContext)
   extends CompositeService(classOf[SparkThriftServer].getSimpleName)
     with Logging {
+
+  // state is tracked internally so that the server only attempts to shut down if it successfully
+  // started, and then once only.
+  private val started = new AtomicBoolean(false)
 
   private var cliService: CLIService = null
   private var thriftCLIService: ThriftCLIService = null
@@ -75,11 +80,14 @@ class SparkThriftServer(sqlContext: SQLContext)
 
   override def start(): Unit = {
     super.start()
+    started.set(true)
   }
 
   override def stop(): Unit = {
-    logInfo("Shutting down HiveServer2")
-    super.stop()
+    if (started.getAndSet(false)) {
+      logInfo("Shutting down HiveServer2")
+      super.stop()
+    }
   }
 }
 

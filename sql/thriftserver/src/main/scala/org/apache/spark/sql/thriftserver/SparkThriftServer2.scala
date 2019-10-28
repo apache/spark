@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.thriftserver
 
-import java.util.concurrent.atomic.AtomicBoolean
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -43,19 +41,19 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  */
 object SparkThriftServer2 extends Logging {
   var uiTab: Option[ThriftServerTab] = None
-  var listener: SparkThriftServer2Listener = _
+  var listener: SparkThriftServerListener = _
 
   /**
    * :: DeveloperApi ::
    * Starts a new thrift server with the given context.
    */
   @DeveloperApi
-  def startWithContext(sqlContext: SQLContext): SparkThriftServer2 = {
-    val server = new SparkThriftServer2(sqlContext)
+  def startWithContext(sqlContext: SQLContext): SparkThriftServer = {
+    val server = new SparkThriftServer(sqlContext)
 
     server.init(new HiveConf())
     server.start()
-    listener = new SparkThriftServer2Listener(server, sqlContext.conf)
+    listener = new SparkThriftServerListener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
     uiTab = if (sqlContext.sparkContext.getConf.get(UI_ENABLED)) {
       Some(new ThriftServerTab(sqlContext.sparkContext))
@@ -86,11 +84,11 @@ object SparkThriftServer2 extends Logging {
     }
 
     try {
-      val server = new SparkThriftServer2(SparkSQLEnv.sqlContext)
+      val server = new SparkThriftServer(SparkSQLEnv.sqlContext)
       server.init(new HiveConf())
       server.start()
       logInfo("HiveThriftServer2 started")
-      listener = new SparkThriftServer2Listener(server, SparkSQLEnv.sqlContext.conf)
+      listener = new SparkThriftServerListener(server, SparkSQLEnv.sqlContext.conf)
       SparkSQLEnv.sparkContext.addSparkListener(listener)
       uiTab = if (SparkSQLEnv.sparkContext.getConf.get(UI_ENABLED)) {
         Some(new ThriftServerTab(SparkSQLEnv.sparkContext))
@@ -159,8 +157,8 @@ object SparkThriftServer2 extends Logging {
   /**
    * An inner sparkListener called in sc.stop to clean up the HiveThriftServer2
    */
-  private[thriftserver] class SparkThriftServer2Listener(val server: SparkThriftServer,
-                                                         val conf: SQLConf) extends SparkListener {
+  private[thriftserver] class SparkThriftServerListener(val server: SparkThriftServer,
+                                                        val conf: SQLConf) extends SparkListener {
 
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       server.stop()
@@ -288,29 +286,6 @@ object SparkThriftServer2 extends Logging {
         }
       }
 
-    }
-  }
-
-}
-
-private[thriftserver] class SparkThriftServer2(sqlContext: SQLContext)
-  extends SparkThriftServer(sqlContext) {
-  // state is tracked internally so that the server only attempts to shut down if it successfully
-  // started, and then once only.
-  private val started = new AtomicBoolean(false)
-
-  override def init(hiveConf: HiveConf) {
-    super.init(hiveConf)
-  }
-
-  override def start(): Unit = {
-    super.start()
-    started.set(true)
-  }
-
-  override def stop(): Unit = {
-    if (started.getAndSet(false)) {
-      super.stop()
     }
   }
 }
