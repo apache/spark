@@ -125,3 +125,8 @@ select map(1, interval 1 day, 2, interval 3 week);
 -- typed interval expression
 select interval 'interval 3 year 1 hour';
 select interval '3 year 1 hour';
+
+-- malformed interval literal
+select interval '10-9' year to month '2-1' year to month;
+select interval 1 year '2-1' year to month;
+select interval '10-9' year to month '1' year;

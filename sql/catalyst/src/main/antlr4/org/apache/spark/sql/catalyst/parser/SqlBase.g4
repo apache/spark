@@ -80,7 +80,7 @@ singleTableSchema
     ;
 
 singleInterval
-    : INTERVAL? (intervalValue intervalUnit)+ EOF
+    : INTERVAL? multiUnitsInterval EOF
     ;
 
 statement
@@ -761,12 +761,24 @@ booleanValue
     ;
 
 interval
-    : {ansi}? INTERVAL? intervalField+
-    | {!ansi}? INTERVAL intervalField*
+    : {ansi}? INTERVAL? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
+    | {!ansi}? INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
-intervalField
-    : value=intervalValue unit=intervalUnit (TO to=intervalUnit)?
+errorCapturingMultiUnitsInterval
+    : multiUnitsInterval unitToUnitInterval?
+    ;
+
+multiUnitsInterval
+    : (intervalValue intervalUnit)+
+    ;
+
+errorCapturingUnitToUnitInterval
+    : body=unitToUnitInterval (error1=multiUnitsInterval | error2=unitToUnitInterval)?
+    ;
+
+unitToUnitInterval
+    : value=STRING from=intervalUnit TO to=intervalUnit
     ;
 
 intervalValue
