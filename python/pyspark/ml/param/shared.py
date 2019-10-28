@@ -30,12 +30,6 @@ class HasMaxIter(Params):
     def __init__(self):
         super(HasMaxIter, self).__init__()
 
-    def setMaxIter(self, value):
-        """
-        Sets the value of :py:attr:`maxIter`.
-        """
-        return self._set(maxIter=value)
-
     def getMaxIter(self):
         """
         Gets the value of maxIter or its default value.
@@ -52,12 +46,6 @@ class HasRegParam(Params):
 
     def __init__(self):
         super(HasRegParam, self).__init__()
-
-    def setRegParam(self, value):
-        """
-        Sets the value of :py:attr:`regParam`.
-        """
-        return self._set(regParam=value)
 
     def getRegParam(self):
         """
@@ -77,12 +65,6 @@ class HasFeaturesCol(Params):
         super(HasFeaturesCol, self).__init__()
         self._setDefault(featuresCol='features')
 
-    def setFeaturesCol(self, value):
-        """
-        Sets the value of :py:attr:`featuresCol`.
-        """
-        return self._set(featuresCol=value)
-
     def getFeaturesCol(self):
         """
         Gets the value of featuresCol or its default value.
@@ -100,12 +82,6 @@ class HasLabelCol(Params):
     def __init__(self):
         super(HasLabelCol, self).__init__()
         self._setDefault(labelCol='label')
-
-    def setLabelCol(self, value):
-        """
-        Sets the value of :py:attr:`labelCol`.
-        """
-        return self._set(labelCol=value)
 
     def getLabelCol(self):
         """
@@ -125,12 +101,6 @@ class HasPredictionCol(Params):
         super(HasPredictionCol, self).__init__()
         self._setDefault(predictionCol='prediction')
 
-    def setPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`predictionCol`.
-        """
-        return self._set(predictionCol=value)
-
     def getPredictionCol(self):
         """
         Gets the value of predictionCol or its default value.
@@ -148,12 +118,6 @@ class HasProbabilityCol(Params):
     def __init__(self):
         super(HasProbabilityCol, self).__init__()
         self._setDefault(probabilityCol='probability')
-
-    def setProbabilityCol(self, value):
-        """
-        Sets the value of :py:attr:`probabilityCol`.
-        """
-        return self._set(probabilityCol=value)
 
     def getProbabilityCol(self):
         """
@@ -173,12 +137,6 @@ class HasRawPredictionCol(Params):
         super(HasRawPredictionCol, self).__init__()
         self._setDefault(rawPredictionCol='rawPrediction')
 
-    def setRawPredictionCol(self, value):
-        """
-        Sets the value of :py:attr:`rawPredictionCol`.
-        """
-        return self._set(rawPredictionCol=value)
-
     def getRawPredictionCol(self):
         """
         Gets the value of rawPredictionCol or its default value.
@@ -196,12 +154,6 @@ class HasInputCol(Params):
     def __init__(self):
         super(HasInputCol, self).__init__()
 
-    def setInputCol(self, value):
-        """
-        Sets the value of :py:attr:`inputCol`.
-        """
-        return self._set(inputCol=value)
-
     def getInputCol(self):
         """
         Gets the value of inputCol or its default value.
@@ -218,12 +170,6 @@ class HasInputCols(Params):
 
     def __init__(self):
         super(HasInputCols, self).__init__()
-
-    def setInputCols(self, value):
-        """
-        Sets the value of :py:attr:`inputCols`.
-        """
-        return self._set(inputCols=value)
 
     def getInputCols(self):
         """
@@ -243,12 +189,6 @@ class HasOutputCol(Params):
         super(HasOutputCol, self).__init__()
         self._setDefault(outputCol=self.uid + '__output')
 
-    def setOutputCol(self, value):
-        """
-        Sets the value of :py:attr:`outputCol`.
-        """
-        return self._set(outputCol=value)
-
     def getOutputCol(self):
         """
         Gets the value of outputCol or its default value.
@@ -265,12 +205,6 @@ class HasOutputCols(Params):
 
     def __init__(self):
         super(HasOutputCols, self).__init__()
-
-    def setOutputCols(self, value):
-        """
-        Sets the value of :py:attr:`outputCols`.
-        """
-        return self._set(outputCols=value)
 
     def getOutputCols(self):
         """
@@ -290,12 +224,6 @@ class HasNumFeatures(Params):
         super(HasNumFeatures, self).__init__()
         self._setDefault(numFeatures=262144)
 
-    def setNumFeatures(self, value):
-        """
-        Sets the value of :py:attr:`numFeatures`.
-        """
-        return self._set(numFeatures=value)
-
     def getNumFeatures(self):
         """
         Gets the value of numFeatures or its default value.
@@ -312,12 +240,6 @@ class HasCheckpointInterval(Params):
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
-
-    def setCheckpointInterval(self, value):
-        """
-        Sets the value of :py:attr:`checkpointInterval`.
-        """
-        return self._set(checkpointInterval=value)
 
     def getCheckpointInterval(self):
         """
@@ -337,12 +259,6 @@ class HasSeed(Params):
         super(HasSeed, self).__init__()
         self._setDefault(seed=hash(type(self).__name__))
 
-    def setSeed(self, value):
-        """
-        Sets the value of :py:attr:`seed`.
-        """
-        return self._set(seed=value)
-
     def getSeed(self):
         """
         Gets the value of seed or its default value.
@@ -359,12 +275,6 @@ class HasTol(Params):
 
     def __init__(self):
         super(HasTol, self).__init__()
-
-    def setTol(self, value):
-        """
-        Sets the value of :py:attr:`tol`.
-        """
-        return self._set(tol=value)
 
     def getTol(self):
         """
@@ -383,12 +293,6 @@ class HasStepSize(Params):
     def __init__(self):
         super(HasStepSize, self).__init__()
 
-    def setStepSize(self, value):
-        """
-        Sets the value of :py:attr:`stepSize`.
-        """
-        return self._set(stepSize=value)
-
     def getStepSize(self):
         """
         Gets the value of stepSize or its default value.
@@ -405,12 +309,6 @@ class HasHandleInvalid(Params):
 
     def __init__(self):
         super(HasHandleInvalid, self).__init__()
-
-    def setHandleInvalid(self, value):
-        """
-        Sets the value of :py:attr:`handleInvalid`.
-        """
-        return self._set(handleInvalid=value)
 
     def getHandleInvalid(self):
         """
@@ -430,12 +328,6 @@ class HasElasticNetParam(Params):
         super(HasElasticNetParam, self).__init__()
         self._setDefault(elasticNetParam=0.0)
 
-    def setElasticNetParam(self, value):
-        """
-        Sets the value of :py:attr:`elasticNetParam`.
-        """
-        return self._set(elasticNetParam=value)
-
     def getElasticNetParam(self):
         """
         Gets the value of elasticNetParam or its default value.
@@ -453,12 +345,6 @@ class HasFitIntercept(Params):
     def __init__(self):
         super(HasFitIntercept, self).__init__()
         self._setDefault(fitIntercept=True)
-
-    def setFitIntercept(self, value):
-        """
-        Sets the value of :py:attr:`fitIntercept`.
-        """
-        return self._set(fitIntercept=value)
 
     def getFitIntercept(self):
         """
@@ -478,12 +364,6 @@ class HasStandardization(Params):
         super(HasStandardization, self).__init__()
         self._setDefault(standardization=True)
 
-    def setStandardization(self, value):
-        """
-        Sets the value of :py:attr:`standardization`.
-        """
-        return self._set(standardization=value)
-
     def getStandardization(self):
         """
         Gets the value of standardization or its default value.
@@ -500,12 +380,6 @@ class HasThresholds(Params):
 
     def __init__(self):
         super(HasThresholds, self).__init__()
-
-    def setThresholds(self, value):
-        """
-        Sets the value of :py:attr:`thresholds`.
-        """
-        return self._set(thresholds=value)
 
     def getThresholds(self):
         """
@@ -525,12 +399,6 @@ class HasThreshold(Params):
         super(HasThreshold, self).__init__()
         self._setDefault(threshold=0.5)
 
-    def setThreshold(self, value):
-        """
-        Sets the value of :py:attr:`threshold`.
-        """
-        return self._set(threshold=value)
-
     def getThreshold(self):
         """
         Gets the value of threshold or its default value.
@@ -547,12 +415,6 @@ class HasWeightCol(Params):
 
     def __init__(self):
         super(HasWeightCol, self).__init__()
-
-    def setWeightCol(self, value):
-        """
-        Sets the value of :py:attr:`weightCol`.
-        """
-        return self._set(weightCol=value)
 
     def getWeightCol(self):
         """
@@ -572,12 +434,6 @@ class HasSolver(Params):
         super(HasSolver, self).__init__()
         self._setDefault(solver='auto')
 
-    def setSolver(self, value):
-        """
-        Sets the value of :py:attr:`solver`.
-        """
-        return self._set(solver=value)
-
     def getSolver(self):
         """
         Gets the value of solver or its default value.
@@ -594,12 +450,6 @@ class HasVarianceCol(Params):
 
     def __init__(self):
         super(HasVarianceCol, self).__init__()
-
-    def setVarianceCol(self, value):
-        """
-        Sets the value of :py:attr:`varianceCol`.
-        """
-        return self._set(varianceCol=value)
 
     def getVarianceCol(self):
         """
@@ -619,12 +469,6 @@ class HasAggregationDepth(Params):
         super(HasAggregationDepth, self).__init__()
         self._setDefault(aggregationDepth=2)
 
-    def setAggregationDepth(self, value):
-        """
-        Sets the value of :py:attr:`aggregationDepth`.
-        """
-        return self._set(aggregationDepth=value)
-
     def getAggregationDepth(self):
         """
         Gets the value of aggregationDepth or its default value.
@@ -642,12 +486,6 @@ class HasParallelism(Params):
     def __init__(self):
         super(HasParallelism, self).__init__()
         self._setDefault(parallelism=1)
-
-    def setParallelism(self, value):
-        """
-        Sets the value of :py:attr:`parallelism`.
-        """
-        return self._set(parallelism=value)
 
     def getParallelism(self):
         """
@@ -667,12 +505,6 @@ class HasCollectSubModels(Params):
         super(HasCollectSubModels, self).__init__()
         self._setDefault(collectSubModels=False)
 
-    def setCollectSubModels(self, value):
-        """
-        Sets the value of :py:attr:`collectSubModels`.
-        """
-        return self._set(collectSubModels=value)
-
     def getCollectSubModels(self):
         """
         Gets the value of collectSubModels or its default value.
@@ -689,12 +521,6 @@ class HasLoss(Params):
 
     def __init__(self):
         super(HasLoss, self).__init__()
-
-    def setLoss(self, value):
-        """
-        Sets the value of :py:attr:`loss`.
-        """
-        return self._set(loss=value)
 
     def getLoss(self):
         """
@@ -714,12 +540,6 @@ class HasDistanceMeasure(Params):
         super(HasDistanceMeasure, self).__init__()
         self._setDefault(distanceMeasure='euclidean')
 
-    def setDistanceMeasure(self, value):
-        """
-        Sets the value of :py:attr:`distanceMeasure`.
-        """
-        return self._set(distanceMeasure=value)
-
     def getDistanceMeasure(self):
         """
         Gets the value of distanceMeasure or its default value.
@@ -736,12 +556,6 @@ class HasValidationIndicatorCol(Params):
 
     def __init__(self):
         super(HasValidationIndicatorCol, self).__init__()
-
-    def setValidationIndicatorCol(self, value):
-        """
-        Sets the value of :py:attr:`validationIndicatorCol`.
-        """
-        return self._set(validationIndicatorCol=value)
 
     def getValidationIndicatorCol(self):
         """

@@ -212,7 +212,16 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     >>> df = spark.createDataFrame(
     ...     [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
     ...     ["user", "item", "rating"])
-    >>> als = ALS(rank=10, maxIter=5, seed=0)
+    >>> als = ALS(rank=10, seed=0)
+    >>> als.setMaxIter(5)
+    ALS...
+    >>> als.getMaxIter()
+    5
+    >>> als.setRegParam(0.1)
+    ALS...
+    >>> als.getRegParam()
+    0.1
+    >>> als.clear(als.regParam)
     >>> model = als.fit(df)
     >>> model.getUserCol()
     'user'
@@ -402,6 +411,36 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
         """
         return self._set(coldStartStrategy=value)
 
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
 
 class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
     """
@@ -430,6 +469,13 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         Sets the value of :py:attr:`coldStartStrategy`.
         """
         return self._set(coldStartStrategy=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
 
     @property
     @since("1.4.0")

@@ -455,6 +455,7 @@ case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
 
           override def next(): ColumnarBatch = {
             cb.setNumRows(0)
+            vectors.foreach(_.reset())
             var rowCount = 0
             while (rowCount < numRows && rowIterator.hasNext) {
               val row = rowIterator.next()
