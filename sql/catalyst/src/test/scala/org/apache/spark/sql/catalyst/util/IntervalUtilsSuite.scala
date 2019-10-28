@@ -99,6 +99,14 @@ class IntervalUtilsSuite extends SparkFunSuite {
       case e: IllegalArgumentException =>
         assert(e.getMessage.contains("month 15 outside range"))
     }
+
+    try {
+      fromYearMonthString("9a9-15")
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("Interval string does not match year-month format"))
+    }
   }
 
   test("from day-time string") {

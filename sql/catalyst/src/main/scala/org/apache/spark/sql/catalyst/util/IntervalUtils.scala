@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.Pattern
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -122,7 +124,7 @@ object IntervalUtils {
     }
   }
 
-  private val yearMonthPattern = Pattern.compile("^([+|-])?(\\d+)-(\\d+)$")
+  private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
 
   private val dayTimePattern = Pattern.compile(
     "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$")
@@ -146,19 +148,26 @@ object IntervalUtils {
    */
   def fromYearMonthString(input: String): CalendarInterval = {
     require(input != null, "Interval year-month string must be not null")
-    val s = input.trim
-    val m = yearMonthPattern.matcher(s)
-    require(m.matches, s"Interval string must match year-month format of 'y-m': $s")
-
-    try {
-      val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
-      val years = toLongWithRange("year", m.group(2), 0, Integer.MAX_VALUE).toInt
-      val months = toLongWithRange("month", m.group(3), 0, 11).toInt
-      new CalendarInterval(sign * (years * 12 + months), 0)
-    } catch {
-      case e: Exception =>
+    def toInterval(yearStr: String, monthStr: String): CalendarInterval = {
+      try {
+        val years = toLongWithRange("year", yearStr, 0, Integer.MAX_VALUE).toInt
+        val months = toLongWithRange("month", monthStr, 0, 11).toInt
+        val totalMonths = Math.addExact(Math.multiplyExact(years, 12), months)
+        new CalendarInterval(totalMonths, 0)
+      } catch {
+        case NonFatal(e) =>
+          throw new IllegalArgumentException(
+            s"Error parsing interval year-month string: ${e.getMessage}", e)
+      }
+    }
+    input.trim match {
+      case yearMonthPattern("-", yearStr, monthStr) =>
+        toInterval(yearStr, monthStr).negate()
+      case yearMonthPattern(_, yearStr, monthStr) =>
+        toInterval(yearStr, monthStr)
+      case _ =>
         throw new IllegalArgumentException(
-          s"Error parsing interval year-month string: ${e.getMessage}", e)
+          s"Interval string does not match year-month format of 'y-m': $input")
     }
   }
 
