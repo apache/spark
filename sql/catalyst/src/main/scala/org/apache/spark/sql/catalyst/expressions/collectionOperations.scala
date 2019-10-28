@@ -2633,6 +2633,8 @@ object Sequence {
       } else {
         // To estimate the resulted array length we need to make assumptions
         // about a month length in days and a day length in microseconds
+        // We choose a minimum days(28) in one month to make sure the estimated
+        // array length is long enough
         val intervalStepInMicros =
           stepMicros + stepMonths * microsPerMonth + stepDays * microsPerDay
         val startMicros: Long = num.toLong(start) * scale

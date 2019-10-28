@@ -132,17 +132,17 @@ public abstract class UnsafeWriter {
 
   public final void write(int ordinal, CalendarInterval input) {
     // grow the global buffer before writing data.
-    grow(24);
+    grow(16);
 
     // Write the months, days and microseconds fields of Interval to the variable length portion.
-    Platform.putLong(getBuffer(), cursor(), input.months);
-    Platform.putLong(getBuffer(), cursor() + 8, input.days);
-    Platform.putLong(getBuffer(), cursor() + 16, input.microseconds);
+    Platform.putInt(getBuffer(), cursor(), input.months);
+    Platform.putInt(getBuffer(), cursor() + 4, input.days);
+    Platform.putLong(getBuffer(), cursor() + 8, input.microseconds);
 
-    setOffsetAndSize(ordinal, 24);
+    setOffsetAndSize(ordinal, 16);
 
     // move the cursor forward.
-    increaseCursor(24);
+    increaseCursor(16);
   }
 
   public final void write(int ordinal, UnsafeRow row) {

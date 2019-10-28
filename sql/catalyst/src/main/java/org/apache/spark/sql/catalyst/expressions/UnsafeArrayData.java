@@ -230,9 +230,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
-    final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
-    final int days = (int) Platform.getLong(baseObject, baseOffset + offset + 8);
-    final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 16);
+    final int months = Platform.getInt(baseObject, baseOffset + offset);
+    final int days = Platform.getInt(baseObject, baseOffset + offset + 4);
+    final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
     return new CalendarInterval(months, days, microseconds);
   }
 
