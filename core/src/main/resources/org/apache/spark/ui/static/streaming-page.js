@@ -129,7 +129,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
     svg.append("g")
         .attr("class", "x axis")
         .attr("transform", "translate(0," + height + ")")
-        .call(xAxis)
+        .call(xAxis);
 
     svg.append("g")
         .attr("class", "y axis")
@@ -198,7 +198,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
                     lastClickedBatch = null;
                 }
                 lastClickedBatch = d.x;
-                highlightBatchRow(lastClickedBatch)
+                highlightBatchRow(lastClickedBatch);
                 lastTimeout = window.setTimeout(function () {
                     lastTimeout = null;
                     if (lastClickedBatch != null) {
@@ -261,9 +261,9 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
 
     svg.append("g")
         .attr("class", "y axis")
-        .call(yAxis)
+        .call(yAxis);
 
-    var bar = svg.selectAll(".bar")
+    svg.selectAll(".bar")
         .data(data)
         .enter()
         .append("g")
