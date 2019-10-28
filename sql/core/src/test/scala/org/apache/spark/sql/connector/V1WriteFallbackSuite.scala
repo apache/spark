@@ -257,7 +257,6 @@ class InMemoryTableWithV1Fallback(
   }
 
   override def capabilities: util.Set[TableCapability] = Set(
-    TableCapability.V1_BATCH_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
     TableCapability.TRUNCATE).asJava
 

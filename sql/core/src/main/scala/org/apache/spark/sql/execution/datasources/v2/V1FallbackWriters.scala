@@ -17,19 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.UUID
-
-import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.SupportsWrite
-import org.apache.spark.sql.connector.write.{SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.sources.{AlwaysTrue, Filter, InsertableRelation}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
+import org.apache.spark.sql.sources.{Filter, InsertableRelation}
 
 /**
  * Physical plan node for append into a v2 table using V1 write interfaces.
@@ -37,12 +31,13 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Rows in the output data set are appended.
  */
 case class AppendDataExecV1(
-    table: SupportsWrite,
-    writeOptions: CaseInsensitiveStringMap,
-    plan: LogicalPlan) extends V1FallbackWriters {
+    v1Relation: InsertableRelation,
+    plan: LogicalPlan) extends LeafExecNode with SupportsV1Write {
+
+  override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    writeWithV1(newWriteBuilder().buildForV1Write())
+    writeWithV1(v1Relation)
   }
 }
 
@@ -58,50 +53,14 @@ case class AppendDataExecV1(
  * AlwaysTrue to delete all rows.
  */
 case class OverwriteByExpressionExecV1(
-    table: SupportsWrite,
-    deleteWhere: Array[Filter],
-    writeOptions: CaseInsensitiveStringMap,
-    plan: LogicalPlan) extends V1FallbackWriters {
+    v1Relation: InsertableRelation,
+    deleteWhere: Seq[Filter],
+    plan: LogicalPlan) extends LeafExecNode with SupportsV1Write {
 
-  private def isTruncate(filters: Array[Filter]): Boolean = {
-    filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
-  }
+  override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    newWriteBuilder() match {
-      case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        writeWithV1(builder.truncate().asV1Builder.buildForV1Write())
-
-      case builder: SupportsOverwrite =>
-        writeWithV1(builder.overwrite(deleteWhere).asV1Builder.buildForV1Write())
-
-      case _ =>
-        throw new SparkException(s"Table does not support overwrite by expression: $table")
-    }
-  }
-}
-
-/** Some helper interfaces that use V2 write semantics through the V1 writer interface. */
-sealed trait V1FallbackWriters extends SupportsV1Write {
-  override def output: Seq[Attribute] = Nil
-  override final def children: Seq[SparkPlan] = Nil
-
-  def table: SupportsWrite
-  def writeOptions: CaseInsensitiveStringMap
-
-  protected implicit class toV1WriteBuilder(builder: WriteBuilder) {
-    def asV1Builder: V1WriteBuilder = builder match {
-      case v1: V1WriteBuilder => v1
-      case other => throw new IllegalStateException(
-        s"The returned writer ${other} was no longer a V1WriteBuilder.")
-    }
-  }
-
-  protected def newWriteBuilder(): V1WriteBuilder = {
-    val writeBuilder = table.newWriteBuilder(writeOptions)
-      .withInputDataSchema(plan.schema)
-      .withQueryId(UUID.randomUUID().toString)
-    writeBuilder.asV1Builder
+    writeWithV1(v1Relation)
   }
 }
 

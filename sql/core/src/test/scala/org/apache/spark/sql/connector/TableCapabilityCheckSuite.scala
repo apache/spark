@@ -98,19 +98,16 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
   }
 
   test("AppendData: check correct capabilities") {
-    Seq(BATCH_WRITE, V1_BATCH_WRITE).foreach { write =>
-      val plan = AppendData.byName(
-        DataSourceV2Relation.create(CapabilityTable(write), CaseInsensitiveStringMap.empty),
-        TestRelation)
+    val plan = AppendData.byName(
+      DataSourceV2Relation.create(CapabilityTable(BATCH_WRITE), CaseInsensitiveStringMap.empty),
+      TestRelation)
 
-      TableCapabilityCheck.apply(plan)
-    }
+    TableCapabilityCheck.apply(plan)
   }
 
   test("Truncate: check missing capabilities") {
     Seq(CapabilityTable(),
       CapabilityTable(BATCH_WRITE),
-      CapabilityTable(V1_BATCH_WRITE),
       CapabilityTable(TRUNCATE),
       CapabilityTable(OVERWRITE_BY_FILTER)).foreach { table =>
 
@@ -128,9 +125,7 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
 
   test("Truncate: check correct capabilities") {
     Seq(CapabilityTable(BATCH_WRITE, TRUNCATE),
-      CapabilityTable(V1_BATCH_WRITE, TRUNCATE),
-      CapabilityTable(BATCH_WRITE, OVERWRITE_BY_FILTER),
-      CapabilityTable(V1_BATCH_WRITE, OVERWRITE_BY_FILTER)).foreach { table =>
+      CapabilityTable(BATCH_WRITE, OVERWRITE_BY_FILTER)).foreach { table =>
 
       val plan = OverwriteByExpression.byName(
         DataSourceV2Relation.create(table, CaseInsensitiveStringMap.empty), TestRelation,
@@ -142,7 +137,6 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
 
   test("OverwriteByExpression: check missing capabilities") {
     Seq(CapabilityTable(),
-      CapabilityTable(V1_BATCH_WRITE),
       CapabilityTable(BATCH_WRITE),
       CapabilityTable(OVERWRITE_BY_FILTER)).foreach { table =>
 
@@ -159,14 +153,12 @@ class TableCapabilityCheckSuite extends AnalysisSuite with SharedSparkSession {
   }
 
   test("OverwriteByExpression: check correct capabilities") {
-    Seq(BATCH_WRITE, V1_BATCH_WRITE).foreach { write =>
-      val table = CapabilityTable(write, OVERWRITE_BY_FILTER)
-      val plan = OverwriteByExpression.byName(
-        DataSourceV2Relation.create(table, CaseInsensitiveStringMap.empty), TestRelation,
-        EqualTo(AttributeReference("x", LongType)(), Literal(5)))
+    val table = CapabilityTable(BATCH_WRITE, OVERWRITE_BY_FILTER)
+    val plan = OverwriteByExpression.byName(
+      DataSourceV2Relation.create(table, CaseInsensitiveStringMap.empty), TestRelation,
+      EqualTo(AttributeReference("x", LongType)(), Literal(5)))
 
-      TableCapabilityCheck.apply(plan)
-    }
+    TableCapabilityCheck.apply(plan)
   }
 
   test("OverwritePartitionsDynamic: check missing capabilities") {
