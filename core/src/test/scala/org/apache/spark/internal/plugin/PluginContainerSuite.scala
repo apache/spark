@@ -81,7 +81,8 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     assert(TestSparkPlugin.driverContext != null)
     assert(TestSparkPlugin.driverContext.ask("ask") === "reply")
 
-    val metricSources = sc.env.metricsSystem.getSourcesByName(classOf[TestSparkPlugin].getName())
+    val metricSources = sc.env.metricsSystem
+      .getSourcesByName(s"plugin.${classOf[TestSparkPlugin].getName()}")
     assert(metricSources.size === 2)
 
     def findMetric(name: String): Int = {

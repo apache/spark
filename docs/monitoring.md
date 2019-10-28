@@ -991,6 +991,11 @@ This is the component with the largest amount of instrumented metrics
 - namespace=JVMCPU
   - jvmCpuTime
 
+- namespace=plugin.<Plugin Class Name>
+  - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
+  configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
+  custom plugins into Spark.
+
 ### Component instance = Executor
 These metrics are exposed by Spark executors. Note, currently they are not available
 when running in local mode.
@@ -1060,7 +1065,7 @@ when running in local mode.
   - hiveClientCalls.count
   - sourceCodeSize (histogram)
 
-- namespace=<Plugin Class Name>
+- namespace=plugin.<Plugin Class Name>
   - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
   configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
   custom plugins into Spark.

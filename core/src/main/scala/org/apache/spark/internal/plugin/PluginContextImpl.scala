@@ -71,7 +71,7 @@ private class PluginContextImpl(
 
   def registerMetrics(): Unit = {
     if (!registry.getMetrics().isEmpty()) {
-      val src = new PluginMetricsSource(pluginName, registry)
+      val src = new PluginMetricsSource(s"plugin.$pluginName", registry)
       metricsSystem.registerSource(src)
     }
   }
