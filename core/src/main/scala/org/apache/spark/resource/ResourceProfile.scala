@@ -93,8 +93,8 @@ private[spark] class ResourceProfile() extends Serializable {
   }
 
   def require(request: TaskResourceRequest): this.type = {
-    if (allowedTaskResources.contains(request.resourceName) ||
-      request.resourceName.startsWith(RESOURCE_DOT)) {
+    val rName = request.resourceName
+    if (allowedTaskResources.contains(rName) || rName.startsWith(RESOURCE_DOT)) {
       _taskResources(request.resourceName) = request
     } else {
       throw new IllegalArgumentException(s"Task resource not allowed: ${request.resourceName}")
@@ -103,8 +103,8 @@ private[spark] class ResourceProfile() extends Serializable {
   }
 
   def require(request: ExecutorResourceRequest): this.type = {
-    if (allowedExecutorResources.contains(request.resourceName) ||
-        request.resourceName.startsWith(RESOURCE_DOT)) {
+    val rName = request.resourceName
+    if (allowedExecutorResources.contains(rName) || rName.startsWith(RESOURCE_DOT)) {
       _executorResources(request.resourceName) = request
     } else {
       throw new IllegalArgumentException(s"Executor resource not allowed: ${request.resourceName}")
