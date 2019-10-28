@@ -18,8 +18,6 @@
 package org.apache.spark.sql.internal
 
 import java.net.URL
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -35,7 +33,7 @@ import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamQueryStore
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.streaming.StreamingQueryManager
+import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
 
@@ -114,15 +112,10 @@ private[sql] class SharedState(
   val cacheManager: CacheManager = new CacheManager
 
   /**
-   * Class for caching streaming query instance.
+   * A class that holds [[StreamingQuery]] active across all sessions to manage the lifecycle
+   * of the stream.
    */
-  val streamQueryStore: StreamQueryStore = new StreamQueryStore()
-
-  /**
-   * A map of active streaming queries to the session specific StreamingQueryManager that manages
-   * the lifecycle of that stream.
-   */
-  private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamingQueryManager]()
+  private[sql] val streamQueryStore: StreamQueryStore = new StreamQueryStore()
 
   /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific

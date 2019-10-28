@@ -353,8 +353,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       }
 
       // Make sure no other query with same id is active across all sessions
-      val activeOption =
-        Option(sparkSession.sharedState.activeStreamingQueries.putIfAbsent(query.id, this))
+      val activeOption = sparkSession.sharedState.streamQueryStore.putIfAbsent(query)
       if (activeOption.isDefined || activeQueries.values.exists(_.id == query.id)) {
         throw new IllegalStateException(
           s"Cannot start query with id ${query.id} as another query with same id is " +
@@ -375,7 +374,6 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         unregisterTerminatedStream(query.id)
         throw e
     }
-    sparkSession.sharedState.streamQueryStore.addStreamQuery(query)
     query
   }
 
@@ -394,7 +392,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   private def unregisterTerminatedStream(terminatedQueryId: UUID): Unit = {
     activeQueriesLock.synchronized {
       // remove from shared state only if the streaming query manager also matches
-      sparkSession.sharedState.activeStreamingQueries.remove(terminatedQueryId, this)
+      sparkSession.sharedState.streamQueryStore.terminate(terminatedQueryId)
       activeQueries -= terminatedQueryId
     }
   }

@@ -128,7 +128,7 @@ class StreamingQueryPage(parent: SQLTab, store: Option[StreamQueryStore])
 
   private def generateStreamingQueryTable(request: HttpServletRequest): Seq[Node] = {
     val (activeQueries, inactiveQueries) =
-      store.map(_.existingStreamQueries.partition(_._1.isActive)).getOrElse((Seq.empty, Seq.empty))
+      store.map(_.allStreamQueries.partition(_._1.isActive)).getOrElse((Seq.empty, Seq.empty))
     val activeQueryTables = if (activeQueries.nonEmpty) {
       val headerRow = Seq(
         "Query Name", "Status", "Id", "Run ID", "Submit Time", "Duration", "Avg Input PerSec",

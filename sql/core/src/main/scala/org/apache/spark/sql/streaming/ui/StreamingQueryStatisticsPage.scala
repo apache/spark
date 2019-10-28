@@ -54,7 +54,7 @@ class StreamingQueryStatisticsPage(
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val (query, timeSinceStart) = if (store.nonEmpty) {
-      store.get.existingStreamQueries.find { case (query, _) =>
+      store.get.allStreamQueries.find { case (query, _) =>
         query.runId.equals(UUID.fromString(parameterId))
       }.getOrElse(throw new Exception(s"Can not find streaming query $parameterId"))
     } else {
@@ -134,15 +134,15 @@ class StreamingQueryStatisticsPage(
   def generateStatTable(query: StreamingQuery): Seq[Node] = {
     val batchTimes = withNoProgress(query,
       query.recentProgress.map(p => df.parse(p.timestamp).getTime), Array.empty[Long])
-    val minBatchTime = withNoProgress(query, df.parse(query.recentProgress.head.timestamp).getTime,
-      0L)
-    val maxBatchTime = withNoProgress(query, df.parse(query.lastProgress.timestamp).getTime,
-      0L)
-    val maxRecordRate = withNoProgress(query, query.recentProgress.map(_.inputRowsPerSecond).max,
-      0L)
+    val minBatchTime =
+      withNoProgress(query, df.parse(query.recentProgress.head.timestamp).getTime, 0L)
+    val maxBatchTime =
+      withNoProgress(query, df.parse(query.lastProgress.timestamp).getTime, 0L)
+    val maxRecordRate =
+      withNoProgress(query, query.recentProgress.map(_.inputRowsPerSecond).max, 0L)
     val minRecordRate = 0L
-    val maxProcessRate = withNoProgress(query,
-      query.recentProgress.map(_.processedRowsPerSecond).max, 0L)
+    val maxProcessRate =
+      withNoProgress(query, query.recentProgress.map(_.processedRowsPerSecond).max, 0L)
     val minProcessRate = 0L
     val maxRows = withNoProgress(query, query.recentProgress.map(_.numInputRows).max, 0L)
     val minRows = 0L

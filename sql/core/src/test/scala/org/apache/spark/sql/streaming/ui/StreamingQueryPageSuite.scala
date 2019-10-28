@@ -53,7 +53,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(tab.headerTabs).thenReturn(Seq.empty)
 
     val streamQuery = createStreamQuery(id)
-    when(streamQueryStore.existingStreamQueries).thenReturn(Seq((streamQuery, 1L)))
+    when(streamQueryStore.allStreamQueries).thenReturn(Seq((streamQuery, 1L)))
     var html = renderStreamingQueryPage(request, tab, Some(streamQueryStore))
       .toString().toLowerCase(Locale.ROOT)
     assert(html.contains("active streaming queries (1)"))
@@ -92,7 +92,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(tab.headerTabs).thenReturn(Seq.empty)
 
     val streamQuery = createStreamQuery(id)
-    when(streamQueryStore.existingStreamQueries).thenReturn(Seq((streamQuery, 1L)))
+    when(streamQueryStore.allStreamQueries).thenReturn(Seq((streamQuery, 1L)))
     val html = renderStreamingQueryStatisticsPage(request, tab, Some(streamQueryStore))
       .toString().toLowerCase(Locale.ROOT)
 

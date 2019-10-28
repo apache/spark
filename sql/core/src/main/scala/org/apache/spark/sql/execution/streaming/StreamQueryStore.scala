@@ -18,30 +18,48 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.mutable
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.streaming.StreamingQuery
 
 /**
- * A class that holds and manages [[StreamingQuery]].
+ * A class that holds [[StreamingQuery]] active across all sessions to manage the lifecycle
+ * of the stream.
  */
 private[sql] class StreamQueryStore {
-  private val lock = new Object
-  private val cache = new mutable.HashMap[UUID, (StreamingQuery, Long)]()
+  private val activeStreamingQueries = new ConcurrentHashMap[UUID, (StreamingQuery, Long)]()
+  // There maybe more than one inactive stream query with same query ID, as we can run same
+  // stream query many times after it failed or terminated.
+  private val inactiveStreamingQueries = new ConcurrentHashMap[(UUID, Long), StreamingQuery]()
 
-  def addStreamQuery(query: StreamingQuery): Unit = {
-    lock.synchronized {
-      if (!cache.contains(query.id)) {
-        val curTime = System.currentTimeMillis()
-        cache.put(query.id, (query, curTime))
+  def putIfAbsent(query: StreamingQuery): Option[StreamingQuery] = {
+    val curTime = System.currentTimeMillis()
+    val prevQuery = Option(activeStreamingQueries.putIfAbsent(query.id, (query, curTime))).map(_._1)
+    if (prevQuery.isEmpty) {
+      // if `prevQuery` is empty, it indicates this query start at first time or restart again.
+      // So it is safe to remove this query from `inactiveStreamingQueries`
+      val candidates = inactiveStreamingQueries.asScala.toSeq.filter { case ((uuid, _), _) =>
+        uuid.equals(query.id)
       }
+      candidates.foreach(cands => inactiveStreamingQueries.remove(cands._1))
+    }
+
+    prevQuery
+  }
+
+  def terminate(id: UUID): Unit = {
+    val query = activeStreamingQueries.remove(id)
+    if (query != null) {
+      inactiveStreamingQueries.putIfAbsent((id, query._2), query._1)
     }
   }
 
-  def existingStreamQueries: Seq[(StreamingQuery, Long)] = {
-    lock.synchronized {
-      cache.values.toSeq
-    }
+  def allStreamQueries: Seq[(StreamingQuery, Long)] = {
+    activeStreamingQueries.asScala.toSeq.map(_._2) ++
+      inactiveStreamingQueries.asScala.toSeq.map { case ((_, startTime), query) =>
+        (query, startTime)
+      }
   }
 }
