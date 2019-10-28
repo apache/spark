@@ -1268,6 +1268,24 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("LOAD DATA INTO TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, data string)
+           |USING foo
+           |PARTITIONED BY (id)
+         """.stripMargin)
+
+      testV1Command("LOAD DATA", s"INPATH 'filepath' INTO TABLE $t")
+      testV1Command("LOAD DATA", s"LOCAL INPATH 'filepath' INTO TABLE $t")
+      testV1Command("LOAD DATA", s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t")
+      testV1Command("LOAD DATA",
+        s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t PARTITION(id=1)")
+    }
+  }
+
   test("SHOW CREATE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
