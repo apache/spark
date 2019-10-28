@@ -299,6 +299,24 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         """
         return self._set(numFolds=value)
 
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
+
+    def setCollectSubModels(self, value):
+        """
+        Sets the value of :py:attr:`collectSubModels`.
+        """
+        return self._set(collectSubModels=value)
+
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
         epm = self.getOrDefault(self.estimatorParamMaps)
@@ -642,6 +660,24 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
         Sets the value of :py:attr:`trainRatio`.
         """
         return self._set(trainRatio=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
+
+    def setCollectSubModels(self, value):
+        """
+        Sets the value of :py:attr:`collectSubModels`.
+        """
+        return self._set(collectSubModels=value)
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
