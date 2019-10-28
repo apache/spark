@@ -124,9 +124,6 @@ object IntervalUtils {
     }
   }
 
-  private val dayTimePattern = Pattern.compile(
-    "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$")
-
   private def toLongWithRange(
       fieldName: String,
       s: String,
@@ -180,6 +177,9 @@ object IntervalUtils {
     fromDayTimeString(s, "day", "second")
   }
 
+  private val dayTimePattern =
+    "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$".r
+
   /**
    * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
    *
@@ -192,7 +192,7 @@ object IntervalUtils {
   def fromDayTimeString(input: String, from: String, to: String): CalendarInterval = {
     require(input != null, "Interval day-time string must be not null")
     val s = input.trim
-    val m = dayTimePattern.matcher(s)
+    val m = dayTimePattern.pattern.matcher(s)
     require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $s")
 
     try {
