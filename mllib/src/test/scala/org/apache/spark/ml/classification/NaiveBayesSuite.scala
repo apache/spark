@@ -81,7 +81,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
   }
 
   def expectedBernoulliProbabilities(model: NaiveBayesModel, feature: Vector): Vector = {
-    val negThetaMatrix = model.theta.map(v => math.log(1.0 - math.exp(v)))
+    val negThetaMatrix = model.theta.map(v => math.log1p(-math.exp(v)))
     val negFeature = Vectors.dense(feature.toArray.map(v => 1.0 - v))
     val piTheta: BV[Double] = model.pi.asBreeze + model.theta.multiply(feature).asBreeze
     val logClassProbs: BV[Double] = piTheta + negThetaMatrix.multiply(negFeature).asBreeze

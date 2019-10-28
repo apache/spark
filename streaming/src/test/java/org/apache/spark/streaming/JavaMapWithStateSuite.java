@@ -149,10 +149,10 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
       inputStream.map(x -> new Tuple2<>(x, 1))).mapWithState(mapWithStateSpec);
 
     List<Set<T>> collectedOutputs =
-        Collections.synchronizedList(new ArrayList<Set<T>>());
+        Collections.synchronizedList(new ArrayList<>());
     mapWithStateDStream.foreachRDD(rdd -> collectedOutputs.add(Sets.newHashSet(rdd.collect())));
     List<Set<Tuple2<K, S>>> collectedStateSnapshots =
-        Collections.synchronizedList(new ArrayList<Set<Tuple2<K, S>>>());
+        Collections.synchronizedList(new ArrayList<>());
     mapWithStateDStream.stateSnapshots().foreachRDD(rdd ->
         collectedStateSnapshots.add(Sets.newHashSet(rdd.collect())));
     BatchCounter batchCounter = new BatchCounter(ssc.ssc());

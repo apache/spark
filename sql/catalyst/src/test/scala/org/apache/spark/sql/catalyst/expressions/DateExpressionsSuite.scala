@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.ZoneOffset
+import java.time.{Instant, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
@@ -28,7 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
 import org.apache.spark.sql.internal.SQLConf
@@ -596,6 +596,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testTrunc(date, null, null)
     testTrunc(null, "MON", null)
     testTrunc(null, null, null)
+
+    testTrunc(Date.valueOf("2000-03-08"), "decade", Date.valueOf("2000-01-01"))
+    testTrunc(Date.valueOf("2000-03-08"), "century", Date.valueOf("1901-01-01"))
   }
 
   test("TruncTimestamp") {
@@ -664,6 +667,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       testTrunc(inputDate, null, null)
       testTrunc(null, "MON", null)
       testTrunc(null, null, null)
+
+      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "decade",
+        Timestamp.valueOf("2000-01-01 00:00:00"))
+      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "century",
+        Timestamp.valueOf("1901-01-01 00:00:00"))
     }
   }
 
@@ -927,5 +935,176 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)), null)
     checkEvaluation(MakeDate(Literal(2019), Literal(13), Literal(19)), null)
     checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
+  }
+
+  test("creating values of TimestampType via make_timestamp") {
+    var makeTimestampExpr = MakeTimestamp(
+      Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
+      Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
+    val expected = Timestamp.valueOf("2013-7-15 8:15:23.5")
+    checkEvaluation(makeTimestampExpr, expected)
+    checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
+
+    checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(year = Literal(Int.MaxValue)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(month = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(month = Literal(13)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(day = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(day = Literal(32)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(hour = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(hour = Literal(25)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(min = Literal(65)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(8, 6))), null)
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(70.0), 8, 6))), null)
+
+    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
+      Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
+    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(60.5), 8, 6))), null)
+
+    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
+      Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
+  }
+
+  test("millennium") {
+    val date = MakeDate(Literal(2019), Literal(1), Literal(1))
+    checkEvaluation(Millennium(date), 3)
+    checkEvaluation(Millennium(date.copy(year = Literal(2001))), 3)
+    checkEvaluation(Millennium(date.copy(year = Literal(2000))), 2)
+    checkEvaluation(Millennium(date.copy(year = Literal(1001), day = Literal(28))), 2)
+    checkEvaluation(Millennium(date.copy(year = Literal(1))), 1)
+    checkEvaluation(Millennium(date.copy(year = Literal(-1))), -1)
+    checkEvaluation(Millennium(date.copy(year = Literal(-100), month = Literal(12))), -1)
+    checkEvaluation(Millennium(date.copy(year = Literal(-2019))), -3)
+  }
+
+  test("century") {
+    val date = MakeDate(Literal(2019), Literal(1), Literal(1))
+    checkEvaluation(Century(date), 21)
+    checkEvaluation(Century(date.copy(year = Literal(2001))), 21)
+    checkEvaluation(Century(date.copy(year = Literal(2000))), 20)
+    checkEvaluation(Century(date.copy(year = Literal(1001), day = Literal(28))), 11)
+    checkEvaluation(Century(date.copy(year = Literal(1))), 1)
+    checkEvaluation(Century(date.copy(year = Literal(-1))), -1)
+    checkEvaluation(Century(date.copy(year = Literal(-100), month = Literal(12))), -2)
+    checkEvaluation(Century(date.copy(year = Literal(-2019))), -21)
+  }
+
+  test("decade") {
+    val date = MakeDate(Literal(2019), Literal(8), Literal(8))
+    checkEvaluation(Decade(date), 201)
+    checkEvaluation(Decade(date.copy(year = Literal(2011))), 201)
+    checkEvaluation(Decade(date.copy(year = Literal(2010))), 201)
+    checkEvaluation(Decade(date.copy(year = Literal(2009))), 200)
+    checkEvaluation(Decade(date.copy(year = Literal(10))), 1)
+    checkEvaluation(Decade(date.copy(year = Literal(1))), 0)
+    checkEvaluation(Decade(date.copy(year = Literal(-1))), -1)
+    checkEvaluation(Decade(date.copy(year = Literal(-10))), -1)
+    checkEvaluation(Decade(date.copy(year = Literal(-11))), -2)
+    checkEvaluation(Decade(date.copy(year = Literal(-2019))), -202)
+  }
+
+  test("milliseconds and microseconds") {
+    outstandingTimezonesIds.foreach { timezone =>
+      var timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
+        Literal(0), Literal(0), Literal(Decimal(BigDecimal(10.123456789), 8, 6)),
+        Some(Literal(timezone)))
+
+      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(10123.457), 8, 3))
+      checkEvaluation(Microseconds(timestamp), 10123457)
+
+      timestamp = timestamp.copy(sec = Literal(Decimal(0.0, 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(Microseconds(timestamp), 0)
+
+      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(59.999999), 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(59999.999), 8, 3))
+      checkEvaluation(Microseconds(timestamp), 59999999)
+
+      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(60.0), 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(Microseconds(timestamp), 0)
+    }
+  }
+
+  test("epoch") {
+    val zoneId = ZoneId.systemDefault()
+    val nanos = 123456000
+    val timestamp = Epoch(MakeTimestamp(
+      Literal(2019), Literal(8), Literal(9), Literal(0), Literal(0),
+      Literal(Decimal(nanos / DateTimeUtils.NANOS_PER_SECOND.toDouble, 8, 6)),
+      Some(Literal(zoneId.getId))))
+    val instant = LocalDateTime.of(2019, 8, 9, 0, 0, 0, nanos)
+      .atZone(zoneId).toInstant
+    val expected = Decimal(BigDecimal(nanos) / DateTimeUtils.NANOS_PER_SECOND +
+      instant.getEpochSecond +
+      zoneId.getRules.getOffset(instant).getTotalSeconds)
+    checkEvaluation(timestamp, expected)
+  }
+
+  test("ISO 8601 week-numbering year") {
+    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
+    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
+  }
+
+  test("extract the seconds part with fraction from timestamps") {
+    outstandingTimezonesIds.foreach { timezone =>
+      val timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
+        Literal(0), Literal(0), Literal(Decimal(10.123456, 8, 6)),
+        Some(Literal(timezone)))
+
+      checkEvaluation(SecondWithFraction(timestamp), Decimal(10.123456, 8, 6))
+      checkEvaluation(
+        SecondWithFraction(timestamp.copy(sec = Literal(Decimal(59000001, 8, 6)))),
+        Decimal(59000001, 8, 6))
+      checkEvaluation(
+        SecondWithFraction(timestamp.copy(sec = Literal(Decimal(1, 8, 6)))),
+        Decimal(0.000001, 8, 6))
+    }
+  }
+
+  test("timestamps difference") {
+    val end = Instant.parse("2019-10-04T11:04:01.123456Z")
+    checkEvaluation(SubtractTimestamps(Literal(end), Literal(end)),
+      new CalendarInterval(0, 0))
+    checkEvaluation(SubtractTimestamps(Literal(end), Literal(Instant.EPOCH)),
+      IntervalUtils.fromString("interval 18173 days " +
+        "11 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds"))
+    checkEvaluation(SubtractTimestamps(Literal(Instant.EPOCH), Literal(end)),
+      IntervalUtils.fromString("interval -18173 days " +
+        "-11 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds"))
+    checkEvaluation(
+      SubtractTimestamps(
+        Literal(Instant.parse("9999-12-31T23:59:59.999999Z")),
+        Literal(Instant.parse("0001-01-01T00:00:00Z"))),
+      IntervalUtils.fromString("interval 521722 weeks 4 days " +
+        "23 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds"))
+  }
+
+  test("subtract dates") {
+    val end = LocalDate.of(2019, 10, 5)
+    checkEvaluation(SubtractDates(Literal(end), Literal(end)),
+      new CalendarInterval(0, 0))
+    checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
+      IntervalUtils.fromString("interval 1 days"))
+    checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),
+      IntervalUtils.fromString("interval -1 days"))
+    val epochDate = Literal(LocalDate.ofEpochDay(0))
+    checkEvaluation(SubtractDates(Literal(end), epochDate),
+      IntervalUtils.fromString("interval 49 years 9 months 4 days"))
+    checkEvaluation(SubtractDates(epochDate, Literal(end)),
+      IntervalUtils.fromString("interval -49 years -9 months -4 days"))
+    checkEvaluation(
+      SubtractDates(
+        Literal(LocalDate.of(10000, 1, 1)),
+        Literal(LocalDate.of(1, 1, 1))),
+      IntervalUtils.fromString("interval 9999 years"))
   }
 }

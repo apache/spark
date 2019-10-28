@@ -23,7 +23,7 @@ There are several ways to monitor Spark applications: web UIs, metrics, and exte
 
 # Web Interfaces
 
-Every SparkContext launches a web UI, by default on port 4040, that
+Every SparkContext launches a [Web UI](web-ui.html), by default on port 4040, that
 displays useful information about the application. This includes:
 
 * A list of scheduler stages and tasks
@@ -844,6 +844,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `CSVSink`: Exports metrics data to CSV files at regular intervals.
 * `JmxSink`: Registers metrics for viewing in a JMX console.
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
+* `PrometheusServlet`: Adds a servlet within the existing Spark UI to serve metrics data in Prometheus format.
 * `GraphiteSink`: Sends metrics to a Graphite node.
 * `Slf4jSink`: Sends metrics to slf4j as log entries.
 * `StatsdSink`: Sends metrics to a StatsD node.
@@ -876,6 +877,7 @@ This example shows a list of Spark configuration parameters for a Graphite sink:
 "spark.metrics.conf.*.sink.graphite.period"=10
 "spark.metrics.conf.*.sink.graphite.unit"=seconds
 "spark.metrics.conf.*.sink.graphite.prefix"="optional_prefix"
+"spark.metrics.conf.*.sink.graphite.regex"="optional_regex_to_send_matching_metrics"
 ```
 
 Default values of the Spark metrics configuration are as follows:
@@ -1057,6 +1059,11 @@ when running in local mode.
   - generatedMethodSize (histogram)
   - hiveClientCalls.count
   - sourceCodeSize (histogram)
+
+- namespace=<Executor Plugin Class Name>
+  - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and 
+  configured using the Spark executor plugin infrastructure.
+  See also the configuration parameter `spark.executor.plugins`
 
 ### Source = JVM Source 
 Notes: 

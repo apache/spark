@@ -27,7 +27,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 
@@ -85,6 +85,30 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
     val existingInternalConsumer = KafkaDataConsumer.cache.get(key)
     assert(existingInternalConsumer.eq(consumer1.internalConsumer))
     assert(existingInternalConsumer.eq(consumer2.internalConsumer))
+  }
+
+  test("new KafkaDataConsumer instance in case of Task retry") {
+    KafkaDataConsumer.cache.clear()
+
+    val kafkaParams = getKafkaParams()
+    val key = new CacheKey(groupId, topicPartition)
+
+    val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+    val consumer1 = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
+      topicPartition, kafkaParams, context1, true)
+    consumer1.release()
+
+    assert(KafkaDataConsumer.cache.size() == 1)
+    assert(KafkaDataConsumer.cache.get(key).eq(consumer1.internalConsumer))
+
+    val context2 = new TaskContextImpl(0, 0, 0, 0, 1, null, null, null)
+    val consumer2 = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
+      topicPartition, kafkaParams, context2, true)
+    consumer2.release()
+
+    // The first consumer should be removed from cache and new non-cached should be returned
+    assert(KafkaDataConsumer.cache.size() == 0)
+    assert(consumer1.internalConsumer.ne(consumer2.internalConsumer))
   }
 
   test("concurrent use of KafkaDataConsumer") {

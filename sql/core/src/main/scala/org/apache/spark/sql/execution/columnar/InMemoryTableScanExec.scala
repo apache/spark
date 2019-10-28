@@ -49,11 +49,11 @@ case class InMemoryTableScanExec(
     }
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override def doCanonicalize(): SparkPlan =
-    copy(attributes = attributes.map(QueryPlan.normalizeExprId(_, relation.output)),
-      predicates = predicates.map(QueryPlan.normalizeExprId(_, relation.output)),
+    copy(attributes = attributes.map(QueryPlan.normalizeExpressions(_, relation.output)),
+      predicates = predicates.map(QueryPlan.normalizeExpressions(_, relation.output)),
       relation = relation.canonicalized.asInstanceOf[InMemoryRelation])
 
   override def vectorTypes: Option[Seq[String]] =
@@ -115,22 +115,19 @@ case class InMemoryTableScanExec(
     val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
     buffers
       .map(createAndDecompressColumn(_, offHeapColumnVectorEnabled))
-      .map(b => {
-        numOutputRows += b.numRows()
-        b
-      })
+      .map { buffer =>
+        numOutputRows += buffer.numRows()
+        buffer
+      }
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
-    val buffers = filteredCachedBatches()
-    val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
-    val numOutputRows = longMetric("numOutputRows")
-
     if (enableAccumulatorsForTest) {
       readPartitions.setValue(0)
       readBatches.setValue(0)
     }
 
+    val numOutputRows = longMetric("numOutputRows")
     // Using these variables here to avoid serialization of entire objects (if referenced
     // directly) within the map Partitions closure.
     val relOutput: AttributeSeq = relation.output

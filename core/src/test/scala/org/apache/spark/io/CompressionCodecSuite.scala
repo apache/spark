@@ -26,7 +26,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 class CompressionCodecSuite extends SparkFunSuite {
   val conf = new SparkConf(false)
 
-  def testCodec(codec: CompressionCodec) {
+  def testCodec(codec: CompressionCodec): Unit = {
     // Write 1000 integers to the output stream, compressed.
     val outputStream = new ByteArrayOutputStream()
     val out = codec.compressedOutputStream(outputStream)

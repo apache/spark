@@ -102,7 +102,7 @@ GROUP BY  t1a,
           t3a,
           t3b,
           t3c
-ORDER BY  t1a DESC, t3b DESC
+ORDER BY  t1a DESC, t3b DESC, t3c ASC
 -- !query 4 schema
 struct<count(DISTINCT t1a):bigint,t1b:smallint,t3a:string,t3b:smallint,t3c:int>
 -- !query 4 output

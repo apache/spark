@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.rdd.RDD
@@ -38,13 +39,13 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
-class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTestUtils
+class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   with BeforeAndAfter {
 
   import testImplicits._
@@ -78,9 +79,9 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
   private def createStageInfo(stageId: Int, attemptId: Int): StageInfo = {
     new StageInfo(stageId = stageId,
       attemptId = attemptId,
+      numTasks = 8,
       // The following fields are not used in tests
       name = "",
-      numTasks = 0,
       rddInfos = Nil,
       parentIds = Nil,
       details = "")
@@ -93,8 +94,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     val info = new TaskInfo(
       taskId = taskId,
       attemptNumber = attemptNumber,
+      index = taskId.toInt,
       // The following fields are not used in tests
-      index = 0,
       launchTime = 0,
       executorId = "",
       host = "",
@@ -189,6 +190,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       ),
       createProperties(executionId)))
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 0, createTaskInfo(1, 0)))
 
     assert(statusStore.executionMetrics(executionId).isEmpty)
 
@@ -216,6 +219,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
 
     // Retrying a stage should reset the metrics
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 1, createTaskInfo(0, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 1, createTaskInfo(1, 0)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, accum updates)
@@ -232,6 +237,7 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       taskType = "",
       reason = null,
       createTaskInfo(0, 0, accums = accumulatorUpdates.mapValues(_ * 100)),
+      new ExecutorMetrics,
       null))
 
     checkAnswer(statusStore.executionMetrics(executionId), accumulatorUpdates.mapValues(_ * 2))
@@ -243,6 +249,7 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       taskType = "",
       reason = null,
       createTaskInfo(0, 0, accums = accumulatorUpdates.mapValues(_ * 2)),
+      new ExecutorMetrics,
       null))
     listener.onTaskEnd(SparkListenerTaskEnd(
       stageId = 0,
@@ -250,12 +257,15 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       taskType = "",
       reason = null,
       createTaskInfo(1, 0, accums = accumulatorUpdates.mapValues(_ * 3)),
+      new ExecutorMetrics,
       null))
 
     checkAnswer(statusStore.executionMetrics(executionId), accumulatorUpdates.mapValues(_ * 5))
 
     // Summit a new stage
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(1, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(1, 0, createTaskInfo(1, 0)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, accum updates)
@@ -272,6 +282,7 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       taskType = "",
       reason = null,
       createTaskInfo(0, 0, accums = accumulatorUpdates.mapValues(_ * 3)),
+      new ExecutorMetrics,
       null))
     listener.onTaskEnd(SparkListenerTaskEnd(
       stageId = 1,
@@ -279,6 +290,7 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       taskType = "",
       reason = null,
       createTaskInfo(1, 0, accums = accumulatorUpdates.mapValues(_ * 3)),
+      new ExecutorMetrics,
       null))
 
     checkAnswer(statusStore.executionMetrics(executionId), accumulatorUpdates.mapValues(_ * 11))
@@ -474,7 +486,7 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     // At the beginning of this test case, there should be no live data in the listener.
     assert(listener.noLiveData())
     spark.sparkContext.parallelize(1 to 10).foreach(i => ())
-    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
     // Listener should ignore the non-SQL stages, as the stage data are only removed when SQL
     // execution ends, which will not be triggered for non-SQL jobs.
     assert(listener.noLiveData())
@@ -484,8 +496,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     val statusStore = spark.sharedState.statusStore
     val oldCount = statusStore.executionsList().size
 
-    val expectedAccumValue = 12345
-    val expectedAccumValue2 = 54321
+    val expectedAccumValue = 12345L
+    val expectedAccumValue2 = 54321L
     val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue, expectedAccumValue2)
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
@@ -511,8 +523,9 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
     val driverMetric2 = physicalPlan.metrics("dummy2")
-    val expectedValue = SQLMetrics.stringValue(driverMetric.metricType, Seq(expectedAccumValue))
-    val expectedValue2 = SQLMetrics.stringValue(driverMetric2.metricType, Seq(expectedAccumValue2))
+    val expectedValue = SQLMetrics.stringValue(driverMetric.metricType, Array(expectedAccumValue))
+    val expectedValue2 = SQLMetrics.stringValue(driverMetric2.metricType,
+      Array(expectedAccumValue2))
 
     assert(metrics.contains(driverMetric.id))
     assert(metrics(driverMetric.id) === expectedValue)
@@ -667,7 +680,7 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
             case e: SparkException => // This is expected for a failed job
           }
         }
-        sc.listenerBus.waitUntilEmpty(10000)
+        sc.listenerBus.waitUntilEmpty()
         val statusStore = spark.sharedState.statusStore
         assert(statusStore.executionsCount() <= 50)
         assert(statusStore.planGraphCount() <= 50)

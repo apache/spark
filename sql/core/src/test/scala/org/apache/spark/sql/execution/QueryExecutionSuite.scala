@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 case class QueryExecutionTestRecord(
     c0: Int, c1: Int, c2: Int, c3: Int, c4: Int,
@@ -33,7 +33,7 @@ case class QueryExecutionTestRecord(
     c20: Int, c21: Int, c22: Int, c23: Int, c24: Int,
     c25: Int, c26: Int)
 
-class QueryExecutionSuite extends SharedSQLContext {
+class QueryExecutionSuite extends SharedSparkSession {
   import testImplicits._
 
   def checkDumpedPlans(path: String, expected: Int): Unit = {

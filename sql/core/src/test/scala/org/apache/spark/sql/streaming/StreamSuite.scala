@@ -201,7 +201,7 @@ class StreamSuite extends StreamTest {
   }
 
   test("DataFrame reuse") {
-    def assertDF(df: DataFrame) {
+    def assertDF(df: DataFrame): Unit = {
       withTempDir { outputDir =>
         withTempDir { checkpointDir =>
           val query = df.writeStream.format("parquet")
@@ -219,8 +219,8 @@ class StreamSuite extends StreamTest {
     }
 
     val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
-    Seq("", "parquet").foreach { useV1SourceReader =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReader) {
+    Seq("", "parquet").foreach { useV1Source =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1Source) {
         assertDF(df)
         assertDF(df)
       }
@@ -1175,7 +1175,7 @@ class FakeDefaultSource extends FakeSource {
         ds.toDF("a")
       }
 
-      override def stop() {}
+      override def stop(): Unit = {}
     }
   }
 }

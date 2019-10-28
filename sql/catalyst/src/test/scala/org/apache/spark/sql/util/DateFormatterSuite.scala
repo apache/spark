@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.util
 
-import java.time.LocalDate
+import java.time.{LocalDate, ZoneOffset}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, localDateToDays}
 import org.apache.spark.sql.internal.SQLConf
 
 class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   test("parsing dates") {
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val formatter = DateFormatter()
+        val formatter = DateFormatter(getZoneId(timeZone))
         val daysSinceEpoch = formatter.parse("2018-12-02")
         assert(daysSinceEpoch === 17867)
       }
@@ -38,7 +39,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   test("format dates") {
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val formatter = DateFormatter()
+        val formatter = DateFormatter(getZoneId(timeZone))
         val date = formatter.format(17867)
         assert(date === "2018-12-02")
       }
@@ -58,7 +59,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
       "5010-11-17").foreach { date =>
       DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-          val formatter = DateFormatter()
+          val formatter = DateFormatter(getZoneId(timeZone))
           val days = formatter.parse(date)
           val formatted = formatter.format(days)
           assert(date === formatted)
@@ -81,7 +82,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
       1110657).foreach { days =>
       DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-          val formatter = DateFormatter()
+          val formatter = DateFormatter(getZoneId(timeZone))
           val date = formatter.format(days)
           val parsed = formatter.parse(date)
           assert(days === parsed)
@@ -91,8 +92,29 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("parsing date without explicit day") {
-    val formatter = DateFormatter("yyyy MMM")
+    val formatter = DateFormatter("yyyy MMM", ZoneOffset.UTC)
     val daysSinceEpoch = formatter.parse("2018 Dec")
     assert(daysSinceEpoch === LocalDate.of(2018, 12, 1).toEpochDay)
+  }
+
+  test("formatting negative years with default pattern") {
+    val epochDays = LocalDate.of(-99, 1, 1).toEpochDay.toInt
+    assert(DateFormatter(ZoneOffset.UTC).format(epochDays) === "-0099-01-01")
+  }
+
+  test("special date values") {
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        val zoneId = getZoneId(timeZone)
+        val formatter = DateFormatter(zoneId)
+
+        assert(formatter.parse("EPOCH") === 0)
+        val today = localDateToDays(LocalDate.now(zoneId))
+        assert(formatter.parse("Yesterday") === today - 1)
+        assert(formatter.parse("now") === today)
+        assert(formatter.parse("today ") === today)
+        assert(formatter.parse("tomorrow UTC") === today + 1)
+      }
+    }
   }
 }

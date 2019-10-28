@@ -35,8 +35,7 @@ import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -330,9 +329,9 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         case null =>
           assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
         case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
-          assert(result.asInstanceOf[java.util.List[_]].asScala.toSeq == expected)
+          assert(result.asInstanceOf[java.util.List[_]].asScala == expected)
         case s if classOf[Seq[_]].isAssignableFrom(s) =>
-          assert(result.asInstanceOf[Seq[_]].toSeq == expected)
+          assert(result.asInstanceOf[Seq[_]] == expected)
         case s if classOf[scala.collection.Set[_]].isAssignableFrom(s) =>
           assert(result.asInstanceOf[scala.collection.Set[_]] == expected.toSet)
       }
@@ -486,7 +485,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("abcd".getBytes, BinaryType),
       ("abcd", StringType),
       (BigDecimal.valueOf(10), DecimalType.IntDecimal),
-      (CalendarInterval.fromString("interval 3 day"), CalendarIntervalType),
+      (IntervalUtils.fromString("interval 3 day"), CalendarIntervalType),
       (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
       (Array(3, 2, 1), ArrayType(IntegerType))
     ).foreach { case (input, dt) =>
@@ -531,8 +530,6 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private def scalaMapSerializerFor[T: TypeTag, U: TypeTag](inputObject: Expression): Expression = {
     import org.apache.spark.sql.catalyst.ScalaReflection._
-
-    val curId = new java.util.concurrent.atomic.AtomicInteger()
 
     def kvSerializerFor[V: TypeTag](inputObject: Expression): Expression =
          localTypeOf[V].dealias match {

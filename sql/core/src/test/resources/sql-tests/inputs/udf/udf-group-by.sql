@@ -20,29 +20,25 @@ SELECT 'foo', COUNT(udf(a)) FROM testData GROUP BY 1;
 SELECT 'foo' FROM testData WHERE a = 0 GROUP BY udf(1);
 
 -- Aggregate grouped by literals (hash aggregate).
-SELECT 'foo', udf(APPROX_COUNT_DISTINCT(udf(a))) FROM testData WHERE a = 0 GROUP BY 1;
+SELECT 'foo', udf(APPROX_COUNT_DISTINCT(udf(a))) FROM testData WHERE a = 0 GROUP BY udf(1);
 
 -- Aggregate grouped by literals (sort aggregate).
-SELECT 'foo', MAX(STRUCT(udf(a))) FROM testData WHERE a = 0 GROUP BY 1;
+SELECT 'foo', MAX(STRUCT(udf(a))) FROM testData WHERE a = 0 GROUP BY udf(1);
 
 -- Aggregate with complex GroupBy expressions.
 SELECT udf(a + b), udf(COUNT(b)) FROM testData GROUP BY a + b;
 SELECT udf(a + 2), udf(COUNT(b)) FROM testData GROUP BY a + 1;
-
--- [SPARK-28445] Inconsistency between Scala and Python/Panda udfs when groupby with udf() is used
--- The following query will make Scala UDF work, but Python and Pandas udfs will fail with an AnalysisException.
--- The query should be added after SPARK-28445.
--- SELECT udf(a + 1), udf(COUNT(b)) FROM testData GROUP BY udf(a + 1);
+SELECT udf(a + 1) + 1, udf(COUNT(b)) FROM testData GROUP BY udf(a + 1);
 
 -- Aggregate with nulls.
 SELECT SKEWNESS(udf(a)), udf(KURTOSIS(a)), udf(MIN(a)), MAX(udf(a)), udf(AVG(udf(a))), udf(VARIANCE(a)), STDDEV(udf(a)), udf(SUM(a)), udf(COUNT(a))
 FROM testData;
 
 -- Aggregate with foldable input and multiple distinct groups.
-SELECT COUNT(DISTINCT udf(b)), udf(COUNT(DISTINCT b, c)) FROM (SELECT 1 AS a, 2 AS b, 3 AS c) GROUP BY a;
+SELECT COUNT(DISTINCT udf(b)), udf(COUNT(DISTINCT b, c)) FROM (SELECT 1 AS a, 2 AS b, 3 AS c) GROUP BY udf(a);
 
 -- Aliases in SELECT could be used in GROUP BY
-SELECT a AS k, COUNT(udf(b)) FROM testData GROUP BY k;
+SELECT udf(a) AS k, COUNT(udf(b)) FROM testData GROUP BY k;
 SELECT a AS k, udf(COUNT(b)) FROM testData GROUP BY k HAVING k > 1;
 
 -- Aggregate functions cannot be used in GROUP BY
@@ -51,7 +47,7 @@ SELECT udf(COUNT(b)) AS k FROM testData GROUP BY k;
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testDataHasSameNameWithAlias AS SELECT * FROM VALUES
 (1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v);
-SELECT k AS a, udf(COUNT(udf(v))) FROM testDataHasSameNameWithAlias GROUP BY a;
+SELECT k AS a, udf(COUNT(udf(v))) FROM testDataHasSameNameWithAlias GROUP BY udf(a);
 
 -- turn off group by aliases
 set spark.sql.groupByAliases=false;
@@ -60,7 +56,7 @@ set spark.sql.groupByAliases=false;
 SELECT a AS k, udf(COUNT(udf(b))) FROM testData GROUP BY k;
 
 -- Aggregate with empty input and non-empty GroupBy expressions.
-SELECT a, COUNT(udf(1)) FROM testData WHERE false GROUP BY a;
+SELECT udf(a), COUNT(udf(1)) FROM testData WHERE false GROUP BY udf(a);
 
 -- Aggregate with empty input and empty GroupBy expressions.
 SELECT udf(COUNT(1)) FROM testData WHERE false;
@@ -104,21 +100,21 @@ SELECT udf(every(udf(v))), some(v), any(v) FROM test_agg WHERE k = 4;
 SELECT every(v), udf(some(v)), any(v) FROM test_agg WHERE k = 5;
 
 -- group by
-SELECT k, every(v), udf(some(v)), any(v) FROM test_agg GROUP BY k;
+SELECT udf(k), every(v), udf(some(v)), any(v) FROM test_agg GROUP BY udf(k);
 
 -- having
 SELECT udf(k), every(v) FROM test_agg GROUP BY k HAVING every(v) = false;
-SELECT k, udf(every(v)) FROM test_agg GROUP BY k HAVING every(v) IS NULL;
+SELECT udf(k), udf(every(v)) FROM test_agg GROUP BY udf(k) HAVING every(v) IS NULL;
 
 -- basic subquery path to make sure rewrite happens in both parent and child plans.
-SELECT k,
+SELECT udf(k),
        udf(Every(v)) AS every
 FROM   test_agg
 WHERE  k = 2
        AND v IN (SELECT Any(v)
                  FROM   test_agg
                  WHERE  k = 1)
-GROUP  BY k;
+GROUP  BY udf(k);
 
 -- basic subquery path to make sure rewrite happens in both parent and child plans.
 SELECT udf(udf(k)),
@@ -128,7 +124,7 @@ WHERE  k = 2
        AND v IN (SELECT Every(v)
                  FROM   test_agg
                  WHERE  k = 1)
-GROUP  BY k;
+GROUP  BY udf(udf(k));
 
 -- input type checking Int
 SELECT every(udf(1));

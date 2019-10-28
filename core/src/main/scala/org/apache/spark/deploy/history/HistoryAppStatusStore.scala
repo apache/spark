@@ -72,7 +72,7 @@ private[spark] class HistoryAppStatusStore(
       source.totalGCTime, source.totalInputBytes, source.totalShuffleRead,
       source.totalShuffleWrite, source.isBlacklisted, source.maxMemory, source.addTime,
       source.removeTime, source.removeReason, newExecutorLogs, source.memoryMetrics,
-      source.blacklistedInStages, source.peakMemoryMetrics, source.attributes)
+      source.blacklistedInStages, source.peakMemoryMetrics, source.attributes, source.resources)
   }
 
 }

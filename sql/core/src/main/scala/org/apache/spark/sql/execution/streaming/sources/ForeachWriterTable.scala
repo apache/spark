@@ -21,14 +21,15 @@ import java.util
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.write.{DataWriter, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.python.PythonForeachWriter
-import org.apache.spark.sql.sources.v2.{SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, SupportsTruncate, WriteBuilder, WriterCommitMessage}
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -133,6 +134,7 @@ class ForeachDataWriter[T](
 
   // If open returns false, we should skip writing rows.
   private val opened = writer.open(partitionId, epochId)
+  private var closeCalled: Boolean = false
 
   override def write(record: InternalRow): Unit = {
     if (!opened) return
@@ -141,17 +143,26 @@ class ForeachDataWriter[T](
       writer.process(rowConverter(record))
     } catch {
       case t: Throwable =>
-        writer.close(t)
+        closeWriter(t)
         throw t
     }
   }
 
   override def commit(): WriterCommitMessage = {
-    writer.close(null)
+    closeWriter(null)
     ForeachWriterCommitMessage
   }
 
-  override def abort(): Unit = {}
+  override def abort(): Unit = {
+    closeWriter(new SparkException("Foreach writer has been aborted due to a task failure"))
+  }
+
+  private def closeWriter(errorOrNull: Throwable): Unit = {
+    if (!closeCalled) {
+      closeCalled = true
+      writer.close(errorOrNull)
+    }
+  }
 }
 
 /**

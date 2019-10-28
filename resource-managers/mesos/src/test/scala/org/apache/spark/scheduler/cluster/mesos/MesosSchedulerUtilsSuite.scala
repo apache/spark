@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.{File, FileNotFoundException}
+import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.collection.JavaConverters._
 
@@ -25,7 +26,7 @@ import com.google.common.io.Files
 import org.apache.mesos.Protos.{FrameworkInfo, Resource, Value}
 import org.mockito.Mockito._
 import org.scalatest._
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.mesos.{config => mesosConfig}
@@ -62,12 +63,12 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
 
   def arePortsEqual(array1: Array[(Long, Long)], array2: Array[(Long, Long)])
     : Boolean = {
-    array1.sortBy(identity).deep == array2.sortBy(identity).deep
+    array1.sortBy(identity).sameElements(array2.sortBy(identity))
   }
 
   def arePortsEqual(array1: Array[Long], array2: Array[Long])
     : Boolean = {
-    array1.sortBy(identity).deep == array2.sortBy(identity).deep
+    array1.sortBy(identity).sameElements(array2.sortBy(identity))
   }
 
   def getRangesFromResources(resources: List[Resource]): List[(Long, Long)] = {
@@ -253,7 +254,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   test("Principal specified via spark.mesos.principal.file") {
     val pFile = File.createTempFile("MesosSchedulerUtilsSuite", ".txt")
     pFile.deleteOnExit()
-    Files.write("test-principal".getBytes("UTF-8"), pFile)
+    Files.write("test-principal".getBytes(UTF_8), pFile)
     val conf = new SparkConf()
     conf.set(mesosConfig.CREDENTIAL_PRINCIPAL_FILE, pFile.getAbsolutePath())
 
@@ -282,7 +283,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   test("Principal specified via SPARK_MESOS_PRINCIPAL_FILE") {
     val pFile = File.createTempFile("MesosSchedulerUtilsSuite", ".txt")
     pFile.deleteOnExit()
-    Files.write("test-principal".getBytes("UTF-8"), pFile)
+    Files.write("test-principal".getBytes(UTF_8), pFile)
     val conf = new SparkConfWithEnv(Map("SPARK_MESOS_PRINCIPAL_FILE" -> pFile.getAbsolutePath()))
 
     val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
@@ -313,7 +314,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   test("Principal specified via spark.mesos.secret.file") {
     val sFile = File.createTempFile("MesosSchedulerUtilsSuite", ".txt")
     sFile.deleteOnExit()
-    Files.write("my-secret".getBytes("UTF-8"), sFile)
+    Files.write("my-secret".getBytes(UTF_8), sFile)
     val conf = new SparkConf()
     conf.set(mesosConfig.CREDENTIAL_PRINCIPAL, "test-principal")
     conf.set(mesosConfig.CREDENTIAL_SECRET_FILE, sFile.getAbsolutePath())
@@ -350,7 +351,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   test("Principal specified via SPARK_MESOS_SECRET_FILE") {
     val sFile = File.createTempFile("MesosSchedulerUtilsSuite", ".txt")
     sFile.deleteOnExit()
-    Files.write("my-secret".getBytes("UTF-8"), sFile)
+    Files.write("my-secret".getBytes(UTF_8), sFile)
 
     val sFilePath = sFile.getAbsolutePath()
     val env = Map("SPARK_MESOS_SECRET_FILE" -> sFilePath)

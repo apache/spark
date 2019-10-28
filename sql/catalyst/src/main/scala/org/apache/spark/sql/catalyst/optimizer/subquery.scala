@@ -273,16 +273,28 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   }
 
   private def rewriteSubQueries(plan: LogicalPlan, outerPlans: Seq[LogicalPlan]): LogicalPlan = {
+    /**
+     * This function is used as a aid to enforce idempotency of pullUpCorrelatedPredicate rule.
+     * In the first call to rewriteSubqueries, all the outer references from the subplan are
+     * pulled up and join predicates are recorded as children of the enclosing subquery expression.
+     * The subsequent call to rewriteSubqueries would simply re-records the `children` which would
+     * contains the pulled up correlated predicates (from the previous call) in the enclosing
+     * subquery expression.
+     */
+    def getJoinCondition(newCond: Seq[Expression], oldCond: Seq[Expression]): Seq[Expression] = {
+      if (newCond.isEmpty) oldCond else newCond
+    }
+
     plan transformExpressions {
       case ScalarSubquery(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        ScalarSubquery(newPlan, newCond, exprId)
+        ScalarSubquery(newPlan, getJoinCondition(newCond, children), exprId)
       case Exists(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        Exists(newPlan, newCond, exprId)
-      case ListQuery(sub, _, exprId, childOutputs) =>
+        Exists(newPlan, getJoinCondition(newCond, children), exprId)
+      case ListQuery(sub, children, exprId, childOutputs) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        ListQuery(newPlan, newCond, exprId, childOutputs)
+        ListQuery(newPlan, getJoinCondition(newCond, children), exprId, childOutputs)
     }
   }
 

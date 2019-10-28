@@ -329,6 +329,7 @@ pyspark_core = Module(
         "pyspark.tests.test_join",
         "pyspark.tests.test_profiler",
         "pyspark.tests.test_rdd",
+        "pyspark.tests.test_rddbarrier",
         "pyspark.tests.test_readwrite",
         "pyspark.tests.test_serializers",
         "pyspark.tests.test_shuffle",
@@ -362,7 +363,6 @@ pyspark_sql = Module(
         "pyspark.sql.window",
         "pyspark.sql.avro.functions",
         # unittests
-        "pyspark.sql.tests.test_appsubmit",
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
@@ -373,6 +373,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_functions",
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_pandas_udf",
+        "pyspark.sql.tests.test_pandas_udf_cogrouped_map",
         "pyspark.sql.tests.test_pandas_udf_grouped_agg",
         "pyspark.sql.tests.test_pandas_udf_grouped_map",
         "pyspark.sql.tests.test_pandas_udf_scalar",

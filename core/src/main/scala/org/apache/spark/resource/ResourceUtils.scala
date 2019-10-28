@@ -27,7 +27,6 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils.executeAndGetOutput
 
 /**
@@ -48,7 +47,7 @@ private[spark] case class ResourceRequest(
     discoveryScript: Option[String],
     vendor: Option[String])
 
-private[spark] case class TaskResourceRequirement(resourceName: String, amount: Int)
+private[spark] case class ResourceRequirement(resourceName: String, amount: Int)
 
 /**
  * Case class representing allocated resource addresses for a specific resource.
@@ -62,7 +61,6 @@ private[spark] case class ResourceAllocation(id: ResourceID, addresses: Seq[Stri
 }
 
 private[spark] object ResourceUtils extends Logging {
-
   // config suffixes
   val DISCOVERY_SCRIPT = "discoveryScript"
   val VENDOR = "vendor"
@@ -94,20 +92,36 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
-  def parseTaskResourceRequirements(sparkConf: SparkConf): Seq[TaskResourceRequirement] = {
-    parseAllResourceRequests(sparkConf, SPARK_TASK_PREFIX).map { request =>
-      TaskResourceRequirement(request.id.resourceName, request.amount)
+  def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
+    : Seq[ResourceRequirement] = {
+    parseAllResourceRequests(sparkConf, componentName).map { request =>
+      ResourceRequirement(request.id.resourceName, request.amount)
     }
   }
 
-  private def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
-    implicit val formats = DefaultFormats
+  def resourcesMeetRequirements(
+      resourcesFree: Map[String, Int],
+      resourceRequirements: Seq[ResourceRequirement])
+    : Boolean = {
+    resourceRequirements.forall { req =>
+      resourcesFree.getOrElse(req.resourceName, 0) >= req.amount
+    }
+  }
+
+  def withResourcesJson[T](resourcesFile: String)(extract: String => Seq[T]): Seq[T] = {
     val json = new String(Files.readAllBytes(Paths.get(resourcesFile)))
     try {
-      parse(json).extract[Seq[ResourceAllocation]]
+      extract(json)
     } catch {
       case NonFatal(e) =>
         throw new SparkException(s"Error parsing resources file $resourcesFile", e)
+    }
+  }
+
+  def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
+    withResourcesJson[ResourceAllocation](resourcesFile) { json =>
+      implicit val formats = DefaultFormats
+      parse(json).extract[Seq[ResourceAllocation]]
     }
   }
 
@@ -154,10 +168,14 @@ private[spark] object ResourceUtils extends Logging {
     val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt)
     assertAllResourceAllocationsMeetRequests(allocations, requests)
     val resourceInfoMap = allocations.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
-    logInfo("==============================================================")
-    logInfo(s"Resources for $componentName:\n${resourceInfoMap.mkString("\n")}")
-    logInfo("==============================================================")
     resourceInfoMap
+  }
+
+  def logResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
+    : Unit = {
+    logInfo("==============================================================")
+    logInfo(s"Resources for $componentName:\n${resources.mkString("\n")}")
+    logInfo("==============================================================")
   }
 
   // visible for test
@@ -175,7 +193,7 @@ private[spark] object ResourceUtils extends Logging {
           "doesn't exist!")
       }
     } else {
-      throw new SparkException(s"User is expecting to use resource: $resourceName but " +
+      throw new SparkException(s"User is expecting to use resource: $resourceName, but " +
         "didn't specify a discovery script!")
     }
     if (!result.name.equals(resourceName)) {

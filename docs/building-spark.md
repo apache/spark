@@ -27,14 +27,14 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.6.1 and Java 8.
+Building Spark using Maven requires Maven 3.6.2 and Java 8.
 Spark requires Scala 2.12; support for Scala 2.11 was removed in Spark 3.0.0.
 
 ### Setting up Maven's Memory Usage
 
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
-    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
+    export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g"
 
 (The `ReservedCodeCacheSize` setting is optional but recommended.)
 If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
@@ -82,13 +82,13 @@ Example:
 ## Building With Hive and JDBC Support
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
-add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default, Spark will use Hive 1.2.1 with the `hadoop-2.7` profile, and Hive 2.3.5 with the `hadoop-3.2` profile.
+add the `-Phive` and `-Phive-thriftserver` profiles to your existing build options.
+By default, Spark will use Hive 1.2.1 with the `hadoop-2.7` profile, and Hive 2.3.6 with the `hadoop-3.2` profile.
 
     # With Hive 1.2.1 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
 
-    # With Hive 2.3.5 support
+    # With Hive 2.3.6 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -Phadoop-3.2 -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN
@@ -160,7 +160,7 @@ prompt.
 Configure the JVM options for SBT in `.jvmopts` at the project root, for example:
 
     -Xmx2g
-    -XX:ReservedCodeCacheSize=512m
+    -XX:ReservedCodeCacheSize=1g
 
 For the meanings of these two options, please carefully read the [Setting up Maven's Memory Usage section](https://spark.apache.org/docs/latest/building-spark.html#setting-up-mavens-memory-usage).
 
@@ -241,8 +241,8 @@ The run-tests script also can be limited to a specific Python version or a speci
 
 To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
 
-    R -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
-    R -e "devtools::install_version('testthat', version = '1.0.2', repos='https://cloud.r-project.org/')"
+    Rscript -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
+    Rscript -e "devtools::install_version('testthat', version = '1.0.2', repos='https://cloud.r-project.org/')"
 
 You can run just the SparkR tests using the command:
 

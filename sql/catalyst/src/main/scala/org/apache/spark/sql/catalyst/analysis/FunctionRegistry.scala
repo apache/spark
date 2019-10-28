@@ -216,6 +216,7 @@ object FunctionRegistry {
     expression[PosExplode]("posexplode"),
     expressionGeneratorOuter[PosExplode]("posexplode_outer"),
     expression[Rand]("rand"),
+    expression[Rand]("random"),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
     expression[CaseWhen]("when"),
@@ -313,8 +314,10 @@ object FunctionRegistry {
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
     expression[EveryAgg]("every"),
+    expression[EveryAgg]("bool_and"),
     expression[AnyAgg]("any"),
-    expression[SomeAgg]("some"),
+    expression[AnyAgg]("some"),
+    expression[AnyAgg]("bool_or"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -415,6 +418,8 @@ object FunctionRegistry {
     expression[Year]("year"),
     expression[TimeWindow]("window"),
     expression[MakeDate]("make_date"),
+    expression[MakeTimestamp]("make_timestamp"),
+    expression[DatePart]("date_part"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -454,6 +459,7 @@ object FunctionRegistry {
     expression[MapFilter]("map_filter"),
     expression[ArrayFilter]("filter"),
     expression[ArrayExists]("exists"),
+    expression[ArrayForAll]("forall"),
     expression[ArrayAggregate]("aggregate"),
     expression[TransformValues]("transform_values"),
     expression[TransformKeys]("transform_keys"),
@@ -480,6 +486,7 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method"),
+    expression[Version]("version"),
 
     // grouping sets
     expression[Cube]("cube"),
@@ -518,6 +525,10 @@ object FunctionRegistry {
     expression[BitwiseNot]("~"),
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
+    expression[BitwiseCount]("bit_count"),
+    expression[BitAndAgg]("bit_and"),
+    expression[BitOrAgg]("bit_or"),
+    expression[BitXorAgg]("bit_xor"),
 
     // json
     expression[StructsToJson]("to_json"),
@@ -588,14 +599,19 @@ object FunctionRegistry {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
-          val expectedNumberOfParameters = if (validParametersCount.length == 1) {
-            validParametersCount.head.toString
+          val invalidArgumentsMsg = if (validParametersCount.length == 0) {
+            s"Invalid arguments for function $name"
           } else {
-            validParametersCount.init.mkString("one of ", ", ", " and ") +
-              validParametersCount.last
+            val expectedNumberOfParameters = if (validParametersCount.length == 1) {
+              validParametersCount.head.toString
+            } else {
+              validParametersCount.init.mkString("one of ", ", ", " and ") +
+                validParametersCount.last
+            }
+            s"Invalid number of arguments for function $name. " +
+              s"Expected: $expectedNumberOfParameters; Found: ${params.length}"
           }
-          throw new AnalysisException(s"Invalid number of arguments for function $name. " +
-            s"Expected: $expectedNumberOfParameters; Found: ${params.length}")
+          throw new AnalysisException(invalidArgumentsMsg)
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e

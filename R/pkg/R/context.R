@@ -301,7 +301,7 @@ broadcastRDD <- function(sc, object) {
 #' Set the checkpoint directory
 #'
 #' Set the directory under which RDDs are going to be checkpointed. The
-#' directory must be a HDFS path if running on a cluster.
+#' directory must be an HDFS path if running on a cluster.
 #'
 #' @param sc Spark Context to use
 #' @param dirName Directory path
@@ -325,7 +325,8 @@ setCheckpointDirSC <- function(sc, dirName) {
 #'
 #' A directory can be given if the recursive option is set to true.
 #' Currently directories are only supported for Hadoop-supported filesystems.
-#' Refer Hadoop-supported filesystems at \url{https://wiki.apache.org/hadoop/HCFS}.
+#' Refer Hadoop-supported filesystems at
+#' \url{https://cwiki.apache.org/confluence/display/HADOOP2/HCFS}.
 #'
 #' Note: A path can be added only once. Subsequent additions of the same path are ignored.
 #'
@@ -445,7 +446,7 @@ setLogLevel <- function(level) {
 #' Set checkpoint directory
 #'
 #' Set the directory under which SparkDataFrame are going to be checkpointed. The directory must be
-#' a HDFS path if running on a cluster.
+#' an HDFS path if running on a cluster.
 #'
 #' @rdname setCheckpointDir
 #' @param directory Directory path to checkpoint to

@@ -474,6 +474,21 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         result = df.groupBy('id').agg(f(df['x']).alias('sum')).collect()
         self.assertEqual(result, expected)
 
+    def test_grouped_without_group_by_clause(self):
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def max_udf(v):
+            return v.max()
+
+        df = self.spark.range(0, 100)
+        self.spark.udf.register('max_udf', max_udf)
+
+        with self.tempView("table"):
+            df.createTempView('table')
+
+            agg1 = df.agg(max_udf(df['id']))
+            agg2 = self.spark.sql("select max_udf(id) from table")
+            assert_frame_equal(agg1.toPandas(), agg2.toPandas())
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_udf_grouped_agg import *
