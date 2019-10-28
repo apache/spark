@@ -140,7 +140,7 @@ object IntervalUtils {
   }
 
   /**
-   * Parse YearMonth string in form: [-]YYYY-MM
+   * Parse YearMonth string in form: [+|-]YYYY-MM
    *
    * adapted from HiveIntervalYearMonth.valueOf
    */
