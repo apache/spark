@@ -222,7 +222,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
             case e: EOFException =>
               if (numRetries <= maxRetries) {
                 hasExcept = true
-                logWarning("Exception occurred while reading the port number of the $daemonModule.", e)
+                logWarning("Exception occurred while reading the port number of the $daemonModule.")
               } else {
                 throw new SparkException(s"Start $daemonModule exceedes $maxRetries times.")
               }
