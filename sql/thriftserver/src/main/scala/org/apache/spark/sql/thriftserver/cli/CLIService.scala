@@ -37,11 +37,9 @@ import org.apache.spark.sql.thriftserver.cli.thrift._
 import org.apache.spark.sql.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.types.StructType
 
-class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
+private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   extends CompositeService(classOf[CLIService].getSimpleName)
-    with ICLIService with Logging {
-
-  import CLIService._
+  with ICLIService with Logging {
 
   private var hiveConf: HiveConf = null
   private var sessionManager: SessionManager = null
@@ -100,23 +98,7 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
 
   def getHttpUGI: UserGroupInformation = this.httpUGI
 
-  def openSession(protocol: TProtocolVersion,
-                  username: String,
-                  password: String,
-                  configuration: Predef.Map[String, String]): SessionHandle = {
-    val sessionHandle: SessionHandle =
-      sessionManager.openSession(protocol,
-        username,
-        password,
-        null,
-        configuration,
-        false,
-        null)
-    logDebug(sessionHandle + ": openSession()")
-    sessionHandle
-  }
-
-  def openSession(protocol: TProtocolVersion,
+  override def openSession(protocol: TProtocolVersion,
                   username: String,
                   password: String,
                   ipAddress: String,
@@ -133,24 +115,7 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
     sessionHandle
   }
 
-  def openSessionWithImpersonation(protocol: TProtocolVersion,
-                                   username: String,
-                                   password: String,
-                                   configuration: Predef.Map[String, String],
-                                   delegationToken: String): SessionHandle = {
-    val sessionHandle =
-      sessionManager.openSession(protocol,
-        username,
-        password,
-        null,
-        configuration,
-        true,
-        delegationToken)
-    logDebug(sessionHandle + ": openSessionWithImpersonation()")
-    sessionHandle
-  }
-
-  def openSessionWithImpersonation(protocol: TProtocolVersion,
+  override def openSessionWithImpersonation(protocol: TProtocolVersion,
                                    username: String,
                                    password: String,
                                    ipAddress: String,
@@ -161,38 +126,6 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
         username,
         password,
         ipAddress,
-        configuration,
-        true,
-        delegationToken)
-    logDebug(sessionHandle + ": openSessionWithImpersonation()")
-    sessionHandle
-  }
-
-  override def openSession(username: String,
-                           password: String,
-                           configuration: Predef.Map[String, String]): SessionHandle = {
-    val sessionHandle =
-      sessionManager.openSession(
-        SERVER_VERSION,
-        username,
-        password,
-        null,
-        configuration,
-        false,
-        null)
-    logDebug(sessionHandle + ": openSession()")
-    sessionHandle
-  }
-
-  override def openSessionWithImpersonation(username: String,
-                                            password: String,
-                                            configuration: Predef.Map[String, String],
-                                            delegationToken: String): SessionHandle = {
-    val sessionHandle =
-      sessionManager.openSession(SERVER_VERSION,
-        username,
-        password,
-        null,
         configuration,
         true,
         delegationToken)

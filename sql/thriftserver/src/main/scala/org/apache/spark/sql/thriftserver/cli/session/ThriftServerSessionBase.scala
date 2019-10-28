@@ -27,7 +27,7 @@ import org.apache.spark.sql.thriftserver.cli.operation.OperationManager
 import org.apache.spark.sql.thriftserver.cli.thrift.TProtocolVersion
 
 
-trait ThriftServerSessionBase {
+private[thriftserver] trait ThriftServerSessionBase {
 
   def getProtocolVersion: TProtocolVersion
 

@@ -23,47 +23,47 @@ import org.apache.spark.sql.thriftserver.cli.thrift.TOperationType
 /**
  * OperationType.
  */
-abstract class OperationType {
+private[thriftserver] abstract class OperationType {
   def toTOperationType: TOperationType
 }
 
-case object EXECUTE_STATEMENT extends OperationType {
+private[thriftserver] case object EXECUTE_STATEMENT extends OperationType {
   override def toTOperationType: TOperationType = TOperationType.EXECUTE_STATEMENT
 }
 
-case object GET_TYPE_INFO extends OperationType {
+private[thriftserver] case object GET_TYPE_INFO extends OperationType {
   override def toTOperationType: TOperationType = TOperationType.GET_TYPE_INFO
 }
 
-case object GET_CATALOGS extends OperationType {
+private[thriftserver] case object GET_CATALOGS extends OperationType {
   override def toTOperationType: TOperationType = TOperationType.GET_CATALOGS
 }
 
-case object GET_SCHEMAS extends OperationType {
+private[thriftserver] case object GET_SCHEMAS extends OperationType {
   override def toTOperationType: TOperationType = TOperationType.GET_SCHEMAS
 }
 
-case object GET_TABLES extends OperationType {
+private[thriftserver] case object GET_TABLES extends OperationType {
   override def toTOperationType: TOperationType = TOperationType.GET_TABLES
 }
 
-case object GET_TABLE_TYPES extends OperationType {
+private[thriftserver] case object GET_TABLE_TYPES extends OperationType {
   override def toTOperationType: TOperationType = TOperationType.GET_TABLE_TYPES
 }
 
-case object GET_COLUMNS extends OperationType {
+private[thriftserver] case object GET_COLUMNS extends OperationType {
   override def toTOperationType: TOperationType = TOperationType.GET_COLUMNS
 }
 
-case object GET_FUNCTIONS extends OperationType {
+private[thriftserver] case object GET_FUNCTIONS extends OperationType {
   override def toTOperationType: TOperationType = TOperationType.GET_FUNCTIONS
 }
 
-case object UNKNOWN_OPERATION extends OperationType {
+private[thriftserver] case object UNKNOWN_OPERATION extends OperationType {
   override def toTOperationType: TOperationType = TOperationType.UNKNOWN
 }
 
-object OperationType {
+private[thriftserver] object OperationType {
   def getOperationType(tOperationType: TOperationType): OperationType =
     tOperationType match {
       case TOperationType.EXECUTE_STATEMENT => EXECUTE_STATEMENT

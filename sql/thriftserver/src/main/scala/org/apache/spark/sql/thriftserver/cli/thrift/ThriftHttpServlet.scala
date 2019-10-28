@@ -44,11 +44,11 @@ import org.apache.spark.sql.thriftserver.auth._
 import org.apache.spark.sql.thriftserver.auth.AuthenticationProviderFactory.AuthMethods
 import org.apache.spark.sql.thriftserver.cli.session.SessionManager
 
-class ThriftHttpServlet(processor: TProcessor,
-                        protocolFactory: TProtocolFactory,
-                        authType: String,
-                        serviceUGI: UserGroupInformation,
-                        httpUGI: UserGroupInformation)
+private[thriftserver] class ThriftHttpServlet(processor: TProcessor,
+    protocolFactory: TProtocolFactory,
+    authType: String,
+    serviceUGI: UserGroupInformation,
+    httpUGI: UserGroupInformation)
   extends TServlet(processor, protocolFactory) with Logging {
   private val hiveConf: HiveConf = new HiveConf
   // Class members for cookie based authentication.

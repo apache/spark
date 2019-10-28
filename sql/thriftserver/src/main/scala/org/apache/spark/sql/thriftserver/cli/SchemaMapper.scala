@@ -20,7 +20,7 @@ package org.apache.spark.sql.thriftserver.cli
 import org.apache.spark.sql.thriftserver.cli.thrift.{TTableSchema, TTypeId}
 import org.apache.spark.sql.types._
 
-object SchemaMapper {
+private[thriftserver] object SchemaMapper {
 
   def toTTableSchema(fields: StructType): TTableSchema = {
     val tTableSchema = new TTableSchema

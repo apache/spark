@@ -18,7 +18,7 @@
 
 package org.apache.spark.sql.thriftserver
 
-class ServiceException(msg: String, cause: Throwable)
+private[thriftserver] class ServiceException(msg: String, cause: Throwable)
   extends RuntimeException(msg, cause) {
 
   def this(cause: Throwable) = this(null, cause)

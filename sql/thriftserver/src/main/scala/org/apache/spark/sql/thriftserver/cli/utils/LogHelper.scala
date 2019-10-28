@@ -37,7 +37,7 @@ import org.slf4j.Logger
  * example - once per module) LogHelper always emits info/error to current
  * session as required.
  */
-object LogHelper {
+private[thriftserver] object LogHelper {
   def getInfoStream: PrintStream = {
     val ss = SessionState.get
     if ((ss != null) && (ss.info != null)) ss.info
@@ -51,7 +51,7 @@ object LogHelper {
   }
 }
 
-class LogHelper(var LOG: Logger, var isSilent: Boolean) {
+private[thriftserver] class LogHelper(var LOG: Logger, var isSilent: Boolean) {
   def this(LOG: Nothing) {
     this(LOG, false)
   }

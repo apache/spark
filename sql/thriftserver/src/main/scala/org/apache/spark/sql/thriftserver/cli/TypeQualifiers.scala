@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.thriftserver.cli.thrift.{TCLIServiceConstants, TTypeQualifiers, TTypeQualifierValue}
 import org.apache.spark.sql.types.{DataType, DecimalType}
 
-class TypeQualifiers private() {
+private[thriftserver] class TypeQualifiers private() {
   private[this] var precision: Option[Int] = None
   private[this] var scale: Option[Int] = None
 
@@ -44,7 +44,7 @@ class TypeQualifiers private() {
       .toMap.asJava)
 }
 
-object TypeQualifiers {
+private[thriftserver] object TypeQualifiers {
   def fromTypeInfo(typ: DataType): TypeQualifiers = {
     val result = new TypeQualifiers
     typ match {

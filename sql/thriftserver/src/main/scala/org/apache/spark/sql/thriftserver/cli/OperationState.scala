@@ -19,7 +19,7 @@ package org.apache.spark.sql.thriftserver.cli
 
 import org.apache.spark.sql.thriftserver.cli.thrift.TOperationState
 
-trait OperationState {
+private[thriftserver] trait OperationState {
 
   def toTOperationState(): TOperationState
 
@@ -33,7 +33,7 @@ trait OperationState {
     "Illegal Operation state transition " + this + " -> " + state, "ServerError", 1000)
 }
 
-case object INITIALIZED extends OperationState {
+private[thriftserver] case object INITIALIZED extends OperationState {
   override def toTOperationState(): TOperationState = TOperationState.INITIALIZED_STATE
 
   override def validateTransition(newState: OperationState): Unit = newState match {
@@ -42,7 +42,7 @@ case object INITIALIZED extends OperationState {
   }
 }
 
-case object PENDING extends OperationState {
+private[thriftserver] case object PENDING extends OperationState {
   override def toTOperationState(): TOperationState = TOperationState.PENDING_STATE
 
   override def validateTransition(newState: OperationState): Unit = newState match {
@@ -51,7 +51,7 @@ case object PENDING extends OperationState {
   }
 }
 
-case object RUNNING extends OperationState {
+private[thriftserver] case object RUNNING extends OperationState {
   override def toTOperationState(): TOperationState = TOperationState.RUNNING_STATE
 
   override def validateTransition(newState: OperationState): Unit = newState match {
@@ -60,7 +60,7 @@ case object RUNNING extends OperationState {
   }
 }
 
-case object TIMEOUT extends OperationState {
+private[thriftserver] case object TIMEOUT extends OperationState {
   override def toTOperationState(): TOperationState = TOperationState.TIMEDOUT_STATE
 
   override def validateTransition(newState: OperationState): Unit = newState match {
@@ -69,7 +69,7 @@ case object TIMEOUT extends OperationState {
   }
 }
 
-case object FINISHED extends OperationState {
+private[thriftserver] case object FINISHED extends OperationState {
   override def toTOperationState(): TOperationState = TOperationState.FINISHED_STATE
 
   override def isTerminal(): Boolean = true
@@ -80,7 +80,7 @@ case object FINISHED extends OperationState {
   }
 }
 
-case object CANCELED extends OperationState {
+private[thriftserver] case object CANCELED extends OperationState {
   override def toTOperationState(): TOperationState = TOperationState.CANCELED_STATE
 
   override def isTerminal(): Boolean = true
@@ -91,13 +91,13 @@ case object CANCELED extends OperationState {
   }
 }
 
-case object CLOSED extends OperationState {
+private[thriftserver] case object CLOSED extends OperationState {
   override def toTOperationState(): TOperationState = TOperationState.CLOSED_STATE
 
   override def isTerminal(): Boolean = true
 }
 
-case object ERROR extends OperationState {
+private[thriftserver] case object ERROR extends OperationState {
   override def toTOperationState(): TOperationState = TOperationState.ERROR_STATE
 
   override def isTerminal(): Boolean = true
@@ -108,12 +108,12 @@ case object ERROR extends OperationState {
   }
 }
 
-case object UNKNOWN extends OperationState {
+private[thriftserver] case object UNKNOWN extends OperationState {
   override def toTOperationState(): TOperationState = TOperationState.UKNOWN_STATE
 }
 
 
-object OperationState {
+private[thriftserver] object OperationState {
   def getOperationState(tOperationState: TOperationState): OperationState = {
     tOperationState match {
       case TOperationState.INITIALIZED_STATE => INITIALIZED

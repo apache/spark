@@ -20,7 +20,7 @@ package org.apache.spark.sql.thriftserver.cli
 import org.apache.spark.sql.thriftserver.cli.thrift.THandleIdentifier
 
 
-abstract class Handle(val handleId: HandleIdentifier) {
+private[thriftserver] abstract class Handle(val handleId: HandleIdentifier) {
   def this() = this(new HandleIdentifier())
 
   def this(tHandleIdentifier: THandleIdentifier) = this(new HandleIdentifier(tHandleIdentifier))

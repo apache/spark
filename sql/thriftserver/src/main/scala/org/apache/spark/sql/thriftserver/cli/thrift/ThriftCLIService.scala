@@ -41,33 +41,32 @@ import org.apache.spark.sql.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.types.StructType
 
 
-abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
+private[thriftserver] abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   extends AbstractService(serviceName)
-    with TCLIService.Iface
-    with Runnable
-    with Logging {
-
+  with TCLIService.Iface
+  with Runnable
+  with Logging {
 
   private val OK_STATUS = new TStatus(TStatusCode.SUCCESS_STATUS)
   protected var hiveAuthFactory: HiveAuthFactory = new HiveAuthFactory()
 
   protected var portNum: Int = 0
-  protected var serverIPAddress: InetAddress = null
-  protected var hiveHost: String = null
-  protected var server: TServer = null
-  protected var httpServer: org.eclipse.jetty.server.Server = null
+  protected var serverIPAddress: InetAddress = _
+  protected var hiveHost: String = _
+  protected var server: TServer = _
+  protected var httpServer: org.eclipse.jetty.server.Server = _
 
   private var isStarted = false
   protected var isEmbedded = false
 
-  protected var hiveConf: HiveConf = null
+  protected var hiveConf: HiveConf = _
 
   protected var minWorkerThreads: Int = 0
   protected var maxWorkerThreads: Int = 0
   protected var workerKeepAliveTime: Long = 0L
 
   private class ThriftCLIServerContext extends ServerContext {
-    private var sessionHandle: SessionHandle = null
+    private var sessionHandle: SessionHandle = _
 
     def setSessionHandle(sessionHandle: SessionHandle): Unit = {
       this.sessionHandle = sessionHandle

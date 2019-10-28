@@ -22,7 +22,7 @@ import java.util.UUID
 
 import org.apache.spark.sql.thriftserver.cli.thrift.THandleIdentifier
 
-class HandleIdentifier(val publicId: UUID, val secretId: UUID) {
+private[thriftserver] class HandleIdentifier(val publicId: UUID, val secretId: UUID) {
 
   def this() = this(UUID.randomUUID(), UUID.randomUUID())
 

@@ -23,7 +23,7 @@ import java.util.Locale
 import org.apache.spark.sql.thriftserver.cli.thrift.TTypeId
 import org.apache.spark.sql.types.DecimalType
 
-trait Type {
+private[thriftserver] trait Type {
 
   def getName: String
 

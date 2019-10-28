@@ -34,9 +34,9 @@ import org.apache.spark.sql.thriftserver.cli.CLIService
 import org.apache.spark.sql.thriftserver.cli.thrift.{ThriftBinaryCLIService, ThriftCLIService, ThriftHttpCLIService}
 import org.apache.spark.util.ShutdownHookManager
 
-class SparkThriftServer(sqlContext: SQLContext)
+private[thriftserver] class SparkThriftServer(sqlContext: SQLContext)
   extends CompositeService(classOf[SparkThriftServer].getSimpleName)
-    with Logging {
+  with Logging {
 
   // state is tracked internally so that the server only attempts to shut down if it successfully
   // started, and then once only.

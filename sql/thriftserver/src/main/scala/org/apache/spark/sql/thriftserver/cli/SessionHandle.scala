@@ -21,7 +21,7 @@ import java.util.UUID
 
 import org.apache.spark.sql.thriftserver.cli.thrift.{TProtocolVersion, TSessionHandle}
 
-class SessionHandle private(handleId: HandleIdentifier, protocol: TProtocolVersion)
+private[thriftserver] class SessionHandle(handleId: HandleIdentifier, protocol: TProtocolVersion)
   extends Handle(handleId) {
 
   def this(tSessionHandle: TSessionHandle) =

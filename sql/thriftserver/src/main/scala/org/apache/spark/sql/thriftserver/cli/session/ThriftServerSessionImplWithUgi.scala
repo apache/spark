@@ -30,12 +30,13 @@ import org.apache.spark.sql.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.thriftserver.cli.{CLIService, SparkThriftServerSQLException}
 import org.apache.spark.sql.thriftserver.cli.thrift.TProtocolVersion
 
-class ThriftServerSessionImplWithUgi(protocol: TProtocolVersion,
-                                     username: String,
-                                     password: String,
-                                     serverHiveConf: HiveConf,
-                                     ipAddress: String,
-                                     delegationTokenStr: String)
+private[thriftserver] class ThriftServerSessionImplWithUgi(
+    protocol: TProtocolVersion,
+    username: String,
+    password: String,
+    serverHiveConf: HiveConf,
+    ipAddress: String,
+    delegationTokenStr: String)
   extends ThriftServerSessionImpl(protocol, username, password, serverHiveConf, ipAddress)
     with Logging {
 

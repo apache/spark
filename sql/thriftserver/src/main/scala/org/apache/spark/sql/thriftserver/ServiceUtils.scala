@@ -21,7 +21,7 @@ import java.io.{Closeable, IOException}
 
 import org.slf4j.Logger
 
-object ServiceUtils {
+private[thriftserver] object ServiceUtils {
 
   /*
    * Get the index separating the user name from domain name (the user's name up

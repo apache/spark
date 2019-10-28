@@ -24,7 +24,7 @@ import org.apache.spark.sql.thriftserver.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.thriftserver.cli.thrift.TProtocolVersion._
 import org.apache.spark.sql.types.StructType
 
-object RowSetFactory {
+private[thriftserver] object RowSetFactory {
   def create(types: StructType, rows: Seq[Row], version: TProtocolVersion): RowSet = {
     if (version.getValue >= HIVE_CLI_SERVICE_PROTOCOL_V6.getValue) {
       ColumnBasedSet(types, ArrayBuffer(rows: _*), 0)

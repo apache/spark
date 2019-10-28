@@ -22,7 +22,7 @@ package org.apache.spark.sql.thriftserver
  * ServiceStateChangeListener.
  *
  */
-trait ServiceStateChangeListener {
+private[thriftserver] trait ServiceStateChangeListener {
 
   /**
    * Callback to notify of a state change. The service will already

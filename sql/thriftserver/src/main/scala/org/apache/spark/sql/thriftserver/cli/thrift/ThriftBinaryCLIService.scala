@@ -34,9 +34,9 @@ import org.apache.spark.sql.thriftserver.cli.CLIService
 import org.apache.spark.sql.thriftserver.server.ThreadFactoryWithGarbageCleanup
 
 
-class ThriftBinaryCLIService(cliService: CLIService)
+private[thriftserver] class ThriftBinaryCLIService(cliService: CLIService)
   extends ThriftCLIService(cliService, classOf[ThriftBinaryCLIService].getSimpleName)
-    with Logging {
+  with Logging {
 
   override def run(): Unit = {
     try { // Server thread pool

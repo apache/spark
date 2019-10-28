@@ -19,9 +19,10 @@ package org.apache.spark.sql.thriftserver.cli
 
 import org.apache.spark.sql.thriftserver.cli.thrift.{TOperationHandle, TProtocolVersion}
 
-class OperationHandle private(val opType: OperationType,
-                              protocol: TProtocolVersion,
-                              handleId: HandleIdentifier) extends Handle(handleId) {
+private[thriftserver] class OperationHandle private(
+    val opType: OperationType,
+    protocol: TProtocolVersion,
+    handleId: HandleIdentifier) extends Handle(handleId) {
 
   private[this] var hasResultSet: Boolean = false
 

@@ -28,8 +28,9 @@ import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.internal.Logging
 
-class VariableSubstitution(hiveVariableSource: util.Map[String, String])
-  extends SystemVariables with Logging {
+private[thriftserver] class VariableSubstitution(hiveVariableSource: util.Map[String, String])
+  extends SystemVariables
+  with Logging {
   
   override protected def getSubstitute(conf: Configuration, variable: String): String = {
     var value: String = super.getSubstitute(conf, variable)

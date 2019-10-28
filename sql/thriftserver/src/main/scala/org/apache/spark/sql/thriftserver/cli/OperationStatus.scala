@@ -23,8 +23,9 @@ package org.apache.spark.sql.thriftserver.cli
  * OperationStatus
  *
  */
-class OperationStatus(val state: OperationState,
-                      val operationException: SparkThriftServerSQLException) {
+private[thriftserver] class OperationStatus(
+    val state: OperationState,
+    val operationException: SparkThriftServerSQLException) {
 
   def getState: OperationState = state
 

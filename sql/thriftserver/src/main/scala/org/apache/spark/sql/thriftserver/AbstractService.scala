@@ -32,7 +32,8 @@ import org.apache.spark.sql.thriftserver.Service._
  * @param name
  * service name
  */
-abstract class AbstractService(val name: String) extends Service with Logging {
+private[thriftserver] abstract class AbstractService(val name: String)
+  extends Service with Logging {
 
   /**
    * Service state: initially {@link STATE#NOTINITED}.

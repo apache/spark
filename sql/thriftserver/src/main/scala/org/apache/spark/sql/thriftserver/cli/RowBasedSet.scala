@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
  * with the ability of
  * transform to [[TRowSet]].
  */
-case class RowBasedSet(types: StructType,
+private[thriftserver] case class RowBasedSet(types: StructType,
                        rows: ArrayBuffer[Row], initStartOffset: Long)
   extends RowSet {
 

@@ -39,7 +39,7 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
  * `HiveThriftServer2` thrift server.
  */
-object SparkThriftServer2 extends Logging {
+private[thriftserver] object SparkThriftServer2 extends Logging {
   var uiTab: Option[ThriftServerTab] = None
   var listener: SparkThriftServerListener = _
 

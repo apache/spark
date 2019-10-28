@@ -19,11 +19,11 @@ package org.apache.spark.sql.thriftserver.cli
 
 import org.apache.spark.sql.thriftserver.cli.thrift.TFetchOrientation
 
-trait FetchOrientation {
+private[thriftserver] trait FetchOrientation {
   def toTFetchOrientation: TFetchOrientation
 }
 
-object FetchOrientation {
+private[thriftserver] object FetchOrientation {
 
   case object FETCH_NEXT extends FetchOrientation {
     override val toTFetchOrientation: TFetchOrientation = TFetchOrientation.FETCH_NEXT

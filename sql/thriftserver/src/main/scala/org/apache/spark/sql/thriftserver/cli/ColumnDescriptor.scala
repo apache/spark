@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StructField
  * A wrapper class for Spark's [[StructField]] with a column position,
  * and can be transform to [[TColumnDesc]]
  */
-case class ColumnDescriptor(field: StructField, pos: Int) {
+private[thriftserver] case class ColumnDescriptor(field: StructField, pos: Int) {
   /**
    * Transform a [[ColumnDescriptor]] to a [[TColumnDesc]] instance.
    */

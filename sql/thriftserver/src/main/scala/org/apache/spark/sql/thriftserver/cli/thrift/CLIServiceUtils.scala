@@ -19,7 +19,7 @@ package org.apache.spark.sql.thriftserver.cli.thrift
 
 import org.apache.log4j.PatternLayout
 
-object CLIServiceUtils {
+private[thriftserver] object CLIServiceUtils {
 
   private val SEARCH_STRING_ESCAPE = '\\'
   val verboseLayout = new PatternLayout("%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n")

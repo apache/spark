@@ -21,7 +21,7 @@ package org.apache.spark.sql.thriftserver.cli
  * PatternOrIdentifier.
  *
  */
-class PatternOrIdentifier(var text: String) {
+private[thriftserver] class PatternOrIdentifier(var text: String) {
 
   var isPt: Boolean = false
 

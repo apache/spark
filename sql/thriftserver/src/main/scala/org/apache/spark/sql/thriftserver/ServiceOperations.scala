@@ -22,7 +22,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.thriftserver.Service._
 
-object ServiceOperations extends Logging {
+private[thriftserver] object ServiceOperations extends Logging {
 
   /**
    * Verify that a service is in a given state.

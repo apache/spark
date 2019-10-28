@@ -20,7 +20,7 @@ package org.apache.spark.sql.thriftserver.cli
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.thriftserver.cli.thrift.TRowSet
 
-trait RowSet {
+private[thriftserver] trait RowSet {
   def addRow(row: Row): RowSet
 
   def extractSubset(maxRows: Int): RowSet

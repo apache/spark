@@ -28,12 +28,12 @@ import org.apache.spark.internal.Logging
  * and appends it to the cookie value generated at the
  * server side. It uses SHA digest algorithm to sign and verify signatures.
  */
-object CookieSigner {
+private[thriftserver] object CookieSigner {
   private val SIGNATURE = "&s="
   private val SHA_STRING = "SHA"
 }
 
-class CookieSigner extends Logging {
+private[thriftserver] class CookieSigner extends Logging {
   private var secretBytes: Array[Byte] = null
 
   def this(secret: Array[Byte]) {

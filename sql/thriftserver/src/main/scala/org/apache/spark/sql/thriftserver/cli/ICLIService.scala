@@ -18,20 +18,24 @@
 package org.apache.spark.sql.thriftserver.cli
 
 import org.apache.spark.sql.thriftserver.auth.HiveAuthFactory
-import org.apache.spark.sql.thriftserver.cli.thrift.{TGetQueryIdReq, TGetQueryIdResp, TSetClientInfoReq, TSetClientInfoResp}
+import org.apache.spark.sql.thriftserver.cli.thrift._
 import org.apache.spark.sql.types.StructType
 
 
-trait ICLIService {
+private[thriftserver] trait ICLIService {
 
   @throws[SparkThriftServerSQLException]
-  def openSession(username: String,
+  def openSession(protocol: TProtocolVersion,
+                  username: String,
                   password: String,
+                  ipAddress: String,
                   configuration: Map[String, String]): SessionHandle
 
   @throws[SparkThriftServerSQLException]
-  def openSessionWithImpersonation(username: String,
+  def openSessionWithImpersonation(protocol: TProtocolVersion,
+                                   username: String,
                                    password: String,
+                                   ipAddress: String,
                                    configuration: Map[String, String],
                                    delegationToken: String): SessionHandle
 

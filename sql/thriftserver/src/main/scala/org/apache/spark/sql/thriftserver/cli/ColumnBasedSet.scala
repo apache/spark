@@ -28,9 +28,10 @@ import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.thriftserver.cli.thrift._
 import org.apache.spark.sql.types.{BinaryType, _}
 
-case class ColumnBasedSet(types: StructType,
-                          rows: ArrayBuffer[Row],
-                          initStartOffset: Long)
+private[thriftserver] case class ColumnBasedSet(
+    types: StructType,
+    rows: ArrayBuffer[Row],
+    initStartOffset: Long)
   extends RowSet {
 
   var startOffset: Long = initStartOffset

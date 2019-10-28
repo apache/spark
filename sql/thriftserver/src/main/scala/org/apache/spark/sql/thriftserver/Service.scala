@@ -20,7 +20,7 @@ package org.apache.spark.sql.thriftserver
 
 import org.apache.hadoop.hive.conf.HiveConf
 
-trait Service {
+private[thriftserver] trait Service {
   /**
    * Initialize the service.
    *
@@ -98,7 +98,7 @@ trait Service {
   def getStartTime: Long
 }
 
-object Service {
+private[thriftserver] object Service {
 
   trait STATE
 

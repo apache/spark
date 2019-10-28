@@ -37,7 +37,7 @@ import org.apache.spark.sql.thriftserver.cli.CLIService
 import org.apache.spark.sql.thriftserver.server.ThreadFactoryWithGarbageCleanup
 
 
-class ThriftHttpCLIService(cliService: CLIService)
+private[thriftserver] class ThriftHttpCLIService(cliService: CLIService)
   extends ThriftCLIService(cliService, classOf[ThriftHttpCLIService].getSimpleName) {
   /**
    * Configure Jetty to serve http requests. Example of a client connection URL:

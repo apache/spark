@@ -27,7 +27,9 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.thriftserver.Service.STOPPED
 
-class CompositeService(name: String) extends AbstractService(name) with Logging {
+private[thriftserver] class CompositeService(name: String)
+  extends AbstractService(name)
+  with Logging {
 
 
   private val serviceList: util.ArrayList[Service] = new util.ArrayList[Service]

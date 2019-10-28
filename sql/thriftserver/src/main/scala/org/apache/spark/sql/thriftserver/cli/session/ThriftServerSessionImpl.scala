@@ -37,13 +37,14 @@ import org.apache.spark.sql.thriftserver.server.ThreadWithGarbageCleanup
 import org.apache.spark.sql.types.StructType
 
 
-class ThriftServerSessionImpl(_protocol: TProtocolVersion,
-                              var _username: String,
-                              var _password: String,
-                              serverHiveConf: HiveConf,
-                              var _ipAddress: String) extends ThriftServerSession with Logging {
+private[thriftserver] class ThriftServerSessionImpl(
+    protocol: TProtocolVersion,
+    var username: String,
+    var password: String,
+    serverHiveConf: HiveConf,
+    var ipAddress: String) extends ThriftServerSession with Logging {
 
-  private val _sessionHandle: SessionHandle = new SessionHandle(_protocol)
+  private val _sessionHandle: SessionHandle = new SessionHandle(protocol)
   private val _hiveConf: HiveConf = new HiveConf(serverHiveConf)
   private var _sessionState: SessionState = null
   private var _sessionManager: SessionManager = null
@@ -56,8 +57,8 @@ class ThriftServerSessionImpl(_protocol: TProtocolVersion,
 
   @throws[SparkThriftServerSQLException]
   override def open(sessionConfMap: Map[String, String]): Unit = {
-    _sessionState = new SessionState(_hiveConf, _username)
-    _sessionState.setUserIpAddress(_ipAddress)
+    _sessionState = new SessionState(_hiveConf, username)
+    _sessionState.setUserIpAddress(ipAddress)
     _sessionState.setIsHiveServerQuery(true)
     SessionState.start(_sessionState)
     if (sessionConfMap != null) {
@@ -693,7 +694,7 @@ class ThriftServerSessionImpl(_protocol: TProtocolVersion,
     }
   }
 
-  override def getProtocolVersion: TProtocolVersion = _protocol
+  override def getProtocolVersion: TProtocolVersion = protocol
 
   /**
    * Set the session manager for the session
@@ -769,21 +770,21 @@ class ThriftServerSessionImpl(_protocol: TProtocolVersion,
 
   override def getSessionHandle: SessionHandle = _sessionHandle
 
-  override def getUsername: String = _username
+  override def getUsername: String = username
 
-  override def getPassword: String = _password
+  override def getPassword: String = password
 
   override def getHiveConf: HiveConf = _hiveConf
 
   override def getSessionState: SessionState = _sessionState
 
-  override def getUserName: String = _username
+  override def getUserName: String = username
 
-  override def setUserName(userName: String): Unit = _username = userName
+  override def setUserName(userName: String): Unit = username = userName
 
-  override def getIpAddress: String = _ipAddress
+  override def getIpAddress: String = ipAddress
 
-  override def setIpAddress(ipAddress: String): Unit = _ipAddress = ipAddress
+  override def setIpAddress(ipAddress: String): Unit = ipAddress = ipAddress
 
   override def getLastAccessTime: Long = _lastAccessTime
 

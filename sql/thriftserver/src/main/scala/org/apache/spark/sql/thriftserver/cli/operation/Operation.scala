@@ -283,8 +283,8 @@ private[thriftserver] abstract class Operation(
   }
 
   protected def toSQLException(
-                                prefix: String,
-                                response: CommandProcessorResponse): SparkThriftServerSQLException = {
+      prefix: String,
+      response: CommandProcessorResponse): SparkThriftServerSQLException = {
     val ex = new SparkThriftServerSQLException(prefix + ": " +
       response.getErrorMessage, response.getSQLState, response.getResponseCode)
     if (response.getException != null) {

@@ -37,8 +37,8 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param parentSession a HiveSession from SessionManager
  */
 private[thriftserver] class SparkGetCatalogsOperation(
-                                               sqlContext: SQLContext,
-                                               parentSession: ThriftServerSession)
+    sqlContext: SQLContext,
+    parentSession: ThriftServerSession)
   extends SparkMetadataOperation(parentSession, GET_CATALOGS) with Logging {
 
   RESULT_SET_SCHEMA = new StructType()

@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.thriftserver.cli
 
-trait FetchType {
+private[thriftserver] trait FetchType {
   def toTFetchType: Short
 }
 
-object FetchType {
+private[thriftserver] object FetchType {
 
   case object QUERY_OUTPUT extends FetchType {
     override val toTFetchType: Short = 0
