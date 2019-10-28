@@ -216,7 +216,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           hasExcept = false
           try {
             daemon = pb.start()
-            val in = new DataInputStream(daemon.getInputStream)
+            in = new DataInputStream(daemon.getInputStream)
             daemonPort = in.readInt()
           } catch {
             case e: EOFException =>
