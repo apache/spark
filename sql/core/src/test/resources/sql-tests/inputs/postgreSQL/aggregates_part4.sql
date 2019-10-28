@@ -53,7 +53,6 @@
 -- from generate_series(1,6) x;
 
 -- [SPARK-27980] Ordered-Set Aggregate Functions
--- [SPARK-28382] Array Functions: unnest
 -- select ten, mode() within group (order by string4) from tenk1 group by ten;
 
 -- select percentile_disc(array[0.25,0.5,0.75]) within group (order by x)
@@ -404,12 +403,8 @@
 
 -- [SPARK-28382] Array Functions: unnest
 -- check collation-sensitive matching between grouping expressions
--- select v||'a', case v||'a' when 'aa' then 1 else 0 end, count(*)
---   from unnest(array['a','b']) u(v)
---  group by v||'a' order by 1;
--- select v||'a', case when v||'a' = 'aa' then 1 else 0 end, count(*)
---   from unnest(array['a','b']) u(v)
---  group by v||'a' order by 1;
+select v||'a', case v||'a' when 'aa' then 1 else 0 end, count(*) from (select unnest(array('a','b')) as v) u group by v||'a' order by 1;
+select v||'a', case when v||'a' = 'aa' then 1 else 0 end, count(*) from (select unnest(array('a','b')) as v) u group by v||'a' order by 1;
 
 -- Make sure that generation of HashAggregate for uniqification purposes
 -- does not lead to array overflow due to unexpected duplicate hash keys

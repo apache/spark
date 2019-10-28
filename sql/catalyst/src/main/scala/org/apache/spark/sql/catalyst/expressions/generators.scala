@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -340,6 +340,63 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.genCode(ctx)
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows recursively.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(10, 20));
+       10
+       20
+      > SELECT _FUNC_(a) FROM VALUES (array(1,2)), (array(3,4)) AS v1(a);
+       1
+       2
+       3
+       4
+  """,
+  since = "3.0.0")
+case class UnNest(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
+
+  override def prettyName: String = "unnest"
+
+  override def elementSchema: StructType = {
+    new StructType().add(prettyName, getLeafDataType(child.dataType))
+  }
+
+  // TODO: multidimensional arrays must have array expressions with matching dimensions
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case _: ArrayType =>
+      TypeUtils.checkForSameTypeInputExpr(child.children.map(_.dataType), s"function $prettyName")
+    case _ =>
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function unnest should be array type not ${child.dataType.catalogString}")
+  }
+
+  @scala.annotation.tailrec
+  private def getLeafDataType(typ: DataType): DataType = typ match {
+    case ArrayType(et, _) => getLeafDataType(et)
+    case at => at
+  }
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = eval0(input, child)
+
+  private def eval0(input: InternalRow, expr: Expression): TraversableOnce[InternalRow] = {
+    expr.dataType match {
+      case ArrayType(et1, _) =>
+        val inputArray = child.eval(input).asInstanceOf[ArrayData]
+        if (inputArray == null) {
+          Nil
+        } else {
+          val rows = new Array[InternalRow](inputArray.numElements())
+          inputArray.foreach(et1, (i, e) => { rows(i) = InternalRow(e) })
+          et1 match {
+            case ArrayType(_, _) => rows.zip(expr.children).flatMap { case (r, e) => eval0(r, e) }
+            case _ => rows
+          }
+        }
+    }
   }
 }
 

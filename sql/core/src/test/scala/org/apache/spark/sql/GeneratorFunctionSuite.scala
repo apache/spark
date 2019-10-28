@@ -344,6 +344,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 }
 
+
 case class EmptyGenerator() extends Generator {
   override def children: Seq[Expression] = Nil
   override def elementSchema: StructType = new StructType().add("id", IntegerType)

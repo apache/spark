@@ -200,6 +200,7 @@ object FunctionRegistry {
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
     expressionGeneratorOuter[Explode]("explode_outer"),
+    expression[UnNest]("unnest"),
     expression[Greatest]("greatest"),
     expression[If]("if"),
     expression[Inline]("inline"),

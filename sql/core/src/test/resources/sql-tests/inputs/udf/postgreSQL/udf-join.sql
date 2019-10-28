@@ -1091,10 +1091,10 @@ order by udf(fault);
 -- left join unnest(v1ys) as u1(u1y) on u1y = v2y;
 
 -- [SPARK-28382] Array Functions: unnest
--- select * from
--- (values (1, array(10,20)), (2, array(20,30))) as v1(v1x,v1ys)
--- left join (values (1, 10), (2, 20)) as v2(v2x,v2y) on v2x = v1x
--- left join unnest(v1ys) as u1(u1y) on u1y = v2y;
+
+create or replace temporary view v1 as select * from values (1, array(10,20)), (2, array(20,30)) as v1(v1x,v1ys);
+create or replace temporary view v2 as select * from values (1, 10), (2, 20) as v2(v2x,v2y);
+select * from v1 left join v2 on v2x = v1x left join (select unnest(v1ys) as u1y from v1) u1 on u1y = v2y;
 
 --
 -- test handling of potential equivalence clauses above outer joins
