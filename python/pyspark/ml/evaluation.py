@@ -119,7 +119,9 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     ...    [(0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)])
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["raw", "label"])
     ...
-    >>> evaluator = BinaryClassificationEvaluator(rawPredictionCol="raw")
+    >>> evaluator = BinaryClassificationEvaluator()
+    >>> evaluator.setRawPredictionCol("raw")
+    BinaryClassificationEvaluator...
     >>> evaluator.evaluate(dataset)
     0.70...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
@@ -196,6 +198,25 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         """
         return self.getOrDefault(self.numBins)
 
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setRawPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`rawPredictionCol`.
+        """
+        return self._set(rawPredictionCol=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
     @keyword_only
     @since("1.4.0")
     def setParams(self, rawPredictionCol="rawPrediction", labelCol="label",
@@ -220,7 +241,9 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
     ...   (-25.98418959, -22.0), (30.69731842, 33.0), (74.69283752, 71.0)]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["raw", "label"])
     ...
-    >>> evaluator = RegressionEvaluator(predictionCol="raw")
+    >>> evaluator = RegressionEvaluator()
+    >>> evaluator.setPredictionCol("raw")
+    RegressionEvaluator...
     >>> evaluator.evaluate(dataset)
     2.842...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "r2"})
@@ -299,6 +322,25 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
         """
         return self.getOrDefault(self.throughOrigin)
 
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
     @keyword_only
     @since("1.4.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
@@ -322,7 +364,9 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
-    >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction")
+    >>> evaluator = MulticlassClassificationEvaluator()
+    >>> evaluator.setPredictionCol("prediction")
+    MulticlassClassificationEvaluator...
     >>> evaluator.evaluate(dataset)
     0.66...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
@@ -453,6 +497,32 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         """
         return self.getOrDefault(self.eps)
 
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("3.0.0")
+    def setProbabilityCol(self, value):
+        """
+        Sets the value of :py:attr:`probabilityCol`.
+        """
+        return self._set(probabilityCol=value)
+
+    @since("3.0.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
     @keyword_only
     @since("1.5.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
@@ -482,7 +552,9 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     ...     ([0.0, 1.0, 2.0], [0.0, 1.0]), ([1.0], [1.0, 2.0])]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
     ...
-    >>> evaluator = MultilabelClassificationEvaluator(predictionCol="prediction")
+    >>> evaluator = MultilabelClassificationEvaluator()
+    >>> evaluator.setPredictionCol("prediction")
+    MultilabelClassificationEvaluator...
     >>> evaluator.evaluate(dataset)
     0.63...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
@@ -549,6 +621,20 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         """
         return self.getOrDefault(self.metricLabel)
 
+    @since("3.0.0")
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
     @keyword_only
     @since("3.0.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
@@ -581,7 +667,9 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     ...     ([10.5, 11.5], 1.0), ([1.0, 1.0], 0.0), ([8.0, 6.0], 1.0)])
     >>> dataset = spark.createDataFrame(featureAndPredictions, ["features", "prediction"])
     ...
-    >>> evaluator = ClusteringEvaluator(predictionCol="prediction")
+    >>> evaluator = ClusteringEvaluator()
+    >>> evaluator.setPredictionCol("prediction")
+    ClusteringEvaluator...
     >>> evaluator.evaluate(dataset)
     0.9079...
     >>> ce_path = temp_path + "/ce"
@@ -613,6 +701,18 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
+    @keyword_only
+    @since("2.3.0")
+    def setParams(self, predictionCol="prediction", featuresCol="features",
+                  metricName="silhouette", distanceMeasure="squaredEuclidean"):
+        """
+        setParams(self, predictionCol="prediction", featuresCol="features", \
+                  metricName="silhouette", distanceMeasure="squaredEuclidean")
+        Sets params for clustering evaluator.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
     @since("2.3.0")
     def setMetricName(self, value):
         """
@@ -627,18 +727,6 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
         """
         return self.getOrDefault(self.metricName)
 
-    @keyword_only
-    @since("2.3.0")
-    def setParams(self, predictionCol="prediction", featuresCol="features",
-                  metricName="silhouette", distanceMeasure="squaredEuclidean"):
-        """
-        setParams(self, predictionCol="prediction", featuresCol="features", \
-                  metricName="silhouette", distanceMeasure="squaredEuclidean")
-        Sets params for clustering evaluator.
-        """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
-
     @since("2.4.0")
     def setDistanceMeasure(self, value):
         """
@@ -652,6 +740,18 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
         Gets the value of `distanceMeasure`
         """
         return self.getOrDefault(self.distanceMeasure)
+
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
 
 
 @inherit_doc
@@ -669,7 +769,9 @@ class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
     ...     ([1.0, 2.0, 3.0, 4.0, 5.0], [])]
     >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
     ...
-    >>> evaluator = RankingEvaluator(predictionCol="prediction")
+    >>> evaluator = RankingEvaluator()
+    >>> evaluator.setPredictionCol("prediction")
+    RankingEvaluator...
     >>> evaluator.evaluate(dataset)
     0.35...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "precisionAtK", evaluator.k: 2})
@@ -733,6 +835,20 @@ class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
         Gets the value of k or its default value.
         """
         return self.getOrDefault(self.k)
+
+    @since("3.0.0")
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
 
     @keyword_only
     @since("3.0.0")

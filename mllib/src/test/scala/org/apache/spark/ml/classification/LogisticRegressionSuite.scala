@@ -1425,8 +1425,6 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("multinomial logistic regression with zero variance (SPARK-21681)") {
-    val sqlContext = multinomialDatasetWithZeroVar.sqlContext
-    import sqlContext.implicits._
     val mlr = new LogisticRegression().setFamily("multinomial").setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(true).setWeightCol("weight")
 

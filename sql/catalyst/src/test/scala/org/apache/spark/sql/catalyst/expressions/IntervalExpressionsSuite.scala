@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.CalendarInterval
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   implicit def interval(s: String): Literal = {
-    Literal(CalendarInterval.fromString("interval " + s))
+    Literal(IntervalUtils.fromString("interval " + s))
   }
 
   test("millenniums") {

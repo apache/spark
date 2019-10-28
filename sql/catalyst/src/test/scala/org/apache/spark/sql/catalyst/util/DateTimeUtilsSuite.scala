@@ -555,12 +555,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
-      "Kwajalein" -> Set(8632, 8633),
+      "Kwajalein" -> Set(8632, 8633, 8634),
       "Pacific/Apia" -> Set(15338),
       "Pacific/Enderbury" -> Set(9130, 9131),
       "Pacific/Fakaofo" -> Set(15338),
       "Pacific/Kiritimati" -> Set(9130, 9131),
-      "Pacific/Kwajalein" -> Set(8632, 8633),
+      "Pacific/Kwajalein" -> Set(8632, 8633, 8634),
       "MIT" -> Set(15338))
     for (tz <- ALL_TIMEZONES) {
       val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
@@ -586,12 +586,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
       val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
       toTimestamp("NOW", zoneId).get should be (now +- tolerance)
       assert(toTimestamp("now UTC", zoneId) === None)
-      val today = instantToMicros(LocalDateTime.now(zoneId)
+      val localToday = LocalDateTime.now(zoneId)
         .`with`(LocalTime.MIDNIGHT)
-        .atZone(zoneId).toInstant)
-      toTimestamp(" Yesterday", zoneId).get should be (today - MICROS_PER_DAY +- tolerance)
+        .atZone(zoneId)
+      val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
+      toTimestamp(" Yesterday", zoneId).get should be (yesterday +- tolerance)
+      val today = instantToMicros(localToday.toInstant)
       toTimestamp("Today ", zoneId).get should be (today +- tolerance)
-      toTimestamp(" tomorrow CET ", zoneId).get should be (today + MICROS_PER_DAY +- tolerance)
+      val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
+      toTimestamp(" tomorrow CET ", zoneId).get should be (tomorrow +- tolerance)
     }
   }
 
