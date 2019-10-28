@@ -305,7 +305,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
 case class Join(
     left: LogicalPlan,
     right: LogicalPlan,
-    joinType: JoinType,
+    joinType: CatalystJoinType,
     condition: Option[Expression],
     hint: JoinHint)
   extends BinaryNode with PredicateHelper {

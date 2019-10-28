@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 case class ShuffledHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
-    joinType: JoinType,
+    joinType: CatalystJoinType,
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,

@@ -82,7 +82,7 @@ class CheckCartesianProductsSuite extends PlanTest {
   }
 
   private def performCartesianProductCheck(
-      joinType: JoinType,
+      joinType: CatalystJoinType,
       condition: Option[Expression] = None): Unit = {
     val analyzedPlan = testRelation1.join(testRelation2, joinType, condition).analyze
     val optimizedPlan = Optimize.execute(analyzedPlan)

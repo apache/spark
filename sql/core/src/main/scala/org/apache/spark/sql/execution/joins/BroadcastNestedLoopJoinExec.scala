@@ -33,7 +33,7 @@ case class BroadcastNestedLoopJoinExec(
     left: SparkPlan,
     right: SparkPlan,
     buildSide: BuildSide,
-    joinType: JoinType,
+    joinType: CatalystJoinType,
     condition: Option[Expression]) extends BinaryExecNode {
 
   override lazy val metrics = Map(

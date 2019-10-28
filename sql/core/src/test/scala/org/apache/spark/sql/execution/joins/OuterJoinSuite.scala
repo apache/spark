@@ -67,7 +67,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
       testName: String,
       leftRows: => DataFrame,
       rightRows: => DataFrame,
-      joinType: JoinType,
+      joinType: CatalystJoinType,
       condition: => Expression,
       expectedAnswer: Seq[Product]): Unit = {
 

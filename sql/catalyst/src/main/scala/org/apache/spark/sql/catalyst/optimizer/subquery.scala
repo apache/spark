@@ -48,7 +48,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   private def buildJoin(
       outerPlan: LogicalPlan,
       subplan: LogicalPlan,
-      joinType: JoinType,
+      joinType: CatalystJoinType,
       condition: Option[Expression]): Join = {
     // Deduplicate conflicting attributes if any.
     val dedupSubplan = dedupSubqueryOnSelfJoin(outerPlan, subplan, None, condition)

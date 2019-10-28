@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.{BooleanType, LongType}
 case class BroadcastHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
-    joinType: JoinType,
+    joinType: CatalystJoinType,
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,

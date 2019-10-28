@@ -102,7 +102,7 @@ object PhysicalOperation extends PredicateHelper {
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild, joinHint) */
   type ReturnType =
-    (JoinType, Seq[Expression], Seq[Expression],
+    (CatalystJoinType, Seq[Expression], Seq[Expression],
       Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
 
   def unapply(join: Join): Option[ReturnType] = join match {

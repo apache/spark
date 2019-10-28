@@ -46,7 +46,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       y: LogicalPlan,
       expectedLeft: LogicalPlan,
       expectedRight: LogicalPlan,
-      joinType: JoinType) = {
+      joinType: CatalystJoinType) = {
     val condition = Some("x.a".attr === "y.a".attr)
     val originalQuery = x.join(y, joinType, condition).analyze
     val correctAnswer = expectedLeft.join(expectedRight, joinType, condition).analyze

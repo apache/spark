@@ -126,7 +126,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 case class StreamingSymmetricHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
-    joinType: JoinType,
+    joinType: CatalystJoinType,
     condition: JoinConditionSplitPredicates,
     stateInfo: Option[StatefulOperatorStateInfo],
     eventTimeWatermark: Option[Long],
@@ -137,7 +137,7 @@ case class StreamingSymmetricHashJoinExec(
   def this(
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
-      joinType: JoinType,
+      joinType: CatalystJoinType,
       condition: Option[Expression],
       left: SparkPlan,
       right: SparkPlan) = {

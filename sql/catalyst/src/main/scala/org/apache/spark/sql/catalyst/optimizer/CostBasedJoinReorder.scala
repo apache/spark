@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, PredicateHelper}
-import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, JoinType}
+import org.apache.spark.sql.catalyst.plans.{CatalystJoinType, Inner, InnerLike}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -106,7 +106,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
 case class OrderedJoin(
     left: LogicalPlan,
     right: LogicalPlan,
-    joinType: JoinType,
+    joinType: CatalystJoinType,
     condition: Option[Expression]) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
 }

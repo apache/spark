@@ -37,7 +37,7 @@ import org.apache.spark.util.collection.BitSet
 case class SortMergeJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
-    joinType: JoinType,
+    joinType: CatalystJoinType,
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan) extends BinaryExecNode with CodegenSupport {

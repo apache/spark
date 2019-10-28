@@ -78,7 +78,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
   // the SQLContext should be used only within a test to keep SQL tests stable
   private def testExistenceJoin(
       testName: String,
-      joinType: JoinType,
+      joinType: CatalystJoinType,
       leftRows: => DataFrame,
       rightRows: => DataFrame,
       condition: => Expression,

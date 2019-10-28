@@ -15,50 +15,49 @@
  * limitations under the License.
  */
 
-
-package org.apache.spark.sql.catalyst.plans
+package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 
 class JoinTypesTest extends SparkFunSuite {
 
   test("construct an Inner type") {
-    assert(JoinType("inner") === Inner)
+    assert(JoinType("inner") === JoinType.Inner)
   }
 
   test("construct a FullOuter type") {
-    assert(JoinType("fullouter") === FullOuter)
-    assert(JoinType("full_outer") === FullOuter)
-    assert(JoinType("outer") === FullOuter)
-    assert(JoinType("full") === FullOuter)
+    assert(JoinType("fullouter") === JoinType.FullOuter)
+    assert(JoinType("full_outer") === JoinType.FullOuter)
+    assert(JoinType("outer") === JoinType.FullOuter)
+    assert(JoinType("full") === JoinType.FullOuter)
   }
 
   test("construct a LeftOuter type") {
-    assert(JoinType("leftouter") === LeftOuter)
-    assert(JoinType("left_outer") === LeftOuter)
-    assert(JoinType("left") === LeftOuter)
+    assert(JoinType("leftouter") === JoinType.LeftOuter)
+    assert(JoinType("left_outer") === JoinType.LeftOuter)
+    assert(JoinType("left") === JoinType.LeftOuter)
   }
 
   test("construct a RightOuter type") {
-    assert(JoinType("rightouter") === RightOuter)
-    assert(JoinType("right_outer") === RightOuter)
-    assert(JoinType("right") === RightOuter)
+    assert(JoinType("rightouter") === JoinType.RightOuter)
+    assert(JoinType("right_outer") === JoinType.RightOuter)
+    assert(JoinType("right") === JoinType.RightOuter)
   }
 
   test("construct a LeftSemi type") {
-    assert(JoinType("leftsemi") === LeftSemi)
-    assert(JoinType("left_semi") === LeftSemi)
-    assert(JoinType("semi") === LeftSemi)
+    assert(JoinType("leftsemi") === JoinType.LeftSemi)
+    assert(JoinType("left_semi") === JoinType.LeftSemi)
+    assert(JoinType("semi") === JoinType.LeftSemi)
   }
 
   test("construct a LeftAnti type") {
-    assert(JoinType("leftanti") === LeftAnti)
-    assert(JoinType("left_anti") === LeftAnti)
-    assert(JoinType("anti") === LeftAnti)
+    assert(JoinType("leftanti") === JoinType.LeftAnti)
+    assert(JoinType("left_anti") === JoinType.LeftAnti)
+    assert(JoinType("anti") === JoinType.LeftAnti)
   }
 
   test("construct a Cross type") {
-    assert(JoinType("cross") === Cross)
+    assert(JoinType("cross") === JoinType.Cross)
   }
 
 }

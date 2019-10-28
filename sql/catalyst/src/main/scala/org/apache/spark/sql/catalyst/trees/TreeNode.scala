@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.CatalystJoinType
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
@@ -780,7 +780,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case exprId: ExprId => true
     case field: StructField => true
     case id: IdentifierWithDatabase => true
-    case join: JoinType => true
+    case join: CatalystJoinType => true
     case spec: BucketSpec => true
     case catalog: CatalogTable => true
     case partition: Partitioning => true

@@ -140,7 +140,7 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     v == null || v == false
   }
 
-  private def buildNewJoinType(filter: Filter, join: Join): JoinType = {
+  private def buildNewJoinType(filter: Filter, join: Join): CatalystJoinType = {
     val conditions = splitConjunctivePredicates(filter.condition) ++ filter.constraints
     val leftConditions = conditions.filter(_.references.subsetOf(join.left.outputSet))
     val rightConditions = conditions.filter(_.references.subsetOf(join.right.outputSet))

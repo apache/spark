@@ -2555,7 +2555,7 @@ class Analyzer(
   private def commonNaturalJoinProcessing(
       left: LogicalPlan,
       right: LogicalPlan,
-      joinType: JoinType,
+      joinType: CatalystJoinType,
       joinNames: Seq[String],
       condition: Option[Expression],
       hint: JoinHint) = {

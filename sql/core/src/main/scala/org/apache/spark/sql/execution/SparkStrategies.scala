@@ -163,12 +163,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       a.stats.sizeInBytes * 3 <= b.stats.sizeInBytes
     }
 
-    private def canBuildRight(joinType: JoinType): Boolean = joinType match {
+    private def canBuildRight(joinType: CatalystJoinType): Boolean = joinType match {
       case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }
 
-    private def canBuildLeft(joinType: JoinType): Boolean = joinType match {
+    private def canBuildLeft(joinType: CatalystJoinType): Boolean = joinType match {
       case _: InnerLike | RightOuter => true
       case _ => false
     }

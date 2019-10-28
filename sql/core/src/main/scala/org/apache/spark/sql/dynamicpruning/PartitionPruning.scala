@@ -186,12 +186,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     !plan.isStreaming && hasSelectivePredicate(plan)
   }
 
-  private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
+  private def canPruneLeft(joinType: CatalystJoinType): Boolean = joinType match {
     case Inner | LeftSemi | RightOuter => true
     case _ => false
   }
 
-  private def canPruneRight(joinType: JoinType): Boolean = joinType match {
+  private def canPruneRight(joinType: CatalystJoinType): Boolean = joinType match {
     case Inner | LeftOuter => true
     case _ => false
   }

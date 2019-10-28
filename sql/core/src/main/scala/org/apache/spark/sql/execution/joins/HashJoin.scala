@@ -31,7 +31,7 @@ trait HashJoin {
 
   val leftKeys: Seq[Expression]
   val rightKeys: Seq[Expression]
-  val joinType: JoinType
+  val joinType: CatalystJoinType
   val buildSide: BuildSide
   val condition: Option[Expression]
   val left: SparkPlan

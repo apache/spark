@@ -336,29 +336,30 @@ class PlanParserSuite extends AnalysisTest {
 
   test("joins") {
     // Test single joins.
-    val testUnconditionalJoin = (sql: String, jt: JoinType) => {
+    val testUnconditionalJoin = (sql: String, jt: CatalystJoinType) => {
       assertEqual(
         s"select * from t as tt $sql u",
         table("t").as("tt").join(table("u"), jt, None).select(star()))
     }
-    val testConditionalJoin = (sql: String, jt: JoinType) => {
+    val testConditionalJoin = (sql: String, jt: CatalystJoinType) => {
       assertEqual(
         s"select * from t $sql u as uu on a = b",
         table("t").join(table("u").as("uu"), jt, Option('a === 'b)).select(star()))
     }
-    val testNaturalJoin = (sql: String, jt: JoinType) => {
+    val testNaturalJoin = (sql: String, jt: CatalystJoinType) => {
       assertEqual(
         s"select * from t tt natural $sql u as uu",
         table("t").as("tt").join(table("u").as("uu"), NaturalJoin(jt), None).select(star()))
     }
-    val testUsingJoin = (sql: String, jt: JoinType) => {
+    val testUsingJoin = (sql: String, jt: CatalystJoinType) => {
       assertEqual(
         s"select * from t $sql u using(a, b)",
         table("t").join(table("u"), UsingJoin(jt, Seq("a", "b")), None).select(star()))
     }
     val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
     val testExistence = Seq(testUnconditionalJoin, testConditionalJoin, testUsingJoin)
-    def test(sql: String, jt: JoinType, tests: Seq[(String, JoinType) => Unit]): Unit = {
+    def test(sql: String, jt: CatalystJoinType,
+      tests: Seq[(String, CatalystJoinType) => Unit]): Unit = {
       tests.foreach(_(sql, jt))
     }
     test("cross join", Cross, Seq(testUnconditionalJoin))
