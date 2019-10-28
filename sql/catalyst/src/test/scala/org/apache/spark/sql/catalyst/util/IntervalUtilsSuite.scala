@@ -50,7 +50,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
       }
     }
 
-    for (input <- Seq("interval", "interval1 day", "foo", "foo 1 day")) {
+    for (input <- Seq("interval", "interval 1 day", "interval1 day", "foo", "foo 1 day")) {
       try {
         fromString(input)
         fail("Expected to throw an exception for the invalid input")
@@ -82,13 +82,11 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   private def testSingleUnit(
       unit: String, number: Int, months: Int, days: Int, microseconds: Long): Unit = {
-    for (prefix <- Seq("interval ", "")) {
-      val input1 = prefix + number + " " + unit
-      val input2 = prefix + number + " " + unit + "s"
-      val result = new CalendarInterval(months, days, microseconds)
-      assert(fromString(input1) == result)
-      assert(fromString(input2) == result)
-    }
+    val input1 = number + " " + unit
+    val input2 = number + " " + unit + "s"
+    val result = new CalendarInterval(months, days, microseconds)
+    assert(fromString(input1) == result)
+    assert(fromString(input2) == result)
   }
 
   test("from year-month string") {
@@ -185,5 +183,12 @@ class IntervalUtilsSuite extends SparkFunSuite {
     assert(!isNegative("0 months", 28))
     assert(!isNegative("1 year -360 days", 31))
     assert(!isNegative("-1 year 380 days", 31))
+  }
+
+  test("legacyCastStringToInterval") {
+    for (input <- Seq("inTERval 1 year", "1 year")) {
+      val result = new CalendarInterval(12, 0, 0)
+      assert(IntervalUtils.legacyCastStringToInterval(input) == result)
+    }
   }
 }

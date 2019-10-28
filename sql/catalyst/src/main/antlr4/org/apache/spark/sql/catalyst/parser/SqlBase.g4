@@ -80,7 +80,7 @@ singleTableSchema
     ;
 
 singleInterval
-    : INTERVAL? multiUnitsInterval EOF
+    : multiUnitsInterval EOF
     ;
 
 statement

@@ -365,4 +365,13 @@ object IntervalUtils {
   def isNegative(interval: CalendarInterval, daysPerMonth: Int = 31): Boolean = {
     getDuration(interval, TimeUnit.MICROSECONDS, daysPerMonth) < 0
   }
+
+  def legacyCastStringToInterval(str: String): CalendarInterval = {
+    val trimmed = str.trim
+    if (trimmed.regionMatches(true, 0, "interval", 0, 8)) {
+      safeFromString(trimmed.drop(8))
+    } else {
+      safeFromString(trimmed)
+    }
+  }
 }

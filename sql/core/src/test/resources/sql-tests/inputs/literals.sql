@@ -123,7 +123,6 @@ SELECT 3.14, -3.14, 3.14e8, 3.14e-8, -3.14e8, -3.14e-8, 3.14e+8, 3.14E8, 3.14E-8
 select map(1, interval 1 day, 2, interval 3 week);
 
 -- typed interval expression
-select interval 'interval 3 year 1 hour';
 select interval '3 year 1 hour';
 
 -- typed integer expression
@@ -133,6 +132,7 @@ select integer '2147483648';
 
 -- malformed interval literal
 select interval;
+select interval 'interval 3 year 1 hour';
 select interval 1 fake_unit;
 select interval 1 year to month;
 select interval '1' year to second;

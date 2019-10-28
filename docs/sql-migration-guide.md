@@ -220,6 +220,8 @@ license: |
 
   - Since Spark 3.0, the interval literal syntax does not allow multiple from-to units anymore. For example, `SELECT INTERVAL '1-1' YEAR TO MONTH '2-2' YEAR TO MONTH'` throws parser exception.
 
+  - Since Spark 3.0, when casting string to interval type, strings with leading "interval" such as "interval 1 day" will be treated as invalid and the cast returns null. In Spark version 2.4 and earlier, the leading "interval" is allowed and required. To allow the leading "interval", you can set `spark.sql.legacy.allowIntervalPrefixInCast` to true.
+
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was

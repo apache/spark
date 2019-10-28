@@ -465,6 +465,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // IntervalConverter
   private[this] def castToInterval(from: DataType): Any => Any = from match {
+    case StringType if SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_INTERVAL_PREFIX_IN_CAST) =>
+      buildCast[UTF8String](_, s => IntervalUtils.legacyCastStringToInterval(s.toString))
+
     case StringType =>
       buildCast[UTF8String](_, s => IntervalUtils.safeFromString(s.toString))
   }
@@ -1214,10 +1217,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      val func = if (SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_INTERVAL_PREFIX_IN_CAST)) {
+        "legacyCastStringToInterval"
+      } else {
+        "safeFromString"
+      }
       (c, evPrim, evNull) =>
-        code"""$evPrim = $util.safeFromString($c.toString());
-           if(${evPrim} == null) {
-             ${evNull} = true;
+        code"""$evPrim = $util.$func($c.toString());
+           if($evPrim == null) {
+             $evNull = true;
            }
          """.stripMargin
 

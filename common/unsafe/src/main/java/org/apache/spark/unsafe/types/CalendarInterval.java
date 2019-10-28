@@ -81,7 +81,7 @@ public final class CalendarInterval implements Serializable {
 
   @Override
   public String toString() {
-    StringBuilder sb = new StringBuilder("interval");
+    StringBuilder sb = new StringBuilder();
 
     if (months != 0) {
       appendUnit(sb, months / 12, "year");
@@ -98,18 +98,19 @@ public final class CalendarInterval implements Serializable {
       rest %= MICROS_PER_MINUTE;
       if (rest != 0) {
         String s = BigDecimal.valueOf(rest, 6).stripTrailingZeros().toPlainString();
-        sb.append(' ').append(s).append(" seconds");
+        sb.append(s).append(" seconds ");
       }
     } else if (months == 0 && days == 0) {
-      sb.append(" 0 microseconds");
+      sb.append("0 seconds ");
     }
 
+    sb.setLength(sb.length() - 1);
     return sb.toString();
   }
 
   private void appendUnit(StringBuilder sb, long value, String unit) {
     if (value != 0) {
-      sb.append(' ').append(value).append(' ').append(unit).append('s');
+      sb.append(value).append(' ').append(unit).append('s').append(' ');
     }
   }
 }

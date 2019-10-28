@@ -2042,6 +2042,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_ALLOW_INTERVAL_PREFIX_IN_CAST =
+    buildConf("spark.sql.legacy.allowIntervalPrefixInCast")
+      .doc("When true, it's allowed to have the 'interval' prefix in the string that is being " +
+        "casted to interval type. For example, `CAST('interval 1 day' AS INTERVAL)` returns " +
+        "null if this config is set to false.")
+      .booleanConf
+      .createWithDefault(false)
+
   val ADDITIONAL_REMOTE_REPOSITORIES =
     buildConf("spark.sql.additionalRemoteRepositories")
       .doc("A comma-delimited string config of the optional additional remote Maven mirror " +
