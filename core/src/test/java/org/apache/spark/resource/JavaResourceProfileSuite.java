@@ -31,9 +31,9 @@ public class JavaResourceProfileSuite {
   @Test
   public void testResourceProfileAccessFromJava() throws Exception {
     ExecutorResourceRequest execReqGpu =
-        new ExecutorResourceRequest(GpuResource, 2, "", "myscript");
+      new ExecutorResourceRequest(GpuResource, 2, "", "myscript");
     ExecutorResourceRequest execReqFpga =
-	new ExecutorResourceRequest(FPGAResource, 3, "", "myfpgascript", "nvidia");
+      new ExecutorResourceRequest(FPGAResource, 3, "", "myfpgascript", "nvidia");
 
     ResourceProfile rprof = new ResourceProfile();
     rprof.require(execReqGpu);
