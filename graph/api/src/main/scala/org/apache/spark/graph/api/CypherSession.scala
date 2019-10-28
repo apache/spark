@@ -73,7 +73,8 @@ object CypherSession extends Logging {
 
     val labelCount = labelColumns.size
     if (labelCount > 5) {
-      logWarning(s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node datasets.")
+      logWarning(
+        s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node datasets.")
       if (labelCount > 10) {
         throw new IllegalArgumentException(
           s"Expected number of label columns to be less than or equal to 10, was $labelCount.")
