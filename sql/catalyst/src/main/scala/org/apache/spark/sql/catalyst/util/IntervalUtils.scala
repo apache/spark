@@ -240,7 +240,7 @@ object IntervalUtils {
       new CalendarInterval(0, sign * (
         days * DateTimeUtils.MICROS_PER_DAY + hours * MICROS_PER_HOUR +
         minutes * MICROS_PER_MINUTE + seconds * DateTimeUtils.MICROS_PER_SECOND +
-        nanos / 1000L))
+        nanos / DateTimeUtils.NANOS_PER_MICROS))
     } catch {
       case e: Exception =>
         throw new IllegalArgumentException(
