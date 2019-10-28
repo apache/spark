@@ -37,16 +37,6 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     join.buildSide == BuildLeft &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.right)
   }
 
-  def setIsLocalShuffleToTrue(stage: QueryStageExec): Unit = {
-    stage match {
-      case stage: ShuffleQueryStageExec =>
-        stage.isLocalShuffle = true
-      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-        stage.isLocalShuffle = true
-    }
-
-  }
-
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED)) {
       return plan
@@ -55,11 +45,9 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     val optimizedPlan = plan.transformDown {
       case join: BroadcastHashJoinExec if canUseLocalShuffleReaderRight(join) =>
         val localReader = LocalShuffleReaderExec(join.right.asInstanceOf[QueryStageExec])
-        setIsLocalShuffleToTrue(join.right.asInstanceOf[QueryStageExec])
         join.copy(right = localReader)
       case join: BroadcastHashJoinExec if canUseLocalShuffleReaderLeft(join) =>
         val localReader = LocalShuffleReaderExec(join.left.asInstanceOf[QueryStageExec])
-        setIsLocalShuffleToTrue(join.left.asInstanceOf[QueryStageExec])
         join.copy(left = localReader)
     }
 
