@@ -206,15 +206,28 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
         // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
         workerEnv.put("PYTHONUNBUFFERED", "YES")
-        daemon = pb.start()
 
-        val in = new DataInputStream(daemon.getInputStream)
-        try {
-          daemonPort = in.readInt()
-        } catch {
-          case _: EOFException =>
-            throw new SparkException(s"No port number in $daemonModule's stdout")
-        }
+        val maxRetries = SparkEnv.get.conf.getInt("spark.python.daemon.maxRetries", 3)
+        var in: DataInputStream = null
+        var hasExcept: Boolean = false
+        var numRetries: Int = 0
+        do {
+          numRetries += 1
+          hasExcept = false
+          try {
+            daemon = pb.start()
+            val in = new DataInputStream(daemon.getInputStream)
+            daemonPort = in.readInt()
+          } catch {
+            case e: EOFException =>
+              if (numRetries <= maxRetries) {
+                hasExcept = true
+                logWarning("Exception occurred while reading the port number of the $daemonModule.", e)
+              } else {
+                throw new SparkException(s"Start $daemonModule exceedes $maxRetries times.")
+              }
+          }
+        } while (hasExcept && numRetries < maxRetries && daemon.isAlive() == false)
 
         // test that the returned port number is within a valid range.
         // note: this does not cover the case where the port number
