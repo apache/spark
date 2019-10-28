@@ -19,8 +19,9 @@ package org.apache.spark.sql.connector
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
@@ -788,6 +789,45 @@ class DataSourceV2SQLSuite
 
     // The following will be no-op since the namespace already exists.
     sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
+  }
+
+  test("DropNamespace: basic tests") {
+    // Session catalog is used.
+    sql("CREATE NAMESPACE ns")
+    testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
+    sql("DROP NAMESPACE ns")
+    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
+
+    // V2 non-session catalog is used.
+    sql("CREATE NAMESPACE testcat.ns1")
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
+    sql("DROP NAMESPACE testcat.ns1")
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq())
+  }
+
+  test("DropNamespace: drop non-empty namespace") {
+    sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
+
+    val e1 = intercept[IllegalStateException] {
+      sql("DROP NAMESPACE testcat.ns1")
+    }
+    assert(e1.getMessage.contains("Cannot delete non-empty namespace: ns1"))
+
+    val e2 = intercept[SparkException] {
+      sql("DROP NAMESPACE testcat.ns1 CASCADE")
+    }
+    assert(e2.getMessage.contains(
+      "Cascade option for droping namespace is not supported in V2 catalog"))
+  }
+
+  test("DropNamespace: test handling of 'IF EXISTS'") {
+    sql("DROP NAMESPACE IF EXISTS testcat.unknown")
+
+    val exception = intercept[NoSuchNamespaceException] {
+      sql("DROP NAMESPACE testcat.ns1")
+    }
+    assert(exception.getMessage.contains("Namespace 'ns1' not found"))
   }
 
   test("ShowNamespaces: show root namespaces with default v2 catalog") {

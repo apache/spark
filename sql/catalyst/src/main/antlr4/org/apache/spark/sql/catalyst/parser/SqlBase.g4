@@ -95,8 +95,8 @@ statement
         SET DBPROPERTIES tablePropertyList                             #setDatabaseProperties
     | ALTER database db=errorCapturingIdentifier
         SET locationSpec                                               #setDatabaseLocation
-    | DROP database (IF EXISTS)? db=errorCapturingIdentifier
-        (RESTRICT | CASCADE)?                                          #dropDatabase
+    | DROP (database | NAMESPACE) (IF EXISTS)? multipartIdentifier
+        (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider

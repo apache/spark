@@ -74,51 +74,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }.head
   }
 
-  test("drop database") {
-    val sql1 = "DROP DATABASE IF EXISTS database_name RESTRICT"
-    val sql2 = "DROP DATABASE IF EXISTS database_name CASCADE"
-    val sql3 = "DROP SCHEMA IF EXISTS database_name RESTRICT"
-    val sql4 = "DROP SCHEMA IF EXISTS database_name CASCADE"
-    // The default is restrict=true
-    val sql5 = "DROP DATABASE IF EXISTS database_name"
-    // The default is ifExists=false
-    val sql6 = "DROP DATABASE database_name"
-    val sql7 = "DROP DATABASE database_name CASCADE"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val parsed3 = parser.parsePlan(sql3)
-    val parsed4 = parser.parsePlan(sql4)
-    val parsed5 = parser.parsePlan(sql5)
-    val parsed6 = parser.parsePlan(sql6)
-    val parsed7 = parser.parsePlan(sql7)
-
-    val expected1 = DropDatabaseCommand(
-      "database_name",
-      ifExists = true,
-      cascade = false)
-    val expected2 = DropDatabaseCommand(
-      "database_name",
-      ifExists = true,
-      cascade = true)
-    val expected3 = DropDatabaseCommand(
-      "database_name",
-      ifExists = false,
-      cascade = false)
-    val expected4 = DropDatabaseCommand(
-      "database_name",
-      ifExists = false,
-      cascade = true)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected1)
-    comparePlans(parsed4, expected2)
-    comparePlans(parsed5, expected1)
-    comparePlans(parsed6, expected3)
-    comparePlans(parsed7, expected4)
-  }
-
   test("alter database set dbproperties") {
     // ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
     val sql1 = "ALTER DATABASE database_name SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"

@@ -296,6 +296,14 @@ object CreateNamespaceStatement {
 }
 
 /**
+ * A DROP NAMESPACE statement, as parsed from SQL.
+ */
+case class DropNamespaceStatement(
+    namespace: Seq[String],
+    ifExists: Boolean,
+    cascade: Boolean) extends ParsedStatement
+
+/**
  * A SHOW NAMESPACES statement, as parsed from SQL.
  */
 case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
