@@ -331,6 +331,27 @@ case class AnalyzeColumnStatement(
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
 
 /**
+ * A SHOW CREATE TABLE statement, as parsed from SQL.
+ */
+case class ShowCreateTableStatement(tableName: Seq[String]) extends ParsedStatement
+
+/**
+ * A CACHE TABLE statement, as parsed from SQL
+ */
+case class CacheTableStatement(
+    tableName: Seq[String],
+    plan: Option[LogicalPlan],
+    isLazy: Boolean,
+    options: Map[String, String]) extends ParsedStatement
+
+/**
+ * An UNCACHE TABLE statement, as parsed from SQL
+ */
+case class UncacheTableStatement(
+    tableName: Seq[String],
+    ifExists: Boolean) extends ParsedStatement
+
+/**
  * A TRUNCATE TABLE statement, as parsed from SQL
  */
 case class TruncateTableStatement(

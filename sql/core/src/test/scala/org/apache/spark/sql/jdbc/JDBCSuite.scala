@@ -450,15 +450,6 @@ class JDBCSuite extends QueryTest
       urlWithUserAndPass, "TEST.PEOPLE", new Properties()).collect().length === 3)
   }
 
-  test("Basic API with illegal fetchsize") {
-    val properties = new Properties()
-    properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "-1")
-    val e = intercept[IllegalArgumentException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
-    }.getMessage
-    assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
-  }
-
   test("Missing partition columns") {
     withView("tempPeople") {
       val e = intercept[IllegalArgumentException] {

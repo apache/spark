@@ -79,6 +79,10 @@ singleTableSchema
     : colTypeList EOF
     ;
 
+singleInterval
+    : INTERVAL? (intervalValue intervalUnit)+ EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
@@ -197,7 +201,7 @@ statement
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
-    | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
+    | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
@@ -205,9 +209,9 @@ statement
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | REFRESH TABLE multipartIdentifier                                #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
-    | CACHE LAZY? TABLE tableIdentifier
+    | CACHE LAZY? TABLE multipartIdentifier
         (OPTIONS options=tablePropertyList)? (AS? query)?              #cacheTable
-    | UNCACHE TABLE (IF EXISTS)? tableIdentifier                       #uncacheTable
+    | UNCACHE TABLE (IF EXISTS)? multipartIdentifier                   #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData

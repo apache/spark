@@ -123,6 +123,27 @@ class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, Ja
     .. versionadded:: 2.0.0
     """
 
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("3.0.0")
+    def setProbabilityCol(self, value):
+        """
+        Sets the value of :py:attr:`probabilityCol`.
+        """
+        return self._set(probabilityCol=value)
+
     @property
     @since("2.0.0")
     def weights(self):
@@ -200,8 +221,13 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     ...         (Vectors.dense([-0.83, -0.68]),),
     ...         (Vectors.dense([-0.91, -0.76]),)]
     >>> df = spark.createDataFrame(data, ["features"])
-    >>> gm = GaussianMixture(k=3, tol=0.0001,
-    ...                      maxIter=10, seed=10)
+    >>> gm = GaussianMixture(k=3, tol=0.0001, seed=10)
+    >>> gm.getMaxIter()
+    100
+    >>> gm.setMaxIter(10)
+    GaussianMixture...
+    >>> gm.getMaxIter()
+    10
     >>> model = gm.fit(df)
     >>> model.getFeaturesCol()
     'features'
@@ -289,6 +315,48 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
         Sets the value of :py:attr:`k`.
         """
         return self._set(k=value)
+
+    @since("2.0.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("2.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("2.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("2.0.0")
+    def setProbabilityCol(self, value):
+        """
+        Sets the value of :py:attr:`probabilityCol`.
+        """
+        return self._set(probabilityCol=value)
+
+    @since("2.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("2.0.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
 
 
 class GaussianMixtureSummary(ClusteringSummary):
@@ -389,6 +457,20 @@ class KMeansModel(JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadabl
     .. versionadded:: 1.5.0
     """
 
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
     @since("1.5.0")
     def clusterCenters(self):
         """Get the cluster centers, represented as a list of NumPy arrays."""
@@ -425,7 +507,14 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
     ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
     >>> df = spark.createDataFrame(data, ["features"])
-    >>> kmeans = KMeans(k=2, seed=1)
+    >>> kmeans = KMeans(k=2)
+    >>> kmeans.setSeed(1)
+    KMeans...
+    >>> kmeans.setMaxIter(10)
+    KMeans...
+    >>> kmeans.getMaxIter()
+    10
+    >>> kmeans.clear(kmeans.maxIter)
     >>> model = kmeans.fit(df)
     >>> model.getDistanceMeasure()
     'euclidean'
@@ -531,6 +620,41 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
         """
         return self._set(distanceMeasure=value)
 
+    @since("1.5.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("1.5.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("1.5.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("1.5.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("1.5.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
 
 @inherit_doc
 class _BisectingKMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
@@ -570,6 +694,20 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
 
     .. versionadded:: 2.0.0
     """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
 
     @since("2.0.0")
     def clusterCenters(self):
@@ -629,6 +767,16 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
     >>> df = spark.createDataFrame(data, ["features"])
     >>> bkm = BisectingKMeans(k=2, minDivisibleClusterSize=1.0)
+    >>> bkm.setMaxIter(10)
+    BisectingKMeans...
+    >>> bkm.getMaxIter()
+    10
+    >>> bkm.clear(bkm.maxIter)
+    >>> bkm.setSeed(1)
+    BisectingKMeans...
+    >>> bkm.getSeed()
+    1
+    >>> bkm.clear(bkm.seed)
     >>> model = bkm.fit(df)
     >>> model.getMaxIter()
     20
@@ -722,6 +870,34 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
         Sets the value of :py:attr:`distanceMeasure`.
         """
         return self._set(distanceMeasure=value)
+
+    @since("2.0.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("2.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("2.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("2.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
 
     def _create_model(self, java_model):
         return BisectingKMeansModel(java_model)
@@ -872,6 +1048,31 @@ class LDAModel(JavaModel, _LDAParams):
 
     .. versionadded:: 2.0.0
     """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("3.0.0")
+    def setTopicDistributionCol(self, value):
+        """
+        Sets the value of :py:attr:`topicDistributionCol`.
+
+        >>> algo = LDA().setTopicDistributionCol("topicDistributionCol")
+        >>> algo.getTopicDistributionCol()
+        'topicDistributionCol'
+        """
+        return self._set(topicDistributionCol=value)
 
     @since("2.0.0")
     def isDistributed(self):
@@ -1045,6 +1246,11 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     >>> df = spark.createDataFrame([[1, Vectors.dense([0.0, 1.0])],
     ...      [2, SparseVector(2, {0: 1.0})],], ["id", "features"])
     >>> lda = LDA(k=2, seed=1, optimizer="em")
+    >>> lda.setMaxIter(10)
+    LDA...
+    >>> lda.getMaxIter()
+    10
+    >>> lda.clear(lda.maxIter)
     >>> model = lda.fit(df)
     >>> model.getTopicDistributionCol()
     'topicDistribution'
@@ -1124,6 +1330,20 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    @since("2.0.0")
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
+    @since("2.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
 
     @since("2.0.0")
     def setK(self, value):
@@ -1235,6 +1455,20 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         False
         """
         return self._set(keepLastCheckpoint=value)
+
+    @since("2.0.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("2.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
 
 
 @inherit_doc
@@ -1391,6 +1625,20 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
         Sets the value of :py:attr:`dstCol`.
         """
         return self._set(dstCol=value)
+
+    @since("2.4.0")
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    @since("2.4.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
 
     @since("2.4.0")
     def assignClusters(self, dataset):

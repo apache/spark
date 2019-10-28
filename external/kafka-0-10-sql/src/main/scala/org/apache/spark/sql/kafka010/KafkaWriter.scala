@@ -24,7 +24,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.types.{BinaryType, MapType, StringType}
+import org.apache.spark.sql.types.{BinaryType, IntegerType, MapType, StringType}
 import org.apache.spark.util.Utils
 
 /**
@@ -41,6 +41,7 @@ private[kafka010] object KafkaWriter extends Logging {
   val KEY_ATTRIBUTE_NAME: String = "key"
   val VALUE_ATTRIBUTE_NAME: String = "value"
   val HEADERS_ATTRIBUTE_NAME: String = "headers"
+  val PARTITION_ATTRIBUTE_NAME: String = "partition"
 
   override def toString: String = "KafkaWriter"
 
@@ -85,6 +86,14 @@ private[kafka010] object KafkaWriter extends Logging {
       case _ =>
         throw new AnalysisException(s"$HEADERS_ATTRIBUTE_NAME attribute type " +
           s"must be a ${KafkaRecordToRowConverter.headersType.catalogString}")
+    }
+    schema.find(_.name == PARTITION_ATTRIBUTE_NAME).getOrElse(
+      Literal(null, IntegerType)
+    ).dataType match {
+      case IntegerType => // good
+      case _ =>
+        throw new AnalysisException(s"$PARTITION_ATTRIBUTE_NAME attribute type " +
+          s"must be an ${IntegerType.catalogString}")
     }
   }
 

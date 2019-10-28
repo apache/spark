@@ -300,7 +300,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         val e = intercept[ParseException] {
           sql(s"CACHE TABLE $db.cachedTable AS SELECT 1")
         }.getMessage
-        assert(e.contains("It is not allowed to add database prefix ") &&
+        assert(e.contains("It is not allowed to add catalog/namespace prefix ") &&
           e.contains("to the table name in CACHE TABLE AS SELECT"))
       }
     }

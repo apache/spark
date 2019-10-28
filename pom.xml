@@ -136,10 +136,10 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.3.0</kafka.version>
+    <kafka.version>2.3.1</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.6</orc.version>
+    <orc.version>1.5.7</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
@@ -148,7 +148,7 @@
     <chill.version>0.9.3</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
-    <codahale.metrics.version>3.1.5</codahale.metrics.version>
+    <codahale.metrics.version>3.2.6</codahale.metrics.version>
     <avro.version>1.8.2</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <aws.kinesis.client.version>1.8.10</aws.kinesis.client.version>
@@ -2241,7 +2241,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.2.4</version>
+          <version>4.2.0</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
