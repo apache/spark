@@ -374,8 +374,8 @@ object FileStreamSource {
       require(baseArchiveFileSystem.isDefined == baseArchivePath.isDefined)
 
       baseArchiveFileSystem.foreach { fs =>
-        require(fileSystem.getUri == fs.getUri, "Base archive path is located to the different" +
-          s" filesystem with source, which is not supported. source path: $sourcePath" +
+        require(fileSystem.getUri == fs.getUri, "Base archive path is located on a different " +
+          s"file system than the source files. source path: $sourcePath" +
           s" / base archive path: ${baseArchivePath.get}")
       }
 
