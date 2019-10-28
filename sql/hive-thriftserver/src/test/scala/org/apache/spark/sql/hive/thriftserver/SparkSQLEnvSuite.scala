@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import test.custom.listener.{DummyQueryExecutionListener, DummyStreamingQueryListener}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils.{HIVE_METASTORE_JARS, HIVE_METASTORE_VERSION}
 import org.apache.spark.sql.hive.test.TestHiveContext
-import org.apache.spark.sql.hive.thriftserver.__root__.test.custom.listener.{DummyQueryExecutionListener, DummyStreamingQueryListener}
 import org.apache.spark.sql.internal.StaticSQLConf.{QUERY_EXECUTION_LISTENERS, STREAMING_QUERY_LISTENERS, WAREHOUSE_PATH}
 
 class SparkSQLEnvSuite extends SparkFunSuite {
@@ -39,6 +41,13 @@ class SparkSQLEnvSuite extends SparkFunSuite {
 
       try {
         SparkSQLEnv.init()
+
+        val session = SparkSession.getActiveSession
+        assert(session.isDefined)
+        assert(session.get.listenerManager.listListeners()
+          .exists(_.isInstanceOf[DummyQueryExecutionListener]))
+        assert(session.get.streams.listListeners()
+          .exists(_.isInstanceOf[DummyStreamingQueryListener]))
       } finally {
         SparkSQLEnv.stop()
       }
@@ -63,29 +72,5 @@ class SparkSQLEnvSuite extends SparkFunSuite {
     } finally {
       setProperties(oldValues)
     }
-  }
-}
-
-/**
- * These classes in this package are intentionally placed to the outer package of spark,
- * because IsolatedClientLoader leverages Spark classloader for shared classess including
- * spark package, and the test should fail if Spark initializes these listeners with
- * IsolatedClientLoader.
- */
-package __root__.test.custom.listener {
-
-  import org.apache.spark.sql.execution.QueryExecution
-  import org.apache.spark.sql.streaming.StreamingQueryListener
-  import org.apache.spark.sql.util.QueryExecutionListener
-
-  class DummyQueryExecutionListener extends QueryExecutionListener {
-    override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {}
-    override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
-  }
-
-  class DummyStreamingQueryListener extends StreamingQueryListener {
-    override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {}
-    override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {}
-    override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
   }
 }
