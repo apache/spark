@@ -33,7 +33,7 @@ package org.apache.spark.resource
  * This api is currently private until the rest of the pieces are in place and then it
  * will become public.
  */
-class ExecutorResourceRequest(
+private[spark] class ExecutorResourceRequest(
     val resourceName: String,
     val amount: Int,
     val units: String = "",
