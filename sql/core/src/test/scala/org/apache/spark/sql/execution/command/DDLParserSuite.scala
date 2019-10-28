@@ -1365,29 +1365,4 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(source4.table == "table2")
     assert(location4 == Some("/spark/warehouse"))
   }
-
-  test("load data") {
-    val v1 = "LOAD DATA INPATH 'path' INTO TABLE table1"
-    val (table, path, isLocal, isOverwrite, partition) = parser.parsePlan(v1).collect {
-      case LoadDataCommand(t, path, l, o, partition) => (t, path, l, o, partition)
-    }.head
-    assert(table.database.isEmpty)
-    assert(table.table == "table1")
-    assert(path == "path")
-    assert(!isLocal)
-    assert(!isOverwrite)
-    assert(partition.isEmpty)
-
-    val v2 = "LOAD DATA LOCAL INPATH 'path' OVERWRITE INTO TABLE table1 PARTITION(c='1', d='2')"
-    val (table2, path2, isLocal2, isOverwrite2, partition2) = parser.parsePlan(v2).collect {
-      case LoadDataCommand(t, path, l, o, partition) => (t, path, l, o, partition)
-    }.head
-    assert(table2.database.isEmpty)
-    assert(table2.table == "table1")
-    assert(path2 == "path")
-    assert(isLocal2)
-    assert(isOverwrite2)
-    assert(partition2.nonEmpty)
-    assert(partition2.get.apply("c") == "1" && partition2.get.apply("d") == "2")
-  }
 }
