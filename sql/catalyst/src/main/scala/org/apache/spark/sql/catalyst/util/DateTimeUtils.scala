@@ -573,11 +573,11 @@ object DateTimeUtils {
    * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
    */
   def timestampAddInterval(
-    start: SQLTimestamp,
-    months: Int,
-    days: Int,
-    microseconds: Long,
-    zoneId: ZoneId): SQLTimestamp = {
+      start: SQLTimestamp,
+      months: Int,
+      days: Int,
+      microseconds: Long,
+      zoneId: ZoneId): SQLTimestamp = {
     val resultTimestamp = microsToInstant(start)
       .atZone(zoneId)
       .plusMonths(months)
