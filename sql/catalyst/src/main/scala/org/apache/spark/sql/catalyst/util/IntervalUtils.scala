@@ -293,28 +293,25 @@ object IntervalUtils {
    * Parse second_nano string in ss.nnnnnnnnn format to microseconds
    */
   private def parseSecondNano(secondNano: String): Long = {
-    val parts = secondNano.split("\\.")
-    if (parts.length == 1) {
+    def parseSeconds(secondsStr: String): Long = {
       toLongWithRange(
         "second",
-        parts(0),
+        secondsStr,
         Long.MinValue / DateTimeUtils.MICROS_PER_SECOND,
         Long.MaxValue / DateTimeUtils.MICROS_PER_SECOND) * DateTimeUtils.MICROS_PER_SECOND
-    } else if (parts.length == 2) {
-      val seconds = if (parts(0) == "") {
-        0L
-      } else {
-        toLongWithRange(
-          "second",
-          parts(0),
-          Long.MinValue / DateTimeUtils.MICROS_PER_SECOND,
-          Long.MaxValue / DateTimeUtils.MICROS_PER_SECOND)
-      }
-      val nanos = toLongWithRange("nanosecond", parts(1), 0L, 999999999L)
-      seconds * DateTimeUtils.MICROS_PER_SECOND + nanos / 1000L
-    } else {
-      throw new IllegalArgumentException(
-        "Interval string does not match second-nano format of ss.nnnnnnnnn")
+    }
+    def parseNanos(nanosStr: String): Long = {
+      toLongWithRange("nanosecond", nanosStr, 0L, 999999999L) / DateTimeUtils.NANOS_PER_MICROS
+    }
+
+    secondNano.split("\\.") match {
+      case Array(secondsStr) => parseSeconds(secondsStr)
+      case Array("", nanosStr) => parseNanos(nanosStr)
+      case Array(secondsStr, nanosStr) =>
+        Math.addExact(parseSeconds(secondsStr), parseNanos(nanosStr))
+      case _ =>
+        throw new IllegalArgumentException(
+          "Interval string does not match second-nano format of ss.nnnnnnnnn")
     }
   }
 }
