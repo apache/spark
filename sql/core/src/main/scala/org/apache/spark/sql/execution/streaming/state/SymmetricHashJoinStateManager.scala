@@ -127,8 +127,8 @@ class SymmetricHashJoinStateManager(
    * or the underlying store being interleaved.
    */
   def removeByKeyCondition(removalCondition: UnsafeRow => Boolean)
-      : Iterator[KeyToValueAndMatched] = {
-    new NextIterator[KeyToValueAndMatched] {
+      : Iterator[KeyToValuePair] = {
+    new NextIterator[KeyToValuePair] {
 
       private val allKeyToNumValues = keyToNumValues.iterator
 
@@ -137,15 +137,15 @@ class SymmetricHashJoinStateManager(
 
       private def currentKey = currentKeyToNumValue.key
 
-      private val reusedRet = new KeyToValueAndMatched()
+      private val reusedRet = new KeyToValuePair()
 
-      private def getAndRemoveValue(): KeyToValueAndMatched = {
+      private def getAndRemoveValue(): KeyToValuePair = {
         val keyWithIndexAndValue = currentValues.next()
         keyWithIndexToValue.remove(currentKey, keyWithIndexAndValue.valueIndex)
         reusedRet.withNew(currentKey, keyWithIndexAndValue.value, keyWithIndexAndValue.matched)
       }
 
-      override def getNext(): KeyToValueAndMatched = {
+      override def getNext(): KeyToValuePair = {
         // If there are more values for the current key, remove and return the next one.
         if (currentValues != null && currentValues.hasNext) {
           return getAndRemoveValue()
@@ -185,11 +185,11 @@ class SymmetricHashJoinStateManager(
    * or the underlying store being interleaved.
    */
   def removeByValueCondition(removalCondition: UnsafeRow => Boolean)
-      : Iterator[KeyToValueAndMatched] = {
-    new NextIterator[KeyToValueAndMatched] {
+      : Iterator[KeyToValuePair] = {
+    new NextIterator[KeyToValuePair] {
 
       // Reuse this object to avoid creation+GC overhead.
-      private val reusedRet = new KeyToValueAndMatched()
+      private val reusedRet = new KeyToValuePair()
 
       private val allKeyToNumValues = keyToNumValues.iterator
 
@@ -249,7 +249,7 @@ class SymmetricHashJoinStateManager(
         return null
       }
 
-      override def getNext(): KeyToValueAndMatched = {
+      override def getNext(): KeyToValuePair = {
         val currentValue = findNextValueForIndex()
 
         // If there's no value, clean up and finish. There aren't any more available.
@@ -565,13 +565,13 @@ class SymmetricHashJoinStateManager(
     }
 
     def iterator: Iterator[KeyWithIndexAndValue] = {
-      val keyWithIndexAndValueWithMatched = new KeyWithIndexAndValue()
+      val keyWithIndexAndValue = new KeyWithIndexAndValue()
       stateStore.getRange(None, None).map { pair =>
         val (value, matched) = valueRowConverter.convertValue(pair.value)
-        keyWithIndexAndValueWithMatched.withNew(
+        keyWithIndexAndValue.withNew(
           keyRowGenerator(pair.key), pair.key.getLong(indexOrdinalInKeyWithIndexRow),
           value, matched)
-        keyWithIndexAndValueWithMatched
+        keyWithIndexAndValue
       }
     }
 
@@ -613,7 +613,7 @@ object SymmetricHashJoinStateManager {
    * Helper class for representing data key to (value, matched).
    * Designed for object reuse.
    */
-  case class KeyToValueAndMatched(
+  case class KeyToValuePair(
       var key: UnsafeRow = null,
       var value: UnsafeRow = null,
       var matched: Boolean = false) {
