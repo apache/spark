@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.adaptive.{QueryStageExec, ReusedQueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{LocalShuffleReaderExec, QueryStageExec, ReusedQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -64,10 +64,14 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       return plan
     }
 
-    val shuffleStages = plan.collect {
-      case stage: ShuffleQueryStageExec => stage
-      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => stage
+    def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
+      case _: LocalShuffleReaderExec => Nil
+      case stage: ShuffleQueryStageExec => Seq(stage)
+      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => Seq(stage)
+      case _ => plan.children.flatMap(collectShuffleStages)
     }
+
+    val shuffleStages = collectShuffleStages(plan)
     // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
     // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
     if (!shuffleStages.forall(_.plan.canChangeNumPartitions)) {
