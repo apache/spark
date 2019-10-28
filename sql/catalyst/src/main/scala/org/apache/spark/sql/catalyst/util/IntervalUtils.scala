@@ -125,7 +125,7 @@ object IntervalUtils {
   /**
    * Gets interval duration
    *
-   * @param cal - the interval to get duration
+   * @param interval - the interval to get duration
    * @param targetUnit - time units of the result
    * @param daysPerMonth - the number of days per one month. The default value is 31 days
    *                       per month. This value was taken as the default because it is used
@@ -135,18 +135,20 @@ object IntervalUtils {
    * @return duration in the specified time units
    */
   def getDuration(
-      cal: CalendarInterval,
+      interval: CalendarInterval,
       targetUnit: TimeUnit,
       daysPerMonth: Int = 31): Long = {
-    val monthsDuration = Math.multiplyExact(daysPerMonth * DateTimeUtils.MICROS_PER_DAY, cal.months)
-    val result = Math.addExact(cal.microseconds, monthsDuration)
+    val monthsDuration = Math.multiplyExact(
+      daysPerMonth * DateTimeUtils.MICROS_PER_DAY,
+      interval.months)
+    val result = Math.addExact(interval.microseconds, monthsDuration)
     targetUnit.convert(result, TimeUnit.MICROSECONDS)
   }
 
   /**
    * Checks the interval is negative
    *
-   * @param cal          - the checked interval
+   * @param interval          - the checked interval
    * @param daysPerMonth - the number of days per one month. The default value is 31 days
    *                       per month. This value was taken as the default because it is used
    *                       in Structured Streaming for watermark calculations. Having 31 days
@@ -154,7 +156,7 @@ object IntervalUtils {
    *                       the end of any month (February with 29 days or January with 31 days).
    * @return true if duration of the given interval is less than 0 otherwise false
    */
-  def isNegative(cal: CalendarInterval, daysPerMonth: Int = 31): Boolean = {
-    getDuration(cal, TimeUnit.MICROSECONDS, daysPerMonth) < 0
+  def isNegative(interval: CalendarInterval, daysPerMonth: Int = 31): Boolean = {
+    getDuration(interval, TimeUnit.MICROSECONDS, daysPerMonth) < 0
   }
 }
