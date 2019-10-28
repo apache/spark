@@ -19,9 +19,8 @@ package org.apache.spark.graph.api
 
 import scala.collection.JavaConverters._
 
-import org.slf4j.LoggerFactory
-
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.{BooleanType, StructType}
 
@@ -29,7 +28,7 @@ import org.apache.spark.sql.types.{BooleanType, StructType}
  * Contains constants used for convention based column naming.
  */
 @Evolving
-object CypherSession {
+object CypherSession extends Logging {
 
   /**
    * Naming convention for identifier columns, both node and relationship identifiers.
@@ -74,8 +73,7 @@ object CypherSession {
 
     val labelCount = labelColumns.size
     if (labelCount > 5) {
-      LoggerFactory.getLogger(CypherSession.getClass).warn(
-        s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node datasets.")
+      logWarning(s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node datasets.")
       if (labelCount > 10) {
         throw new IllegalArgumentException(
           s"Expected number of label columns to be less than or equal to 10, was $labelCount.")
