@@ -780,7 +780,7 @@ class JDBCSuite extends QueryTest
 
   test("Aggregated dialects") {
     val agg = new AggregatedDialect(List(new JdbcDialect {
-      override def dbTag: String = "h2"
+      override def dbTag: String = "h2:"
       override def getCatalystType(
           sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
         if (sqlType % 2 == 0) {
