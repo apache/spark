@@ -170,7 +170,7 @@ public class ExternalShuffleBlockResolver {
    */
   public ByteBuffer areExecutorsRegistered(String appId, String[] execIds) {
     byte[] result = new byte[execIds.length];
-    for (int i = 0; i< execIds.length; i++) {
+    for (int i = 0; i < execIds.length; i++) {
       if(executors.containsKey(new AppExecId(appId, execIds[i]))) {
         result[i] = 1;
       }
