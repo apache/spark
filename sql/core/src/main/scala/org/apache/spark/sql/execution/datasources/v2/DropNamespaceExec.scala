@@ -17,25 +17,31 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 
 /**
- * Physical plan node for creating a namespace.
+ * Physical plan node for dropping a namespace.
  */
 case class DropNamespaceExec(
     catalog: SupportsNamespaces,
     namespace: Seq[String],
     ifExists: Boolean,
     cascade: Boolean)
-    extends V2CommandExec {
+  extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-    // TODO: How to handle when cascade is true?
     val ns = namespace.toArray
     if (catalog.namespaceExists(ns)) {
-      catalog.dropNamespace(ns)
+      try {
+        catalog.dropNamespace(ns)
+      } catch {
+        case e: IllegalStateException if cascade =>
+          throw new SparkException(
+            "Cascade option for droping namespace is not supported in V2 catalog", e)
+      }
     } else if (!ifExists) {
       throw new NoSuchNamespaceException(ns)
     }

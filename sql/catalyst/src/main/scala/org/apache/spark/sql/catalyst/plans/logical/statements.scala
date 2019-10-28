@@ -297,7 +297,7 @@ object CreateNamespaceStatement {
 
 /**
  * A DROP NAMESPACE statement, as parsed from SQL.
-  */
+ */
 case class DropNamespaceStatement(
     namespace: Seq[String],
     ifExists: Boolean,
