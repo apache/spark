@@ -1045,6 +1045,33 @@ class DDLParserSuite extends AnalysisTest {
       RepairTableStatement(Seq("a", "b", "c")))
   }
 
+  test("LOAD DATA INTO table") {
+    comparePlans(
+      parsePlan("LOAD DATA INPATH 'filepath' INTO TABLE a.b.c"),
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", false, false, None))
+
+    comparePlans(
+      parsePlan("LOAD DATA LOCAL INPATH 'filepath' INTO TABLE a.b.c"),
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, false, None))
+
+    comparePlans(
+      parsePlan("LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c"),
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, true, None))
+
+    comparePlans(
+      parsePlan(
+        s"""
+           |LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c
+           |PARTITION(ds='2017-06-10')
+         """.stripMargin),
+      LoadDataStatement(
+        Seq("a", "b", "c"),
+        "filepath",
+        true,
+        true,
+        Some(Map("ds" -> "2017-06-10"))))
+  }
+
   test("SHOW CREATE table") {
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c"),
