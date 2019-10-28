@@ -63,3 +63,4 @@ public class JavaResourceProfileSuite {
     assertEquals(taskReq.resourceName(), GpuResource);
   }
 }
+

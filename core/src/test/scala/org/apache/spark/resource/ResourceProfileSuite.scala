@@ -158,3 +158,4 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(taskError.contains("The resource amount 0.7 must be either <= 0.5, or a whole number."))
   }
 }
+
