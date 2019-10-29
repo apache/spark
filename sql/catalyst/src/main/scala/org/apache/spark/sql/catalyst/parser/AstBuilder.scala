@@ -1801,7 +1801,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           Literal(DatatypeConverter.parseHexBinary(padding + value))
         case "INTEGER" =>
           val i = try {
-            Integer.parseInt(value)
+            value.toInt
           } catch {
             case e: NumberFormatException =>
               val ex = new ParseException(s"Cannot parse the Int value: $value, $e", ctx)
