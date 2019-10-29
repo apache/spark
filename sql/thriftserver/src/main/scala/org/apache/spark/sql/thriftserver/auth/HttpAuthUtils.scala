@@ -159,11 +159,9 @@ object HttpAuthUtils {
   class HttpKerberosClientAction(val serverPrincipal: String,
                                  val serverHttpUrl: String)
     extends PrivilegedExceptionAction[String] {
-    base64codec = new Base64(0)
-    httpContext = new BasicHttpContext
+    final private val base64codec: Base64 = new Base64(0)
+    final private val httpContext: HttpContext = new BasicHttpContext
     httpContext.setAttribute(HttpKerberosClientAction.SERVER_HTTP_URL, serverHttpUrl)
-    final private var base64codec: Base64 = null
-    final private var httpContext: HttpContext = null
 
     @throws[Exception]
     override def run: String = { // This Oid for Kerberos GSS-API mechanism.

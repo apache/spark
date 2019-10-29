@@ -19,6 +19,7 @@ package org.apache.spark.sql.thriftserver.cli.operation
 
 import java.sql.SQLException
 import java.util
+import java.util.{List => JList, Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -74,7 +75,7 @@ private[thriftserver] class OperationManager
 
   def newExecuteStatementOperation(parentSession: ThriftServerSession,
                                    statement: String,
-                                   confOverlay: Map[String, String],
+                                   confOverlay: JMap[String, String],
                                    async: Boolean): SparkExecuteStatementOperation = synchronized {
     val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
     require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
@@ -127,12 +128,12 @@ private[thriftserver] class OperationManager
                             catalogName: String,
                             schemaName: String,
                             tableName: String,
-                            tableTypes: List[String]): SparkMetadataOperation = synchronized {
+                            tableTypes: JList[String]): SparkMetadataOperation = synchronized {
     val sqlContext = sessionToContexts.get(session.getSessionHandle)
     require(sqlContext != null, s"Session handle: ${session.getSessionHandle} has not been" +
       " initialized or had already closed.")
     val operation = new SparkGetTablesOperation(sqlContext, session,
-      catalogName, schemaName, tableName, tableTypes.asJava)
+      catalogName, schemaName, tableName, tableTypes)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetTablesOperation with session=$session.")
     operation

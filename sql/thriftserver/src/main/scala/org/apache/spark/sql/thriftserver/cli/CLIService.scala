@@ -18,6 +18,7 @@
 package org.apache.spark.sql.thriftserver.cli
 
 import java.io.IOException
+import java.util.{List => JList, Map => JMap}
 import java.util.concurrent.{CancellationException, ExecutionException, TimeoutException, TimeUnit}
 import javax.security.auth.login.LoginException
 
@@ -102,7 +103,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
                   username: String,
                   password: String,
                   ipAddress: String,
-                  configuration: Predef.Map[String, String]): SessionHandle = {
+                  configuration: JMap[String, String]): SessionHandle = {
     val sessionHandle =
       sessionManager.openSession(protocol,
         username,
@@ -119,7 +120,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
                                    username: String,
                                    password: String,
                                    ipAddress: String,
-                                   configuration: Predef.Map[String, String],
+                                   configuration: JMap[String, String],
                                    delegationToken: String): SessionHandle = {
     val sessionHandle =
       sessionManager.openSession(protocol,
@@ -148,7 +149,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
 
   override def executeStatement(sessionHandle: SessionHandle,
                                 statement: String,
-                                confOverlay: Predef.Map[String, String]): OperationHandle = {
+                                confOverlay: JMap[String, String]): OperationHandle = {
     val session = sessionManager.getSession(sessionHandle)
     val opHandle: OperationHandle = session.executeStatement(statement, confOverlay)
     logDebug(sessionHandle + ": executeStatement()")
@@ -157,7 +158,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
 
   override def executeStatementAsync(sessionHandle: SessionHandle,
                                      statement: String,
-                                     confOverlay: Predef.Map[String, String]): OperationHandle = {
+                                     confOverlay: JMap[String, String]): OperationHandle = {
     val opHandle: OperationHandle =
       sessionManager.getSession(sessionHandle)
         .executeStatementAsync(statement, confOverlay)
@@ -172,7 +173,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
   }
 
   override def getCatalogs(sessionHandle: SessionHandle): OperationHandle = {
-    val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).getTypeInfo
+    val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).getCatalogs
     logDebug(sessionHandle + ": getTypeInfo()")
     opHandle
   }
@@ -192,7 +193,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
                          catalogName: String,
                          schemaName: String,
                          tableName: String,
-                         tableTypes: List[String]): OperationHandle = {
+                         tableTypes: JList[String]): OperationHandle = {
     val opHandle: OperationHandle =
       sessionManager.getSession(sessionHandle)
         .getTables(catalogName, schemaName, tableName, tableTypes)

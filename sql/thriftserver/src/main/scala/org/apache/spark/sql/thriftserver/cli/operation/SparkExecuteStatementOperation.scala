@@ -42,7 +42,7 @@ import org.apache.spark.util.{Utils => SparkUtils}
 private[thriftserver] class SparkExecuteStatementOperation(
     parentSession: ThriftServerSession,
     statement: String,
-    confOverlay: Map[String, String],
+    confOverlay: JMap[String, String],
     runInBackground: Boolean = true)(sqlContext: SQLContext,
                                      sessionToActivePool: JMap[SessionHandle, String])
   extends Operation(parentSession, EXECUTE_STATEMENT, runInBackground)

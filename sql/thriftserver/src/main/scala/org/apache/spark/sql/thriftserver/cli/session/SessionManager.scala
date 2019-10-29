@@ -18,7 +18,7 @@
 package org.apache.spark.sql.thriftserver.cli.session
 
 import java.io.{File, IOException}
-import java.util.Date
+import java.util.{Date, List => JList, Map => JMap}
 import java.util.concurrent._
 
 import org.apache.commons.io.FileUtils
@@ -205,7 +205,7 @@ private[thriftserver] class SessionManager(hiveServer2: SparkThriftServer, sqlCo
                   username: String,
                   password: String,
                   ipAddress: String,
-                  sessionConf: Map[String, String]): SessionHandle =
+                  sessionConf: JMap[String, String]): SessionHandle =
     openSession(protocol, username, password, ipAddress, sessionConf, false, null)
 
   @throws[SparkThriftServerSQLException]
@@ -213,7 +213,7 @@ private[thriftserver] class SessionManager(hiveServer2: SparkThriftServer, sqlCo
                   username: String,
                   password: String,
                   ipAddress: String,
-                  sessionConf: Map[String, String],
+                  sessionConf: JMap[String, String],
                   withImpersonation: Boolean,
                   delegationToken: String): SessionHandle = {
     var session: ThriftServerSession = null
@@ -260,8 +260,8 @@ private[thriftserver] class SessionManager(hiveServer2: SparkThriftServer, sqlCo
       sqlContext.newSession()
     }
     ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
-    if (sessionConf != null && sessionConf.contains("use:database")) {
-      ctx.sql(s"use ${sessionConf.get("use:database").get}")
+    if (sessionConf != null && sessionConf.containsKey("use:database")) {
+      ctx.sql(s"use ${sessionConf.get("use:database")}")
     }
     operationManager.sessionToContexts.put(sessionHandle, ctx)
     sessionHandle

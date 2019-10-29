@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.thriftserver.cli.session
 
+import java.util.{List => JList, Map => JMap}
+
 import org.apache.spark.sql.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.thriftserver.cli._
 import org.apache.spark.sql.types.StructType
@@ -24,7 +26,7 @@ import org.apache.spark.sql.types.StructType
 private[thriftserver] trait ThriftServerSession extends ThriftServerSessionBase {
 
   @throws[SparkThriftServerSQLException]
-  def open(sessionConfMap: Map[String, String]): Unit
+  def open(sessionConfMap: JMap[String, String]): Unit
 
   /**
    * getInfo operation handler
@@ -46,11 +48,11 @@ private[thriftserver] trait ThriftServerSession extends ThriftServerSessionBase 
    */
   @throws[SparkThriftServerSQLException]
   def executeStatement(statement: String,
-                       confOverlay: Map[String, String]): OperationHandle
+                       confOverlay: JMap[String, String]): OperationHandle
 
   @throws[SparkThriftServerSQLException]
   def executeStatementAsync(statement: String,
-                            confOverlay: Map[String, String]): OperationHandle
+                            confOverlay: JMap[String, String]): OperationHandle
 
   /**
    * getTypeInfo operation handler
@@ -96,10 +98,10 @@ private[thriftserver] trait ThriftServerSession extends ThriftServerSessionBase 
   def getTables(catalogName: String,
                 schemaName: String,
                 tableName: String,
-                tableTypes: List[String]): OperationHandle
+                tableTypes: JList[String]): OperationHandle
 
   /**
-   * getTableTypes operation handler
+   * getTableTypes operListation handler
    *
    * @return
    * @throws SparkThriftServerSQLException

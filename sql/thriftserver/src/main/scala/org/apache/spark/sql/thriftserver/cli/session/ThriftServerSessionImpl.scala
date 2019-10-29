@@ -19,6 +19,7 @@ package org.apache.spark.sql.thriftserver.cli.session
 
 import java.io._
 import java.util
+import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 
@@ -56,20 +57,20 @@ private[thriftserver] class ThriftServerSessionImpl(
   private var _lastIdleTime: Long = 0L
 
   @throws[SparkThriftServerSQLException]
-  override def open(sessionConfMap: Map[String, String]): Unit = {
+  override def open(sessionConfMap: JMap[String, String]): Unit = {
     _sessionState = new SessionState(_hiveConf, username)
     _sessionState.setUserIpAddress(ipAddress)
     _sessionState.setIsHiveServerQuery(true)
     SessionState.start(_sessionState)
     if (sessionConfMap != null) {
-      configureSession(sessionConfMap.asJava)
+      configureSession(sessionConfMap)
     }
     _lastAccessTime = System.currentTimeMillis
     _lastIdleTime = _lastAccessTime
   }
 
   @throws[SparkThriftServerSQLException]
-  private def configureSession(sessionConfMap: util.Map[String, String]): Unit = {
+  private def configureSession(sessionConfMap: JMap[String, String]): Unit = {
     SessionState.setCurrentSessionState(_sessionState)
 
     sessionConfMap.entrySet().forEach(entry => {
@@ -189,18 +190,18 @@ private[thriftserver] class ThriftServerSessionImpl(
    * @throws SparkThriftServerSQLException
    */
   override def executeStatement(statement: String,
-                                confOverlay: Map[String, String]): OperationHandle = {
+                                confOverlay: JMap[String, String]): OperationHandle = {
     executeStatementInternal(statement, confOverlay, false)
   }
 
   override def executeStatementAsync(statement: String,
-                                     confOverlay: Map[String, String]): OperationHandle = {
+                                     confOverlay: JMap[String, String]): OperationHandle = {
     executeStatementInternal(statement, confOverlay, true)
   }
 
   @throws[SparkThriftServerSQLException]
   private def executeStatementInternal(statement: String,
-                                       confOverlay: Map[String, String],
+                                       confOverlay: JMap[String, String],
                                        runAsync: Boolean): OperationHandle = {
     acquire(true)
     val operationManager = getOperationManager
@@ -318,7 +319,7 @@ private[thriftserver] class ThriftServerSessionImpl(
   override def getTables(catalogName: String,
                          schemaName: String,
                          tableName: String,
-                         tableTypes: List[String]): OperationHandle = {
+                         tableTypes: JList[String]): OperationHandle = {
     acquire(true)
     val operationManager = getOperationManager
     val operation =

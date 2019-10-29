@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.thriftserver.cli
 
+import java.util.{List => JList, Map => JMap}
+
 import org.apache.spark.sql.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.thriftserver.cli.thrift._
 import org.apache.spark.sql.types.StructType
@@ -29,14 +31,14 @@ private[thriftserver] trait ICLIService {
                   username: String,
                   password: String,
                   ipAddress: String,
-                  configuration: Map[String, String]): SessionHandle
+                  configuration: JMap[String, String]): SessionHandle
 
   @throws[SparkThriftServerSQLException]
   def openSessionWithImpersonation(protocol: TProtocolVersion,
                                    username: String,
                                    password: String,
                                    ipAddress: String,
-                                   configuration: Map[String, String],
+                                   configuration: JMap[String, String],
                                    delegationToken: String): SessionHandle
 
   @throws[SparkThriftServerSQLException]
@@ -49,12 +51,12 @@ private[thriftserver] trait ICLIService {
   @throws[SparkThriftServerSQLException]
   def executeStatement(sessionHandle: SessionHandle,
                        statement: String,
-                       confOverlay: Map[String, String]): OperationHandle
+                       confOverlay: JMap[String, String]): OperationHandle
 
   @throws[SparkThriftServerSQLException]
   def executeStatementAsync(sessionHandle: SessionHandle,
                             statement: String,
-                            confOverlay: Map[String, String]): OperationHandle
+                            confOverlay: JMap[String, String]): OperationHandle
 
   @throws[SparkThriftServerSQLException]
   def getTypeInfo(sessionHandle: SessionHandle): OperationHandle
@@ -72,7 +74,7 @@ private[thriftserver] trait ICLIService {
                 catalogName: String,
                 schemaName: String,
                 tableName: String,
-                tableTypes: List[String]): OperationHandle
+                tableTypes: JList[String]): OperationHandle
 
   @throws[SparkThriftServerSQLException]
   def getTableTypes(sessionHandle: SessionHandle): OperationHandle

@@ -383,14 +383,14 @@ private[thriftserver] abstract class ThriftCLIService(cliService: CLIService, se
         userName,
         req.getPassword,
         ipAddress,
-        req.getConfiguration.asScala.toMap,
+        req.getConfiguration,
         delegationTokenStr)
     } else sessionHandle = cliService.openSession(
       protocol,
       userName,
       req.getPassword,
       ipAddress,
-      req.getConfiguration.asScala.toMap)
+      req.getConfiguration)
     sessionHandle
   }
 
@@ -476,9 +476,9 @@ private[thriftserver] abstract class ThriftCLIService(cliService: CLIService, se
       val confOverlay: util.Map[String, String] = req.getConfOverlay
       val runAsync: Boolean = req.isRunAsync
       val operationHandle: OperationHandle = if (runAsync) {
-        cliService.executeStatementAsync(sessionHandle, statement, confOverlay.asScala.toMap)
+        cliService.executeStatementAsync(sessionHandle, statement, confOverlay)
       } else {
-        cliService.executeStatement(sessionHandle, statement, confOverlay.asScala.toMap)
+        cliService.executeStatement(sessionHandle, statement, confOverlay)
       }
       resp.setOperationHandle(operationHandle.toTOperationHandle)
       resp.setStatus(OK_STATUS)
@@ -549,7 +549,7 @@ private[thriftserver] abstract class ThriftCLIService(cliService: CLIService, se
           req.getCatalogName,
           req.getSchemaName,
           req.getTableName,
-          req.getTableTypes.asScala.toList)
+          req.getTableTypes)
       resp.setOperationHandle(opHandle.toTOperationHandle)
       resp.setStatus(OK_STATUS)
     } catch {

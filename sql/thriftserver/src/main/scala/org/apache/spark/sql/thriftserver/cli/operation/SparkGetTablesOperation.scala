@@ -23,7 +23,6 @@ import java.util.regex.Pattern
 import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 
 import org.apache.spark.internal.Logging
@@ -56,12 +55,26 @@ private[thriftserver] class SparkGetTablesOperation(
   extends SparkMetadataOperation(parentSession, GET_TABLES)
   with Logging {
 
-  RESULT_SET_SCHEMA = new StructType()
-    .add(StructField("TABLE_CAT", StringType))
-    .add(StructField("TABLE_SCHEM", StringType))
-    .add(StructField("TABLE_NAME", StringType))
-    .add(StructField("TABLE_TYPE", StringType))
-    .add(StructField("REMARKS", StringType))
+  if (HiveUtils.isHive23) {
+    RESULT_SET_SCHEMA = new StructType()
+      .add(StructField("TABLE_CAT", StringType))
+      .add(StructField("TABLE_SCHEM", StringType))
+      .add(StructField("TABLE_NAME", StringType))
+      .add(StructField("TABLE_TYPE", StringType))
+      .add(StructField("REMARKS", StringType))
+      .add(StructField("TYPE_CAT", StringType))
+      .add(StructField("TYPE_SCHEM", StringType))
+      .add(StructField("TYPE_NAME", StringType))
+      .add(StructField("SELF_REFERENCING_COL_NAME", StringType))
+      .add(StructField("REF_GENERATION", StringType))
+  } else {
+    RESULT_SET_SCHEMA = new StructType()
+      .add(StructField("TABLE_CAT", StringType))
+      .add(StructField("TABLE_SCHEM", StringType))
+      .add(StructField("TABLE_NAME", StringType))
+      .add(StructField("TABLE_TYPE", StringType))
+      .add(StructField("REMARKS", StringType))
+  }
 
   private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
 
@@ -74,7 +87,11 @@ private[thriftserver] class SparkGetTablesOperation(
     setStatementId(UUID.randomUUID().toString)
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
-    val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
+    val tableTypesStr = if (tableTypes == null) {
+      "null"
+    } else {
+      tableTypes.asScala.mkString(",")
+    }
     val logMsg = s"Listing tables '$cmdStr, tableTypes : $tableTypesStr, tableName : $tableName'"
     logInfo(s"$logMsg with $statementId")
     setState(RUNNING)

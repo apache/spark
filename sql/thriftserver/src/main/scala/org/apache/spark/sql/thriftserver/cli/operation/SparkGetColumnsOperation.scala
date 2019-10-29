@@ -184,7 +184,7 @@ private[thriftserver] class SparkGetColumnsOperation(
           dbName, // TABLE_SCHEM
           tableName, // TABLE_NAME
           column.name, // COLUMN_NAME
-          Type.getType(column.dataType.sql).getName, // DATA_TYPE
+          Type.getType(column.dataType.sql).toJavaSQLType, // DATA_TYPE
           column.dataType.sql, // TYPE_NAME
           null, // COLUMN_SIZE
           null, // BUFFER_LENGTH, unused
