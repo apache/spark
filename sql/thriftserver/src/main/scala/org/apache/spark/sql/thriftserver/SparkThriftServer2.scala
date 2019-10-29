@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.thriftserver
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -28,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.thriftserver.ui.ThriftServerTab
@@ -43,6 +45,16 @@ private[thriftserver] object SparkThriftServer2 extends Logging {
   var uiTab: Option[ThriftServerTab] = None
   var listener: SparkThriftServerListener = _
 
+  def hiveConfForExecution(): HiveConf = {
+    val extraConfig = HiveUtils.newTemporaryConfiguration(true)
+    val hiveConf: HiveConf = new HiveConf()
+    (SparkSQLEnv.sparkContext.hadoopConfiguration
+      .iterator().asScala.map(kv => kv.getKey -> kv.getValue)
+      ++ SparkSQLEnv.sparkContext.conf.getAll.toMap ++ extraConfig).toMap
+      .foreach { case (k, v) => hiveConf.set(k, v) }
+    hiveConf
+  }
+
   /**
    * :: DeveloperApi ::
    * Starts a new thrift server with the given context.
@@ -51,7 +63,7 @@ private[thriftserver] object SparkThriftServer2 extends Logging {
   def startWithContext(sqlContext: SQLContext): SparkThriftServer = {
     val server = new SparkThriftServer(sqlContext)
 
-    server.init(new HiveConf())
+    server.init(hiveConfForExecution())
     server.start()
     listener = new SparkThriftServerListener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
@@ -85,7 +97,7 @@ private[thriftserver] object SparkThriftServer2 extends Logging {
 
     try {
       val server = new SparkThriftServer(SparkSQLEnv.sqlContext)
-      server.init(new HiveConf())
+      server.init(hiveConfForExecution())
       server.start()
       logInfo("HiveThriftServer2 started")
       listener = new SparkThriftServerListener(server, SparkSQLEnv.sqlContext.conf)
