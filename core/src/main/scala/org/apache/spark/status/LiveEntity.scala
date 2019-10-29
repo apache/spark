@@ -61,6 +61,7 @@ private[spark] abstract class LiveEntity {
 private class LiveJob(
     val jobId: Int,
     name: String,
+    description: Option[String],
     submissionTime: Option[Date],
     val stageIds: Seq[Int],
     jobGroup: Option[String],
@@ -90,7 +91,7 @@ private class LiveJob(
     val info = new v1.JobData(
       jobId,
       name,
-      None, // description is always None?
+      description,
       submissionTime,
       completionTime,
       stageIds,

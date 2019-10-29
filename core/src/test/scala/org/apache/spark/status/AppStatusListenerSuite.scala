@@ -154,6 +154,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       new StageInfo(2, 0, "stage2", 4, Nil, Seq(1), "details2"))
 
     val jobProps = new Properties()
+    jobProps.setProperty(SparkContext.SPARK_JOB_DESCRIPTION, "jobDescription")
     jobProps.setProperty(SparkContext.SPARK_JOB_GROUP_ID, "jobGroup")
     jobProps.setProperty("spark.scheduler.pool", "schedPool")
 
@@ -162,7 +163,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     check[JobDataWrapper](1) { job =>
       assert(job.info.jobId === 1)
       assert(job.info.name === stages.last.name)
-      assert(job.info.description === None)
+      assert(job.info.description === Some("jobDescription"))
       assert(job.info.status === JobExecutionStatus.RUNNING)
       assert(job.info.submissionTime === Some(new Date(time)))
       assert(job.info.jobGroup === Some("jobGroup"))
