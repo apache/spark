@@ -23,39 +23,32 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, EnsureRequirements, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 
-case class OptimizeLocalShuffleReader(
-    conf: SQLConf,
-    var parent: Option[SparkPlan] = None) extends Rule[SparkPlan] {
-
-  def canUseLocalShuffleReader(plan: SparkPlan): Boolean = {
-    ShuffleQueryStageExec.isShuffleQueryStageExec(plan)
-  }
+case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED)) {
       return plan
     }
-    // In order to choose the best optimal plan after applied local reader rule.
-    // When `BroadcastExchangeExec` + `ShuffleQueryStageExec` occurs,
-    // we also make the shuffle reader to local reader.
-    val newPlan = if (canUseLocalShuffleReader(plan) &&
-      parent.nonEmpty && parent.get.isInstanceOf[BroadcastExchangeExec]) {
-      LocalShuffleReaderExec(plan.asInstanceOf[QueryStageExec])
-    } else plan
 
-    val optimizedPlan = newPlan.transformDown {
-      case join: BroadcastHashJoinExec =>
-        val optimizedRightPlan = if (canUseLocalShuffleReader(join.right)) {
-          LocalShuffleReaderExec(join.right.asInstanceOf[QueryStageExec])
-        } else join.right
-        val optimizedLeftPlan = if (canUseLocalShuffleReader(join.left)) {
-          LocalShuffleReaderExec(join.left.asInstanceOf[QueryStageExec])
-        } else join.left
-        join.copy(left = optimizedLeftPlan, right = optimizedRightPlan)
+    def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
+      case _: LocalShuffleReaderExec => Nil
+      case stage: ShuffleQueryStageExec => Seq(stage)
+      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => Seq(stage)
+      case _ => plan.children.flatMap(collectShuffleStages)
+    }
+    val shuffleStages = collectShuffleStages(plan)
+
+    val optimizedPlan = if (shuffleStages.isEmpty ||
+      !shuffleStages.forall(_.plan.canChangeNumPartitions)) {
+      plan
+    } else {
+      plan.transformUp {
+        case stage: QueryStageExec if (ShuffleQueryStageExec.isShuffleQueryStageExec(stage)) =>
+          LocalShuffleReaderExec(stage)
+      }
     }
 
     def numExchanges(plan: SparkPlan): Int = {
