@@ -549,14 +549,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(parsed2, expected2)
   }
 
-  test("alter table: recover partitions") {
-    val sql = "ALTER TABLE table_name RECOVER PARTITIONS"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRecoverPartitionsCommand(
-      TableIdentifier("table_name", None))
-    comparePlans(parsed, expected)
-  }
-
   test("alter view: add partition (not supported)") {
     assertUnsupported(
       """

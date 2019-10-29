@@ -1169,6 +1169,12 @@ class DDLParserSuite extends AnalysisTest {
       RefreshTableStatement(Seq("a", "b", "c")))
   }
 
+  test("alter table: recover partitions") {
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c RECOVER PARTITIONS"),
+      AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],

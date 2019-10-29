@@ -338,6 +338,12 @@ class ResolveSessionCatalog(
       ShowPartitionsCommand(
         v1TableName.asTableIdentifier,
         partitionSpec)
+
+    case AlterTableRecoverPartitionsStatement(tableName) =>
+      val v1TableName = parseV1Table(tableName, "ALTER TABLE RECOVER PARTITIONS")
+      AlterTableRecoverPartitionsCommand(
+        v1TableName.asTableIdentifier,
+        "ALTER TABLE RECOVER PARTITIONS")
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
