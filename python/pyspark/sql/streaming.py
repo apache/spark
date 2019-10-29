@@ -1062,7 +1062,7 @@ class DataStreamWriter(object):
         >>> def func(batch_df, batch_id):
         ...     batch_df.collect()
         ...
-        >>> writer = sdf.writeStream.foreach(func)
+        >>> writer = sdf.writeStream.foreachBatch(func)
         """
 
         from pyspark.java_gateway import ensure_callback_server_started
