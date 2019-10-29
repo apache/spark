@@ -1808,7 +1808,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(i)
+          Literal(i, IntegerType)
         case other =>
           throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
       }
