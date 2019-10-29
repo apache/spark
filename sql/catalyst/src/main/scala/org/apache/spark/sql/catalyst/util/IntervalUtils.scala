@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
