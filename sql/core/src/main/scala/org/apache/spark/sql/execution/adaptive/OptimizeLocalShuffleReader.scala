@@ -43,6 +43,8 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
 
     val optimizedPlan = if (shuffleStages.isEmpty ||
       !shuffleStages.forall(_.plan.canChangeNumPartitions)) {
+      // For the Exchange introduced by repartition,
+      // don't apply this rule to avoid additional shuffle introduced for the parent stage.
       plan
     } else {
       plan.transformUp {
