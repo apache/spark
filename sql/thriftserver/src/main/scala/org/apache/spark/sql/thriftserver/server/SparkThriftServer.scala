@@ -154,11 +154,7 @@ object SparkThriftServer extends Logging {
     try {
       val oproc = new ServerOptionsProcessor("hiveserver2")
       val oprocResponse = oproc.parse(args)
-      // NOTE: It is critical to do this here so that log4j is reinitialized
-      // before any of the other core hive classes are loaded
-      val initLog4jMessage = LogUtils.initHiveLog4j
       val classname = classOf[SparkThriftServer].getSimpleName
-      logDebug(initLog4jMessage)
       logInfo(toStartupShutdownString("STARTUP_MSG: ",
         Array[String]("Starting " + classname,
           "  host = " + HiveStringUtils.getHostname,
