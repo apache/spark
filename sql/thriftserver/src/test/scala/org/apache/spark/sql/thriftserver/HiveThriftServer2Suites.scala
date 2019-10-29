@@ -34,7 +34,6 @@ import scala.util.{Random, Try}
 import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
-import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
