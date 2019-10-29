@@ -176,6 +176,17 @@ class ResolveHintsSuite extends AnalysisTest {
       RepartitionByExpression(
         Seq(AttributeReference("a", IntegerType)()), testRelation, conf.numShufflePartitions))
 
+    val e = intercept[IllegalArgumentException] {
+      checkAnalysis(
+        UnresolvedHint("REPARTITION",
+          Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
+          table("TaBlE")),
+        RepartitionByExpression(
+          Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10)
+      )
+    }
+    e.getMessage.contains("For range partitioning use REPARTITION_BY_RANGE instead")
+
     checkAnalysis(
       UnresolvedHint(
         "REPARTITION_BY_RANGE", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),

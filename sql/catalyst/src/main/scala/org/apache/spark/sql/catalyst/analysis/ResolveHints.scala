@@ -152,6 +152,11 @@ object ResolveHints {
 
       def createRepartitionByExpression(
           numPartitions: Int, partitionExprs: Seq[Any]): RepartitionByExpression = {
+        val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
+        if (sortOrders.nonEmpty) throw new IllegalArgumentException(
+          s"""Invalid partitionExprs specified: $sortOrders
+             |For range partitioning use REPARTITION_BY_RANGE instead.
+           """.stripMargin)
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
           throw new AnalysisException(s"$hintName Hint parameter should include columns, but " +
