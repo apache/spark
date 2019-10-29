@@ -12,20 +12,22 @@ CREATE TABLE empsalary (
     enroll_date date
 ) USING parquet;
 
-INSERT INTO empsalary VALUES ('develop', 10, 5200, cast ('2007-08-01' as date));
-INSERT INTO empsalary VALUES ('sales', 1, 5000, cast ('2006-10-01' as date));
-INSERT INTO empsalary VALUES ('personnel', 5, 3500, cast ('2007-12-10' as date));
-INSERT INTO empsalary VALUES ('sales', 4, 4800, cast ('2007-08-08' as date));
-INSERT INTO empsalary VALUES ('personnel', 2, 3900, cast ('2006-12-23' as date));
-INSERT INTO empsalary VALUES ('develop', 7, 4200, cast ('2008-01-01' as date));
-INSERT INTO empsalary VALUES ('develop', 9, 4500, cast ('2008-01-01' as date));
-INSERT INTO empsalary VALUES ('sales', 3, 4800, cast ('2007-08-01' as date));
-INSERT INTO empsalary VALUES ('develop', 8, 6000, cast ('2006-10-01' as date));
-INSERT INTO empsalary VALUES ('develop', 11, 5200, cast ('2007-08-15' as date));
+INSERT INTO empsalary VALUES
+  ('develop', 10, 5200, date '2007-08-01'),
+  ('sales', 1, 5000, date '2006-10-01'),
+  ('personnel', 5, 3500, date '2007-12-10'),
+  ('sales', 4, 4800, date '2007-08-08'),
+  ('personnel', 2, 3900, date '2006-12-23'),
+  ('develop', 7, 4200, date '2008-01-01'),
+  ('develop', 9, 4500, date '2008-01-01'),
+  ('sales', 3, 4800, date '2007-08-01'),
+  ('develop', 8, 6000, date '2006-10-01'),
+  ('develop', 11, 5200, date '2007-08-15');
 
 -- Test in_range for other datetime datatypes
 
 -- Spark only supports timestamp
+-- [SPARK-29636] Spark can't parse '11:00 BST' or '2000-10-19 10:23:54+01' signatures to timestamp
 create table datetimes (
     id int,
     f_time timestamp,
@@ -36,16 +38,17 @@ create table datetimes (
 ) using parquet;
 
 -- Spark cannot safely cast StringType to TimestampType
-insert into datetimes values (1, cast ('11:00' as timestamp), cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), cast ('2000-10-19 10:23:54+01' as timestamp), cast('2000-10-19 10:23:54' as timestamp));
-insert into datetimes values (2, cast ('12:00' as timestamp), cast ('12:00 BST' as timestamp), cast ('2 years' as timestamp), cast ('2001-10-19 10:23:54+01' as timestamp), cast ('2001-10-19 10:23:54' as timestamp));
-insert into datetimes values (3, cast ('13:00' as timestamp), cast ('13:00 BST' as timestamp), cast ('3 years' as timestamp), cast ('2001-10-19 10:23:54+01' as timestamp), cast ('2001-10-19 10:23:54' as timestamp));
-insert into datetimes values (4, cast ('14:00' as timestamp), cast ('14:00 BST' as timestamp), cast ('4 years' as timestamp), cast ('2002-10-19 10:23:54+01' as timestamp), cast ('2002-10-19 10:23:54' as timestamp));
-insert into datetimes values (5, cast ('15:00' as timestamp), cast ('15:00 BST' as timestamp), cast ('5 years' as timestamp), cast ('2003-10-19 10:23:54+01' as timestamp), cast ('2003-10-19 10:23:54' as timestamp));
-insert into datetimes values (6, cast ('15:00' as timestamp), cast ('15:00 BST' as timestamp), cast ('5 years' as timestamp), cast ('2004-10-19 10:23:54+01' as timestamp), cast ('2004-10-19 10:23:54' as timestamp));
-insert into datetimes values (7, cast ('17:00' as timestamp), cast ('17:00 BST' as timestamp), cast ('7 years' as timestamp), cast ('2005-10-19 10:23:54+01' as timestamp), cast ('2005-10-19 10:23:54' as timestamp));
-insert into datetimes values (8, cast ('18:00' as timestamp), cast ('18:00 BST' as timestamp), cast ('8 years' as timestamp), cast ('2006-10-19 10:23:54+01' as timestamp), cast ('2006-10-19 10:23:54' as timestamp));
-insert into datetimes values (9, cast ('19:00' as timestamp), cast ('19:00 BST' as timestamp), cast ('9 years' as timestamp), cast ('2007-10-19 10:23:54+01' as timestamp), cast ('2007-10-19 10:23:54' as timestamp));
-insert into datetimes values (10, cast ('20:00' as timestamp), cast ('20:00 BST' as timestamp), cast ('10 years' as timestamp), cast ('2008-10-19 10:23:54+01' as timestamp), cast ('2008-10-19 10:23:54' as timestamp));
+insert into datetimes values
+(1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), cast ('2000-10-19 10:23:54+01' as timestamp), timestamp '2000-10-19 10:23:54'),
+(2, timestamp '12:00', cast ('12:00 BST' as timestamp), cast ('2 years' as timestamp), cast ('2001-10-19 10:23:54+01' as timestamp), timestamp '2001-10-19 10:23:54'),
+(3, timestamp '13:00', cast ('13:00 BST' as timestamp), cast ('3 years' as timestamp), cast ('2001-10-19 10:23:54+01' as timestamp), timestamp '2001-10-19 10:23:54'),
+(4, timestamp '14:00', cast ('14:00 BST' as timestamp), cast ('4 years' as timestamp), cast ('2002-10-19 10:23:54+01' as timestamp), timestamp '2002-10-19 10:23:54'),
+(5, timestamp '15:00', cast ('15:00 BST' as timestamp), cast ('5 years' as timestamp), cast ('2003-10-19 10:23:54+01' as timestamp), timestamp '2003-10-19 10:23:54'),
+(6, timestamp '15:00', cast ('15:00 BST' as timestamp), cast ('5 years' as timestamp), cast ('2004-10-19 10:23:54+01' as timestamp), timestamp '2004-10-19 10:23:54'),
+(7, timestamp '17:00', cast ('17:00 BST' as timestamp), cast ('7 years' as timestamp), cast ('2005-10-19 10:23:54+01' as timestamp), timestamp '2005-10-19 10:23:54'),
+(8, timestamp '18:00', cast ('18:00 BST' as timestamp), cast ('8 years' as timestamp), cast ('2006-10-19 10:23:54+01' as timestamp), timestamp '2006-10-19 10:23:54'),
+(9, timestamp '19:00', cast ('19:00 BST' as timestamp), cast ('9 years' as timestamp), cast ('2007-10-19 10:23:54+01' as timestamp), timestamp '2007-10-19 10:23:54'),
+(10, timestamp '20:00', cast ('20:00 BST' as timestamp), cast ('10 years' as timestamp), cast ('2008-10-19 10:23:54+01' as timestamp), timestamp '2008-10-19 10:23:54');
 
 -- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
 -- select id, f_time, first(id) over w, last(id) over w
