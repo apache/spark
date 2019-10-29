@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.IntervalUtils.fromString
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromString, fromYearMonthString}
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.unsafe.types.CalendarInterval._
 
@@ -87,6 +87,67 @@ class IntervalUtilsSuite extends SparkFunSuite {
       val result = new CalendarInterval(months, microseconds)
       assert(fromString(input1) == result)
       assert(fromString(input2) == result)
+    }
+  }
+
+  test("from year-month string") {
+    assert(fromYearMonthString("99-10") === new CalendarInterval(99 * 12 + 10, 0L))
+    assert(fromYearMonthString("+99-10") === new CalendarInterval(99 * 12 + 10, 0L))
+    assert(fromYearMonthString("-8-10") === new CalendarInterval(-8 * 12 - 10, 0L))
+
+    try {
+      fromYearMonthString("99-15")
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("month 15 outside range"))
+    }
+
+    try {
+      fromYearMonthString("9a9-15")
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("Interval string does not match year-month format"))
+    }
+  }
+
+  test("from day-time string") {
+    assert(fromDayTimeString("5 12:40:30.999999999") ===
+      new CalendarInterval(
+        0,
+        5 * MICROS_PER_DAY +
+        12 * MICROS_PER_HOUR +
+        40 * MICROS_PER_MINUTE +
+        30 * MICROS_PER_SECOND + 999999L))
+    assert(fromDayTimeString("10 0:12:0.888") ===
+      new CalendarInterval(
+        0,
+        10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLI))
+    assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3 * MICROS_PER_DAY))
+
+    try {
+      fromDayTimeString("5 30:12:20")
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("hour 30 outside range"))
+    }
+
+    try {
+      fromDayTimeString("5 30-12")
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("must match day-time format"))
+    }
+
+    try {
+      fromDayTimeString("5 1:12:20", "hour", "microsecond")
+      fail("Expected to throw an exception for the invalid convention type")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("Cannot support (interval"))
     }
   }
 

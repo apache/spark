@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType
  * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params
-  with HasHandleInvalid with HasInputCol with HasOutputCol {
+  with HasHandleInvalid with HasInputCol with HasOutputCol with HasInputCols with HasOutputCols {
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
@@ -129,8 +129,7 @@ private[feature] trait QuantileDiscretizerBase extends Params
  */
 @Since("1.6.0")
 final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val uid: String)
-  extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable
-    with HasInputCols with HasOutputCols {
+  extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("quantileDiscretizer"))
