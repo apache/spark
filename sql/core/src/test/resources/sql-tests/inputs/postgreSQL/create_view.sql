@@ -122,7 +122,7 @@ CREATE TEMPORARY VIEW temp_table AS SELECT * FROM VALUES
 CREATE VIEW v1 AS SELECT * FROM base_table;
 DESC TABLE EXTENDED v1;
 -- should be created in temp object schema
--- [SPARK-XXXXX] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
+-- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW v1_temp AS SELECT * FROM temp_table;
 -- should be created in temp object schema
 CREATE TEMPORARY VIEW v2_temp AS SELECT * FROM base_table;
@@ -131,7 +131,7 @@ DESC TABLE EXTENDED v2_temp;
 CREATE VIEW temp_view_test.v2 AS SELECT * FROM base_table;
 DESC TABLE EXTENDED temp_view_test.v2;
 -- should fail
--- [SPARK-XXXXX] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
+-- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW temp_view_test.v3_temp AS SELECT * FROM temp_table;
 -- should fail
 -- Spark doesn't support the cascaded syntax below in `CREATE SCHEMA`
@@ -148,13 +148,13 @@ CREATE VIEW v3 AS
     WHERE t1.id = t2.id;
 DESC TABLE EXTENDED v3;
 -- should be temp (one join rel is temp)
--- [SPARK-XXXXX] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
+-- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW v4_temp AS
     SELECT t1.a AS t1_a, t2.a AS t2_a
     FROM base_table t1, temp_table t2
     WHERE t1.id = t2.id;
 -- should be temp
--- [SPARK-XXXXX] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
+-- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW v5_temp AS
     SELECT t1.a AS t1_a, t2.a AS t2_a, t3.a AS t3_a
     FROM base_table t1, base_table2 t2, temp_table t3
@@ -172,20 +172,20 @@ DESC TABLE EXTENDED v7;
 CREATE VIEW v8 AS SELECT * FROM base_table WHERE EXISTS (SELECT 1);
 DESC TABLE EXTENDED v8;
 
--- [SPARK-XXXXX] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
+-- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW v6_temp AS SELECT * FROM base_table WHERE id IN (SELECT id FROM temp_table);
 CREATE VIEW v7_temp AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM temp_table) t2;
--- [SPARK-XXXXX] Not allowed to create a permanent view by referencing a temporary view in EXISTS
+-- [SPARK-29630] Not allowed to create a permanent view by referencing a temporary view in EXISTS
 CREATE VIEW v8_temp AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM temp_table);
 CREATE VIEW v9_temp AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM temp_table);
 
 -- a view should also be temporary if it references a temporary view
--- [SPARK-XXXXX] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
+-- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW v10_temp AS SELECT * FROM v7_temp;
 CREATE VIEW v11_temp AS SELECT t1.id, t2.a FROM base_table t1, v10_temp t2;
 CREATE VIEW v12_temp AS SELECT true FROM v11_temp;
 
--- [SPARK-XXXXX] Support ANSI SQL CREATE SEQUENCE
+-- [SPARK-27764] Support ANSI SQL CREATE SEQUENCE
 -- a view should also be temporary if it references a temporary sequence
 -- CREATE SEQUENCE seq1;
 -- CREATE TEMPORARY SEQUENCE seq1_temp;
@@ -216,19 +216,19 @@ CREATE TEMPORARY VIEW tt AS SELECT * FROM VALUES
 
 CREATE VIEW nontemp1 AS SELECT * FROM t1 CROSS JOIN t2;
 DESC TABLE EXTENDED nontemp1;
--- [SPARK-XXXXX] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
+-- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW temporal1 AS SELECT * FROM t1 CROSS JOIN tt;
 CREATE VIEW nontemp2 AS SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2;
 DESC TABLE EXTENDED nontemp2;
--- [SPARK-XXXXX] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
+-- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW temporal2 AS SELECT * FROM t1 INNER JOIN tt ON t1.num = tt.num2;
 CREATE VIEW nontemp3 AS SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2;
 DESC TABLE EXTENDED nontemp3;
--- [SPARK-XXXXX] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
+-- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW temporal3 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2;
 CREATE VIEW nontemp4 AS SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx';
 DESC TABLE EXTENDED nontemp4;
--- [SPARK-XXXXX] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
+-- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW temporal4 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2 AND tt.value = 'xxx';
 
 -- Skip the tests below because of PostgreSQL specific cases
@@ -273,25 +273,16 @@ DESC TABLE EXTENDED mytempview;
 
 --
 -- CREATE VIEW and WITH(...) clause
+-- CREATE VIEW mysecview1
+--        AS SELECT * FROM tbl1 WHERE a = 0;
 --
--- [SPARK-XXXXX] Support CREATE VIEW and WITH clause
-CREATE VIEW mysecview1
-       AS SELECT * FROM tbl1 WHERE a = 0;
+-- Skip the tests below because Spark doesn't support `WITH options`
 -- CREATE VIEW mysecview2 WITH (security_barrier=true)
 --        AS SELECT * FROM tbl1 WHERE a > 0;
-CREATE VIEW mysecview2 AS WITH mysecview2t
-       AS (SELECT * FROM tbl1 WHERE a > 0)
-       SELECT * FROM mysecview2t;
 -- CREATE VIEW mysecview3 WITH (security_barrier=false)
 --        AS SELECT * FROM tbl1 WHERE a < 0;
-CREATE VIEW mysecview3 AS WITH mysecview3t
-       AS (SELECT * FROM tbl1 WHERE a < 0)
-       SELECT * FROM mysecview3t;
 -- CREATE VIEW mysecview4 WITH (security_barrier)
 --        AS SELECT * FROM tbl1 WHERE a <> 0;
-CREATE VIEW mysecview4 AS WITH mysecview4t
-       AS (SELECT * FROM tbl1 WHERE a <> 0)
-       SELECT * FROM mysecview4t;
 -- Spark cannot support options in WITH clause
 -- CREATE VIEW mysecview5 WITH (security_barrier=100)	-- Error
 --        AS SELECT * FROM tbl1 WHERE a > 100;
@@ -303,21 +294,14 @@ CREATE VIEW mysecview4 AS WITH mysecview4t
 --                      'mysecview3'::regclass, 'mysecview4'::regclass)
 --        ORDER BY relname;
 
-CREATE OR REPLACE VIEW mysecview1
-       AS SELECT * FROM tbl1 WHERE a = 256;
-CREATE OR REPLACE VIEW mysecview2
-       AS SELECT * FROM tbl1 WHERE a > 256;
--- [SPARK-XXXXX] Support CREATE VIEW and WITH clause
+-- CREATE OR REPLACE VIEW mysecview1
+--        AS SELECT * FROM tbl1 WHERE a = 256;
+-- CREATE OR REPLACE VIEW mysecview2
+--        AS SELECT * FROM tbl1 WHERE a > 256;
 -- CREATE OR REPLACE VIEW mysecview3 WITH (security_barrier=true)
 --        AS SELECT * FROM tbl1 WHERE a < 256;
-CREATE OR REPLACE VIEW mysecview3 AS WITH mysecview3t
-       AS (SELECT * FROM tbl1 WHERE a < 256)
-       SELECT * FROM mysecview3t;
 -- CREATE OR REPLACE VIEW mysecview4 WITH (security_barrier=false)
 --        AS SELECT * FROM tbl1 WHERE a <> 256;
-CREATE OR REPLACE VIEW mysecview4 AS WITH mysecview4t
-       AS (SELECT * FROM tbl1 WHERE a <> 256)
-       SELECT * FROM mysecview4t;
 -- Skip the test below because of PostgreSQL specific cases
 -- SELECT relname, relkind, reloptions FROM pg_class
 --        WHERE oid in ('mysecview1'::regclass, 'mysecview2'::regclass,
@@ -413,7 +397,7 @@ DESC TABLE aliased_view_3;
 DESC TABLE aliased_view_4;
 
 ALTER TABLE a2 RENAME TO tx1;
--- [SPARK-XXXXX] Support ALTER TABLE [relname] SET SCHEMA [dbname]
+-- [SPARK-29632] Support ALTER TABLE [relname] SET SCHEMA [dbname]
 -- ALTER TABLE tx1 SET SCHEMA temp_view_test;
 
 -- \d+ aliased_view_1
@@ -421,7 +405,7 @@ ALTER TABLE a2 RENAME TO tx1;
 -- \d+ aliased_view_3
 -- \d+ aliased_view_4
 
--- [SPARK-XXXXX] Support ALTER TABLE [relname] SET SCHEMA [dbname]
+-- [SPARK-29632] Support ALTER TABLE [relname] SET SCHEMA [dbname]
 -- ALTER TABLE temp_view_test.tt1 RENAME TO tmp1;
 -- ALTER TABLE temp_view_test.tmp1 SET SCHEMA testviewschm2;
 -- ALTER TABLE tmp1 RENAME TO tx1;
@@ -481,7 +465,7 @@ DESC TABLE v2a;
 -- select pg_get_viewdef('v3', true);
 DESC TABLE v3;
 
--- [SPARK-XXXXX] Make COLUMN optional in ALTER TABLE
+-- [SPARK-27764] Make COLUMN optional in ALTER TABLE
 -- [SPARK-27589] Spark file source V2 (For supporting RENAME COLUMN in ALTER TABLE)
 -- alter table tt3 rename c to d;
 drop table tt3;
