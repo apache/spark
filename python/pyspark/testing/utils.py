@@ -54,7 +54,8 @@ def write_int(i):
 def eventually(condition, timeout=30.0, catch_assertions=False):
     """
     Wait a given amount of time for a condition to pass, else fail with an error.
-    This is a helper utility for streaming ML tests.
+    This is a helper utility for PySpark tests.
+
     :param condition: Function that checks for termination conditions.
                       condition() can return:
                        - True: Conditions met. Return without error.

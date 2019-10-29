@@ -56,13 +56,13 @@ class PinThreadTests(unittest.TestCase):
                 # within this thread.
                 self.sc.setLocalProperty(property_name, str(i))
 
-                # Sleep for some arbitrary time.
-                time.sleep(random.random())
+                # 5 threads, 1 second sleep. 5 threads without a sleep.
+                time.sleep(i % 2)
 
                 try:
                     assert self.sc.getLocalProperty(property_name) == str(i)
 
-                    # Each command might create a thread in multi-treading mode in Py4J.
+                    # Each command might create a thread in multi-threading mode in Py4J.
                     # This assert makes sure that the created thread is being reused.
                     assert jvm_thread_id == self.sc._jvm.java.lang.Thread.currentThread().getId()
                 except Exception as e:
