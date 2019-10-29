@@ -134,11 +134,11 @@ class OneHotEncoder @Since("3.0.0") (@Since("3.0.0") override val uid: String)
 
   /** @group setParam */
   @Since("3.0.0")
-  def setInputCol(values: String): this.type = set(inputCol, values)
+  def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   @Since("3.0.0")
-  def setOutputCol(values: String): this.type = set(outputCol, values)
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
   @Since("3.0.0")

@@ -2355,7 +2355,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
 
 class _OneHotEncoderParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols,
-                           HasHandleInvalid)::
+                           HasHandleInvalid):
     """
     Params for :py:class:`OneHotEncoder` and :py:class:`OneHotEncoderModel`.
 
