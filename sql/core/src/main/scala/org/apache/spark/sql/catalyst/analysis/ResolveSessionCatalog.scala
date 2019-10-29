@@ -346,7 +346,8 @@ class ResolveSessionCatalog(
       val db = namespace match {
         case Some(db) if (v1TableName.database.exists(!resolver(_, db.head))) =>
           throw new AnalysisException(
-            s"SHOW COLUMNS with conflicting databases: '$db' != '${v1TableName.database.get}'")
+            s"SHOW COLUMNS with conflicting databases: " +
+              s"'${db.head}' != '${v1TableName.database.get}'")
         case _ => namespace.map(_.head)
       }
       ShowColumnsCommand(db, v1TableName)
