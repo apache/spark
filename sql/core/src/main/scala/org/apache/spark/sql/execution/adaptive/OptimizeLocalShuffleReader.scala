@@ -23,32 +23,39 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, EnsureRequirements, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
-case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
+case class OptimizeLocalShuffleReader(
+    conf: SQLConf,
+    var parent: Option[SparkPlan] = None) extends Rule[SparkPlan] {
 
-  def canUseLocalShuffleReaderLeft(join: BroadcastHashJoinExec): Boolean = {
-    join.buildSide == BuildRight &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.left)
-  }
-
-  def canUseLocalShuffleReaderRight(join: BroadcastHashJoinExec): Boolean = {
-    join.buildSide == BuildLeft &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.right)
+  def canUseLocalShuffleReader(plan: SparkPlan): Boolean = {
+    ShuffleQueryStageExec.isShuffleQueryStageExec(plan)
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED)) {
       return plan
     }
+    // In order to choose the best optimal plan after applied local reader rule.
+    // When `BroadcastExchangeExec` + `ShuffleQueryStageExec` occurs,
+    // we also make the shuffle reader to local reader.
+    val newPlan = if (canUseLocalShuffleReader(plan) &&
+      parent.nonEmpty && parent.get.isInstanceOf[BroadcastExchangeExec]) {
+      LocalShuffleReaderExec(plan.asInstanceOf[QueryStageExec])
+    } else plan
 
-    val optimizedPlan = plan.transformDown {
-      case join: BroadcastHashJoinExec if canUseLocalShuffleReaderRight(join) =>
-        val localReader = LocalShuffleReaderExec(join.right.asInstanceOf[QueryStageExec])
-        join.copy(right = localReader)
-      case join: BroadcastHashJoinExec if canUseLocalShuffleReaderLeft(join) =>
-        val localReader = LocalShuffleReaderExec(join.left.asInstanceOf[QueryStageExec])
-        join.copy(left = localReader)
+    val optimizedPlan = newPlan.transformDown {
+      case join: BroadcastHashJoinExec =>
+        val optimizedRightPlan = if (canUseLocalShuffleReader(join.right)) {
+          LocalShuffleReaderExec(join.right.asInstanceOf[QueryStageExec])
+        } else join.right
+        val optimizedLeftPlan = if (canUseLocalShuffleReader(join.left)) {
+          LocalShuffleReaderExec(join.left.asInstanceOf[QueryStageExec])
+        } else join.left
+        join.copy(left = optimizedLeftPlan, right = optimizedRightPlan)
     }
 
     def numExchanges(plan: SparkPlan): Int = {
@@ -59,7 +66,6 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
 
     val numExchangeBefore = numExchanges(EnsureRequirements(conf).apply(plan))
     val numExchangeAfter = numExchanges(EnsureRequirements(conf).apply(optimizedPlan))
-
     if (numExchangeAfter > numExchangeBefore) {
       logDebug("OptimizeLocalShuffleReader rule is not applied due" +
         " to additional shuffles will be introduced.")
@@ -107,26 +113,5 @@ case class LocalShuffleReaderExec(child: QueryStageExec) extends UnaryExecNode {
       }
     }
     cachedShuffleRDD
-  }
-
-  override def generateTreeString(
-      depth: Int,
-      lastChildren: Seq[Boolean],
-      append: String => Unit,
-      verbose: Boolean,
-      prefix: String = "",
-      addSuffix: Boolean = false,
-      maxFields: Int,
-      printNodeId: Boolean): Unit = {
-    super.generateTreeString(depth,
-      lastChildren,
-      append,
-      verbose,
-      prefix,
-      addSuffix,
-      maxFields,
-      printNodeId)
-    child.generateTreeString(
-      depth + 1, lastChildren :+ true, append, verbose, "", false, maxFields, printNodeId)
   }
 }
