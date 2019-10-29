@@ -30,16 +30,14 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.types.StructType
 
-
 class HiveUserDefinedTypeSuite extends QueryTest with TestHiveSingleton {
   private val functionClass = classOf[org.apache.spark.sql.hive.TestUDF].getCanonicalName
 
   test("Support UDT in Hive UDF") {
-    val rand = new Random
     val functionName = "get_point_x"
     try {
       val schema = new StructType().add("point", new ExamplePointUDT, nullable = false)
-      val input = Row.fromSeq(Seq(new ExamplePoint(rand.nextDouble(), rand.nextDouble())))
+      val input = Row.fromSeq(Seq(new ExamplePoint(3.141592d, -3.141592d)))
       val df = spark.createDataFrame(Array(input).toList.asJava, schema)
       df.createOrReplaceTempView("src")
       spark.sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
