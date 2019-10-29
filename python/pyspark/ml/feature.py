@@ -1464,7 +1464,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
         return self._call_java("numDocs")
 
 
-class _ImputerParams(HasInputCols, HasOutputCols):
+class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols):
     """
     Params for :py:class:`Imputer` and :py:class:`ImputerModel`.
 
@@ -1540,6 +1540,55 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     +---+---+-----+-----+
     |1.0|NaN|  4.0|  NaN|
     ...
+    >>> df1 = spark.createDataFrame([(1.0,), (2.0,), (float("nan"),), (4.0,), (5.0,)], ["a"])
+    >>> imputer1 = Imputer(inputCol="a", outputCol="out_a")
+    >>> model1 = imputer1.fit(df1)
+    >>> model1.surrogateDF.show()
+    +---+
+    |  a|
+    +---+
+    |3.0|
+    +---+
+    ...
+    >>> model1.transform(df1).show()
+    +---+-----+
+    |  a|out_a|
+    +---+-----+
+    |1.0|  1.0|
+    |2.0|  2.0|
+    |NaN|  3.0|
+    ...
+    >>> imputer1.setStrategy("median").setMissingValue(1.0).fit(df1).transform(df1).show()
+    +---+-----+
+    |  a|out_a|
+    +---+-----+
+    |1.0|  4.0|
+    ...
+    >>> df2 = spark.createDataFrame([(float("nan"),), (float("nan"),), (3.0,), (4.0,), (5.0,)],
+    ...                             ["b"])
+    >>> imputer2 = Imputer(inputCol="b", outputCol="out_b")
+    >>> model2 = imputer2.fit(df2)
+    >>> model2.surrogateDF.show()
+    +---+
+    |  b|
+    +---+
+    |4.0|
+    +---+
+    ...
+    >>> model2.transform(df2).show()
+    +---+-----+
+    |  b|out_b|
+    +---+-----+
+    |NaN|  4.0|
+    |NaN|  4.0|
+    |3.0|  3.0|
+    ...
+    >>> imputer2.setStrategy("median").setMissingValue(1.0).fit(df2).transform(df2).show()
+    +---+-----+
+    |  b|out_b|
+    +---+-----+
+    |NaN|  NaN|
+    ...
     >>> imputerPath = temp_path + "/imputer"
     >>> imputer.save(imputerPath)
     >>> loadedImputer = Imputer.load(imputerPath)
@@ -1558,10 +1607,10 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
 
     @keyword_only
     def __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None,
-                 outputCols=None):
+                 outputCols=None, inputCol=None, outputCol=None):
         """
         __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
-                 outputCols=None):
+                 outputCols=None, inputCol=None, outputCol=None):
         """
         super(Imputer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Imputer", self.uid)
@@ -1572,10 +1621,10 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     @keyword_only
     @since("2.2.0")
     def setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None,
-                  outputCols=None):
+                  outputCols=None, inputCol=None, outputCol=None):
         """
         setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
-                  outputCols=None)
+                  outputCols=None, inputCol=None, outputCol=None)
         Sets params for this Imputer.
         """
         kwargs = self._input_kwargs
@@ -1608,6 +1657,20 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
         Sets the value of :py:attr:`outputCols`.
         """
         return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     def _create_model(self, java_model):
         return ImputerModel(java_model)
