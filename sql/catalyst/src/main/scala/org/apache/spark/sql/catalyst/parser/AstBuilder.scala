@@ -1924,7 +1924,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single unit TO unit statement in the interval literal syntax",
           innerCtx.unitToUnitInterval)
       }
-      Literal(visitMultiUnitsInterval(innerCtx.multiUnitsInterval))
+      Literal(visitMultiUnitsInterval(innerCtx.multiUnitsInterval), CalendarIntervalType)
     } else {
       assert(ctx.errorCapturingUnitToUnitInterval != null)
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
@@ -1934,7 +1934,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single unit TO unit statement in the interval literal syntax",
           errorCtx)
       }
-      Literal(visitUnitToUnitInterval(innerCtx.body))
+      Literal(visitUnitToUnitInterval(innerCtx.body), CalendarIntervalType)
     }
   }
 
@@ -1978,7 +1978,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       try {
         val from = ctx.from.getText.toLowerCase(Locale.ROOT)
         val to = ctx.to.getText.toLowerCase(Locale.ROOT)
-        val interval = (from, to) match {
+        (from, to) match {
           case ("year", "month") =>
             IntervalUtils.fromYearMonthString(value)
           case ("day", "hour") =>
@@ -1996,8 +1996,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case _ =>
             throw new ParseException(s"Intervals $from TO $to are not supported.", ctx)
         }
-        validate(interval != null, "No interval can be constructed", ctx)
-        interval
       } catch {
         // Handle Exceptions thrown by CalendarInterval
         case e: IllegalArgumentException =>
