@@ -66,11 +66,11 @@ private[thriftserver] class SparkGetTypeInfoOperation(
 
   override def close(): Unit = {
     super.close()
-    SparkThriftServer2.listener.onOperationClosed(_statementId)
+    SparkThriftServer2.listener.onOperationClosed(statementId)
   }
 
   override def runInternal(): Unit = {
-    _statementId = UUID.randomUUID().toString
+    setStatementId(UUID.randomUUID().toString)
     val logMsg = "Listing type info"
     logInfo(s"$logMsg with $statementId")
     setState(RUNNING)
@@ -83,10 +83,10 @@ private[thriftserver] class SparkGetTypeInfoOperation(
     }
 
     SparkThriftServer2.listener.onStatementStart(
-      _statementId,
+      statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
-      _statementId,
+      statementId,
       parentSession.getUsername)
 
     try {
@@ -121,17 +121,17 @@ private[thriftserver] class SparkGetTypeInfoOperation(
         e match {
           case hiveException: SparkThriftServerSQLException =>
             SparkThriftServer2.listener.onStatementError(
-              _statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
             throw hiveException
           case _ =>
             val root = ExceptionUtils.getRootCause(e)
             SparkThriftServer2.listener.onStatementError(
-              _statementId, root.getMessage, SparkUtils.exceptionString(root))
+              statementId, root.getMessage, SparkUtils.exceptionString(root))
             throw new SparkThriftServerSQLException("Error getting type info: " +
               root.toString, root)
         }
     }
-    SparkThriftServer2.listener.onStatementFinish(_statementId)
+    SparkThriftServer2.listener.onStatementFinish(statementId)
   }
 
   override def getResultSetSchema: StructType = {

@@ -85,7 +85,7 @@ private[thriftserver] trait ThriftServerSessionBase {
 
   def getIpAddress: String
 
-  def setIpAddress(ipAddress: String): Unit
+  def setIpAddress(ipAddr: String): Unit
 
   def getLastAccessTime: Long
 }

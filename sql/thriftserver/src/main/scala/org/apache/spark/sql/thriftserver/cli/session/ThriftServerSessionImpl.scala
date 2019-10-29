@@ -784,7 +784,7 @@ private[thriftserver] class ThriftServerSessionImpl(
 
   override def getIpAddress: String = ipAddress
 
-  override def setIpAddress(ipAddress: String): Unit = ipAddress = ipAddress
+  override def setIpAddress(ipAddr: String): Unit = ipAddress = ipAddr
 
   override def getLastAccessTime: Long = _lastAccessTime
 

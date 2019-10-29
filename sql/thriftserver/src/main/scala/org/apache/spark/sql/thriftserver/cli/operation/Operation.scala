@@ -79,7 +79,11 @@ private[thriftserver] abstract class Operation(
 
   def getStatus: OperationStatus = new OperationStatus(_state, _operationException)
 
-  def statementId: String = _statementId
+  def setStatementId(statementId: String): Unit = _statementId = statementId
+
+  def getStatementId: String = _statementId
+
+  def statementId: String = getStatementId
 
   def hasResultSet: Boolean = _hasResultSet
 

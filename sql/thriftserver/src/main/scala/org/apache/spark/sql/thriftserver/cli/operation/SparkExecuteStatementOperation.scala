@@ -80,7 +80,7 @@ private[thriftserver] class SparkExecuteStatementOperation(
 
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = withSchedulerPool {
     logInfo(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
-      s"with ${_statementId}")
+      s"with ${statementId}")
     validateDefaultFetchOrientation(order)
     assertState(FINISHED)
     setHasResultSet(true)
@@ -154,13 +154,13 @@ private[thriftserver] class SparkExecuteStatementOperation(
 
   override def runInternal(): Unit = {
     setState(PENDING)
-    _statementId = UUID.randomUUID().toString
+    setStatementId(UUID.randomUUID().toString)
     logInfo(s"Submitting query '$statement' with $statementId")
     SparkThriftServer2.listener.onStatementStart(
-      _statementId,
+      statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       statement,
-      _statementId,
+      statementId,
       parentSession.getUsername)
     setHasResultSet(true) // avoid no resultset for async run
 
@@ -207,14 +207,14 @@ private[thriftserver] class SparkExecuteStatementOperation(
           logError("Error submitting query in background, query rejected", rejected)
           setState(ERROR)
           SparkThriftServer2.listener.onStatementError(
-            _statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
+            statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
           throw new SparkThriftServerSQLException("The background threadpool cannot accept" +
             " new task for execution, please retry the operation", rejected)
         case NonFatal(e) =>
           logError(s"Error executing query in background", e)
           setState(ERROR)
           SparkThriftServer2.listener.onStatementError(
-            _statementId, e.getMessage, SparkUtils.exceptionString(e))
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
           throw new SparkThriftServerSQLException(e)
       }
     }
@@ -235,7 +235,7 @@ private[thriftserver] class SparkExecuteStatementOperation(
       val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
       Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-      sqlContext.sparkContext.setJobGroup(_statementId, statement)
+      sqlContext.sparkContext.setJobGroup(statementId, statement)
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
@@ -245,7 +245,7 @@ private[thriftserver] class SparkExecuteStatementOperation(
             "in this session.")
         case _ =>
       }
-      SparkThriftServer2.listener.onStatementParsed(_statementId, result.queryExecution.toString())
+      SparkThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
       iter = {
         if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
           resultList = None
@@ -264,8 +264,8 @@ private[thriftserver] class SparkExecuteStatementOperation(
         // then they may both call cleanup() before Spark Jobs are started. But before background
         // task interrupted, it may have start some spark job, so we need to cancel again to
         // make sure job was cancelled when background thread was interrupted
-        if (_statementId != null) {
-          sqlContext.sparkContext.cancelJobGroup(_statementId)
+        if (statementId != null) {
+          sqlContext.sparkContext.cancelJobGroup(statementId)
         }
         val currentState = getStatus.getState
         if (currentState.isTerminal) {
@@ -277,12 +277,12 @@ private[thriftserver] class SparkExecuteStatementOperation(
           e match {
             case hiveException: SparkThriftServerSQLException =>
               SparkThriftServer2.listener.onStatementError(
-                _statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+                statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
               throw hiveException
             case _ =>
               val root = ExceptionUtils.getRootCause(e)
               SparkThriftServer2.listener.onStatementError(
-                _statementId, root.getMessage, SparkUtils.exceptionString(root))
+                statementId, root.getMessage, SparkUtils.exceptionString(root))
               throw new SparkThriftServerSQLException("Error running query: " + root.toString, root)
           }
         }
@@ -290,7 +290,7 @@ private[thriftserver] class SparkExecuteStatementOperation(
       synchronized {
         if (!getStatus.getState.isTerminal) {
           setState(FINISHED)
-          SparkThriftServer2.listener.onStatementFinish(_statementId)
+          SparkThriftServer2.listener.onStatementFinish(statementId)
         }
       }
       sqlContext.sparkContext.clearJobGroup()
@@ -302,7 +302,7 @@ private[thriftserver] class SparkExecuteStatementOperation(
       if (!getStatus.getState.isTerminal) {
         logInfo(s"Cancel query with $statementId")
         cleanup(CANCELED)
-        SparkThriftServer2.listener.onStatementCanceled(_statementId)
+        SparkThriftServer2.listener.onStatementCanceled(statementId)
       }
     }
   }
@@ -315,8 +315,8 @@ private[thriftserver] class SparkExecuteStatementOperation(
         backgroundHandle.cancel(true)
       }
     }
-    if (_statementId != null) {
-      sqlContext.sparkContext.cancelJobGroup(_statementId)
+    if (statementId != null) {
+      sqlContext.sparkContext.cancelJobGroup(statementId)
     }
   }
 

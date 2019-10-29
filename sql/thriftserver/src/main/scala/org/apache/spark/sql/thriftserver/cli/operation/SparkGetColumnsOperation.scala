@@ -86,11 +86,11 @@ private[thriftserver] class SparkGetColumnsOperation(
   private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
   override def close(): Unit = {
     super.close()
-    SparkThriftServer2.listener.onOperationClosed(_statementId)
+    SparkThriftServer2.listener.onOperationClosed(statementId)
   }
 
   override def runInternal(): Unit = {
-    _statementId = UUID.randomUUID().toString
+    setStatementId(UUID.randomUUID().toString)
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
@@ -102,10 +102,10 @@ private[thriftserver] class SparkGetColumnsOperation(
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     SparkThriftServer2.listener.onStatementStart(
-      _statementId,
+      statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
-      _statementId,
+      statementId,
       parentSession.getUsername)
 
     val schemaPattern = convertSchemaPattern(schemaName)
@@ -159,16 +159,16 @@ private[thriftserver] class SparkGetColumnsOperation(
         e match {
           case hiveException: SparkThriftServerSQLException =>
             SparkThriftServer2.listener.onStatementError(
-              _statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
             throw hiveException
           case _ =>
             val root = ExceptionUtils.getRootCause(e)
             SparkThriftServer2.listener.onStatementError(
-              _statementId, root.getMessage, SparkUtils.exceptionString(root))
+              statementId, root.getMessage, SparkUtils.exceptionString(root))
             throw new SparkThriftServerSQLException("Error getting columns: " + root.toString, root)
         }
     }
-    SparkThriftServer2.listener.onStatementFinish(_statementId)
+    SparkThriftServer2.listener.onStatementFinish(statementId)
   }
 
   private def addToRowSet(
