@@ -17,12 +17,14 @@
 
 package org.apache.spark.graph.api
 
-import org.apache.spark.graph.api.CypherSession.{ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN}
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.{QueryTest, Row}
+import scala.collection.Set
+
 import org.scalatest.Matchers
 
-import scala.collection.Set
+import org.apache.spark.graph.api.CypherSession.{ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN}
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.test.SharedSparkSession
+
 
 class CypherSessionCompanionSuite extends QueryTest with SharedSparkSession with Matchers {
 
@@ -91,7 +93,7 @@ class CypherSessionCompanionSuite extends QueryTest with SharedSparkSession with
   test("extracts relationship datasets with properties and multiple labels") {
     val inputDf = spark.createDataFrame(Seq(
       (0L, 0L, 1L, true, false, "01-01-2000"),
-      (1L, 1L, 2L, false, true, "02-01-2000"),
+      (1L, 1L, 2L, false, true, "02-01-2000")
     )).toDF(ID_COLUMN, SOURCE_ID_COLUMN, TARGET_ID_COLUMN, ":KNOWS", ":LIKES", "since")
 
     val relationshipDatasets = CypherSession.extractRelationshipDatasets(inputDf)

@@ -43,7 +43,7 @@ final class NodeDatasetBuilder(val ds: Dataset[Row]) {
     if (idColumn.isEmpty) {
       throw new IllegalArgumentException("idColumn must not be empty")
     }
-    this.idColumn = idColumn;
+    this.idColumn = idColumn
     this
   }
 
