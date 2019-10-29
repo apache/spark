@@ -36,6 +36,7 @@ CREATE VIEW toyemp AS
 -- COMMENT ON VIEW toyemp IS NULL;
 
 DROP VIEW toyemp;
+DROP TABLE emp;
 
 -- These views are left around mainly to exercise special cases in pg_dump.
 
