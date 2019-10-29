@@ -402,7 +402,7 @@ object FileStreamSource {
       require(baseArchivePath.isDefined)
 
       val curPath = new Path(new URI(entry.path))
-      val newPath = new Path(baseArchivePath.get, curPath.toUri.getPath.stripPrefix("/"))
+      val newPath = new Path(baseArchivePath.get.toString.stripSuffix("/") + curPath.toUri.getPath)
 
       try {
         logDebug(s"Creating directory if it doesn't exist ${newPath.getParent}")
