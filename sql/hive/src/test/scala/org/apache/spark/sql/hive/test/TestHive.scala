@@ -648,7 +648,7 @@ private[sql] class TestHiveSessionStateBuilder(
   override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
 }
 
-private[hive] object HiveTestJars {
+object HiveTestJars {
   private val repository = SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.defaultValueString.split(",")(0)
   private val hiveTestJarsDir = Utils.createTempDir()
 
