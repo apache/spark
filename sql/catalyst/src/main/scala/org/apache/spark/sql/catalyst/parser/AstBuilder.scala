@@ -108,7 +108,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       }.toArray
       val values = ctx.intervalValue().asScala.map(getIntervalValue).toArray
       try {
-        CalendarInterval.fromUnitStrings(units, values)
+        IntervalUtils.fromUnitStrings(units, values)
       } catch {
         case i: IllegalArgumentException =>
           val e = new ParseException(i.getMessage, ctx)
@@ -1953,21 +1953,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       val unitText = unit.getText.toLowerCase(Locale.ROOT)
       val interval = (unitText, Option(to).map(_.getText.toLowerCase(Locale.ROOT))) match {
         case (u, None) =>
-          CalendarInterval.fromUnitStrings(Array(normalizeInternalUnit(u)), Array(s))
+          IntervalUtils.fromUnitStrings(Array(normalizeInternalUnit(u)), Array(s))
         case ("year", Some("month")) =>
-          CalendarInterval.fromYearMonthString(s)
+          IntervalUtils.fromYearMonthString(s)
         case ("day", Some("hour")) =>
-          CalendarInterval.fromDayTimeString(s, "day", "hour")
+          IntervalUtils.fromDayTimeString(s, "day", "hour")
         case ("day", Some("minute")) =>
-          CalendarInterval.fromDayTimeString(s, "day", "minute")
+          IntervalUtils.fromDayTimeString(s, "day", "minute")
         case ("day", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s, "day", "second")
+          IntervalUtils.fromDayTimeString(s, "day", "second")
         case ("hour", Some("minute")) =>
-          CalendarInterval.fromDayTimeString(s, "hour", "minute")
+          IntervalUtils.fromDayTimeString(s, "hour", "minute")
         case ("hour", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s, "hour", "second")
+          IntervalUtils.fromDayTimeString(s, "hour", "second")
         case ("minute", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s, "minute", "second")
+          IntervalUtils.fromDayTimeString(s, "minute", "second")
         case (from, Some(t)) =>
           throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
       }
