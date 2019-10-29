@@ -31,7 +31,6 @@ import org.apache.spark.internal.Logging
 private[thriftserver] class VariableSubstitution(hiveVariableSource: util.Map[String, String])
   extends SystemVariables
   with Logging {
-  
   override protected def getSubstitute(conf: Configuration, variable: String): String = {
     var value: String = super.getSubstitute(conf, variable)
     if (value == null && SessionState.get != null) {
@@ -45,7 +44,9 @@ private[thriftserver] class VariableSubstitution(hiveVariableSource: util.Map[St
   }
 
   def substitute(conf: HiveConf, expr: String): String = {
-    if (expr == null) return expr
+    if (expr == null) {
+      return expr
+    }
     if (HiveConf.getBoolVar(conf, ConfVars.HIVEVARIABLESUBSTITUTE)) {
       logDebug("Substitution is on: " + expr)
     } else {

@@ -136,3 +136,4 @@ private[thriftserver] abstract class AbstractService(val name: String)
     }
   }
 }
+

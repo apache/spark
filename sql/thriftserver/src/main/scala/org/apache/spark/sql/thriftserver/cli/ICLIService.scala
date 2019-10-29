@@ -147,5 +147,4 @@ private[thriftserver] trait ICLIService {
   def renewDelegationToken(sessionHandle: SessionHandle,
                            authFactory: HiveAuthFactory,
                            tokenStr: String): Unit
-
 }

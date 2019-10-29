@@ -299,7 +299,9 @@ private[thriftserver] class OperationManager
         throw new SparkThriftServerSQLException(e.getMessage, e.getCause)
     }
     // convert logs to RowSet
-    val rowSet: RowSet = RowSetFactory.create(logSchema, logs.asScala.map(Row(_)), getOperation(opHandle).getProtocolVersion)
+    val rowSet: RowSet =
+      RowSetFactory.create(logSchema, logs.asScala.map(Row(_)),
+        getOperation(opHandle).getProtocolVersion)
     rowSet
   }
 
