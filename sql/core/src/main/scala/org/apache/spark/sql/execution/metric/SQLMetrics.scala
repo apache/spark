@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.metric
 
 import java.text.NumberFormat
-import java.util.Locale
+import java.util.{Arrays, Locale}
 
 import scala.concurrent.duration._
 
@@ -150,7 +150,7 @@ object SQLMetrics {
    * A function that defines how we aggregate the final accumulator results among all tasks,
    * and represent it in string for a SQL physical operator.
    */
-  def stringValue(metricsType: String, values: Seq[Long]): String = {
+  def stringValue(metricsType: String, values: Array[Long]): String = {
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
@@ -162,8 +162,9 @@ object SQLMetrics {
         val metric = if (validValues.isEmpty) {
           Seq.fill(3)(0L)
         } else {
-          val sorted = validValues.sorted
-          Seq(sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+          Arrays.sort(validValues)
+          Seq(validValues(0), validValues(validValues.length / 2),
+            validValues(validValues.length - 1))
         }
         metric.map(v => numberFormat.format(v.toDouble / baseForAvgMetric))
       }
@@ -184,8 +185,9 @@ object SQLMetrics {
         val metric = if (validValues.isEmpty) {
           Seq.fill(4)(0L)
         } else {
-          val sorted = validValues.sorted
-          Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+          Arrays.sort(validValues)
+          Seq(validValues.sum, validValues(0), validValues(validValues.length / 2),
+            validValues(validValues.length - 1))
         }
         metric.map(strFormat)
       }

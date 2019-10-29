@@ -929,6 +929,28 @@ class DDLParserSuite extends AnalysisTest {
           "location" -> "/home/user/db")))
   }
 
+  test("drop namespace") {
+    comparePlans(
+      parsePlan("DROP NAMESPACE a.b.c"),
+      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = false))
+
+    comparePlans(
+      parsePlan("DROP NAMESPACE IF EXISTS a.b.c"),
+      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = false))
+
+    comparePlans(
+      parsePlan("DROP NAMESPACE IF EXISTS a.b.c RESTRICT"),
+      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = false))
+
+    comparePlans(
+      parsePlan("DROP NAMESPACE IF EXISTS a.b.c CASCADE"),
+      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = true))
+
+    comparePlans(
+      parsePlan("DROP NAMESPACE a.b.c CASCADE"),
+      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = true))
+  }
+
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),
@@ -1039,13 +1061,46 @@ class DDLParserSuite extends AnalysisTest {
       "missing 'COLUMNS' at '<EOF>'")
   }
 
-  test("MSCK REPAIR table") {
+  test("MSCK REPAIR TABLE") {
     comparePlans(
       parsePlan("MSCK REPAIR TABLE a.b.c"),
       RepairTableStatement(Seq("a", "b", "c")))
   }
 
-  test("CACHE table") {
+  test("LOAD DATA INTO table") {
+    comparePlans(
+      parsePlan("LOAD DATA INPATH 'filepath' INTO TABLE a.b.c"),
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", false, false, None))
+
+    comparePlans(
+      parsePlan("LOAD DATA LOCAL INPATH 'filepath' INTO TABLE a.b.c"),
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, false, None))
+
+    comparePlans(
+      parsePlan("LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c"),
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, true, None))
+
+    comparePlans(
+      parsePlan(
+        s"""
+           |LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c
+           |PARTITION(ds='2017-06-10')
+         """.stripMargin),
+      LoadDataStatement(
+        Seq("a", "b", "c"),
+        "filepath",
+        true,
+        true,
+        Some(Map("ds" -> "2017-06-10"))))
+  }
+
+  test("SHOW CREATE table") {
+    comparePlans(
+      parsePlan("SHOW CREATE TABLE a.b.c"),
+      ShowCreateTableStatement(Seq("a", "b", "c")))
+  }
+
+  test("CACHE TABLE") {
     comparePlans(
       parsePlan("CACHE TABLE a.b.c"),
       CacheTableStatement(Seq("a", "b", "c"), None, false, Map.empty))
@@ -1060,6 +1115,16 @@ class DDLParserSuite extends AnalysisTest {
 
     intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
       "It is not allowed to add catalog/namespace prefix a.b")
+  }
+
+  test("UNCACHE TABLE") {
+    comparePlans(
+      parsePlan("UNCACHE TABLE a.b.c"),
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = false))
+
+    comparePlans(
+      parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
+      UncacheTableStatement(Seq("a", "b", "c"), ifExists = true))
   }
 
   test("TRUNCATE table") {
@@ -1098,10 +1163,16 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed5, expected5)
   }
 
-  test("REFRESH TABLE table") {
+  test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
       RefreshTableStatement(Seq("a", "b", "c")))
+  }
+
+  test("alter table: recover partitions") {
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c RECOVER PARTITIONS"),
+      AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
   }
 
   private case class TableSpec(

@@ -597,7 +597,7 @@ class ExpressionParserSuite extends AnalysisTest {
     "microsecond")
 
   def intervalLiteral(u: String, s: String): Literal = {
-    Literal(CalendarInterval.fromUnitStrings(Array(u), Array(s)))
+    Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
   }
 
   test("intervals") {
@@ -637,7 +637,7 @@ class ExpressionParserSuite extends AnalysisTest {
     // Year-Month intervals.
     val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
     yearMonthValues.foreach { value =>
-      val result = Literal(CalendarInterval.fromYearMonthString(value))
+      val result = Literal(IntervalUtils.fromYearMonthString(value))
       checkIntervals(s"'$value' year to month", result)
     }
 
@@ -650,7 +650,7 @@ class ExpressionParserSuite extends AnalysisTest {
       "-1 0:0:0",
       "1 0:0:1")
     datTimeValues.foreach { value =>
-      val result = Literal(CalendarInterval.fromDayTimeString(value))
+      val result = Literal(IntervalUtils.fromDayTimeString(value))
       checkIntervals(s"'$value' day to second", result)
     }
 
@@ -662,7 +662,7 @@ class ExpressionParserSuite extends AnalysisTest {
       "0:0:0",
       "0:0:1")
     hourTimeValues.foreach { value =>
-      val result = Literal(CalendarInterval.fromDayTimeString(value))
+      val result = Literal(IntervalUtils.fromDayTimeString(value))
       checkIntervals(s"'$value' hour to second", result)
     }
 

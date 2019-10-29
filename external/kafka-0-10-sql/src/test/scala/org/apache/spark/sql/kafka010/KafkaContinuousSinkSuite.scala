@@ -19,12 +19,15 @@ package org.apache.spark.sql.kafka010
 
 import java.util.Locale
 
+import scala.reflect.ClassTag
+
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{BinaryType, DataType}
 import org.apache.spark.util.Utils
@@ -192,24 +195,9 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    /* No topic field or topic option */
-    var writer: StreamingQuery = null
-    var ex: Exception = null
-    try {
-      writer = createKafkaWriter(input.toDF())(
-        withSelectExpr = "CAST(null as STRING) as topic", "value"
-      )
-      testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-      eventually(timeout(streamingTimeout)) {
-        assert(writer.exception.isDefined)
-        ex = writer.exception.get
-      }
-    } finally {
-      writer.stop()
+    runAndVerifyException[StreamingQueryException](inputTopic, "null topic present in the data.") {
+      createKafkaWriter(input.toDF())(withSelectExpr = "CAST(null as STRING) as topic", "value")
     }
-    assert(ex.getCause.getCause.getMessage
-      .toLowerCase(Locale.ROOT)
-      .contains("null topic present in the data."))
   }
 
   test("streaming - write data with bad schema") {
@@ -226,24 +214,10 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    val ex = intercept[AnalysisException] {
-      /* No topic field or topic option */
-      createKafkaWriter(input.toDF())(
-        withSelectExpr = "value as key", "value"
-      )
-    }
-    assert(ex.getMessage
-      .toLowerCase(Locale.ROOT)
-      .contains("topic option required when no 'topic' attribute is present"))
-
-    val ex2 = intercept[AnalysisException] {
-      /* No value field */
-      createKafkaWriter(input.toDF())(
-        withSelectExpr = s"'$topic' as topic", "value as key"
-      )
-    }
-    assert(ex2.getMessage.toLowerCase(Locale.ROOT).contains(
-      "required attribute 'value' not found"))
+    assertWrongSchema(topic, input, Seq("value as key", "value"),
+      "topic option required when no 'topic' attribute is present")
+    assertWrongSchema(topic, input, Seq(s"'$topic' as topic", "value as key"),
+      "required attribute 'value' not found")
   }
 
   test("streaming - write data with valid schema but wrong types") {
@@ -258,34 +232,18 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
       .option("startingOffsets", "earliest")
       .load()
       .selectExpr("CAST(value as STRING) value")
+      .toDF()
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    val ex = intercept[AnalysisException] {
-      /* topic field wrong type */
-      createKafkaWriter(input.toDF())(
-        withSelectExpr = s"CAST('1' as INT) as topic", "value"
-      )
-    }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("topic type must be a string"))
-
-    val ex2 = intercept[AnalysisException] {
-      /* value field wrong type */
-      createKafkaWriter(input.toDF())(
-        withSelectExpr = s"'$topic' as topic", "CAST(value as INT) as value"
-      )
-    }
-    assert(ex2.getMessage.toLowerCase(Locale.ROOT).contains(
-      "value attribute type must be a string or binary"))
-
-    val ex3 = intercept[AnalysisException] {
-      /* key field wrong type */
-      createKafkaWriter(input.toDF())(
-        withSelectExpr = s"'$topic' as topic", "CAST(value as INT) as key", "value"
-      )
-    }
-    assert(ex3.getMessage.toLowerCase(Locale.ROOT).contains(
-      "key attribute type must be a string or binary"))
+    assertWrongSchema(topic, input, Seq("CAST('1' as INT) as topic", "value"),
+      "topic must be a(n) string")
+    assertWrongSchema(topic, input, Seq(s"'$topic' as topic", "CAST(value as INT) as value"),
+      "value must be a(n) string or binary")
+    assertWrongSchema(topic, input, Seq(s"'$topic' as topic", "CAST(value as INT) as key", "value"),
+      "key must be a(n) string or binary")
+    assertWrongSchema(topic, input, Seq(s"'$topic' as topic", "value as partition", "value"),
+      "partition must be a(n) int")
   }
 
   test("streaming - write to non-existing topic") {
@@ -301,21 +259,9 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
       .load()
     val topic = newTopic()
 
-    var writer: StreamingQuery = null
-    var ex: Exception = null
-    try {
-      ex = intercept[StreamingQueryException] {
-        writer = createKafkaWriter(input.toDF(), withTopic = Some(topic))()
-        testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
-        eventually(timeout(streamingTimeout)) {
-          assert(writer.exception.isDefined)
-        }
-        throw writer.exception.get
-      }
-    } finally {
-      writer.stop()
+    runAndVerifyException[StreamingQueryException](inputTopic, "job aborted") {
+      createKafkaWriter(input.toDF(), withTopic = Some(topic))()
     }
-    assert(ex.getCause.getCause.getMessage.toLowerCase(Locale.ROOT).contains("job aborted"))
   }
 
   test("streaming - exception on config serializer") {
@@ -330,21 +276,10 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
       .option("subscribe", inputTopic)
       .load()
 
-    val ex = intercept[IllegalArgumentException] {
-      createKafkaWriter(
-        input.toDF(),
-        withOptions = Map("kafka.key.serializer" -> "foo"))()
-    }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
-      "kafka option 'key.serializer' is not supported"))
-
-    val ex2 = intercept[IllegalArgumentException] {
-      createKafkaWriter(
-        input.toDF(),
-        withOptions = Map("kafka.value.serializer" -> "foo"))()
-    }
-    assert(ex2.getMessage.toLowerCase(Locale.ROOT).contains(
-      "kafka option 'value.serializer' is not supported"))
+    assertWrongOption(inputTopic, input.toDF(), Map("kafka.key.serializer" -> "foo"),
+      "kafka option 'key.serializer' is not supported")
+    assertWrongOption(inputTopic, input.toDF(), Map("kafka.value.serializer" -> "foo"),
+      "kafka option 'value.serializer' is not supported")
   }
 
   test("generic - write big data with small producer buffer") {
@@ -412,5 +347,49 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     withOutputMode.foreach(stream.outputMode(_))
     withOptions.foreach(opt => stream.option(opt._1, opt._2))
     stream.start()
+  }
+
+  private def runAndVerifyException[T <: Exception : ClassTag](
+      inputTopic: String,
+      expectErrorMsg: String)(
+      writerFn: => StreamingQuery): Unit = {
+    var writer: StreamingQuery = null
+    val ex: Exception = try {
+      intercept[T] {
+        writer = writerFn
+        testUtils.sendMessages(inputTopic, Array("1", "2", "3", "4", "5"))
+        eventually(timeout(streamingTimeout)) {
+          assert(writer.exception.isDefined)
+        }
+        throw writer.exception.get
+      }
+    } finally {
+      if (writer != null) writer.stop()
+    }
+    val rootException = ex match {
+      case e: StreamingQueryException => e.getCause.getCause
+      case e => e
+    }
+    assert(rootException.getMessage.toLowerCase(Locale.ROOT).contains(expectErrorMsg))
+  }
+
+  private def assertWrongSchema(
+      inputTopic: String,
+      input: DataFrame,
+      selectExpr: Seq[String],
+      expectErrorMsg: String): Unit = {
+    runAndVerifyException[AnalysisException](inputTopic, expectErrorMsg) {
+      createKafkaWriter(input)(withSelectExpr = selectExpr: _*)
+    }
+  }
+
+  private def assertWrongOption(
+      inputTopic: String,
+      input: DataFrame,
+      options: Map[String, String],
+      expectErrorMsg: String): Unit = {
+    runAndVerifyException[IllegalArgumentException](inputTopic, expectErrorMsg) {
+      createKafkaWriter(input, withOptions = options)()
+    }
   }
 }

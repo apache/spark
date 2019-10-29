@@ -136,14 +136,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Creates a [[ShowCreateTableCommand]]
-   */
-  override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
-    val table = visitTableIdentifier(ctx.tableIdentifier())
-    ShowCreateTableCommand(table)
-  }
-
-  /**
    * Create a [[RefreshResource]] logical plan.
    */
   override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {
@@ -163,13 +155,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths",
       ctx)
     unquotedPath
-  }
-
-  /**
-   * Create an [[UncacheTableCommand]] logical plan.
-   */
-  override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
-    UncacheTableCommand(visitTableIdentifier(ctx.tableIdentifier), ctx.EXISTS != null)
   }
 
   /**
@@ -289,25 +274,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[LoadDataCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   LOAD DATA [LOCAL] INPATH 'filepath' [OVERWRITE] INTO TABLE tablename
-   *   [PARTITION (partcol1=val1, partcol2=val2 ...)]
-   * }}}
-   */
-  override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
-    LoadDataCommand(
-      table = visitTableIdentifier(ctx.tableIdentifier),
-      path = string(ctx.path),
-      isLocal = ctx.LOCAL != null,
-      isOverwrite = ctx.OVERWRITE != null,
-      partition = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
-    )
-  }
-
-  /**
    * Create an [[AlterDatabasePropertiesCommand]] command.
    *
    * For example:
@@ -336,18 +302,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       ctx.db.getText,
       visitLocationSpec(ctx.locationSpec)
     )
-  }
-
-  /**
-   * Create a [[DropDatabaseCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   DROP (DATABASE|SCHEMA) [IF EXISTS] database [RESTRICT|CASCADE];
-   * }}}
-   */
-  override def visitDropDatabase(ctx: DropDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DropDatabaseCommand(ctx.db.getText, ctx.EXISTS != null, ctx.CASCADE != null)
   }
 
   /**
@@ -559,19 +513,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null,
       retainData = false)
-  }
-
-  /**
-   * Create an [[AlterTableRecoverPartitionsCommand]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table RECOVER PARTITIONS;
-   * }}}
-   */
-  override def visitRecoverPartitions(
-      ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRecoverPartitionsCommand(visitTableIdentifier(ctx.tableIdentifier))
   }
 
   /**
