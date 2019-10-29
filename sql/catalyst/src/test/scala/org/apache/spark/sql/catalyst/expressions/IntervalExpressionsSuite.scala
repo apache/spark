@@ -103,25 +103,27 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     "31 days 11 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds"
 
   test("days") {
-    checkEvaluation(ExtractIntervalDays("0 days"), 0L)
-    checkEvaluation(ExtractIntervalDays("1 days 100 seconds"), 1L)
-    checkEvaluation(ExtractIntervalDays("-1 days -100 seconds"), -1L)
-    checkEvaluation(ExtractIntervalDays("-365 days"), -365L)
-    checkEvaluation(ExtractIntervalDays("365 days"), 365L)
+    checkEvaluation(ExtractIntervalDays("0 days"), 0)
+    checkEvaluation(ExtractIntervalDays("1 days 100 seconds"), 1)
+    checkEvaluation(ExtractIntervalDays("-1 days -100 seconds"), -1)
+    checkEvaluation(ExtractIntervalDays("-365 days"), -365)
+    checkEvaluation(ExtractIntervalDays("365 days"), 365)
     // Years and months must not be taken into account
-    checkEvaluation(ExtractIntervalDays("100 year 10 months 5 days"), 5L)
-    checkEvaluation(ExtractIntervalDays(largeInterval), 31L)
+    checkEvaluation(ExtractIntervalDays("100 year 10 months 5 days"), 5)
+    checkEvaluation(ExtractIntervalDays(largeInterval), 31)
   }
 
   test("hours") {
-    checkEvaluation(ExtractIntervalHours("0 hours"), 0.toByte)
-    checkEvaluation(ExtractIntervalHours("1 hour"), 1.toByte)
-    checkEvaluation(ExtractIntervalHours("-1 hour"), -1.toByte)
-    checkEvaluation(ExtractIntervalHours("23 hours"), 23.toByte)
-    checkEvaluation(ExtractIntervalHours("-23 hours"), -23.toByte)
-    // Years and months must not be taken into account
-    checkEvaluation(ExtractIntervalHours("100 year 10 months 10 hours"), 10.toByte)
-    checkEvaluation(ExtractIntervalHours(largeInterval), 11.toByte)
+    checkEvaluation(ExtractIntervalHours("0 hours"), 0L)
+    checkEvaluation(ExtractIntervalHours("1 hour"), 1L)
+    checkEvaluation(ExtractIntervalHours("-1 hour"), -1L)
+    checkEvaluation(ExtractIntervalHours("23 hours"), 23L)
+    checkEvaluation(ExtractIntervalHours("-23 hours"), -23L)
+    // Years, months and days must not be taken into account
+    checkEvaluation(ExtractIntervalHours("100 year 10 months 10 days 10 hours"), 10L)
+    // Minutes should be taken into account
+    checkEvaluation(ExtractIntervalHours("10 hours 100 minutes"), 11L)
+    checkEvaluation(ExtractIntervalHours(largeInterval), 11L)
   }
 
   test("minutes") {

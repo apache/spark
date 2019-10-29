@@ -60,12 +60,12 @@ object IntervalUtils {
     (getMonths(interval) / MONTHS_PER_QUARTER + 1).toByte
   }
 
-  def getDays(interval: CalendarInterval): Long = {
+  def getDays(interval: CalendarInterval): Int = {
     interval.days
   }
 
-  def getHours(interval: CalendarInterval): Byte = {
-    ((interval.microseconds % DateTimeUtils.MICROS_PER_DAY) / MICROS_PER_HOUR).toByte
+  def getHours(interval: CalendarInterval): Long = {
+    interval.microseconds / MICROS_PER_HOUR
   }
 
   def getMinutes(interval: CalendarInterval): Byte = {
