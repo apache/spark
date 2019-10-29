@@ -20,13 +20,13 @@ license: |
 ---
 ### Description
 
-SHOW TABLE EXTENDED will show information for all tables matching the given regular expression.
+`SHOW TABLE EXTENDED` will show information for all tables matching the given regular expression.
 Output includes basic table information and file system information like `Last Access`, 
 `Created By`, `Type`, `Provider`, `Table Properties`, `Location`, `Serde Library`, `InputFormat`, 
 `OutputFormat`, `Storage Properties`, `Partition Provider`, `Partition Columns` and `Schema`.
 
-Users cannot use regular expression for table name if a partition specification is present and  it will output 
-the given partition's file specific system information such as `Partition Parameters` and `Partition Statistics` 
+Users cannot use regular expression for the table name if a partition specification is present. It will output 
+the given partition's file-system-specific information such as `Partition Parameters` and `Partition Statistics` 
 
 ### Syntax
 {% highlight sql %}
@@ -41,7 +41,13 @@ SHOW TABLE EXTENDED [IN|FROM database_name] LIKE 'identifier_with_wildcards' [PA
   </dd>
   <dt><code><em>LIKE string_pattern</em></code></dt>
   <dd>
-    Specifies a string pattern that is used to match the table in the database. 
+    Specifies the regular expression pattern that is used to filter out unwanted tables.
+    <ul> 
+       <li> Except for `*` and `|` character, the pattern works like a regex.</li>
+       <li> `*` alone matches 0 or more characters and `|` is used to separate multiple different regexes,
+             any of which can match. </li>
+       <li> The leading and trailing blanks are trimmed in the input pattern before processing.</li>
+    </ul> 
   </dd>
   <dt><code><em>PARTITION(partition_spec)</em></code></dt>
   <dd>
