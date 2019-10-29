@@ -294,7 +294,6 @@ class TaskContextTestsWithResources(unittest.TestCase):
         os.unlink(self.tempFile.name)
         self.sc.stop()
 
-
 if __name__ == "__main__":
     import unittest
     from pyspark.tests.test_taskcontext import *

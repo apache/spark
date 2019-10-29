@@ -166,10 +166,10 @@ class BarrierTaskContext(TaskContext):
         running tasks.
 
         .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
-            A RuntimeError will raise if it's not in a barrier stage.
+            A RuntimeError will raise if it is not in a barrier stage.
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
-            raise RuntimeError('''It's not in a barrier stage''')
+            raise RuntimeError('''It is not in a barrier stage''')
         return cls._taskContext
 
     @classmethod

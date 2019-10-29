@@ -503,11 +503,11 @@ def main(infile, outfile):
         if isBarrier:
             taskContext = BarrierTaskContext._getOrCreate()
             BarrierTaskContext._initialize(boundPort, secret)
+            # Set the task context instance here, so we can get it by TaskContext.get for
+            # both TaskContext and BarrierTaskContext
+            TaskContext._setTaskContext(taskContext)
         else:
             taskContext = TaskContext._getOrCreate()
-        # Set the task context instance here, so we can get it by TaskContext.get for
-        # both TaskContext and BarrierTaskContext
-        TaskContext._setTaskContext(taskContext)
         # read inputs for TaskContext info
         taskContext._stageId = read_int(infile)
         taskContext._partitionId = read_int(infile)
