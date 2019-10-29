@@ -16,18 +16,23 @@
  */
 package org.apache.spark.sql.connector
 
+import java.util
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+
+import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.connector.write.WriteBuilder
 import org.apache.spark.sql.execution.{FileSourceScanExec, QueryExecution}
-import org.apache.spark.sql.execution.datasources.{FileFormat, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.datasources.{FileFormat, InsertIntoHadoopFsRelationCommand, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{FileDataSourceV2, FileTable}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -40,7 +45,24 @@ class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "parquet"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override protected def inferDataSchema(
+      files: Seq[FileStatus], options: Map[String, String]): Option[StructType] = {
+    Some(new StructType)
+  }
+
+  override protected def createFileTable(
+      paths: Seq[String],
+      fileIndexGetter: () => PartitioningAwareFileIndex,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      tableProps: util.Map[String, String]): FileTable = {
+    throw new UnsupportedOperationException
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     new DummyReadOnlyFileTable
   }
 }
@@ -64,7 +86,24 @@ class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
   override def shortName(): String = "parquet"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override protected def inferDataSchema(
+      files: Seq[FileStatus], options: Map[String, String]): Option[StructType] = {
+    Some(new StructType)
+  }
+
+  override protected def createFileTable(
+      paths: Seq[String],
+      fileIndexGetter: () => PartitioningAwareFileIndex,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      tableProps: util.Map[String, String]): FileTable = {
+    throw new UnsupportedOperationException
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     new DummyWriteOnlyFileTable
   }
 }

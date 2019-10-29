@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.{SupportsTruncate, WriteBuilder}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
@@ -39,7 +40,19 @@ class ConsoleSinkProvider extends TableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    new StructType()
+  }
+
+  override def inferPartitioning(
+      schema: StructType, options: CaseInsensitiveStringMap): Array[Transform] = {
+    Array.empty
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     ConsoleTable
   }
 

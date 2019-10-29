@@ -16,28 +16,39 @@
  */
 package org.apache.spark.sql.v2.avro
 
-import org.apache.spark.sql.avro.AvroFileFormat
-import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.execution.datasources.FileFormat
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import java.util
+
+import org.apache.hadoop.fs.FileStatus
+
+import org.apache.spark.sql.avro.{AvroFileFormat, AvroUtils}
+import org.apache.spark.sql.execution.datasources.{FileFormat, PartitioningAwareFileIndex}
+import org.apache.spark.sql.execution.datasources.v2.{FileDataSourceV2, FileTable}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AvroDataSourceV2 extends FileDataSourceV2 {
 
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[AvroFileFormat]
 
-  override def shortName(): String = "avro"
+  override def shortName(): String = "AVRO"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    AvroTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+  override protected def inferDataSchema(
+      files: Seq[FileStatus], options: Map[String, String]): Option[StructType] = {
+    AvroUtils.inferSchema(sparkSession, options, files)
   }
 
-  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
-    val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    AvroTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
+  override protected def createFileTable(
+      paths: Seq[String],
+      fileIndexGetter: () => PartitioningAwareFileIndex,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      tableProps: util.Map[String, String]): FileTable = {
+    AvroTable(
+      sparkSession,
+      paths,
+      fileIndexGetter,
+      dataSchema,
+      partitionSchema,
+      tableProps,
+      fallbackFileFormat)
   }
 }

@@ -16,28 +16,45 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.csv
 
-import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.execution.datasources.FileFormat
-import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import java.util
+
+import org.apache.hadoop.fs.FileStatus
+
+import org.apache.spark.sql.catalyst.csv.CSVOptions
+import org.apache.spark.sql.execution.datasources.{FileFormat, PartitioningAwareFileIndex}
+import org.apache.spark.sql.execution.datasources.csv.{CSVDataSource, CSVFileFormat}
+import org.apache.spark.sql.execution.datasources.v2.{FileDataSourceV2, FileTable}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CSVDataSourceV2 extends FileDataSourceV2 {
 
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[CSVFileFormat]
 
-  override def shortName(): String = "csv"
+  override def shortName(): String = "CSV"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    CSVTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+  override protected def inferDataSchema(
+      files: Seq[FileStatus], options: Map[String, String]): Option[StructType] = {
+    val parsedOptions = new CSVOptions(
+      options,
+      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
+      sparkSession.sessionState.conf.sessionLocalTimeZone)
+
+    CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
 
-  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
-    val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    CSVTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
+  override protected def createFileTable(
+      paths: Seq[String],
+      fileIndexGetter: () => PartitioningAwareFileIndex,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      tableProps: util.Map[String, String]): FileTable = {
+    CSVTable(
+      sparkSession,
+      paths,
+      fileIndexGetter,
+      dataSchema,
+      partitionSchema,
+      tableProps,
+      fallbackFileFormat)
   }
 }

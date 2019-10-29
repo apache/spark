@@ -30,6 +30,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
@@ -417,7 +418,7 @@ object SimpleReaderFactory extends PartitionReaderFactory {
 
 abstract class SimpleBatchTable extends Table with SupportsRead  {
 
-  override def schema(): StructType = new StructType().add("i", "int").add("j", "int")
+  override def schema(): StructType = TestingV2Source.schema
 
   override def name(): String = this.getClass.toString
 
@@ -431,12 +432,27 @@ abstract class SimpleScanBuilder extends ScanBuilder
 
   override def toBatch: Batch = this
 
-  override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
+  override def readSchema(): StructType = TestingV2Source.schema
 
   override def createReaderFactory(): PartitionReaderFactory = SimpleReaderFactory
 }
 
-class SimpleSinglePartitionSource extends TableProvider {
+trait TestingV2Source extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    TestingV2Source.schema
+  }
+
+  override def inferPartitioning(
+      schema: StructType, options: CaseInsensitiveStringMap): Array[Transform] = {
+    Array.empty
+  }
+}
+
+object TestingV2Source {
+  val schema = new StructType().add("i", "int").add("j", "int")
+}
+
+class SimpleSinglePartitionSource extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
@@ -444,16 +460,21 @@ class SimpleSinglePartitionSource extends TableProvider {
     }
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
-    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder()
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new SimpleBatchTable {
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new MyScanBuilder()
+      }
     }
   }
 }
 
 // This class is used by pyspark tests. If this class is modified/moved, make sure pyspark
 // tests still pass.
-class SimpleDataSourceV2 extends TableProvider {
+class SimpleDataSourceV2 extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
@@ -461,18 +482,28 @@ class SimpleDataSourceV2 extends TableProvider {
     }
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
-    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder()
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new SimpleBatchTable {
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new MyScanBuilder()
+      }
     }
   }
 }
 
-class AdvancedDataSourceV2 extends TableProvider {
+class AdvancedDataSourceV2 extends TestingV2Source {
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
-    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new AdvancedScanBuilder()
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new SimpleBatchTable {
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new AdvancedScanBuilder()
+      }
     }
   }
 }
@@ -558,7 +589,7 @@ class AdvancedReaderFactory(requiredSchema: StructType) extends PartitionReaderF
 }
 
 
-class SchemaRequiredDataSource extends TableProvider {
+class SchemaRequiredDataSource extends TestingV2Source {
 
   class MyScanBuilder(schema: StructType) extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = Array.empty
@@ -566,11 +597,14 @@ class SchemaRequiredDataSource extends TableProvider {
     override def readSchema(): StructType = schema
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     throw new IllegalArgumentException("requires a user-supplied schema")
   }
 
-  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     val userGivenSchema = schema
     new SimpleBatchTable {
       override def schema(): StructType = userGivenSchema
@@ -582,7 +616,7 @@ class SchemaRequiredDataSource extends TableProvider {
   }
 }
 
-class ColumnarDataSourceV2 extends TableProvider {
+class ColumnarDataSourceV2 extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder {
 
@@ -595,9 +629,14 @@ class ColumnarDataSourceV2 extends TableProvider {
     }
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
-    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder()
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new SimpleBatchTable {
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new MyScanBuilder()
+      }
     }
   }
 }
@@ -647,7 +686,7 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   }
 }
 
-class PartitionAwareDataSource extends TableProvider {
+class PartitionAwareDataSource extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder
     with SupportsReportPartitioning{
@@ -666,9 +705,14 @@ class PartitionAwareDataSource extends TableProvider {
     override def outputPartitioning(): Partitioning = new MyPartitioning
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
-    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder()
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new SimpleBatchTable {
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new MyScanBuilder()
+      }
     }
   }
 
@@ -702,20 +746,7 @@ object SpecificReaderFactory extends PartitionReaderFactory {
   }
 }
 
-class SchemaReadAttemptException(m: String) extends RuntimeException(m)
-
-class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
-
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    new MyTable(options) {
-      override def schema(): StructType = {
-        throw new SchemaReadAttemptException("schema should not be read.")
-      }
-    }
-  }
-}
-
-class ReportStatisticsDataSource extends TableProvider {
+class ReportStatisticsDataSource extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder
     with SupportsReportStatistics {
@@ -732,7 +763,10 @@ class ReportStatisticsDataSource extends TableProvider {
     }
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     new SimpleBatchTable {
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
         new MyScanBuilder

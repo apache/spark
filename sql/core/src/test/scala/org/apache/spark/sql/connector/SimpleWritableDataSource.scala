@@ -29,6 +29,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, ScanBuilder}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.types.StructType
@@ -131,7 +132,7 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     }
   }
 
-  class MyTable(options: CaseInsensitiveStringMap)
+  class MyTable(options: util.Map[String, String])
     extends SimpleBatchTable with SupportsWrite {
 
     private val path = options.get("path")
@@ -151,8 +152,20 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
       Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    new MyTable(options)
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    tableSchema
+  }
+
+  override def inferPartitioning(
+      schema: StructType, options: CaseInsensitiveStringMap): Array[Transform] = {
+    Array.empty
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new MyTable(properties)
   }
 }
 

@@ -371,7 +371,7 @@ case class DataSource(
         HadoopFsRelation(
           fileCatalog,
           partitionSchema = fileCatalog.partitionSchema,
-          dataSchema = dataSchema,
+          dataSchema = dataSchema.asNullable,
           bucketSpec = None,
           format,
           caseInsensitiveOptions)(sparkSession)
@@ -722,7 +722,8 @@ object DataSource extends Logging {
       .split(",").map(_.trim)
     val cls = lookupDataSource(provider, conf)
     cls.newInstance() match {
-      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
+      case d: DataSourceRegister
+          if useV1Sources.contains(d.shortName().toLowerCase(Locale.ROOT)) => None
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
         Some(t)

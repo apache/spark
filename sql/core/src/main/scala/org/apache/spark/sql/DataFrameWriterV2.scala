@@ -96,7 +96,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   @scala.annotation.varargs
   override def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T] = {
-    def ref(name: String): NamedReference = LogicalExpressions.parseReference(name)
+    def ref(name: String): NamedReference = LogicalExpressions.reference(Seq(name))
 
     val asTransforms = (column +: columns).map(_.expr).map {
       case Years(attr: Attribute) =>

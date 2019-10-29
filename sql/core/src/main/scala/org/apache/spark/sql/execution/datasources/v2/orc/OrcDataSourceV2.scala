@@ -16,29 +16,40 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
-import org.apache.spark.sql.connector.catalog.Table
+import java.util
+
+import org.apache.hadoop.fs.FileStatus
+
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
+import org.apache.spark.sql.execution.datasources.orc.{OrcFileFormat, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class OrcDataSourceV2 extends FileDataSourceV2 {
 
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[OrcFileFormat]
 
-  override def shortName(): String = "orc"
+  override def shortName(): String = "ORC"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    OrcTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+  override protected def inferDataSchema(
+      files: Seq[FileStatus], options: Map[String, String]): Option[StructType] = {
+    OrcUtils.inferSchema(sparkSession, files, options)
   }
 
-  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
-    val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    OrcTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
+  override protected def createFileTable(
+      paths: Seq[String],
+      fileIndexGetter: () => PartitioningAwareFileIndex,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      tableProps: util.Map[String, String]): FileTable = {
+    OrcTable(
+      sparkSession,
+      paths,
+      fileIndexGetter,
+      dataSchema,
+      partitionSchema,
+      tableProps,
+      fallbackFileFormat)
   }
 }
 

@@ -297,15 +297,15 @@ class RateStreamProviderSuite extends StreamTest {
     testIllegalOptionValue("numPartitions", "-1", Seq("-1", "numPartitions", "positive"))
   }
 
-  test("user-specified schema given") {
-    val exception = intercept[UnsupportedOperationException] {
+  test("incompatible user-specified schema given") {
+    val exception = intercept[IllegalArgumentException] {
       spark.readStream
         .format("rate")
         .schema(spark.range(1).schema)
         .load()
     }
     assert(exception.getMessage.contains(
-      "RateStreamProvider source does not support user-specified schema"))
+      "Specified schema does not match the actual table schema"))
   }
 
   test("continuous data") {

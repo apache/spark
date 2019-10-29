@@ -37,7 +37,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.sql.{Dataset, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, StreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
@@ -1142,7 +1142,8 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
         val dsOptions = new CaseInsensitiveStringMap(options.asJava)
-        val table = provider.getTable(dsOptions)
+        val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, None)
+          .asInstanceOf[provider.KafkaTable]
         val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
         val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),

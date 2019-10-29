@@ -18,22 +18,25 @@
 package test.org.apache.spark.sql.connector;
 
 import java.io.IOException;
+import java.util.Map;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.Table;
-import org.apache.spark.sql.connector.catalog.TableProvider;
+import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 
-public class JavaColumnarDataSourceV2 implements TableProvider {
+public class JavaColumnarDataSourceV2 implements TestingV2Source {
 
   class MyScanBuilder extends JavaSimpleScanBuilder {
 
@@ -52,7 +55,8 @@ public class JavaColumnarDataSourceV2 implements TableProvider {
   }
 
   @Override
-  public Table getTable(CaseInsensitiveStringMap options) {
+  public Table getTable(
+      StructType schema, Transform[] partitioning, Map<String, String> properties) {
     return new JavaSimpleBatchTable() {
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {

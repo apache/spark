@@ -16,66 +16,26 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util
-
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.Utils
 
-abstract class FileTable(
-    sparkSession: SparkSession,
-    options: CaseInsensitiveStringMap,
-    paths: Seq[String],
-    userSpecifiedSchema: Option[StructType])
-  extends Table with SupportsRead with SupportsWrite {
-
+abstract class FileTable extends Table with SupportsRead with SupportsWrite {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  lazy val fileIndex: PartitioningAwareFileIndex = {
-    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-    // Hadoop Configurations are case sensitive.
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
-      // We are reading from the results of a streaming query. We will load files from
-      // the metadata log instead of listing them using HDFS APIs.
-      new MetadataLogFileIndex(sparkSession, new Path(paths.head),
-        options.asScala.toMap, userSpecifiedSchema)
-    } else {
-      // This is a non-streaming file based datasource.
-      val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
-        checkEmptyGlobPath = true, checkFilesExist = true)
-      val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
-      new InMemoryFileIndex(
-        sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
-    }
-  }
-
-  lazy val dataSchema: StructType = {
-    val schema = userSpecifiedSchema.map { schema =>
-      val partitionSchema = fileIndex.partitionSchema
-      val resolver = sparkSession.sessionState.conf.resolver
-      StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
-    }.orElse {
-      inferSchema(fileIndex.allFiles())
-    }.getOrElse {
-      throw new AnalysisException(
-        s"Unable to infer schema for $formatName. It must be specified manually.")
-    }
-    fileIndex match {
-      case _: MetadataLogFileIndex => schema
-      case _ => schema.asNullable
-    }
-  }
+  protected val sparkSession: SparkSession
+  protected val paths: Seq[String]
+  val dataSchema: StructType
+  val partitionSchema: StructType
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
@@ -87,33 +47,27 @@ abstract class FileTable(
           s"$formatName data source does not support ${field.dataType.catalogString} data type.")
       }
     }
-    val partitionSchema = fileIndex.partitionSchema
     SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
       "in the partition schema", caseSensitive)
-    val partitionNameSet: Set[String] =
-      partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
-
-    // When data and partition schemas have overlapping columns,
-    // tableSchema = dataSchema - overlapSchema + partitionSchema
-    val fields = dataSchema.fields.filterNot { field =>
-      val colName = PartitioningUtils.getColName(field, caseSensitive)
-      partitionNameSet.contains(colName)
-    } ++ partitionSchema.fields
-    StructType(fields)
+    StructType(dataSchema ++ partitionSchema)
+  }
+  override lazy val name: String = {
+    val name = formatName + " " + paths.map(qualifiedPathName).mkString(",")
+    Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, name)
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.asTransforms
+  protected val fileIndexGetter: () => PartitioningAwareFileIndex
+  lazy val fileIndex = fileIndexGetter.apply()
 
-  override def properties: util.Map[String, String] = options.asCaseSensitiveMap
+  private def qualifiedPathName(path: String): String = {
+    val hdfsPath = new Path(path)
+    val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
+  }
+
+  override def partitioning: Array[Transform] = partitionSchema.map(_.name).asTransforms
 
   override def capabilities: java.util.Set[TableCapability] = FileTable.CAPABILITIES
-
-  /**
-   * When possible, this method should return the schema of the given `files`.  When the format
-   * does not support inference, or no valid files are given should return None.  In these cases
-   * Spark will require that user specify the schema manually.
-   */
-  def inferSchema(files: Seq[FileStatus]): Option[StructType]
 
   /**
    * Returns whether this format supports the given [[DataType]] in read/write path.

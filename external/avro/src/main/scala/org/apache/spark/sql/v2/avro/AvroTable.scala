@@ -16,31 +16,25 @@
  */
 package org.apache.spark.sql.v2.avro
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.fs.FileStatus
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroUtils
 import org.apache.spark.sql.connector.write.WriteBuilder
-import org.apache.spark.sql.execution.datasources.FileFormat
+import org.apache.spark.sql.execution.datasources.{FileFormat, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.v2.FileTable
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class AvroTable(
-    name: String,
     sparkSession: SparkSession,
-    options: CaseInsensitiveStringMap,
     paths: Seq[String],
-    userSpecifiedSchema: Option[StructType],
-    fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+    fileIndexGetter: () => PartitioningAwareFileIndex,
+    dataSchema: StructType,
+    partitionSchema: StructType,
+    override val properties: java.util.Map[String, String],
+    fallbackFileFormat: Class[_ <: FileFormat]) extends FileTable {
+
   override def newScanBuilder(options: CaseInsensitiveStringMap): AvroScanBuilder =
     new AvroScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
-
-  override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
-    AvroUtils.inferSchema(sparkSession, options.asScala.toMap, files)
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
     new AvroWriteBuilder(options, paths, formatName, supportsDataType)

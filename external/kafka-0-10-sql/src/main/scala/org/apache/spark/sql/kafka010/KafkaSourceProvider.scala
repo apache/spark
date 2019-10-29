@@ -31,6 +31,7 @@ import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.{BatchWrite, WriteBuilder}
@@ -108,9 +109,37 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       failOnDataLoss(caseInsensitiveParameters))
   }
 
-  override def getTable(options: CaseInsensitiveStringMap): KafkaTable = {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
-    new KafkaTable(includeHeaders)
+    KafkaRecordToRowConverter.kafkaSchema(includeHeaders)
+  }
+
+  override def inferPartitioning(
+      schema: StructType,
+      options: CaseInsensitiveStringMap): Array[Transform] = {
+    Array.empty
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: ju.Map[String, String]): KafkaTable = {
+    val options = new CaseInsensitiveStringMap(properties)
+    val actualSchema = inferSchema(options)
+    if (schema != actualSchema) {
+      throw new IllegalArgumentException(
+        s"""
+           |Specified schema does not match the actual table schema of kafka source:
+           |Specified schema:    $schema
+           |Actual table schema: $actualSchema
+        """.stripMargin)
+    }
+
+    if (partitioning.nonEmpty) {
+      throw new IllegalArgumentException("kafka source does not support partitioning.")
+    }
+
+    new KafkaTable(schema)
   }
 
   /**
@@ -374,11 +403,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  class KafkaTable(includeHeaders: Boolean) extends Table with SupportsRead with SupportsWrite {
+  class KafkaTable(override val schema: StructType) extends Table
+    with SupportsRead with SupportsWrite {
 
     override def name(): String = "KafkaTable"
-
-    override def schema(): StructType = KafkaRecordToRowConverter.kafkaSchema(includeHeaders)
 
     override def capabilities(): ju.Set[TableCapability] = {
       import TableCapability._

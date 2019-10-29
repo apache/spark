@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeTable, DropTable, InsertAction, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SubqueryAlias, UpdateAction, UpdateTable}
-import org.apache.spark.sql.connector.InMemoryTableProvider
+import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, Integ
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
 
-  private val v2Format = classOf[InMemoryTableProvider].getName
+  private val v2Format = classOf[FakeV2Provider].getName
 
   private val table: Table = {
     val t = mock(classOf[Table])

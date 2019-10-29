@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
 import org.apache.spark.sql.connector.write.{PhysicalWriteInfo, WriteBuilder, WriterCommitMessage}
@@ -91,16 +92,30 @@ trait FakeStreamingWriteTable extends Table with SupportsWrite {
   }
 }
 
+trait BaseFakeProvider extends TableProvider {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    new StructType()
+  }
+
+  override def inferPartitioning(
+      schema: StructType, options: CaseInsensitiveStringMap): Array[Transform] = {
+    Array.empty
+  }
+}
+
 class FakeReadMicroBatchOnly
     extends DataSourceRegister
-    with TableProvider
+    with BaseFakeProvider
     with SessionConfigSupport {
   override def shortName(): String = "fake-read-microbatch-only"
 
   override def keyPrefix: String = shortName()
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    LastReadOptions.options = options
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    LastReadOptions.options = properties
     new Table with SupportsRead {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Seq())
@@ -116,14 +131,17 @@ class FakeReadMicroBatchOnly
 
 class FakeReadContinuousOnly
     extends DataSourceRegister
-    with TableProvider
+    with BaseFakeProvider
     with SessionConfigSupport {
   override def shortName(): String = "fake-read-continuous-only"
 
   override def keyPrefix: String = shortName()
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    LastReadOptions.options = options
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    LastReadOptions.options = properties
     new Table with SupportsRead {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Seq())
@@ -137,10 +155,13 @@ class FakeReadContinuousOnly
   }
 }
 
-class FakeReadBothModes extends DataSourceRegister with TableProvider {
+class FakeReadBothModes extends DataSourceRegister with BaseFakeProvider {
   override def shortName(): String = "fake-read-microbatch-continuous"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     new Table with SupportsRead {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Seq())
@@ -154,10 +175,13 @@ class FakeReadBothModes extends DataSourceRegister with TableProvider {
   }
 }
 
-class FakeReadNeitherMode extends DataSourceRegister with TableProvider {
+class FakeReadNeitherMode extends DataSourceRegister with BaseFakeProvider {
   override def shortName(): String = "fake-read-neither-mode"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     new Table {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
@@ -168,14 +192,17 @@ class FakeReadNeitherMode extends DataSourceRegister with TableProvider {
 
 class FakeWriteOnly
     extends DataSourceRegister
-    with TableProvider
+    with BaseFakeProvider
     with SessionConfigSupport {
   override def shortName(): String = "fake-write-microbatch-continuous"
 
   override def keyPrefix: String = shortName()
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    LastWriteOptions.options = options
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    LastWriteOptions.options = properties
     new Table with FakeStreamingWriteTable {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
@@ -183,9 +210,12 @@ class FakeWriteOnly
   }
 }
 
-class FakeNoWrite extends DataSourceRegister with TableProvider {
+class FakeNoWrite extends DataSourceRegister with BaseFakeProvider {
   override def shortName(): String = "fake-write-neither-mode"
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     new Table {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
@@ -201,7 +231,7 @@ class FakeSink extends Sink {
 }
 
 class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
-  with TableProvider with StreamSinkProvider {
+  with BaseFakeProvider with StreamSinkProvider {
 
   override def createSink(
       sqlContext: SQLContext,
@@ -213,7 +243,10 @@ class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
 
   override def shortName(): String = "fake-write-v1-fallback"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     new Table with FakeStreamingWriteTable {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
@@ -222,7 +255,7 @@ class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
 }
 
 object LastReadOptions {
-  var options: CaseInsensitiveStringMap = _
+  var options: util.Map[String, String] = _
 
   def clear(): Unit = {
     options = null
@@ -230,7 +263,7 @@ object LastReadOptions {
 }
 
 object LastWriteOptions {
-  var options: CaseInsensitiveStringMap = _
+  var options: util.Map[String, String] = _
 
   def clear(): Unit = {
     options = null
@@ -348,7 +381,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
           eventually(timeout(streamingTimeout)) {
             // Write options should not be set.
             assert(!LastWriteOptions.options.containsKey(readOptionName))
-            assert(LastReadOptions.options.getBoolean(readOptionName, false))
+            assert(LastReadOptions.options.get(readOptionName) == "true")
           }
         }
       }
@@ -359,7 +392,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
           eventually(timeout(streamingTimeout)) {
             // Read options should not be set.
             assert(!LastReadOptions.options.containsKey(writeOptionName))
-            assert(LastWriteOptions.options.getBoolean(writeOptionName, false))
+            assert(LastWriteOptions.options.get(writeOptionName) == "true")
           }
         }
       }
@@ -378,10 +411,12 @@ class StreamingDataSourceV2Suite extends StreamTest {
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
       val sourceTable = DataSource.lookupDataSource(read, spark.sqlContext.conf).getConstructor()
-        .newInstance().asInstanceOf[TableProvider].getTable(CaseInsensitiveStringMap.empty())
+        .newInstance().asInstanceOf[TableProvider]
+        .getTable(new StructType(), Array.empty, new util.HashMap[String, String])
 
       val sinkTable = DataSource.lookupDataSource(write, spark.sqlContext.conf).getConstructor()
-        .newInstance().asInstanceOf[TableProvider].getTable(CaseInsensitiveStringMap.empty())
+        .newInstance().asInstanceOf[TableProvider]
+        .getTable(new StructType(), Array.empty, new util.HashMap[String, String])
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       trigger match {

@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousStream
@@ -48,7 +49,33 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class RateStreamProvider extends TableProvider with DataSourceRegister {
   import RateStreamProvider._
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    RateStreamProvider.SCHEMA
+  }
+
+  override def inferPartitioning(
+      schema: StructType, options: CaseInsensitiveStringMap): Array[Transform] = {
+    Array.empty
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    if (schema != RateStreamProvider.SCHEMA) {
+      throw new IllegalArgumentException(
+        s"""
+          |Specified schema does not match the actual table schema of rate stream source:
+          |Specified schema:    $schema
+          |Actual table schema: ${RateStreamProvider.SCHEMA}
+        """.stripMargin)
+    }
+
+    if (partitioning.nonEmpty) {
+      throw new IllegalArgumentException("rate stream source does not support partitioning.")
+    }
+
+    val options = new CaseInsensitiveStringMap(properties)
     val rowsPerSecond = options.getLong(ROWS_PER_SECOND, 1)
     if (rowsPerSecond <= 0) {
       throw new IllegalArgumentException(

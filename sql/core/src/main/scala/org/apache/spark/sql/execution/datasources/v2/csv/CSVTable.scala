@@ -16,38 +16,24 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.csv
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.fs.FileStatus
-
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.connector.write.WriteBuilder
-import org.apache.spark.sql.execution.datasources.FileFormat
-import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
+import org.apache.spark.sql.execution.datasources.{FileFormat, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.v2.FileTable
 import org.apache.spark.sql.types.{AtomicType, DataType, StructType, UserDefinedType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class CSVTable(
-    name: String,
     sparkSession: SparkSession,
-    options: CaseInsensitiveStringMap,
     paths: Seq[String],
-    userSpecifiedSchema: Option[StructType],
-    fallbackFileFormat: Class[_ <: FileFormat])
-  extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
+    fileIndexGetter: () => PartitioningAwareFileIndex,
+    dataSchema: StructType,
+    partitionSchema: StructType,
+    override val properties: java.util.Map[String, String],
+    fallbackFileFormat: Class[_ <: FileFormat]) extends FileTable {
+
   override def newScanBuilder(options: CaseInsensitiveStringMap): CSVScanBuilder =
     CSVScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
-
-  override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
-    val parsedOptions = new CSVOptions(
-      options.asScala.toMap,
-      columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
-      sparkSession.sessionState.conf.sessionLocalTimeZone)
-
-    CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
-  }
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
     new CSVWriteBuilder(options, paths, formatName, supportsDataType)

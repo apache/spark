@@ -25,6 +25,7 @@ import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
 import org.apache.spark.sql.connector.read.Scan
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KafkaSourceProviderSuite extends SparkFunSuite {
@@ -125,6 +126,8 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
 
   private def getKafkaDataSourceScan(options: CaseInsensitiveStringMap): Scan = {
     val provider = new KafkaSourceProvider()
-    provider.getTable(options).newScanBuilder(options).build()
+    val table = DataSourceV2Utils.getTableFromProvider(provider, options, None)
+      .asInstanceOf[provider.KafkaTable]
+    table.newScanBuilder(options).build()
   }
 }

@@ -65,8 +65,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
         prunePhysicalColumns(output, projects, filters, table.dataSchema,
           prunedDataSchema => {
             val prunedFileTable = table match {
-              case o: OrcTable => o.copy(userSpecifiedSchema = Some(prunedDataSchema))
-              case p: ParquetTable => p.copy(userSpecifiedSchema = Some(prunedDataSchema))
+              case o: OrcTable => o.copy(dataSchema = prunedDataSchema)
+              case p: ParquetTable => p.copy(dataSchema = prunedDataSchema)
               case _ =>
                 val message = s"${table.formatName} data source doesn't support schema pruning."
                 throw new AnalysisException(message)

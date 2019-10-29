@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsWrite, TableCatalog, TableProvider, V1Table}
@@ -258,7 +258,21 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      provider.getTable(dsOptions) match {
+
+      val table = provider match {
+        // For file source, it's expensive to infer schema/partition at each write. Here we pass
+        // the schema of input query and the user-specified partitioning to `getTable`. If the
+        // query schema is not compatible with the existing data, the write can still success but
+        // following reads would fail.
+        case p: FileDataSourceV2 =>
+          import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+          val partitioning = partitioningColumns.getOrElse(Nil).asTransforms
+          p.getTable(df.schema, partitioning, dsOptions)
+        case _ =>
+          DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema = None)
+      }
+
+      table match {
         case table: SupportsWrite if table.supports(BATCH_WRITE) =>
           if (partitioningColumns.nonEmpty) {
             throw new AnalysisException("Cannot write data to TableProvider implementation " +
@@ -505,12 +519,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
 
   private def saveAsTable(catalog: TableCatalog, ident: Identifier): Unit = {
-    val partitioning = partitioningColumns.map { colNames =>
-      colNames.map(name => IdentityTransform(FieldReference(name)))
-    }.getOrElse(Seq.empty[Transform])
-    val bucketing = bucketColumnNames.map { cols =>
-      Seq(BucketTransform(LiteralValue(numBuckets.get, IntegerType), cols.map(FieldReference(_))))
-    }.getOrElse(Seq.empty[Transform])
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    val partitioning = partitioningColumns.map(_.asTransforms).getOrElse(Array.empty)
+    val bucketing = getBucketSpec.map(_.asTransform)
     val partitionTransforms = partitioning ++ bucketing
 
     val tableOpt = try Option(catalog.loadTable(ident)) catch {

@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.internal.SQLConf
@@ -95,7 +96,19 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
 // This class is used to indicate the memory stream data source. We don't actually use it, as
 // memory stream is for test only and we never look it up by name.
 object MemoryStreamTableProvider extends TableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    throw new IllegalStateException("MemoryStreamTableProvider should not be used.")
+  }
+
+  override def inferPartitioning(
+      schema: StructType, options: CaseInsensitiveStringMap): Array[Transform] = {
+    throw new IllegalStateException("MemoryStreamTableProvider should not be used.")
+  }
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     throw new IllegalStateException("MemoryStreamTableProvider should not be used.")
   }
 }

@@ -16,29 +16,41 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.text
 
-import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.execution.datasources.FileFormat
+import java.util
+
+import org.apache.hadoop.fs.FileStatus
+
+import org.apache.spark.sql.execution.datasources.{FileFormat, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.execution.datasources.v2.{FileDataSourceV2, FileTable}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class TextDataSourceV2 extends FileDataSourceV2 {
 
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[TextFileFormat]
 
-  override def shortName(): String = "text"
+  override def shortName(): String = "Text"
 
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    TextTable(tableName, sparkSession, options, paths, None, fallbackFileFormat)
+  override protected def inferDataSchema(
+      files: Seq[FileStatus],
+      options: Map[String, String]): Option[StructType] = {
+    Some(StructType(Seq(StructField("value", StringType))))
   }
 
-  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
-    val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    TextTable(tableName, sparkSession, options, paths, Some(schema), fallbackFileFormat)
+  override protected def createFileTable(
+      paths: Seq[String],
+      fileIndexGetter: () => PartitioningAwareFileIndex,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      tableProps: util.Map[String, String]): FileTable = {
+    TextTable(
+      sparkSession,
+      paths,
+      fileIndexGetter,
+      dataSchema,
+      partitionSchema,
+      tableProps,
+      fallbackFileFormat)
   }
 }
 

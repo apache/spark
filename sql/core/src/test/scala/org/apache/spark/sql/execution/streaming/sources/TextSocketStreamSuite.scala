@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, StreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.internal.SQLConf
@@ -175,13 +175,15 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
   test("params not given") {
     val provider = new TextSocketSourceProvider
     intercept[AnalysisException] {
-      provider.getTable(CaseInsensitiveStringMap.empty())
+      DataSourceV2Utils.getTableFromProvider(provider, CaseInsensitiveStringMap.empty(), None)
     }
     intercept[AnalysisException] {
-      provider.getTable(new CaseInsensitiveStringMap(Map("host" -> "localhost").asJava))
+      DataSourceV2Utils.getTableFromProvider(
+        provider, new CaseInsensitiveStringMap(Map("host" -> "localhost").asJava), None)
     }
     intercept[AnalysisException] {
-      provider.getTable(new CaseInsensitiveStringMap(Map("port" -> "1234").asJava))
+      DataSourceV2Utils.getTableFromProvider(
+        provider, new CaseInsensitiveStringMap(Map("port" -> "1234").asJava), None)
     }
   }
 
@@ -189,21 +191,23 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
     val provider = new TextSocketSourceProvider
     val params = Map("host" -> "localhost", "port" -> "1234", "includeTimestamp" -> "fasle")
     intercept[AnalysisException] {
-      provider.getTable(new CaseInsensitiveStringMap(params.asJava))
+      DataSourceV2Utils.getTableFromProvider(
+        provider, new CaseInsensitiveStringMap(params.asJava), None)
     }
   }
 
-  test("user-specified schema given") {
+  test("incompatible user-specified schema given") {
     val provider = new TextSocketSourceProvider
     val userSpecifiedSchema = StructType(
       StructField("name", StringType) ::
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
-    val exception = intercept[UnsupportedOperationException] {
-      provider.getTable(new CaseInsensitiveStringMap(params.asJava), userSpecifiedSchema)
+    val exception = intercept[IllegalArgumentException] {
+      DataSourceV2Utils.getTableFromProvider(
+        provider, new CaseInsensitiveStringMap(params.asJava), Some(userSpecifiedSchema))
     }
     assert(exception.getMessage.contains(
-      "TextSocketSourceProvider source does not support user-specified schema"))
+      "Specified schema does not match the actual table schema"))
   }
 
   test("input row metrics") {
