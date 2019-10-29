@@ -435,6 +435,11 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
           e.copy(branches = newBranches)
         }
 
+      case e @ CaseWhen(branches, elseValue) if branches.length == 1 =>
+        // If there is only one branch in the CaseWhen rewrite it to If
+        // which has more efficient codeGen
+        If(branches(0)._1, branches(0)._2, elseValue.getOrElse(Literal.create(null, e.dataType)))
+
       case CaseWhen(branches, _) if branches.headOption.map(_._1).contains(TrueLiteral) =>
         // If the first branch is a true literal, remove the entire CaseWhen and use the value
         // from that. Note that CaseWhen.branches should never be empty, and as a result the

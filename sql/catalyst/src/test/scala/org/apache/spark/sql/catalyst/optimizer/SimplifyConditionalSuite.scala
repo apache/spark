@@ -166,4 +166,25 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Literal(1))
     )
   }
+
+  test("rewrite CaseWhen to If if there is only one branch") {
+    // When we have only one branch, we convert it to If
+    assertEquivalent(
+      CaseWhen(normalBranch :: Nil, Some(Literal(30))),
+      If(normalBranch._1, normalBranch._2, Literal(30))
+    )
+
+    // When there are more branches we do not do it
+    assertEquivalent(
+      CaseWhen(normalBranch :: nullBranch :: Nil, None),
+      CaseWhen(normalBranch :: nullBranch :: Nil, None)
+    )
+
+    // When there are more branches that simplify to single branch
+    // we rewrite it using If
+    assertEquivalent(
+      CaseWhen(normalBranch :: unreachableBranch :: Nil, None),
+      If(normalBranch._1, normalBranch._2, Literal.create(null, NullType))
+    )
+  }
 }
