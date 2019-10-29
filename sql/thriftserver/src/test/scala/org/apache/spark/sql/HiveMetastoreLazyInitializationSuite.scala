@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
-
 import org.apache.spark.util.Utils
 
 class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {

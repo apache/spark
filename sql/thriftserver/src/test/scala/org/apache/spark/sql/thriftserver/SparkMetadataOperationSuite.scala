@@ -19,6 +19,8 @@ package org.apache.spark.sql.thriftserver
 
 import java.sql.{DatabaseMetaData, ResultSet}
 
+import org.apache.spark.sql.thriftserver.cli.Type
+
 class SparkMetadataOperationSuite extends SparkThriftJdbcTest {
 
   override def mode: ServerMode.Value = ServerMode.binary
@@ -244,7 +246,7 @@ class SparkMetadataOperationSuite extends SparkThriftJdbcTest {
 
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
-      checkResult(metaData.getTypeInfo, ThriftserverShimUtils.supportedType().map(_.getName))
+      checkResult(metaData.getTypeInfo, Type.values.map(_.getName))
     }
   }
 }

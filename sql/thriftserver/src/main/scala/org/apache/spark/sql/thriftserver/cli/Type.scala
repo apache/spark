@@ -182,8 +182,7 @@ object Type {
     BINARY.getName -> BINARY,
     ARRAY.getName -> ARRAY,
     MAP.getName -> MAP,
-    STRUCT.getName -> STRUCT,
-    USER_DEFINED.getName -> USER_DEFINED
+    STRUCT.getName -> STRUCT
   )
 
   def values: Seq[Type] = typeMap.values.toSeq
@@ -480,22 +479,6 @@ object Type {
     override def getMaxPrecision(): Option[Int] = None
 
     override def javaSQLType: Int = java.sql.Types.STRUCT
-  }
-
-  case object USER_DEFINED extends Type {
-    override def getName: String = "USER_DEFINED"
-
-    override def tTypeId: TTypeId = TTypeId.USER_DEFINED_TYPE
-
-    override def isComplex: Boolean = true
-
-    override def isQualifiedType: Boolean = false
-
-    override def isCollectionType: Boolean = false
-
-    override def getMaxPrecision(): Option[Int] = None
-
-    override def javaSQLType: Int = java.sql.Types.OTHER
   }
 
 }
