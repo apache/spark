@@ -2354,7 +2354,8 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return self._set(outputCol=value)
 
 
-class _OneHotEncoderParams(HasInputCols, HasOutputCols, HasHandleInvalid):
+class _OneHotEncoderParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols,
+                           HasHandleInvalid):
     """
     Params for :py:class:`OneHotEncoder` and :py:class:`OneHotEncoderModel`.
 
@@ -2415,6 +2416,10 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
     'error'
     >>> model.transform(df).head().output
     SparseVector(2, {0: 1.0})
+    >>> single_col_ohe = OneHotEncoder(inputCol="input", outputCol="output")
+    >>> single_col_model = single_col_ohe.fit(df)
+    >>> single_col_model.transform(df).head().output
+    SparseVector(2, {0: 1.0})
     >>> ohePath = temp_path + "/ohe"
     >>> ohe.save(ohePath)
     >>> loadedOHE = OneHotEncoder.load(ohePath)
@@ -2430,9 +2435,11 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
     """
 
     @keyword_only
-    def __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
+    def __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True,
+                 inputCol=None, outputCol=None):
         """
-        __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
+        __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
+                 inputCol=None, outputCol=None)
         """
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -2443,9 +2450,11 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
 
     @keyword_only
     @since("2.3.0")
-    def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
+    def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True,
+                  inputCol=None, outputCol=None):
         """
-        setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
+        setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
+                  inputCol=None, outputCol=None)
         Sets params for this OneHotEncoder.
         """
         kwargs = self._input_kwargs
@@ -2478,6 +2487,20 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
         Sets the value of :py:attr:`handleInvalid`.
         """
         return self._set(handleInvalid=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     def _create_model(self, java_model):
         return OneHotEncoderModel(java_model)
