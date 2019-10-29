@@ -136,7 +136,7 @@ if [[ $SPARK_VERSION > "2.4" ]]; then
 fi
 
 # Hive-specific profiles for some builds
-HIVE_PROFILES="-Phive -Phive-thriftserver"
+HIVE_PROFILES="-Phive -Phive-thriftserver -Pspark-thriftserver"
 # Profiles for publishing snapshots and release to Maven Central
 PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
 # Profiles for building binary releases

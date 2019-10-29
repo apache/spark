@@ -1041,7 +1041,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
    * Return whether the given main class represents a thrift server.
    */
   private def isThriftServer(mainClass: String): Boolean = {
-    mainClass == "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
+    mainClass == "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2" ||
+    mainClass == "org.apache.spark.sql.thriftserver.SparkThriftServer2"
   }
 
   /**

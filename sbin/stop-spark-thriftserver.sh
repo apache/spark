@@ -17,19 +17,10 @@
 # limitations under the License.
 #
 
-SPARK_PROFILES=${1:-"-Pkinesis-asl -Pmesos -Pkubernetes -Pyarn -Phive -Phive-thriftserver -Pspark-thriftserver"}
+# Stops the thrift server on the machine this script is executed on.
 
-# NOTE: echo "q" is needed because SBT prompts the user for input on encountering a build file
-# with failure (either resolution or compilation); the "q" makes SBT quit.
-ERRORS=$(echo -e "q\n" \
-    | build/sbt ${SPARK_PROFILES} checkstyle test:checkstyle \
-    | awk '{if($1~/error/)print}' \
-)
-
-if test ! -z "$ERRORS"; then
-    echo -e "Checkstyle failed at following occurrences:\n$ERRORS"
-    exit 1
-else
-    echo -e "Checkstyle checks passed."
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
+"${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.sql.thriftserver.SparkThriftServer2 1
