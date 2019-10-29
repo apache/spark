@@ -24,7 +24,7 @@ import java.nio.file.{Files => JavaFiles}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, EnumSet, Properties}
+import java.util.{Arrays, EnumSet, Locale, Properties}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
 import javax.net.ssl._
@@ -222,6 +222,17 @@ private[spark] object TestUtils {
       contains = e.getMessage.contains(msg)
     }
     assert(contains, s"Exception tree doesn't contain the expected message: $msg")
+  }
+
+  def assertExceptionLowercaseMsg(exception: Throwable, msg: String): Unit = {
+    var e = exception
+    var contains = e.getMessage.toLowerCase(Locale.ROOT).contains(msg)
+    while (e.getCause != null && !contains) {
+      e = e.getCause
+      contains = e.getMessage.toLowerCase(Locale.ROOT).contains(msg)
+    }
+    assert(contains, s"Exception tree doesn't contain the expected message: $msg / " +
+      s"actual exception was: $exception")
   }
 
   /**
