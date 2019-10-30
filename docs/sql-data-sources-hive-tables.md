@@ -88,8 +88,8 @@ creating table, you can create a table using storage handler at Hive side, and u
   <tr>
     <td><code>inputFormat, outputFormat</code></td>
     <td>
-      These 2 options specify the name of a corresponding `InputFormat` and `OutputFormat` class as a string literal,
-      e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in a pair, and you can not
+      These 2 options specify the name of a corresponding <code>InputFormat</code> and <code>OutputFormat</code> class as a string literal,
+      e.g. <code>org.apache.hadoop.hive.ql.io.orc.OrcInputFormat</code>. These 2 options must be appeared in a pair, and you can not
       specify them if you already specified the `fileFormat` option.
     </td>
   </tr>
@@ -97,8 +97,8 @@ creating table, you can create a table using storage handler at Hive side, and u
   <tr>
     <td><code>serde</code></td>
     <td>
-      This option specifies the name of a serde class. When the `fileFormat` option is specified, do not specify this option
-      if the given `fileFormat` already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
+      This option specifies the name of a serde class. When the <code>fileFormat</code> option is specified, do not specify this option
+      if the given <code>fileFormat</code> already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
       don't include the serde information and you can use this option with these 3 fileFormats.
     </td>
   </tr>
