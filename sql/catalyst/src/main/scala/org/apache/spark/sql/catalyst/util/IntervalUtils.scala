@@ -175,7 +175,7 @@ object IntervalUtils {
    * adapted from HiveIntervalDayTime.valueOf
    */
   def fromDayTimeString(s: String): CalendarInterval = {
-    fromDayTimeString(s, "day", "second")
+    fromDayTimeString(s, UnitName.day, UnitName.second)
   }
 
   private val dayTimePattern = ("^(?<sign>[+|-])?((?<day>\\d+) )?" +
@@ -193,8 +193,8 @@ object IntervalUtils {
     val year = Value(8, "year")
   }
 
-  private def unitsRange(start: String, end: String): Seq[UnitName.Value] = {
-    (UnitName.withName(start).id to UnitName.withName(end).id).map(UnitName(_))
+  private def unitsRange(start: UnitName.Value, end: UnitName.Value): Seq[UnitName.Value] = {
+    (start.id to end.id).map(UnitName(_))
   }
 
   /**
@@ -206,7 +206,10 @@ object IntervalUtils {
    * - HOUR TO (MINUTE|SECOND)
    * - MINUTE TO SECOND
    */
-  def fromDayTimeString(input: String, from: String, to: String): CalendarInterval = {
+  def fromDayTimeString(
+      input: String,
+      from: UnitName.Value,
+      to: UnitName.Value): CalendarInterval = {
     require(input != null, "Interval day-time string must be not null")
     assert(input.length == input.trim.length)
     val m = dayTimePattern.pattern.matcher(input)

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromString, fromYearMonthString}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromString, fromYearMonthString, UnitName}
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.unsafe.types.CalendarInterval._
 
@@ -141,7 +141,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
 
     try {
-      fromDayTimeString("5 1:12:20", "hour", "microsecond")
+      fromDayTimeString("5 1:12:20", UnitName.hour, UnitName.microsecond)
       fail("Expected to throw an exception for the invalid convention type")
     } catch {
       case e: IllegalArgumentException =>

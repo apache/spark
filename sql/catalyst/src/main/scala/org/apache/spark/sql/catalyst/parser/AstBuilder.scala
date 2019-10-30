@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.catalyst.util.IntervalUtils.UnitName
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1967,17 +1968,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case ("year", Some("month")) =>
           IntervalUtils.fromYearMonthString(s)
         case ("day", Some("hour")) =>
-          IntervalUtils.fromDayTimeString(s, "day", "hour")
+          IntervalUtils.fromDayTimeString(s, UnitName.day, UnitName.hour)
         case ("day", Some("minute")) =>
-          IntervalUtils.fromDayTimeString(s, "day", "minute")
+          IntervalUtils.fromDayTimeString(s, UnitName.day, UnitName.minute)
         case ("day", Some("second")) =>
-          IntervalUtils.fromDayTimeString(s, "day", "second")
+          IntervalUtils.fromDayTimeString(s, UnitName.day, UnitName.second)
         case ("hour", Some("minute")) =>
-          IntervalUtils.fromDayTimeString(s, "hour", "minute")
+          IntervalUtils.fromDayTimeString(s, UnitName.hour, UnitName.minute)
         case ("hour", Some("second")) =>
-          IntervalUtils.fromDayTimeString(s, "hour", "second")
+          IntervalUtils.fromDayTimeString(s, UnitName.hour, UnitName.second)
         case ("minute", Some("second")) =>
-          IntervalUtils.fromDayTimeString(s, "minute", "second")
+          IntervalUtils.fromDayTimeString(s, UnitName.minute, UnitName.second)
         case (from, Some(t)) =>
           throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
       }
