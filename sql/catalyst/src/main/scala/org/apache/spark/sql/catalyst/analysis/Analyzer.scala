@@ -681,10 +681,20 @@ class Analyzer(
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
+      case desc @ DescribeTable(u: UnresolvedV2Relation, _) =>
+        resolveV2Relation(u).map(relation => desc.copy(table = relation)).getOrElse(desc)
+
+      case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
+        resolveV2Relation(u).map(relation => alter.copy(table = relation)).getOrElse(alter)
+
       case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadTable(u.catalog, u.tableName).map { table =>
-          DataSourceV2Relation.create(table)
-        }.getOrElse(u)
+        resolveV2Relation(u).getOrElse(u)
+    }
+
+    private def resolveV2Relation(u: UnresolvedV2Relation): Option[DataSourceV2Relation] = {
+      CatalogV2Util.loadTable(u.catalog, u.tableName).map { table =>
+        DataSourceV2Relation.create(table)
+      }
     }
   }
 

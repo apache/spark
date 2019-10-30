@@ -97,6 +97,20 @@ trait CheckAnalysis extends PredicateHelper {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
+      case AlterTable(_, _, u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
+        u.failAnalysis(
+          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
+
+      case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
+        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
+
+      case DescribeTable(u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
+        u.failAnalysis(
+          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
+
+      case DescribeTable(u: UnresolvedV2Relation, _) =>
+        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
+
       case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
         u.failAnalysis(
           s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
