@@ -23,7 +23,7 @@ class MapInfo {
   final long[] lengths;
   final long[] records;
 
-  public MapInfo(long[] lengths, long[] records) {
+  MapInfo(long[] lengths, long[] records) {
     this.lengths = lengths;
     this.records = records;
   }
