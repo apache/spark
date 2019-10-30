@@ -414,13 +414,13 @@ if [[ "$1" == "publish-release" ]]; then
 
   # TODO: revisit for Scala 2.13 support
 
-  if ! is_dry_run && [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
+  if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
     ./dev/change-scala-version.sh 2.11
     $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests \
       $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
   fi
 
-  if ! is_dry_run && [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
+  if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
     ./dev/change-scala-version.sh 2.12
     $MVN -DzincPort=$((ZINC_PORT + 2)) -Dmaven.repo.local=$tmp_repo -DskipTests \
       $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
