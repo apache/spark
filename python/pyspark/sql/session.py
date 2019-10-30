@@ -636,7 +636,7 @@ class SparkSession(object):
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
-        :param data: an RDD of any kind of SQL data representation(e.g. row, tuple, int, boolean,
+        :param data: an RDD of any kind of SQL data representation (e.g. row, tuple, int, boolean,
             etc.), :class:`list`, or :class:`pandas.DataFrame`.
         :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is ``None``.  The data type string format equals to
