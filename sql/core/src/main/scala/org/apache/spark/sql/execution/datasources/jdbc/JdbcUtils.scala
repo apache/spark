@@ -546,7 +546,7 @@ object JdbcUtils extends Logging {
 
     case ShortType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setInt(pos + 1, row.getShort(pos))
+        stmt.setShort(pos + 1, row.getShort(pos))
 
     case ByteType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>

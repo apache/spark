@@ -202,4 +202,25 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
+
+  test("Write tables with ShortType") {
+    import testImplicits._
+    val df = Seq(-32768.toShort, 0.toShort, 1.toShort, 38.toShort, 32768.toShort).toDF("a")
+    val tablename = "shorttable"
+    df.write
+      .format("jdbc")
+      .mode("overwrite")
+      .option("url", jdbcUrl)
+      .option("dbtable", tablename)
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", tablename)
+      .load()
+    assert(df.count == df2.count)
+    val rows = df2.collect()
+    val colType = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(colType(0) == "class java.lang.Short")
+  }
 }
