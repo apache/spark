@@ -142,13 +142,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assertNoSuchTable(s"ALTER TABLE $viewName RECOVER PARTITIONS")
 
       // For v2 ALTER TABLE statements, we have better error message saying view is not supported.
-      assertAnalysisExceptionThrown(
+      assertAnalysisError(
         s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
         s"'$viewName' is a view not a table")
 
       // For the following v2 ALERT TABLE statements, unsupported operations are checked first
       // before resolving the relations.
-      assertAnalysisExceptionThrown(
+      assertAnalysisError(
         s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'",
         "ALTER TABLE SET LOCATION does not support partition for v2 tables")
     }
@@ -184,7 +184,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertAnalysisExceptionThrown(query: String, message: String): Unit = {
+  private def assertAnalysisError(query: String, message: String): Unit = {
     val e = intercept[AnalysisException](sql(query))
     assert(e.message.contains(message))
   }
