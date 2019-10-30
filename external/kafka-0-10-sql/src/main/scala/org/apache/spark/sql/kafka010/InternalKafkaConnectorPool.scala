@@ -203,6 +203,7 @@ private[kafka010] abstract class ObjectFactory[K, V <: Closeable]
 
 private[kafka010] class CustomSwallowedExceptionListener(connectorType: String)
   extends SwallowedExceptionListener with Logging {
+
   override def onSwallowException(e: Exception): Unit = {
     logError(s"Error closing Kafka $connectorType", e)
   }
