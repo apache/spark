@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.math.{BigDecimal, RoundingMode}
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -255,26 +256,50 @@ object IntervalUtils {
       try {
         units(i) match {
           case "year" =>
-            months = Math.addExact(months, Math.multiplyExact(values(i).toInt, 12))
+            months = new BigDecimal(values(i)).multiply(new BigDecimal(MONTHS_PER_YEAR))
+              .setScale(0, RoundingMode.DOWN)
+              .intValueExact
           case "month" =>
-            months = Math.addExact(months, values(i).toInt)
+            val m = new BigDecimal(values(i))
+            microseconds = m.remainder(BigDecimal.ONE).multiply(new BigDecimal(MICROS_PER_MONTH))
+              .setScale(0, RoundingMode.DOWN)
+              .longValueExact
+            months = Math.addExact(months, m.setScale(0, RoundingMode.DOWN).intValueExact)
           case "week" =>
-            val weeksUs = Math.multiplyExact(values(i).toLong, 7 * DateTimeUtils.MICROS_PER_DAY)
-            microseconds = Math.addExact(microseconds, weeksUs)
+            microseconds = Math.addExact(
+              microseconds,
+              new BigDecimal(values(i)).multiply(new BigDecimal(7 * DateTimeUtils.MICROS_PER_DAY))
+                .setScale(0, RoundingMode.DOWN)
+                .longValueExact)
           case "day" =>
-            val daysUs = Math.multiplyExact(values(i).toLong, DateTimeUtils.MICROS_PER_DAY)
-            microseconds = Math.addExact(microseconds, daysUs)
+            microseconds = Math.addExact(
+              microseconds,
+              new BigDecimal(values(i)).multiply(new BigDecimal(DateTimeUtils.MICROS_PER_DAY))
+                .setScale(0, RoundingMode.DOWN)
+                .longValueExact)
           case "hour" =>
-            val hoursUs = Math.multiplyExact(values(i).toLong, MICROS_PER_HOUR)
-            microseconds = Math.addExact(microseconds, hoursUs)
+            microseconds = Math.addExact(
+              microseconds,
+              new BigDecimal(values(i)).multiply(new BigDecimal(MICROS_PER_HOUR))
+                .setScale(0, RoundingMode.DOWN)
+                .longValueExact)
           case "minute" =>
-            val minutesUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MINUTE)
-            microseconds = Math.addExact(microseconds, minutesUs)
+            microseconds = Math.addExact(
+              microseconds,
+              new BigDecimal(values(i)).multiply(new BigDecimal(MICROS_PER_MINUTE))
+                .setScale(0, RoundingMode.DOWN)
+                .longValueExact)
           case "second" =>
-            microseconds = Math.addExact(microseconds, parseSecondNano(values(i)))
+            microseconds = Math.addExact(
+              microseconds,
+              new BigDecimal(values(i)).multiply(new BigDecimal(DateTimeUtils.MICROS_PER_SECOND))
+                .setScale(0, RoundingMode.DOWN).longValueExact)
           case "millisecond" =>
-            val millisUs = Math.multiplyExact(values(i).toLong, DateTimeUtils.MICROS_PER_MILLIS)
-            microseconds = Math.addExact(microseconds, millisUs)
+            microseconds = Math.addExact(
+              microseconds,
+              new BigDecimal(values(i)).multiply(new BigDecimal(DateTimeUtils.MICROS_PER_MILLIS))
+                .setScale(0, RoundingMode.DOWN)
+                .longValueExact)
           case "microsecond" =>
             microseconds = Math.addExact(microseconds, values(i).toLong)
         }

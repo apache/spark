@@ -36,3 +36,20 @@ select date '2001-10-01' - 7;
 select date '2001-10-01' - date '2001-09-28';
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678';
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
+
+-- year interval only affect year and month if any
+select interval '1.41 years';
+
+-- month interval will affect microseconds
+select interval '2.512345678 months';
+select interval '2.51 months';
+
+select interval '2.21 weeks';
+select interval '15.24 days';
+select interval '3.31 hours';
+select interval '5.38 minutes';
+select interval '12.3456789 seconds';
+select interval '6.66 milliseconds';
+
+select interval '1.41 years 2.51 months 2.21 weeks 15.24 days 3.31 hours 5.38 minutes 12.3456789 seconds';
+select interval '1.42 years 2.51 months 2.21 weeks 15.24 days 3.31 hours 5.38 minutes 12.3456789 seconds';
