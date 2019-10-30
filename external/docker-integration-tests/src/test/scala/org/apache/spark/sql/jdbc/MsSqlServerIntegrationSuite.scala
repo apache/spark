@@ -21,8 +21,6 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
@@ -205,20 +203,9 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
 
-  test("SPARK-28151 Test write table with BYTETYPE") {
-    val df : DataFrame = {
-      val schema = StructType(Seq(
-        StructField("a", ByteType, true)
-      ))
-      val data = Seq(
-        Row(-127.toByte),
-        Row(0.toByte),
-        Row(1.toByte),
-        Row(38.toByte),
-        Row(128.toByte)
-      )
-      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
-    }
+  test("Write tables with BYTETYPE") {
+    import testImplicits._
+    val df = Seq(-127.toByte, 0.toByte, 1.toByte, 38.toByte, 128.toByte).toDF("a")
     val tablename = "bytetable"
     df.write
       .format("jdbc")
@@ -226,13 +213,13 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("dbtable", tablename)
       .save()
-    val df_copy = spark.read
+    val df2 = spark.read
       .format("jdbc")
       .option("url", jdbcUrl)
       .option("dbtable", tablename)
       .load()
-    assert(df.count == df_copy.count)
-    val rows = df_copy.collect()
+    assert(df.count == df2.count)
+    val rows = df2.collect()
     val colType = rows(0).toSeq.map(x => x.getClass.toString)
     assert(colType(0) == "class java.lang.Byte")
   }
