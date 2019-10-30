@@ -197,7 +197,7 @@ statement
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
-          ((FROM | IN) namespace=multipartIdentifier)?                 #showColumns
+        ((FROM | IN) namespace=multipartIdentifier)?                   #showColumns
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions

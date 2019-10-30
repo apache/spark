@@ -1363,15 +1363,8 @@ class DataSourceV2SQLSuite
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
 
-      val e1 = intercept[AnalysisException] {
-        sql(s"SHOW COLUMNS FROM $t")
-      }
-      assert(e1.message.contains(s"SHOW COLUMNS is only supported with v1 tables."))
-
-      val e2 = intercept[AnalysisException] {
-        sql(s"SHOW COLUMNS IN $t")
-      }
-      assert(e2.message.contains(s"SHOW COLUMNS is only supported with v1 tables."))
+      testV1Command("SHOW COLUMNS", s"FROM $t")
+      testV1Command("SHOW COLUMNS", s"IN $t")
 
       val e3 = intercept[AnalysisException] {
         sql(s"SHOW COLUMNS FROM tbl IN testcat.ns1.ns2")
