@@ -110,7 +110,7 @@ class V1ReadFallbackCatalog extends BasicInMemoryTableCatalog {
     if (schema != V1ReadFallbackCatalog.schema || partitions.nonEmpty) {
       throw new UnsupportedOperationException
     }
-    val table = new TableWithV1ReadFallback
+    val table = new TableWithV1ReadFallback(ident.toString)
     tables.put(ident, table)
     table
   }
@@ -122,12 +122,11 @@ object V1ReadFallbackCatalog {
 
 class V1ReadFallbackTableProvider extends TableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    new TableWithV1ReadFallback
+    new TableWithV1ReadFallback("v1-read-fallback")
   }
 }
 
-class TableWithV1ReadFallback extends Table with SupportsRead {
-  override def name(): String = "v1-read-fallback"
+class TableWithV1ReadFallback(override val name: String) extends Table with SupportsRead {
 
   override def schema(): StructType = V1ReadFallbackCatalog.schema
 
@@ -165,9 +164,9 @@ class TableWithV1ReadFallback extends Table with SupportsRead {
       requiredSchema: StructType,
       filters: Array[Filter]) extends V1Scan {
     override def readSchema(): StructType = requiredSchema
-    override def toV1Relation(): BaseRelation = {
+    override def toV1Relation(context: SQLContext): BaseRelation = {
       new BaseRelation with TableScan {
-        override def sqlContext: SQLContext = SparkSession.active.sqlContext
+        override def sqlContext: SQLContext = context
         override def schema: StructType = requiredSchema
         override def buildScan(): RDD[Row] = {
           val lowerBound = if (filters.isEmpty) {

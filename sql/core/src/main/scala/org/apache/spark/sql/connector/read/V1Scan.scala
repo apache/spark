@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.read
 
 import org.apache.spark.annotation.{Experimental, Unstable}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.sources.BaseRelation
 
 /**
@@ -39,5 +40,5 @@ trait V1Scan extends Scan {
    *
    * @since 3.0.0
    */
-  def toV1Relation(): BaseRelation
+  def toV1Relation(context: SQLContext): BaseRelation
 }

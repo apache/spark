@@ -49,7 +49,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
       val (scanExec, needsUnsafeConversion) = relation.scan match {
         case v1Scan: V1Scan =>
-          val v1Relation = v1Scan.toV1Relation()
+          val v1Relation = v1Scan.toV1Relation(session.sqlContext)
           if (v1Relation.schema != v1Scan.readSchema()) {
             throw new IllegalArgumentException(
               "The fallback v1 relation reports inconsistent schema:\n" +
@@ -63,8 +63,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
                 "`V1Scan.toV1Relation` must return a `TableScan` instance.")
           }
           val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+          val originalOutputNames = relation.table.schema().map(_.name)
+          val requiredColumnsIndex = output.map(_.name).map(originalOutputNames.indexOf)
           val dsScan = RowDataSourceScanExec(
             output,
+            requiredColumnsIndex,
             pushedFilters.toSet,
             pushedFilters.toSet,
             unsafeRowRDD,
