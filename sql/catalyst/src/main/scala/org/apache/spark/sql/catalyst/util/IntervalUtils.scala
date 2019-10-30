@@ -193,6 +193,12 @@ object IntervalUtils {
     val year = Value(8, "year")
   }
 
+  val unitValueProps: Map[UnitName.Value, (Long, Long, Long => Long)] = Map(
+    UnitName.minute -> (0, 59, Math.multiplyExact(_, MICROS_PER_MINUTE)),
+    UnitName.hour -> (0, 23, Math.multiplyExact(_, MICROS_PER_HOUR)),
+    UnitName.day -> (0, Integer.MAX_VALUE, Math.multiplyExact(_, DateTimeUtils.MICROS_PER_DAY))
+  )
+
   private def unitsRange(start: UnitName.Value, end: UnitName.Value): Seq[UnitName.Value] = {
     (start.id to end.id).map(UnitName(_))
   }
@@ -215,24 +221,16 @@ object IntervalUtils {
     val m = dayTimePattern.pattern.matcher(input)
     require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input")
 
-    def toLong(unitName: UnitName.Value, minValue: Long, maxValue: Long): Long = {
+    def toLong(unitName: UnitName.Value): Long = {
       val name = unitName.toString
-      toLongWithRange(name, m.group(name), minValue, maxValue)
+      val (minValue, maxValue, conv) = unitValueProps(unitName)
+      conv(toLongWithRange(name, m.group(name), minValue, maxValue))
     }
 
     try {
       val micros = unitsRange(to, from).map {
-        case name @ UnitName.day =>
-          val days = toLong(name, 0, Integer.MAX_VALUE)
-          Math.multiplyExact(days, DateTimeUtils.MICROS_PER_DAY)
-        case name @ UnitName.hour =>
-          val hours = toLong(name, 0, 23)
-          Math.multiplyExact(hours, MICROS_PER_HOUR)
-        case name @ UnitName.minute =>
-          val minutes = toLong(name, 0, 59)
-          Math.multiplyExact(minutes, MICROS_PER_MINUTE)
-        case UnitName.second =>
-          parseSecondNano(m.group(UnitName.second.toString))
+        case name @ (UnitName.day | UnitName.hour | UnitName.minute) => toLong(name)
+        case UnitName.second => parseSecondNano(m.group(UnitName.second.toString))
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot support (interval '$input' $from to $to) expression")
