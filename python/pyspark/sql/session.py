@@ -94,12 +94,12 @@ class SparkSession(object):
 
             >>> from pyspark.conf import SparkConf
             >>> SparkSession.builder.config(conf=SparkConf())
-            <pyspark.sql.session...>
+            <pyspark.sql.session...
 
             For a (key, value) pair, you can omit parameter names.
 
             >>> SparkSession.builder.config("spark.some.config.option", "some-value")
-            <pyspark.sql.session...>
+            <pyspark.sql.session...
 
             :param key: a key name string for configuration property
             :param value: a value for configuration property
