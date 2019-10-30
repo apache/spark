@@ -38,6 +38,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcEndpointAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -601,7 +602,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
     // Check the locality information
     val currentHosts = slaves.values.filter(_.taskIDs.nonEmpty).map(_.hostname).toSet
-    val allDesiredHosts = hostToLocalTaskCount.keys.toSet
+    val allDesiredHosts = hostToLocalTaskCount.map { case (k, v) => k._1 }.toSet
+
     // Try to match locality for hosts which do not have executors yet, to potentially
     // increase coverage.
     val remainingHosts = allDesiredHosts -- currentHosts
@@ -759,9 +761,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       super.applicationId
     }
 
-  override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = Future.successful {
+  override def doRequestTotalExecutors(requestedTotal: Int,
+      resources: Option[Map[ResourceProfile, Int]] = None): Future[Boolean] = Future.successful {
     // We don't truly know if we can fulfill the full amount of executors
     // since at coarse grain it depends on the amount of slaves available.
+    val totalRequested = resources.getOrElse(requestedTotal)
     logInfo("Capping the total amount of executors to " + requestedTotal)
     executorLimitOption = Some(requestedTotal)
     // Update the locality wait start time to continue trying for locality.

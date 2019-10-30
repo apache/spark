@@ -1610,20 +1610,6 @@ class SparkContext(config: SparkConf) extends Logging {
   def requestTotalExecutors(
       numExecutors: Int,
       localityAwareTasks: Int,
-      hostToLocalTaskCount: scala.collection.immutable.Map[String, Int]
-    ): Boolean = {
-    schedulerBackend match {
-      case b: ExecutorAllocationClient =>
-        b.requestTotalExecutors(numExecutors, localityAwareTasks, hostToLocalTaskCount)
-      case _ =>
-        logWarning("Requesting executors is not supported by current scheduler.")
-        false
-    }
-  }
-
-  def requestTotalExecutors(
-      numExecutors: Int,
-      localityAwareTasks: Int,
       hostToLocalTaskCount: scala.collection.immutable.Map[String, Int],
       resources: Option[Map[String, ResourceProfile]] = None
   ): Boolean = {

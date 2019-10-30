@@ -27,6 +27,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.internal.config.Streaming._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -71,10 +72,11 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
         if (expectedRequestedTotalExecs.nonEmpty) {
           require(expectedRequestedTotalExecs.get > 0)
           verify(allocationClient, times(1)).requestTotalExecutors(
-            meq(expectedRequestedTotalExecs.get), meq(0), meq(Map.empty))
+            meq(expectedRequestedTotalExecs.get),
+            meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)), meq(Map.empty))
         } else {
-          verify(allocationClient, never).requestTotalExecutors(0, 0, Map.empty)
-        }
+          verify(allocationClient, never).requestTotalExecutors(0,
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0), Map.empty)        }
       }
 
       /** Verify that a particular executor was killed */
@@ -140,7 +142,8 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       when(allocationClient.getExecutorIds()).thenReturn((1 to numExecs).map(_.toString))
       requestExecutors(allocationManager, numNewExecs)
       verify(allocationClient, times(1)).requestTotalExecutors(
-        meq(expectedRequestedTotalExecs), meq(0), meq(Map.empty))
+        meq(expectedRequestedTotalExecs),
+        meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)), meq(Map.empty))
     }
 
     withAllocationManager(numReceivers = 1) { case (_, allocationManager) =>

@@ -24,6 +24,7 @@ import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.ui.TestFilter
@@ -50,7 +51,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
 
   private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
       extends YarnSchedulerBackend(scheduler, sc) {
-    def setHostToLocalTaskCount(hostToLocalTaskCount: Map[String, Int]): Unit = {
+    def setHostToLocalTaskCount(hostToLocalTaskCount: Map[(String, ResourceProfile), Int]): Unit = {
       this.hostToLocalTaskCount = hostToLocalTaskCount
     }
   }
@@ -62,12 +63,13 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     val yarnSchedulerBackendExtended = new TestYarnSchedulerBackend(sched, sc)
     yarnSchedulerBackend = yarnSchedulerBackendExtended
     val ser = new JavaSerializer(sc.conf).newInstance()
+    val defaultResourceProf = ResourceProfile.getOrCreateDefaultProfile(sc.getConf)
     for {
       blacklist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
       numRequested <- 0 until 10
       hostToLocalCount <- IndexedSeq(
-        Map[String, Int](),
-        Map("a" -> 1, "b" -> 2)
+        Map.empty[(String, ResourceProfile), Int],
+        Map(("a", defaultResourceProf) -> 1, ("b", defaultResourceProf) -> 2)
       )
     } {
       yarnSchedulerBackendExtended.setHostToLocalTaskCount(hostToLocalCount)
@@ -75,7 +77,8 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       val req = yarnSchedulerBackendExtended.prepareRequestExecutors(numRequested)
       assert(req.requestedTotal === numRequested)
       assert(req.nodeBlacklist === blacklist)
-      assert(req.hostToLocalTaskCount.keySet.intersect(blacklist).isEmpty)
+      val hosts = req.hostToLocalTaskCount.keySet.map(_._1)
+      assert(hosts.intersect(blacklist).isEmpty)
       // Serialize to make sure serialization doesn't throw an error
       ser.serialize(req)
     }

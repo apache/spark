@@ -92,7 +92,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private val executorsPendingToRemove = new HashMap[String, Boolean]
 
-  // A map to store hostname with its possible task number running on it
+  // A map to store hostname and ResourceProfile with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   protected var hostToLocalTaskCount: Map[(String, ResourceProfile), Int] = Map.empty
 
@@ -703,8 +703,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
                  |numPendingExecutors      = $numPendingExecutors
                  |executorsPendingToRemove = ${executorsPendingToRemove.size}""".stripMargin)
           }
-          // TODO - need resouces here
-          (requestedTotalExecutors, None)
+          // TODO - need resources here
+          doRequestTotalExecutors(requestedTotalExecutors, None)
         } else {
           numPendingExecutors += executorsToKill.size
           Future.successful(true)
