@@ -350,6 +350,14 @@ class ResolveSessionCatalog(
               s"'${db.head}' != '${v1TableName.database.get}'")
         case _ => namespace.map(_.head)
       }
+      if (namespace.isDefined && namespace.get.length > 1) {
+        throw new AnalysisException(
+          s"Namespace name should have only one part if specified: ${namespace.get.quoted}")
+      }
+      if (table.length > 2) {
+        throw new AnalysisException(
+          s"Table name should have at most two parts: ${table.quoted}")
+      }
       ShowColumnsCommand(db, v1TableName)
 
     case AlterTableRecoverPartitionsStatement(tableName) =>
