@@ -49,6 +49,11 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkContext = sparkSession.sparkContext
       sqlContext = sparkSession.sqlContext
 
+      // SPARK-29604: force initialization of the session state with the Spark class loader,
+      // instead of having it happen during the initialization of the Hive client (which may use a
+      // different class loader).
+      sparkSession.sessionState
+
       val metadataHive = sparkSession
         .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
       metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
