@@ -20,10 +20,10 @@ package org.apache.spark.shuffle.sort
 import java.io.File
 import java.util.UUID
 
-import org.junit.Assert._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.junit.Assert._
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
@@ -32,7 +32,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
-import org.apache.spark.memory.{MemoryTestingUtils, TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
