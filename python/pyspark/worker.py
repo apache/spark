@@ -600,7 +600,8 @@ def main(infile, outfile):
         else:
             process()
 
-        # reset task context to None
+        # Reset task context to None. This is a guard code to avoid residual context when worker
+        # reuse.
         TaskContext._setTaskContext(None)
         BarrierTaskContext._setTaskContext(None)
     except Exception:

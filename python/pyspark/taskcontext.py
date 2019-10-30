@@ -169,7 +169,7 @@ class BarrierTaskContext(TaskContext):
             A RuntimeError will raise if it is not in a barrier stage.
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
-            raise RuntimeError('''It is not in a barrier stage''')
+            raise Exception('It is not in a barrier stage')
         return cls._taskContext
 
     @classmethod
