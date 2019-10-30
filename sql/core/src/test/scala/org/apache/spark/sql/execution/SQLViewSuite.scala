@@ -81,7 +81,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           val globalTempDB = spark.sharedState.globalTempViewManager.database
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
           sql(s"CREATE VIEW jtv2 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
-
         }
       }
     }
