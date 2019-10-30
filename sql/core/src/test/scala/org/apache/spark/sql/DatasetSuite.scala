@@ -1220,7 +1220,8 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     assert(e.getMessage.contains(
       "`abstract` is a reserved keyword and cannot be used as field name"))
   }
-  test("better error message when use java field name starting with a number") {
+
+  test("SPARK-29594 better error message when use java field name starting with a number") {
     val e = intercept[UnsupportedOperationException] {
       Seq(InvalidInJavaForNumber("HelloWorld!")).toDS()
     }
