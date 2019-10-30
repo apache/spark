@@ -178,8 +178,24 @@ object IntervalUtils {
     fromDayTimeString(s, "day", "second")
   }
 
-  private val dayTimePattern =
-    "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$".r
+  private val dayTimePattern = ("^(?<sign>[+|-])?((?<day>\\d+) )?" +
+    "((?<hour>\\d+):)?(?<minute>\\d+):(?<second>(\\d+)(\\.(\\d+))?)$").r
+
+  object UnitName extends Enumeration {
+    val microsecond = Value(0, "microsecond")
+    val millisecond = Value(1, "millisecond")
+    val second = Value(2, "second")
+    val minute = Value(3, "minute")
+    val hour = Value(4, "hour")
+    val day = Value(5, "day")
+    val week = Value(6, "week")
+    val month = Value(7, "month")
+    val year = Value(8, "year")
+  }
+
+  private def unitsRange(start: String, end: String): Seq[UnitName.Value] = {
+    (UnitName.withName(start).id to UnitName.withName(end).id).map(UnitName(_))
+  }
 
   /**
    * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
@@ -196,53 +212,29 @@ object IntervalUtils {
     val m = dayTimePattern.pattern.matcher(input)
     require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input")
 
+    def toLong(unitName: UnitName.Value, minValue: Long, maxValue: Long): Long = {
+      val name = unitName.toString
+      toLongWithRange(name, m.group(name), minValue, maxValue)
+    }
+
     try {
-      val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
-      val days = if (m.group(2) == null) {
-        0
-      } else {
-        toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE)
-      }
-      var hours: Long = 0L
-      var minutes: Long = 0L
-      var seconds: Long = 0L
-      if (m.group(5) != null || from == "minute") { // 'HH:mm:ss' or 'mm:ss minute'
-        hours = toLongWithRange("hour", m.group(5), 0, 23)
-        minutes = toLongWithRange("minute", m.group(6), 0, 59)
-        seconds = toLongWithRange("second", m.group(7), 0, 59)
-      } else if (m.group(8) != null) { // 'mm:ss.nn'
-        minutes = toLongWithRange("minute", m.group(6), 0, 59)
-        seconds = toLongWithRange("second", m.group(7), 0, 59)
-      } else { // 'HH:mm'
-        hours = toLongWithRange("hour", m.group(6), 0, 23)
-        minutes = toLongWithRange("second", m.group(7), 0, 59)
-      }
-      // Hive allow nanosecond precision interval
-      val nanoStr = if (m.group(9) == null) {
-        null
-      } else {
-        (m.group(9) + "000000000").substring(0, 9)
-      }
-      var nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L)
-      to match {
-        case "hour" =>
-          minutes = 0
-          seconds = 0
-          nanos = 0
-        case "minute" =>
-          seconds = 0
-          nanos = 0
-        case "second" =>
-          // No-op
+      val micros = unitsRange(to, from).map {
+        case name @ UnitName.day =>
+          val days = toLong(name, 0, Integer.MAX_VALUE)
+          Math.multiplyExact(days, DateTimeUtils.MICROS_PER_DAY)
+        case name @ UnitName.hour =>
+          val hours = toLong(name, 0, 23)
+          Math.multiplyExact(hours, MICROS_PER_HOUR)
+        case name @ UnitName.minute =>
+          val minutes = toLong(name, 0, 59)
+          Math.multiplyExact(minutes, MICROS_PER_MINUTE)
+        case UnitName.second =>
+          parseSecondNano(m.group(UnitName.second.toString))
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot support (interval '$input' $from to $to) expression")
-      }
-      var micros = nanos / DateTimeUtils.NANOS_PER_MICROS
-      micros = Math.addExact(micros, Math.multiplyExact(days, DateTimeUtils.MICROS_PER_DAY))
-      micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
-      micros = Math.addExact(micros, Math.multiplyExact(minutes, MICROS_PER_MINUTE))
-      micros = Math.addExact(micros, Math.multiplyExact(seconds, DateTimeUtils.MICROS_PER_SECOND))
+      }.reduce((x: Long, y: Long) => Math.addExact(x, y))
+      val sign = if (m.group("sign") != null && m.group("sign") == "-") -1 else 1
       new CalendarInterval(0, sign * micros)
     } catch {
       case e: Exception =>
@@ -292,6 +284,21 @@ object IntervalUtils {
     new CalendarInterval(months, microseconds)
   }
 
+  // Parses a string with nanoseconds, truncates the result and returns microseconds
+  private def parseNanos(nanosStr: String, isNegative: Boolean): Long = {
+    if (nanosStr != null) {
+      val maxNanosLen = 9
+      val alignedStr = if (nanosStr.length < maxNanosLen) {
+        (nanosStr + "000000000").substring(0, maxNanosLen)
+      } else nanosStr
+      val nanos = toLongWithRange("nanosecond", alignedStr, 0L, 999999999L)
+      val micros = nanos / DateTimeUtils.NANOS_PER_MICROS
+      if (isNegative) -micros else micros
+    } else {
+      0L
+    }
+  }
+
   /**
    * Parse second_nano string in ss.nnnnnnnnn format to microseconds
    */
@@ -303,15 +310,13 @@ object IntervalUtils {
         Long.MinValue / DateTimeUtils.MICROS_PER_SECOND,
         Long.MaxValue / DateTimeUtils.MICROS_PER_SECOND) * DateTimeUtils.MICROS_PER_SECOND
     }
-    def parseNanos(nanosStr: String): Long = {
-      toLongWithRange("nanosecond", nanosStr, 0L, 999999999L) / DateTimeUtils.NANOS_PER_MICROS
-    }
 
     secondNano.split("\\.") match {
       case Array(secondsStr) => parseSeconds(secondsStr)
-      case Array("", nanosStr) => parseNanos(nanosStr)
+      case Array("", nanosStr) => parseNanos(nanosStr, false)
       case Array(secondsStr, nanosStr) =>
-        Math.addExact(parseSeconds(secondsStr), parseNanos(nanosStr))
+        val seconds = parseSeconds(secondsStr)
+        Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
       case _ =>
         throw new IllegalArgumentException(
           "Interval string does not match second-nano format of ss.nnnnnnnnn")
