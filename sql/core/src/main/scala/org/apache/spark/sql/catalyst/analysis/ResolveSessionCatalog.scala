@@ -118,11 +118,15 @@ class ResolveSessionCatalog(
       }
 
     case AlterTableSetLocationStatement(
-         nameParts @ SessionCatalog(catalog, tableName), newLoc) =>
+         nameParts @ SessionCatalog(catalog, tableName), partitionSpec, newLoc) =>
       loadTable(catalog, tableName.asIdentifier).collect {
         case v1Table: V1Table =>
-          AlterTableSetLocationCommand(tableName.asTableIdentifier, None, newLoc)
+          AlterTableSetLocationCommand(tableName.asTableIdentifier, partitionSpec, newLoc)
       }.getOrElse {
+        if (partitionSpec.nonEmpty) {
+          throw new AnalysisException(
+            "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
+        }
         val changes = Seq(TableChange.setProperty("location", newLoc))
         createAlterTable(nameParts, catalog, tableName, changes)
       }

@@ -179,6 +179,7 @@ case class AlterTableUnsetPropertiesStatement(
  */
 case class AlterTableSetLocationStatement(
     tableName: Seq[String],
+    partitionSpec: Option[TablePartitionSpec],
     location: String) extends ParsedStatement
 
 /**

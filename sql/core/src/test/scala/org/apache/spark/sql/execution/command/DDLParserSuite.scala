@@ -635,18 +635,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         "SET FILEFORMAT PARQUET")
   }
 
-  test("alter table: set partition location") {
-    val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
-      "SET LOCATION 'new location'"
-    val parsed2 = parser.parsePlan(sql2)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected2 = AlterTableSetLocationCommand(
-      tableIdent,
-      Some(Map("dt" -> "2008-08-08", "country" -> "us")),
-      "new location")
-    comparePlans(parsed2, expected2)
-  }
-
   test("alter table: change column name/type/comment") {
     val sql1 = "ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT"
     val sql2 = "ALTER TABLE table_name CHANGE COLUMN col_name col_name INT COMMENT 'new_comment'"

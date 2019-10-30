@@ -516,22 +516,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AlterTableSetLocationCommand]] command for a partition.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table PARTITION spec SET LOCATION "loc";
-   * }}}
-   */
-  override def visitSetPartitionLocation(
-      ctx: SetPartitionLocationContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetLocationCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Some(visitNonOptionalPartitionSpec(ctx.partitionSpec)),
-      visitLocationSpec(ctx.locationSpec))
-  }
-
-  /**
    * Create a [[AlterTableChangeColumnCommand]] command.
    *
    * For example:
