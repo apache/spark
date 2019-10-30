@@ -1266,7 +1266,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed2_table, expected2_table)
     comparePlans(parsed1_purge, expected1_purge)
 
-    val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION(ds='2017-06-10')"
+    val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
     val expected3_table = AlterTableDropPartitionStatement(
       Seq("a", "b", "c"),
       Seq(Map("ds" -> "2017-06-10")),
