@@ -20,6 +20,8 @@ package org.apache.spark.util.collection.unsafe.sort;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.function.Supplier;
@@ -518,19 +520,50 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     public long spill() throws IOException {
       synchronized (this) {
-        if (!(upstream instanceof UnsafeInMemorySorter.SortedIterator && nextUpstream == null
-          && numRecords > 0)) {
+        if (!(nextUpstream == null && numRecords > 0)) {
           return 0L;
         }
+        if (upstream instanceof ChainedIterator) {
+          Collection<UnsafeSorterIterator> iterators = ((ChainedIterator) upstream).getIterators();
+          boolean canSpill = iterators.stream()
+                  .allMatch(iterator -> iterator instanceof UnsafeInMemorySorter.SortedIterator);
+          if (canSpill) {
+            ChainedIterator clonedChainedIterator = cloneChainedIterator((ChainedIterator) upstream);
+            UnsafeInMemorySorter.SortedIterator current =
+                    (UnsafeInMemorySorter.SortedIterator) ((ChainedIterator) upstream).current;
+            return spillInt(clonedChainedIterator, current.getCurrentPageNumber());
+          }
+        } else if (upstream instanceof UnsafeInMemorySorter.SortedIterator) {
+          UnsafeInMemorySorter.SortedIterator sortedUpStream = (UnsafeInMemorySorter.SortedIterator) upstream;
+          UnsafeInMemorySorter.SortedIterator clonedInMemIterator = sortedUpStream.clone();
+          return spillInt(clonedInMemIterator, sortedUpStream.getCurrentPageNumber());
+        }
+        return 0L;
+      }
+    }
 
-        UnsafeInMemorySorter.SortedIterator inMemIterator =
-          ((UnsafeInMemorySorter.SortedIterator) upstream).clone();
+    private ChainedIterator cloneChainedIterator(ChainedIterator iterator) {
+      LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
+      queue.add(
+              ((UnsafeInMemorySorter.SortedIterator) iterator.getCurrent()).clone());
+      Collection<UnsafeSorterIterator> iterators = iterator.getIterators();
+      for (UnsafeSorterIterator unsafeSorterIterator : iterators) {
+        UnsafeInMemorySorter.SortedIterator sortedIterator =
+                ((UnsafeInMemorySorter.SortedIterator) unsafeSorterIterator).clone();
+        queue.add(sortedIterator);
+      }
+      return new ChainedIterator(queue, iterator.numRecords);
+    }
+
+    private long spillInt(UnsafeSorterIterator clonedInMemIterator,
+                          long currentPageNumber) throws IOException {
+      synchronized (this) {
 
        ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
         // Iterate over the records that have not been returned and spill them.
         final UnsafeSorterSpillWriter spillWriter =
           new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
-        spillIterator(inMemIterator, spillWriter);
+        spillIterator(clonedInMemIterator, spillWriter);
         spillWriters.add(spillWriter);
         nextUpstream = spillWriter.getReader(serializerManager);
 
@@ -540,8 +573,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           // is accessing the current record. We free this page in that caller's next loadNext()
           // call.
           for (MemoryBlock page : allocatedPages) {
-            if (!loaded || page.pageNumber !=
-                    ((UnsafeInMemorySorter.SortedIterator)upstream).getCurrentPageNumber()) {
+            if (!loaded || page.pageNumber != currentPageNumber) {
               released += page.size();
               freePage(page);
             } else {
@@ -688,6 +720,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       this.current = iterators.remove();
     }
 
+    ChainedIterator(Queue<UnsafeSorterIterator> iterators, int numRecords) {
+      assert iterators.size() > 0;
+      this.iterators = iterators;
+      this.current = iterators.remove();
+      this.numRecords = numRecords;
+    }
+
+
     @Override
     public int getNumRecords() {
       return numRecords;
@@ -720,5 +760,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     @Override
     public long getKeyPrefix() { return current.getKeyPrefix(); }
+
+    public Collection<UnsafeSorterIterator> getIterators() {
+      return Collections.unmodifiableCollection(iterators);
+    }
+
+    public UnsafeSorterIterator getCurrent() {
+      return current;
+    }
   }
 }

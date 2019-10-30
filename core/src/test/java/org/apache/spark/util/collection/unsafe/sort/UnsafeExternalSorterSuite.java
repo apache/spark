@@ -384,6 +384,59 @@ public class UnsafeExternalSorterSuite {
   }
 
   @Test
+  public void forcedSpillingWithReadIteratorContainNull() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    long[] record = new long[100];
+    int recordSize = record.length * 8;
+    int notNullNum = (int) pageSizeBytes / recordSize * 2;
+    int nullNum = (int) pageSizeBytes / recordSize * 1;
+    long nullValue = -1;
+    int totalNum = notNullNum + nullNum;
+    int checkNumBeforeSpill = totalNum / 4;
+
+    for (int i = 0; i < notNullNum; i++) {
+      record[0] = (long) i;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, i, false);
+    }
+
+    for (int i = 0; i < nullNum; i++) {
+      record[0] = nullValue;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, Long.MIN_VALUE, true);
+    }
+
+    assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
+    UnsafeExternalSorter.SpillableIterator iter =
+            (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
+    int lastv = 0;
+    for (int i = 0; i < checkNumBeforeSpill; i++) {
+      iter.hasNext();
+      iter.loadNext();
+      checkIterValue(iter, i, nullNum, nullValue);
+      lastv = i;
+    }
+    assertTrue(iter.spill() > 0);
+    assertEquals(0, iter.spill());
+    checkIterValue(iter, lastv, nullNum, nullValue);
+    for (int i = checkNumBeforeSpill; i < totalNum; i++) {
+      iter.hasNext();
+      iter.loadNext();
+      checkIterValue(iter, i, nullNum, nullValue);
+    }
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  private void checkIterValue(UnsafeExternalSorter.SpillableIterator iter,
+                              int idx, int nullNum, long nullValue) {
+    long value = Platform.getLong(iter.getBaseObject(), iter.getBaseOffset());
+    if (idx < nullNum) {
+      assertEquals(nullValue, value);
+    } else {
+      assertEquals(idx - nullNum, value);
+    }
+  }
+
+    @Test
   public void forcedSpillingWithoutComparator() throws Exception {
     final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
       taskMemoryManager,
