@@ -218,7 +218,7 @@ object IntervalUtils {
         minutes = toLongWithRange("second", m.group(7), 0, 59)
       }
       // Hive allow nanosecond precision interval
-      var nanos = parseNanos(m.group(9))
+      var nanos = parseNanos(m.group(9), seconds < 0)
       to match {
         case "hour" =>
           minutes = 0
@@ -287,9 +287,11 @@ object IntervalUtils {
     new CalendarInterval(months, microseconds)
   }
 
-  private def parseNanos(nanosStr: String): Long = {
+  private def parseNanos(nanosStr: String, isNegative: Boolean): Long = {
     val alignedStr = if (nanosStr == null) nanosStr else (nanosStr + "000000000").substring(0, 9)
-    toLongWithRange("nanosecond", alignedStr, 0L, 999999999L) / DateTimeUtils.NANOS_PER_MICROS
+    val nanos = toLongWithRange("nanosecond", alignedStr, 0L, 999999999L)
+    val micros = nanos / DateTimeUtils.NANOS_PER_MICROS
+    if (isNegative) -micros else micros
   }
 
   /**
@@ -306,9 +308,10 @@ object IntervalUtils {
 
     secondNano.split("\\.") match {
       case Array(secondsStr) => parseSeconds(secondsStr)
-      case Array("", nanosStr) => parseNanos(nanosStr)
+      case Array("", nanosStr) => parseNanos(nanosStr, false)
       case Array(secondsStr, nanosStr) =>
-        Math.addExact(parseSeconds(secondsStr), parseNanos(nanosStr))
+        val seconds = parseSeconds(secondsStr)
+        Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
       case _ =>
         throw new IllegalArgumentException(
           "Interval string does not match second-nano format of ss.nnnnnnnnn")
