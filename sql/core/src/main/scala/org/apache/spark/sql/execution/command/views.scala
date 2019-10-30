@@ -137,7 +137,7 @@ case class CreateViewCommand(
     val analyzedPlan = qe.analyzed
 
     if (userSpecifiedColumns.nonEmpty &&
-      userSpecifiedColumns.length != analyzedPlan.output.length) {
+        userSpecifiedColumns.length != analyzedPlan.output.length) {
       throw new AnalysisException(s"The number of columns produced by the SELECT clause " +
         s"(num: `${analyzedPlan.output.length}`) does not match the number of column names " +
         s"specified by CREATE VIEW (num: `${userSpecifiedColumns.length}`).")
@@ -200,7 +200,7 @@ case class CreateViewCommand(
       child.collect {
         // Permanent views will be created as temporary view if based on temporary view.
         case UnresolvedRelation(AsTableIdentifier(ident))
-          if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
+            if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
           // Temporary views are only stored in the session catalog
           logInfo(s"View $name is based on temporary view $ident."
             + s" $name will be created as temporary view")
