@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
 
 private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   extends CompositeService(classOf[CLIService].getSimpleName)
-  with ICLIService with Logging {
+    with ICLIService with Logging {
 
   private var hiveConf: HiveConf = null
   private var sessionManager: SessionManager = null
@@ -99,7 +99,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
 
   def getHttpUGI: UserGroupInformation = this.httpUGI
 
-  override def openSession(protocol: TProtocolVersion,
+  def openSession(protocol: TProtocolVersion,
                   username: String,
                   password: String,
                   ipAddress: String,
@@ -116,7 +116,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
     sessionHandle
   }
 
-  override def openSessionWithImpersonation(protocol: TProtocolVersion,
+  def openSessionWithImpersonation(protocol: TProtocolVersion,
                                    username: String,
                                    password: String,
                                    ipAddress: String,
@@ -134,6 +134,37 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
     sessionHandle
   }
 
+  override def openSession(username: String,
+                           password: String,
+                           configuration: JMap[String, String]): SessionHandle = {
+    val sessionHandle =
+      sessionManager.openSession(CLIService.SERVER_VERSION,
+        username,
+        password,
+        null,
+        configuration,
+        false,
+        null)
+    logDebug(sessionHandle + ": openSession()")
+    sessionHandle
+  }
+
+  override def openSessionWithImpersonation(username: String,
+                                            password: String,
+                                            configuration: JMap[String, String],
+                                            delegationToken: String): SessionHandle = {
+    val sessionHandle =
+      sessionManager.openSession(CLIService.SERVER_VERSION,
+        username,
+        password,
+        null,
+        configuration,
+        true,
+        delegationToken)
+    logDebug(sessionHandle + ": openSessionWithImpersonation()")
+    sessionHandle
+  }
+
   override def closeSession(sessionHandle: SessionHandle): Unit = {
     sessionManager.closeSession(sessionHandle)
     logDebug(sessionHandle + ": closeSession()")
@@ -142,7 +173,12 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
 
   override def getInfo(sessionHandle: SessionHandle,
                        infoType: GetInfoType): GetInfoValue = {
-    val infoValue = sessionManager.getSession(sessionHandle).getInfo(infoType)
+    val infoValue = infoType match {
+      case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
+      case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
+      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(sqlContext.sparkContext.version)
+      case _ => sessionManager.getSession(sessionHandle).getInfo(infoType)
+    }
     logDebug(sessionHandle + ": getInfo()")
     infoValue
   }
@@ -165,6 +201,29 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
     logDebug(sessionHandle + ": executeStatementAsync()")
     opHandle
   }
+
+  override def executeStatement(sessionHandle: SessionHandle,
+                                statement: String,
+                                confOverlay: JMap[String, String],
+                                queryTimeout: Long): OperationHandle = {
+    val opHandle: OperationHandle =
+      sessionManager.getSession(sessionHandle)
+        .executeStatement(statement, confOverlay, queryTimeout)
+    logDebug(sessionHandle + ": executeStatementAsync()")
+    opHandle
+  }
+
+  override def executeStatementAsync(sessionHandle: SessionHandle,
+                                     statement: String,
+                                     confOverlay: JMap[String, String],
+                                     queryTimeout: Long): OperationHandle = {
+    val opHandle: OperationHandle =
+      sessionManager.getSession(sessionHandle)
+        .executeStatementAsync(statement, confOverlay, queryTimeout)
+    logDebug(sessionHandle + ": executeStatementAsync()")
+    opHandle
+  }
+
 
   override def getTypeInfo(sessionHandle: SessionHandle): OperationHandle = {
     val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).getTypeInfo
@@ -383,10 +442,9 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
   override def getDelegationToken(sessionHandle: SessionHandle,
                                   authFactory: HiveAuthFactory,
                                   owner: String,
-                                  renewer: String,
-                                  remoteAddr: String): String = {
+                                  renewer: String): String = {
     val delegationToken = sessionManager.getSession(sessionHandle)
-      .getDelegationToken(authFactory, owner, renewer, remoteAddr)
+      .getDelegationToken(authFactory, owner, renewer)
     logInfo(sessionHandle + ": getDelegationToken()")
     delegationToken
   }
@@ -408,7 +466,8 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
   }
 
   def getSessionManager: SessionManager = sessionManager
-}
+
+ }
 
 object CLIService {
   val protocols: Array[TProtocolVersion] = TProtocolVersion.values()

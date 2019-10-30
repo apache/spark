@@ -52,6 +52,11 @@ private[thriftserver] object FetchOrientation {
   def getFetchOrientation(tFetchOrientation: TFetchOrientation): FetchOrientation =
     tFetchOrientation match {
       case FETCH_FIRST.toTFetchOrientation => FETCH_FIRST
+      case FETCH_NEXT.toTFetchOrientation => FETCH_NEXT
+      case FETCH_ABSOLUTE.toTFetchOrientation => FETCH_ABSOLUTE
+      case FETCH_LAST.toTFetchOrientation => FETCH_LAST
+      case FETCH_PRIOR.toTFetchOrientation => FETCH_PRIOR
+      case FETCH_RELATIVE.toTFetchOrientation => FETCH_RELATIVE
       case _ => FETCH_NEXT
     }
 }

@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.conf.SystemVariables._
 import org.apache.hadoop.hive.ql.session.SessionState
 
@@ -46,7 +47,12 @@ private[thriftserver] class ThriftServerSessionImpl(
     var ipAddress: String) extends ThriftServerSession with Logging {
 
   private val _sessionHandle: SessionHandle = new SessionHandle(protocol)
-  private val _hiveConf: HiveConf = new HiveConf(serverHiveConf)
+  private val _hiveConf: HiveConf = {
+    val conf = new HiveConf(serverHiveConf)
+    // Set an explicit session name to control the download directory name
+    conf.set(ConfVars.HIVESESSIONID.varname, _sessionHandle.getHandleIdentifier.toString)
+    conf
+  }
   private var _sessionState: SessionState = null
   private var _sessionManager: SessionManager = null
   private var _operationManager: OperationManager = new OperationManager()
@@ -190,19 +196,32 @@ private[thriftserver] class ThriftServerSessionImpl(
    * @throws SparkThriftServerSQLException
    */
   override def executeStatement(statement: String,
-                                confOverlay: JMap[String, String]): OperationHandle = {
-    executeStatementInternal(statement, confOverlay, false)
+                                  confOverlay: JMap[String, String]): OperationHandle = {
+    executeStatementInternal(statement, confOverlay, false, 0)
   }
 
   override def executeStatementAsync(statement: String,
                                      confOverlay: JMap[String, String]): OperationHandle = {
-    executeStatementInternal(statement, confOverlay, true)
+    executeStatementInternal(statement, confOverlay, true, 0)
+  }
+
+  override def executeStatement(statement: String,
+                                confOverlay: JMap[String, String],
+                                queryTimeOut: Long): OperationHandle = {
+    executeStatementInternal(statement, confOverlay, false, queryTimeOut)
+  }
+
+  override def executeStatementAsync(statement: String,
+                                     confOverlay: JMap[String, String],
+                                     queryTimeout: Long): OperationHandle = {
+    executeStatementInternal(statement, confOverlay, true, queryTimeout)
   }
 
   @throws[SparkThriftServerSQLException]
   private def executeStatementInternal(statement: String,
                                        confOverlay: JMap[String, String],
-                                       runAsync: Boolean): OperationHandle = {
+                                       runAsync: Boolean,
+                                       queryTimeout: Long): OperationHandle = {
     acquire(true)
     val operationManager = getOperationManager
     val operation = operationManager
@@ -210,7 +229,8 @@ private[thriftserver] class ThriftServerSessionImpl(
         getSession,
         statement,
         confOverlay,
-        runAsync)
+        runAsync,
+        queryTimeout)
     val opHandle = operation.getHandle
     try {
       operation.run
@@ -510,6 +530,7 @@ private[thriftserver] class ThriftServerSessionImpl(
       _opHandleSet.clear
       // Cleanup session log directory.
       cleanupSessionLogDir
+      cleanupPipeoutFile
       val hiveHist = _sessionState.getHiveHistory
       if (null != hiveHist) {
         hiveHist.closeStream()
@@ -567,6 +588,21 @@ private[thriftserver] class ThriftServerSessionImpl(
     }
   }
 
+  private def cleanupPipeoutFile(): Unit = {
+    val lScratchDir = _hiveConf.getVar(ConfVars.LOCALSCRATCHDIR)
+    val sessionID = _hiveConf.getVar(ConfVars.HIVESESSIONID)
+    val fileAry = new File(lScratchDir)
+      .listFiles((dir, name) => name.startsWith(sessionID) && name.endsWith(".pipeout"))
+    for (file <- fileAry) {
+      try
+        FileUtils.forceDelete(file)
+      catch {
+        case e: SparkThriftServerSQLException =>
+          logError("Failed to cleanup pipeout file: " + file, e)
+      }
+    }
+  }
+
   override def getResultSetMetadata(opHandle: OperationHandle): StructType = {
     acquire(true)
     try {
@@ -593,14 +629,13 @@ private[thriftserver] class ThriftServerSessionImpl(
 
   override def getDelegationToken(authFactory: HiveAuthFactory,
                                   owner: String,
-                                  renewer: String,
-                                  remoteAddr: String): String = {
+                                  renewer: String): String = {
     HiveAuthFactory.verifyProxyAccess(
       getUsername,
       owner,
       getIpAddress,
       getHiveConf)
-    authFactory.getDelegationToken(owner, renewer, remoteAddr)
+    authFactory.getDelegationToken(owner, renewer, getIpAddress)
   }
 
   override def cancelDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit = {

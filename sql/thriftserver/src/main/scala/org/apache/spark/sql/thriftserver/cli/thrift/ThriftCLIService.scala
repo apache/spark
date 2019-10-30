@@ -193,8 +193,7 @@ private[thriftserver] abstract class ThriftCLIService(cliService: CLIService, se
           new SessionHandle(req.getSessionHandle),
           hiveAuthFactory,
           req.getOwner,
-          req.getRenewer,
-          getIpAddress)
+          req.getRenewer)
         resp.setDelegationToken(token)
         resp.setStatus(OK_STATUS)
       } catch {

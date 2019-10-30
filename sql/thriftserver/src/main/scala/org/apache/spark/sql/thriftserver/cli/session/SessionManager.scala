@@ -200,6 +200,14 @@ private[thriftserver] class SessionManager(hiveServer2: SparkThriftServer, sqlCo
     }
   }
 
+  def setConfMap(conf: SQLContext, confMap: JMap[String, String]): Unit = {
+    val iterator = confMap.entrySet().iterator()
+    while (iterator.hasNext) {
+      val kv = iterator.next()
+      conf.setConf(kv.getKey, kv.getValue)
+    }
+  }
+
   @throws[SparkThriftServerSQLException]
   def openSession(protocol: TProtocolVersion,
                   username: String,
@@ -260,6 +268,9 @@ private[thriftserver] class SessionManager(hiveServer2: SparkThriftServer, sqlCo
       sqlContext.newSession()
     }
     ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+    val hiveSessionState = session.getSessionState
+    setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
+    setConfMap(ctx, hiveSessionState.getHiveVariables)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
       ctx.sql(s"use ${sessionConf.get("use:database")}")
     }

@@ -79,14 +79,18 @@ private[thriftserver] case class ColumnBasedSet(
       case LongType =>
         val values = rows.indices.map { i =>
           nulls.set(i, rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) 0 else rows(i).getLong(ordinal)
+          if (rows(i).isNullAt(ordinal)) 0L else rows(i).getLong(ordinal)
         }.map(_.asInstanceOf[java.lang.Long]).asJava
         TColumn.i64Val(new TI64Column(values, bitSetToBuffer(nulls)))
       case FloatType =>
         val values = rows.indices.map { i =>
           nulls.set(i, rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) 0 else rows(i).getFloat(ordinal)
-        }.map(_.toDouble.asInstanceOf[java.lang.Double]).asJava
+          if (rows(i).isNullAt(ordinal)) {
+            0.toDouble.asInstanceOf[java.lang.Double]
+          } else {
+            new java.lang.Double(rows(i).get(ordinal).toString)
+          }
+        }.asJava
         TColumn.doubleVal(new TDoubleColumn(values, bitSetToBuffer(nulls)))
       case DoubleType =>
         val values = rows.indices.map { i =>
@@ -110,6 +114,16 @@ private[thriftserver] case class ColumnBasedSet(
           }
         }.asJava
         TColumn.binaryVal(new TBinaryColumn(values, bitSetToBuffer(nulls)))
+      case DecimalType() =>
+        val values = rows.indices.map { i =>
+          nulls.set(i, rows(i).isNullAt(ordinal))
+          if (rows(i).isNullAt(ordinal)) {
+            EMPTY_STRING
+          } else {
+            rows(i).getDecimal(ordinal).toPlainString
+          }
+        }.asJava
+        TColumn.stringVal(new TStringColumn(values, bitSetToBuffer(nulls)))
       case _ =>
         val values = rows.indices.map { i =>
           nulls.set(i, rows(i).isNullAt(ordinal))
@@ -146,6 +160,7 @@ private[thriftserver] case class ColumnBasedSet(
 
   override def setStartOffset(startOffset: Long): Unit = this.startOffset = startOffset
 
+  override def iterator: Iterator[Row] = rows.iterator
 }
 
 object ColumnBasedSet {

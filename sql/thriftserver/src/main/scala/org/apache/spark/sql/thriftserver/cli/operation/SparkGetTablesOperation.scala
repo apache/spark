@@ -167,17 +167,12 @@ private[thriftserver] class SparkGetTablesOperation(
       tableName: String,
       tableType: String,
       comment: Option[String]): Unit = {
-    val rowData = Array[AnyRef](
-      "",
-      dbName,
-      tableName,
-      tableType,
-      comment.getOrElse(""))
     // Since HIVE-7575(Hive 2.0.0), adds 5 additional columns to the ResultSet of GetTables.
     if (HiveUtils.isHive23) {
-      rowSet.addRow(Row(rowData ++ Array(null, null, null, null, null)))
+      rowSet.addRow(Row("", dbName, tableName, tableType, comment.getOrElse(""),
+        null, null, null, null, null))
     } else {
-      rowSet.addRow(Row(rowData))
+      rowSet.addRow(Row("", dbName, tableName, tableType, comment.getOrElse("")))
     }
   }
 

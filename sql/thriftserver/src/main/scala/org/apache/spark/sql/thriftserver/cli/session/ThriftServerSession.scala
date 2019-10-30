@@ -54,6 +54,16 @@ private[thriftserver] trait ThriftServerSession extends ThriftServerSessionBase 
   def executeStatementAsync(statement: String,
                             confOverlay: JMap[String, String]): OperationHandle
 
+  @throws[SparkThriftServerSQLException]
+  def executeStatement(statement: String,
+                       confOverlay: JMap[String, String],
+                       queryTimeout: Long): OperationHandle
+
+  @throws[SparkThriftServerSQLException]
+  def executeStatementAsync(statement: String,
+                            confOverlay: JMap[String, String],
+                            queryTimeout: Long): OperationHandle
+
   /**
    * getTypeInfo operation handler
    *
@@ -201,8 +211,7 @@ private[thriftserver] trait ThriftServerSession extends ThriftServerSessionBase 
   def getDelegationToken(authFactory:
                          HiveAuthFactory,
                          owner: String,
-                         renewer: String,
-                         remoteAddr: String): String
+                         renewer: String): String
 
   @throws[SparkThriftServerSQLException]
   def cancelDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit

@@ -150,4 +150,5 @@ private[thriftserver] case class RowBasedSet(types: StructType,
 
   override def setStartOffset(startOffset: Long): Unit = this.startOffset = startOffset
 
+  override def iterator: Iterator[Row] = rows.iterator
 }

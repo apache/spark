@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.thriftserver.cli
 
-import org.apache.spark.sql.thriftserver.cli.thrift.{TTableSchema, TTypeId}
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+
+import org.apache.spark.sql.thriftserver.cli.thrift.{TCLIServiceConstants, TTableSchema, TTypeEntry, TTypeId}
 import org.apache.spark.sql.types._
 
 private[thriftserver] object SchemaMapper {
@@ -30,6 +33,21 @@ private[thriftserver] object SchemaMapper {
       }.map(_.toTColumnDesc).foreach(tTableSchema.addToColumns)
     }
     tTableSchema
+  }
+
+  def toStructType(fields: TTableSchema): StructType = {
+    val schema = new StructType()
+    if (fields != null) {
+      val posToField: Map[Int, StructField] = fields.getColumns.asScala
+        .map { tColumn =>
+          tColumn.position ->
+            new StructField(tColumn.columnName,
+              toDataType(tColumn.typeDesc.getTypes.get(0)))
+        }.toMap
+      posToField.keys.toSeq.sorted.foreach(pos =>
+        posToField.get(pos).map(schema.add))
+    }
+    schema
   }
 
   def toTTypeId(typ: DataType): TTypeId = typ match {
@@ -59,4 +77,33 @@ private[thriftserver] object SchemaMapper {
       }
       throw new IllegalArgumentException("Unrecognized type name: " + catalogString)
   }
+
+  def toDataType(entry: TTypeEntry): DataType =
+    entry.getPrimitiveEntry.`type` match {
+      case TTypeId.NULL_TYPE => NullType
+      case TTypeId.BOOLEAN_TYPE => BooleanType
+      case TTypeId.TINYINT_TYPE => ByteType
+      case TTypeId.SMALLINT_TYPE => ShortType
+      case TTypeId.INT_TYPE => IntegerType
+      case TTypeId.BIGINT_TYPE => LongType
+      case TTypeId.FLOAT_TYPE => FloatType
+      case TTypeId.DOUBLE_TYPE => DoubleType
+      case TTypeId.STRING_TYPE => StringType
+      case TTypeId.DECIMAL_TYPE =>
+        val tQualifiers = entry.getPrimitiveEntry
+          .getTypeQualifiers.qualifiers
+        DecimalType(tQualifiers.get(TCLIServiceConstants.PRECISION).getI32Value,
+          tQualifiers.get(TCLIServiceConstants.SCALE).getI32Value)
+      case TTypeId.DATE_TYPE => DateType
+      case TTypeId.TIMESTAMP_TYPE => TimestampType
+      case TTypeId.BINARY_TYPE => BinaryType
+      case TTypeId.ARRAY_TYPE =>
+        ArrayType(StringType, true)
+      case TTypeId.MAP_TYPE =>
+        MapType(StringType, StringType, true)
+      case TTypeId.STRUCT_TYPE =>
+        StringType
+      case TTypeId.USER_DEFINED_TYPE => StringType
+      case _ => StringType
+    }
 }

@@ -27,17 +27,13 @@ import org.apache.spark.sql.types.StructType
 private[thriftserver] trait ICLIService {
 
   @throws[SparkThriftServerSQLException]
-  def openSession(protocol: TProtocolVersion,
-                  username: String,
+  def openSession(username: String,
                   password: String,
-                  ipAddress: String,
                   configuration: JMap[String, String]): SessionHandle
 
   @throws[SparkThriftServerSQLException]
-  def openSessionWithImpersonation(protocol: TProtocolVersion,
-                                   username: String,
+  def openSessionWithImpersonation(username: String,
                                    password: String,
-                                   ipAddress: String,
                                    configuration: JMap[String, String],
                                    delegationToken: String): SessionHandle
 
@@ -57,6 +53,18 @@ private[thriftserver] trait ICLIService {
   def executeStatementAsync(sessionHandle: SessionHandle,
                             statement: String,
                             confOverlay: JMap[String, String]): OperationHandle
+
+  @throws[SparkThriftServerSQLException]
+  def executeStatement(sessionHandle: SessionHandle,
+                       statement: String,
+                       confOverlay: JMap[String, String],
+                       queryTimeout: Long): OperationHandle
+
+  @throws[SparkThriftServerSQLException]
+  def executeStatementAsync(sessionHandle: SessionHandle,
+                            statement: String,
+                            confOverlay: JMap[String, String],
+                            queryTimeout: Long): OperationHandle
 
   @throws[SparkThriftServerSQLException]
   def getTypeInfo(sessionHandle: SessionHandle): OperationHandle
@@ -137,8 +145,7 @@ private[thriftserver] trait ICLIService {
   def getDelegationToken(sessionHandle: SessionHandle,
                          authFactory: HiveAuthFactory,
                          owner: String,
-                         renewer: String,
-                         remoteAddr: String): String
+                         renewer: String): String
 
   @throws[SparkThriftServerSQLException]
   def cancelDelegationToken(sessionHandle: SessionHandle,

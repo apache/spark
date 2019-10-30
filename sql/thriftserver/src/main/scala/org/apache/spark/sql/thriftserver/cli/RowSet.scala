@@ -34,4 +34,6 @@ private[thriftserver] trait RowSet {
   def setStartOffset(startOffset: Long): Unit
 
   def toTRowSet: TRowSet
+
+  def iterator: Iterator[Row]
 }

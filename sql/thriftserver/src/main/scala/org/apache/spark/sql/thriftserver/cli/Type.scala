@@ -194,7 +194,6 @@ object Type {
     } else {
       throw new IllegalArgumentException("Unregonized Thrift TTypeId value: " + tTypeId)
     }
-
   }
 
   def getType(name: String): Type = {

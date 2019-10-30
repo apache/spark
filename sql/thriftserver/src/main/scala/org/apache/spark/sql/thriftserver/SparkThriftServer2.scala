@@ -45,12 +45,12 @@ object SparkThriftServer2 extends Logging {
   var uiTab: Option[ThriftServerTab] = None
   var listener: SparkThriftServerListener = _
 
-  def hiveConfForExecution(): HiveConf = {
+  def hiveConfForExecution(sparkContext: SparkContext): HiveConf = {
     val extraConfig = HiveUtils.newTemporaryConfiguration(true)
     val hiveConf: HiveConf = new HiveConf()
-    (SparkSQLEnv.sparkContext.hadoopConfiguration
+    (sparkContext.hadoopConfiguration
       .iterator().asScala.map(kv => kv.getKey -> kv.getValue)
-      ++ SparkSQLEnv.sparkContext.conf.getAll.toMap ++ extraConfig).toMap
+      ++ sparkContext.conf.getAll.toMap ++ extraConfig).toMap
       .foreach { case (k, v) => hiveConf.set(k, v) }
     hiveConf
   }
@@ -63,7 +63,7 @@ object SparkThriftServer2 extends Logging {
   def startWithContext(sqlContext: SQLContext): SparkThriftServer = {
     val server = new SparkThriftServer(sqlContext)
 
-    server.init(hiveConfForExecution())
+    server.init(hiveConfForExecution(sqlContext.sparkContext))
     server.start()
     listener = new SparkThriftServerListener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
@@ -97,7 +97,7 @@ object SparkThriftServer2 extends Logging {
 
     try {
       val server = new SparkThriftServer(SparkSQLEnv.sqlContext)
-      server.init(hiveConfForExecution())
+      server.init(hiveConfForExecution(SparkSQLEnv.sparkContext))
       server.start()
       logInfo("HiveThriftServer2 started")
       listener = new SparkThriftServerListener(server, SparkSQLEnv.sqlContext.conf)

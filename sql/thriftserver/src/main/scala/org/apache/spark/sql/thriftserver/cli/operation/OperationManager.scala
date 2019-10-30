@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
 
 private[thriftserver] class OperationManager
   extends AbstractService(classOf[OperationManager].getSimpleName)
-  with Logging {
+    with Logging {
 
   private[this] lazy val logSchema: StructType = new StructType().add("operation_log", "string")
   private[this] val handleToOperation = new ConcurrentHashMap[OperationHandle, Operation]
@@ -76,18 +76,21 @@ private[thriftserver] class OperationManager
   def newExecuteStatementOperation(parentSession: ThriftServerSession,
                                    statement: String,
                                    confOverlay: JMap[String, String],
-                                   async: Boolean): SparkExecuteStatementOperation = synchronized {
-    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
-      s" initialized or had already closed.")
-    val conf = sqlContext.sessionState.conf
-    val runInBackground = async && conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
-    val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay,
-      runInBackground)(sqlContext, sessionToActivePool)
-    handleToOperation.put(operation.getHandle, operation)
-    logDebug(s"Created Operation for $statement with session=$parentSession, " +
-      s"runInBackground=$runInBackground")
-    operation
+                                   async: Boolean,
+                                   queryTimeOut: Long): SparkExecuteStatementOperation = {
+    synchronized {
+      val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+      require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} " +
+        s"has not been initialized or had already closed.")
+      val conf = sqlContext.sessionState.conf
+      val runInBackground = async && conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
+      val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay,
+        runInBackground)(sqlContext, sessionToActivePool)
+      handleToOperation.put(operation.getHandle, operation)
+      logDebug(s"Created Operation for $statement with session=$parentSession, " +
+        s"runInBackground=$runInBackground")
+      operation
+    }
   }
 
   def newGetTypeInfoOperation(session: ThriftServerSession): SparkGetTypeInfoOperation =
