@@ -58,7 +58,7 @@ class DataFrame(object):
     Once created, it can be manipulated using the various domain-specific-language
     (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
 
-    To select a column from the data frame, use the apply method::
+    To select a column from the :class:`DataFrame`, use the apply method::
 
         ageCol = people.age
 
@@ -373,7 +373,7 @@ class DataFrame(object):
             return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     def _repr_html_(self):
-        """Returns a dataframe with html code when you enabled eager evaluation
+        """Returns a :class:`DataFrame` with html code when you enabled eager evaluation
         by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
         using support eager evaluation with HTML.
         """
@@ -407,11 +407,11 @@ class DataFrame(object):
     @since(2.1)
     def checkpoint(self, eager=True):
         """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
-        logical plan of this DataFrame, which is especially useful in iterative algorithms where the
+        logical plan of this :class:`DataFrame`, which is especially useful in iterative algorithms where the
         plan may grow exponentially. It will be saved to files inside the checkpoint
         directory set with :meth:`SparkContext.setCheckpointDir`.
 
-        :param eager: Whether to checkpoint this DataFrame immediately
+        :param eager: Whether to checkpoint this :class:`DataFrame` immediately
 
         .. note:: Experimental
         """
@@ -421,11 +421,11 @@ class DataFrame(object):
     @since(2.3)
     def localCheckpoint(self, eager=True):
         """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
-        truncate the logical plan of this DataFrame, which is especially useful in iterative
+        truncate the logical plan of this :class:`DataFrame`, which is especially useful in iterative
         algorithms where the plan may grow exponentially. Local checkpoints are stored in the
         executors using the caching subsystem and therefore they are not reliable.
 
-        :param eager: Whether to checkpoint this DataFrame immediately
+        :param eager: Whether to checkpoint this :class:`DataFrame` immediately
 
         .. note:: Experimental
         """
@@ -468,7 +468,7 @@ class DataFrame(object):
 
     @since(2.2)
     def hint(self, name, *parameters):
-        """Specifies some hint on the current DataFrame.
+        """Specifies some hint on the current :class:`DataFrame`.
 
         :param name: A name of the hint.
         :param parameters: Optional parameters.
@@ -862,7 +862,7 @@ class DataFrame(object):
             sampling fraction for each stratum. If a stratum is not
             specified, we treat its fraction as zero.
         :param seed: random seed
-        :return: a new DataFrame that represents the stratified sample
+        :return: a new :class:`DataFrame` that represents the stratified sample
 
         >>> from pyspark.sql.functions import col
         >>> dataset = sqlContext.range(0, 100).select((col("id") % 3).alias("key"))
@@ -964,7 +964,7 @@ class DataFrame(object):
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
 
-        :param alias: string, an alias name to be set for the DataFrame.
+        :param alias: string, an alias name to be set for the :class:`DataFrame`.
 
         >>> from pyspark.sql.functions import *
         >>> df_as1 = df.alias("df_as1")
@@ -1144,7 +1144,7 @@ class DataFrame(object):
         given, this function computes statistics for all numerical or string columns.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
-            guarantee about the backward compatibility of the schema of the resulting DataFrame.
+            guarantee about the backward compatibility of the schema of the resulting :class:`DataFrame`.
 
         >>> df.describe(['age']).show()
         +-------+------------------+
@@ -1188,7 +1188,7 @@ class DataFrame(object):
         approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
-            guarantee about the backward compatibility of the schema of the resulting DataFrame.
+            guarantee about the backward compatibility of the schema of the resulting :class:`DataFrame`.
 
         >>> df.summary().show()
         +-------+------------------+-----+
@@ -1448,7 +1448,7 @@ class DataFrame(object):
 
     @since(2.0)
     def union(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
+        """ Return a new :class:`DataFrame` containing union of rows in this and another :class:`DataFrame`.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
         (that does deduplication of elements), use this function followed by :func:`distinct`.
@@ -1459,7 +1459,7 @@ class DataFrame(object):
 
     @since(1.3)
     def unionAll(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
+        """ Return a new :class:`DataFrame` containing union of rows in this and another :class:`DataFrame`.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
         (that does deduplication of elements), use this function followed by :func:`distinct`.
@@ -1470,7 +1470,7 @@ class DataFrame(object):
 
     @since(2.3)
     def unionByName(self, other):
-        """ Returns a new :class:`DataFrame` containing union of rows in this and another frame.
+        """ Returns a new :class:`DataFrame` containing union of rows in this and another :class:`DataFrame`.
 
         This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
         union (that does deduplication of elements), use this function followed by :func:`distinct`.
@@ -1523,8 +1523,8 @@ class DataFrame(object):
 
     @since(1.3)
     def subtract(self, other):
-        """ Return a new :class:`DataFrame` containing rows in this frame
-        but not in another frame.
+        """ Return a new :class:`DataFrame` containing rows in this :class:`DataFrame`
+        but not in another :class:`DataFrame`.
 
         This is equivalent to `EXCEPT DISTINCT` in SQL.
 
@@ -1814,7 +1814,7 @@ class DataFrame(object):
     def approxQuantile(self, col, probabilities, relativeError):
         """
         Calculates the approximate quantiles of numerical columns of a
-        DataFrame.
+        :class:`DataFrame`.
 
         The result of this algorithm has the following deterministic bound:
         If the DataFrame has N elements and if we request the quantile at
@@ -1887,7 +1887,7 @@ class DataFrame(object):
     @since(1.4)
     def corr(self, col1, col2, method=None):
         """
-        Calculates the correlation of two columns of a DataFrame as a double value.
+        Calculates the correlation of two columns of a :class:`DataFrame` as a double value.
         Currently only supports the Pearson Correlation Coefficient.
         :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases of each other.
 
@@ -1975,7 +1975,7 @@ class DataFrame(object):
         existing column that has the same name.
 
         The column expression must be an expression over this DataFrame; attempting to add
-        a column from some other dataframe will raise an error.
+        a column from some other DataFrame will raise an error.
 
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
