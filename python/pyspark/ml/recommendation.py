@@ -69,7 +69,8 @@ class _ALSModelParams(HasPredictionCol):
 
 
 @inherit_doc
-class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval, HasSeed):
+class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval, HasSeed,
+                 HasAggregationDepth):
     """
     Params for :py:class:`ALS`.
 
@@ -213,7 +214,7 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     ...     [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
     ...     ["user", "item", "rating"])
     >>> als = ALS(rank=10, seed=0)
-    >>> als.setMaxIter(5)
+    >>> als.setMaxIter(5).setAggregationDepth(3)
     ALS...
     >>> als.getMaxIter()
     5
@@ -280,13 +281,15 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                  ratingCol="rating", nonnegative=False, checkpointInterval=10,
                  intermediateStorageLevel="MEMORY_AND_DISK",
-                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan"):
+                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan",
+                 aggregationDepth=2):
         """
         __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=None, \
                  ratingCol="rating", nonnegative=false, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
-                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
+                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", \
+                 aggregationDepth=2)
         """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
@@ -294,7 +297,8 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
                          implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
                          ratingCol="rating", nonnegative=False, checkpointInterval=10,
                          intermediateStorageLevel="MEMORY_AND_DISK",
-                         finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
+                         finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan",
+                         aggregationDepth=2)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -304,13 +308,15 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
                   implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                   ratingCol="rating", nonnegative=False, checkpointInterval=10,
                   intermediateStorageLevel="MEMORY_AND_DISK",
-                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan"):
+                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan",
+                  aggregationDepth=2):
         """
         setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None, \
                  ratingCol="rating", nonnegative=False, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
-                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
+                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", \
+                 aggregationDepth=2)
         Sets params for ALS.
         """
         kwargs = self._input_kwargs
@@ -440,6 +446,13 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
         Sets the value of :py:attr:`seed`.
         """
         return self._set(seed=value)
+
+    @since("3.0.0")
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
 
 
 class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):

@@ -131,7 +131,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
  * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter with HasRegParam
-  with HasCheckpointInterval with HasSeed {
+  with HasCheckpointInterval with HasSeed with HasAggregationDepth {
 
   /**
    * Param for rank of the matrix factorization (positive).
@@ -234,6 +234,10 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 
   /** @group expertGetParam */
   def getFinalStorageLevel: String = $(finalStorageLevel)
+
+  /** @group expertSetParam */
+  @Since("3.0.0")
+  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
 
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
@@ -686,7 +690,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       alpha = $(alpha), nonnegative = $(nonnegative),
       intermediateRDDStorageLevel = StorageLevel.fromString($(intermediateStorageLevel)),
       finalRDDStorageLevel = StorageLevel.fromString($(finalStorageLevel)),
-      checkpointInterval = $(checkpointInterval), seed = $(seed))
+      checkpointInterval = $(checkpointInterval), seed = $(seed), depth = $(aggregationDepth))
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
@@ -920,7 +924,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       checkpointInterval: Int = 10,
-      seed: Long = 0L)(
+      seed: Long = 0L,
+      depth: Int = 2)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
 
     require(!ratings.isEmpty(), s"No ratings available from $ratings")
@@ -978,7 +983,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         userFactors.setName(s"userFactors-$iter").persist(intermediateRDDStorageLevel)
         val previousItemFactors = itemFactors
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
-          userLocalIndexEncoder, implicitPrefs, alpha, solver)
+          userLocalIndexEncoder, implicitPrefs, alpha, solver, depth = depth)
         previousItemFactors.unpersist()
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
@@ -988,7 +993,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         }
         val previousUserFactors = userFactors
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
-          itemLocalIndexEncoder, implicitPrefs, alpha, solver)
+          itemLocalIndexEncoder, implicitPrefs, alpha, solver, depth = depth)
         if (shouldCheckpoint(iter)) {
           ALS.cleanShuffleDependencies(sc, deps)
           deletePreviousCheckpointFile()
@@ -1000,7 +1005,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       var previousCachedItemFactors: Option[RDD[(Int, FactorBlock)]] = None
       for (iter <- 0 until maxIter) {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
-          userLocalIndexEncoder, solver = solver)
+          userLocalIndexEncoder, solver = solver, depth = depth)
         if (shouldCheckpoint(iter)) {
           itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
           val deps = itemFactors.dependencies
@@ -1014,7 +1019,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           previousCachedItemFactors = Option(itemFactors)
         }
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
-          itemLocalIndexEncoder, solver = solver)
+          itemLocalIndexEncoder, solver = solver, depth = depth)
       }
     }
     val userIdAndFactors = userInBlocks
@@ -1663,9 +1668,10 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       srcEncoder: LocalIndexEncoder,
       implicitPrefs: Boolean = false,
       alpha: Double = 1.0,
-      solver: LeastSquaresNESolver): RDD[(Int, FactorBlock)] = {
+      solver: LeastSquaresNESolver,
+      depth: Int): RDD[(Int, FactorBlock)] = {
     val numSrcBlocks = srcFactorBlocks.partitions.length
-    val YtY = if (implicitPrefs) Some(computeYtY(srcFactorBlocks, rank)) else None
+    val YtY = if (implicitPrefs) Some(computeYtY(srcFactorBlocks, rank, depth)) else None
     val srcOut = srcOutBlocks.join(srcFactorBlocks).flatMap {
       case (srcBlockId, (srcOutBlock, srcFactors)) =>
         srcOutBlock.view.zipWithIndex.map { case (activeIndices, dstBlockId) =>
@@ -1742,13 +1748,17 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * Computes the Gramian matrix of user or item factors, which is only used in implicit preference.
    * Caching of the input factors is handled in [[ALS#train]].
    */
-  private def computeYtY(factorBlocks: RDD[(Int, FactorBlock)], rank: Int): NormalEquation = {
-    factorBlocks.values.aggregate(new NormalEquation(rank))(
+  private def computeYtY(
+      factorBlocks: RDD[(Int, FactorBlock)],
+      rank: Int,
+      depth: Int = 2): NormalEquation = {
+    factorBlocks.values.treeAggregate(new NormalEquation(rank))(
       seqOp = (ne, factors) => {
         factors.foreach(ne.add(_, 0.0))
         ne
       },
-      combOp = (ne1, ne2) => ne1.merge(ne2))
+      combOp = (ne1, ne2) => ne1.merge(ne2),
+      depth = depth)
   }
 
   /**
