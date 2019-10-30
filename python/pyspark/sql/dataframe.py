@@ -1144,8 +1144,8 @@ class DataFrame(object):
         given, this function computes statistics for all numerical or string columns.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
-        guarantee about the backward compatibility of the schema of the resulting
-        :class:`DataFrame`.
+            guarantee about the backward compatibility of the schema of the resulting
+            :class:`DataFrame`.
 
         >>> df.describe(['age']).show()
         +-------+------------------+
