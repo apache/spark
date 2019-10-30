@@ -179,7 +179,7 @@ object IntervalUtils {
   }
 
   private val dayTimePattern = ("^(?<sign>[+|-])?((?<day>\\d+) )?" +
-    "((?<hour>\\d+):)?(?<minute>\\d+):(?<second>(\\d+)(\\.(\\d+))?)$").r
+    "((?<hour>\\d{1,2}+):)?(?<minute>\\d{1,2}+):(?<second>(\\d{1,2}+)(\\.(\\d{1,9}+))?)$").r
 
   object UnitName extends Enumeration {
     val microsecond = Value(0, "microsecond")
@@ -223,8 +223,8 @@ object IntervalUtils {
 
     def toLong(unitName: UnitName.Value): Long = {
       val name = unitName.toString
-      val (minValue, maxValue, conv) = unitValueProps(unitName)
-      conv(toLongWithRange(name, m.group(name), minValue, maxValue))
+      val (minValue, maxValue, toMicros) = unitValueProps(unitName)
+      toMicros(toLongWithRange(name, m.group(name), minValue, maxValue))
     }
 
     try {
