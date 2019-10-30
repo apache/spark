@@ -19,9 +19,10 @@
 -- SELECT INTERVAL '-1 +02:03' AS `22 hours ago...`;
 -- SELECT INTERVAL '-1 days +02:03' AS `22 hours ago...`;
 -- [SPARK-29371] Support interval field values with fractional parts
--- SELECT INTERVAL '1.5 weeks' AS `Ten days twelve hours`;
--- SELECT INTERVAL '1.5 months' AS `One month 15 days`;
+SELECT INTERVAL '1.5 weeks' AS `Ten days twelve hours`;
+SELECT INTERVAL '1.5 months' AS `One month 15 days`;
 -- SELECT INTERVAL '10 years -11 month -12 days +13:14' AS `9 years...`;
+SELECT INTERVAL '10 years -11 month -12 days +13 hours 14 minutes' AS `9 years...`;
 
 -- [SPARK-29382] Support writing `INTERVAL` type to datasource table
 -- CREATE TABLE INTERVAL_TBL (f1 interval);

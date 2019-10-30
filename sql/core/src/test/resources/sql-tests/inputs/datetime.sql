@@ -58,3 +58,5 @@ select interval '1.42 years 2.51 months 2.21 weeks 15.24 days 3.31 hours 5.38 mi
 
 select interval '-1.41 years 2.51 months 2.21 weeks 15.24 days 3.31 hours 5.38 minutes 12.3456789 seconds';
 select interval '-1.42 years 2.51 months 2.21 weeks 15.24 days 3.31 hours 5.38 minutes 12.3456789 seconds';
+
+select interval '.1111111111' second;
