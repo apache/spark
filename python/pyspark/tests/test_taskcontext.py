@@ -180,7 +180,7 @@ class TaskContextTests(PySparkTestCase):
         def f(iterator):
             try:
                 taskContext = BarrierTaskContext.get()
-            except RuntimeError:
+            except Exception:
                 yield -1
             else:
                 yield taskContext.partitionId()
@@ -238,7 +238,7 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
             tp = TaskContext.get().partitionId()
             try:
                 bp = BarrierTaskContext.get().partitionId()
-            except RuntimeError:
+            except Exception:
                 bp = -1
 
             yield (tp, bp, os.getpid())
