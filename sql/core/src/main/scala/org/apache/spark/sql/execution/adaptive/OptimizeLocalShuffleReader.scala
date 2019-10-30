@@ -24,33 +24,51 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartit
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight}
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * A rule to optimize the shuffle reader to local reader as far as possible
+ * when converting the 'SortMergeJoinExec' to 'BroadcastHashJoinExec' in runtime.
+ *
+ * This rule can be divided into two steps:
+ * Step1: Add the local reader in probe side adn then check whether additional
+ *       shuffle introduced. If introduced, we will revert all the local
+ *       reader in probe side.
+ * Step2: Add the local reader in build side and will not check whether
+ *        additional shuffle introduced.Because the build side will not introduce
+ *        additional shuffle.
+ */
 case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
+
+  def canUseLocalShuffleReaderProbeLeft(join: BroadcastHashJoinExec): Boolean = {
+    join.buildSide == BuildRight &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.left)
+  }
+
+  def canUseLocalShuffleReaderProbeRight(join: BroadcastHashJoinExec): Boolean = {
+    join.buildSide == BuildLeft &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.right)
+  }
+
+  def canUseLocalShuffleReaderBuildLeft(join: BroadcastHashJoinExec): Boolean = {
+    join.buildSide == BuildLeft && ShuffleQueryStageExec.isShuffleQueryStageExec(join.left)
+  }
+
+  def canUseLocalShuffleReaderBuildRight(join: BroadcastHashJoinExec): Boolean = {
+    join.buildSide == BuildRight && ShuffleQueryStageExec.isShuffleQueryStageExec(join.right)
+  }
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED)) {
       return plan
     }
-
-    def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
-      case _: LocalShuffleReaderExec => Nil
-      case stage: ShuffleQueryStageExec => Seq(stage)
-      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) => Seq(stage)
-      case _ => plan.children.flatMap(collectShuffleStages)
-    }
-    val shuffleStages = collectShuffleStages(plan)
-
-    val optimizedPlan = if (shuffleStages.isEmpty ||
-      !shuffleStages.forall(_.plan.canChangeNumPartitions)) {
-      // For the Exchange introduced by repartition,
-      // don't apply this rule to avoid additional shuffle introduced for the parent stage.
-      plan
-    } else {
-      plan.transformUp {
-        case stage: QueryStageExec if (ShuffleQueryStageExec.isShuffleQueryStageExec(stage)) =>
-          LocalShuffleReaderExec(stage)
-      }
+    // Add local reader in probe side.
+    val tmpOptimizedProbeSidePlan = plan.transformDown {
+      case join: BroadcastHashJoinExec if canUseLocalShuffleReaderProbeRight(join) =>
+        val localReader = LocalShuffleReaderExec(join.right.asInstanceOf[QueryStageExec])
+        join.copy(right = localReader)
+      case join: BroadcastHashJoinExec if canUseLocalShuffleReaderProbeLeft(join) =>
+        val localReader = LocalShuffleReaderExec(join.left.asInstanceOf[QueryStageExec])
+        join.copy(left = localReader)
     }
 
     def numExchanges(plan: SparkPlan): Int = {
@@ -58,15 +76,25 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
         case e: ShuffleExchangeExec => e
       }.length
     }
-
+    // Check whether additional shuffle introduced. If introduced, revert the local reader.
     val numExchangeBefore = numExchanges(EnsureRequirements(conf).apply(plan))
-    val numExchangeAfter = numExchanges(EnsureRequirements(conf).apply(optimizedPlan))
-    if (numExchangeAfter > numExchangeBefore) {
-      logDebug("OptimizeLocalShuffleReader rule is not applied due" +
+    val numExchangeAfter = numExchanges(EnsureRequirements(conf).apply(tmpOptimizedProbeSidePlan))
+    val optimizedProbeSidePlan = if (numExchangeAfter > numExchangeBefore) {
+      logDebug("OptimizeLocalShuffleReader rule is not applied in the probe side due" +
         " to additional shuffles will be introduced.")
       plan
     } else {
-      optimizedPlan
+      tmpOptimizedProbeSidePlan
+    }
+    // Add the local reader in  build side and will not check whether
+    // additional shuffle introduced.
+    optimizedProbeSidePlan.transformDown {
+      case join: BroadcastHashJoinExec if canUseLocalShuffleReaderBuildLeft(join) =>
+        val localReader = LocalShuffleReaderExec(join.left.asInstanceOf[QueryStageExec])
+        join.copy(left = localReader)
+      case join: BroadcastHashJoinExec if canUseLocalShuffleReaderBuildRight(join) =>
+        val localReader = LocalShuffleReaderExec(join.right.asInstanceOf[QueryStageExec])
+        join.copy(right = localReader)
     }
   }
 }

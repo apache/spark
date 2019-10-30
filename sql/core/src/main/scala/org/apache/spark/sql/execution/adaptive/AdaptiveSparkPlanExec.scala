@@ -525,7 +525,7 @@ object AdaptiveSparkPlanExec {
    * Apply a list of physical operator rules on a [[SparkPlan]].
    */
   def applyPhysicalRules(plan: SparkPlan, rules: Seq[Rule[SparkPlan]]): SparkPlan = {
-    rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp)}
+    rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
   }
 }
 
