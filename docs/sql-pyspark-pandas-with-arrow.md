@@ -180,13 +180,13 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 
 ### Cogrouped Map
 
-CoGrouped map Pandas UDFs allow two DataFrames to be cogrouped a by a common key and then a python function applied to
+Cogrouped map Pandas UDFs allow two DataFrames to be cogrouped by a common key and then a python function applied to
 each cogroup.  They are used with `groupBy().cogroup().apply()` which consists of the following steps:
 
 * Shuffle the data such that the groups of each dataframe which share a key are cogrouped together.
-* Apply a function to each cogroup.  The input of of the function is two `pandas.DataFrame` (with an optional Tuple
+* Apply a function to each cogroup.  The input of the function is two `pandas.DataFrame` (with an optional Tuple
 representing the key).  The output of the function is a `pandas.DataFrame`.
-* Combine the results into a new `DataFrame`.
+* Combine the pandas.DataFrames from all groups into a new `DataFrame`. 
 
 To use `groupBy().cogroup().apply()`, the user needs to define the following:
 * A Python function that defines the computation for each cogroup.
@@ -198,8 +198,8 @@ strings, e.g. integer indices. See [pandas.DataFrame](https://pandas.pydata.org/
 on how to label columns when constructing a `pandas.DataFrame`.
 
 Note that all data for a cogroup will be loaded into memory before the function is applied. This can lead to out of
-memory exceptions, especially if the group sizes are skewed. The configuration for[maxRecordsPerBatch](#setting-arrow-batch-size)
-is not applied and it is up to the userto ensure that the cogrouped data will fit into the available memory.
+memory exceptions, especially if the group sizes are skewed. The configuration for [maxRecordsPerBatch](#setting-arrow-batch-size)
+is not applied and it is up to the user to ensure that the cogrouped data will fit into the available memory.
 
 The following example shows how to use `groupby().cogroup().apply()` to perform an asof join between two datasets.
 

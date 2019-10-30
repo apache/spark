@@ -3235,12 +3235,12 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     6. COGROUPED_MAP
 
-       A cogrouped map UDF defines transformation: two `pandas.DataFrame` -> `pandas.DataFrame`
-       The returnType should be a :class:`StructType` describing the schema of the returned
-       `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
-       the field names in the defined returnType schema if specified as strings, or match the
-       field data types by position if not strings, e.g. integer indices.
-       The length of the returned `pandas.DataFrame` can be arbitrary.
+       A cogrouped map UDF defines transformation: (`pandas.DataFrame`, `pandas.DataFrame`) ->
+       `pandas.DataFrame`. The `returnType` should be a :class:`StructType` describing the schema
+       of the returned `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame`
+       must either match the field names in the defined `returnType` schema if specified as strings,
+       or match the field data types by position if not strings, e.g. integer indices. The length
+       of the returned `pandas.DataFrame` can be arbitrary.
 
        CoGrouped map UDFs are used with :meth:`pyspark.sql.CoGroupedData.apply`.
 
