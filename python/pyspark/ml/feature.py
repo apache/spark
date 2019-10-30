@@ -1516,6 +1516,8 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     Imputer...
     >>> imputer.setOutputCols(["out_a", "out_b"])
     Imputer...
+    >>> imputer.getRelativeError()
+    0.001
     >>> model = imputer.fit(df)
     >>> model.getStrategy()
     'mean'
