@@ -43,7 +43,7 @@ CREATE OR REPLACE TEMPORARY VIEW INT8_TBL AS SELECT * FROM
 
 -- Test null limit and offset.  The planner would discard a simple null
 -- constant, so to ensure executor is exercised, do this:
--- [SPARK-XXXXX] Discard a NULL constant in LIMIT
+-- [SPARK-29650] Discard a NULL constant in LIMIT
 select * from int8_tbl limit (case when random() < 0.5 then bigint(null) end);
 -- [SPARK-28330] ANSI SQL: Top-level <result offset clause> in <query expression>
 -- select * from int8_tbl offset (case when random() < 0.5 then bigint(null) end);
