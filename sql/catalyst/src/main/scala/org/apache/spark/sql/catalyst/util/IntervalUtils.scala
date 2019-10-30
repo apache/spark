@@ -290,7 +290,10 @@ object IntervalUtils {
   // Parses a string with nanoseconds, truncates the result and returns microseconds
   private def parseNanos(nanosStr: String, isNegative: Boolean): Long = {
     if (nanosStr != null) {
-      val alignedStr = (nanosStr + "000000000").substring(0, 9)
+      val maxNanosLen = 9
+      val alignedStr = if (nanosStr.length < maxNanosLen) {
+        (nanosStr + "000000000").substring(0, maxNanosLen)
+      } else nanosStr
       val nanos = toLongWithRange("nanosecond", alignedStr, 0L, 999999999L)
       val micros = nanos / DateTimeUtils.NANOS_PER_MICROS
       if (isNegative) -micros else micros
