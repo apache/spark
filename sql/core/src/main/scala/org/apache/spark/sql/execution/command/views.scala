@@ -110,7 +110,7 @@ case class CreateViewCommand(
 
   private def isTemporary = viewType == LocalTempView || viewType == GlobalTempView
 
-  if(isTemporary) verifyTempView()
+  if (isTemporary) verifyTempView()
 
   private def verifyTempView(): Unit = {
     // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS'
