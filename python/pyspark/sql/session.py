@@ -136,7 +136,7 @@ class SparkSession(object):
         @since(2.0)
         def enableHiveSupport(self):
             """Enables Hive support, including connectivity to a persistent Hive metastore, support
-            for Hive SerDe's, and Hive user-defined functions.
+            for Hive SerDe, and Hive user-defined functions.
             """
             return self.config("spark.sql.catalogImplementation", "hive")
 
@@ -151,7 +151,7 @@ class SparkSession(object):
             new one based on the options set in this builder.
 
             This method first checks whether there is a valid global default SparkSession, and if
-            there is, return that one. If no valid global default SparkSession exists, the method
+            yes, return that one. If no valid global default SparkSession exists, the method
             creates a new SparkSession and assigns the newly created SparkSession as the global
             default.
 
