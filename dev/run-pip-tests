@@ -39,17 +39,12 @@ PYTHON_EXECS=()
 # Some systems don't have pip or virtualenv - in those cases our tests won't work.
 if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
   echo "virtualenv installed - using. Note if this is a conda virtual env you may wish to set USE_CONDA"
-  # Figure out which Python execs we should test pip installation with
-  if hash python2 2>/dev/null; then
-    # We do this since we are testing with virtualenv and the default virtual env python
-    # is in /usr/bin/python
-    PYTHON_EXECS+=('python2')
-  elif hash python 2>/dev/null; then
-    # If python2 isn't installed fallback to python if available
-    PYTHON_EXECS+=('python')
-  fi
+  # test only against python3
   if hash python3 2>/dev/null; then
-    PYTHON_EXECS+=('python3')
+    PYTHON_EXECS=('python3')
+  else
+    echo "Python3 not installed on system, skipping pip installability tests"
+    exit 0
   fi
 elif hash conda 2>/dev/null; then
   echo "Using conda virtual environments"
