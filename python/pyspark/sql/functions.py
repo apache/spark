@@ -1940,13 +1940,16 @@ def array_contains(col, value):
     given value, and false otherwise.
 
     :param col: name of column containing array
-    :param value: value to check for in array
+    :param value: value or column to check for in array
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
     >>> df.select(array_contains(df.data, "a")).collect()
     [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
+    >>> df.select(array_contains(df.data, lit("a"))).collect()
+    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
     """
     sc = SparkContext._active_spark_context
+    value = value._jc if isinstance(value, Column) else value
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
 
