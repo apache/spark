@@ -2967,4 +2967,30 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       visitNonOptionalPartitionSpec(ctx.from),
       visitNonOptionalPartitionSpec(ctx.to))
   }
+
+  /**
+   * Create an [[AlterTableDropPartitionStatement]]
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...]
+   *     [PURGE];
+   *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+   * }}}
+   *
+   * ALTER VIEW ... DROP PARTITION ... is not supported because the concept of partitioning
+   * is associated with physical tables
+   */
+  override def visitDropTablePartitions(
+      ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.VIEW != null) {
+      operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
+    }
+    AlterTableDropPartitionStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
+      ifExists = ctx.EXISTS != null,
+      purge = ctx.PURGE != null,
+      retainData = false)
+  }
 }
