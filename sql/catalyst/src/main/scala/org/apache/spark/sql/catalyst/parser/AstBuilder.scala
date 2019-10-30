@@ -1769,7 +1769,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * {{{
    *   [TYPE] '[VALUE]'
    * }}}
-   * Currently Date, Timestamp, Interval and Binary typed literals are supported.
+   * Currently Date, Timestamp, Interval, Binary and INTEGER typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
@@ -1799,6 +1799,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
+        case "INTEGER" =>
+          val i = try {
+            value.toInt
+          } catch {
+            case e: NumberFormatException =>
+              val ex = new ParseException(s"Cannot parse the Int value: $value, $e", ctx)
+              ex.setStackTrace(e.getStackTrace)
+              throw ex
+          }
+          Literal(i, IntegerType)
         case other =>
           throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
       }
