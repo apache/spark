@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
+import java.util.Locale
 
 import org.apache.commons.lang3.StringUtils
 
