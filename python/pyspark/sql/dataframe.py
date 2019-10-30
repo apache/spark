@@ -1414,7 +1414,7 @@ class DataFrame(object):
     def cube(self, *cols):
         """
         Create a multi-dimensional cube for the current :class:`DataFrame` using
-        the specified columns, so we can run aggregation on them.
+        the specified columns, so we can run aggregations on them.
 
         >>> df.cube("name", df.age).count().orderBy("name", "age").show()
         +-----+----+-----+
