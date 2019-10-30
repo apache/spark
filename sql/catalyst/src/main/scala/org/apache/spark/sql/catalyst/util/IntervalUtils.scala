@@ -218,22 +218,22 @@ object IntervalUtils {
         minutes = toLongWithRange("second", m.group(7), 0, 59)
       }
       // Hive allow nanosecond precision interval
-      var nanos = parseNanos(m.group(9), seconds < 0)
+      var secondsFraction = parseNanos(m.group(9), seconds < 0)
       to match {
         case "hour" =>
           minutes = 0
           seconds = 0
-          nanos = 0
+          secondsFraction = 0
         case "minute" =>
           seconds = 0
-          nanos = 0
+          secondsFraction = 0
         case "second" =>
           // No-op
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot support (interval '$input' $from to $to) expression")
       }
-      var micros = nanos / DateTimeUtils.NANOS_PER_MICROS
+      var micros = secondsFraction
       micros = Math.addExact(micros, Math.multiplyExact(days, DateTimeUtils.MICROS_PER_DAY))
       micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
       micros = Math.addExact(micros, Math.multiplyExact(minutes, MICROS_PER_MINUTE))
@@ -287,6 +287,7 @@ object IntervalUtils {
     new CalendarInterval(months, microseconds)
   }
 
+  // Parses a string with nanoseconds, truncates the result and returns microseconds
   private def parseNanos(nanosStr: String, isNegative: Boolean): Long = {
     if (nanosStr != null) {
       val alignedStr = (nanosStr + "000000000").substring(0, 9)
