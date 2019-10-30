@@ -73,19 +73,28 @@ private[thriftserver] object RowSetFactory extends Logging {
           bufferMap.put(i, new ColumnBuffer(tvalue))
           i = i + 1
         }
-        (0 until tRowSet.getRowsSize).foreach(index => {
-          rows += Row((0 until tRowSet.getColumnCount).map(colPos =>
-            bufferMap.get(colPos).get(index)))
+        val columnsSize = bufferMap.values().asScala.map(_.size).max
+        val columnCount = tRowSet.getColumns.size()
+        (0 until columnsSize).foreach(index => {
+          val row = Row.fromSeq((0 until columnCount).map(bufferMap.get(_).get(index)))
+          rows += row
         })
       } else {
-        tRowSet.getRows.asScala.foreach(row => {
-          rows += Row(row.getColVals.asScala.map(_.getFieldValue))
+        val bufferMap = new util.HashMap[Int, ColumnBuffer]
+        tRowSet.getColumns.asScala.zipWithIndex.foreach { case (tColumn, i) =>
+          bufferMap.put(i, new ColumnBuffer(tColumn))
+        }
+        val columnsSize = bufferMap.values().asScala.map(_.size).max
+        val columnCount = tRowSet.getColumns.size()
+        (0 until columnsSize).foreach(index => {
+          val row = Row.fromSeq((0 until columnCount).map(bufferMap.get(_).get(index)))
+          rows += row
         })
       }
       ColumnBasedSet(null, rows, tRowSet.getStartRowOffset)
     } else {
       tRowSet.getRows.asScala.foreach(row => {
-        rows += Row(row.getColVals.asScala.map(_.getFieldValue))
+        rows += Row.fromSeq(row.getColVals.asScala.map(_.getFieldValue))
       })
       RowBasedSet(null, rows, tRowSet.getStartRowOffset)
     }

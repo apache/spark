@@ -53,7 +53,7 @@ private[thriftserver] abstract class Operation(
   private var _lastAccessTime = System.currentTimeMillis()
 
   protected val DEFAULT_FETCH_ORIENTATION_SET: Set[FetchOrientation] =
-    Set(FetchOrientation.FETCH_NEXT, FetchOrientation.FETCH_FIRST)
+    Set(FetchOrientation.FETCH_NEXT, FetchOrientation.FETCH_FIRST, FetchOrientation.FETCH_PRIOR)
 
   def getBackgroundHandle: Future[_] = _backgroundHandle
 

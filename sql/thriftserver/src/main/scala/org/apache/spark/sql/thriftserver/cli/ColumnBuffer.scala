@@ -125,7 +125,9 @@ class ColumnBuffer() {
   def getType: Type = `type`
 
   def get(index: Int): Any = {
-    if (nulls.get(index)) return null
+    if (nulls.get(index)) {
+      return null
+    }
     `type` match {
       case BOOLEAN =>
         return _boolVars(index)

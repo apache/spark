@@ -53,39 +53,71 @@ private[thriftserver] case class ColumnBasedSet(
     val nulls = new BitSet()
     typ match {
       case BooleanType =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) true else rows(i).getBoolean(ordinal)
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+            val isNull = rows(i).isNullAt(ordinal)
+            nulls.set(i, isNull)
+            if (isNull) {
+              true
+            } else {
+              rows(i).getBoolean(ordinal)
+            }
         }.map(_.asInstanceOf[java.lang.Boolean]).asJava
         TColumn.boolVal(new TBoolColumn(values, bitSetToBuffer(nulls)))
       case ByteType =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) 0.toByte else rows(i).getByte(ordinal)
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+            val isNull = rows(i).isNullAt(ordinal)
+            nulls.set(i, isNull)
+            if (isNull) {
+              0.toByte
+            } else {
+              rows(i).getByte(ordinal)
+            }
         }.map(_.asInstanceOf[java.lang.Byte]).asJava
         TColumn.byteVal(new TByteColumn(values, bitSetToBuffer(nulls)))
       case ShortType =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) 0.toShort else rows(i).getShort(ordinal)
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
+            0.toShort
+          } else {
+            rows(i).getShort(ordinal)
+          }
         }.map(_.asInstanceOf[java.lang.Short]).asJava
         TColumn.i16Val(new TI16Column(values, bitSetToBuffer(nulls)))
       case IntegerType =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) 0 else rows(i).getInt(ordinal)
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
+            0
+          } else {
+            rows(i).getInt(ordinal)
+          }
         }.map(_.asInstanceOf[java.lang.Integer]).asJava
         TColumn.i32Val(new TI32Column(values, bitSetToBuffer(nulls)))
       case LongType =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) 0L else rows(i).getLong(ordinal)
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
+            0L
+          } else {
+            rows(i).getLong(ordinal)
+          }
         }.map(_.asInstanceOf[java.lang.Long]).asJava
         TColumn.i64Val(new TI64Column(values, bitSetToBuffer(nulls)))
       case FloatType =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) {
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
             0.toDouble.asInstanceOf[java.lang.Double]
           } else {
             new java.lang.Double(rows(i).get(ordinal).toString)
@@ -93,21 +125,35 @@ private[thriftserver] case class ColumnBasedSet(
         }.asJava
         TColumn.doubleVal(new TDoubleColumn(values, bitSetToBuffer(nulls)))
       case DoubleType =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) 0 else rows(i).getDouble(ordinal)
-        }.map(_.asInstanceOf[java.lang.Double]).asJava
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
+            0.toDouble.asInstanceOf[java.lang.Double]
+          } else {
+            new java.lang.Double(rows(i).get(ordinal).toString)
+          }
+        }.asJava
         TColumn.doubleVal(new TDoubleColumn(values, bitSetToBuffer(nulls)))
       case StringType =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) EMPTY_STRING else rows(i).getString(ordinal)
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
+            EMPTY_STRING
+          } else {
+            rows(i).getString(ordinal)
+          }
         }.asJava
         TColumn.stringVal(new TStringColumn(values, bitSetToBuffer(nulls)))
       case BinaryType =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) {
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
             EMPTY_BINARY
           } else {
             ByteBuffer.wrap(rows(i).getAs[Array[Byte]](ordinal))
@@ -115,9 +161,11 @@ private[thriftserver] case class ColumnBasedSet(
         }.asJava
         TColumn.binaryVal(new TBinaryColumn(values, bitSetToBuffer(nulls)))
       case DecimalType() =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) {
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
             EMPTY_STRING
           } else {
             rows(i).getDecimal(ordinal).toPlainString
@@ -125,9 +173,11 @@ private[thriftserver] case class ColumnBasedSet(
         }.asJava
         TColumn.stringVal(new TStringColumn(values, bitSetToBuffer(nulls)))
       case _ =>
-        val values = rows.indices.map { i =>
-          nulls.set(i, rows(i).size > i && rows(i).isNullAt(ordinal))
-          if (rows(i).isNullAt(ordinal)) {
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
             EMPTY_STRING
           } else {
             HiveResult.toHiveString((rows(i).get(ordinal), typ))
