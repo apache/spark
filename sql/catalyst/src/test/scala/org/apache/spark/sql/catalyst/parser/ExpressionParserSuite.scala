@@ -632,7 +632,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Non Existing unit
     intercept("interval 10 nanoseconds",
-      "missing {'DAY', 'DAYS', 'HOUR'", "'YEAR', 'YEARS'} at 'nanoseconds'")
+      "no viable alternative at input '10 nanoseconds'")
 
     // Year-Month intervals.
     val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
