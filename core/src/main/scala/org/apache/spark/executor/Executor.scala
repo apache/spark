@@ -63,7 +63,10 @@ private[spark] class Executor(
   extends Logging {
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
-
+  private var executorShutdown = false
+  ShutdownHookManager.addShutdownHook(
+    () => if (!executorShutdown) pluginShutdown
+  )
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
@@ -288,18 +291,23 @@ private[spark] class Executor(
     threadPool.shutdown()
 
     // Notify plugins that executor is shutting down so they can terminate cleanly
+    pluginShutdown
+    if (!isLocal) {
+      env.stop()
+    }
+  }
+
+  private def pluginShutdown: Unit = {
     Utils.withContextClassLoader(replClassLoader) {
       executorPlugins.foreach { plugin =>
         try {
+          executorShutdown = true
           plugin.shutdown()
         } catch {
           case e: Exception =>
             logWarning("Plugin " + plugin.getClass().getCanonicalName() + " shutdown failed", e)
         }
       }
-    }
-    if (!isLocal) {
-      env.stop()
     }
   }
 
