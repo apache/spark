@@ -109,9 +109,7 @@ class ExecutionListenerManager private extends Logging {
   }
 
   /** Only exposed for testing. */
-  private[sql] def listListeners(): Array[QueryExecutionListener] = {
-    listenerBus.listeners.asScala.toArray
-  }
+  private[sql] def listListeners(): Array[QueryExecutionListener] = listeners.toArray
 
   /**
    * Get an identical copy of this listener manager.
