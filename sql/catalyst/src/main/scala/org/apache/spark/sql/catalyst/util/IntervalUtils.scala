@@ -288,10 +288,14 @@ object IntervalUtils {
   }
 
   private def parseNanos(nanosStr: String, isNegative: Boolean): Long = {
-    val alignedStr = if (nanosStr == null) nanosStr else (nanosStr + "000000000").substring(0, 9)
-    val nanos = toLongWithRange("nanosecond", alignedStr, 0L, 999999999L)
-    val micros = nanos / DateTimeUtils.NANOS_PER_MICROS
-    if (isNegative) -micros else micros
+    if (nanosStr != null) {
+      val alignedStr = (nanosStr + "000000000").substring(0, 9)
+      val nanos = toLongWithRange("nanosecond", alignedStr, 0L, 999999999L)
+      val micros = nanos / DateTimeUtils.NANOS_PER_MICROS
+      if (isNegative) -micros else micros
+    } else {
+      0L
+    }
   }
 
   /**
