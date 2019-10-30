@@ -312,7 +312,7 @@ class DataFrame(object):
     @property
     @since(2.0)
     def isStreaming(self):
-        """Returns true if this :class:`Dataset` contains one or more sources that continuously
+        """Returns ``True`` if this :class:`Dataset` contains one or more sources that continuously
         return data as it arrives. A :class:`Dataset` that reads data from a streaming source
         must be executed as a :class:`StreamingQuery` using the :func:`start` method in
         :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
@@ -328,10 +328,10 @@ class DataFrame(object):
         """Prints the first ``n`` rows to the console.
 
         :param n: Number of rows to show.
-        :param truncate: If set to True, truncate strings longer than 20 chars by default.
+        :param truncate: If set to ``True``, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
-        :param vertical: If set to True, print output rows vertically (one line
+        :param vertical: If set to ``True``, print output rows vertically (one line
             per column value).
 
         >>> df
@@ -633,7 +633,7 @@ class DataFrame(object):
         """Marks the :class:`DataFrame` as non-persistent, and remove all blocks for it from
         memory and disk.
 
-        .. note:: `blocking` default has changed to False to match Scala in 2.0.
+        .. note:: `blocking` default has changed to ``False`` to match Scala in 2.0.
         """
         self.is_cached = False
         self._jdf.unpersist(blocking)
@@ -790,7 +790,7 @@ class DataFrame(object):
     def sample(self, withReplacement=None, fraction=None, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
 
-        :param withReplacement: Sample with replacement or not (default False).
+        :param withReplacement: Sample with replacement or not (default ``False``).
         :param fraction: Fraction of rows to generate, range [0.0, 1.0].
         :param seed: Seed for sampling (default a random seed).
 
@@ -1056,7 +1056,7 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
 
         :param cols: list of :class:`Column` or column names to sort by.
-        :param ascending: boolean or list of boolean (default True).
+        :param ascending: boolean or list of boolean (default ``True``).
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
 
@@ -1077,7 +1077,7 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
 
         :param cols: list of :class:`Column` or column names to sort by.
-        :param ascending: boolean or list of boolean (default True).
+        :param ascending: boolean or list of boolean (default ``True``).
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
 
@@ -1493,7 +1493,7 @@ class DataFrame(object):
     @since(1.3)
     def intersect(self, other):
         """ Return a new :class:`DataFrame` containing rows only in
-        both this frame and another frame.
+        both this :class:`DataFrame` and another :class:`DataFrame`.
 
         This is equivalent to `INTERSECT` in SQL.
         """
@@ -1501,8 +1501,8 @@ class DataFrame(object):
 
     @since(2.4)
     def intersectAll(self, other):
-        """ Return a new :class:`DataFrame` containing rows in both this dataframe and other
-        dataframe while preserving duplicates.
+        """ Return a new :class:`DataFrame` containing rows in both this :class:`DataFrame` and other
+        :class:`DataFrame` while preserving duplicates.
 
         This is equivalent to `INTERSECT ALL` in SQL.
         >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
