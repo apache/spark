@@ -61,9 +61,9 @@ select
   interval '13' second,
   interval '13.123456789' second
 -- !query 4 schema
-struct<interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 microseconds:interval,interval 1 weeks 3 days:interval,interval 11 hours:interval,interval 12 minutes:interval,interval 13 seconds:interval,interval 13 seconds 123 milliseconds 456 microseconds:interval>
+struct<interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microseconds:interval,interval 1 weeks 3 days:interval,interval 11 hours:interval,interval 12 minutes:interval,interval 13 seconds:interval,interval 13 seconds 123 milliseconds 456 microseconds:interval>
 -- !query 4 output
-interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 microseconds	interval 1 weeks 3 days	interval 11 hours	interval 12 minutes	interval 13 seconds	interval 13 seconds 123 milliseconds 456 microseconds
+interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microseconds	interval 1 weeks 3 days	interval 11 hours	interval 12 minutes	interval 13 seconds	interval 13 seconds 123 milliseconds 456 microseconds
 
 
 -- !query 5
@@ -75,9 +75,9 @@ select
   '13' second,
   '13.123456789' second
 -- !query 5 schema
-struct<interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 microseconds:interval,interval 1 weeks 3 days:interval,interval 11 hours:interval,interval 12 minutes:interval,interval 13 seconds:interval,interval 13 seconds 123 milliseconds 456 microseconds:interval>
+struct<interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microseconds:interval,interval 1 weeks 3 days:interval,interval 11 hours:interval,interval 12 minutes:interval,interval 13 seconds:interval,interval 13 seconds 123 milliseconds 456 microseconds:interval>
 -- !query 5 output
-interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 microseconds	interval 1 weeks 3 days	interval 11 hours	interval 12 minutes	interval 13 seconds	interval 13 seconds 123 milliseconds 456 microseconds
+interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 987 milliseconds 654 microseconds	interval 1 weeks 3 days	interval 11 hours	interval 12 minutes	interval 13 seconds	interval 13 seconds 123 milliseconds 456 microseconds
 
 
 -- !query 6
@@ -204,7 +204,7 @@ select
   interval '99 11:22:33.123456789' day to second + dateval
 from interval_arithmetic
 -- !query 15 schema
-struct<dateval:date,CAST(CAST(dateval AS TIMESTAMP) - interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) - interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + (- interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds) AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS DATE):date>
+struct<dateval:date,CAST(CAST(dateval AS TIMESTAMP) - interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) - interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 milliseconds -456 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 milliseconds -456 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + (- interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds) AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS DATE):date>
 -- !query 15 output
 2012-01-01	2011-09-23	2012-04-09	2012-04-09	2011-09-23	2011-09-23	2012-04-09
 
@@ -220,7 +220,7 @@ select
   '99 11:22:33.123456789' day to second + dateval
 from interval_arithmetic
 -- !query 16 schema
-struct<dateval:date,CAST(CAST(dateval AS TIMESTAMP) - interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) - interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + (- interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds) AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS DATE):date>
+struct<dateval:date,CAST(CAST(dateval AS TIMESTAMP) - interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) - interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 milliseconds -456 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 milliseconds -456 microseconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + (- interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds) AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS DATE):date>
 -- !query 16 output
 2012-01-01	2011-09-23	2012-04-09	2012-04-09	2011-09-23	2011-09-23	2012-04-09
 
@@ -236,9 +236,9 @@ select
   interval '99 11:22:33.123456789' day to second + tsval
 from interval_arithmetic
 -- !query 17 schema
-struct<tsval:timestamp,CAST(tsval - interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS TIMESTAMP):timestamp,CAST(tsval - interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 microseconds AS TIMESTAMP):timestamp,CAST(tsval + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS TIMESTAMP):timestamp,CAST(tsval + interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 microseconds AS TIMESTAMP):timestamp,CAST(tsval + (- interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds) AS TIMESTAMP):timestamp,CAST(tsval + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS TIMESTAMP):timestamp>
+struct<tsval:timestamp,CAST(tsval - interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS TIMESTAMP):timestamp,CAST(tsval - interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 milliseconds -456 microseconds AS TIMESTAMP):timestamp,CAST(tsval + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS TIMESTAMP):timestamp,CAST(tsval + interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 milliseconds -456 microseconds AS TIMESTAMP):timestamp,CAST(tsval + (- interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds) AS TIMESTAMP):timestamp,CAST(tsval + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS TIMESTAMP):timestamp>
 -- !query 17 output
-2012-01-01 00:00:00	2011-09-23 13:37:26.999877	2012-04-09 12:22:33.000123	2012-04-09 12:22:33.000123	2011-09-23 13:37:26.999877	2011-09-23 13:37:26.999877	2012-04-09 12:22:33.000123
+2012-01-01 00:00:00	2011-09-23 13:37:26.876544	2012-04-09 12:22:33.123456	2012-04-09 12:22:33.123456	2011-09-23 13:37:26.876544	2011-09-23 13:37:26.876544	2012-04-09 12:22:33.123456
 
 
 -- !query 18
@@ -252,9 +252,9 @@ select
   '99 11:22:33.123456789' day to second + tsval
 from interval_arithmetic
 -- !query 18 schema
-struct<tsval:timestamp,CAST(tsval - interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS TIMESTAMP):timestamp,CAST(tsval - interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 microseconds AS TIMESTAMP):timestamp,CAST(tsval + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS TIMESTAMP):timestamp,CAST(tsval + interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 microseconds AS TIMESTAMP):timestamp,CAST(tsval + (- interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds) AS TIMESTAMP):timestamp,CAST(tsval + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds AS TIMESTAMP):timestamp>
+struct<tsval:timestamp,CAST(tsval - interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS TIMESTAMP):timestamp,CAST(tsval - interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 milliseconds -456 microseconds AS TIMESTAMP):timestamp,CAST(tsval + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS TIMESTAMP):timestamp,CAST(tsval + interval -14 weeks -1 days -11 hours -22 minutes -33 seconds -123 milliseconds -456 microseconds AS TIMESTAMP):timestamp,CAST(tsval + (- interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds) AS TIMESTAMP):timestamp,CAST(tsval + interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds AS TIMESTAMP):timestamp>
 -- !query 18 output
-2012-01-01 00:00:00	2011-09-23 13:37:26.999877	2012-04-09 12:22:33.000123	2012-04-09 12:22:33.000123	2011-09-23 13:37:26.999877	2011-09-23 13:37:26.999877	2012-04-09 12:22:33.000123
+2012-01-01 00:00:00	2011-09-23 13:37:26.876544	2012-04-09 12:22:33.123456	2012-04-09 12:22:33.123456	2011-09-23 13:37:26.876544	2011-09-23 13:37:26.876544	2012-04-09 12:22:33.123456
 
 
 -- !query 19
@@ -263,9 +263,9 @@ select
   interval '99 11:22:33.123456789' day to second - interval '10 9:8:7.123456789' day to second
 from interval_arithmetic
 -- !query 19 schema
-struct<(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds + interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 microseconds):interval,(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds - interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 microseconds):interval>
+struct<(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds + interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):interval,(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds - interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):interval>
 -- !query 19 output
-interval 15 weeks 4 days 20 hours 30 minutes 40 seconds 246 microseconds	interval 12 weeks 5 days 2 hours 14 minutes 26 seconds
+interval 15 weeks 4 days 20 hours 30 minutes 40 seconds 246 milliseconds 912 microseconds	interval 12 weeks 5 days 2 hours 14 minutes 26 seconds
 
 
 -- !query 20
@@ -274,9 +274,9 @@ select
   '99 11:22:33.123456789' day to second - '10 9:8:7.123456789' day to second
 from interval_arithmetic
 -- !query 20 schema
-struct<(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds + interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 microseconds):interval,(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 microseconds - interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 microseconds):interval>
+struct<(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds + interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):interval,(interval 14 weeks 1 days 11 hours 22 minutes 33 seconds 123 milliseconds 456 microseconds - interval 1 weeks 3 days 9 hours 8 minutes 7 seconds 123 milliseconds 456 microseconds):interval>
 -- !query 20 output
-interval 15 weeks 4 days 20 hours 30 minutes 40 seconds 246 microseconds	interval 12 weeks 5 days 2 hours 14 minutes 26 seconds
+interval 15 weeks 4 days 20 hours 30 minutes 40 seconds 246 milliseconds 912 microseconds	interval 12 weeks 5 days 2 hours 14 minutes 26 seconds
 
 
 -- !query 21
