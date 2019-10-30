@@ -55,7 +55,7 @@ import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
  * this will become public.
  */
 @Evolving
-private[spark] class ResourceProfile() extends Serializable {
+class ResourceProfile() extends Serializable {
 
   private val _id = ResourceProfile.getNextProfileId
   private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
@@ -115,7 +115,7 @@ private[spark] class ResourceProfile() extends Serializable {
   override def equals(obj: Any): Boolean = {
     obj match {
       case that: ResourceProfile =>
-        that.getClass == this.getClass &&
+        that.getClass == this.getClass && that._id == _id &&
           that._taskResources == _taskResources && that._executorResources == _executorResources
       case _ =>
         false

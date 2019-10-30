@@ -30,7 +30,7 @@ package org.apache.spark.resource
  * This api is currently private until the rest of the pieces are in place and then it
  * will become public.
  */
-private[spark] class TaskResourceRequest(
+class TaskResourceRequest(
     val resourceName: String,
     val amount: Double) extends Serializable {
 
@@ -40,5 +40,17 @@ private[spark] class TaskResourceRequest(
   override def toString(): String = {
     s"TaskResourceRequest: resourceName = $resourceName, amount = $amount"
   }
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case that: TaskResourceRequest =>
+        that.getClass == this.getClass &&
+          that.resourceName == resourceName && that.amount == amount
+      case _ =>
+        false
+    }
+  }
+
+  override def hashCode(): Int = Seq(resourceName, amount).hashCode()
 }
 

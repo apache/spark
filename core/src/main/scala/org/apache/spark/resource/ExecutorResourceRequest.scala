@@ -56,4 +56,18 @@ class ExecutorResourceRequest(
     s"ExecutorResourceRequest: resourceName = $resourceName, amount = $amount, " +
       s"discoveryScript = $discoveryScript, vendor = $vendor"
   }
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case that: ExecutorResourceRequest =>
+        that.getClass == this.getClass &&
+          that.resourceName == resourceName && that.amount == amount && that.units == units &&
+        that.discoveryScript == discoveryScript && that.vendor == vendor
+      case _ =>
+        false
+    }
+  }
+
+  override def hashCode(): Int =
+    Seq(resourceName, amount, units, discoveryScript, vendor).hashCode()
 }

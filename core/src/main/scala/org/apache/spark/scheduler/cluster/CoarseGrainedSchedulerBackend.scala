@@ -100,6 +100,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   protected var localityAwareTasks = 0
   protected var numLocalityAwareTasksPerResourceProfileId = Map.empty[Int, Int]
+    // Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)
 
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0

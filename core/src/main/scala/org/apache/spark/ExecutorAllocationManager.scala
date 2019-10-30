@@ -139,7 +139,6 @@ private[spark] class ExecutorAllocationManager(
   // The desired number of executors at this moment in time. If all our executors were to die, this
   // is the number of executors we would immediately want from the cluster manager.
   // private var numExecutorsTarget = initialNumExecutors
-  // TODO - do we need entire Profile or just id?
   private val numExecutorsTargetPerResourceProfile = new mutable.HashMap[ResourceProfile, Int]
   numExecutorsTargetPerResourceProfile(defaultProfile) = initialNumExecutors
 
@@ -173,12 +172,14 @@ private[spark] class ExecutorAllocationManager(
   //   (2) an executor idle timeout has elapsed.
   @volatile private var initializing: Boolean = true
 
-  // Number of locality aware tasks, used for executor placement.
+  // Number of locality aware tasks for each ResourceProfile, used for executor placement.
   private var localityAwareTasks = 0
   private var numLocalityAwareTasksPerResourceProfileId = new mutable.HashMap[Int, Int]
+  numLocalityAwareTasksPerResourceProfileId(defaultProfile.id) = 0
 
-  // Host to possible task running on it, used for executor placement.
+  // Host and ResourceProfile to possible task running on it, used for executor placement.
   // private var hostToLocalTaskCount: Map[String, Int] = Map.empty
+  // TODO - create case class for (host, resourceprofile)?
   private var hostToLocalTaskCount: Map[(String, ResourceProfile), Int] = Map.empty
 
   /**
@@ -384,6 +385,7 @@ private[spark] class ExecutorAllocationManager(
 
   private def doRequest(updates: Map[ResourceProfile, TargetNumUpdates], now: Long): Unit = {
     // Only call cluster manager if target has changed.
+    logWarning("in do Request update: " + updates)
     if (updates.size > 0) {
       val requestAcknowledged = try {
         logInfo("requesting updates: " + updates)
@@ -459,6 +461,7 @@ private[spark] class ExecutorAllocationManager(
      */
   private def addExecutors(maxNumExecutorsNeeded: Int, rp: ResourceProfile): Int = {
 
+    logWarning("in add executors max: " + maxNumExecutorsNeeded)
     val oldNumExecutorsTarget =
       numExecutorsTargetPerResourceProfile.getOrElseUpdate(rp, 0)
     // Do not request more executors if it would put our target over the upper bound
@@ -469,11 +472,13 @@ private[spark] class ExecutorAllocationManager(
       return 0
     }
 
+
     // There's no point in wasting time ramping up to the number of executors we already have, so
     // make sure our target is at least as much as our current allocation:
     numExecutorsTargetPerResourceProfile(rp) =
       math.max(numExecutorsTargetPerResourceProfile(rp),
         executorMonitor.executorCountWithResourceProfile(rp.id))
+
     // Boost our target with the number to add for this round:
     numExecutorsTargetPerResourceProfile(rp) +=
       numExecutorsToAddPerResourceProfileId.getOrElseUpdate(rp.id, 0)

@@ -770,17 +770,25 @@ private[spark] class ApplicationMaster(
   private class AMEndpoint(override val rpcEnv: RpcEnv, driver: RpcEndpointRef)
     extends RpcEndpoint with Logging {
 
+    private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case r: RequestExecutors =>
+        logWarning("in Request Executors: " + r)
         Option(allocator) match {
           case Some(a) =>
-            if (a.requestTotalExecutorsWithPreferredLocalities(r.requestedTotal,
-              r.numLocalityAwareTasksPerResourceProfileId(
-                ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID),
+            // TODO - remove option from resources?
+            // temporary until we implement YARN allocator pieces, pass default
+            // profile number requested to allocator
+            val numRequest = r.resources.getOrElse(Map.empty).getOrElse(defaultProfile, 0)
+            val numAware = r.numLocalityAwareTasksPerResourceProfileId.
+                getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, 0)
+            if (a.requestTotalExecutorsWithPreferredLocalities(numRequest,
+              numAware,
               r.hostToLocalTaskCount.map { case ((host, rp), count) => (host, count) },
               r.nodeBlacklist)) {
               resetAllocatorInterval()
