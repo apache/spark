@@ -43,7 +43,7 @@ import org.apache.spark.storage.StorageLevel
  * Common params for GaussianMixture and GaussianMixtureModel
  */
 private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter with HasFeaturesCol
-  with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol {
+  with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol with HasAggregationDepth {
 
   /**
    * Number of independent Gaussians in the mixture model. Must be greater than 1. Default: 2.
@@ -341,6 +341,10 @@ class GaussianMixture @Since("2.0.0") (
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group expertSetParam */
+  @Since("3.0.0")
+  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
+
   /**
    * Number of samples per cluster to use when initializing Gaussians.
    */
@@ -397,7 +401,8 @@ class GaussianMixture @Since("2.0.0") (
         },
         combOp = (c1, c2) => (c1, c2) match {
           case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
-        })
+        },
+        depth = $(aggregationDepth))
 
       bcWeights.destroy()
       bcGaussians.destroy()
