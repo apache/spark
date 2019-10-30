@@ -923,6 +923,8 @@ This is the component with the largest amount of instrumented metrics
   - memory.remainingOnHeapMem_MB
 
 - namespace=HiveExternalCatalog
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.register.static.sources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
   - hiveClientCalls.count
@@ -930,6 +932,8 @@ This is the component with the largest amount of instrumented metrics
   - partitionsFetched.count
 
 - namespace=CodeGenerator
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.register.static.sources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
