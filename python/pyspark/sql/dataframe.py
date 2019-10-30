@@ -407,7 +407,7 @@ class DataFrame(object):
     @since(2.1)
     def checkpoint(self, eager=True):
         """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
-        logical plan of this :class:`DataFrame`, which is especially useful in iterative algorithms 
+        logical plan of this :class:`DataFrame`, which is especially useful in iterative algorithms
         where the plan may grow exponentially. It will be saved to files inside the checkpoint
         directory set with :meth:`SparkContext.setCheckpointDir`.
 
@@ -421,8 +421,8 @@ class DataFrame(object):
     @since(2.3)
     def localCheckpoint(self, eager=True):
         """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
-        truncate the logical plan of this :class:`DataFrame`, which is especially useful in 
-        iterative algorithms where the plan may grow exponentially. Local checkpoints are 
+        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        iterative algorithms where the plan may grow exponentially. Local checkpoints are
         stored in the executors using the caching subsystem and therefore they are not reliable.
 
         :param eager: Whether to checkpoint this :class:`DataFrame` immediately
@@ -1144,7 +1144,7 @@ class DataFrame(object):
         given, this function computes statistics for all numerical or string columns.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
-        guarantee about the backward compatibility of the schema of the resulting 
+        guarantee about the backward compatibility of the schema of the resulting
         :class:`DataFrame`.
 
         >>> df.describe(['age']).show()
@@ -1189,7 +1189,7 @@ class DataFrame(object):
         approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
-            guarantee about the backward compatibility of the schema of the resulting 
+            guarantee about the backward compatibility of the schema of the resulting
             :class:`DataFrame`.
 
         >>> df.summary().show()
@@ -1450,7 +1450,7 @@ class DataFrame(object):
 
     @since(2.0)
     def union(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this and another 
+        """ Return a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
@@ -1462,7 +1462,7 @@ class DataFrame(object):
 
     @since(1.3)
     def unionAll(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this and another 
+        """ Return a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
@@ -1474,7 +1474,7 @@ class DataFrame(object):
 
     @since(2.3)
     def unionByName(self, other):
-        """ Returns a new :class:`DataFrame` containing union of rows in this and another 
+        """ Returns a new :class:`DataFrame` containing union of rows in this and another
         :class:`DataFrame`.
 
         This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
@@ -1506,7 +1506,7 @@ class DataFrame(object):
 
     @since(2.4)
     def intersectAll(self, other):
-        """ Return a new :class:`DataFrame` containing rows in both this :class:`DataFrame` 
+        """ Return a new :class:`DataFrame` containing rows in both this :class:`DataFrame`
         and another :class:`DataFrame` while preserving duplicates.
 
         This is equivalent to `INTERSECT ALL` in SQL.
