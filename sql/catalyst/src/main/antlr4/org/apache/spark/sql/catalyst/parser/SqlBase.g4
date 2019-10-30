@@ -761,8 +761,8 @@ booleanValue
     ;
 
 interval
-    : {ansi}? INTERVAL? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
-    | {!ansi}? INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
+    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
+    | {ansi}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
 errorCapturingMultiUnitsInterval
@@ -778,7 +778,7 @@ errorCapturingUnitToUnitInterval
     ;
 
 unitToUnitInterval
-    : value=STRING from=intervalUnit TO to=intervalUnit
+    : value=intervalValue from=intervalUnit TO to=intervalUnit
     ;
 
 intervalValue

@@ -132,6 +132,10 @@ select integer'7';
 select integer '2147483648';
 
 -- malformed interval literal
+select interval;
+select interval 1 fake_unit;
+select interval 1 year to month;
+select interval '1' year to second;
 select interval '10-9' year to month '2-1' year to month;
 select interval '10-9' year to month '12:11:10' hour to second;
 select interval '1 15:11' day to minute '12:11:10' hour to second;
@@ -141,5 +145,11 @@ select interval '10-9' year to month '1' year;
 select interval '12:11:10' hour to second '1' year;
 -- malformed interval literal with ansi mode
 SET spark.sql.ansi.enabled=true;
-select interval '10-9' year to month '2-1' year to month;
-select '10-9' year to month '2-1' year to month;
+select interval;
+select interval 1 fake_unit;
+select interval 1 year to month;
+select 1 year to month;
+select interval '1' year to second;
+select '1' year to second;
+select interval 1 year '2-1' year to month;
+select 1 year '2-1' year to month;
