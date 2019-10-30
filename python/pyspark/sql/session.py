@@ -631,7 +631,7 @@ class SparkSession(object):
         the real data, or an exception will be thrown at runtime. If the given schema is not
         :class:`pyspark.sql.types.StructType`, it will be wrapped into a
         :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value".
-        Each record will also be wrapped into a tuple, which can be converted to row later.
+            Each record will also be wrapped into a tuple, which can be converted to row later.
 
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
