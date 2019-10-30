@@ -48,7 +48,7 @@ or the `JAVA_HOME` environment variable pointing to a Java installation.
 
 Spark runs on Java 8/11, Scala 2.12, Python 2.7+/3.4+ and R 3.1+.
 Java 8 prior to version 8u92 support is deprecated as of Spark 3.0.0.
-Python 2 support is deprecated as of Spark 3.0.0.
+Python 2 and Python 3 prior to version 3.6 support is deprecated as of Spark 3.0.0.
 R prior to version 3.4 support is deprecated as of Spark 3.0.0.
 For the Scala API, Spark {{site.SPARK_VERSION}}
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
