@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.*;
 
+import org.apache.spark.*;
 import org.mockito.stubbing.Answer;
 import scala.Option;
 import scala.Product2;
@@ -37,10 +38,6 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import org.apache.spark.HashPartitioner;
-import org.apache.spark.ShuffleDependency;
-import org.apache.spark.SparkConf;
-import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.io.CompressionCodec$;
@@ -86,6 +83,7 @@ public class UnsafeShuffleWriterSuite {
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
   @Mock(answer = RETURNS_SMART_NULLS) ShuffleDependency<Object, Object, Object> shuffleDep;
+  @Mock(answer = RETURNS_SMART_NULLS) SparkEnv env;
 
   @After
   public void tearDown() {
@@ -110,6 +108,9 @@ public class UnsafeShuffleWriterSuite {
     taskMetrics = new TaskMetrics();
     memoryManager = new TestMemoryManager(conf);
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
+
+    when(env.conf()).thenReturn(conf);
+    SparkEnv.set(env);
 
     // Some tests will override this manager because they change the configuration. This is a
     // default for tests that don't need a specific one.
@@ -260,6 +261,52 @@ public class UnsafeShuffleWriterSuite {
     assertEquals(0, taskMetrics.diskBytesSpilled());
     assertEquals(0, taskMetrics.memoryBytesSpilled());
   }
+
+  private void testMergingSpillsRecordStatistics(
+    boolean transferToEnabled) throws IOException {
+    conf.set("spark.shuffle.statistics.verbose", "true");
+
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(transferToEnabled);
+    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
+    for (int i : new int[] { 1, 2, 3, 4, 4, 2 }) {
+      dataToWrite.add(new Tuple2<>(i, i));
+    }
+    writer.insertRecordIntoSorter(dataToWrite.get(0));
+    writer.insertRecordIntoSorter(dataToWrite.get(1));
+    writer.insertRecordIntoSorter(dataToWrite.get(2));
+    writer.insertRecordIntoSorter(dataToWrite.get(3));
+    writer.forceSorterToSpill();
+    writer.insertRecordIntoSorter(dataToWrite.get(4));
+    writer.insertRecordIntoSorter(dataToWrite.get(5));
+    writer.closeAndWriteOutput();
+    final Option<MapStatus> mapStatus = writer.stop(true);
+    assertTrue(mapStatus.isDefined());
+    assertTrue(mergedOutputFile.exists());
+    assertEquals(2, spillFilesCreated.size());
+
+    long sumOfPartitionSizes = 0;
+    for (long size: partitionSizesInMergedFile) {
+      sumOfPartitionSizes += size;
+    }
+    assertEquals(sumOfPartitionSizes, mergedOutputFile.length());
+
+    long sumOfPartitionRows = 0;
+    for (int i = 0; i < NUM_PARTITITONS; i++) {
+      sumOfPartitionRows += mapStatus.get().getRecordForBlock(i);
+    }
+    assertEquals(sumOfPartitionRows, 6);
+  }
+
+  @Test
+  public void mergeSpillsRecordStatisticsWithTransferTo() throws Exception {
+    testMergingSpillsRecordStatistics(true);
+  }
+
+  @Test
+  public void mergeSpillsRecordStatisticsWithFileStream() throws Exception {
+    testMergingSpillsRecordStatistics(false);
+  }
+
 
   @Test
   public void writeWithoutSpilling() throws Exception {

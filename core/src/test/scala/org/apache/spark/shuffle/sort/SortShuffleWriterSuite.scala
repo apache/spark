@@ -17,12 +17,13 @@
 
 package org.apache.spark.shuffle.sort
 
+import org.junit.Assert._
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.Mockito._
 import org.scalatest.Matchers
 
-import org.apache.spark.{Partitioner, SharedSparkContext, ShuffleDependency, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver}
@@ -34,6 +35,7 @@ import org.apache.spark.util.Utils
 
 class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with Matchers {
 
+  conf.set("spark.shuffle.statistics.verbose", "true")
   @Mock(answer = RETURNS_SMART_NULLS)
   private var blockManager: BlockManager = _
 
@@ -98,11 +100,18 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
       context,
       shuffleExecutorComponents)
     writer.write(records.toIterator)
-    writer.stop(success = true)
+    val mapStatus = writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 2)
     val writeMetrics = context.taskMetrics().shuffleWriteMetrics
     assert(dataFile.exists())
     assert(dataFile.length() === writeMetrics.bytesWritten)
     assert(records.size === writeMetrics.recordsWritten)
+    assertTrue(mapStatus.isDefined)
+    val numPartitions = shuffleHandle.dependency.partitioner.numPartitions
+    var sumOfPartitionRows: Long = 0
+    for( i <- 0 to (numPartitions - 1)) {
+      sumOfPartitionRows += mapStatus.get.getRecordForBlock(i)
+    }
+    assertEquals(sumOfPartitionRows, writeMetrics.recordsWritten)
   }
 }

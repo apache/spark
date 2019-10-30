@@ -584,20 +584,52 @@ private[spark] class MapOutputTrackerMaster(
       val parallelism = math.min(
         Runtime.getRuntime.availableProcessors(),
         statuses.length.toLong * totalSizes.length / parallelAggThreshold + 1).toInt
+
+      var totalRecords = new Array[Long](0)
+      val records = statuses(0).getRecordForBlock(0)
+
       if (parallelism <= 1) {
         for (s <- statuses) {
           for (i <- 0 until totalSizes.length) {
             totalSizes(i) += s.getSizeForBlock(i)
           }
         }
+
+        // records == -1 means no records number info
+        if (records != -1) {
+          totalRecords = new Array[Long](dep.partitioner.numPartitions)
+          for (s <- statuses) {
+            for (i <- 0 until totalRecords.length) {
+              totalRecords(i) += s.getRecordForBlock(i)
+            }
+          }
+        }
+
       } else {
+        val (sizeParallelism, recordParallelism) = if (records != -1) {
+          (parallelism / 2, parallelism - parallelism / 2)
+        } else {
+          (parallelism, 0)
+        }
+
         val threadPool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "map-output-aggregate")
         try {
           implicit val executionContext = ExecutionContext.fromExecutor(threadPool)
-          val mapStatusSubmitTasks = equallyDivide(totalSizes.length, parallelism).map {
+          var mapStatusSubmitTasks = equallyDivide(totalSizes.length, sizeParallelism).map {
             reduceIds => Future {
               for (s <- statuses; i <- reduceIds) {
                 totalSizes(i) += s.getSizeForBlock(i)
+              }
+            }
+          }
+
+          if (records != -1) {
+            totalRecords = new Array[Long](dep.partitioner.numPartitions)
+            mapStatusSubmitTasks ++= equallyDivide(totalRecords.length, recordParallelism).map {
+              reduceIds => Future {
+                for (s <- statuses; i <- reduceIds) {
+                  totalRecords(i) += s.getRecordForBlock(i)
+                }
               }
             }
           }
@@ -606,7 +638,7 @@ private[spark] class MapOutputTrackerMaster(
           threadPool.shutdown()
         }
       }
-      new MapOutputStatistics(dep.shuffleId, totalSizes)
+      new MapOutputStatistics(dep.shuffleId, totalSizes, totalRecords)
     }
   }
 

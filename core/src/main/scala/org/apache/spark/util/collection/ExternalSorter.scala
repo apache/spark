@@ -728,8 +728,10 @@ private[spark] class ExternalSorter[K, V, C](
   def writePartitionedMapOutput(
       shuffleId: Int,
       mapId: Long,
-      mapOutputWriter: ShuffleMapOutputWriter): Unit = {
+      numPartitions: Int,
+      mapOutputWriter: ShuffleMapOutputWriter): Array[Long] = {
     var nextPartitionId = 0
+    val records = new Array[Long](numPartitions)
     if (spills.isEmpty) {
       // Case where we only have in-memory data
       val collection = if (aggregator.isDefined) map else buffer
@@ -752,6 +754,7 @@ private[spark] class ExternalSorter[K, V, C](
           }
         } {
           if (partitionPairsWriter != null) {
+            records(nextPartitionId) = partitionPairsWriter.getRecordsWritten()
             partitionPairsWriter.close()
           }
         }
@@ -778,6 +781,7 @@ private[spark] class ExternalSorter[K, V, C](
           }
         } {
           if (partitionPairsWriter != null) {
+            records(nextPartitionId) = partitionPairsWriter.getRecordsWritten()
             partitionPairsWriter.close()
           }
         }
@@ -788,6 +792,7 @@ private[spark] class ExternalSorter[K, V, C](
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
+    records
   }
 
   def stop(): Unit = {

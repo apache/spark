@@ -132,7 +132,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       if (!records.hasNext()) {
         partitionLengths = mapOutputWriter.commitAllPartitions();
         mapStatus = MapStatus$.MODULE$.apply(
-          blockManager.shuffleServerId(), partitionLengths, mapId);
+          blockManager.shuffleServerId(), partitionLengths, new long[numPartitions], mapId);
         return;
       }
       final SerializerInstance serInstance = serializer.newInstance();
@@ -164,9 +164,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
 
-      partitionLengths = writePartitionedData(mapOutputWriter);
+      MapInfo mapInfo = writePartitionedData(mapOutputWriter);
       mapStatus = MapStatus$.MODULE$.apply(
-        blockManager.shuffleServerId(), partitionLengths, mapId);
+        blockManager.shuffleServerId(), mapInfo.lengths, mapInfo.records, mapId);
     } catch (Exception e) {
       try {
         mapOutputWriter.abort(e);
@@ -186,15 +186,19 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   /**
    * Concatenate all of the per-partition files into a single combined file.
    *
-   * @return array of lengths, in bytes, of each partition of the file (used by map output tracker).
+   * @return array of lengths, in bytes, array of records of each
+   * partition of the file (used by map output tracker), wrapped in MapInfo.
    */
-  private long[] writePartitionedData(ShuffleMapOutputWriter mapOutputWriter) throws IOException {
+  private MapInfo writePartitionedData(ShuffleMapOutputWriter mapOutputWriter) throws IOException {
+
+    final long[] records = new long[numPartitions];
     // Track location of the partition starts in the output file
     if (partitionWriters != null) {
       final long writeStartTime = System.nanoTime();
       try {
         for (int i = 0; i < numPartitions; i++) {
           final File file = partitionWriterSegments[i].file();
+          records[i] = partitionWriterSegments[i].record();
           ShufflePartitionWriter writer = mapOutputWriter.getPartitionWriter(i);
           if (file.exists()) {
             if (transferToEnabled) {
@@ -219,7 +223,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       partitionWriters = null;
     }
-    return mapOutputWriter.commitAllPartitions();
+    return  new MapInfo(mapOutputWriter.commitAllPartitions(), records);
   }
 
   private void writePartitionedDataWithChannel(

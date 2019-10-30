@@ -354,7 +354,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     Seq(denseBlockSizes, sparseBlockSizes).foreach { blockSizes =>
       mapTaskId += 1
       ser.serialize(HighlyCompressedMapStatus(
-        BlockManagerId("exec-1", "host", 1234), blockSizes, mapTaskId))
+        BlockManagerId("exec-1", "host", 1234), blockSizes, Array[Long](), mapTaskId))
     }
   }
 

@@ -15,25 +15,16 @@
  * limitations under the License.
  */
 
+
 package org.apache.spark.shuffle.sort;
 
-import java.io.File;
+class MapInfo {
 
-import org.apache.spark.storage.TempShuffleBlockId;
+  final long[] lengths;
+  final long[] records;
 
-/**
- * Metadata for a block of data written by {@link ShuffleExternalSorter}.
- */
-final class SpillInfo {
-  final long[] partitionLengths;
-  final long[] partitionRecords;
-  final File file;
-  final TempShuffleBlockId blockId;
-
-  SpillInfo(int numPartitions, File file, TempShuffleBlockId blockId) {
-    this.partitionLengths = new long[numPartitions];
-    this.partitionRecords = new long[numPartitions];
-    this.file = file;
-    this.blockId = blockId;
+  public MapInfo(long[] lengths, long[] records) {
+    this.lengths = lengths;
+    this.records = records;
   }
 }

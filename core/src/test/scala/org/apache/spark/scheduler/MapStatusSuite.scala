@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, 
 
 import scala.util.Random
 
-import org.mockito.Mockito.mock
+import org.mockito.Mockito._
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
@@ -61,7 +61,7 @@ class MapStatusSuite extends SparkFunSuite {
       stddev <- Seq(0.0, 0.01, 0.5, 1.0)
     ) {
       val sizes = Array.fill[Long](numSizes)(abs(round(Random.nextGaussian() * stddev)) + mean)
-      val status = MapStatus(BlockManagerId("a", "b", 10), sizes, -1)
+      val status = MapStatus(BlockManagerId("a", "b", 10), sizes, Array[Long](), -1)
       val status1 = compressAndDecompressMapStatus(status)
       for (i <- 0 until numSizes) {
         if (sizes(i) != 0) {
@@ -75,12 +75,16 @@ class MapStatusSuite extends SparkFunSuite {
 
   test("large tasks should use " + classOf[HighlyCompressedMapStatus].getName) {
     val sizes = Array.fill[Long](2001)(150L)
-    val status = MapStatus(null, sizes, -1)
+    val status = MapStatus(null, sizes, Array[Long](), -1)
     assert(status.isInstanceOf[HighlyCompressedMapStatus])
     assert(status.getSizeForBlock(10) === 150L)
     assert(status.getSizeForBlock(50) === 150L)
     assert(status.getSizeForBlock(99) === 150L)
     assert(status.getSizeForBlock(2000) === 150L)
+    assert(status.getRecordForBlock(10) === -1L)
+    assert(status.getRecordForBlock(50) === -1L)
+    assert(status.getRecordForBlock(99) === -1L)
+    assert(status.getRecordForBlock(2000) === -1L)
   }
 
   test("HighlyCompressedMapStatus: estimated size should be the average non-empty block size") {
@@ -88,7 +92,7 @@ class MapStatusSuite extends SparkFunSuite {
     val avg = sizes.sum / sizes.count(_ != 0)
     val loc = BlockManagerId("a", "b", 10)
     val mapTaskAttemptId = 5
-    val status = MapStatus(loc, sizes, mapTaskAttemptId)
+    val status = MapStatus(loc, sizes, Array[Long](), mapTaskAttemptId)
     val status1 = compressAndDecompressMapStatus(status)
     assert(status1.isInstanceOf[HighlyCompressedMapStatus])
     assert(status1.location == loc)
@@ -103,7 +107,8 @@ class MapStatusSuite extends SparkFunSuite {
 
   test("SPARK-22540: ensure HighlyCompressedMapStatus calculates correct avgSize") {
     val threshold = 1000
-    val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.key, threshold.toString)
+    val conf = new SparkConf().set(
+      config.SHUFFLE_ACCURATE_BLOCK_SIZE_THRESHOLD.key, threshold.toString)
     val env = mock(classOf[SparkEnv])
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
@@ -111,7 +116,7 @@ class MapStatusSuite extends SparkFunSuite {
     val smallBlockSizes = sizes.filter(n => n > 0 && n < threshold)
     val avg = smallBlockSizes.sum / smallBlockSizes.length
     val loc = BlockManagerId("a", "b", 10)
-    val status = MapStatus(loc, sizes, 5)
+    val status = MapStatus(loc, sizes, Array[Long](), 5)
     val status1 = compressAndDecompressMapStatus(status)
     assert(status1.isInstanceOf[HighlyCompressedMapStatus])
     assert(status1.location == loc)
@@ -161,13 +166,13 @@ class MapStatusSuite extends SparkFunSuite {
 
   test("Blocks which are bigger than SHUFFLE_ACCURATE_BLOCK_THRESHOLD should not be " +
     "underestimated.") {
-    val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.key, "1000")
+    val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_SIZE_THRESHOLD.key, "1000")
     val env = mock(classOf[SparkEnv])
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
     // Value of element in sizes is equal to the corresponding index.
     val sizes = (0L to 2000L).toArray
-    val status1 = MapStatus(BlockManagerId("exec-0", "host-0", 100), sizes, 5)
+    val status1 = MapStatus(BlockManagerId("exec-0", "host-0", 100), sizes, Array[Long](), 5)
     val arrayStream = new ByteArrayOutputStream(102400)
     val objectOutputStream = new ObjectOutputStream(arrayStream)
     assert(status1.isInstanceOf[HighlyCompressedMapStatus])
@@ -178,6 +183,84 @@ class MapStatusSuite extends SparkFunSuite {
     val status2 = objectInput.readObject().asInstanceOf[HighlyCompressedMapStatus]
     (1001 to 2000).foreach {
       case part => assert(status2.getSizeForBlock(part) >= sizes(part))
+    }
+  }
+
+  test("verbose statistics mode: large tasks should use " +
+    classOf[HighlyCompressedMapStatus].getName) {
+    val conf = new SparkConf().set(config.SHUFFLE_STATISTICS_VERBOSE.key, "true")
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+
+    val sizes = Array.fill[Long](2001)(150L)
+    val records = Array.fill[Long](2001)(10L)
+    val status = MapStatus(null, sizes, records, -1)
+    assert(status.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status.getSizeForBlock(10) === 150L)
+    assert(status.getSizeForBlock(50) === 150L)
+    assert(status.getSizeForBlock(99) === 150L)
+    assert(status.getSizeForBlock(2000) === 150L)
+    assert(status.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status.getRecordForBlock(10) === 10L)
+    assert(status.getRecordForBlock(50) === 10L)
+    assert(status.getRecordForBlock(99) === 10L)
+    assert(status.getRecordForBlock(2000) === 10L)
+  }
+
+  test("verbose statistics mode: HighlyCompressedMapStatus:" +
+    "estimated size/records should be the average non-empty block size/records") {
+    val conf = new SparkConf().set(config.SHUFFLE_STATISTICS_VERBOSE.key, "true")
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+
+    val sizes = Array.tabulate[Long](3000) { i => i.toLong }
+    val records = Array.tabulate[Long](3000) { i => (i / 30).toLong }
+
+    val avgSize = sizes.sum / sizes.count(_ != 0)
+    val avgRecord = records.sum / records.count(_ != 0)
+    val loc = BlockManagerId("a", "b", 10)
+    val status = MapStatus(loc, sizes, records, -1)
+    val status1 = compressAndDecompressMapStatus(status)
+    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status1.location == loc)
+    for (i <- 0 until 3000) {
+      val estimateSize = status1.getSizeForBlock(i)
+      val estimateRecord = status1.getRecordForBlock(i)
+      if (sizes(i) > 0) {
+        assert(estimateSize === avgSize)
+      }
+      if (records(i) > 0) {
+        assert(estimateRecord === avgRecord)
+      }
+    }
+  }
+
+  test("verbose statistics mode: Blocks which are bigger than SHUFFLE_ACCURATE_RECORD_THRESHOLD" +
+    "should not be underestimated.") {
+    val conf = new SparkConf().set(config.SHUFFLE_STATISTICS_VERBOSE.key, "true")
+      .set(config.SHUFFLE_ACCURATE_BLOCK_SIZE_THRESHOLD.key, "1000")
+      .set(config.SHUFFLE_ACCURATE_BLOCK_RECORD_THRESHOLD.key, "1000")
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+    // Value of element in sizes is equal to the corresponding index.
+    val sizes = (0L to 2000L).toArray
+    val records = (0L to 2000L).toArray
+    val status1 = MapStatus(BlockManagerId("exec-0", "host-0", 100), sizes, records, -1)
+    val arrayStream = new ByteArrayOutputStream(204800)
+    val objectOutputStream = new ObjectOutputStream(arrayStream)
+    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
+    objectOutputStream.writeObject(status1)
+    objectOutputStream.flush()
+    val array = arrayStream.toByteArray
+    val objectInput = new ObjectInputStream(new ByteArrayInputStream(array))
+    val status2 = objectInput.readObject().asInstanceOf[HighlyCompressedMapStatus]
+    (1001 to 2000).foreach {
+      case part =>
+        assert(status2.getSizeForBlock(part) >= sizes(part))
+        assert(status2.getRecordForBlock(part) >= records(part))
     }
   }
 

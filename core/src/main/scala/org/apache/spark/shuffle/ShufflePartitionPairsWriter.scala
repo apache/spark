@@ -126,6 +126,10 @@ private[spark] class ShufflePartitionPairsWriter(
     }
   }
 
+  def getRecordsWritten(): Int = {
+    numRecordsWritten
+  }
+
   private def updateBytesWritten(): Unit = {
     val numBytesWritten = partitionWriter.getNumBytesWritten
     val bytesWrittenDiff = numBytesWritten - curNumBytesWritten

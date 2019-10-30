@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.sort
 import java.io.File
 import java.util.UUID
 
+import org.junit.Assert._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -31,7 +32,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
-import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.memory.{MemoryTestingUtils, TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
@@ -46,6 +47,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
   @Mock(answer = RETURNS_SMART_NULLS) private var taskContext: TaskContext = _
   @Mock(answer = RETURNS_SMART_NULLS) private var blockResolver: IndexShuffleBlockResolver = _
   @Mock(answer = RETURNS_SMART_NULLS) private var dependency: ShuffleDependency[Int, Int, Int] = _
+  @Mock(answer = RETURNS_SMART_NULLS) private var env: SparkEnv = _
 
   private var taskMetrics: TaskMetrics = _
   private var tempDir: File = _
@@ -121,6 +123,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
 
     shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(
       conf, blockManager, blockResolver)
+    when(env.conf).thenReturn(conf)
+    SparkEnv.set(env)
   }
 
   override def afterEach(): Unit = {
@@ -235,5 +239,27 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     assert(temporaryFilesCreated.nonEmpty)
     writer.stop( /* success = */ false)
     assert(temporaryFilesCreated.count(_.exists()) === 0)
+  }
+
+  test("write with some records") {
+    conf.set("spark.shuffle.statistics.verbose", "true")
+    val records = List[(Int, Int)]((1, 2), (2, 3), (4, 4), (6, 5))
+    val writer = new BypassMergeSortShuffleWriter[Int, Int](
+      blockManager,
+      shuffleHandle,
+      0L, // MapId
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      shuffleExecutorComponents)
+
+    writer.write(records.toIterator)
+    val mapStatus = writer.stop(true)
+    assertTrue(mapStatus.isDefined)
+    val numPartitions = shuffleHandle.dependency.partitioner.numPartitions
+    var sumOfPartitionRows: Long = 0
+    for( i <- 0 to (numPartitions - 1)) {
+      sumOfPartitionRows += mapStatus.get.getRecordForBlock(i)
+    }
+    assertEquals(sumOfPartitionRows, records.length)
   }
 }

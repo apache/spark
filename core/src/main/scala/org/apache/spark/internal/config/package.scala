@@ -809,13 +809,27 @@ package object config {
       .checkValue(_ > 0, "The expire time for caching preferred locations cannot be non-positive.")
       .createOptional
 
-  private[spark] val SHUFFLE_ACCURATE_BLOCK_THRESHOLD =
+  private[spark] val SHUFFLE_ACCURATE_BLOCK_SIZE_THRESHOLD =
     ConfigBuilder("spark.shuffle.accurateBlockThreshold")
       .doc("Threshold in bytes above which the size of shuffle blocks in " +
         "HighlyCompressedMapStatus is accurately recorded. This helps to prevent OOM " +
         "by avoiding underestimating shuffle block size when fetch shuffle blocks.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(100 * 1024 * 1024)
+
+  private[spark] val SHUFFLE_STATISTICS_VERBOSE =
+    ConfigBuilder("spark.shuffle.statistics.verbose")
+      .doc("Collect shuffle statistics in verbose mode, including row counts etc.")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_ACCURATE_BLOCK_RECORD_THRESHOLD =
+    ConfigBuilder("spark.shuffle.accurateBlockRecordThreshold")
+      .doc("When we compress the records number of shuffle blocks in HighlyCompressedMapStatus, " +
+        "we will record the number accurately if it's above this config. The record number will " +
+        "be used for data skew judgement when spark.shuffle.statistics.verbose is set true.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(2 * 1024 * 1024)
 
   private[spark] val SHUFFLE_REGISTRATION_TIMEOUT =
     ConfigBuilder("spark.shuffle.registration.timeout")
