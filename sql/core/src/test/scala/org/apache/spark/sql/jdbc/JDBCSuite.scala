@@ -26,21 +26,22 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends QueryTest
-  with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
+  with BeforeAndAfter with PrivateMethodTester with SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -50,14 +51,14 @@ class JDBCSuite extends QueryTest
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
 
   val testH2Dialect = new JdbcDialect {
-    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
+    override def dbTag: String = "h2"
     override def getCatalystType(
         sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
       Some(StringType)
   }
 
   val testH2DialectTinyInt = new JdbcDialect {
-    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+    override def dbTag: String = "h2"
     override def getCatalystType(
         sqlType: Int,
         typeName: String,
@@ -779,7 +780,7 @@ class JDBCSuite extends QueryTest
 
   test("Aggregated dialects") {
     val agg = new AggregatedDialect(List(new JdbcDialect {
-      override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
+      override def dbTag: String = "h2:"
       override def getCatalystType(
           sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
         if (sqlType % 2 == 0) {
@@ -810,6 +811,7 @@ class JDBCSuite extends QueryTest
 
   test("Aggregated dialects: isCascadingTruncateTable") {
     def genDialect(cascadingTruncateTable: Option[Boolean]): JdbcDialect = new JdbcDialect {
+      override def dbTag: String = ""
       override def canHandle(url: String): Boolean = true
       override def getCatalystType(
         sqlType: Int,
@@ -1025,6 +1027,88 @@ class JDBCSuite extends QueryTest
         sql(s"DESC FORMATTED $tableName").collect().foreach { r =>
           assert(!r.toString().contains(password))
         }
+      }
+    }
+  }
+
+  test("Hide credentials in show create table") {
+    val userName = "testUser"
+    val password = "testPass"
+    val tableName = "tab1"
+    val dbTable = "TEST.PEOPLE"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (
+           | url '$urlWithUserAndPass',
+           | dbtable '$dbTable',
+           | user '$userName',
+           | password '$password')
+         """.stripMargin)
+
+      val show = ShowCreateTableCommand(TableIdentifier(tableName))
+      spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+        assert(!r.toString.contains(password))
+        assert(r.toString.contains(dbTable))
+        assert(r.toString.contains(userName))
+      }
+
+      sql(s"SHOW CREATE TABLE $tableName").collect().foreach { r =>
+        assert(!r.toString.contains(password))
+        assert(r.toString.contains(dbTable))
+        assert(r.toString.contains(userName))
+      }
+
+      withSQLConf(SQLConf.SQL_OPTIONS_REDACTION_PATTERN.key -> "(?i)dbtable|user") {
+        spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+          assert(!r.toString.contains(password))
+          assert(!r.toString.contains(dbTable))
+          assert(!r.toString.contains(userName))
+        }
+      }
+    }
+  }
+
+  test("Replace CatalogUtils.maskCredentials with SQLConf.get.redactOptions") {
+    val password = "testPass"
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (
+           | url '$urlWithUserAndPass',
+           | dbtable 'TEST.PEOPLE',
+           | user 'testUser',
+           | password '$password')
+         """.stripMargin)
+
+      val storageProps = sql(s"DESC FORMATTED $tableName")
+        .filter("col_name = 'Storage Properties'")
+        .select("data_type").collect()
+      assert(storageProps.length === 1)
+      storageProps.foreach { r =>
+        assert(r.getString(0).contains(s"url=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+        assert(r.getString(0).contains(s"password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+      }
+
+      val information = sql(s"SHOW TABLE EXTENDED LIKE '$tableName'")
+        .select("information").collect()
+      assert(information.length === 1)
+      information.foreach { r =>
+        assert(r.getString(0).contains(s"url=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+        assert(r.getString(0).contains(s"password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+      }
+
+      val createTabStmt = sql(s"SHOW CREATE TABLE $tableName")
+        .select("createtab_stmt").collect()
+      assert(createTabStmt.length === 1)
+      createTabStmt.foreach { r =>
+        assert(r.getString(0).contains(s"`url` '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
+        assert(r.getString(0).contains(s"`password` '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
       }
     }
   }
@@ -1574,5 +1658,51 @@ class JDBCSuite extends QueryTest
         }
       }
     }
+  }
+
+  test("SPARK-28552: Check whether a dialect instance can be applied on the given jdbc url") {
+    var dialects = List[JdbcDialect]()
+
+    def registerDialect(dialect: JdbcDialect) : Unit = {
+      dialects = dialect :: dialects.filterNot(_ == dialect)
+    }
+
+    registerDialect(MySQLDialect)
+    registerDialect(PostgresDialect)
+    registerDialect(DB2Dialect)
+    registerDialect(MsSqlServerDialect)
+    registerDialect(DerbyDialect)
+    registerDialect(OracleDialect)
+    registerDialect(TeradataDialect)
+
+    def get(url: String): JdbcDialect = {
+      val matchingDialects = dialects.filter(_.canHandle(url))
+      matchingDialects.length match {
+        case 0 => NoopDialect
+        case 1 => matchingDialects.head
+        case _ => new AggregatedDialect(matchingDialects)
+      }
+    }
+
+    assert(get("jdbc:mysql://localhost/db") == MySQLDialect)
+    assert(get("jdbc:MySQL://localhost/db") == MySQLDialect)
+
+    assert(get("jdbc:postgresql://localhost/db") == PostgresDialect)
+    assert(get("jdbc:postGresql://localhost/db") == PostgresDialect)
+
+    assert(get("jdbc:db2://localhost/db") == DB2Dialect)
+    assert(get("jdbc:DB2://localhost/db") == DB2Dialect)
+
+    assert(get("jdbc:sqlserver://localhost/db") == MsSqlServerDialect)
+    assert(get("jdbc:sqlServer://localhost/db") == MsSqlServerDialect)
+
+    assert(get("jdbc:derby://localhost/db") == DerbyDialect)
+    assert(get("jdbc:derBy://localhost/db") == DerbyDialect)
+
+    assert(get("jdbc:oracle://localhost/db") == OracleDialect)
+    assert(get("jdbc:Oracle://localhost/db") == OracleDialect)
+
+    assert(get("jdbc:teradata://localhost/db") == TeradataDialect)
+    assert(get("jdbc:Teradata://localhost/db") == TeradataDialect)
   }
 }

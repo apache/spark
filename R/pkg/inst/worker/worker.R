@@ -50,7 +50,7 @@ compute <- function(mode, partition, serializer, deserializer, key,
     } else {
       # Check to see if inputData is a valid data.frame
       stopifnot(deserializer == "byte" || deserializer == "arrow")
-      stopifnot(class(inputData) == "data.frame")
+      stopifnot(is.data.frame(inputData))
     }
 
     if (mode == 2) {

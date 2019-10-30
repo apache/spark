@@ -22,7 +22,7 @@ import scala.util.Random
 import breeze.linalg.normalize
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasSeed
@@ -32,8 +32,6 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: Experimental ::
- *
  * Params for [[BucketedRandomProjectionLSH]].
  */
 private[ml] trait BucketedRandomProjectionLSHParams extends Params {
@@ -56,8 +54,6 @@ private[ml] trait BucketedRandomProjectionLSHParams extends Params {
 }
 
 /**
- * :: Experimental ::
- *
  * Model produced by [[BucketedRandomProjectionLSH]], where multiple random vectors are stored. The
  * vectors are normalized to be unit vectors and each vector is used in a hash function:
  *    `h_i(x) = floor(r_i.dot(x) / bucketLength)`
@@ -66,7 +62,6 @@ private[ml] trait BucketedRandomProjectionLSHParams extends Params {
  *
  * @param randUnitVectors An array of random unit vectors. Each vector represents a hash function.
  */
-@Experimental
 @Since("2.1.0")
 class BucketedRandomProjectionLSHModel private[ml](
     override val uid: String,
@@ -114,8 +109,6 @@ class BucketedRandomProjectionLSHModel private[ml](
 }
 
 /**
- * :: Experimental ::
- *
  * This [[BucketedRandomProjectionLSH]] implements Locality Sensitive Hashing functions for
  * Euclidean distance metrics.
  *
@@ -131,7 +124,6 @@ class BucketedRandomProjectionLSHModel private[ml](
  * 2. Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
  * arXiv:1408.2927 (2014).
  */
-@Experimental
 @Since("2.1.0")
 class BucketedRandomProjectionLSH(override val uid: String)
   extends LSH[BucketedRandomProjectionLSHModel]

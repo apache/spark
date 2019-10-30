@@ -37,6 +37,7 @@ class IntegerType private() extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Int]]
   private[sql] val integral = implicitly[Integral[Int]]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
+  override private[sql] val exactNumeric = IntegerExactNumeric
 
   /**
    * The default size of a value of the IntegerType is 4 bytes.

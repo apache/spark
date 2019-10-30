@@ -52,6 +52,8 @@ class ResourceInformation(
   }
 
   override def hashCode(): Int = Seq(name, addresses.toSeq).hashCode()
+
+  def toJson(): JValue = ResourceInformationJson(name, addresses).toJValue
 }
 
 private[spark] object ResourceInformation {
@@ -70,6 +72,16 @@ private[spark] object ResourceInformation {
       case NonFatal(e) =>
         throw new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n" +
           s"Here is a correct example: $exampleJson.", e)
+    }
+  }
+
+  def parseJson(json: JValue): ResourceInformation = {
+    implicit val formats = DefaultFormats
+    try {
+      json.extract[ResourceInformationJson].toResourceInformation
+    } catch {
+      case NonFatal(e) =>
+        throw new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n", e)
     }
   }
 }

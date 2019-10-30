@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -25,6 +26,12 @@ class UtilsTests(ReusedSQLTestCase):
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))
         self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
+
+    def test_capture_user_friendly_exception(self):
+        try:
+            self.spark.sql("select `中文字段`")
+        except AnalysisException as e:
+            self.assertRegexpMatches(str(e), "cannot resolve '`中文字段`'")
 
     def test_capture_parse_exception(self):
         self.assertRaises(ParseException, lambda: self.spark.sql("abc"))

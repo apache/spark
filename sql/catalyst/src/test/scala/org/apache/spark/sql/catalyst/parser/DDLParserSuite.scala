@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UpdateTableStatement}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -407,7 +408,7 @@ class DDLParserSuite extends AnalysisTest {
   private def testCreateOrReplaceDdl(
       sqlStatement: String,
       tableSpec: TableSpec,
-      expectedIfNotExists: Boolean) {
+      expectedIfNotExists: Boolean): Unit = {
     val parsedPlan = parsePlan(sqlStatement)
     val newTableToken = sqlStatement.split(" ")(0).trim.toUpperCase(Locale.ROOT)
     parsedPlan match {
@@ -617,6 +618,47 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("describe table column") {
+    comparePlans(parsePlan("DESCRIBE t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("abc.xyz"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE t abc.xyz"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("abc", "xyz"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("a.b", "x.y"), isExtended = false))
+
+    comparePlans(parsePlan("DESCRIBE TABLE t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = true))
+    comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = true))
+
+    val caught = intercept[AnalysisException](
+      parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
+    assert(caught.getMessage.contains(
+        "DESC TABLE COLUMN for a specific partition is not supported"))
+  }
+
+  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
+    comparePlans(parsePlan("describe t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
+    comparePlans(parsePlan("describe table t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
+    comparePlans(parsePlan("describe table extended t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
+    comparePlans(parsePlan("describe table formatted t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
+  }
+
   test("insert table: basic append") {
     Seq(
       "INSERT INTO TABLE testcat.ns1.ns2.tbl SELECT * FROM source",
@@ -721,6 +763,102 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     assert(exc.getMessage.contains("INSERT INTO ... IF NOT EXISTS"))
+  }
+
+  test("delete from table: delete all") {
+    parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
+      DeleteFromStatement(
+        Seq("testcat", "ns1", "ns2", "tbl"),
+        None,
+        None))
+  }
+
+  test("delete from table: with alias and where clause") {
+    parseCompare("DELETE FROM testcat.ns1.ns2.tbl AS t WHERE t.a = 2",
+      DeleteFromStatement(
+        Seq("testcat", "ns1", "ns2", "tbl"),
+        Some("t"),
+        Some(EqualTo(UnresolvedAttribute("t.a"), Literal(2)))))
+  }
+
+  test("delete from table: columns aliases is not allowed") {
+    val exc = intercept[ParseException] {
+      parsePlan("DELETE FROM testcat.ns1.ns2.tbl AS t(a,b,c,d) WHERE d = 2")
+    }
+
+    assert(exc.getMessage.contains("Columns aliases is not allowed in DELETE."))
+  }
+
+  test("update table: basic") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl
+        |SET t.a='Robert', t.b=32
+      """.stripMargin,
+      UpdateTableStatement(
+        Seq("testcat", "ns1", "ns2", "tbl"),
+        None,
+        Seq(Seq("t", "a"), Seq("t", "b")),
+        Seq(Literal("Robert"), Literal(32)),
+        None))
+  }
+
+  test("update table: with alias and where clause") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl AS t
+        |SET t.a='Robert', t.b=32
+        |WHERE t.c=2
+      """.stripMargin,
+      UpdateTableStatement(
+        Seq("testcat", "ns1", "ns2", "tbl"),
+        Some("t"),
+        Seq(Seq("t", "a"), Seq("t", "b")),
+        Seq(Literal("Robert"), Literal(32)),
+        Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
+  }
+
+  test("update table: columns aliases is not allowed") {
+    val exc = intercept[ParseException] {
+      parsePlan(
+        """
+          |UPDATE testcat.ns1.ns2.tbl AS t(a,b,c,d)
+          |SET b='Robert', c=32
+          |WHERE d=2
+        """.stripMargin)
+    }
+
+    assert(exc.getMessage.contains("Columns aliases is not allowed in UPDATE."))
+  }
+
+  test("show tables") {
+    comparePlans(
+      parsePlan("SHOW TABLES"),
+      ShowTablesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
+      ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
+  }
+
+  test("show namespaces") {
+    comparePlans(
+      parsePlan("SHOW NAMESPACES"),
+      ShowNamespacesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1")), Some("*pattern*")))
   }
 
   private case class TableSpec(

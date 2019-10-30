@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming.continuous
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousPartitionReaderFactory
+import org.apache.spark.sql.connector.read.InputPartition
+import org.apache.spark.sql.connector.read.streaming.ContinuousPartitionReaderFactory
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.NextIterator
 

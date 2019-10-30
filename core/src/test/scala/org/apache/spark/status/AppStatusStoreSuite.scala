@@ -17,8 +17,7 @@
 
 package org.apache.spark.status
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.status.api.v1.TaskMetricDistributions
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.Distribution
 import org.apache.spark.util.kvstore._
 
@@ -77,14 +76,23 @@ class AppStatusStoreSuite extends SparkFunSuite {
     assert(store.count(classOf[CachedQuantile]) === 2)
   }
 
-  test("only successfull task have taskSummary") {
-    val store = new InMemoryStore()
-    (0 until 5).foreach { i => store.write(newTaskData(i, status = "FAILED")) }
-    val appStore = new AppStatusStore(store).taskSummary(stageId, attemptId, uiQuantiles)
-    assert(appStore.size === 0)
+  private def createLiveStore(inMemoryStore: InMemoryStore): AppStatusStore = {
+    val conf = new SparkConf()
+    val store = new ElementTrackingStore(inMemoryStore, conf)
+    val listener = new AppStatusListener(store, conf, true, None)
+    new AppStatusStore(store, listener = Some(listener))
   }
 
-  test("summary should contain task metrics of only successfull tasks") {
+  test("SPARK-28638: only successful tasks have taskSummary when with in memory kvstore") {
+    val store = new InMemoryStore()
+    (0 until 5).foreach { i => store.write(newTaskData(i, status = "FAILED")) }
+    Seq(new AppStatusStore(store), createLiveStore(store)).foreach { appStore =>
+      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles)
+      assert(summary.size === 0)
+    }
+  }
+
+  test("SPARK-28638: summary should contain successful tasks only when with in memory kvstore") {
     val store = new InMemoryStore()
 
     for (i <- 0 to 5) {
@@ -95,13 +103,15 @@ class AppStatusStoreSuite extends SparkFunSuite {
       }
     }
 
-    val summary = new AppStatusStore(store).taskSummary(stageId, attemptId, uiQuantiles).get
+    Seq(new AppStatusStore(store), createLiveStore(store)).foreach { appStore =>
+      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles).get
 
-    val values = Array(0.0, 2.0, 4.0)
+      val values = Array(0.0, 2.0, 4.0)
 
-    val dist = new Distribution(values, 0, values.length).getQuantiles(uiQuantiles.sorted)
-    dist.zip(summary.executorRunTime).foreach { case (expected, actual) =>
-      assert(expected === actual)
+      val dist = new Distribution(values, 0, values.length).getQuantiles(uiQuantiles.sorted)
+      dist.zip(summary.executorRunTime).foreach { case (expected, actual) =>
+        assert(expected === actual)
+      }
     }
   }
 

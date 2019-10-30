@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.collection.{immutable, GenTraversableOnce}
 
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, SparkDataStream}
-
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 
 /**
  * A helper class that looks like a Map[Source, Offset].

@@ -22,9 +22,9 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSQLContext {
+class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits._
 
   val batchedPythonUDF = new MyDummyPythonUDF
@@ -92,7 +92,7 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("Python UDF should not break column pruning/filter pushdown -- Parquet V1") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempPath { f =>
         spark.range(10).select($"id".as("a"), $"id".as("b"))
           .write.parquet(f.getCanonicalPath)
@@ -129,7 +129,7 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("Python UDF should not break column pruning/filter pushdown -- Parquet V2") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { f =>
         spark.range(10).select($"id".as("a"), $"id".as("b"))
           .write.parquet(f.getCanonicalPath)

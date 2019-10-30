@@ -663,8 +663,6 @@ class SparkContext(object):
 
     def binaryFiles(self, path, minPartitions=None):
         """
-        .. note:: Experimental
-
         Read a directory of binary files from HDFS, a local file system
         (available on all nodes), or any Hadoop-supported file system URI
         as a byte array. Each file is read as a single record and returned
@@ -680,8 +678,6 @@ class SparkContext(object):
 
     def binaryRecords(self, path, recordLength):
         """
-        .. note:: Experimental
-
         Load data from a flat binary file, assuming each record is a set of numbers
         with the specified numerical format (see ByteBuffer), and the number of
         bytes per record is constant.
@@ -954,7 +950,7 @@ class SparkContext(object):
     def setCheckpointDir(self, dirName):
         """
         Set the directory under which RDDs are going to be checkpointed. The
-        directory must be a HDFS path if running on a cluster.
+        directory must be an HDFS path if running on a cluster.
         """
         self._jsc.sc().setCheckpointDir(dirName)
 

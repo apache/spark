@@ -20,10 +20,12 @@ import sys
 if sys.version >= '3':
     xrange = range
 
+from pyspark import since
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.param import Params
+from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol
 from pyspark.ml.util import _jvm
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
@@ -361,3 +363,75 @@ class JavaModel(JavaTransformer, Model):
             self._create_params_from_java()
 
             self._resetUid(java_model.uid())
+
+
+@inherit_doc
+class JavaPredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
+    """
+    (Private) Trait for parameters for prediction (regression and classification)
+    """
+    pass
+
+
+@inherit_doc
+class JavaPredictor(JavaEstimator, JavaPredictorParams):
+    """
+    (Private) Java Estimator for prediction tasks (regression and classification).
+    """
+
+    @since("3.0.0")
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+
+@inherit_doc
+class JavaPredictionModel(JavaModel, JavaPredictorParams):
+    """
+    (Private) Java Model for prediction tasks (regression and classification).
+    """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @property
+    @since("2.1.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        return self._call_java("numFeatures")
+
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        return self._call_java("predict", value)

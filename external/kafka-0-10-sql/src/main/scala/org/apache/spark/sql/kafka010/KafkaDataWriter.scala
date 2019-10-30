@@ -21,7 +21,7 @@ import java.{util => ju}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.sources.v2.writer._
+import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 
 /**
  * Dummy commit message. The DataSourceV2 framework requires a commit message implementation but we

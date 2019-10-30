@@ -36,7 +36,7 @@ case class LogicalRelation(
 
   // Only care about relation when canonicalizing.
   override def doCanonicalize(): LogicalPlan = copy(
-    output = output.map(QueryPlan.normalizeExprId(_, output)),
+    output = output.map(QueryPlan.normalizeExpressions(_, output)),
     catalogTable = None)
 
   override def computeStats(): Statistics = {

@@ -21,9 +21,10 @@ import scala.collection.immutable.TreeSet
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -62,6 +63,42 @@ trait PredicateHelper {
       case And(cond1, cond2) =>
         splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
       case other => other :: Nil
+    }
+  }
+
+  /**
+   * Find the origin of where the input references of expression exp were scanned in the tree of
+   * plan, and if they originate from a single leaf node.
+   * Returns optional tuple with Expression, undoing any projections and aliasing that has been done
+   * along the way from plan to origin, and the origin LeafNode plan from which all the exp
+   */
+  def findExpressionAndTrackLineageDown(
+      exp: Expression,
+      plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
+
+    plan match {
+      case Project(projectList, child) =>
+        val aliases = AttributeMap(projectList.collect {
+          case a @ Alias(child, _) => (a.toAttribute, child)
+        })
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), child)
+      // we can unwrap only if there are row projections, and no aggregation operation
+      case Aggregate(_, aggregateExpressions, child) =>
+        val aliasMap = AttributeMap(aggregateExpressions.collect {
+          case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
+            (a.toAttribute, a.child)
+        })
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), child)
+      case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
+        Some((exp, l))
+      case other =>
+        other.children.flatMap {
+          child => if (exp.references.subsetOf(child.outputSet)) {
+            findExpressionAndTrackLineageDown(exp, child)
+          } else {
+            None
+          }
+        }.headOption
     }
   }
 
@@ -117,7 +154,7 @@ trait PredicateHelper {
       e.children.isEmpty
     case a: AttributeReference => true
     // PythonUDF will be executed by dedicated physical operator later.
-    // For PythonUDFs that can't be evaluated in join condition, `PullOutPythonUDFInJoinCondition`
+    // For PythonUDFs that can't be evaluated in join condition, `ExtractPythonUDFFromJoinCondition`
     // will pull them out later.
     case _: PythonUDF => true
     case e: Unevaluable => false
@@ -420,17 +457,25 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
           break;
        """)
 
+    val switchCode = if (caseBranches.size > 0) {
+      code"""
+        switch (${valueGen.value}) {
+          ${caseBranches.mkString("\n")}
+          default:
+            ${ev.isNull} = $hasNull;
+        }
+       """
+    } else {
+      s"${ev.isNull} = $hasNull;"
+    }
+
     ev.copy(code =
       code"""
         ${valueGen.code}
         ${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${valueGen.isNull};
         ${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
         if (!${valueGen.isNull}) {
-          switch (${valueGen.value}) {
-            ${caseBranches.mkString("\n")}
-            default:
-              ${ev.isNull} = $hasNull;
-          }
+          $switchCode
         }
        """)
   }
@@ -843,4 +888,86 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override def symbol: String = ">="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
+}
+
+trait BooleanTest extends UnaryExpression with Predicate with ExpectsInputTypes {
+
+  def boolValueForComparison: Boolean
+  def boolValueWhenNull: Boolean
+
+  override def nullable: Boolean = false
+  override def inputTypes: Seq[DataType] = Seq(BooleanType)
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    Option(value) match {
+      case None => boolValueWhenNull
+      case other => if (boolValueWhenNull) {
+        value == !boolValueForComparison
+      } else {
+        value == boolValueForComparison
+      }
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    ev.copy(code = code"""
+      ${eval.code}
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      if (${eval.isNull}) {
+        ${ev.value} = $boolValueWhenNull;
+      } else if ($boolValueWhenNull) {
+        ${ev.value} = ${eval.value} == !$boolValueForComparison;
+      } else {
+        ${ev.value} = ${eval.value} == $boolValueForComparison;
+      }
+      """, isNull = FalseLiteral)
+  }
+}
+
+case class IsTrue(child: Expression) extends BooleanTest {
+  override def boolValueForComparison: Boolean = true
+  override def boolValueWhenNull: Boolean = false
+  override def sql: String = s"(${child.sql} IS TRUE)"
+}
+
+case class IsNotTrue(child: Expression) extends BooleanTest {
+  override def boolValueForComparison: Boolean = true
+  override def boolValueWhenNull: Boolean = true
+  override def sql: String = s"(${child.sql} IS NOT TRUE)"
+}
+
+case class IsFalse(child: Expression) extends BooleanTest {
+  override def boolValueForComparison: Boolean = false
+  override def boolValueWhenNull: Boolean = false
+  override def sql: String = s"(${child.sql} IS FALSE)"
+}
+
+case class IsNotFalse(child: Expression) extends BooleanTest {
+  override def boolValueForComparison: Boolean = false
+  override def boolValueWhenNull: Boolean = true
+  override def sql: String = s"(${child.sql} IS NOT FALSE)"
+}
+
+/**
+ * IS UNKNOWN and IS NOT UNKNOWN are the same as IS NULL and IS NOT NULL, respectively,
+ * except that the input expression must be of a boolean type.
+ */
+object IsUnknown {
+  def apply(child: Expression): Predicate = {
+    new IsNull(child) with ExpectsInputTypes {
+      override def inputTypes: Seq[DataType] = Seq(BooleanType)
+      override def sql: String = s"(${child.sql} IS UNKNOWN)"
+    }
+  }
+}
+
+object IsNotUnknown {
+  def apply(child: Expression): Predicate = {
+    new IsNotNull(child) with ExpectsInputTypes {
+      override def inputTypes: Seq[DataType] = Seq(BooleanType)
+      override def sql: String = s"(${child.sql} IS NOT UNKNOWN)"
+    }
+  }
 }

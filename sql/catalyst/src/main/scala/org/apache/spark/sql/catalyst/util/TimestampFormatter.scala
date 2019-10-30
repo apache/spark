@@ -22,8 +22,10 @@ import java.time._
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoField.MICRO_OF_SECOND
 import java.time.temporal.TemporalQueries
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 import java.util.concurrent.TimeUnit.SECONDS
+
+import DateTimeUtils.convertSpecialTimestamp
 
 sealed trait TimestampFormatter extends Serializable {
   /**
@@ -50,14 +52,17 @@ class Iso8601TimestampFormatter(
   protected lazy val formatter = getOrCreateFormatter(pattern, locale)
 
   override def parse(s: String): Long = {
-    val parsed = formatter.parse(s)
-    val parsedZoneId = parsed.query(TemporalQueries.zone())
-    val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
-    val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
-    val epochSeconds = zonedDateTime.toEpochSecond
-    val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
+    val specialDate = convertSpecialTimestamp(s.trim, zoneId)
+    specialDate.getOrElse {
+      val parsed = formatter.parse(s)
+      val parsedZoneId = parsed.query(TemporalQueries.zone())
+      val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
+      val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
+      val epochSeconds = zonedDateTime.toEpochSecond
+      val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
 
-    Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
+      Math.addExact(SECONDS.toMicros(epochSeconds), microsOfSecond)
+    }
   }
 
   override def format(us: Long): String = {
@@ -67,7 +72,7 @@ class Iso8601TimestampFormatter(
 }
 
 /**
- * The formatter parses/formats timestamps according to the pattern `yyyy-MM-dd HH:mm:ss.[..fff..]`
+ * The formatter parses/formats timestamps according to the pattern `uuuu-MM-dd HH:mm:ss.[..fff..]`
  * where `[..fff..]` is a fraction of second up to microsecond resolution. The formatter does not
  * output trailing zeros in the fraction. For example, the timestamp `2019-03-05 15:00:01.123400` is
  * formatted as the string `2019-03-05 15:00:01.1234`.

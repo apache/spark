@@ -44,6 +44,12 @@ class KubernetesConfSuite extends SparkFunSuite {
     "customEnvKey2" -> "customEnvValue2")
   private val DRIVER_POD = new PodBuilder().build()
   private val EXECUTOR_ID = "executor-id"
+  private val EXECUTOR_ENV_VARS = Map(
+    "spark.executorEnv.1executorEnvVars1/var1" -> "executorEnvVars1",
+    "spark.executorEnv.executorEnvVars2*var2" -> "executorEnvVars2",
+    "spark.executorEnv.executorEnvVars3_var3" -> "executorEnvVars3",
+    "spark.executorEnv.executorEnvVars4-var4" -> "executorEnvVars4",
+    "spark.executorEnv.executorEnvVars5-var5" -> "executorEnvVars5/var5")
 
   test("Resolve driver labels, annotations, secret mount paths, envs, and memory overhead") {
     val sparkConf = new SparkConf(false)
@@ -131,5 +137,23 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.annotations === CUSTOM_ANNOTATIONS)
     assert(conf.secretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
     assert(conf.secretEnvNamesToKeyRefs === SECRET_ENV_VARS)
+  }
+
+  test("Verify that executorEnv key conforms to the regular specification") {
+    val sparkConf = new SparkConf(false)
+    EXECUTOR_ENV_VARS.foreach { case (key, value) =>
+      sparkConf.set(key, value)
+    }
+
+    val conf = KubernetesConf.createExecutorConf(
+      sparkConf,
+      EXECUTOR_ID,
+      KubernetesTestConf.APP_ID,
+      Some(DRIVER_POD))
+    assert(conf.environment ===
+      Map(
+        "executorEnvVars3_var3" -> "executorEnvVars3",
+        "executorEnvVars4-var4" -> "executorEnvVars4",
+        "executorEnvVars5-var5" -> "executorEnvVars5/var5"))
   }
 }

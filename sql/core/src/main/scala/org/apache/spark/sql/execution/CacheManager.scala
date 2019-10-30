@@ -79,12 +79,13 @@ class CacheManager extends Logging {
       logWarning("Asked to cache already cached data.")
     } else {
       val sparkSession = query.sparkSession
+      val qe = sparkSession.sessionState.executePlan(planToCache)
       val inMemoryRelation = InMemoryRelation(
         sparkSession.sessionState.conf.useCompression,
         sparkSession.sessionState.conf.columnBatchSize, storageLevel,
-        sparkSession.sessionState.executePlan(planToCache).executedPlan,
+        qe.executedPlan,
         tableName,
-        planToCache)
+        optimizedPlan = qe.optimizedPlan)
       this.synchronized {
         if (lookupCachedData(planToCache).nonEmpty) {
           logWarning("Data has already been cached.")
@@ -184,10 +185,10 @@ class CacheManager extends Logging {
     }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      val plan = spark.sessionState.executePlan(cd.plan).executedPlan
+      val qe = spark.sessionState.executePlan(cd.plan)
       val newCache = InMemoryRelation(
-        cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = plan),
-        logicalPlan = cd.plan)
+        cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
+        optimizedPlan = qe.optimizedPlan)
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       this.synchronized {
         if (lookupCachedData(recomputedPlan.plan).nonEmpty) {

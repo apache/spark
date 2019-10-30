@@ -124,7 +124,7 @@ SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query 12 schema
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 12 output
-show_t3	true	Table: show_t3
+	show_t3	true	Table: show_t3
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
