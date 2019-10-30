@@ -844,8 +844,8 @@ class DataStreamWriter(object):
         :param once: if set to True, set a trigger that processes only one batch of data in a
                      streaming query then terminates the query. Only one trigger can be set.
         :param continuous: a time interval as a string, e.g. '5 seconds', '1 minute'.
-                           Set a trigger that runs a continuous query with a given checkpoint interval.
-                           Only one trigger can be set.
+                           Set a trigger that runs a continuous query with a given checkpoint
+                           interval. Only one trigger can be set.
 
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
