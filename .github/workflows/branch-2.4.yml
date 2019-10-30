@@ -44,7 +44,7 @@ jobs:
         java-version: '1.8'
     - uses: actions/setup-python@v1
       with:
-        python-version: '3.x'
+        python-version: '3.7'
         architecture: 'x64'
     - name: Scala
       run: ./dev/lint-scala
