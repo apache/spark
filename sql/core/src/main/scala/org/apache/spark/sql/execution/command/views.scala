@@ -110,18 +110,25 @@ case class CreateViewCommand(
 
   private def isTemporary = viewType == LocalTempView || viewType == GlobalTempView
 
-  // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with 'CREATE TEMPORARY TABLE'
-  if (allowExisting && isTemporary) {
-    throw new AnalysisException(
-      "It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
+  if(isTemporary) verifyTempView()
+
+  private def verifyTempView(): Unit = {
+    // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS'
+    // to be consistent with 'CREATE TEMPORARY TABLE'
+    if (allowExisting) {
+      throw new AnalysisException(
+        "It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
+    }
+
+    // Temporary view names should NOT contain database prefix like "database.table"
+    if (name.database.isDefined) {
+      val database = name.database.get
+      throw new AnalysisException(
+        s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
+    }
   }
 
-  // Temporary view names should NOT contain database prefix like "database.table"
-  if (isTemporary && name.database.isDefined) {
-    val database = name.database.get
-    throw new AnalysisException(
-      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
-  }
+  private var isTempReferred = false
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // If the plan cannot be analyzed, throw an exception and don't proceed.
@@ -130,18 +137,17 @@ case class CreateViewCommand(
     val analyzedPlan = qe.analyzed
 
     if (userSpecifiedColumns.nonEmpty &&
-        userSpecifiedColumns.length != analyzedPlan.output.length) {
+      userSpecifiedColumns.length != analyzedPlan.output.length) {
       throw new AnalysisException(s"The number of columns produced by the SELECT clause " +
         s"(num: `${analyzedPlan.output.length}`) does not match the number of column names " +
         s"specified by CREATE VIEW (num: `${userSpecifiedColumns.length}`).")
     }
 
-    // When creating a permanent view, not allowed to reference temporary objects.
     // This should be called after `qe.assertAnalyzed()` (i.e., `child` can be resolved)
     verifyTemporaryObjectsNotExists(sparkSession)
 
     val catalog = sparkSession.sessionState.catalog
-    if (viewType == LocalTempView) {
+    if (viewType == LocalTempView || isTempReferred) {
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createTempView(name.table, aliasedPlan, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
@@ -178,7 +184,8 @@ case class CreateViewCommand(
   }
 
   /**
-   * Permanent views are not allowed to reference temp objects, including temp function and views
+   * Permanent views are not allowed to reference temp function. When permanent view
+   * has a reference of temp view, it will be created as temp view [SPARK-29628].
    */
   private def verifyTemporaryObjectsNotExists(sparkSession: SparkSession): Unit = {
     import sparkSession.sessionState.analyzer.AsTableIdentifier
@@ -191,12 +198,15 @@ case class CreateViewCommand(
       // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
       // package (e.g., HiveGenericUDF).
       child.collect {
-        // Disallow creating permanent views based on temporary views.
+        // Permanent views will be created as temporary view if based on temporary view.
         case UnresolvedRelation(AsTableIdentifier(ident))
-            if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
-          // temporary views are only stored in the session catalog
-          throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-            s"referencing a temporary view $ident")
+          if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
+          // Temporary views are only stored in the session catalog
+          logInfo(s"View $name is based on temporary view $ident."
+            + s" $name will be created as temporary view")
+          verifyTempView()
+          isTempReferred = true
+
         case other if !other.resolved => other.expressions.flatMap(_.collect {
           // Disallow creating permanent views based on temporary UDFs.
           case e: UnresolvedFunction
