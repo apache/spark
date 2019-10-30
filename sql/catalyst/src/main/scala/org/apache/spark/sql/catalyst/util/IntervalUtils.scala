@@ -218,12 +218,7 @@ object IntervalUtils {
         minutes = toLongWithRange("second", m.group(7), 0, 59)
       }
       // Hive allow nanosecond precision interval
-      val nanoStr = if (m.group(9) == null) {
-        null
-      } else {
-        (m.group(9) + "000000000").substring(0, 9)
-      }
-      var nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L)
+      var nanos = parseNanos(m.group(9))
       to match {
         case "hour" =>
           minutes = 0
@@ -292,6 +287,11 @@ object IntervalUtils {
     new CalendarInterval(months, microseconds)
   }
 
+  private def parseNanos(nanosStr: String): Long = {
+    val alignedStr = if (nanosStr == null) nanosStr else (nanosStr + "000000000").substring(0, 9)
+    toLongWithRange("nanosecond", alignedStr, 0L, 999999999L) / DateTimeUtils.NANOS_PER_MICROS
+  }
+
   /**
    * Parse second_nano string in ss.nnnnnnnnn format to microseconds
    */
@@ -302,9 +302,6 @@ object IntervalUtils {
         secondsStr,
         Long.MinValue / DateTimeUtils.MICROS_PER_SECOND,
         Long.MaxValue / DateTimeUtils.MICROS_PER_SECOND) * DateTimeUtils.MICROS_PER_SECOND
-    }
-    def parseNanos(nanosStr: String): Long = {
-      toLongWithRange("nanosecond", nanosStr, 0L, 999999999L) / DateTimeUtils.NANOS_PER_MICROS
     }
 
     secondNano.split("\\.") match {
