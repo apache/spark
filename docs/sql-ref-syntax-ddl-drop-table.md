@@ -21,10 +21,10 @@ license: |
 
 ### Description
 
-`DROP TABLE` deletes the table and removes the directory associated with this table from the file system
-if this is not `EXTERNAL` table. If the table is not present it throws an exception.
+`DROP TABLE` deletes the table and removes the directory associated with the table from the file system
+if the table is not `EXTERNAL` table. If the table is not present it throws an exception.
 
-In case of an external table, only the associated metadata information are removed from the metastore database.
+In case of an external table, only the associated metadata information is removed from the metastore database.
 
 ### Syntax
 {% highlight sql %}
