@@ -733,7 +733,7 @@ class DataFrameWriter(OptionUtils):
         :param partitionBy: names of partitioning columns
         :param options: all other string options
 
-        >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
+        >>> df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
         """
         self.mode(mode).options(**options)
         if partitionBy is not None:
