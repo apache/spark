@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -194,6 +195,11 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    */
   def removeListener(listener: StreamingQueryListener): Unit = {
     listenerBus.removeListener(listener)
+  }
+
+  /** Only exposed for testing. */
+  private[sql] def listListeners(): Array[StreamingQueryListener] = {
+    listenerBus.listeners.asScala.toArray
   }
 
   /** Post a listener event */
