@@ -124,7 +124,7 @@ class DataFrame(object):
 
     @since(2.0)
     def createTempView(self, name):
-        """Creates a local temporary view with this DataFrame.
+        """Creates a local temporary view with this :class:`DataFrame`.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -146,7 +146,7 @@ class DataFrame(object):
 
     @since(2.0)
     def createOrReplaceTempView(self, name):
-        """Creates or replaces a local temporary view with this DataFrame.
+        """Creates or replaces a local temporary view with this :class:`DataFrame`.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -164,7 +164,7 @@ class DataFrame(object):
 
     @since(2.1)
     def createGlobalTempView(self, name):
-        """Creates a global temporary view with this DataFrame.
+        """Creates a global temporary view with this :class:`DataFrame`.
 
         The lifetime of this temporary view is tied to this Spark application.
         throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
@@ -523,8 +523,9 @@ class DataFrame(object):
     def toLocalIterator(self, prefetchPartitions=False):
         """
         Returns an iterator that contains all of the rows in this :class:`DataFrame`.
-        The iterator will consume as much memory as the largest partition in this DataFrame.
-        With prefetch it may consume up to the memory of the 2 largest partitions.
+        The iterator will consume as much memory as the largest partition in this
+        :class:`DataFrame`. With prefetch it may consume up to the memory of the 2 largest
+        partitions.
 
         :param prefetchPartitions: If Spark should pre-fetch the next partition
                                    before it is needed.
@@ -668,7 +669,7 @@ class DataFrame(object):
     def repartition(self, numPartitions, *cols):
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
-        resulting DataFrame is hash partitioned.
+        resulting :class:`DataFrame` is hash partitioned.
 
         :param numPartitions:
             can be an int to specify the target number of partitions or a Column.
@@ -730,7 +731,7 @@ class DataFrame(object):
     def repartitionByRange(self, numPartitions, *cols):
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
-        resulting DataFrame is range partitioned.
+        resulting :class:`DataFrame` is range partitioned.
 
         :param numPartitions:
             can be an int to specify the target number of partitions or a Column.
@@ -898,8 +899,8 @@ class DataFrame(object):
     def randomSplit(self, weights, seed=None):
         """Randomly splits this :class:`DataFrame` with the provided weights.
 
-        :param weights: list of doubles as weights with which to split the DataFrame. Weights will
-            be normalized if they don't sum up to 1.0.
+        :param weights: list of doubles as weights with which to split the :class:`DataFrame`.
+            Weights will be normalized if they don't sum up to 1.0.
         :param seed: The seed for sampling.
 
         >>> splits = df4.randomSplit([1.0, 2.0], 24)
@@ -1312,7 +1313,7 @@ class DataFrame(object):
 
         :param cols: list of column names (string) or expressions (:class:`Column`).
             If one of the column names is '*', that column is expanded to include all columns
-            in the current DataFrame.
+            in the current :class:`DataFrame`.
 
         >>> df.select('*').collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
@@ -1822,9 +1823,9 @@ class DataFrame(object):
         :class:`DataFrame`.
 
         The result of this algorithm has the following deterministic bound:
-        If the DataFrame has N elements and if we request the quantile at
+        If the :class:`DataFrame` has N elements and if we request the quantile at
         probability `p` up to error `err`, then the algorithm will return
-        a sample `x` from the DataFrame so that the *exact* rank of `x` is
+        a sample `x` from the :class:`DataFrame` so that the *exact* rank of `x` is
         close to (p * N). More precisely,
 
           floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
@@ -1940,7 +1941,7 @@ class DataFrame(object):
         :param col1: The name of the first column. Distinct items will make the first item of
             each row.
         :param col2: The name of the second column. Distinct items will make the column names
-            of the DataFrame.
+            of the :class:`DataFrame`.
         """
         if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
@@ -1957,7 +1958,8 @@ class DataFrame(object):
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
-            guarantee about the backward compatibility of the schema of the resulting DataFrame.
+            guarantee about the backward compatibility of the schema of the resulting
+            :class:`DataFrame`.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.
@@ -1979,8 +1981,8 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
 
-        The column expression must be an expression over this DataFrame; attempting to add
-        a column from some other DataFrame will raise an error.
+        The column expression must be an expression over this :class:`DataFrame`; attempting to add
+        a column from some other :class:`DataFrame` will raise an error.
 
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
@@ -2095,8 +2097,8 @@ class DataFrame(object):
 
         This is only available if Pandas is installed and available.
 
-        .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
-            to be small, as all the data is loaded into the driver's memory.
+        .. note:: This method should only be used if the resulting Pandas's :class:`DataFrame` is
+            expected to be small, as all the data is loaded into the driver's memory.
 
         .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
 
@@ -2298,8 +2300,9 @@ def _to_scala_map(sc, jm):
 
 def _to_corrected_pandas_type(dt):
     """
-    When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
-    This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
+    When converting Spark SQL records to Pandas :class:`DataFrame`, the inferred data type may be
+    wrong. This method gets the corrected data type for Pandas if that type may be inferred
+    uncorrectly.
     """
     import numpy as np
     if type(dt) == ByteType:
