@@ -76,7 +76,7 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
 
   /** Tooltips for header fields of the RDD table */
   val tooltips = Seq(
-    Some(ID),
+    None,
     Some(RDD_NAME),
     Some(STORAGE_LEVEL),
     Some(CACHED_PARTITIONS),

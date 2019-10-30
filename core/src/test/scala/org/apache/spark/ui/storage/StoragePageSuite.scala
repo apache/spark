@@ -85,6 +85,7 @@ class StoragePageSuite extends SparkFunSuite {
                 {Text(x._1)}
               </span>
             </th>
+          case None => <th width={""} class={""}>{Text(x._1)}</th>
         }
       }.toList
     }

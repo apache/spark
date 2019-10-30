@@ -18,27 +18,25 @@
 package org.apache.spark.ui.storage
 
 private[ui] object ToolTips {
-  val ID =
-    "ID of RDD"
 
   val RDD_NAME =
-    "Name of persisted RDD"
+    "Name of the persisted RDD"
 
   val STORAGE_LEVEL =
-    "StorageLevel displays where RDD is stored, " +
-      "Format of RDD (Serialized or De-serialized) and" +
-      "Replication factor of the RDD"
+    "StorageLevel displays where the persisted RDD is stored, " +
+      "format of the persisted RDD (serialized or de-serialized) and" +
+      "replication factor of the persisted RDD"
 
   val CACHED_PARTITIONS =
     "Number of partitions cached"
 
   val FRACTION_CACHED =
-    "Fraction of RDD cached"
+    "Fraction of total partitions cached"
 
   val SIZE_IN_MEMORY =
-    "Total size in the memory"
+    "Total size of partitions in memory"
 
   val SIZE_ON_DISK =
-    "Total size on the disk"
+    "Total size of partitions on the disk"
 }
 
