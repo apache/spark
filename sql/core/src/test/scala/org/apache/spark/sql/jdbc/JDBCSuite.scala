@@ -51,14 +51,14 @@ class JDBCSuite extends QueryTest
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
 
   val testH2Dialect = new JdbcDialect {
-    override def dbTag: String = "h2"
+    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
     override def getCatalystType(
         sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
       Some(StringType)
   }
 
   val testH2DialectTinyInt = new JdbcDialect {
-    override def dbTag: String = "h2"
+    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
     override def getCatalystType(
         sqlType: Int,
         typeName: String,
@@ -771,7 +771,7 @@ class JDBCSuite extends QueryTest
 
   test("Aggregated dialects") {
     val agg = new AggregatedDialect(List(new JdbcDialect {
-      override def dbTag: String = "h2:"
+      override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
       override def getCatalystType(
           sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
         if (sqlType % 2 == 0) {
@@ -802,7 +802,6 @@ class JDBCSuite extends QueryTest
 
   test("Aggregated dialects: isCascadingTruncateTable") {
     def genDialect(cascadingTruncateTable: Option[Boolean]): JdbcDialect = new JdbcDialect {
-      override def dbTag: String = ""
       override def canHandle(url: String): Boolean = true
       override def getCatalystType(
         sqlType: Int,
