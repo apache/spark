@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromString, fromYearMonthString}
-import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.unsafe.types.CalendarInterval._
 
@@ -148,10 +147,5 @@ class IntervalUtilsSuite extends SparkFunSuite {
       case e: IllegalArgumentException =>
         assert(e.getMessage.contains("Cannot support (interval"))
     }
-  }
-
-  test("get epoch") {
-    val decimal = IntervalUtils.getEpoch(fromYearMonthString("0-1"))
-    assert(decimal === Decimal("2592000.000000"))
   }
 }
