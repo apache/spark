@@ -33,7 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
 import org.apache.spark.sql.execution.streaming.{Offset => _, _}
@@ -246,6 +246,8 @@ class TextSocketContinuousPartitionReader(
   private var currentOffset = startOffset
   private var current: Option[InternalRow] = None
 
+  private val projectWithoutTimestamp = UnsafeProjection.create(TextSocketReader.SCHEMA_REGULAR)
+
   override def next(): Boolean = {
     try {
       current = getRecord
@@ -277,8 +279,7 @@ class TextSocketContinuousPartitionReader(
       if (includeTimestamp) {
         rec
       } else {
-        InternalRow(rec.get(0, TextSocketReader.SCHEMA_TIMESTAMP)
-          .asInstanceOf[(String, Timestamp)]._1)
+        projectWithoutTimestamp(rec)
       }
     )
 }
