@@ -3,13 +3,13 @@
 -- CREATE VIEW
 -- https://github.com/postgres/postgres/blob/REL_12_STABLE/src/test/regress/sql/create_view.sql
 
--- Spark doesn't support geometric types
+-- [SPARK-27764] Support geometric types
 -- CREATE VIEW street AS
 --    SELECT r.name, r.thepath, c.cname AS cname
 --    FROM ONLY road r, real_city c
 --    WHERE c.outline ## r.thepath;
 
--- Spark doesn't support geometric types
+-- [SPARK-27764] Support geometric types
 -- CREATE VIEW iexit AS
 --    SELECT ih.name, ih.thepath,
 -- 	interpt_pp(ih.thepath, r.thepath) AS exit
@@ -19,7 +19,7 @@
 CREATE TABLE emp (
   name string,
   age int,
-  -- Spark doesn't support a geometric type `point`
+  -- [SPARK-27764] Support geometric types
   -- location point
   salary int,
   manager string
@@ -29,7 +29,7 @@ CREATE VIEW toyemp AS
    SELECT name, age, /* location ,*/ 12*salary AS annualsal
    FROM emp;
 
--- Spark doesn't support the COMMENT clause that is not defined in the SQL standard
+-- [SPARK-29659] Support COMMENT ON syntax
 -- Test comments
 -- COMMENT ON VIEW noview IS 'no view';
 -- COMMENT ON VIEW toyemp IS 'is a view';
@@ -41,15 +41,16 @@ DROP TABLE emp;
 -- These views are left around mainly to exercise special cases in pg_dump.
 
 -- [SPARK-19842] Informational Referential Integrity Constraints Support in Spark
--- CREATE TABLE view_base_table (key int PRIMARY KEY, data varchar(20));
+CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20));
 --
--- CREATE VIEW key_dependent_view AS
---    SELECT * FROM view_base_table GROUP BY key;
+CREATE VIEW key_dependent_view AS
+   SELECT * FROM view_base_table GROUP BY key;
 --
+-- [SPARK-19842] Informational Referential Integrity Constraints Support in Spark
 -- ALTER TABLE view_base_table DROP CONSTRAINT view_base_table_pkey;  -- fails
 
--- CREATE VIEW key_dependent_view_no_cols AS
---    SELECT FROM view_base_table GROUP BY key HAVING length(data) > 0;
+CREATE VIEW key_dependent_view_no_cols AS
+   SELECT FROM view_base_table GROUP BY key HAVING length(data) > 0;
 
 --
 -- CREATE OR REPLACE VIEW
@@ -79,17 +80,17 @@ CREATE OR REPLACE VIEW viewtest AS
 SELECT * FROM viewtest;
 
 -- should fail
--- Spark can accept the DDL query below
+-- [SPARK-29660] Dropping columns and changing column names/types are prohibited in VIEW definition
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT a FROM viewtest_tbl WHERE a <> 20;
 
 -- should fail
--- Spark can accept the DDL query below
+-- [SPARK-29660] Dropping columns and changing column names/types are prohibited in VIEW definition
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT 1, * FROM viewtest_tbl;
 
 -- should fail
--- Spark can accept the DDL query below
+-- [SPARK-29660] Dropping columns and changing column names/types are prohibited in VIEW definition
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT a, decimal(b) FROM viewtest_tbl;
 
@@ -102,7 +103,7 @@ DROP TABLE viewtest_tbl;
 
 -- tests for temporary views
 
--- Spark doesn't support the cascaded syntax below in `CREATE SCHEMA`
+-- [SPARK-29661] Support cascaded syntax in CREATE SCHEMA
 -- CREATE SCHEMA temp_view_test
 --     CREATE TABLE base_table (a int, id int) using parquet
 --     CREATE TABLE base_table2 (a int, id int) using parquet;
@@ -126,7 +127,7 @@ DESC TABLE EXTENDED v1;
 -- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW v1_temp AS SELECT * FROM temp_table;
 -- should be created in temp object schema
-CREATE TEMPORARY VIEW v2_temp AS SELECT * FROM base_table;
+CREATE TEMP VIEW v2_temp AS SELECT * FROM base_table;
 DESC TABLE EXTENDED v2_temp;
 -- should be created in temp_views schema
 CREATE VIEW temp_view_test.v2 AS SELECT * FROM base_table;
@@ -135,7 +136,7 @@ DESC TABLE EXTENDED temp_view_test.v2;
 -- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW temp_view_test.v3_temp AS SELECT * FROM temp_table;
 -- should fail
--- Spark doesn't support the cascaded syntax below in `CREATE SCHEMA`
+-- [SPARK-29661] Support cascaded syntax in CREATE SCHEMA
 -- CREATE SCHEMA test_view_schema
 --     CREATE TEMP VIEW testview AS SELECT 1;
 
@@ -211,8 +212,8 @@ USE testviewschm2;
 CREATE TABLE t1 (num int, name string) using parquet;
 CREATE TABLE t2 (num2 int, value string) using parquet;
 -- Since Spark doesn't support CREATE TEMPORARY TABLE, we used CREATE TEMPORARY VIEW instead
--- CREATE TEMPORARY TABLE tt (num2 int, value string);
-CREATE TEMPORARY VIEW tt AS SELECT * FROM VALUES
+-- CREATE TEMP TABLE tt (num2 int, value string);
+CREATE TEMP VIEW tt AS SELECT * FROM VALUES
   (1, 'a') AS tt(num2, value);
 
 CREATE VIEW nontemp1 AS SELECT * FROM t1 CROSS JOIN t2;
@@ -247,8 +248,8 @@ CREATE TABLE tbl2 (c int, d int) using parquet;
 CREATE TABLE tbl3 (e int, f int) using parquet;
 CREATE TABLE tbl4 (g int, h int) using parquet;
 -- Since Spark doesn't support CREATE TEMPORARY TABLE, we used CREATE TEMPORARY VIEW instead
--- CREATE TEMPORARY TABLE tmptbl (i int, j int);
-CREATE TEMPORARY VIEW tmptbl AS SELECT * FROM VALUES
+-- CREATE TEMP TABLE tmptbl (i int, j int);
+CREATE TEMP VIEW tmptbl AS SELECT * FROM VALUES
   (1, 1) AS temptbl(i, j);
 
 --Should be in testviewschm2
@@ -326,7 +327,7 @@ CREATE VIEW tt1 AS
        ('abc', '0123456789', 42, 'abcd'),
        ('0123456789', 'abc', 42.12, 'abc')
   ) vv(a,b,c,d);
--- Skip the test below because of PostgreSQL specific cases
+-- Replace the PostgreSQL meta command `\d` with `DESC`
 -- \d+ tt1
 SELECT * FROM tt1;
 SELECT string(a) FROM tt1;
@@ -424,7 +425,7 @@ select * from
   (select * from (tbl1 cross join tbl2) same) ss,
   (tbl3 cross join tbl4) same;
 
--- Skip the test below because of PostgreSQL specific cases
+-- Replace the PostgreSQL meta command `\d` with `DESC`
 -- \d+ view_of_joins
 
 -- Test view decompilation in the face of column addition/deletion/renaming
