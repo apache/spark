@@ -528,13 +528,15 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           boolean canSpill = iterators.stream()
                   .allMatch(iterator -> iterator instanceof UnsafeInMemorySorter.SortedIterator);
           if (canSpill) {
-            ChainedIterator clonedChainedIterator = cloneChainedIterator((ChainedIterator) upstream);
+            ChainedIterator clonedChainedIterator =
+                    cloneChainedIterator((ChainedIterator) upstream);
             UnsafeInMemorySorter.SortedIterator current =
                     (UnsafeInMemorySorter.SortedIterator) ((ChainedIterator) upstream).current;
             return spillInt(clonedChainedIterator, current.getCurrentPageNumber());
           }
         } else if (upstream instanceof UnsafeInMemorySorter.SortedIterator) {
-          UnsafeInMemorySorter.SortedIterator sortedUpStream = (UnsafeInMemorySorter.SortedIterator) upstream;
+          UnsafeInMemorySorter.SortedIterator sortedUpStream =
+                  (UnsafeInMemorySorter.SortedIterator) upstream;
           UnsafeInMemorySorter.SortedIterator clonedInMemIterator = sortedUpStream.clone();
           return spillInt(clonedInMemIterator, sortedUpStream.getCurrentPageNumber());
         }
