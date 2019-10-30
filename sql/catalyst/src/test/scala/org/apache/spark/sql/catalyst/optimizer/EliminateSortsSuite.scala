@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -27,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, ORDER_BY_ORDINAL}
+import org.apache.spark.sql.types.IntegerType
 
 class EliminateSortsSuite extends PlanTest {
   override val conf = new SQLConf().copy(CASE_SENSITIVE -> true, ORDER_BY_ORDINAL -> false)
@@ -200,34 +202,55 @@ class EliminateSortsSuite extends PlanTest {
     val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(count(1))
     val optimized = Optimize.execute(groupByPlan.analyze)
     val correctAnswer = projectPlan.groupBy('a)(count(1)).analyze
-    comparePlans(Optimize.execute(optimized), correctAnswer)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("remove orderBy in groupBy clause with sum aggs") {
     val projectPlan = testRelation.select('a, 'b)
     val unnecessaryOrderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
-    val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(sum('a))
+    val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(sum('a) + 10 as "sum")
     val optimized = Optimize.execute(groupByPlan.analyze)
-    val correctAnswer = projectPlan.groupBy('a)(sum('a)).analyze
-    comparePlans(Optimize.execute(optimized), correctAnswer)
+    val correctAnswer = projectPlan.groupBy('a)(sum('a) + 10 as "sum").analyze
+    comparePlans(optimized, correctAnswer)
   }
 
-  test("remove orderBy in groupBy clause with first aggs") {
+  test("should not remove orderBy in groupBy clause with first aggs") {
     val projectPlan = testRelation.select('a, 'b)
     val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
     val groupByPlan = orderByPlan.groupBy('a)(first('a))
     val optimized = Optimize.execute(groupByPlan.analyze)
     val correctAnswer = groupByPlan.analyze
-    comparePlans(Optimize.execute(optimized), correctAnswer)
+    comparePlans(optimized, correctAnswer)
   }
 
-  test("remove orderBy in groupBy clause with first and count aggs") {
+  test("should not remove orderBy in groupBy clause with first and count aggs") {
     val projectPlan = testRelation.select('a, 'b)
     val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
     val groupByPlan = orderByPlan.groupBy('a)(first('a), count(1))
     val optimized = Optimize.execute(groupByPlan.analyze)
     val correctAnswer = groupByPlan.analyze
-    comparePlans(Optimize.execute(optimized), correctAnswer)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("should not remove orderBy in groupBy clause with PythonUDF as aggs") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      IntegerType, Seq.empty, PythonEvalType.SQL_BATCHED_UDF, true)
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val groupByPlan = orderByPlan.groupBy('a)(pythonUdf)
+    val optimized = Optimize.execute(groupByPlan.analyze)
+    val correctAnswer = groupByPlan.analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("should not remove orderBy in groupBy clause with ScalaUDF as aggs") {
+    val scalaUdf = ScalaUDF((s: Int) => s, IntegerType, 'a :: Nil, true :: Nil)
+    val projectPlan = testRelation.select('a, 'b)
+    val orderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val groupByPlan = orderByPlan.groupBy('a)(scalaUdf)
+    val optimized = Optimize.execute(groupByPlan.analyze)
+    val correctAnswer = groupByPlan.analyze
+    comparePlans(optimized, correctAnswer)
   }
 
   test("should not remove orderBy with limit in groupBy clause") {
@@ -236,7 +259,7 @@ class EliminateSortsSuite extends PlanTest {
     val groupByPlan = orderByPlan.groupBy('a)(count(1))
     val optimized = Optimize.execute(groupByPlan.analyze)
     val correctAnswer = groupByPlan.analyze
-    comparePlans(Optimize.execute(optimized), correctAnswer)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("remove orderBy in join clause") {
@@ -246,7 +269,7 @@ class EliminateSortsSuite extends PlanTest {
     val joinPlan = unnecessaryOrderByPlan.join(projectPlanB).select('a, 'd)
     val optimized = Optimize.execute(joinPlan.analyze)
     val correctAnswer = projectPlan.join(projectPlanB).select('a, 'd).analyze
-    comparePlans(Optimize.execute(optimized), correctAnswer)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("should not remove orderBy with limit in join clause") {
@@ -256,7 +279,7 @@ class EliminateSortsSuite extends PlanTest {
     val joinPlan = orderByPlan.join(projectPlanB).select('a, 'd)
     val optimized = Optimize.execute(joinPlan.analyze)
     val correctAnswer = joinPlan.analyze
-    comparePlans(Optimize.execute(optimized), correctAnswer)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("should not remove orderBy in left join clause if there is an outer limit") {
@@ -268,7 +291,7 @@ class EliminateSortsSuite extends PlanTest {
       .limit(10)
     val optimized = Optimize.execute(joinPlan.analyze)
     val correctAnswer = PushDownOptimizer.execute(joinPlan.analyze)
-    comparePlans(Optimize.execute(optimized), correctAnswer)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("remove orderBy in right join clause event if there is an outer limit") {
@@ -283,6 +306,6 @@ class EliminateSortsSuite extends PlanTest {
       .join(projectPlanB, RightOuter)
       .limit(10)
     val correctAnswer = PushDownOptimizer.execute(noOrderByPlan.analyze)
-    comparePlans(Optimize.execute(optimized), correctAnswer)
+    comparePlans(optimized, correctAnswer)
   }
 }

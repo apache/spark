@@ -953,10 +953,10 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 
 /**
  * Removes Sort operation. This can happen:
- * 1) if the sort is noop
+ * 1) if the sort order is empty or the sort order does not have any reference
  * 2) if the child is already sorted
  * 3) if there is another Sort operator separated by 0...n Project/Filter operators
- * 4) if the Sort operator is within Join and without Limit
+ * 4) if the Sort operator is within Join without Limit and having deterministic conditions only
  * 5) if the Sort operator is within GroupBy and the aggregate function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
@@ -973,20 +973,20 @@ object EliminateSorts extends Rule[LogicalPlan] {
       g.copy(child = recursiveRemoveSort(originChild))
   }
 
-  def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = plan match {
+  private def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = plan match {
     case Sort(_, _, child) => recursiveRemoveSort(child)
     case other if canEliminateSort(other) =>
       other.withNewChildren(other.children.map(recursiveRemoveSort))
     case _ => plan
   }
 
-  def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
+  private def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
     case _ => false
   }
 
-  def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
+  private def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
     def isOrderIrrelevantAggFunction(func: AggregateFunction): Boolean = func match {
       case _: Sum => true
       case _: Min => true
@@ -997,11 +997,14 @@ object EliminateSorts extends Rule[LogicalPlan] {
       case _ => false
     }
 
-    aggs.flatMap { e =>
-      e.collect {
-        case ae: AggregateExpression => ae.aggregateFunction
-      }
-    }.forall(isOrderIrrelevantAggFunction)
+    def checkValidAggregateExpression(expr: Expression): Boolean = expr match {
+      case _: AttributeReference => true
+      case ae: AggregateExpression => isOrderIrrelevantAggFunction(ae.aggregateFunction)
+      case _: UserDefinedExpression => false
+      case e => e.children.forall(checkValidAggregateExpression)
+    }
+
+    aggs.forall(checkValidAggregateExpression)
   }
 }
 
