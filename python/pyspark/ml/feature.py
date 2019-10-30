@@ -1609,7 +1609,7 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
 
     @keyword_only
     def __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None,
-                 outputCols=None, inputCol=None, outputCol=None, , relativeError=0.001):
+                 outputCols=None, inputCol=None, outputCol=None, relativeError=0.001):
         """
         __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
                  outputCols=None, inputCol=None, outputCol=None, relativeError=0.001):
