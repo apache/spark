@@ -36,16 +36,16 @@ private[thriftserver] object SchemaMapper {
   }
 
   def toStructType(fields: TTableSchema): StructType = {
-    val schema = new StructType()
+    var schema = new StructType()
     if (fields != null) {
-      val posToField: Map[Int, StructField] = fields.getColumns.asScala
-        .map { tColumn =>
-          tColumn.position ->
-            new StructField(tColumn.columnName,
-              toDataType(tColumn.typeDesc.getTypes.get(0)))
-        }.toMap
-      posToField.keys.toSeq.sorted.foreach(pos =>
-        posToField.get(pos).map(schema.add))
+      val posToField: Map[Int, StructField] = fields.getColumns.asScala.map { tColumn =>
+        tColumn.position ->
+          new StructField(tColumn.columnName,
+            toDataType(tColumn.typeDesc.getTypes.get(0)))
+      }.toMap
+      posToField.keys.toSeq.sorted.foreach { pos =>
+        schema = schema.add(posToField(pos))
+      }
     }
     schema
   }
