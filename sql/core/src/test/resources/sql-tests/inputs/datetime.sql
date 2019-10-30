@@ -49,7 +49,12 @@ select interval '15.24 days';
 select interval '3.31 hours';
 select interval '5.38 minutes';
 select interval '12.3456789 seconds';
+select interval '-12.3456789 seconds';
+
 select interval '6.66 milliseconds';
 
 select interval '1.41 years 2.51 months 2.21 weeks 15.24 days 3.31 hours 5.38 minutes 12.3456789 seconds';
 select interval '1.42 years 2.51 months 2.21 weeks 15.24 days 3.31 hours 5.38 minutes 12.3456789 seconds';
+
+select interval '-1.41 years 2.51 months 2.21 weeks 15.24 days 3.31 hours 5.38 minutes 12.3456789 seconds';
+select interval '-1.42 years 2.51 months 2.21 weeks 15.24 days 3.31 hours 5.38 minutes 12.3456789 seconds';
