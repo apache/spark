@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapabil
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
@@ -195,7 +195,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
         withClue(cls.getName) {
           val df = spark.read.format(cls.getName).load()
           val logical = df.queryExecution.optimizedPlan.collect {
-            case d: DataSourceV2ScanRelation => d
+            case d: DataSourceV2Relation => d
           }.head
 
           val statics = logical.computeStats()
@@ -332,7 +332,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
   test("SPARK-23315: get output from canonicalized data source v2 related plans") {
     def checkCanonicalizedOutput(
         df: DataFrame, logicalNumOutput: Int, physicalNumOutput: Int): Unit = {
-      val logical = df.queryExecution.logical.collect {
+      val logical = df.queryExecution.optimizedPlan.collect {
         case d: DataSourceV2Relation => d
       }.head
       assert(logical.canonicalized.output.length == logicalNumOutput)
@@ -356,7 +356,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession {
         .read
         .option(optionName, false)
         .format(classOf[DataSourceV2WithSessionConfig].getName).load()
-      val options = df.queryExecution.logical.collectFirst {
+      val options = df.queryExecution.optimizedPlan.collectFirst {
         case d: DataSourceV2Relation => d.options
       }.get
       assert(options.get(optionName) === "false")
