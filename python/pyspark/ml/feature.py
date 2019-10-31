@@ -4131,7 +4131,7 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
     >>> df = spark.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 1.0]),), (Vectors.dense([0.0, 2.0]),)], ["a"])
     >>> indexer = VectorIndexer(maxCategories=2, inputCol="a")
-    >>> indexer.setOutputCol("indexed").setAggregationDepth(1)
+    >>> indexer.setOutputCol("indexed").setAggregationDepth(3)
     VectorIndexer...
     >>> model = indexer.fit(df)
     >>> indexer.getHandleInvalid()
