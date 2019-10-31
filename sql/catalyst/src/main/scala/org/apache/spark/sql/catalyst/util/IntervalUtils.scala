@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.util.regex.Pattern
-
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
@@ -178,9 +176,6 @@ object IntervalUtils {
     fromDayTimeString(s, UnitName.day, UnitName.second)
   }
 
-  private val dayTimePattern = ("^(?<sign>[+|-])?((?<day>\\d+) )?" +
-    "((?<hour>\\d{1,2}+):)?(?<minute>\\d{1,2}+):(?<second>(\\d{1,2}+)(\\.(\\d{1,9}+))?)$").r
-
   object UnitName extends Enumeration {
     val microsecond = Value(0, "microsecond")
     val millisecond = Value(1, "millisecond")
@@ -197,6 +192,21 @@ object IntervalUtils {
     UnitName.minute -> (0, 59, Math.multiplyExact(_, MICROS_PER_MINUTE)),
     UnitName.hour -> (0, 23, Math.multiplyExact(_, MICROS_PER_HOUR)),
     UnitName.day -> (0, Integer.MAX_VALUE, Math.multiplyExact(_, DateTimeUtils.MICROS_PER_DAY))
+  )
+
+  private val signRe = "(?<sign>[+|-])?"
+  private val dayRe = "((?<day>\\d+)\\s+)?"
+  private val hourRe = "(?<hour>\\d{1,2}+)"
+  private val minuteRe = "(?<minute>\\d{1,2}+)"
+  private val secondRe = "(?<second>(\\d{1,2}+)(\\.(\\d{1,9}+))?)"
+
+  private val dayTimeRe = Map(
+    (UnitName.minute, UnitName.second) -> (s"^$signRe$minuteRe:$secondRe$$").r,
+    (UnitName.hour, UnitName.minute) -> (s"^$signRe$hourRe:$minuteRe$$").r,
+    (UnitName.hour, UnitName.second) -> (s"^$signRe$hourRe:$minuteRe:$secondRe$$").r,
+    (UnitName.day, UnitName.hour) -> (s"^$signRe$dayRe$hourRe$$").r,
+    (UnitName.day, UnitName.minute) -> (s"^$signRe$dayRe$hourRe:$minuteRe$$").r,
+    (UnitName.day, UnitName.second) -> (s"^$signRe$dayRe$hourRe:$minuteRe:$secondRe$$").r
   )
 
   private def unitsRange(start: UnitName.Value, end: UnitName.Value): Seq[UnitName.Value] = {
@@ -218,8 +228,11 @@ object IntervalUtils {
       to: UnitName.Value): CalendarInterval = {
     require(input != null, "Interval day-time string must be not null")
     assert(input.length == input.trim.length)
-    val m = dayTimePattern.pattern.matcher(input)
-    require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input")
+    require(dayTimeRe.contains(from -> to),
+      s"Cannot support (interval '$input' $from to $to) expression")
+    val pattern = dayTimeRe(from, to).pattern
+    val m = pattern.matcher(input)
+    require(m.matches, s"Interval string must match day-time format of '$pattern': $input")
 
     def toLong(unitName: UnitName.Value): Long = {
       val name = unitName.toString
