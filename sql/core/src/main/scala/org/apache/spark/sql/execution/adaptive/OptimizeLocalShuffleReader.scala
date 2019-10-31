@@ -57,14 +57,6 @@ object BroadcastJoinWithShuffleRight {
  */
 case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
 
-  def canUseLocalShuffleReaderProbeLeft(join: BroadcastHashJoinExec): Boolean = {
-    join.buildSide == BuildRight &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.left)
-  }
-
-  def canUseLocalShuffleReaderProbeRight(join: BroadcastHashJoinExec): Boolean = {
-    join.buildSide == BuildLeft &&  ShuffleQueryStageExec.isShuffleQueryStageExec(join.right)
-  }
-
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.OPTIMIZE_LOCAL_SHUFFLE_READER_ENABLED)) {
       return plan
