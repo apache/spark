@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.util.regex.Pattern
+import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
@@ -324,5 +324,43 @@ object IntervalUtils {
         throw new IllegalArgumentException(
           "Interval string does not match second-nano format of ss.nnnnnnnnn")
     }
+  }
+
+  /**
+   * Gets interval duration
+   *
+   * @param interval The interval to get duration
+   * @param targetUnit Time units of the result
+   * @param daysPerMonth The number of days per one month. The default value is 31 days
+   *                     per month. This value was taken as the default because it is used
+   *                     in Structured Streaming for watermark calculations. Having 31 days
+   *                     per month, we can guarantee that events are not dropped before
+   *                     the end of any month (February with 29 days or January with 31 days).
+   * @return Duration in the specified time units
+   */
+  def getDuration(
+      interval: CalendarInterval,
+      targetUnit: TimeUnit,
+      daysPerMonth: Int = 31): Long = {
+    val monthsDuration = Math.multiplyExact(
+      daysPerMonth * DateTimeUtils.MICROS_PER_DAY,
+      interval.months)
+    val result = Math.addExact(interval.microseconds, monthsDuration)
+    targetUnit.convert(result, TimeUnit.MICROSECONDS)
+  }
+
+  /**
+   * Checks the interval is negative
+   *
+   * @param interval The checked interval
+   * @param daysPerMonth The number of days per one month. The default value is 31 days
+   *                     per month. This value was taken as the default because it is used
+   *                     in Structured Streaming for watermark calculations. Having 31 days
+   *                     per month, we can guarantee that events are not dropped before
+   *                     the end of any month (February with 29 days or January with 31 days).
+   * @return true if duration of the given interval is less than 0 otherwise false
+   */
+  def isNegative(interval: CalendarInterval, daysPerMonth: Int = 31): Boolean = {
+    getDuration(interval, TimeUnit.MICROSECONDS, daysPerMonth) < 0
   }
 }

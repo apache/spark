@@ -172,7 +172,7 @@ case class InSubqueryExec(
 }
 
 /**
- * Plans scalar subqueries from that are present in the given [[SparkPlan]].
+ * Plans subqueries that are present in the given [[SparkPlan]].
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {

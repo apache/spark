@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromString, fromYearMonthString}
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -147,5 +149,39 @@ class IntervalUtilsSuite extends SparkFunSuite {
       case e: IllegalArgumentException =>
         assert(e.getMessage.contains("Cannot support (interval"))
     }
+  }
+
+  test("interval duration") {
+    def duration(s: String, unit: TimeUnit, daysPerMonth: Int): Long = {
+      IntervalUtils.getDuration(fromString(s), unit, daysPerMonth)
+    }
+
+    assert(duration("0 seconds", TimeUnit.MILLISECONDS, 31) === 0)
+    assert(duration("1 month", TimeUnit.DAYS, 31) === 31)
+    assert(duration("1 microsecond", TimeUnit.MICROSECONDS, 30) === 1)
+    assert(duration("1 month -30 days", TimeUnit.DAYS, 31) === 1)
+
+    try {
+      duration(Integer.MAX_VALUE + " month", TimeUnit.SECONDS, 31)
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: ArithmeticException =>
+        assert(e.getMessage.contains("overflow"))
+    }
+  }
+
+  test("negative interval") {
+    def isNegative(s: String, daysPerMonth: Int): Boolean = {
+      IntervalUtils.isNegative(fromString(s), daysPerMonth)
+    }
+
+    assert(isNegative("-1 months", 28))
+    assert(isNegative("-1 microsecond", 30))
+    assert(isNegative("-1 month 30 days", 31))
+    assert(isNegative("2 months -61 days", 30))
+    assert(isNegative("-1 year -2 seconds", 30))
+    assert(!isNegative("0 months", 28))
+    assert(!isNegative("1 year -360 days", 31))
+    assert(!isNegative("-1 year 380 days", 31))
   }
 }
