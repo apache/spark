@@ -243,23 +243,27 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
 
             yield (tp, bp, os.getpid())
 
-        def verify(result, task_context_target, barrier_context_target):
-            tps = list(map(lambda x: x[0], result))
-            bps = list(map(lambda x: x[1], result))
-            pids = list(map(lambda x: x[2], result))
-            self.assertTrue(tps == task_context_target)
-            self.assertTrue(bps == barrier_context_target)
-            for pid in pids:
-                self.assertTrue(pid in worker_pids)
         # normal stage after normal stage
         normal_result = rdd.mapPartitions(context).collect()
-        verify(normal_result, [0, 1], [-1, -1])
+        tps, bps, pids = zip(*normal_result)
+        self.assertTrue(tps == [0, 1])
+        self.assertTrue(bps == [-1, -1])
+        for pid in pids:
+            self.assertTrue(pid in worker_pids)
         # barrier stage after normal stage
         barrier_result = rdd.barrier().mapPartitions(context).collect()
-        verify(barrier_result, [0, 1], [0, 1])
+        tps, bps, pids = zip(*barrier_result)
+        self.assertTrue(tps == [0, 1])
+        self.assertTrue(bps == [0, 1])
+        for pid in pids:
+            self.assertTrue(pid in worker_pids)
         # normal stage after barrier stage
         normal_result2 = rdd.mapPartitions(context).collect()
-        verify(normal_result2, [0, 1], [-1, -1])
+        tps, bps, pids = zip(*normal_result2)
+        self.assertTrue(tps == [0, 1])
+        self.assertTrue(bps == [-1, -1])
+        for pid in pids:
+            self.assertTrue(pid in worker_pids)
 
     def tearDown(self):
         self.sc.stop()
