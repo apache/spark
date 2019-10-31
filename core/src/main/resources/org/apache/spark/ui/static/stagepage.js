@@ -75,7 +75,7 @@ function stageEndPoint(appId) {
 
 function getColumnNameForTaskMetricSummary(columnKey) {
     switch(columnKey) {
-        case "executorRunTime":
+        case "duration":
             return "Duration";
 
         case "jvmGcTime":
@@ -667,8 +667,8 @@ $(document).ready(function () {
                         {data : "launchTime", name: "Launch Time", render: formatDate},
                         {
                             data : function (row, type) {
-                                if (row.taskMetrics && row.taskMetrics.executorRunTime) {
-                                    return type === 'display' ? formatDuration(row.taskMetrics.executorRunTime) : row.taskMetrics.executorRunTime;
+                                if (row.duration) {
+                                    return type === 'display' ? formatDuration(row.duration) : row.duration;
                                 } else {
                                     return "";
                                 }

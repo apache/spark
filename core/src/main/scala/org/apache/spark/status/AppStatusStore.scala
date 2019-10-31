@@ -207,6 +207,7 @@ private[spark] class AppStatusStore(
         quantiles = quantiles,
         executorDeserializeTime = toValues(_.executorDeserializeTime),
         executorDeserializeCpuTime = toValues(_.executorDeserializeCpuTime),
+        duration = toValues(_.duration),
         executorRunTime = toValues(_.executorRunTime),
         executorCpuTime = toValues(_.executorCpuTime),
         resultSize = toValues(_.resultSize),
@@ -300,6 +301,7 @@ private[spark] class AppStatusStore(
       executorDeserializeCpuTime = scanTasks(TaskIndexNames.DESER_CPU_TIME) { t =>
         t.executorDeserializeCpuTime
       },
+      duration = scanTasks(TaskIndexNames.DURATION) { t => t.duration },
       executorRunTime = scanTasks(TaskIndexNames.EXEC_RUN_TIME) { t => t.executorRunTime },
       executorCpuTime = scanTasks(TaskIndexNames.EXEC_CPU_TIME) { t => t.executorCpuTime },
       resultSize = scanTasks(TaskIndexNames.RESULT_SIZE) { t => t.resultSize },
@@ -347,6 +349,7 @@ private[spark] class AppStatusStore(
         val cached = new CachedQuantile(stageId, stageAttemptId, quantileToString(q), count,
           executorDeserializeTime = computedQuantiles.executorDeserializeTime(idx),
           executorDeserializeCpuTime = computedQuantiles.executorDeserializeCpuTime(idx),
+          duration = computedQuantiles.duration(idx),
           executorRunTime = computedQuantiles.executorRunTime(idx),
           executorCpuTime = computedQuantiles.executorCpuTime(idx),
           resultSize = computedQuantiles.resultSize(idx),
