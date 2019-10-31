@@ -179,7 +179,7 @@ class JDBCOptions(
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
       case other => throw new IllegalArgumentException(
         s"Invalid value `$other` for parameter `$JDBC_TXN_ISOLATION_LEVEL`. This can be " +
-          s"`NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`."
+          "`NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`."
       )
     }
   // An option to execute custom SQL before fetching data from the remote DB
