@@ -73,7 +73,11 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       createAlterTable(nameParts, catalog, tableName, changes)
 
     case AlterTableSetLocationStatement(
-         nameParts @ NonSessionCatalog(catalog, tableName), newLoc) =>
+         nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, newLoc) =>
+      if (partitionSpec.nonEmpty) {
+        throw new AnalysisException(
+          "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
+      }
       val changes = Seq(TableChange.setProperty("location", newLoc))
       createAlterTable(nameParts, catalog, tableName, changes)
 
