@@ -210,12 +210,12 @@ class SparkContext(object):
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
-        if sys.version_info < (3, 0):
+        if sys.version_info < (3, 6):
             with warnings.catch_warnings():
                 warnings.simplefilter("once")
                 warnings.warn(
-                    "Support for Python 2 is deprecated as of Spark 3.0. "
-                    "See the plan for dropping Python 2 support at "
+                    "Support for Python 2 and Python 3 prior to version 3.6 is deprecated as "
+                    "of Spark 3.0. See also the plan for dropping Python 2 support at "
                     "https://spark.apache.org/news/plan-for-dropping-python-2-support.html.",
                     DeprecationWarning)
 

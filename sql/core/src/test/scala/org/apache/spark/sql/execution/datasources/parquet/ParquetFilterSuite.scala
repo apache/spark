@@ -33,8 +33,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
+import org.apache.spark.sql.execution.datasources.orc.OrcFilters
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
@@ -1483,10 +1484,12 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
 
       query.queryExecution.optimizedPlan.collectFirst {
         case PhysicalOperation(_, filters,
-            DataSourceV2ScanRelation(_, scan: ParquetScan, _)) =>
+        DataSourceV2Relation(parquetTable: ParquetTable, _, options)) =>
           assert(filters.nonEmpty, "No filter is analyzed from the given query")
+          val scanBuilder = parquetTable.newScanBuilder(options)
           val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter).toArray
-          val pushedFilters = scan.pushedFilters
+          scanBuilder.pushFilters(sourceFilters)
+          val pushedFilters = scanBuilder.pushedFilters()
           assert(pushedFilters.nonEmpty, "No filter is pushed down")
           val schema = new SparkToParquetSchemaConverter(conf).convert(df.schema)
           val parquetFilters = createParquetFilters(schema)

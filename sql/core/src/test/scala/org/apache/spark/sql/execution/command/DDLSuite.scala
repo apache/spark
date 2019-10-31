@@ -2089,7 +2089,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           val message = intercept[AnalysisException] {
             sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
           }.getMessage
-          assert(message.contains("SHOW COLUMNS with conflicting databases"))
+          assert(message.contains(
+            s"SHOW COLUMNS with conflicting databases: " +
+              s"'${db.toUpperCase(Locale.ROOT)}' != '$db'"))
         }
       }
     }

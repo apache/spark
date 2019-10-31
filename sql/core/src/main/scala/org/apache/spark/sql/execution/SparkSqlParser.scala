@@ -123,19 +123,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * A command for users to list the column names for a table.
-   * This function creates a [[ShowColumnsCommand]] logical plan.
-   *
-   * The syntax of using this command in SQL is:
-   * {{{
-   *   SHOW COLUMNS (FROM | IN) table_identifier [(FROM | IN) database];
-   * }}}
-   */
-  override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
-    ShowColumnsCommand(Option(ctx.db).map(_.getText), visitTableIdentifier(ctx.tableIdentifier))
-  }
-
-  /**
    * Create a [[RefreshResource]] logical plan.
    */
   override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {
@@ -513,22 +500,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null,
       retainData = false)
-  }
-
-  /**
-   * Create an [[AlterTableSetLocationCommand]] command for a partition.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table PARTITION spec SET LOCATION "loc";
-   * }}}
-   */
-  override def visitSetPartitionLocation(
-      ctx: SetPartitionLocationContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetLocationCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Some(visitNonOptionalPartitionSpec(ctx.partitionSpec)),
-      visitLocationSpec(ctx.locationSpec))
   }
 
   /**
