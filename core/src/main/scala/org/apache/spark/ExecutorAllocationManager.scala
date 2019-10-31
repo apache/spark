@@ -30,6 +30,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.dynalloc.ExecutorMonitor
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
@@ -125,6 +126,7 @@ private[spark] class ExecutorAllocationManager(
   private val tasksPerExecutorForFullParallelism =
     conf.get(EXECUTOR_CORES) / conf.get(CPUS_PER_TASK)
 
+  // TODO - make this configurable by ResourceProfile in the future
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
@@ -267,12 +269,9 @@ private[spark] class ExecutorAllocationManager(
     addTime = 0L
     // numExecutorsTarget = initialNumExecutors
     numExecutorsTargetPerResourceProfile.keys.foreach { rp =>
-      if (rp.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {
-        numExecutorsTargetPerResourceProfile(rp) = initialNumExecutors
-      } else {
-        // TODO - do we really want this 0?
-        numExecutorsTargetPerResourceProfile(rp) = 0
-      }
+      // Note this means every profile will be allowed to have initial number
+      // we may want to make this configurable per Profile in the future
+      numExecutorsTargetPerResourceProfile(rp) = initialNumExecutors
     }
     executorMonitor.reset()
   }
@@ -282,12 +281,14 @@ private[spark] class ExecutorAllocationManager(
    * and pending tasks, rounded up.
    */
   private def maxNumExecutorsNeededPerResourceProfile(rp: Int): Int = {
-    // TODO - we need to break this down by ResourceProfile
     val numRunningOrPendingTasks = listener.totalPendingTasksPerResourceProfile(rp) +
       listener.totalRunningTasksPerResourceProfile(rp)
     math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
-    tasksPerExecutorForFullParallelism)
-    .toInt
+      tasksPerExecutorForFullParallelism).toInt
+  }
+
+  private def totalRunningTasksPerResourceProfile(id: Int): Int = synchronized {
+    listener.totalRunningTasksPerResourceProfile(id)
   }
 
   /**
@@ -339,7 +340,7 @@ private[spark] class ExecutorAllocationManager(
         logInfo("max needed for rp: " + rProfId + " is: " + maxNeeded)
         val resourceProfile = listener.resourceProfileIdToResourceProfile(rProfId)
         val targetExecs =
-          numExecutorsTargetPerResourceProfile.getOrElseUpdate(resourceProfile, 0)
+          numExecutorsTargetPerResourceProfile.getOrElseUpdate(resourceProfile, initialNumExecutors)
         if (maxNeeded < targetExecs) {
           // The target number exceeds the number we actually need, so stop adding new
           // executors and inform the cluster manager to cancel the extra pending requests
@@ -465,13 +466,13 @@ private[spark] class ExecutorAllocationManager(
     val oldNumExecutorsTarget =
       numExecutorsTargetPerResourceProfile.getOrElseUpdate(rp, 0)
     // Do not request more executors if it would put our target over the upper bound
+    // this is doing a max check per ResourceProfile
     if (oldNumExecutorsTarget >= maxNumExecutors) {
       logDebug(s"Not adding executors because our current target total " +
         s"is already ${oldNumExecutorsTarget} (limit $maxNumExecutors)")
       numExecutorsToAddPerResourceProfileId(rp.id) = 1
       return 0
     }
-
 
     // There's no point in wasting time ramping up to the number of executors we already have, so
     // make sure our target is at least as much as our current allocation:
@@ -499,6 +500,10 @@ private[spark] class ExecutorAllocationManager(
     delta
   }
 
+  private def getResourceProfileIdOfExecutor(executorId: String): Int = {
+    executorMonitor.getResourceProfileId(executorId)
+  }
+
   /**
    * Request the cluster manager to remove the given executors.
    * Returns the list of executors which are removed.
@@ -511,9 +516,13 @@ private[spark] class ExecutorAllocationManager(
 
     var newExecutorTotal = numExistingExecutors
     executors.foreach { executorIdToBeRemoved =>
-      val rpId = executorMonitor.getResourceProfileId(executorIdToBeRemoved)
+      val rpId = getResourceProfileIdOfExecutor(executorIdToBeRemoved)
+      if (rpId == UNKNOWN_RESOURCE_PROFILE_ID) {
+        logWarning(s"Not removing executor $executorIdsToBeRemoved because couldn't find " +
+          "ResourceProfile for it!")
+      }
       val rp = listener.resourceProfileIdToResourceProfile(rpId)
-      // TODO - ideally min num per stage, otherwise min * num stages executors
+      // TODO - ideally min num per stage (or ResourceProfile), otherwise min * num stages executors
       if (newExecutorTotal - 1 < minNumExecutors) {
         logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
           s"$newExecutorTotal executor(s) left (minimum number of executor limit $minNumExecutors)")
