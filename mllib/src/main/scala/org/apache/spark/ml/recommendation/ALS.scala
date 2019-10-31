@@ -926,25 +926,25 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       checkpointInterval: Int = 10,
       seed: Long = 0L)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
-    train(ratings, rank, numUserBlocks, numItemBlocks, maxIter, regParam, implicitPrefs, alpha,
+    train[ID](ratings, rank, numUserBlocks, numItemBlocks, maxIter, regParam, implicitPrefs, alpha,
       nonnegative, intermediateRDDStorageLevel, finalRDDStorageLevel, checkpointInterval, seed, 2)
   }
 
   private def train[ID: ClassTag]( // scalastyle:ignore
       ratings: RDD[Rating[ID]],
-      rank: Int = 10,
-      numUserBlocks: Int = 10,
-      numItemBlocks: Int = 10,
-      maxIter: Int = 10,
-      regParam: Double = 0.1,
-      implicitPrefs: Boolean = false,
-      alpha: Double = 1.0,
-      nonnegative: Boolean = false,
-      intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
-      finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
-      checkpointInterval: Int = 10,
-      seed: Long = 0L,
-      depth: Int = 2)(
+      rank: Int,
+      numUserBlocks: Int,
+      numItemBlocks: Int,
+      maxIter: Int,
+      regParam: Double,
+      implicitPrefs: Boolean,
+      alpha: Double,
+      nonnegative: Boolean,
+      intermediateRDDStorageLevel: StorageLevel,
+      finalRDDStorageLevel: StorageLevel,
+      checkpointInterval: Int,
+      seed: Long,
+      depth: Int)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
 
     require(!ratings.isEmpty(), s"No ratings available from $ratings")
