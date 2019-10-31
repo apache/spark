@@ -169,7 +169,7 @@ public class ExternalShuffleBlockResolverSuite {
     ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo(SORT_MANAGER));
     String[] execIds = new String[] {"exec2", "exec3"};
-    ByteBuffer status = resolver.areExecutorsRegistered("app0", execIds);
-    assert(status.equals(ByteBuffer.wrap(new byte[] {1, 0})));
+    ByteBuffer statuses = resolver.areExecutorsRegistered("app0", execIds);
+    assert(statuses.equals(ByteBuffer.wrap(new byte[] {1, 0})));
   }
 }
