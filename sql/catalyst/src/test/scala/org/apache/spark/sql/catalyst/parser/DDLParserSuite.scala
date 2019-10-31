@@ -1215,14 +1215,16 @@ class DDLParserSuite extends AnalysisTest {
       Map("dt" -> "2008-09-09", "country" -> "uk"))
     comparePlans(parsed1, expected1)
 
-    val sql2 = "ALTER TABLE a.b.c PARTITION (ds='2017-06-10') RENAME TO PARTITION " +
-      "(ds='2018-06-10')"
+    val sql2 =
+      """
+        |ALTER TABLE a.b.c PARTITION (ds='2017-06-10')
+        |RENAME TO PARTITION (ds='2018-06-10')
+      """.stripMargin
+    val parsed2 = parsePlan(sql2)
     val expected2 = AlterTableRenamePartitionStatement(
       Seq("a", "b", "c"),
       Map("ds" -> "2017-06-10"),
       Map("ds" -> "2018-06-10"))
-
-    val parsed2 = parsePlan(sql2)
     comparePlans(parsed2, expected2)
   }
 

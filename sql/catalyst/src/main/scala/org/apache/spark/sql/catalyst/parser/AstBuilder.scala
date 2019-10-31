@@ -2952,7 +2952,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     AlterTableRecoverPartitionsStatement(visitMultipartIdentifier(ctx.multipartIdentifier))
   }
 
-
   /**
    * Create an [[AlterTableRenamePartitionStatement]]
    *
