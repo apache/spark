@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
 import java.util.{Locale, UUID}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -45,7 +44,8 @@ import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.sql.thriftserver.auth.PlainSaslHelper
-import org.apache.spark.sql.thriftserver.cli.RowSet
+import org.apache.spark.sql.thriftserver.cli.{FetchOrientation, FetchType, GetInfoType, RowSet}
+import org.apache.spark.sql.thriftserver.cli.thrift.{TCLIService, ThriftCLIServiceClient}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 object TestData {
@@ -60,82 +60,81 @@ object TestData {
 class SparkThriftBinaryServerSuite extends SparkThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
-  //  private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
-  //    // Transport creation logic below mimics HiveConnection.createBinaryTransport
-  //    val rawTransport = new TSocket("localhost", serverPort)
-  //    val user = System.getProperty("user.name")
-  //    val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
-  //    val protocol = new TBinaryProtocol(transport)
-  //    val client = new ThriftCLIServiceClient(new TCLIService.Client(protocol))
-  //
-  //    transport.open()
-  //    try f(client) finally transport.close()
-  //  }
+  private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
+    // Transport creation logic below mimics HiveConnection.createBinaryTransport
+    val rawTransport = new TSocket("localhost", serverPort)
+    val user = System.getProperty("user.name")
+    val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
+    val protocol = new TBinaryProtocol(transport)
+    val client = new ThriftCLIServiceClient(new TCLIService.Client(protocol))
 
-  //  test("GetInfo Thrift API") {
-  //    withCLIServiceClient { client =>
-  //      val user = System.getProperty("user.name")
-  //      val sessionHandle = client.openSession(user, "")
-  //
-  //      assertResult("Spark SQL", "Wrong GetInfo(CLI_DBMS_NAME) result") {
-  //        client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_NAME).getStringValue
-  //      }
-  //
-  //      assertResult("Spark SQL", "Wrong GetInfo(CLI_SERVER_NAME) result") {
-  //        client.getInfo(sessionHandle, GetInfoType.CLI_SERVER_NAME).getStringValue
-  //      }
-  //
-  //      assertResult(true, "Spark version shouldn't be \"Unknown\"") {
-  //        val version = client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_VER).getStringValue
-  //        logInfo(s"Spark version: $version")
-  //        version != "Unknown"
-  //      }
-  //    }
-  //  }
+    transport.open()
+    try f(client) finally transport.close()
+  }
 
-  //  test("SPARK-16563 ThriftCLIService FetchResults repeat fetching result") {
-  //    withCLIServiceClient { client =>
-  //      val user = System.getProperty("user.name")
-  //      val sessionHandle = client.openSession(user, "")
-  //
-  //      withJdbcStatement("test_16563") { statement =>
-  //        val queries = Seq(
-  //          "CREATE TABLE test_16563(key INT, val STRING)",
-  //          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_16563")
-  //
-  //        queries.foreach(statement.execute)
-  //        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
-  //        val operationHandle = client.executeStatement(
-  //          sessionHandle,
-  //          "SELECT * FROM test_16563",
-  //          confOverlay)
-  //
-  //        // Fetch result first time
-  //        assertResult(5, "Fetching result first time from next row") {
-  //
-  //          val rows_next = client.fetchResults(
-  //            operationHandle,
-  //            FetchOrientation.FETCH_NEXT,
-  //            1000,
-  //            FetchType.QUERY_OUTPUT)
-  //
-  //          rows_next.numRows()
-  //        }
-  //
-  //        // Fetch result second time from first row
-  //        assertResult(5, "Repeat fetching result from first row") {
-  //
-  //          val rows_first = client.fetchResults(
-  //            operationHandle,
-  //            FetchOrientation.FETCH_FIRST,
-  //            1000,
-  //            FetchType.QUERY_OUTPUT)
-  //
-  //          rows_first.numRows()
-  //        }
-  //      }
-  //    }
-  //  }
+  test("GetInfo Thrift API") {
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+
+      assertResult("Spark SQL", "Wrong GetInfo(CLI_DBMS_NAME) result") {
+        client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_NAME).getStringValue
+      }
+
+      assertResult("Spark SQL", "Wrong GetInfo(CLI_SERVER_NAME) result") {
+        client.getInfo(sessionHandle, GetInfoType.CLI_SERVER_NAME).getStringValue
+      }
+
+      assertResult(true, "Spark version shouldn't be \"Unknown\"") {
+        val version = client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_VER).getStringValue
+        logInfo(s"Spark version: $version")
+        version != "Unknown"
+      }
+    }
+  }
+
+  test("SPARK-16563 ThriftCLIService FetchResults repeat fetching result") {
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+
+      withJdbcStatement("test_16563") { statement =>
+        val queries = Seq(
+          "CREATE TABLE test_16563(key INT, val STRING)",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_16563")
+        queries.foreach(statement.execute)
+        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+        val operationHandle = client.executeStatement(
+          sessionHandle,
+          "SELECT * FROM test_16563",
+          confOverlay)
+
+        // Fetch result first time
+        assertResult(5, "Fetching result first time from next row") {
+
+          val rows_next = client.fetchResults(
+            operationHandle,
+            FetchOrientation.FETCH_NEXT,
+            1000,
+            FetchType.QUERY_OUTPUT)
+
+          rows_next.numRows
+        }
+
+        // Fetch result second time from first row
+        assertResult(5, "Repeat fetching result from first row") {
+
+          val rows_first = client.fetchResults(
+            operationHandle,
+            FetchOrientation.FETCH_FIRST,
+            1000,
+            FetchType.QUERY_OUTPUT)
+
+          rows_first.numRows
+        }
+      }
+    }
+  }
 
   test("Support beeline --hiveconf and --hivevar") {
     withJdbcStatement() { statement =>
@@ -629,31 +628,31 @@ class SparkThriftBinaryServerSuite extends SparkThriftJdbcTest {
     }
   }
 
-  //  test("SPARK-23547 Cleanup the .pipeout file when the Hive Session closed") {
-  //    def pipeoutFileList(sessionID: UUID): Array[File] = {
-  //      lScratchDir.listFiles(new FilenameFilter {
-  //        override def accept(dir: File, name: String): Boolean = {
-  //          name.startsWith(sessionID.toString) && name.endsWith(".pipeout")
-  //        }
-  //      })
-  //    }
-  //
-  //    withCLIServiceClient { client =>
-  //      val user = System.getProperty("user.name")
-  //      val sessionHandle = client.openSession(user, "")
-  //      val sessionID = sessionHandle.getSessionId
-  //
-  //      if (HiveUtils.isHive23) {
-  //        assert(pipeoutFileList(sessionID).length == 2)
-  //      } else {
-  //        assert(pipeoutFileList(sessionID).length == 1)
-  //      }
-  //
-  //      client.closeSession(sessionHandle)
-  //
-  //      assert(pipeoutFileList(sessionID).length == 0)
-  //    }
-  //  }
+  test("SPARK-23547 Cleanup the .pipeout file when the Hive Session closed") {
+    def pipeoutFileList(sessionID: UUID): Array[File] = {
+      lScratchDir.listFiles(new FilenameFilter {
+        override def accept(dir: File, name: String): Boolean = {
+          name.startsWith(sessionID.toString) && name.endsWith(".pipeout")
+        }
+      })
+    }
+
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+      val sessionID = sessionHandle.getSessionId
+
+      if (HiveUtils.isHive23) {
+        assert(pipeoutFileList(sessionID).length == 2)
+      } else {
+        assert(pipeoutFileList(sessionID).length == 1)
+      }
+
+      client.closeSession(sessionHandle)
+
+      assert(pipeoutFileList(sessionID).length == 0)
+    }
+  }
 
   test("SPARK-24829 Checks cast as float") {
     withJdbcStatement() { statement =>
@@ -686,91 +685,91 @@ class SparkThriftBinaryServerSuite extends SparkThriftJdbcTest {
     }
   }
 
-  //  test("ThriftCLIService FetchResults FETCH_FIRST, FETCH_NEXT, FETCH_PRIOR") {
-  //    def checkResult(rows: RowSet, start: Long, end: Long): Unit = {
-  //      assert(rows.getStartOffset == start)
-  //      assert(rows.numRows == end - start)
-  //      rows.iterator.asScala.zip((start until end).iterator).foreach { case (row, v) =>
-  //        assert(row(0).asInstanceOf[Long] === v)
-  //      }
-  //    }
-  //
-  //    withCLIServiceClient { client =>
-  //      val user = System.getProperty("user.name")
-  //      val sessionHandle = client.openSession(user, "")
-  //
-  //      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
-  //      val operationHandle = client.executeStatement(
-  //        sessionHandle,
-  //        "SELECT * FROM range(10)",
-  //        confOverlay) // 10 rows result with sequence 0, 1, 2, ..., 9
-  //      var rows: RowSet = null
-  //
-  //      // Fetch 5 rows with FETCH_NEXT
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_NEXT, 5, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 0, 5) // fetched [0, 5)
-  //
-  //      // Fetch another 2 rows with FETCH_NEXT
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_NEXT, 2, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 5, 7) // fetched [5, 7)
-  //
-  //      // FETCH_PRIOR 3 rows
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_PRIOR, 3, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 2, 5) // fetched [2, 5)
-  //
-  //      // FETCH_PRIOR again will scroll back to 0, and then the returned result
-  //      // may overlap the results of previous FETCH_PRIOR
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_PRIOR, 3, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 0, 3) // fetched [0, 3)
-  //
-  //      // FETCH_PRIOR again will stay at 0
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_PRIOR, 4, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 0, 4) // fetched [0, 4)
-  //
-  //      // FETCH_NEXT will continue moving forward from offset 4
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_NEXT, 10, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 4, 10) // fetched [4, 10) until the end of results
-  //
-  //      // FETCH_NEXT is at end of results
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_NEXT, 5, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 10, 10) // fetched empty [10, 10) (at end of results)
-  //
-  //      // FETCH_NEXT is at end of results again
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_NEXT, 2, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 10, 10) // fetched empty [10, 10) (at end of results)
-  //
-  //      // FETCH_PRIOR 1 rows yet again
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_PRIOR, 1, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 9, 10) // fetched [9, 10)
-  //
-  //      // FETCH_NEXT will return 0 yet again
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_NEXT, 5, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 10, 10) // fetched empty [10, 10) (at end of results)
-  //
-  //      // FETCH_FIRST results from first row
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_FIRST, 3, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 0, 3) // fetch [0, 3)
-  //
-  //      // Fetch till the end rows with FETCH_NEXT"
-  //      rows = client.fetchResults(
-  //        operationHandle, FetchOrientation.FETCH_NEXT, 1000, FetchType.QUERY_OUTPUT)
-  //      checkResult(rows, 3, 10) // fetched [3, 10)
-  //
-  //      client.closeOperation(operationHandle)
-  //      client.closeSession(sessionHandle)
-  //    }
-  //  }
+  test("ThriftCLIService FetchResults FETCH_FIRST, FETCH_NEXT, FETCH_PRIOR") {
+    def checkResult(rows: RowSet, start: Long, end: Long): Unit = {
+      assert(rows.getStartOffset == start)
+      assert(rows.numRows == end - start)
+      rows.iterator.zip((start until end).iterator).foreach { case (row, v) =>
+        assert(row(0).asInstanceOf[Long] === v)
+      }
+    }
+
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val operationHandle = client.executeStatement(
+        sessionHandle,
+        "SELECT * FROM range(10)",
+        confOverlay) // 10 rows result with sequence 0, 1, 2, ..., 9
+    var rows: RowSet = null
+
+      // Fetch 5 rows with FETCH_NEXT
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_NEXT, 5, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 0, 5) // fetched [0, 5)
+
+      // Fetch another 2 rows with FETCH_NEXT
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_NEXT, 2, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 5, 7) // fetched [5, 7)
+
+      // FETCH_PRIOR 3 rows
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_PRIOR, 3, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 2, 5) // fetched [2, 5)
+
+      // FETCH_PRIOR again will scroll back to 0, and then the returned result
+      // may overlap the results of previous FETCH_PRIOR
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_PRIOR, 3, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 0, 3) // fetched [0, 3)
+
+      // FETCH_PRIOR again will stay at 0
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_PRIOR, 4, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 0, 4) // fetched [0, 4)
+
+      // FETCH_NEXT will continue moving forward from offset 4
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_NEXT, 10, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 4, 10) // fetched [4, 10) until the end of results
+
+      // FETCH_NEXT is at end of results
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_NEXT, 5, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 10, 10) // fetched empty [10, 10) (at end of results)
+
+      // FETCH_NEXT is at end of results again
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_NEXT, 2, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 10, 10) // fetched empty [10, 10) (at end of results)
+
+      // FETCH_PRIOR 1 rows yet again
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_PRIOR, 1, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 9, 10) // fetched [9, 10)
+
+      // FETCH_NEXT will return 0 yet again
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_NEXT, 5, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 10, 10) // fetched empty [10, 10) (at end of results)
+
+      // FETCH_FIRST results from first row
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_FIRST, 3, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 0, 3) // fetch [0, 3)
+
+      // Fetch till the end rows with FETCH_NEXT"
+      rows = client.fetchResults(
+        operationHandle, FetchOrientation.FETCH_NEXT, 1000, FetchType.QUERY_OUTPUT)
+      checkResult(rows, 3, 10) // fetched [3, 10)
+
+      client.closeOperation(operationHandle)
+      client.closeSession(sessionHandle)
+    }
+  }
 }
 
 class SingleSessionSuite extends SparkThriftJdbcTest {
