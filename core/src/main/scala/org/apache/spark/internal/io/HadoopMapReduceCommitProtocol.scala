@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configurable
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -83,13 +83,43 @@ class HadoopMapReduceCommitProtocol(
    * e.g. a=1/b=2. Files under these partitions will be saved into staging directory and moved to
    * destination directory at the end, if `dynamicPartitionOverwrite` is true.
    */
-  @transient private var partitionPaths: mutable.Set[String] = null
+  @transient private[spark] var partitionPaths: mutable.Set[String] = null
 
   /**
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  private def stagingDir = new Path(path, ".spark-staging-" + jobId)
+  private[spark] def stagingDir = new Path(path, ".spark-staging-" + jobId)
+
+  /**
+   * Tracks the staging task files with dynamicPartitionOverwrite=true.
+   */
+  @transient private[spark] var dynamicStagingTaskFiles: mutable.Set[Path] = null
+
+  /**
+   * Get staging path for a task with dynamicPartitionOverwrite=true.
+   */
+  private def dynamicStagingTaskPath(dir: String, taskContext: TaskAttemptContext): Path = {
+    val attemptID = taskContext.getTaskAttemptID.getId
+    new Path(stagingDir, s"$dir-$attemptID")
+  }
+
+  /**
+   * Get responding partition path for a task with dynamicPartitionOverwrite=true.
+   */
+  private[spark] def getDynamicPartitionPath(
+      fs: FileSystem,
+      stagingTaskFile: Path,
+      context: TaskAttemptContext): Path = {
+    val attemptID = context.getTaskAttemptID.getId
+    val stagingPartitionPath = stagingTaskFile.getParent
+    val partitionPathName = stagingPartitionPath.getName.stripSuffix(s"-$attemptID")
+    val partitionPath = new Path(stagingPartitionPath.getParent, partitionPathName)
+    if (!fs.exists(partitionPath)) {
+      fs.mkdirs(partitionPath)
+    }
+    partitionPath
+  }
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
@@ -118,7 +148,13 @@ class HadoopMapReduceCommitProtocol(
     }
 
     dir.map { d =>
-      new Path(new Path(stagingDir, d), filename).toString
+      if (dynamicPartitionOverwrite) {
+        val tempFile = new Path(dynamicStagingTaskPath(d, taskContext), filename)
+        dynamicStagingTaskFiles += tempFile
+        tempFile.toString
+      } else {
+        new Path(new Path(stagingDir, d), filename).toString
+      }
     }.getOrElse {
       new Path(stagingDir, filename).toString
     }
@@ -236,6 +272,7 @@ class HadoopMapReduceCommitProtocol(
     committer.setupTask(taskContext)
     addedAbsPathFiles = mutable.Map[String, String]()
     partitionPaths = mutable.Set[String]()
+    dynamicStagingTaskFiles = mutable.Set[Path]()
   }
 
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
@@ -243,6 +280,25 @@ class HadoopMapReduceCommitProtocol(
     logTrace(s"Commit task ${attemptId}")
     SparkHadoopMapRedUtil.commitTask(
       committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
+    if (dynamicPartitionOverwrite) {
+      val fs = stagingDir.getFileSystem(taskContext.getConfiguration)
+      dynamicStagingTaskFiles.foreach { stagingTaskFile =>
+        val fileName = stagingTaskFile.getName
+        val partitionPath = getDynamicPartitionPath(fs, stagingTaskFile, taskContext)
+        val finalFile = new Path(partitionPath, fileName)
+        if (!fs.exists(finalFile) && !fs.rename(stagingTaskFile, finalFile)) {
+          if (fs.exists(finalFile)) {
+            logWarning(
+              s"""
+                | Some other task had renamed a staging dynamic file to $finalFile.
+                | See details in SPARK-29302.
+              """.stripMargin)
+          } else {
+            throw new IOException(s"Failed to rename $stagingTaskFile to $finalFile")
+          }
+        }
+      }
+    }
     new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
   }
 
