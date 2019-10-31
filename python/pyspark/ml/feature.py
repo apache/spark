@@ -3035,6 +3035,13 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
         """
         return self._set(outputCol=value)
 
+    @since("3.0.0")
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
     def _create_model(self, java_model):
         return RobustScalerModel(java_model)
 

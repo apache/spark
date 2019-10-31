@@ -383,7 +383,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, weightCol, offsetCol, predictionCol,
-      linkPredictionCol, family, solver, fitIntercept, link, maxIter, regParam, tol)
+      linkPredictionCol, family, solver, fitIntercept, link, maxIter, regParam, tol,
+      aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
     if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {

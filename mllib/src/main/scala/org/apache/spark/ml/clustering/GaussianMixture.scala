@@ -375,7 +375,8 @@ class GaussianMixture @Since("2.0.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
+    instr.logParams(this, featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol,
+      aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
     val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(
