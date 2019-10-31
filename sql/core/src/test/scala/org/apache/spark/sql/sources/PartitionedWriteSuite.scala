@@ -24,6 +24,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -164,4 +165,46 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
       assert(e.getMessage.contains("Found duplicate column(s) b, b: `b`;"))
     }
   }
+
+  test("SPARK-27194 SPARK-29302: Define a Spark staging output committer to fix " +
+    "FileAlreadyExistingException") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+      SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[ConstantJobIdCommitProtocol].getName) {
+      withTempDir { d =>
+        withTable("t") {
+          sql(
+            s"""
+              | create table t(c1 int, p1 int) using parquet partitioned by (p1)
+              | location '${d.getAbsolutePath}'
+            """.stripMargin)
+
+          // File commit protocol is ConstantJobIdCommitProtocol, whose jobId is 'jobId'.
+          val stagingDir = new File(d, ".spark-staging-jobId")
+          stagingDir.mkdirs()
+          val stagingPartDir = new File(stagingDir, "p1=2")
+          stagingPartDir.mkdirs()
+          val conflictTaskFile = new File(stagingPartDir, "part-00000-jobId.c000.snappy.parquet")
+          conflictTaskFile.createNewFile()
+
+          val df = Seq((1, 2)).toDF("c1", "p1")
+          df.write
+            .partitionBy("p1")
+            .mode("overwrite")
+            .saveAsTable("t")
+          checkAnswer(sql("select * from t"), df)
+        }
+      }
+    }
+  }
 }
+
+/**
+ * A file commit protocol with constant jobId.
+ */
+private class ConstantJobIdCommitProtocol(
+    jobId: String,
+    path: String,
+    dynamicPartitionOverwrite: Boolean)
+  extends HadoopMapReduceCommitProtocol("jobId", path, dynamicPartitionOverwrite)
