@@ -80,7 +80,7 @@ case class CreateTableLikeCommand(
       val providerWithLowerCase = provider.get.toLowerCase(Locale.ROOT)
       // check the validation of provider input, invalid provider will throw
       // AnalysisException or ClassNotFoundException or NoSuchMethodException
-      DataSource.lookupDataSourceV2(providerWithLowerCase, sparkSession.sessionState.conf)
+      DataSource.lookupDataSource(providerWithLowerCase, sparkSession.sessionState.conf)
       Some(providerWithLowerCase)
     } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
       Some(sparkSession.sessionState.conf.defaultDataSourceName)
