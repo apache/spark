@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.",
   examples = """
@@ -32,10 +33,11 @@ import org.apache.spark.sql.types._
        25
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
        NULL
-      > SELECT _FUNC_(cast(v as interval)) FROM VALUES ('1 seconds'), ('2 seconds'), (null) tab(col)
+      > SELECT _FUNC_(cast(col as interval)) FROM VALUES ('1 seconds'), ('2 seconds'), (null) tab(col);
        interval 3 seconds
   """,
   since = "1.0.0")
+// scalastyle:on line.size.limit
 case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = child :: Nil
