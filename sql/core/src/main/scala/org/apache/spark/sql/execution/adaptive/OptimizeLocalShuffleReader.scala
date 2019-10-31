@@ -24,8 +24,24 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartit
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.internal.SQLConf
+
+object BroadcastJoinWithShuffleLeft {
+  def unapply(plan: SparkPlan): Option[(QueryStageExec, BuildSide)] = plan match {
+    case join: BroadcastHashJoinExec if ShuffleQueryStageExec.isShuffleQueryStageExec(join.left) =>
+      Some((join.left.asInstanceOf[QueryStageExec], join.buildSide))
+    case _ => None
+  }
+}
+
+object BroadcastJoinWithShuffleRight {
+  def unapply(plan: SparkPlan): Option[(QueryStageExec, BuildSide)] = plan match {
+    case join: BroadcastHashJoinExec if ShuffleQueryStageExec.isShuffleQueryStageExec(join.right) =>
+      Some((join.right.asInstanceOf[QueryStageExec], join.buildSide))
+    case _ => None
+  }
+}
 
 /**
  * A rule to optimize the shuffle reader to local reader as far as possible
@@ -55,12 +71,12 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     }
     // Add local reader in probe side.
     val withProbeSideLocalReader = plan.transformDown {
-      case join: BroadcastHashJoinExec if canUseLocalShuffleReaderProbeRight(join) =>
-        val localReader = LocalShuffleReaderExec(join.right.asInstanceOf[QueryStageExec])
-        join.copy(right = localReader)
-      case join: BroadcastHashJoinExec if canUseLocalShuffleReaderProbeLeft(join) =>
-        val localReader = LocalShuffleReaderExec(join.left.asInstanceOf[QueryStageExec])
-        join.copy(left = localReader)
+      case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildRight) =>
+        val localReader = LocalShuffleReaderExec(shuffleStage)
+        join.asInstanceOf[BroadcastHashJoinExec].copy(left = localReader)
+      case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildLeft) =>
+        val localReader = LocalShuffleReaderExec(shuffleStage)
+        join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
     }
 
     def numExchanges(plan: SparkPlan): Int = {
@@ -81,14 +97,12 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
     // Add the local reader in build side and and do not need to check whether
     // additional shuffle introduced.
     optimizedPlan.transformDown {
-      case join: BroadcastHashJoinExec if (join.buildSide == BuildLeft &&
-        ShuffleQueryStageExec.isShuffleQueryStageExec(join.left)) =>
-        val localReader = LocalShuffleReaderExec(join.left.asInstanceOf[QueryStageExec])
-        join.copy(left = localReader)
-      case join: BroadcastHashJoinExec if (join.buildSide == BuildRight &&
-        ShuffleQueryStageExec.isShuffleQueryStageExec(join.right)) =>
-        val localReader = LocalShuffleReaderExec(join.right.asInstanceOf[QueryStageExec])
-        join.copy(right = localReader)
+      case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildLeft) =>
+        val localReader = LocalShuffleReaderExec(shuffleStage)
+        join.asInstanceOf[BroadcastHashJoinExec].copy(left = localReader)
+      case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildRight) =>
+        val localReader = LocalShuffleReaderExec(shuffleStage)
+        join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
     }
   }
 }

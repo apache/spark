@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.adaptive.rule
+package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
