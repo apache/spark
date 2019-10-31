@@ -196,20 +196,13 @@ object IntervalUtils {
     UnitName.day -> (0, Integer.MAX_VALUE, Math.multiplyExact(_, DateTimeUtils.MICROS_PER_DAY))
   )
 
-  private val signRe = "(?<sign>[+|-])?"
-  private val dayRe = "((?<day>\\d+)\\s+)?"
+  private val signRe = "(?<sign>[+|-])"
+  private val dayRe = "((?<day>\\d+)\\s+)"
   private val hourRe = "(?<hour>\\d{1,2}+)"
   private val minuteRe = "(?<minute>\\d{1,2}+)"
   private val secondRe = "(?<second>(\\d{1,2}+)(\\.(\\d{1,9}+))?)"
-
-  private val dayTimeRe = Map(
-    (UnitName.minute, UnitName.second) -> (s"^$signRe$minuteRe:$secondRe$$").r,
-    (UnitName.hour, UnitName.minute) -> (s"^$signRe$hourRe:$minuteRe$$").r,
-    (UnitName.hour, UnitName.second) -> (s"^$signRe$hourRe:$minuteRe:$secondRe$$").r,
-    (UnitName.day, UnitName.hour) -> (s"^$signRe$dayRe$hourRe$$").r,
-    (UnitName.day, UnitName.minute) -> (s"^$signRe$dayRe$hourRe:$minuteRe$$").r,
-    (UnitName.day, UnitName.second) -> (s"^$signRe$dayRe$hourRe:$minuteRe:$secondRe$$").r
-  )
+  private val minsecRe = (s"^$signRe?$dayRe?($hourRe:)?$minuteRe:$secondRe$$").r
+  private val daysecRe = (s"^$signRe?$dayRe?$hourRe(:$minuteRe(:$secondRe)?)?$$").r
 
   private def unitsRange(start: UnitName.Value, end: UnitName.Value): Seq[UnitName.Value] = {
     (start.id to end.id).map(UnitName(_))
@@ -230,9 +223,10 @@ object IntervalUtils {
       to: UnitName.Value): CalendarInterval = {
     require(input != null, "Interval day-time string must be not null")
     assert(input.length == input.trim.length)
-    require(dayTimeRe.contains(from -> to),
-      s"Cannot support (interval '$input' $from to $to) expression")
-    val pattern = dayTimeRe(from, to).pattern
+    val pattern = (from, to) match {
+      case (UnitName.minute, UnitName.second) => minsecRe.pattern
+      case _ => daysecRe.pattern
+    }
     val m = pattern.matcher(input)
     require(m.matches, s"Interval string must match day-time format of '$pattern': $input")
 
@@ -327,6 +321,7 @@ object IntervalUtils {
         Long.MaxValue / DateTimeUtils.MICROS_PER_SECOND) * DateTimeUtils.MICROS_PER_SECOND
     }
 
+    if (secondNano == null) return 0L
     secondNano.split("\\.") match {
       case Array(secondsStr) => parseSeconds(secondsStr)
       case Array("", nanosStr) => parseNanos(nanosStr, false)
