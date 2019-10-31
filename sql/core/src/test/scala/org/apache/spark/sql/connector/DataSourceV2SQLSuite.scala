@@ -1929,6 +1929,21 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-30284: CREATE VIEW should track the current catalog and namespace") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+
+    withView("v") {
+      sql("USE testcat.ns1.ns2")
+      sql("CREATE TABLE t USING foo AS SELECT 1")
+      checkAnswer(spark.table("t"), Row(1))
+
+      sql("CREATE VIEW spark_catalog.v AS SELECT * FROM t")
+      sql("USE spark_catalog")
+      checkAnswer(spark.table("v"), Row(1))
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")

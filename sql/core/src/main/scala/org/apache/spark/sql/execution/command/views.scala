@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
-import org.apache.spark.sql.types.{MetadataBuilder, StructType}
+import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -288,13 +288,6 @@ object ViewHelper {
   import CatalogTable._
 
   /**
-   * Generate the view default database in `properties`.
-   */
-  private def generateViewDefaultDatabase(databaseName: String): Map[String, String] = {
-    Map(VIEW_DEFAULT_DATABASE -> databaseName)
-  }
-
-  /**
    * Generate the view query output column names in `properties`.
    */
   private def generateQueryColumnNames(columns: Seq[String]): Map[String, String] = {
@@ -344,9 +337,9 @@ object ViewHelper {
       fieldNames, "in the view definition", session.sessionState.conf.resolver)
 
     // Generate the view default database name.
-    val viewDefaultDatabase = session.sessionState.catalog.getCurrentDatabase
+    val manager = session.sessionState.catalogManager
     removeQueryColumnNames(properties) ++
-      generateViewDefaultDatabase(viewDefaultDatabase) ++
+      catalogAndNamespaceToProps(manager.currentCatalog.name(), manager.currentNamespace) ++
       generateQueryColumnNames(queryOutput)
   }
 

@@ -255,9 +255,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table	                    
 View Original Text  	SELECT * FROM base_table	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 27
@@ -311,9 +311,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table	                    
 View Original Text  	SELECT * FROM base_table	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 32
@@ -357,9 +357,9 @@ View Text           	SELECT t1.a AS t1_a, t2.a AS t2_a
 View Original Text  	SELECT t1.a AS t1_a, t2.a AS t2_a
     FROM base_table t1, base_table2 t2
     WHERE t1.id = t2.id	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[t1_a, t2_a]        	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=t2_a, view.query.out.col.0=t1_a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=t1_a, view.query.out.numCols=2, view.query.out.col.1=t2_a, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 35
@@ -411,9 +411,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2)	                    
 View Original Text  	SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2)	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 39
@@ -441,9 +441,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2	                    
 View Original Text  	SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[id, a]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=a, view.query.out.col.0=id, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=id, view.query.out.numCols=2, view.query.out.col.1=a, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 41
@@ -471,9 +471,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2)	                    
 View Original Text  	SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2)	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 43
@@ -501,9 +501,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2)	                    
 View Original Text  	SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2)	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 45
@@ -531,9 +531,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE EXISTS (SELECT 1)	                    
 View Original Text  	SELECT * FROM base_table WHERE EXISTS (SELECT 1)	                    
-View Default Database	temp_view_test      	                    
+View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.default.database=temp_view_test, view.query.out.col.1=id, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=id, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test]
 
 
 -- !query 47
@@ -667,9 +667,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 CROSS JOIN t2	                    
 View Original Text  	SELECT * FROM t1 CROSS JOIN t2	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.query.out.col.3=value, view.query.out.col.0=num, view.query.out.numCols=4, view.default.database=testviewschm2, view.query.out.col.1=name, view.query.out.col.2=num2]
+Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 61
@@ -708,9 +708,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2	                    
 View Original Text  	SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.query.out.col.3=value, view.query.out.col.0=num, view.query.out.numCols=4, view.default.database=testviewschm2, view.query.out.col.1=name, view.query.out.col.2=num2]
+Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 64
@@ -749,9 +749,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2	                    
 View Original Text  	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.query.out.col.3=value, view.query.out.col.0=num, view.query.out.numCols=4, view.default.database=testviewschm2, view.query.out.col.1=name, view.query.out.col.2=num2]
+Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 67
@@ -790,9 +790,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx'	                    
 View Original Text  	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx'	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.query.out.col.3=value, view.query.out.col.0=num, view.query.out.numCols=4, view.default.database=testviewschm2, view.query.out.col.1=name, view.query.out.col.2=num2]
+Table Properties    	[view.query.out.col.3=value, view.catalogAndNamespace.numParts=2, view.query.out.col.0=num, view.query.out.numCols=4, view.query.out.col.1=name, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=num2, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 70
@@ -892,9 +892,9 @@ AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 View Original Text  	SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[a, b]              	                    
-Table Properties    	[view.default.database=testviewschm2, view.query.out.col.1=b, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=b, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 80
@@ -931,9 +931,9 @@ View Original Text  	SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)	                    
-View Default Database	testviewschm2       	                    
+View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[a, b]              	                    
-Table Properties    	[view.default.database=testviewschm2, view.query.out.col.1=b, view.query.out.col.0=a, view.query.out.numCols=2]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=2, view.query.out.col.1=b, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2]
 
 
 -- !query 82
