@@ -102,7 +102,7 @@ private class PlainServerCallbackHandler @throws[AuthenticationException]
       }
     }
     val provider = AuthenticationProviderFactory.getAuthenticationProvider(authMethod)
-    provider.Authenticate(username, password)
+    provider.authenticate(username, password)
     if (ac != null) {
       ac.setAuthorized(true)
     }

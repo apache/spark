@@ -32,7 +32,7 @@ public class PamAuthenticationProviderImpl implements PasswdAuthenticationProvid
   }
 
   @Override
-  public void Authenticate(String user, String password) throws AuthenticationException {
+  public void authenticate(String user, String password) throws AuthenticationException {
 
     if (pamServiceNames == null || pamServiceNames.trim().isEmpty()) {
       throw new AuthenticationException("No PAM services are set.");

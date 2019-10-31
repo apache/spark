@@ -97,7 +97,10 @@ public class SparkThriftServerSQLException extends SQLException {
      * @param vendorCode
      * @param cause
      */
-    public SparkThriftServerSQLException(String reason, String sqlState, int vendorCode, Throwable cause) {
+    public SparkThriftServerSQLException(String reason,
+                                         String sqlState,
+                                         int vendorCode,
+                                         Throwable cause) {
         super(reason, sqlState, vendorCode, cause);
     }
 
@@ -197,7 +200,9 @@ public class SparkThriftServerSQLException extends SQLException {
         return toStackTrace(details, null, 0);
     }
 
-    private static Throwable toStackTrace(List<String> details, StackTraceElement[] parent, int index) {
+    private static Throwable toStackTrace(List<String> details,
+                                          StackTraceElement[] parent,
+                                          int index) {
         String detail = details.get(index++);
         if (!detail.startsWith("*")) {
             return null;  // should not be happened. ignore remaining
@@ -241,7 +246,8 @@ public class SparkThriftServerSQLException extends SQLException {
 
     private static Throwable newInstance(String className, String message) {
         try {
-            return (Throwable)Class.forName(className).getConstructor(String.class).newInstance(message);
+            return (Throwable)Class.forName(className)
+                    .getConstructor(String.class).newInstance(message);
         } catch (Exception e) {
             return new RuntimeException(className + ":" + message);
         }

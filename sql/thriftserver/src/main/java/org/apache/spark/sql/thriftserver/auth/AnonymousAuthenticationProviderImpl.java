@@ -26,7 +26,7 @@ import javax.security.sasl.AuthenticationException;
 public class AnonymousAuthenticationProviderImpl implements PasswdAuthenticationProvider {
 
   @Override
-  public void Authenticate(String user, String password) throws AuthenticationException {
+  public void authenticate(String user, String password) throws AuthenticationException {
     // no-op authentication
   }
 

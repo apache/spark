@@ -289,7 +289,7 @@ private[thriftserver] class ThriftHttpServlet(processor: TProcessor,
           AuthMethods.getValidAuthMethod(authType)
         val provider: PasswdAuthenticationProvider =
           AuthenticationProviderFactory.getAuthenticationProvider(authMethod)
-        provider.Authenticate(userName, getPassword(request, authType))
+        provider.authenticate(userName, getPassword(request, authType))
       } catch {
         case e: Exception =>
           throw new HttpAuthenticationException(e)
@@ -359,7 +359,7 @@ private[thriftserver] class ThriftHttpServlet(processor: TProcessor,
         val serviceTicketBase64: String = getAuthHeader(request, authType)
         val inToken: Array[Byte] = Base64.decodeBase64(serviceTicketBase64.getBytes)
         gssContext.acceptSecContext(inToken, 0, inToken.length)
-        // Authenticate or deny based on its context completion
+        // authenticate or deny based on its context completion
         if (!gssContext.isEstablished) {
           throw new HttpAuthenticationException("Kerberos authentication failed: " +
             "unable to establish context with the service ticket " + "provided by the client.")

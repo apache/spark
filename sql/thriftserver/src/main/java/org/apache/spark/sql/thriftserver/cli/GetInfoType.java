@@ -86,7 +86,8 @@ public enum GetInfoType {
                 return infoType;
             }
         }
-        throw new IllegalArgumentException("Unrecognized Thrift TGetInfoType value: " + tGetInfoType);
+        throw new IllegalArgumentException("Unrecognized Thrift TGetInfoType value: "
+                + tGetInfoType);
     }
 
     public TGetInfoType toTGetInfoType() {

@@ -130,7 +130,8 @@ public class LogDivertAppender extends WriterAppender {
         if (isVerbose) {
             if (lo == null) {
                 lo = CLIServiceUtils.verboseLayout;
-                LOG.info("Cannot find a Layout from a ConsoleAppender. Using default Layout pattern.");
+                LOG.info("Cannot find a Layout from a ConsoleAppender. " +
+                        "Using default Layout pattern.");
             }
         } else {
             lo = CLIServiceUtils.nonVerboseLayout;
@@ -171,7 +172,8 @@ public class LogDivertAppender extends WriterAppender {
 
         // Set current layout depending on the verbose/non-verbose mode.
         if (log != null) {
-            boolean isCurrModeVerbose = (log.getOpLoggingLevel() == OperationLog.LoggingLevel.VERBOSE);
+            boolean isCurrModeVerbose =
+                    (log.getOpLoggingLevel() == OperationLog.LoggingLevel.VERBOSE);
 
             // If there is a logging level change from verbose->non-verbose or vice-versa since
             // the last subAppend call, change the layout to preserve consistency.
