@@ -540,10 +540,16 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("alter table: set location") {
-    val sql1 = "ALTER TABLE table_name SET LOCATION 'new location'"
-    val parsed1 = parsePlan(sql1)
-    val expected1 = AlterTableSetLocationStatement(Seq("table_name"), "new location")
-    comparePlans(parsed1, expected1)
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c SET LOCATION 'new location'"),
+      AlterTableSetLocationStatement(Seq("a", "b", "c"), None, "new location"))
+
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c PARTITION(ds='2017-06-10') SET LOCATION 'new location'"),
+      AlterTableSetLocationStatement(
+        Seq("a", "b", "c"),
+        Some(Map("ds" -> "2017-06-10")),
+        "new location"))
   }
 
   test("alter table: rename column") {
