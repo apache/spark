@@ -1245,14 +1245,14 @@ class HiveDDLSuite
           .createTempView(sourceViewName)
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $locationClause")
+        val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $locationClause $providerClause")
 
         val sourceTable = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
           TableIdentifier(sourceViewName))
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
-        assert(targetTable.provider == Some(spark.sessionState.conf.defaultDataSourceName))
-        checkCreateTableLike(sourceTable, targetTable, tableType)
+        checkCreateTableLike(sourceTable, targetTable, tableType, provider)
       }
     }
   }
@@ -1291,8 +1291,7 @@ class HiveDDLSuite
       // The table type of the source table should be a Hive-managed data source table
       assert(DDLUtils.isDatasourceTable(sourceTable))
       assert(sourceTable.tableType == CatalogTableType.MANAGED)
-      assert(targetTable.provider == (if (provider.isDefined) provider else sourceTable.provider))
-      checkCreateTableLike(sourceTable, targetTable, tableType)
+      checkCreateTableLike(sourceTable, targetTable, tableType, provider)
     }
   }
 
@@ -1332,11 +1331,7 @@ class HiveDDLSuite
         // The table type of the source table should be an external data source table
         assert(DDLUtils.isDatasourceTable(sourceTable))
         assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
-        provider match {
-          case Some(_) => assert(targetTable.provider == provider)
-          case None => assert(targetTable.provider == sourceTable.provider)
-        }
-        checkCreateTableLike(sourceTable, targetTable, tableType)
+        checkCreateTableLike(sourceTable, targetTable, tableType, provider)
       }
     }
   }
@@ -1372,11 +1367,7 @@ class HiveDDLSuite
       assert(sourceTable.properties.get("prop1").nonEmpty)
       val targetTable = catalog.getTableMetadata(
         TableIdentifier(targetTabName, Some("default")))
-      provider match {
-        case Some(_) => assert(targetTable.provider == provider)
-        case None => assert(targetTable.provider == sourceTable.provider)
-      }
-      checkCreateTableLike(sourceTable, targetTable, tableType)
+      checkCreateTableLike(sourceTable, targetTable, tableType, provider)
     }
   }
 
@@ -1428,11 +1419,7 @@ class HiveDDLSuite
         assert(sourceTable.comment == Option("Apache Spark"))
         val targetTable = catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
-        provider match {
-          case Some(_) => assert(targetTable.provider == provider)
-          case None => assert(targetTable.provider == sourceTable.provider)
-        }
-        checkCreateTableLike(sourceTable, targetTable, tableType)
+        checkCreateTableLike(sourceTable, targetTable, tableType, provider)
       }
     }
   }
@@ -1474,16 +1461,16 @@ class HiveDDLSuite
         assert(sourceView.viewQueryColumnNames == Seq("a", "b", "c", "d"))
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
-        assert(targetTable.provider == Some(spark.sessionState.conf.defaultDataSourceName))
-        checkCreateTableLike(sourceView, targetTable, tableType)
+        checkCreateTableLike(sourceView, targetTable, tableType, provider)
       }
     }
   }
 
   private def checkCreateTableLike(
-    sourceTable: CatalogTable,
-    targetTable: CatalogTable,
-    tableType: CatalogTableType): Unit = {
+      sourceTable: CatalogTable,
+      targetTable: CatalogTable,
+      tableType: CatalogTableType,
+      provider: Option[String]): Unit = {
     // The created table should be a MANAGED table or EXTERNAL table with empty view text
     // and original text.
     assert(targetTable.tableType == tableType,
@@ -1520,10 +1507,16 @@ class HiveDDLSuite
         "the target table should be a data source table")
     }
 
-    if (sourceTable.tableType == CatalogTableType.VIEW) {
-      // Source table is a temporary/permanent view, which does not have a provider. The created
-      // target table uses the default data source format
-      assert(targetTable.provider == Option(spark.sessionState.conf.defaultDataSourceName))
+    provider match {
+      case Some(_) => assert(targetTable.provider == provider)
+      case None =>
+        if (sourceTable.tableType == CatalogTableType.VIEW) {
+          // Source table is a temporary/permanent view, which does not have a provider.
+          // The created target table uses the default data source format
+          assert(targetTable.provider == Option(spark.sessionState.conf.defaultDataSourceName))
+        } else {
+          assert(targetTable.provider == sourceTable.provider)
+        }
     }
 
     assert(targetTable.storage.locationUri.nonEmpty, "target table path should not be empty")

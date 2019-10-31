@@ -56,8 +56,6 @@ import org.apache.spark.sql.util.SchemaUtils
  * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
  * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
  *
- * Use "CREATE TABLE t1 LIKE t2 STORED AS file_format"
- * to specify new file format for t1 from a Hive table t2.
  * Use "CREATE TABLE t1 LIKE t2 USING file_format"
  * to specify new file format for t1 from a data source table t2.
  *
@@ -78,14 +76,14 @@ case class CreateTableLikeCommand(
     val catalog = sparkSession.sessionState.catalog
     val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
 
-    val newProvider = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
-      Some(sparkSession.sessionState.conf.defaultDataSourceName)
-    } else if (provider.isDefined) {
+    val newProvider = if (provider.isDefined) {
       val providerWithLowerCase = provider.get.toLowerCase(Locale.ROOT)
       // check the validation of provider input, invalid provider will throw
       // AnalysisException or ClassNotFoundException or NoSuchMethodException
       DataSource.lookupDataSourceV2(providerWithLowerCase, sparkSession.sessionState.conf)
       Some(providerWithLowerCase)
+    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+      Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else {
       sourceTableDesc.provider
     }

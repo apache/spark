@@ -131,7 +131,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
         val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier("cloned"))
         assert(tableMeta.schema == new StructType()
           .add("a", "int", false).add("b", "string", false))
-        assert(tableMeta.provider == Some(spark.sessionState.conf.defaultDataSourceName))
+        assert(tableMeta.provider == Some("orc"))
       }
     }
   }
