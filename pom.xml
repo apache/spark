@@ -136,10 +136,10 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.3.1</kafka.version>
+    <kafka.version>2.3.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.7</orc.version>
+    <orc.version>1.5.6</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
@@ -336,80 +336,80 @@
         <version>4.14</version>
       </dependency>
 
-      <!-- Shaded deps marked as compile. These are promoted to compile scope
+      <!-- Shaded deps marked as provided. These are promoted to compile scope
            in the modules where we want the shaded classes to appear in the
            associated jar. -->
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-http</artifactId>
         <version>${jetty.version}</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-continuation</artifactId>
         <version>${jetty.version}</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-servlet</artifactId>
         <version>${jetty.version}</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-servlets</artifactId>
         <version>${jetty.version}</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-proxy</artifactId>
         <version>${jetty.version}</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-client</artifactId>
         <version>${jetty.version}</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-util</artifactId>
         <version>${jetty.version}</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-security</artifactId>
         <version>${jetty.version}</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-plus</artifactId>
         <version>${jetty.version}</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
         <version>${jetty.version}</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>14.0.1</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.jpmml</groupId>
         <artifactId>pmml-model</artifactId>
         <version>1.4.8</version>
-        <scope>compile</scope>
+        <scope>provided</scope>
         <exclusions>
           <exclusion>
             <groupId>org.jpmml</groupId>
@@ -1940,7 +1940,7 @@
       </dependency>
 
       <!-- hive-llap-common is needed when registering UDFs in Hive 2.3.
-         We add it here, otherwise -Phive-compile won't work. -->
+         We add it here, otherwise -Phive-provided won't work. -->
       <dependency>
         <groupId>org.apache.hive</groupId>
         <artifactId>hive-llap-common</artifactId>
@@ -2241,7 +2241,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.2.0</version>
+          <version>4.2.4</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2550,7 +2550,7 @@
             <execution>
               <id>default-cli</id>
               <goals>
-                 <goal>build-classpath</goal>
+                <goal>build-classpath</goal>
               </goals>
               <configuration>
                 <!-- This includes dependencies with 'runtime' and 'compile' scopes;
@@ -2923,7 +2923,7 @@
         <hive.version.short>2.3.5</hive.version.short>
         <!-- Do not need parquet-hadoop-bundle because we already have
           parquet-common, parquet-column and parquet-hadoop -->
-        <hive.parquet.scope>compile</hive.parquet.scope>
+        <hive.parquet.scope>provided</hive.parquet.scope>
         <orc.classifier></orc.classifier>
         <datanucleus-core.version>4.1.17</datanucleus-core.version>
       </properties>
@@ -3059,20 +3059,20 @@
 
     <!--
       These empty profiles are available in some sub-modules. Declare them here so that
-      maven does not complain when they're compile on the command line for a sub-module
+      maven does not complain when they're provided on the command line for a sub-module
       that does not have them.
     -->
     <profile>
-      <id>hadoop-compile</id>
+      <id>hadoop-provided</id>
     </profile>
     <profile>
-      <id>hive-compile</id>
+      <id>hive-provided</id>
     </profile>
     <profile>
-      <id>orc-compile</id>
+      <id>orc-provided</id>
     </profile>
     <profile>
-      <id>parquet-compile</id>
+      <id>parquet-provided</id>
     </profile>
     <profile>
       <id>sparkr</id>
