@@ -169,13 +169,13 @@ public class ExternalShuffleBlockResolver {
    * Judge whether these executors are registered.
    */
   public ByteBuffer areExecutorsRegistered(String appId, String[] execIds) {
-    byte[] result = new byte[execIds.length];
+    byte[] statuses = new byte[execIds.length];
     for (int i = 0; i < execIds.length; i++) {
       if(executors.containsKey(new AppExecId(appId, execIds[i]))) {
-        result[i] = 1;
+        statuses[i] = 1;
       }
     }
-    return ByteBuffer.wrap(result);
+    return ByteBuffer.wrap(statuses);
   }
 
   /**

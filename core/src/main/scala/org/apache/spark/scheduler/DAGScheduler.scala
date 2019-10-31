@@ -1854,18 +1854,18 @@ private[spark] class DAGScheduler(
             val execIdsOnHost = mapOutputTracker.getExecutorsRegisteredOnHost(host)
             val port = SparkEnv.get.conf.get(config.SHUFFLE_SERVICE_PORT)
             try {
-              val status = SparkEnv.get.blockManager.blockStoreClient
+              val statuses = SparkEnv.get.blockManager.blockStoreClient
                 .asInstanceOf[ExternalBlockStoreClient]
-                .queryExecutorStatus(host, port, execIdsOnHost).array()
-              if (status.size == execIdsOnHost.size) {
-                val execIdsNotRegistered = execIdsOnHost.zip(status).filter(_._2 == 0).map(_._1)
+                .queryExecutorStatuses(host, port, execIdsOnHost).array()
+              if (statuses.size == execIdsOnHost.size) {
+                val execIdsNotRegistered = execIdsOnHost.zip(statuses).filter(_._2 == 0).map(_._1)
                 logInfo("Shuffle files lost for executors: %s (epoch %d)"
                   .format(execIdsNotRegistered.toString, currentEpoch))
                 mapOutputTracker.removeOutputsOnExecutors(execIdsNotRegistered)
               }
             } catch {
               case e: Exception =>
-                logInfo("Exception thrown when querying executor status", e)
+                logError("Exception thrown when querying executor statuses", e)
             }
           case (Some(host), true) =>
             logInfo("Shuffle files lost for host: %s (epoch %d)".format(host, currentEpoch))
