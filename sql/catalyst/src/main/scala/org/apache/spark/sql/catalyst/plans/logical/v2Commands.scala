@@ -271,7 +271,7 @@ case class ShowNamespaces(
  */
 case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
 
-  override def children: Seq[LogicalPlan] = Seq(table)
+  override lazy val resolved: Boolean = table.resolved
 
   override def output: Seq[Attribute] = DescribeTableSchema.describeTableAttributes()
 }
@@ -313,9 +313,7 @@ case class AlterTable(
     table: NamedRelation,
     changes: Seq[TableChange]) extends Command {
 
-  override def children: Seq[LogicalPlan] = Seq(table)
-
-  override lazy val resolved: Boolean = childrenResolved && {
+  override lazy val resolved: Boolean = table.resolved && {
     changes.forall {
       case add: AddColumn =>
         add.fieldNames match {
