@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.thriftserver.cli.session
 
-import java.io._
+import java.io.{BufferedReader, FileInputStream, IOException, _}
 import java.util
 import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.hive.common.cli.HiveFileProcessor
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.conf.SystemVariables._
@@ -68,11 +69,65 @@ private[thriftserver] class ThriftServerSessionImpl(
     _sessionState.setUserIpAddress(ipAddress)
     _sessionState.setIsHiveServerQuery(true)
     SessionState.start(_sessionState)
+    processGlobalInitFile()
     if (sessionConfMap != null) {
       configureSession(sessionConfMap)
     }
     _lastAccessTime = System.currentTimeMillis
     _lastIdleTime = _lastAccessTime
+  }
+
+
+
+  /**
+   * It is used for processing hiverc file from HiveServer2 side.
+   */
+  private class GlobalHivercFileProcessor extends HiveFileProcessor {
+    @throws[IOException]
+    override protected def loadFile(fileName: String): BufferedReader = {
+      val initStream = new FileInputStream(fileName)
+      val bufferedReader = new BufferedReader(new Nothing(initStream))
+      bufferedReader
+    }
+
+    override protected def processCmd(cmd: String): Int = {
+      var rc = 0
+      val cmd_trimed = cmd.trim
+      try {
+        executeStatementInternal(cmd_trimed, null, false, 0)
+      }
+      catch {
+        case e: SparkThriftServerSQLException =>
+          rc = -1
+          logWarning("Failed to execute HQL command in global .hiverc file.", e)
+      }
+      rc
+    }
+  }
+
+  private def processGlobalInitFile(): Unit = {
+    val processor = new GlobalHivercFileProcessor
+    try {
+      val hiverc = _hiveConf.getVar(ConfVars.HIVE_SERVER2_GLOBAL_INIT_FILE_LOCATION)
+      if (hiverc != null) {
+        var hivercFile = new File(hiverc)
+        if (hivercFile.isDirectory) {
+          hivercFile = new File(hivercFile, SessionManager.HIVERCFILE)
+        }
+        if (hivercFile.isFile) {
+          logInfo("Running global init file: " + hivercFile)
+          val rc = processor.processFile(hivercFile.getAbsolutePath)
+          if (rc != 0) {
+            logError("Failed on initializing global .hiverc file")
+          }
+        } else {
+          logDebug("Global init file " + hivercFile + " does not exist")
+        }
+      }
+    } catch {
+      case e: IOException =>
+        logWarning("Failed on initializing global .hiverc file", e)
+    }
   }
 
   @throws[SparkThriftServerSQLException]

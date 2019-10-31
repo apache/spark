@@ -308,7 +308,9 @@ private[thriftserver] class SessionManager(hiveServer2: SparkThriftServer, sqlCo
   def getOpenSessionCount: Int = handleToSession.size
 }
 
-object SessionManager extends Logging {
+private[thriftserver] object SessionManager extends Logging {
+
+  val HIVERCFILE = ".hiverc"
 
   private val threadLocalProxyUserName = new ThreadLocal[String]() {
     override protected def initialValue: String = null
