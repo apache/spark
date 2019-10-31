@@ -732,7 +732,7 @@ class Dataset[T] private[sql](
             s"Unable to parse time delay '$delayThreshold'",
             cause = Some(e))
       }
-    require(parsedDelay.milliseconds >= 0 && parsedDelay.days >= 0 && parsedDelay.months >= 0,
+    require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
     EliminateEventTimeWatermark(
       EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))

@@ -32,7 +32,7 @@ private object Triggers {
 
   def convert(interval: String): Long = {
     val cal = IntervalUtils.fromString(interval)
-    if (cal.months > 0) {
+    if (cal.months != 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }
     TimeUnit.MICROSECONDS.toMillis(cal.microseconds + cal.days * CalendarInterval.MICROS_PER_DAY)

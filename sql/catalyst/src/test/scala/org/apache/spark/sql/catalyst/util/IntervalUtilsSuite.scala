@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.IntervalUtils.fromString
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromString, fromYearMonthString}
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.unsafe.types.CalendarInterval._
 
@@ -87,5 +89,101 @@ class IntervalUtilsSuite extends SparkFunSuite {
       assert(fromString(input1) == result)
       assert(fromString(input2) == result)
     }
+  }
+
+  test("from year-month string") {
+    assert(fromYearMonthString("99-10") === new CalendarInterval(99 * 12 + 10, 0, 0L))
+    assert(fromYearMonthString("+99-10") === new CalendarInterval(99 * 12 + 10, 0, 0L))
+    assert(fromYearMonthString("-8-10") === new CalendarInterval(-8 * 12 - 10, 0, 0L))
+
+    try {
+      fromYearMonthString("99-15")
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("month 15 outside range"))
+    }
+
+    try {
+      fromYearMonthString("9a9-15")
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("Interval string does not match year-month format"))
+    }
+  }
+
+  test("from day-time string") {
+    assert(fromDayTimeString("5 12:40:30.999999999") ===
+      new CalendarInterval(
+        0,
+        5,
+        12 * MICROS_PER_HOUR +
+        40 * MICROS_PER_MINUTE +
+        30 * MICROS_PER_SECOND + 999999L))
+    assert(fromDayTimeString("10 0:12:0.888") ===
+      new CalendarInterval(
+        0,
+        10,
+        12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLI))
+    assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
+
+    try {
+      fromDayTimeString("5 30:12:20")
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("hour 30 outside range"))
+    }
+
+    try {
+      fromDayTimeString("5 30-12")
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("must match day-time format"))
+    }
+
+    try {
+      fromDayTimeString("5 1:12:20", "hour", "microsecond")
+      fail("Expected to throw an exception for the invalid convention type")
+    } catch {
+      case e: IllegalArgumentException =>
+        assert(e.getMessage.contains("Cannot support (interval"))
+    }
+  }
+
+  test("interval duration") {
+    def duration(s: String, unit: TimeUnit, daysPerMonth: Int): Long = {
+      IntervalUtils.getDuration(fromString(s), unit, daysPerMonth)
+    }
+
+    assert(duration("0 seconds", TimeUnit.MILLISECONDS, 31) === 0)
+    assert(duration("1 month", TimeUnit.DAYS, 31) === 31)
+    assert(duration("1 microsecond", TimeUnit.MICROSECONDS, 30) === 1)
+    assert(duration("1 month -30 days", TimeUnit.DAYS, 31) === 1)
+
+    try {
+      duration(Integer.MAX_VALUE + " month", TimeUnit.SECONDS, 31)
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: ArithmeticException =>
+        assert(e.getMessage.contains("overflow"))
+    }
+  }
+
+  test("negative interval") {
+    def isNegative(s: String, daysPerMonth: Int): Boolean = {
+      IntervalUtils.isNegative(fromString(s), daysPerMonth)
+    }
+
+    assert(isNegative("-1 months", 28))
+    assert(isNegative("-1 microsecond", 30))
+    assert(isNegative("-1 month 30 days", 31))
+    assert(isNegative("2 months -61 days", 30))
+    assert(isNegative("-1 year -2 seconds", 30))
+    assert(!isNegative("0 months", 28))
+    assert(!isNegative("1 year -360 days", 31))
+    assert(!isNegative("-1 year 380 days", 31))
   }
 }

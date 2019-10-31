@@ -179,7 +179,14 @@ case class AlterTableUnsetPropertiesStatement(
  */
 case class AlterTableSetLocationStatement(
     tableName: Seq[String],
+    partitionSpec: Option[TablePartitionSpec],
     location: String) extends ParsedStatement
+
+/**
+ * ALTER TABLE ... RECOVER PARTITIONS command, as parsed from SQL.
+ */
+case class AlterTableRecoverPartitionsStatement(
+    tableName: Seq[String]) extends ParsedStatement
 
 /**
  * ALTER VIEW ... SET TBLPROPERTIES command, as parsed from SQL.
@@ -296,6 +303,14 @@ object CreateNamespaceStatement {
 }
 
 /**
+ * A DROP NAMESPACE statement, as parsed from SQL.
+ */
+case class DropNamespaceStatement(
+    namespace: Seq[String],
+    ifExists: Boolean,
+    cascade: Boolean) extends ParsedStatement
+
+/**
  * A SHOW NAMESPACES statement, as parsed from SQL.
  */
 case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
@@ -329,6 +344,16 @@ case class AnalyzeColumnStatement(
  * A REPAIR TABLE statement, as parsed from SQL
  */
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
+
+/**
+ * A LOAD DATA INTO TABLE statement, as parsed from SQL
+ */
+case class LoadDataStatement(
+    tableName: Seq[String],
+    path: String,
+    isLocal: Boolean,
+    isOverwrite: Boolean,
+    partition: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
  * A SHOW CREATE TABLE statement, as parsed from SQL.
@@ -369,3 +394,10 @@ case class ShowPartitionsStatement(
  * A REFRESH TABLE statement, as parsed from SQL
  */
 case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
+
+/**
+ * A SHOW COLUMNS statement, as parsed from SQL
+ */
+case class ShowColumnsStatement(
+    table: Seq[String],
+    namespace: Option[Seq[String]]) extends ParsedStatement

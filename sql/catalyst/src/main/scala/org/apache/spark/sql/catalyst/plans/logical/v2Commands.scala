@@ -247,6 +247,15 @@ case class CreateNamespace(
     properties: Map[String, String]) extends Command
 
 /**
+ * The logical plan of the DROP NAMESPACE command that works for v2 catalogs.
+ */
+case class DropNamespace(
+    catalog: SupportsNamespaces,
+    namespace: Seq[String],
+    ifExists: Boolean,
+    cascade: Boolean) extends Command
+
+/**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(

@@ -540,10 +540,16 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("alter table: set location") {
-    val sql1 = "ALTER TABLE table_name SET LOCATION 'new location'"
-    val parsed1 = parsePlan(sql1)
-    val expected1 = AlterTableSetLocationStatement(Seq("table_name"), "new location")
-    comparePlans(parsed1, expected1)
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c SET LOCATION 'new location'"),
+      AlterTableSetLocationStatement(Seq("a", "b", "c"), None, "new location"))
+
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c PARTITION(ds='2017-06-10') SET LOCATION 'new location'"),
+      AlterTableSetLocationStatement(
+        Seq("a", "b", "c"),
+        Some(Map("ds" -> "2017-06-10")),
+        "new location"))
   }
 
   test("alter table: rename column") {
@@ -929,6 +935,28 @@ class DDLParserSuite extends AnalysisTest {
           "location" -> "/home/user/db")))
   }
 
+  test("drop namespace") {
+    comparePlans(
+      parsePlan("DROP NAMESPACE a.b.c"),
+      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = false))
+
+    comparePlans(
+      parsePlan("DROP NAMESPACE IF EXISTS a.b.c"),
+      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = false))
+
+    comparePlans(
+      parsePlan("DROP NAMESPACE IF EXISTS a.b.c RESTRICT"),
+      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = false))
+
+    comparePlans(
+      parsePlan("DROP NAMESPACE IF EXISTS a.b.c CASCADE"),
+      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = true, cascade = true))
+
+    comparePlans(
+      parsePlan("DROP NAMESPACE a.b.c CASCADE"),
+      DropNamespaceStatement(Seq("a", "b", "c"), ifExists = false, cascade = true))
+  }
+
   test("show databases: basic") {
     comparePlans(
       parsePlan("SHOW DATABASES"),
@@ -1045,6 +1073,33 @@ class DDLParserSuite extends AnalysisTest {
       RepairTableStatement(Seq("a", "b", "c")))
   }
 
+  test("LOAD DATA INTO table") {
+    comparePlans(
+      parsePlan("LOAD DATA INPATH 'filepath' INTO TABLE a.b.c"),
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", false, false, None))
+
+    comparePlans(
+      parsePlan("LOAD DATA LOCAL INPATH 'filepath' INTO TABLE a.b.c"),
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, false, None))
+
+    comparePlans(
+      parsePlan("LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c"),
+      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, true, None))
+
+    comparePlans(
+      parsePlan(
+        s"""
+           |LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c
+           |PARTITION(ds='2017-06-10')
+         """.stripMargin),
+      LoadDataStatement(
+        Seq("a", "b", "c"),
+        "filepath",
+        true,
+        true,
+        Some(Map("ds" -> "2017-06-10"))))
+  }
+
   test("SHOW CREATE table") {
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c"),
@@ -1118,6 +1173,33 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
       RefreshTableStatement(Seq("a", "b", "c")))
+  }
+
+  test("show columns") {
+    val sql1 = "SHOW COLUMNS FROM t1"
+    val sql2 = "SHOW COLUMNS IN db1.t1"
+    val sql3 = "SHOW COLUMNS FROM t1 IN db1"
+    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
+
+    val parsed1 = parsePlan(sql1)
+    val expected1 = ShowColumnsStatement(Seq("t1"), None)
+    val parsed2 = parsePlan(sql2)
+    val expected2 = ShowColumnsStatement(Seq("db1", "t1"), None)
+    val parsed3 = parsePlan(sql3)
+    val expected3 = ShowColumnsStatement(Seq("t1"), Some(Seq("db1")))
+    val parsed4 = parsePlan(sql4)
+    val expected4 = ShowColumnsStatement(Seq("db1", "t1"), Some(Seq("db1")))
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
+  }
+
+  test("alter table: recover partitions") {
+    comparePlans(
+      parsePlan("ALTER TABLE a.b.c RECOVER PARTITIONS"),
+      AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
   }
 
   private case class TableSpec(

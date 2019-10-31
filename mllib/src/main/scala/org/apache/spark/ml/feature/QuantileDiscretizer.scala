@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
@@ -31,7 +31,8 @@ import org.apache.spark.sql.types.StructType
  * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params
-  with HasHandleInvalid with HasInputCol with HasOutputCol with HasInputCols with HasOutputCols {
+  with HasHandleInvalid with HasInputCol with HasOutputCol with HasInputCols with HasOutputCols
+  with HasRelativeError {
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
@@ -68,22 +69,6 @@ private[feature] trait QuantileDiscretizerBase extends Params
   def getNumBucketsArray: Array[Int] = $(numBucketsArray)
 
   /**
-   * Relative error (see documentation for
-   * `org.apache.spark.sql.DataFrameStatFunctions.approxQuantile` for description)
-   * Must be in the range [0, 1].
-   * Note that in multiple columns case, relative error is applied to all columns.
-   * default: 0.001
-   * @group param
-   */
-  val relativeError = new DoubleParam(this, "relativeError", "The relative target precision " +
-    "for the approximate quantile algorithm used to generate buckets. " +
-    "Must be in the range [0, 1].", ParamValidators.inRange(0.0, 1.0))
-  setDefault(relativeError -> 0.001)
-
-  /** @group getParam */
-  def getRelativeError: Double = getOrDefault(relativeError)
-
-  /**
    * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
    * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
    * additional bucket). Note that in the multiple columns case, the invalid handling is applied
@@ -98,7 +83,6 @@ private[feature] trait QuantileDiscretizerBase extends Params
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
   setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
-
 }
 
 /**
@@ -110,7 +94,8 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * parameter. If both of the `inputCol` and `inputCols` parameters are set, an Exception will be
  * thrown. To specify the number of buckets for each column, the `numBucketsArray` parameter can
  * be set, or if the number of buckets should be the same across columns, `numBuckets` can be
- * set as a convenience.
+ * set as a convenience. Note that in multiple columns case, relative error is applied to all
+ * columns.
  *
  * NaN handling:
  * null and NaN values will be ignored from the column during `QuantileDiscretizer` fitting. This
@@ -134,7 +119,7 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("quantileDiscretizer"))
 
-  /** @group setParam */
+  /** @group expertSetParam */
   @Since("2.0.0")
   def setRelativeError(value: Double): this.type = set(relativeError, value)
 
