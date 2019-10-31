@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CacheTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropDatabaseCommand, DropTableCommand, LoadDataCommand, ShowColumnsCommand, ShowCreateTableCommand, ShowPartitionsCommand, ShowTablesCommand, TruncateTableCommand, UncacheTableCommand}
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableChangeColumnCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CacheTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropDatabaseCommand, DropTableCommand, LoadDataCommand, ShowColumnsCommand, ShowCreateTableCommand, ShowPartitionsCommand, ShowTablesCommand, TruncateTableCommand, UncacheTableCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
@@ -369,6 +369,13 @@ class ResolveSessionCatalog(
       AlterTableRecoverPartitionsCommand(
         v1TableName.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
+
+    case AlterTableChangeColumnStatement(tableName, columnName, newColumn) =>
+      val v1TableName = parseV1Table(tableName, "ALTER TABLE CHANGE COLUMN")
+      AlterTableChangeColumnCommand(
+        v1TableName.asTableIdentifier,
+        columnName,
+        newColumn)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {

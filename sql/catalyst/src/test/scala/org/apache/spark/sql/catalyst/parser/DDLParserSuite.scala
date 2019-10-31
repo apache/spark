@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DDLParserSuite extends AnalysisTest {
@@ -601,9 +601,45 @@ class DDLParserSuite extends AnalysisTest {
         Some("new comment")))
   }
 
-  test("alter table: change column position (not supported)") {
+  test("alter table: alter column position (not supported)") {
     assertUnsupported("ALTER TABLE table_name CHANGE COLUMN name COMMENT 'doc' FIRST")
     assertUnsupported("ALTER TABLE table_name CHANGE COLUMN name TYPE INT AFTER other_col")
+  }
+
+  test("alter table: change column name/type/comment") {
+    val sql1 = "ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT"
+    val sql2 = "ALTER TABLE table_name CHANGE COLUMN col_name col_name INT COMMENT 'new_comment'"
+    val sql3 = "ALTER TABLE a.b.c CHANGE COLUMN col_name col_name INT COMMENT 'new_comment'"
+
+    val parsed1 = parsePlan(sql1)
+    val parsed2 = parsePlan(sql2)
+    val parsed3 = parsePlan(sql3)
+
+    val expected1 = AlterTableChangeColumnStatement(
+      Seq("table_name"),
+      "col_old_name",
+      StructField("col_new_name", IntegerType))
+    val expected2 = AlterTableChangeColumnStatement(
+      Seq("table_name"),
+      "col_name",
+      StructField("col_name", IntegerType).withComment("new_comment"))
+    val expected3 = AlterTableChangeColumnStatement(
+      Seq("a", "b", "c"),
+      "col_name",
+      StructField("col_name", IntegerType).withComment("new_comment"))
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+  }
+
+  test("alter table: change column position (not supported)") {
+    assertUnsupported("ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT FIRST")
+    assertUnsupported(
+      "ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT AFTER other_col")
+  }
+
+  test("alter table: change column in partition spec") {
+    assertUnsupported("ALTER TABLE table_name PARTITION (a='1', a='2') CHANGE COLUMN a new_a INT")
   }
 
   test("alter table: drop column") {

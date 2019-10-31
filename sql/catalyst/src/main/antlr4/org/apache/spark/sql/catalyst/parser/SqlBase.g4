@@ -151,7 +151,7 @@ statement
     | ALTER TABLE multipartIdentifier
         (ALTER | CHANGE) COLUMN? qualifiedName
         (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
-    | ALTER TABLE tableIdentifier partitionSpec?
+    | ALTER TABLE multipartIdentifier partitionSpec?
         CHANGE COLUMN?
         colName=errorCapturingIdentifier colType colPosition?          #changeColumn
     | ALTER TABLE tableIdentifier (partitionSpec)?

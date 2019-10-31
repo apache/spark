@@ -503,33 +503,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[AlterTableChangeColumnCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table [PARTITION partition_spec]
-   *   CHANGE [COLUMN] column_old_name column_new_name column_dataType [COMMENT column_comment]
-   *   [FIRST | AFTER column_name];
-   * }}}
-   */
-  override def visitChangeColumn(ctx: ChangeColumnContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.partitionSpec != null) {
-      operationNotAllowed("ALTER TABLE table PARTITION partition_spec CHANGE COLUMN", ctx)
-    }
-
-    if (ctx.colPosition != null) {
-      operationNotAllowed(
-        "ALTER TABLE table [PARTITION partition_spec] CHANGE COLUMN ... FIRST | AFTER otherCol",
-        ctx)
-    }
-
-    AlterTableChangeColumnCommand(
-      tableName = visitTableIdentifier(ctx.tableIdentifier),
-      columnName = ctx.colName.getText,
-      newColumn = visitColType(ctx.colType))
-  }
-
-  /**
    * Convert a nested constants list into a sequence of string sequences.
    */
   override def visitNestedConstantList(
