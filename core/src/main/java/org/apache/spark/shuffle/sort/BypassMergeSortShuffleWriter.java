@@ -165,8 +165,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
 
       MapInfo mapInfo = writePartitionedData(mapOutputWriter);
+      partitionLengths = mapInfo.lengths;
       mapStatus = MapStatus$.MODULE$.apply(
-        blockManager.shuffleServerId(), mapInfo.lengths, mapInfo.records, mapId);
+        blockManager.shuffleServerId(), partitionLengths, mapInfo.records, mapId);
     } catch (Exception e) {
       try {
         mapOutputWriter.abort(e);
