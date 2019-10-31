@@ -36,6 +36,7 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.shuffle.protocol.AreExecutorsRegistered;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
@@ -221,5 +222,15 @@ public class ExternalBlockHandlerSuite {
 
     verify(callback, never()).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
+  }
+
+  @Test
+  public void testAreExecutorsRegistered() {
+    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+    String appId = "app0";
+    String[] execIds = new String[] {"exec1", "exec2"};
+    ByteBuffer areExecutorsRegistered = new AreExecutorsRegistered(appId, execIds).toByteBuffer();
+    handler.receive(client, areExecutorsRegistered, callback);
+    verify(blockResolver, times(1)).areExecutorsRegistered(appId, execIds);
   }
 }

@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -161,5 +162,14 @@ public class ExternalShuffleBlockResolverSuite {
     File file = new File(normPathname);
     String returnedPath = file.getPath();
     assertTrue(normPathname == returnedPath);
+  }
+
+  @Test
+  public void testAreExecutorsRegistered() throws IOException {
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
+    resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo(SORT_MANAGER));
+    String[] execIds = new String[] {"exec2", "exec3"};
+    ByteBuffer status = resolver.areExecutorsRegistered("app0", execIds);
+    assert(status.equals(ByteBuffer.wrap(new byte[] {1, 0})));
   }
 }
