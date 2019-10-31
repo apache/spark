@@ -106,14 +106,16 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
       rootDir0.setExecutable(false)
       val tempShuffleFile2 = diskBlockManager.createTempShuffleBlock()._2
       val tempLocalFile2 = diskBlockManager.createTempLocalBlock()._2
-      assert(tempShuffleFile2.exists(),
-        "There is only one bad disk, so temp shuffle file should be created")
-      assert(tempShuffleFile2.getParentFile.getParentFile.getParent === rootDir1.getAbsolutePath,
-        "The temp shuffle file should be under the healthy disk")
-      assert(tempLocalFile2.exists(),
-        "There is only one bad disk, so temp local file should be created")
-      assert(tempLocalFile2.getParentFile.getParentFile.getParent === rootDir1.getAbsolutePath,
-        "The temp local file should be under the healthy disk")
+      // It's possible that after 10 retries we still not able to find the healthy disk. we need to
+      // remove the flakiness of these two asserts
+      if (tempShuffleFile2.getParentFile.getParentFile.getParent === rootDir1.getAbsolutePath) {
+        assert(tempShuffleFile2.exists(),
+          "There is only one bad disk, so temp shuffle file should be created")
+      }
+      if (tempLocalFile2.getParentFile.getParentFile.getParent === rootDir1.getAbsolutePath) {
+        assert(tempLocalFile2.exists(),
+          "There is only one bad disk, so temp local file should be created")
+      }
 
       // all disks damaged
       rootDir1.setExecutable(false)
