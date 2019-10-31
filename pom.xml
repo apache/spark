@@ -2241,7 +2241,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.2.0</version>
+          <version>4.2.4</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2550,7 +2550,7 @@
             <execution>
               <id>default-cli</id>
               <goals>
-                 <goal>build-classpath</goal>
+                <goal>build-classpath</goal>
               </goals>
               <configuration>
                 <!-- This includes dependencies with 'runtime' and 'compile' scopes;
