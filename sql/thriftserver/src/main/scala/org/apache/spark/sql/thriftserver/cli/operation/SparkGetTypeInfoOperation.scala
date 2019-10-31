@@ -90,11 +90,11 @@ private[thriftserver] class SparkGetTypeInfoOperation(
       parentSession.getUsername)
 
     try {
-      Type.values.foreach(typeInfo => {
+      Type.values().foreach(typeInfo => {
         val rowData = Row(
           typeInfo.getName, // TYPE_NAME
           typeInfo.toJavaSQLType, // DATA_TYPE
-          typeInfo.getMaxPrecision.getOrElse(null), // PRECISION
+          typeInfo.getMaxPrecision, // PRECISION
           typeInfo.getLiteralPrefix, // LITERAL_PREFIX
           typeInfo.getLiteralSuffix, // LITERAL_SUFFIX
           typeInfo.getCreateParams, // CREATE_PARAMS

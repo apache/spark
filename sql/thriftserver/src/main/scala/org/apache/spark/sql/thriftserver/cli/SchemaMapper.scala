@@ -18,7 +18,6 @@
 package org.apache.spark.sql.thriftserver.cli
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.spark.sql.thriftserver.cli.thrift.{TCLIServiceConstants, TTableSchema, TTypeEntry, TTypeId}
 import org.apache.spark.sql.types._

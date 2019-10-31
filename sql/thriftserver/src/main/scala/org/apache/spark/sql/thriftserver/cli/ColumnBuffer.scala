@@ -69,49 +69,49 @@ class ColumnBuffer() {
   def this(colValues: TColumn) {
     this()
     if (colValues.isSetBoolVal) {
-      `type` = Type.BOOLEAN
+      `type` = Type.BOOLEAN_TYPE
       nulls = toBitset(colValues.getBoolVal.getNulls)
       _boolVars = Booleans.toArray(colValues.getBoolVal.getValues)
       _size = boolVars.length
     }
     else if (colValues.isSetByteVal) {
-      `type` = Type.BYTE
+      `type` = Type.TINYINT_TYPE
       nulls = toBitset(colValues.getByteVal.getNulls)
       _byteVars = Bytes.toArray(colValues.getByteVal.getValues)
       _size = byteVars.length
     }
     else if (colValues.isSetI16Val) {
-      `type` = Type.SHORT
+      `type` = Type.SMALLINT_TYPE
       nulls = toBitset(colValues.getI16Val.getNulls)
       _shortVars = Shorts.toArray(colValues.getI16Val.getValues)
       _size = shortVars.length
     }
     else if (colValues.isSetI32Val) {
-      `type` = Type.INT
+      `type` = Type.INT_TYPE
       nulls = toBitset(colValues.getI32Val.getNulls)
       _intVars = Ints.toArray(colValues.getI32Val.getValues)
       _size = intVars.length
     }
     else if (colValues.isSetI64Val) {
-      `type` = Type.LONG
+      `type` = Type.BIGINT_TYPE
       nulls = toBitset(colValues.getI64Val.getNulls)
       _longVars = Longs.toArray(colValues.getI64Val.getValues)
       _size = longVars.length
     }
     else if (colValues.isSetDoubleVal) {
-      `type` = Type.DOUBLE
+      `type` = Type.DOUBLE_TYPE
       nulls = toBitset(colValues.getDoubleVal.getNulls)
       _doubleVars = Doubles.toArray(colValues.getDoubleVal.getValues)
       _size = doubleVars.length
     }
     else if (colValues.isSetBinaryVal) {
-      `type` = Type.BINARY
+      `type` = Type.BINARY_TYPE
       nulls = toBitset(colValues.getBinaryVal.getNulls)
       _binaryVars = colValues.getBinaryVal.getValues.asScala.toArray
       _size = _binaryVars.size
     }
     else if (colValues.isSetStringVal) {
-      `type` = Type.STRING
+      `type` = Type.STRING_TYPE
       nulls = toBitset(colValues.getStringVal.getNulls)
       _stringVars = colValues.getStringVal.getValues.asScala.toArray
       _size = _stringVars.size
@@ -129,22 +129,22 @@ class ColumnBuffer() {
       return null
     }
     `type` match {
-      case BOOLEAN =>
+      case Type.BOOLEAN_TYPE =>
         return _boolVars(index)
-      case BYTE =>
+      case Type.TINYINT_TYPE =>
         return _byteVars(index)
-      case SHORT =>
+      case Type.SMALLINT_TYPE =>
         return _shortVars(index)
-      case INT =>
+      case Type.INT_TYPE =>
         return _intVars(index)
-      case LONG =>
+      case Type.BIGINT_TYPE =>
         return _longVars(index)
-      case FLOAT =>
-      case DOUBLE =>
+      case Type.FLOAT_TYPE =>
+      case Type.DOUBLE_TYPE =>
         return _doubleVars(index)
-      case STRING =>
+      case Type.STRING_TYPE =>
         return _stringVars(index)
-      case BINARY =>
+      case Type.BINARY_TYPE =>
         return _binaryVars(index).array
     }
     null
