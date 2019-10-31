@@ -94,7 +94,8 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * parameter. If both of the `inputCol` and `inputCols` parameters are set, an Exception will be
  * thrown. To specify the number of buckets for each column, the `numBucketsArray` parameter can
  * be set, or if the number of buckets should be the same across columns, `numBuckets` can be
- * set as a convenience.
+ * set as a convenience. Note that in multiple columns case, relative error is applied to all
+ * columns.
  *
  * NaN handling:
  * null and NaN values will be ignored from the column during `QuantileDiscretizer` fitting. This
