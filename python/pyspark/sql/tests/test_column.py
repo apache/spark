@@ -25,6 +25,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 from py4j.protocol import Py4JJavaError
 
+
 class ColumnTests(ReusedSQLTestCase):
 
     def test_column_name_encoding(self):
