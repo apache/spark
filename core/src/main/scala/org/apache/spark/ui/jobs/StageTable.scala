@@ -417,8 +417,19 @@ private[ui] class StageDataSource(
       case Some(t) => UIUtils.formatDate(t)
       case None => "Unknown"
     }
+    val finishTime = stageData.completionTime.map(_.getTime()).getOrElse(currentTime)
 
-    val duration = Some(stageData.executorRunTime)
+    // The submission time for a stage is misleading because it counts the time
+    // the stage waits to be launched. (SPARK-10930)
+    val duration = stageData.firstTaskLaunchedTime.map { date =>
+      val time = date.getTime()
+      if (finishTime > time) {
+        finishTime - time
+      } else {
+        None
+        currentTime - time
+      }
+    }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
 
     val inputRead = stageData.inputBytes
