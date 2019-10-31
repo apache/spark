@@ -36,3 +36,14 @@ select date '2001-10-01' - 7;
 select date '2001-10-01' - date '2001-09-28';
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678';
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
+
+select interval '1 year 2 month' / null;
+select interval '1 year 2 month' / 0;
+select interval '1 year 2 month' / 3;
+select interval '1 year 2 month' / 3.0;
+
+SELECT interval '4 months 2 weeks 6 days' * null;
+SELECT interval '4 months 2 weeks 6 days' * 0;
+SELECT interval '4 months 2 weeks 6 days' * 3;
+SELECT interval '4 months 2 weeks 6 days' * 3.0;
+SELECT 3.0 * interval '4 months 2 weeks 6 days';
