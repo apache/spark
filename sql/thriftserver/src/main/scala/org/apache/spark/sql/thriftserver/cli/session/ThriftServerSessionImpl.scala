@@ -86,7 +86,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     @throws[IOException]
     override protected def loadFile(fileName: String): BufferedReader = {
       val initStream = new FileInputStream(fileName)
-      val bufferedReader = new BufferedReader(new Nothing(initStream))
+      val bufferedReader = new BufferedReader(new InputStreamReader(initStream))
       bufferedReader
     }
 
