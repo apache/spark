@@ -19,16 +19,15 @@ package org.apache.spark.ml.regression
 
 import scala.util.Random
 
-import org.apache.spark.ml.linalg.DenseVector
+import org.apache.spark.ml.linalg.{DenseVector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.regression.FactorizationMachinesSuite._
+import org.apache.spark.ml.regression.FMRegressorSuite._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.{avg, col}
 
-class FactorizationMachinesSuite extends MLTest with DefaultReadWriteTest {
+class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -42,15 +41,14 @@ class FactorizationMachinesSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("params") {
-    ParamsSuite.checkParams(new FactorizationMachines)
-    val model = new FactorizationMachinesModel("fm_test", OldVectors.dense(0.0), 0)
+    ParamsSuite.checkParams(new FMRegressor)
+    val model = new FMRegressorModel("fmr_test", Vectors.dense(0.0), 0)
     ParamsSuite.checkParams(model)
   }
 
   test("factorization machines squaredError") {
-    val fm = new FactorizationMachines()
+    val fm = new FMRegressor()
       .setSolver("adamW")
-      .setLoss("squaredError")
       .setFeaturesCol("features")
       .setLabelCol("label")
       .setNumFactors(2)
@@ -73,22 +71,22 @@ class FactorizationMachinesSuite extends MLTest with DefaultReadWriteTest {
 
   test("read/write") {
     def checkModelData(
-      model: FactorizationMachinesModel,
-      model2: FactorizationMachinesModel
+      model: FMRegressorModel,
+      model2: FMRegressorModel
     ): Unit = {
       assert(model.coefficients.toArray === model2.coefficients.toArray)
       assert(model.numFeatures === model2.numFeatures)
     }
-    val fm = new FactorizationMachines()
+    val fm = new FMRegressor()
     val data = crossDataset
       .withColumnRenamed("features", allParamSettings("featuresCol").toString)
       .withColumnRenamed("label", allParamSettings("labelCol").toString)
-    testEstimatorAndModelReadWrite(fm, crossDataset, allParamSettings,
+    testEstimatorAndModelReadWrite(fm, data, allParamSettings,
       allParamSettings, checkModelData)
   }
 }
 
-object FactorizationMachinesSuite {
+object FMRegressorSuite {
 
   /**
    * Mapping from all Params to valid settings which differ from the defaults.
@@ -96,8 +94,8 @@ object FactorizationMachinesSuite {
    * This excludes input columns to simplify some tests.
    */
   val allParamSettings: Map[String, Any] = Map(
-    "featuresCol" -> "features",
-    "labelCol" -> "label",
+    "featuresCol" -> "myFeatures",
+    "labelCol" -> "myLabel",
     "predictionCol" -> "prediction",
     "numFactors" -> 2,
     "fitBias" -> false,
@@ -108,8 +106,7 @@ object FactorizationMachinesSuite {
     "maxIter" -> 2,
     "stepSize" -> 0.1,
     "tol" -> 1e-4,
-    "solver" -> "gd",
-    "loss" -> "squaredError"
+    "solver" -> "gd"
   )
 
   def generateFactorizationCrossInput(
@@ -131,9 +128,8 @@ object FactorizationMachinesSuite {
       (i, x)
     }.toDF("id", "features")
 
-    val fmModel = new FactorizationMachinesModel(
-      "fm_test", OldVectors.dense(coefficients), numFeatures)
-    fmModel.set(fmModel.loss, "squaredError")
+    val fmModel = new FMRegressorModel(
+      "fmr_test", Vectors.dense(coefficients), numFeatures)
     fmModel.set(fmModel.numFactors, numFactors)
     fmModel.set(fmModel.fitBias, true)
     fmModel.set(fmModel.fitLinear, true)

@@ -44,7 +44,8 @@ __all__ = ['LinearSVC', 'LinearSVCModel',
            'RandomForestClassifier', 'RandomForestClassificationModel',
            'NaiveBayes', 'NaiveBayesModel',
            'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel',
-           'OneVsRest', 'OneVsRestModel']
+           'OneVsRest', 'OneVsRestModel',
+           'FMClassifier', 'FMClassifierModel']
 
 
 class JavaClassifierParams(HasRawPredictionCol, JavaPredictorParams):
@@ -2359,6 +2360,166 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         _java_obj.set("labelCol", self.getLabelCol())
         _java_obj.set("predictionCol", self.getPredictionCol())
         return _java_obj
+
+
+@inherit_doc
+class FMClassifier(JavaProbabilisticClassifier, HasMaxIter, HasStepSize, HasTol, HasSolver,
+                   JavaMLWritable, JavaMLReadable):
+    """
+    Factorization Machines learning algorithm for classification.
+
+    solver Supports:
+
+    * gd (normal mini-batch gradient descent)
+    * adamW (default)
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml.classification import FMClassifier
+    >>> df = spark.createDataFrame([
+    ...     (1.0, Vectors.dense(1.0)),
+    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    >>> fm = FMClassifier(numFactors=2)
+    >>> model = fm.fit(df)
+    >>> test0 = spark.createDataFrame([
+    ...     (Vectors.dense(-1.0),),
+    ...     (Vectors.dense(0.5),),
+    ...     (Vectors.dense(1.0),),
+    ...     (Vectors.dense(2.0),)], ["features"])
+    >>> model.transform(test0).select("features", "probability").show(10, False)
+    +--------+------------------------------------------+
+    |features|probability                               |
+    +--------+------------------------------------------+
+    |[-1.0]  |[0.9999999997574736,2.425264676902229E-10]|
+    |[0.5]   |[0.47627851732981163,0.5237214826701884]  |
+    |[1.0]   |[5.491554426243495E-4,0.9994508445573757] |
+    |[2.0]   |[2.005766663870645E-10,0.9999999997994233]|
+    +--------+------------------------------------------+
+
+    .. versionadded:: 3.0.0
+    """
+
+    numFactors = Param(Params._dummy(), "numFactors", "Dimensionality of the factor vectors, " +
+                       "which are used to get pairwise interactions between variables",
+                       typeConverter=TypeConverters.toInt)
+
+    fitBias = Param(Params._dummy(), "fitBias", "whether to fit global bias term",
+                    typeConverter=TypeConverters.toBoolean)
+
+    fitLinear = Param(Params._dummy(), "fitLinear", "whether to fit linear term (aka 1-way term)",
+                      typeConverter=TypeConverters.toBoolean)
+
+    regParam = Param(Params._dummy(), "regParam", "the magnitude of L2-regularization",
+                     typeConverter=TypeConverters.toFloat)
+
+    miniBatchFraction = Param(Params._dummy(), "miniBatchFraction", "fraction of the input data " +
+                              "set that should be used for one iteration of gradient descent",
+                              typeConverter=TypeConverters.toFloat)
+
+    initStd = Param(Params._dummy(), "initStd", "standard deviation of initial coefficients",
+                    typeConverter=TypeConverters.toFloat)
+
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: gd, adamW. (Default adamW)", typeConverter=TypeConverters.toString)
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 probabilityCol="probability", rawPredictionCol="rawPrediction",
+                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                 tol=1e-6, solver="adamW", thresholds=None):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 probabilityCol="probability", rawPredictionCol="rawPrediction", \
+                 numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
+                 miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
+                 tol=1e-6, solver="adamW", thresholds=None)
+        """
+        super(FMClassifier, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.FMClassifier", self.uid)
+        self._setDefault(numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+                         miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                         tol=1e-6, solver="adamW")
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  probabilityCol="probability", rawPredictionCol="rawPrediction",
+                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
+                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
+                  tol=1e-6, solver="adamW", thresholds=None):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
+                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
+                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
+                  tol=1e-6, solver="adamW", thresholds=None)
+        Sets Params for FMClassifier.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return FMClassifierModel(java_model)
+
+    @since("3.0.0")
+    def setNumFactors(self, value):
+        """
+        Sets the value of :py:attr:`numFactors`.
+        """
+        return self._set(numFactors=value)
+
+    @since("3.0.0")
+    def setFitBias(self, value):
+        """
+        Sets the value of :py:attr:`fitBias`.
+        """
+        return self._set(fitBias=value)
+
+    @since("3.0.0")
+    def setFitLinear(self, value):
+        """
+        Sets the value of :py:attr:`fitLinear`.
+        """
+        return self._set(fitLinear=value)
+
+    @since("3.0.0")
+    def setMiniBatchFraction(self, value):
+        """
+        Sets the value of :py:attr:`miniBatchFraction`.
+        """
+        return self._set(miniBatchFraction=value)
+
+    @since("3.0.0")
+    def setInitStd(self, value):
+        """
+        Sets the value of :py:attr:`initStd`.
+        """
+        return self._set(initStd=value)
+
+
+class FMClassifierModel(JavaProbabilisticClassificationModel, JavaMLWritable, JavaMLReadable):
+    """
+    Model fitted by :class:`FMClassifier`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("3.0.0")
+    def coefficients(self):
+        """
+        Model coefficients.
+
+        coefficients concat from 2-way coefficients, 1-way coefficients, global bias.
+
+        Index 0 ~ numFeatures*numFactors is 2-way coefficients,
+        coefficients(i * numFactors + f) denotes i-th feature and f-th factor,
+        following indices are 1-way coefficients and global bias.
+        """
+        return self._call_java("coefficients")
 
 
 if __name__ == "__main__":

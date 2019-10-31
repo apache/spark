@@ -46,11 +46,9 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Params for Factorization Machines
  */
-private[regression] trait FactorizationMachinesParams
+private[ml] trait FactorizationMachinesParams
   extends PredictorParams
-  with HasMaxIter with HasStepSize with HasTol with HasSolver with HasLoss {
-
-  import FactorizationMachines._
+  with HasMaxIter with HasStepSize with HasTol with HasSolver {
 
   /**
    * Param for dimensionality of the factors (&gt;= 0)
@@ -127,6 +125,15 @@ private[regression] trait FactorizationMachinesParams
   @Since("3.0.0")
   final def getInitStd: Double = $(initStd)
 
+  /** String name for "gd". */
+  private[ml] val GD = "gd"
+
+  /** String name for "adamW". */
+  private[ml] val AdamW = "adamW"
+
+  /** Set of solvers that FactorizationMachines supports. */
+  private[ml] val supportedSolvers = Array(GD, AdamW)
+
   /**
    * The solver algorithm for optimization.
    * Supported options: "gd", "adamW".
@@ -140,17 +147,18 @@ private[regression] trait FactorizationMachinesParams
       s"${supportedSolvers.mkString(", ")}. (Default adamW)",
     ParamValidators.inArray[String](supportedSolvers))
 
-  /**
-   * The loss function to be optimized.
-   * Supported options: "logisticLoss" and "squaredError".
-   * Default: "logisticLoss"
-   *
-   * @group param
-   */
-  @Since("3.0.0")
-  final override val loss: Param[String] = new Param[String](this, "loss", "The loss function to" +
-    s" be optimized. Supported options: ${supportedLosses.mkString(", ")}. (Default logisticLoss)",
-    ParamValidators.inArray[String](supportedLosses))
+  private[ml] def parseSolver(solver: String, coefficientsSize: Int): Updater = {
+    solver match {
+      case GD => new SquaredL2Updater()
+      case AdamW => new AdamWUpdater(coefficientsSize)
+    }
+  }
+}
+
+/**
+ * Params for FMRegressor
+ */
+private[regression] trait FMRegressorParams extends FactorizationMachinesParams {
 }
 
 /**
@@ -159,7 +167,7 @@ private[regression] trait FactorizationMachinesParams
  *
  * The implementation is based upon:
  * <a href="https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf">
- * S. Rendle. "Factorization machines" 2010<a>.
+ * S. Rendle. "Factorization machines" 2010</a>.
  *
  * FM is able to estimate interactions even in problems with huge sparsity
  * (like advertising and recommendation system).
@@ -176,15 +184,16 @@ private[regression] trait FactorizationMachinesParams
  * regularization terms like L2 are usually added to the loss function to prevent overfitting.
  */
 @Since("3.0.0")
-class FactorizationMachines @Since("3.0.0") (
+class FMRegressor @Since("3.0.0") (
     @Since("3.0.0") override val uid: String)
-  extends Predictor[Vector, FactorizationMachines, FactorizationMachinesModel]
-  with FactorizationMachinesParams with DefaultParamsWritable with Logging {
+  extends Predictor[Vector, FMRegressor, FMRegressorModel]
+  with FMRegressorParams with DefaultParamsWritable with Logging {
 
-  import FactorizationMachines._
+  import org.apache.spark.ml.regression.BaseFactorizationMachinesGradient.{SquaredError, parseLoss}
+  import org.apache.spark.ml.regression.FMRegressor.initCoefficients
 
   @Since("3.0.0")
-  def this() = this(Identifiable.randomUID("fm"))
+  def this() = this(Identifiable.randomUID("fmr"))
 
   /**
    * Set the dimensionality of the factors.
@@ -290,26 +299,14 @@ class FactorizationMachines @Since("3.0.0") (
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> AdamW)
 
-  /**
-   * Sets the value of param [[loss]].
-   * - "logisticLoss" is used to classification, label must be in {0, 1}.
-   * - "squaredError" is used to regression.
-   * Default is logisticLoss.
-   *
-   * @group setParam
-   */
-  @Since("3.0.0")
-  def setLoss(value: String): this.type = set(loss, value)
-  setDefault(loss -> LogisticLoss)
-
-  override protected[spark] def train(dataset: Dataset[_]): FactorizationMachinesModel = {
+  override protected[spark] def train(dataset: Dataset[_]): FMRegressorModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     train(dataset, handlePersistence)
   }
 
   protected[spark] def train(
       dataset: Dataset[_],
-      handlePersistence: Boolean): FactorizationMachinesModel = instrumented { instr =>
+      handlePersistence: Boolean): FMRegressorModel = instrumented { instr =>
     val instances: RDD[OldLabeledPoint] =
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
@@ -321,30 +318,22 @@ class FactorizationMachines @Since("3.0.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, numFactors, fitBias, fitLinear, regParam,
-      miniBatchFraction, initStd, maxIter, stepSize, tol, solver, loss)
+      miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
 
     val numFeatures = instances.first().features.size
     instr.logNumFeatures(numFeatures)
 
-    // initialize coefficients
-    val coefficientsSize = $(numFactors) * numFeatures +
-      (if ($(fitLinear)) numFeatures else 0) +
-      (if ($(fitBias)) 1 else 0)
-    val initialCoefficients =
-      Vectors.dense(Array.fill($(numFactors) * numFeatures)(Random.nextGaussian() * $(initStd)) ++
-        (if ($(fitLinear)) new Array[Double](numFeatures) else Array.empty[Double]) ++
-        (if ($(fitBias)) new Array[Double](1) else Array.empty[Double]))
-
     val data = instances.map { case OldLabeledPoint(label, features) => (label, features) }
 
-    // optimize coefficients with gradient descent
-    val gradient = BaseFactorizationMachinesGradient.parseLoss(
-      $(loss), $(numFactors), $(fitBias), $(fitLinear), numFeatures)
+    // initialize coefficients
+    val (initialCoefficients, coefficientsSize) = initCoefficients(
+      numFeatures, $(numFactors), $(fitBias), $(fitLinear), $(initStd))
 
-    val updater = $(solver) match {
-      case GD => new SquaredL2Updater()
-      case AdamW => new AdamWUpdater(coefficientsSize)
-    }
+    // optimize coefficients with gradient descent
+    val gradient = parseLoss(
+      SquaredError, $(numFactors), $(fitBias), $(fitLinear), numFeatures)
+
+    val updater = parseSolver($(solver), coefficientsSize)
 
     val optimizer = new GradientDescent(gradient, updater)
       .setStepSize($(stepSize))
@@ -356,49 +345,48 @@ class FactorizationMachines @Since("3.0.0") (
 
     if (handlePersistence) instances.unpersist()
 
-    val model = copyValues(new FactorizationMachinesModel(uid, coefficients, numFeatures))
+    val model = copyValues(new FMRegressorModel(uid, coefficients.asML, numFeatures))
     model
   }
 
   @Since("3.0.0")
-  override def copy(extra: ParamMap): FactorizationMachines = defaultCopy(extra)
+  override def copy(extra: ParamMap): FMRegressor = defaultCopy(extra)
 }
 
 @Since("3.0.0")
-object FactorizationMachines extends DefaultParamsReadable[FactorizationMachines] {
+object FMRegressor extends DefaultParamsReadable[FMRegressor] {
 
   @Since("3.0.0")
-  override def load(path: String): FactorizationMachines = super.load(path)
+  override def load(path: String): FMRegressor = super.load(path)
 
-  /** String name for "gd". */
-  private[regression] val GD = "gd"
-
-  /** String name for "adamW". */
-  private[regression] val AdamW = "adamW"
-
-  /** Set of solvers that FactorizationMachines supports. */
-  private[regression] val supportedSolvers = Array(GD, AdamW)
-
-  /** String name for "logisticLoss". */
-  private[regression] val LogisticLoss = "logisticLoss"
-
-  /** String name for "squaredError". */
-  private[regression] val SquaredError = "squaredError"
-
-  /** Set of loss function names that FactorizationMachines supports. */
-  private[regression] val supportedLosses = Array(SquaredError, LogisticLoss)
+  private[ml] def initCoefficients(
+    numFeatures: Int,
+    numFactors: Int,
+    fitBias: Boolean,
+    fitLinear: Boolean,
+    initStd: Double
+  ): (Vector, Int) = {
+    val initialCoefficients =
+      Vectors.dense(Array.fill(numFactors * numFeatures)(Random.nextGaussian() * initStd) ++
+        (if (fitLinear) new Array[Double](numFeatures) else Array.emptyDoubleArray) ++
+        (if (fitBias) new Array[Double](1) else Array.emptyDoubleArray))
+    val coefficientsSize = initialCoefficients.size
+    (initialCoefficients, coefficientsSize)
+  }
 }
 
 /**
- * Model produced by [[FactorizationMachines]].
+ * Model produced by [[FMRegressor]].
  */
 @Since("3.0.0")
-class FactorizationMachinesModel (
+class FMRegressorModel (
     @Since("3.0.0") override val uid: String,
-    @Since("3.0.0") val coefficients: OldVector,
+    @Since("3.0.0") val coefficients: Vector,
     @Since("3.0.0") override val numFeatures: Int)
-  extends PredictionModel[Vector, FactorizationMachinesModel]
-  with FactorizationMachinesParams with MLWritable {
+  extends PredictionModel[Vector, FMRegressorModel]
+  with FMRegressorParams with MLWritable {
+
+  import org.apache.spark.ml.regression.BaseFactorizationMachinesGradient.SquaredError
 
   /**
    * Returns Factorization Machines coefficients
@@ -406,49 +394,46 @@ class FactorizationMachinesModel (
    * index 0 ~ numFeatures*numFactors is 2-way coefficients,
    *   [i * numFactors + f] denotes i-th feature and f-th factor
    * Following indices are 1-way coefficients and global bias.
-   *
-   * @return Vector
    */
-  @Since("3.0.0")
-  def getCoefficients: Vector = coefficients
+  private val oldCoefficients: OldVector = coefficients
 
   private lazy val gradient = BaseFactorizationMachinesGradient.parseLoss(
-    $(loss), $(numFactors), $(fitBias), $(fitLinear), numFeatures)
+    SquaredError, $(numFactors), $(fitBias), $(fitLinear), numFeatures)
 
   override def predict(features: Vector): Double = {
-    val rawPrediction = gradient.getRawPrediction(features, coefficients)
+    val rawPrediction = gradient.getRawPrediction(features, oldCoefficients)
     gradient.getPrediction(rawPrediction)
   }
 
   @Since("3.0.0")
-  override def copy(extra: ParamMap): FactorizationMachinesModel = {
-    copyValues(new FactorizationMachinesModel(
+  override def copy(extra: ParamMap): FMRegressorModel = {
+    copyValues(new FMRegressorModel(
       uid, coefficients, numFeatures), extra)
   }
 
   @Since("3.0.0")
   override def write: MLWriter =
-    new FactorizationMachinesModel.FactorizationMachinesModelWriter(this)
+    new FMRegressorModel.FMRegressorModelWriter(this)
 
   override def toString: String = {
-    s"FactorizationMachinesModel: " +
-      s"uid = ${super.toString}, lossFunc = ${$(loss)}, numFeatures = $numFeatures, " +
+    s"FMRegressorModel: " +
+      s"uid = ${super.toString}, numFeatures = $numFeatures, " +
       s"numFactors = ${$(numFactors)}, fitLinear = ${$(fitLinear)}, fitBias = ${$(fitBias)}"
   }
 }
 
 @Since("3.0.0")
-object FactorizationMachinesModel extends MLReadable[FactorizationMachinesModel] {
+object FMRegressorModel extends MLReadable[FMRegressorModel] {
 
   @Since("3.0.0")
-  override def read: MLReader[FactorizationMachinesModel] = new FactorizationMachinesModelReader
+  override def read: MLReader[FMRegressorModel] = new FMRegressorModelReader
 
   @Since("3.0.0")
-  override def load(path: String): FactorizationMachinesModel = super.load(path)
+  override def load(path: String): FMRegressorModel = super.load(path)
 
-  /** [[MLWriter]] instance for [[FactorizationMachinesModel]] */
-  private[FactorizationMachinesModel] class FactorizationMachinesModelWriter(
-      instance: FactorizationMachinesModel) extends MLWriter with Logging {
+  /** [[MLWriter]] instance for [[FMRegressorModel]] */
+  private[FMRegressorModel] class FMRegressorModelWriter(
+      instance: FMRegressorModel) extends MLWriter with Logging {
 
     private case class Data(
         numFeatures: Int,
@@ -462,18 +447,18 @@ object FactorizationMachinesModel extends MLReadable[FactorizationMachinesModel]
     }
   }
 
-  private class FactorizationMachinesModelReader extends MLReader[FactorizationMachinesModel] {
+  private class FMRegressorModelReader extends MLReader[FMRegressorModel] {
 
-    private val className = classOf[FactorizationMachinesModel].getName
+    private val className = classOf[FMRegressorModel].getName
 
-    override def load(path: String): FactorizationMachinesModel = {
+    override def load(path: String): FMRegressorModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
       val Row(numFeatures: Int, coefficients: OldVector) = data
         .select("numFeatures", "coefficients").head()
-      val model = new FactorizationMachinesModel(
+      val model = new FMRegressorModel(
         metadata.uid, coefficients, numFeatures)
       metadata.getAndSetParams(model)
       model
@@ -632,15 +617,25 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
   }
 }
 
-object BaseFactorizationMachinesGradient {
+private[ml] object BaseFactorizationMachinesGradient {
+
+  /** String name for "logisticLoss". */
+  val LogisticLoss = "logisticLoss"
+
+  /** String name for "squaredError". */
+  val SquaredError = "squaredError"
+
+  /** Set of loss function names that FactorizationMachines supports. */
+  val supportedRegressorLosses = Array(SquaredError)
+  val supportedClassifierLosses = Array(LogisticLoss)
+  val supportedLosses = supportedRegressorLosses ++ supportedClassifierLosses
+
   def parseLoss(
       lossFunc: String,
       numFactors: Int,
       fitBias: Boolean,
       fitLinear: Boolean,
       numFeatures: Int): BaseFactorizationMachinesGradient = {
-
-    import FactorizationMachines._
 
     lossFunc match {
       case LogisticLoss =>
@@ -771,4 +766,3 @@ private[ml] class AdamWUpdater(weightSize: Int) extends Updater with Logging {
     (Vectors.fromBreeze(w), 0.5 * regParam * norm * norm)
   }
 }
-

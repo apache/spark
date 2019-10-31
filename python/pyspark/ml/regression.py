@@ -35,7 +35,7 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
            'RandomForestRegressor', 'RandomForestRegressionModel',
-           'FactorizationMachines', 'FactorizationMachinesModel']
+           'FMRegressor', 'FMRegressorModel']
 
 
 @inherit_doc
@@ -2128,15 +2128,10 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
 
 
 @inherit_doc
-class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver, HasLoss,
-                            JavaMLWritable, JavaMLReadable):
+class FMRegressor(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasSolver,
+                  JavaMLWritable, JavaMLReadable):
     """
-    Factorization Machines.
-
-    loss Supports:
-
-    * logisticLoss (default)
-    * squaredError
+    Factorization Machines learning algorithm for regression.
 
     solver Supports:
 
@@ -2144,26 +2139,28 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
     * adamW (default)
 
     >>> from pyspark.ml.linalg import Vectors
-    >>> from pyspark.ml.regression import FactorizationMachines
+    >>> from pyspark.ml.regression import FMRegressor
     >>> df = spark.createDataFrame([
+    ...     (2.0, Vectors.dense(2.0)),
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> fm = FactorizationMachines(numFactors=2, )
+    >>>
+    >>> fm = FMRegressor(numFactors=2, maxIter=1000)
     >>> model = fm.fit(df)
     >>> test0 = spark.createDataFrame([
-    ...     (Vectors.dense(-1.0),),
+    ...     (Vectors.dense(-2.0),),
     ...     (Vectors.dense(0.5),),
     ...     (Vectors.dense(1.0),),
-    ...     (Vectors.dense(2.0),)], ["features"])
+    ...     (Vectors.dense(4.0),)], ["features"])
     >>> model.transform(test0).show(10, False)
-    +--------+----------------------+
-    |features|prediction            |
-    +--------+----------------------+
-    |[-1.0]  |1.7219239347644947E-10|
-    |[0.5]   |0.612429917023823     |
-    |[1.0]   |0.99969782036162      |
-    |[2.0]   |0.9999999999310394    |
-    +--------+----------------------+
+    +--------+-------------------+
+    |features|prediction         |
+    +--------+-------------------+
+    |[-2.0]  |-1.9999901956420845|
+    |[0.5]   |0.4999976361236511 |
+    |[1.0]   |0.9999952024767982 |
+    |[4.0]   |3.999980600595681  |
+    +--------+-------------------+
 
     .. versionadded:: 3.0.0
     """
@@ -2191,27 +2188,23 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
     solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
                    "options: gd, adamW. (Default adamW)", typeConverter=TypeConverters.toString)
 
-    loss = Param(Params._dummy(), "loss", "The loss function to be optimized. Supported " +
-                 "options: logisticLoss, squaredError. (Default logisticLoss)",
-                 typeConverter=TypeConverters.toString)
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                 tol=1e-6, solver="adamW", loss="logisticLoss"):
+                 tol=1e-6, solver="adamW"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                 tol=1e-6, solver="adamW", loss="logisticLoss")
+                 tol=1e-6, solver="adamW")
         """
-        super(FactorizationMachines, self).__init__()
+        super(FMRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
-            "org.apache.spark.ml.regression.FactorizationMachines", self.uid)
+            "org.apache.spark.ml.regression.FMRegressor", self.uid)
         self._setDefault(numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
                          miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                         tol=1e-6, solver="adamW", loss="logisticLoss")
+                         tol=1e-6, solver="adamW")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2220,19 +2213,19 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   numFactors=8, fitBias=True, fitLinear=True, regParam=0.0,
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                  tol=1e-6, solver="adamW", loss="logisticLoss"):
+                  tol=1e-6, solver="adamW"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   numFactors=8, fitBias=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                  tol=1e-6, solver="adamW", loss="logisticLoss")
-        Sets Params for Factorization Machines.
+                  tol=1e-6, solver="adamW")
+        Sets Params for FMRegressor.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
-        return FactorizationMachinesModel(java_model)
+        return FMRegressorModel(java_model)
 
     @since("3.0.0")
     def setNumFactors(self, value):
@@ -2270,9 +2263,9 @@ class FactorizationMachines(JavaPredictor, HasMaxIter, HasStepSize, HasTol, HasS
         return self._set(initStd=value)
 
 
-class FactorizationMachinesModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class FMRegressorModel(JavaPredictionModel, JavaMLWritable, JavaMLReadable):
     """
-    Model fitted by :class:`FactorizationMachines`.
+    Model fitted by :class:`FMRegressor`.
 
     .. versionadded:: 3.0.0
     """
