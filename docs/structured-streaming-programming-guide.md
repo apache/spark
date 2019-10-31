@@ -1717,7 +1717,7 @@ Here is the compatibility matrix.
     <td style="vertical-align: middle;">Append, Update, Complete</td>
     <td>
         Append mode uses watermark to drop old aggregation state. But the output of a 
-        windowed aggregation is delayed the late threshold specified in `withWatermark()` as by
+        windowed aggregation is delayed the late threshold specified in <code>withWatermark()</code> as by
         the modes semantics, rows can be added to the Result Table only once after they are 
         finalized (i.e. after watermark is crossed). See the
         <a href="#handling-late-data-and-watermarking">Late Data</a> section for more details.
@@ -2324,7 +2324,7 @@ Here are the different kinds of triggers that are supported.
   <tr>
     <td><b>One-time micro-batch</b></td>
     <td>
-        The query will execute *only one* micro-batch to process all the available data and then
+        The query will execute <strong>only one</strong> micro-batch to process all the available data and then
         stop on its own. This is useful in scenarios you want to periodically spin up a cluster,
         process everything that is available since the last period, and then shutdown the
         cluster. In some case, this may lead to significant cost savings.
