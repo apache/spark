@@ -53,7 +53,7 @@ private[thriftserver] class SparkGetColumnsOperation(
     schemaName: String,
     tableName: String,
     columnName: String)
-  extends SparkMetadataOperation(parentSession, GET_COLUMNS)
+  extends SparkMetadataOperation(parentSession, OperationType.GET_COLUMNS)
     with Logging {
 
   val catalog: SessionCatalog = sqlContext.sessionState.catalog
@@ -96,7 +96,7 @@ private[thriftserver] class SparkGetColumnsOperation(
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
     logInfo(s"$logMsg with $statementId")
 
-    setState(RUNNING)
+    setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -151,11 +151,11 @@ private[thriftserver] class SparkGetColumnsOperation(
           addToRowSet(columnPattern, null, localTempView.table, plan.schema)
         }
       }
-      setState(FINISHED)
+      setState(OperationState.FINISHED)
     } catch {
       case e: Throwable =>
         logError(s"Error executing get columns operation with $statementId", e)
-        setState(ERROR)
+        setState(OperationState.ERROR)
         e match {
           case hiveException: SparkThriftServerSQLException =>
             SparkThriftServer2.listener.onStatementError(
@@ -218,12 +218,12 @@ private[thriftserver] class SparkGetColumnsOperation(
   }
 
   override def getResultSetSchema: StructType = {
-    assertState(FINISHED)
+    assertState(OperationState.FINISHED)
     RESULT_SET_SCHEMA
   }
 
   override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
-    assertState(FINISHED)
+    assertState(OperationState.FINISHED)
     validateDefaultFetchOrientation(orientation)
     if (orientation == FetchOrientation.FETCH_FIRST) {
       rowSet.setStartOffset(0)

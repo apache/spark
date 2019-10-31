@@ -246,11 +246,11 @@ private[thriftserver] class OperationManager
   def cancelOperation(opHandle: OperationHandle): Unit = {
     val operation: Operation = getOperation(opHandle)
     val opState: OperationState = operation.getStatus.getState
-    if ((opState eq CANCELED) ||
-      (opState eq CLOSED) ||
-      (opState eq FINISHED) ||
-      (opState eq ERROR) ||
-      (opState eq UNKNOWN)) { // Cancel should be a no-op in either cases
+    if ((opState eq OperationState.CANCELED) ||
+      (opState eq OperationState.CLOSED) ||
+      (opState eq OperationState.FINISHED) ||
+      (opState eq OperationState.ERROR) ||
+      (opState eq OperationState.UNKNOWN)) { // Cancel should be a no-op in either cases
       logDebug(opHandle + ": Operation is already aborted in state - " + opState)
     } else {
       logDebug(opHandle + ": Attempting to cancel from state - " + opState)

@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
-import org.apache.spark.sql.thriftserver.cli.{CLOSED, OperationType, SparkThriftServerSQLException}
+import org.apache.spark.sql.thriftserver.cli.{OperationState, OperationType, SparkThriftServerSQLException}
 import org.apache.spark.sql.thriftserver.cli.session.ThriftServerSession
 import org.apache.spark.sql.types.StructType
 
@@ -47,7 +47,7 @@ private[thriftserver] abstract class SparkMetadataOperation(
    */
   @throws[SparkThriftServerSQLException]
   override def close(): Unit = {
-    setState(CLOSED)
+    setState(OperationState.CLOSED)
     cleanupOperationLog()
   }
 

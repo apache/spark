@@ -44,7 +44,7 @@ private[thriftserver] class SparkGetSchemasOperation(
     parentSession: ThriftServerSession,
     catalogName: String,
     schemaName: String)
-  extends SparkMetadataOperation(parentSession, GET_SCHEMAS) with Logging {
+  extends SparkMetadataOperation(parentSession, OperationType.GET_SCHEMAS) with Logging {
 
   RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TABLE_SCHEM", StringType))
@@ -64,7 +64,7 @@ private[thriftserver] class SparkGetSchemasOperation(
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing databases '$cmdStr'"
     logInfo(s"$logMsg with $statementId")
-    setState(RUNNING)
+    setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -91,11 +91,11 @@ private[thriftserver] class SparkGetSchemasOperation(
       if (databasePattern.matcher(globalTempViewDb).matches()) {
         rowSet.addRow(Row(globalTempViewDb, DEFAULT_HIVE_CATALOG))
       }
-      setState(FINISHED)
+      setState(OperationState.FINISHED)
     } catch {
       case e: Throwable =>
         logError(s"Error executing get schemas operation with $statementId", e)
-        setState(ERROR)
+        setState(OperationState.ERROR)
         e match {
           case hiveException: SparkThriftServerSQLException =>
             SparkThriftServer2.listener.onStatementError(
@@ -112,12 +112,12 @@ private[thriftserver] class SparkGetSchemasOperation(
   }
 
   override def getResultSetSchema: StructType = {
-    assertState(FINISHED)
+    assertState(OperationState.FINISHED)
     RESULT_SET_SCHEMA
   }
 
   override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
-    assertState(FINISHED)
+    assertState(OperationState.FINISHED)
     validateDefaultFetchOrientation(orientation)
     if (orientation == FetchOrientation.FETCH_FIRST) {
       rowSet.setStartOffset(0)

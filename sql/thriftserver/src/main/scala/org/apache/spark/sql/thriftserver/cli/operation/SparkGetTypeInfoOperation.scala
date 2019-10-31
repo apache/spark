@@ -39,7 +39,7 @@ import org.apache.spark.util.{Utils => SparkUtils}
 private[thriftserver] class SparkGetTypeInfoOperation(
     sqlContext: SQLContext,
     parentSession: ThriftServerSession)
-  extends SparkMetadataOperation(parentSession, GET_TYPE_INFO) with Logging {
+  extends SparkMetadataOperation(parentSession, OperationType.GET_TYPE_INFO) with Logging {
 
   RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TYPE_NAME", StringType))
@@ -73,7 +73,7 @@ private[thriftserver] class SparkGetTypeInfoOperation(
     setStatementId(UUID.randomUUID().toString)
     val logMsg = "Listing type info"
     logInfo(s"$logMsg with $statementId")
-    setState(RUNNING)
+    setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -113,11 +113,11 @@ private[thriftserver] class SparkGetTypeInfoOperation(
         )
         rowSet.addRow(rowData)
       })
-      setState(FINISHED)
+      setState(OperationState.FINISHED)
     } catch {
       case e: Throwable =>
         logError(s"Error executing get type info with $statementId", e)
-        setState(ERROR)
+        setState(OperationState.ERROR)
         e match {
           case hiveException: SparkThriftServerSQLException =>
             SparkThriftServer2.listener.onStatementError(
@@ -135,12 +135,12 @@ private[thriftserver] class SparkGetTypeInfoOperation(
   }
 
   override def getResultSetSchema: StructType = {
-    assertState(FINISHED)
+    assertState(OperationState.FINISHED)
     RESULT_SET_SCHEMA
   }
 
   override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
-    assertState(FINISHED)
+    assertState(OperationState.FINISHED)
     validateDefaultFetchOrientation(orientation)
     if (orientation == FetchOrientation.FETCH_FIRST) {
       rowSet.setStartOffset(0)

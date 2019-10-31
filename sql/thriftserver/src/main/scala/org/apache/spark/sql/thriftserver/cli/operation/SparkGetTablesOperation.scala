@@ -52,7 +52,7 @@ private[thriftserver] class SparkGetTablesOperation(
     schemaName: String,
     tableName: String,
     tableTypes: JList[String])
-  extends SparkMetadataOperation(parentSession, GET_TABLES)
+  extends SparkMetadataOperation(parentSession, OperationType.GET_TABLES)
   with Logging {
 
   if (HiveUtils.isHive23) {
@@ -94,7 +94,7 @@ private[thriftserver] class SparkGetTablesOperation(
     }
     val logMsg = s"Listing tables '$cmdStr, tableTypes : $tableTypesStr, tableName : $tableName'"
     logInfo(s"$logMsg with $statementId")
-    setState(RUNNING)
+    setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -142,11 +142,11 @@ private[thriftserver] class SparkGetTablesOperation(
           addToRowSet(view.database.orNull, view.table, VIEW.name, None)
         }
       }
-      setState(FINISHED)
+      setState(OperationState.FINISHED)
     } catch {
       case e: Throwable =>
         logError(s"Error executing get tables operation with $statementId", e)
-        setState(ERROR)
+        setState(OperationState.ERROR)
         e match {
           case hiveException: SparkThriftServerSQLException =>
             SparkThriftServer2.listener.onStatementError(
@@ -177,13 +177,13 @@ private[thriftserver] class SparkGetTablesOperation(
   }
 
   override def getResultSetSchema: StructType = {
-    assertState(FINISHED)
+    assertState(OperationState.FINISHED)
     RESULT_SET_SCHEMA
   }
 
 
   override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
-    assertState(FINISHED)
+    assertState(OperationState.FINISHED)
     validateDefaultFetchOrientation(orientation)
     if (orientation == FetchOrientation.FETCH_FIRST) {
       rowSet.setStartOffset(0)

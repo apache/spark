@@ -35,7 +35,7 @@ private[thriftserver] abstract class Operation(
     session: ThriftServerSession,
     opType: OperationType,
     runInBackground: Boolean) extends Logging {
-  private[this] var _state: OperationState = INITIALIZED
+  private[this] var _state: OperationState = OperationState.INITIALIZED
   private[this] val _opHandle: OperationHandle =
     new OperationHandle(opType, session.getProtocolVersion)
   private[this] var _conf: HiveConf = session.getHiveConf
@@ -134,13 +134,13 @@ private[thriftserver] abstract class Operation(
     this._lastAccessTime = System.currentTimeMillis
   }
 
-  def isRunning: Boolean = RUNNING == _state
+  def isRunning: Boolean = OperationState.RUNNING == _state
 
-  def isFinished: Boolean = FINISHED == _state
+  def isFinished: Boolean = OperationState.FINISHED == _state
 
-  def isCanceled: Boolean = CANCELED == _state
+  def isCanceled: Boolean = OperationState.CANCELED == _state
 
-  def isFailed: Boolean = ERROR == _state
+  def isFailed: Boolean = OperationState.ERROR == _state
 
 
   protected def createOperationLog(): Unit = {
@@ -248,7 +248,7 @@ private[thriftserver] abstract class Operation(
   // TODO: make this abstract and implement in subclasses.
   @throws[SparkThriftServerSQLException]
   def cancel(): Unit = {
-    setState(CANCELED)
+    setState(OperationState.CANCELED)
     throw new UnsupportedOperationException("SQLOperation.cancel()")
   }
 

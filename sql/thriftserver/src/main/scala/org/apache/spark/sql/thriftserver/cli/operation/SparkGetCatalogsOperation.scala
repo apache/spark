@@ -39,7 +39,7 @@ import org.apache.spark.util.{Utils => SparkUtils}
 private[thriftserver] class SparkGetCatalogsOperation(
     sqlContext: SQLContext,
     parentSession: ThriftServerSession)
-  extends SparkMetadataOperation(parentSession, GET_CATALOGS) with Logging {
+  extends SparkMetadataOperation(parentSession, OperationType.GET_CATALOGS) with Logging {
 
   RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TABLE_CAT", StringType))
@@ -55,7 +55,7 @@ private[thriftserver] class SparkGetCatalogsOperation(
     setStatementId(UUID.randomUUID().toString)
     val logMsg = "Listing catalogs"
     logInfo(s"$logMsg with $statementId")
-    setState(RUNNING)
+    setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -71,11 +71,11 @@ private[thriftserver] class SparkGetCatalogsOperation(
       if (isAuthV2Enabled) {
         authorizeMetaGets(HiveOperationType.GET_CATALOGS, null)
       }
-      setState(FINISHED)
+      setState(OperationState.FINISHED)
     } catch {
       case e: Throwable =>
         logError(s"Error executing get catalogs operation with $statementId", e)
-        setState(ERROR)
+        setState(OperationState.ERROR)
         e match {
           case hiveException: SparkThriftServerSQLException =>
             SparkThriftServer2.listener.onStatementError(
@@ -93,12 +93,12 @@ private[thriftserver] class SparkGetCatalogsOperation(
   }
 
   override def getResultSetSchema: StructType = {
-    assertState(FINISHED)
+    assertState(OperationState.FINISHED)
     RESULT_SET_SCHEMA
   }
 
   override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
-    assertState(FINISHED)
+    assertState(OperationState.FINISHED)
     validateDefaultFetchOrientation(orientation)
     if (orientation == FetchOrientation.FETCH_FIRST) {
       rowSet.setStartOffset(0)
