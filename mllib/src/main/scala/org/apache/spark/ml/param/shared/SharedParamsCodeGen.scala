@@ -83,6 +83,9 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.inRange(0, 1)"),
       ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
+      ParamDesc[Double]("relativeError", "the relative target precision for the approximate " +
+        "quantile algorithm. Must be in the range [0, 1]",
+        Some("0.001"), isValid = "ParamValidators.inRange(0, 1)", isExpertParam = true),
       ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization (>" +
         " 0)", isValid = "ParamValidators.gt(0)", finalFields = false),
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
