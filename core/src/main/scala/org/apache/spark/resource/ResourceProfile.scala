@@ -21,7 +21,7 @@ import java.util.{Map => JMap}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.HashMap
+import scala.collection.immutable.HashSet
 import scala.collection.mutable
 
 import org.apache.spark.SparkConf
@@ -61,14 +61,13 @@ private[spark] class ResourceProfile() extends Serializable {
   private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
   private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
 
-  private val allowedExecutorResources = HashMap[String, Boolean](
-    (ResourceProfile.MEMORY -> true),
-    (ResourceProfile.OVERHEAD_MEM -> true),
-    (ResourceProfile.PYSPARK_MEM -> true),
-    (ResourceProfile.CORES -> true))
+  private val allowedExecutorResources = HashSet[String](
+    ResourceProfile.MEMORY,
+    ResourceProfile.OVERHEAD_MEM,
+    ResourceProfile.PYSPARK_MEM,
+    ResourceProfile.CORES)
 
-  private val allowedTaskResources = HashMap[String, Boolean]((
-    ResourceProfile.CPUS -> true))
+  private val allowedTaskResources = HashSet[String](ResourceProfile.CPUS)
 
   def id: Int = _id
 
@@ -111,18 +110,6 @@ private[spark] class ResourceProfile() extends Serializable {
     }
     this
   }
-
-  override def equals(obj: Any): Boolean = {
-    obj match {
-      case that: ResourceProfile =>
-        that.getClass == this.getClass &&
-          that._taskResources == _taskResources && that._executorResources == _executorResources
-      case _ =>
-        false
-    }
-  }
-
-  override def hashCode(): Int = Seq(_taskResources, _executorResources).hashCode()
 
   override def toString(): String = {
     s"Profile: id = ${_id}, executor resources: ${_executorResources}, " +
