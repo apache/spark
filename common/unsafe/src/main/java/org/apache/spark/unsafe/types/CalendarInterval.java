@@ -91,10 +91,11 @@ public final class CalendarInterval implements Serializable, Ordered<CalendarInt
     int adjustMonth2 = (int) (that.microseconds / MICROS_PER_MONTH) + that.months;
     int monthDiff = adjustMonth1 - adjustMonth2;
     if (monthDiff == 0) {
-      long miDiff = (this.microseconds % MICROS_PER_MONTH) - (that.microseconds % MICROS_PER_MONTH);
-      if (miDiff == 0) {
+      long msDiff =
+        (this.microseconds % MICROS_PER_MONTH) - (that.microseconds % MICROS_PER_MONTH);
+      if (msDiff == 0) {
         return 0;
-      } else if (miDiff > 0) {
+      } else if (msDiff > 0) {
         return 1;
       } else {
         return -1;

@@ -27,3 +27,9 @@ select cast(v as interval) i from VALUES ('1 seconds'), ('4 seconds'), ('3 secon
 
 -- unlimited microseconds
 select interval '1 month 120 days' > interval '2 month';
+
+-- max
+select max(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v);
+
+-- min
+select min(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v);
