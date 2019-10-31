@@ -681,11 +681,6 @@
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
-        <artifactId>metrics-ganglia</artifactId>
-        <version>${codahale.metrics.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-graphite</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
