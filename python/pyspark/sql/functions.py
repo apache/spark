@@ -3236,6 +3236,58 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  1| 21|
        +---+---+
 
+    6. COGROUPED_MAP
+
+       A cogrouped map UDF defines transformation: (`pandas.DataFrame`, `pandas.DataFrame`) ->
+       `pandas.DataFrame`. The `returnType` should be a :class:`StructType` describing the schema
+       of the returned `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame`
+       must either match the field names in the defined `returnType` schema if specified as strings,
+       or match the field data types by position if not strings, e.g. integer indices. The length
+       of the returned `pandas.DataFrame` can be arbitrary.
+
+       CoGrouped map UDFs are used with :meth:`pyspark.sql.CoGroupedData.apply`.
+
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+       >>> df1 = spark.createDataFrame(
+       ...     [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
+       ...     ("time", "id", "v1"))
+       >>> df2 = spark.createDataFrame(
+       ...     [(20000101, 1, "x"), (20000101, 2, "y")],
+       ...     ("time", "id", "v2"))
+       >>> @pandas_udf("time int, id int, v1 double, v2 string",
+       ...             PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
+       ... def asof_join(l, r):
+       ...     return pd.merge_asof(l, r, on="time", by="id")
+       >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()  # doctest: +SKIP
+       +---------+---+---+---+
+       |     time| id| v1| v2|
+       +---------+---+---+---+
+       | 20000101|  1|1.0|  x|
+       | 20000102|  1|3.0|  x|
+       | 20000101|  2|2.0|  y|
+       | 20000102|  2|4.0|  y|
+       +---------+---+---+---+
+
+       Alternatively, the user can define a function that takes three arguments.  In this case,
+       the grouping key(s) will be passed as the first argument and the data will be passed as the
+       second and third arguments.  The grouping key(s) will be passed as a tuple of numpy data
+       types, e.g., `numpy.int32` and `numpy.float64`. The data will still be passed in as two
+       `pandas.DataFrame` containing all columns from the original Spark DataFrames.
+       >>> @pandas_udf("time int, id int, v1 double, v2 string",
+       ...             PandasUDFType.COGROUPED_MAP)  # doctest: +SKIP
+       ... def asof_join(k, l, r):
+       ...     if k == (1,):
+       ...         return pd.merge_asof(l, r, on="time", by="id")
+       ...     else:
+       ...         return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
+       >>> df1.groupby("id").cogroup(df2.groupby("id")).apply(asof_join).show()  # doctest: +SKIP
+       +---------+---+---+---+
+       |     time| id| v1| v2|
+       +---------+---+---+---+
+       | 20000101|  1|1.0|  x|
+       | 20000102|  1|3.0|  x|
+       +---------+---+---+---+
+
     .. note:: The user-defined functions are considered deterministic by default. Due to
         optimization, duplicate invocations may be eliminated or the function may even be invoked
         more times than it is present in the query. If your function is not deterministic, call
