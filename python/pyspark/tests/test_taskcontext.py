@@ -246,22 +246,23 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         # normal stage after normal stage
         normal_result = rdd.mapPartitions(context).collect()
         tps, bps, pids = zip(*normal_result)
-        self.assertTrue(tps == [0, 1])
-        self.assertTrue(bps == [-1, -1])
+        print(tps)
+        self.assertTrue(tps == (0, 1))
+        self.assertTrue(bps == (-1, -1))
         for pid in pids:
             self.assertTrue(pid in worker_pids)
         # barrier stage after normal stage
         barrier_result = rdd.barrier().mapPartitions(context).collect()
         tps, bps, pids = zip(*barrier_result)
-        self.assertTrue(tps == [0, 1])
-        self.assertTrue(bps == [0, 1])
+        self.assertTrue(tps == (0, 1))
+        self.assertTrue(bps == (0, 1))
         for pid in pids:
             self.assertTrue(pid in worker_pids)
         # normal stage after barrier stage
         normal_result2 = rdd.mapPartitions(context).collect()
         tps, bps, pids = zip(*normal_result2)
-        self.assertTrue(tps == [0, 1])
-        self.assertTrue(bps == [-1, -1])
+        self.assertTrue(tps == (0, 1))
+        self.assertTrue(bps == (-1, -1))
         for pid in pids:
             self.assertTrue(pid in worker_pids)
 
