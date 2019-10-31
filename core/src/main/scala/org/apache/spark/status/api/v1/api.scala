@@ -317,6 +317,7 @@ class TaskMetricDistributions private[spark](
 
     val executorDeserializeTime: IndexedSeq[Double],
     val executorDeserializeCpuTime: IndexedSeq[Double],
+    val duration: IndexedSeq[Double],
     val executorRunTime: IndexedSeq[Double],
     val executorCpuTime: IndexedSeq[Double],
     val resultSize: IndexedSeq[Double],
