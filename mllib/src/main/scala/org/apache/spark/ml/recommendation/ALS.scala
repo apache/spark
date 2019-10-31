@@ -924,6 +924,25 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       checkpointInterval: Int = 10,
+      seed: Long = 0L)(
+      implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
+    train(ratings, rank, numUserBlocks, numItemBlocks, maxIter, regParam, implicitPrefs, alpha,
+      nonnegative, intermediateRDDStorageLevel, finalRDDStorageLevel, checkpointInterval, seed, 2)
+  }
+
+  private def train[ID: ClassTag]( // scalastyle:ignore
+      ratings: RDD[Rating[ID]],
+      rank: Int = 10,
+      numUserBlocks: Int = 10,
+      numItemBlocks: Int = 10,
+      maxIter: Int = 10,
+      regParam: Double = 0.1,
+      implicitPrefs: Boolean = false,
+      alpha: Double = 1.0,
+      nonnegative: Boolean = false,
+      intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
+      finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
+      checkpointInterval: Int = 10,
       seed: Long = 0L,
       depth: Int = 2)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {

@@ -145,6 +145,9 @@ class RobustScaler (override val uid: String)
   /** @group expertSetParam */
   def setRelativeError(value: Double): this.type = set(relativeError, value)
 
+  /** @group expertSetParam */
+  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
+
   override def fit(dataset: Dataset[_]): RobustScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val localRelativeError = $(relativeError)
