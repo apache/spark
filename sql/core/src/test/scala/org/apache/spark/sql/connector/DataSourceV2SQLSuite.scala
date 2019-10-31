@@ -1401,7 +1401,7 @@ class DataSourceV2SQLSuite
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
       val e = intercept[AnalysisException] {
-        val partition = sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
+        sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
       }
       assert(e.message.contains("ALTER TABLE DROP PARTITION is only supported with v1 tables"))
     }
