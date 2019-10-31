@@ -118,4 +118,4 @@ announce.tmpl
 vote.tmpl
 SessionManager.java
 SessionHandler.java
-external/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
+GangliaReporter.java
