@@ -218,27 +218,22 @@ object IntervalUtils {
         minutes = toLongWithRange("second", m.group(7), 0, 59)
       }
       // Hive allow nanosecond precision interval
-      val nanoStr = if (m.group(9) == null) {
-        null
-      } else {
-        (m.group(9) + "000000000").substring(0, 9)
-      }
-      var nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L)
+      var secondsFraction = parseNanos(m.group(9), seconds < 0)
       to match {
         case "hour" =>
           minutes = 0
           seconds = 0
-          nanos = 0
+          secondsFraction = 0
         case "minute" =>
           seconds = 0
-          nanos = 0
+          secondsFraction = 0
         case "second" =>
           // No-op
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot support (interval '$input' $from to $to) expression")
       }
-      var micros = nanos / DateTimeUtils.NANOS_PER_MICROS
+      var micros = secondsFraction
       micros = Math.addExact(micros, Math.multiplyExact(days, DateTimeUtils.MICROS_PER_DAY))
       micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
       micros = Math.addExact(micros, Math.multiplyExact(minutes, MICROS_PER_MINUTE))
@@ -292,6 +287,21 @@ object IntervalUtils {
     new CalendarInterval(months, microseconds)
   }
 
+  // Parses a string with nanoseconds, truncates the result and returns microseconds
+  private def parseNanos(nanosStr: String, isNegative: Boolean): Long = {
+    if (nanosStr != null) {
+      val maxNanosLen = 9
+      val alignedStr = if (nanosStr.length < maxNanosLen) {
+        (nanosStr + "000000000").substring(0, maxNanosLen)
+      } else nanosStr
+      val nanos = toLongWithRange("nanosecond", alignedStr, 0L, 999999999L)
+      val micros = nanos / DateTimeUtils.NANOS_PER_MICROS
+      if (isNegative) -micros else micros
+    } else {
+      0L
+    }
+  }
+
   /**
    * Parse second_nano string in ss.nnnnnnnnn format to microseconds
    */
@@ -303,15 +313,13 @@ object IntervalUtils {
         Long.MinValue / DateTimeUtils.MICROS_PER_SECOND,
         Long.MaxValue / DateTimeUtils.MICROS_PER_SECOND) * DateTimeUtils.MICROS_PER_SECOND
     }
-    def parseNanos(nanosStr: String): Long = {
-      toLongWithRange("nanosecond", nanosStr, 0L, 999999999L) / DateTimeUtils.NANOS_PER_MICROS
-    }
 
     secondNano.split("\\.") match {
       case Array(secondsStr) => parseSeconds(secondsStr)
-      case Array("", nanosStr) => parseNanos(nanosStr)
+      case Array("", nanosStr) => parseNanos(nanosStr, false)
       case Array(secondsStr, nanosStr) =>
-        Math.addExact(parseSeconds(secondsStr), parseNanos(nanosStr))
+        val seconds = parseSeconds(secondsStr)
+        Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
       case _ =>
         throw new IllegalArgumentException(
           "Interval string does not match second-nano format of ss.nnnnnnnnn")
