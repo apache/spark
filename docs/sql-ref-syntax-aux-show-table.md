@@ -79,7 +79,7 @@ SHOW TABLE EXTENDED  LIKE `employee`;
                                 Provider: hive
                                 Table Properties: [transient_lastDdlTime=1567158021]
                                 Location: file:/opt/spark1/spark/spark-warehouse/employee
-                                Serde Library: org.apache.hadoop.hive.serde2.lazy
+                                Serde Library: org.apache.hadoop.hive.serde2.lazy   
                                 .LazySimpleSerDe
                                 InputFormat: org.apache.hadoop.mapred.TextInputFormat
                                 OutputFormat: org.apache.hadoop.hive.ql.io
@@ -145,7 +145,7 @@ SHOW TABLE EXTENDED  LIKE `employe*`;
 -- show partition file system details
 SHOW TABLE EXTENDED  IN `default` LIKE `employee` PARTITION (`grade=1`);
 +--------+---------+-----------+---------------------------------------------------------------
-|database|tableName|isTemporary|                         information                                                                                                                                                                                                                                                                  information                                                                                                                                                                                                                                                                                                 |
+|database|tableName|isTemporary|                         information                           
 +--------+---------+-----------+---------------------------------------------------------------
 |default |employee |false      | Partition Values: [grade=1]
                                Location: file:/opt/spark1/spark/spark-warehouse/employee
@@ -164,6 +164,12 @@ SHOW TABLE EXTENDED  IN `default` LIKE `employee` PARTITION (`grade=1`);
                                Partition Statistics: 4 bytes
                                                                                                                                                                              |
 +--------+---------+-----------+---------------------------------------------------------------
+
+-- show partition file system details with regex fails as shown below
+SHOW TABLE EXTENDED  IN `default` LIKE `empl*` PARTITION (`grade=1`);
+Error: Error running query: org.apache.spark.sql.catalyst.analysis.NoSuchTableException:
+ Table or view 'emplo*' not found in database 'default'; (state=,code=0)
+
 {% endhighlight %}
 ### Related Statements
 - [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
