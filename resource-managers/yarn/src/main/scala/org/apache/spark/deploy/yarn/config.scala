@@ -316,6 +316,10 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
+  private[spark] val YARN_BLACKLIST_WAITING_MILLIS = ConfigBuilder("spark.blacklist.waiting.millis")
+    .longConf
+    .createWithDefault(60000L)
+
   private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
   private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."

@@ -27,7 +27,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.client.api.AMRMClient
+import org.apache.hadoop.yarn.client.api.{AMRMClient, YarnClient}
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
@@ -64,6 +64,7 @@ private[yarn] class YarnAllocator(
     conf: YarnConfiguration,
     sparkConf: SparkConf,
     amClient: AMRMClient[ContainerRequest],
+    yarnClient: YarnClient,
     appAttemptId: ApplicationAttemptId,
     securityMgr: SecurityManager,
     localResources: Map[String, LocalResource],
@@ -107,7 +108,7 @@ private[yarn] class YarnAllocator(
   private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
 
   private val allocatorBlacklistTracker =
-    new YarnAllocatorBlacklistTracker(sparkConf, amClient, failureTracker)
+    new YarnAllocatorBlacklistTracker(sparkConf, amClient, yarnClient, failureTracker)
 
   @volatile private var targetNumExecutors =
     SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
@@ -259,7 +260,6 @@ private[yarn] class YarnAllocator(
     val allocateResponse = amClient.allocate(progressIndicator)
 
     val allocatedContainers = allocateResponse.getAllocatedContainers()
-    allocatorBlacklistTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
     if (allocatedContainers.size > 0) {
       logDebug(("Allocated containers: %d. Current executor count: %d. " +

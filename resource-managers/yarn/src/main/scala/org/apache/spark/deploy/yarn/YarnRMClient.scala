@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.client.api.AMRMClient
+import org.apache.hadoop.yarn.client.api.{AMRMClient, YarnClient}
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils
@@ -37,6 +37,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 private[spark] class YarnRMClient extends Logging {
 
   private var amClient: AMRMClient[ContainerRequest] = _
+  private var yarnClient: YarnClient = _
   private var uiHistoryAddress: String = _
   private var registered: Boolean = false
 
@@ -57,6 +58,9 @@ private[spark] class YarnRMClient extends Logging {
       sparkConf: SparkConf,
       uiAddress: Option[String],
       uiHistoryAddress: String): Unit = {
+    yarnClient = YarnClient.createYarnClient()
+    yarnClient.init(conf)
+    yarnClient.start()
     amClient = AMRMClient.createAMRMClient()
     amClient.init(conf)
     amClient.start()
@@ -82,8 +86,8 @@ private[spark] class YarnRMClient extends Logging {
       securityMgr: SecurityManager,
       localResources: Map[String, LocalResource]): YarnAllocator = {
     require(registered, "Must register AM before creating allocator.")
-    new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, appAttemptId, securityMgr,
-      localResources, SparkRackResolver.get(conf))
+    new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, yarnClient,
+      appAttemptId, securityMgr, localResources, SparkRackResolver.get(conf))
   }
 
   /**
@@ -98,6 +102,9 @@ private[spark] class YarnRMClient extends Logging {
     }
     if (amClient != null) {
       amClient.stop()
+    }
+    if (yarnClient != null) {
+      yarnClient.stop()
     }
   }
 

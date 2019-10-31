@@ -22,7 +22,7 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.client.api.AMRMClient
+import org.apache.hadoop.yarn.client.api.{AMRMClient, YarnClient}
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.ArgumentCaptor
@@ -64,6 +64,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   val containerResource = Resource.newInstance(3072, 6)
 
   var rmClient: AMRMClient[ContainerRequest] = _
+  var yarnClient: YarnClient = _
 
   var clock: ManualClock = _
 
@@ -71,6 +72,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+
+    yarnClient = mock(classOf[YarnClient])
+
     rmClient = AMRMClient.createAMRMClient()
     rmClient.init(conf)
     rmClient.start()
@@ -80,6 +84,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   override def afterEach(): Unit = {
     try {
       rmClient.stop()
+      yarnClient.stop()
     } finally {
       super.afterEach()
     }
@@ -93,6 +98,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   def createAllocator(
       maxExecutors: Int = 5,
       rmClient: AMRMClient[ContainerRequest] = rmClient,
+      yarnClient: YarnClient = yarnClient,
       additionalConfigs: Map[String, String] = Map()): YarnAllocator = {
     val args = Array(
       "--jar", "somejar.jar",
@@ -113,6 +119,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       conf,
       sparkConfClone,
       rmClient,
+      yarnClient,
       appAttemptId,
       new SecurityManager(sparkConf),
       Map(),
@@ -166,7 +173,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
 
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
-    val handler = createAllocator(1, mockAmClient,
+    val mockYarnClient = mock(classOf[YarnClient])
+    val handler = createAllocator(1, mockAmClient, mockYarnClient,
       Map(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${GPU}.${AMOUNT}" -> "2G"))
 
     handler.updateResourceRequests()
@@ -190,12 +198,13 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val yarnResources = Seq(YARN_GPU_RESOURCE_CONFIG, YARN_FPGA_RESOURCE_CONFIG, yarnMadeupResource)
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+    val mockYarnClient = mock(classOf[YarnClient])
     val madeupConfigName = s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}.${AMOUNT}"
     val sparkResources =
       Map(EXECUTOR_GPU_ID.amountConf -> "3",
         EXECUTOR_FPGA_ID.amountConf -> "2",
         madeupConfigName -> "5")
-    val handler = createAllocator(1, mockAmClient, sparkResources)
+    val handler = createAllocator(1, mockAmClient, mockYarnClient, sparkResources)
 
     handler.updateResourceRequests()
     val yarnRInfo = ResourceRequestTestHelper.getResources(handler.resource)
@@ -466,11 +475,13 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   test("SPARK-26269: YarnAllocator should have same blacklist behaviour with YARN") {
     val rmClientSpy = spy(rmClient)
+    val yarnClientSpy = spy(yarnClient)
     val maxExecutors = 11
 
     val handler = createAllocator(
       maxExecutors,
       rmClientSpy,
+      yarnClientSpy,
       Map(
         YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED.key -> "true",
         MAX_FAILED_EXEC_PER_NODE.key -> "0"))
