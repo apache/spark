@@ -558,20 +558,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin)
   }
 
-  test("alter table: rename partition") {
-    val sql =
-      """
-       |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-       |RENAME TO PARTITION (dt='2008-09-09', country='uk')
-      """.stripMargin
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRenamePartitionCommand(
-      TableIdentifier("table_name", None),
-      Map("dt" -> "2008-08-08", "country" -> "us"),
-      Map("dt" -> "2008-09-09", "country" -> "uk"))
-    comparePlans(parsed, expected)
-  }
-
   test("alter table: exchange partition (not supported)") {
     assertUnsupported(
       """
