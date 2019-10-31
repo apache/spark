@@ -32,6 +32,8 @@ import org.apache.spark.sql.types._
        25
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
        NULL
+      > SELECT _FUNC_(cast(v as interval)) FROM VALUES ('1 seconds'), ('2 seconds'), (null) tab(col)
+       interval 3 seconds
   """,
   since = "1.0.0")
 case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
