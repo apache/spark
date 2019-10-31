@@ -30,7 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2164,3 +2164,32 @@ case class SubtractDates(left: Expression, right: Expression)
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "expr1 _FUNC_ expr2 - Divide interval value `expr1` by `expr2`. It returns NULL if `expr2` is 0 or NULL.",
+  examples = """
+    Examples:
+      > SELECT interval '1 year 2 month' / 3.0;
+       interval 4 months 2 weeks 6 days
+  """,
+  since = "3.0.0")
+// scalastyle:on line.size.limit
+case class IntervalDivide(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = CalendarIntervalType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, DecimalType)
+
+  override def nullSafeEval(interval: Any, divisor: Any): Any = {
+    IntervalUtils.divide(interval.asInstanceOf[CalendarInterval],
+      divisor.asInstanceOf[Decimal])
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (interval, divisor) => {
+      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+      s"$iu.divide($interval, $divisor)"
+    })
+  }
+}
