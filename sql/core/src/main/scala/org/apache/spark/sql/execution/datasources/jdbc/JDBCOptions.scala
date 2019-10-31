@@ -177,6 +177,10 @@ class JDBCOptions(
       case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
+      case other => throw new IllegalArgumentException(
+        s"Invalid value `$other` for parameter `$JDBC_TXN_ISOLATION_LEVEL`. This can be " +
+          "`NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`."
+      )
     }
   // An option to execute custom SQL before fetching data from the remote DB
   val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
