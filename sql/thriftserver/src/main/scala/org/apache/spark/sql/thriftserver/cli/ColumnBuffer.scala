@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import com.google.common.primitives._
 import java.util._
 
-import org.apache.spark.sql.thriftserver.cli.Type._
 import org.apache.spark.sql.thriftserver.cli.thrift._
 
 /**

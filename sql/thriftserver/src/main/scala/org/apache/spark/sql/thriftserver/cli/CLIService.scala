@@ -466,8 +466,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
   }
 
   def getSessionManager: SessionManager = sessionManager
-
- }
+}
 
 object CLIService {
   val protocols: Array[TProtocolVersion] = TProtocolVersion.values()

@@ -113,6 +113,4 @@ public interface ICLIService {
                                       String primaryCatalog, String primarySchema, String primaryTable,
                                       String foreignCatalog, String foreignSchema, String foreignTable)
             throws SparkThriftServerSQLException;
-
-    void setApplicationName(SessionHandle sh, String value) throws SparkThriftServerSQLException;
 }

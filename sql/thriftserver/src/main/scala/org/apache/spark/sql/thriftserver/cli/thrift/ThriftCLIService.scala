@@ -664,7 +664,8 @@ private[thriftserver] abstract class ThriftCLIService(cliService: CLIService, se
   }
 
   override def SetClientInfo(req: TSetClientInfoReq): TSetClientInfoResp = {
-    throw new TException("Method not implemented")
+    val resp = new TSetClientInfoResp()
+    resp.setStatus(notSupportTokenErrorStatus)
   }
 
   @throws[TException]
