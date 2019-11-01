@@ -38,6 +38,7 @@ create table datetimes (
 ) using parquet;
 
 -- Spark cannot safely cast StringType to TimestampType
+-- [SPARK-29636] Spark can't parse '11:00 BST' or '2000-10-19 10:23:54+01' signatures to timestamp
 insert into datetimes values
 (1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), cast ('2000-10-19 10:23:54+01' as timestamp), timestamp '2000-10-19 10:23:54'),
 (2, timestamp '12:00', cast ('12:00 BST' as timestamp), cast ('2 years' as timestamp), cast ('2001-10-19 10:23:54+01' as timestamp), timestamp '2001-10-19 10:23:54'),
@@ -144,7 +145,6 @@ insert into datetimes values
 -- 	exclude ties), salary, enroll_date from empsalary;
 
 -- GROUPS tests
--- [SPARK-28648] Adds support to `groups` unit type in window clauses
 
 -- [SPARK-28648] Adds support to `groups` unit type in window clauses
 -- SELECT sum(unique1) over (order by four groups between unbounded preceding and current row),
@@ -257,7 +257,6 @@ insert into datetimes values
 -- salary, enroll_date from empsalary;
 
 -- Show differences in offset interpretation between ROWS, RANGE, and GROUPS
-
 WITH cte (x) AS (
         SELECT * FROM range(1, 36, 2)
 )
@@ -306,11 +305,9 @@ WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 -- WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
 
 -- with UNION
-
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
 
 -- check some degenerate cases
-
 create table t1 (f1 int, f2 int) using parquet;
 insert into t1 values (1,1),(1,2),(2,2);
 
@@ -323,9 +320,10 @@ from t1 where f1 = f2; -- error, must have order by
 -- select f1, sum(f1) over (partition by f1 order by f2
 -- range between 1 preceding and 1 following)
 -- from t1 where f1 = f2;
--- select f1, sum(f1) over (partition by f1 order by f2
---                          range between 1 preceding and 1 following)
--- from t1 where f1 = f2;
+
+select f1, sum(f1) over (partition by f1 order by f2
+range between 1 preceding and 1 following)
+from t1 where f1 = f2;
 
 select f1, sum(f1) over (partition by f1, f1 order by f2
 range between 2 preceding and 1 preceding)
@@ -362,7 +360,6 @@ from t1 where f1 = f2;
 -- from t1 where f1 = f2;
 
 -- ordering by a non-integer constant is allowed
-
 SELECT rank() OVER (ORDER BY length('abc'));
 
 -- can't order by another window function
@@ -376,7 +373,6 @@ SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) 
 
 SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1;
 
--- Since random() result may change due to seed issues, the behavior is actually unstable
 SELECT * FROM rank() OVER (ORDER BY random());
 
 -- Original query: DELETE FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10;
