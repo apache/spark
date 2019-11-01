@@ -34,8 +34,8 @@ trait BroadcastedHadoopConf {
   val sparkSession: SparkSession
   val options: CaseInsensitiveStringMap
 
-  var cachedHadoopConf: Configuration = null
-  var cachedBroadcastedConf: Broadcast[SerializableConfiguration] = null
+  protected var cachedHadoopConf: Configuration = null
+  protected var cachedBroadcastedConf: Broadcast[SerializableConfiguration] = null
 
   /**
    * Override this if you need to generate your Hadoop configuration differently
