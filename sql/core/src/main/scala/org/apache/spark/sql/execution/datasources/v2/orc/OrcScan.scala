@@ -45,18 +45,11 @@ case class OrcScan(
 
   override def isSplitable(path: Path): Boolean = true
 
-  override def hadoopConf(): Configuration = {
-    if (cachedHadoopConf eq null) {
-      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-      // Hadoop Configurations are case sensitive.
-      cachedHadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-      // The pushed filters will be set in `hadoopConf`. After that, we can simply use the
-      // changed `hadoopConf` in executors.
-      OrcFilters.createFilter(schema, pushedFilters).foreach { f =>
-        OrcInputFormat.setSearchArgument(hadoopConf, f, dataSchema.fieldNames)
-      }
+  override def withHadoopConfRewrite(hadoopConf: Configuration): Configuration = {
+    OrcFilters.createFilter(schema, pushedFilters).foreach { f =>
+      OrcInputFormat.setSearchArgument(hadoopConf, f, dataSchema.fieldNames)
     }
-    cachedHadoopConf
+    hadoopConf
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
