@@ -56,7 +56,7 @@ insert into gstest3 values
 -- Since Spark doesn't support CREATE TEMPORARY TABLE, we used CREATE TABLE instead
 -- create temp table gstest4(id integer, v integer,
 --                           unhashable_col bit(4), unsortable_col xid);
--- [SPARK-XXXXX] Support bit string types/literals
+-- [SPARK-29697] Support bit string types/literals
 create table gstest4(id integer, v integer,
                      unhashable_col /* bit(4) */ byte, unsortable_col /* xid */ integer) using parquet;
 insert into gstest4
@@ -90,7 +90,7 @@ create table gstest_empty (a integer, b integer, v integer) using parquet;
 -- simple rollup with multiple plain aggregates, with and without ordering
 -- (and with ordering differing from grouping)
 
--- [SPARK-XXXXX] Support grouping function with multiple arguments
+-- [SPARK-29698] Support grouping function with multiple arguments
 -- select a, b, grouping(a,b), sum(v), count(*), max(v)
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by rollup (a,b);
@@ -122,11 +122,11 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
 --  group by rollup (a) order by a;
 
 -- nesting with window functions
--- [SPARK-XXXXX] Different answers in nested aggregates with window functions
+-- [SPARK-29699] Different answers in nested aggregates with window functions
 select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
   from gstest2 group by rollup (a,b) order by rsum, a, b;
 
--- [SPARK-XXXXX] Support nested grouping sets
+-- [SPARK-29700] Support nested grouping sets
 -- nesting with grouping sets
 -- select sum(c) from gstest2
 --   group by grouping sets((), grouping sets((), grouping sets(())))
@@ -158,39 +158,39 @@ select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
 
 -- empty input: first is 0 rows, second 1, third 3 etc.
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a);
--- [SPARK-XXXXX] Different answers when empty input given in GROUPING SETS
+-- [SPARK-29701] Different answers when empty input given in GROUPING SETS
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),());
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),());
 select sum(v), count(*) from gstest_empty group by grouping sets ((),(),());
 
 -- empty input with joins tests some important code paths
--- [SPARK-XXXXX] Different answers when empty input given in GROUPING SETS
+-- [SPARK-29701] Different answers when empty input given in GROUPING SETS
 select t1.a, t2.b, sum(t1.v), count(*) from gstest_empty t1, gstest_empty t2
  group by grouping sets ((t1.a,t2.b),());
 
 -- simple joins, var resolution, GROUPING on join vars
--- [SPARK-XXXXX] Support grouping function with multiple arguments
+-- [SPARK-29698] Support grouping function with multiple arguments
 -- select t1.a, t2.b, grouping(t1.a, t2.b), sum(t1.v), max(t2.a)
 select t1.a, t2.b, grouping(t1.a), grouping(t2.b), sum(t1.v), max(t2.a)
   from gstest1 t1, gstest2 t2
  group by grouping sets ((t1.a, t2.b), ());
 
--- [SPARK-XXXXX] Support grouping function with multiple arguments
+-- [SPARK-29698] Support grouping function with multiple arguments
 -- select t1.a, t2.b, grouping(t1.a, t2.b), sum(t1.v), max(t2.a)
 select t1.a, t2.b, grouping(t1.a), grouping(t2.b), sum(t1.v), max(t2.a)
   from gstest1 t1 join gstest2 t2 on (t1.a=t2.a)
  group by grouping sets ((t1.a, t2.b), ());
 
--- [SPARK-XXXXX] Support grouping function with multiple arguments
+-- [SPARK-29698] Support grouping function with multiple arguments
 -- select a, b, grouping(a, b), sum(t1.v), max(t2.c)
 select a, b, grouping(a), grouping(b), sum(t1.v), max(t2.c)
   from gstest1 t1 join gstest2 t2 using (a,b)
  group by grouping sets ((a, b), ());
 
 -- check that functionally dependent cols are not nulled
--- [SPARK-XXXXX] Support grouping function with multiple arguments
+-- [SPARK-29698] Support grouping function with multiple arguments
 -- [SPARK-19842] Informational Referential Integrity Constraints Support in Spark
--- [SPARK-XXXXX] Resolve group-by columns with functional dependencies
+-- [SPARK-29702] Resolve group-by columns with functional dependencies
 -- select a, d, grouping(a,b,c)
 --   from gstest3
 --  group by grouping sets ((a,b), (a,c));
@@ -203,7 +203,7 @@ select a, b, grouping(a), grouping(b), sum(t1.v), max(t2.c)
 --  group by alias1, rollup(alias2);
 
 -- [SPARK-27767] Built-in function: generate_series
--- [SPARK-XXXXX] Support the combinations of grouping operations
+-- [SPARK-29704] Support the combinations of grouping operations
 -- select g as alias1, g as alias2
 --   from generate_series(1,3) g
 --  group by alias1, rollup(alias2);
@@ -254,23 +254,22 @@ DROP VIEW int8_tbl;
 --   select min(unique1) from tenk1 GROUP BY ();
 
 -- Views with GROUPING SET queries
--- [SPARK-XXXXX] Support grouping function with multiple arguments
--- [SPARK-XXXXX] Support more expressive forms in GroupingSets/Cube/Rollup
+-- [SPARK-29698] Support grouping function with multiple arguments
+-- [SPARK-29705] Support more expressive forms in GroupingSets/Cube/Rollup
 -- CREATE VIEW gstest_view AS select a, b, grouping(a,b), sum(c), count(*), max(c)
--- CREATE VIEW gstest_view AS select a, b, grouping(a), grouping(b), sum(c), count(*), max(c)
 --   from gstest2 group by rollup ((a,b,c),(c,d));
 
 -- select pg_get_viewdef('gstest_view'::regclass, true);
 
 -- Nested queries with 3 or more levels of nesting
--- [SPARK-XXXXX] Support grouping function with multiple arguments
--- [SPARK-XXXXX] grouping() can only be used with GroupingSets/Cube/Rollup
+-- [SPARK-29698] Support grouping function with multiple arguments
+-- [SPARK-29703] grouping() can only be used with GroupingSets/Cube/Rollup
 -- select(select (select grouping(a,b) from (values (1)) v2(c)) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP(e,f);
 -- select(select (select grouping(e,f) from (values (1)) v2(c)) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP(e,f);
 -- select(select (select grouping(c) from (values (1)) v2(c) GROUP BY c) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP(e,f);
 
 -- Combinations of operations
--- [SPARK-XXXXX] Support the combinations of grouping operations
+-- [SPARK-29704] Support the combinations of grouping operations
 -- select a, b, c, d from gstest2 group by rollup(a,b),grouping sets(c,d);
 -- select a, b from (values (1,2),(2,3)) v(a,b) group by a,b, grouping sets(a);
 
@@ -291,13 +290,13 @@ DROP VIEW int8_tbl;
 -- explain (costs off)
 -- select * from gstest1 group by grouping sets((a,b,v),(v)) order by v,b,a;
 
--- [SPARK-XXXXX] Support grouping function with multiple arguments
--- [SPARK-XXXXX] grouping() can only be used with GroupingSets/Cube/Rollup
+-- [SPARK-29698] Support grouping function with multiple arguments
+-- [SPARK-29703] grouping() can only be used with GroupingSets/Cube/Rollup
 -- Agg level check. This query should error out.
 -- select (select grouping(a), grouping(b) from gstest2) from gstest2 group by a,b;
 
 --Nested queries
--- [SPARK-XXXXX] Support nested grouping sets
+-- [SPARK-29700] Support nested grouping sets
 -- select a, b, sum(c), count(*) from gstest2 group by grouping sets (rollup(a,b),a);
 
 -- HAVING queries
@@ -311,7 +310,7 @@ select a,count(*) from gstest2 group by rollup(a) having a is distinct from 1 or
 -- explain (costs off)
 --   select a,count(*) from gstest2 group by rollup(a) having a is distinct from 1 order by a;
 
--- [SPARK-XXXXX] Support an empty grouping expression
+-- [SPARK-29706] Support an empty grouping expression
 -- select v.c, (select count(*) from gstest2 group by () having v.c)
 --   from (values (false),(true)) v(c) order by v.c;
 -- explain (costs off)
@@ -331,7 +330,7 @@ order by 2,1;
 select ten, grouping(ten) from onek
 group by cube(ten) having grouping(ten) > 0
 order by 2,1;
--- [SPARK-XXXXX] grouping() can only be used with GroupingSets/Cube/Rollup
+-- [SPARK-29703] grouping() can only be used with GroupingSets/Cube/Rollup
 -- select ten, grouping(ten) from onek
 -- group by (ten) having grouping(ten) >= 0
 -- order by 2,1;
@@ -347,7 +346,7 @@ order by 2,1;
 -- [SPARK-27878] Support ARRAY(sub-SELECT) expressions
 -- select array(select row(v.a,s1.*) from (select two,four, count(*) from onek group by cube(two,four) order by two,four) s1) from (values (1),(2)) v(a);
 
--- [SPARK-XXXXX] Support the combinations of grouping operations
+-- [SPARK-29704] Support the combinations of grouping operations
 -- Grouping on text columns
 -- select sum(ten) from onek group by two, rollup(string(four)) order by 1;
 -- select sum(ten) from onek group by rollup(string(four)), two order by 1;
@@ -366,14 +365,14 @@ select count(*) from gstest4 group by rollup(unhashable_col,unsortable_col);
 
 -- simple cases
 
--- [SPARK-XXXXX] Support grouping function with multiple arguments
+-- [SPARK-29698] Support grouping function with multiple arguments
 -- select a, b, grouping(a,b), sum(v), count(*), max(v)
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by grouping sets ((a),(b)) order by 3,4,1,2 /* 3,1,2 */;
 -- explain (costs off) select a, b, grouping(a,b), sum(v), count(*), max(v)
 --   from gstest1 group by grouping sets ((a),(b)) order by 3,1,2;
 
--- [SPARK-XXXXX] Support grouping function with multiple arguments
+-- [SPARK-29698] Support grouping function with multiple arguments
 -- select a, b, grouping(a,b), sum(v), count(*), max(v)
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by cube(a,b) order by 3,4,1,2 /* 3,1,2 */;
@@ -386,14 +385,14 @@ select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
 --     from gstest1 group by cube(a,b);
 
 -- unsortable cases
--- [SPARK-XXXXX] Different answers in aggregates of multiple grouping sets
+-- [SPARK-29708] Different answers in aggregates of multiple grouping sets
 select unsortable_col, count(*)
   from gstest4 group by grouping sets ((unsortable_col),(unsortable_col))
   order by string(unsortable_col);
 
 -- mixed hashable/sortable cases
 select unhashable_col, unsortable_col,
-       -- [SPARK-XXXXX] Support grouping function with multiple arguments
+       -- [SPARK-29698] Support grouping function with multiple arguments
        -- grouping(unhashable_col, unsortable_col),
        grouping(unhashable_col), grouping(unsortable_col),
        count(*), sum(v)
@@ -407,7 +406,7 @@ select unhashable_col, unsortable_col,
 --    order by 3,5;
 
 select unhashable_col, unsortable_col,
-       -- [SPARK-XXXXX] Support grouping function with multiple arguments
+       -- [SPARK-29698] Support grouping function with multiple arguments
        -- grouping(unhashable_col, unsortable_col),
        grouping(unhashable_col), grouping(unsortable_col),
        count(*), sum(v)
@@ -424,19 +423,19 @@ select unhashable_col, unsortable_col,
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a);
 -- explain (costs off)
 --   select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a);
--- [SPARK-XXXXX] Different answers when empty input given in GROUPING SETS
+-- [SPARK-29701] Different answers when empty input given in GROUPING SETS
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),());
 select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),());
 -- explain (costs off)
 --   select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),());
--- [SPARK-XXXXX] Different answers when empty input given in GROUPING SETS
+-- [SPARK-29701] Different answers when empty input given in GROUPING SETS
 select sum(v), count(*) from gstest_empty group by grouping sets ((),(),());
 -- explain (costs off)
 --   select sum(v), count(*) from gstest_empty group by grouping sets ((),(),());
 
--- [SPARK-XXXXX] Support grouping function with multiple arguments
+-- [SPARK-29698] Support grouping function with multiple arguments
 -- [SPARK-19842] Informational Referential Integrity Constraints Support in Spark
--- [SPARK-XXXXX] Resolve group-by columns with functional dependencies
+-- [SPARK-29702] Resolve group-by columns with functional dependencies
 -- check that functionally dependent cols are not nulled
 -- select a, d, grouping(a,b,c)
 --   from gstest3
@@ -466,14 +465,14 @@ select sum(v), count(*) from gstest_empty group by grouping sets ((),(),());
 --          lateral (select a, b, sum(v.x) from gstest_data(v.x) group by grouping sets (a,b)) s;
 
 -- Tests for chained aggregates
--- [SPARK-XXXXX] Support grouping function with multiple arguments
+-- [SPARK-29698] Support grouping function with multiple arguments
 -- select a, b, grouping(a,b), sum(v), count(*), max(v)
 select a, b, grouping(a), grouping(b), sum(v), count(*), max(v)
   from gstest1 group by grouping sets ((a,b),(a+1,b+1),(a+2,b+2)) order by 3,4,7 /* 3,6 */;
 -- explain (costs off)
 --   select a, b, grouping(a,b), sum(v), count(*), max(v)
 --     from gstest1 group by grouping sets ((a,b),(a+1,b+1),(a+2,b+2)) order by 3,6;
--- [SPARK-XXXXX] Different answers in nested aggregates with window functions
+-- [SPARK-29699] Different answers in nested aggregates with window functions
 select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
   from gstest2 group by cube (a,b) order by rsum, a, b;
 -- explain (costs off)
