@@ -127,12 +127,12 @@ public class CalendarIntervalSuite {
       CalendarInterval interval = new CalendarInterval(0, 0, 0);
       assertEquals(interval, interval.divide(10));
 
-      interval = new CalendarInterval(1, 0, 30 * MICROS_PER_SECOND);
+      interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND);
       assertEquals(
-        new CalendarInterval(0, 15, 15 * MICROS_PER_SECOND),
+        new CalendarInterval(0, 16, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND),
         interval.divide(2));
       assertEquals(
-        new CalendarInterval(2, 0, MICROS_PER_MINUTE),
+        new CalendarInterval(2, 6, MICROS_PER_MINUTE),
         interval.divide(0.5));
 
       interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND);
