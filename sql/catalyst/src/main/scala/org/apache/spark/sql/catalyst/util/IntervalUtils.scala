@@ -202,7 +202,7 @@ object IntervalUtils {
       val days = if (m.group(2) == null) {
         0
       } else {
-        toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE)
+        toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE).toInt
       }
       var hours: Long = 0L
       var minutes: Long = 0L
@@ -238,7 +238,7 @@ object IntervalUtils {
       micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
       micros = Math.addExact(micros, Math.multiplyExact(minutes, MICROS_PER_MINUTE))
       micros = Math.addExact(micros, Math.multiplyExact(seconds, DateTimeUtils.MICROS_PER_SECOND))
-      new CalendarInterval(0, sign * days.toInt, sign * micros)
+      new CalendarInterval(0, sign * days, sign * micros)
     } catch {
       case e: Exception =>
         throw new IllegalArgumentException(
