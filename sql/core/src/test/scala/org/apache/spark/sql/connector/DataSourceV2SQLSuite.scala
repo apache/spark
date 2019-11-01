@@ -19,8 +19,9 @@ package org.apache.spark.sql.connector
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
@@ -790,6 +791,45 @@ class DataSourceV2SQLSuite
     sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
   }
 
+  test("DropNamespace: basic tests") {
+    // Session catalog is used.
+    sql("CREATE NAMESPACE ns")
+    testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
+    sql("DROP NAMESPACE ns")
+    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
+
+    // V2 non-session catalog is used.
+    sql("CREATE NAMESPACE testcat.ns1")
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
+    sql("DROP NAMESPACE testcat.ns1")
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq())
+  }
+
+  test("DropNamespace: drop non-empty namespace") {
+    sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
+
+    val e1 = intercept[IllegalStateException] {
+      sql("DROP NAMESPACE testcat.ns1")
+    }
+    assert(e1.getMessage.contains("Cannot delete non-empty namespace: ns1"))
+
+    val e2 = intercept[SparkException] {
+      sql("DROP NAMESPACE testcat.ns1 CASCADE")
+    }
+    assert(e2.getMessage.contains(
+      "Cascade option for droping namespace is not supported in V2 catalog"))
+  }
+
+  test("DropNamespace: test handling of 'IF EXISTS'") {
+    sql("DROP NAMESPACE IF EXISTS testcat.unknown")
+
+    val exception = intercept[NoSuchNamespaceException] {
+      sql("DROP NAMESPACE testcat.ns1")
+    }
+    assert(exception.getMessage.contains("Namespace 'ns1' not found"))
+  }
+
   test("ShowNamespaces: show root namespaces with default v2 catalog") {
     spark.conf.set("spark.sql.default.catalog", "testcat")
 
@@ -1268,6 +1308,32 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("LOAD DATA INTO TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (id bigint, data string)
+           |USING foo
+           |PARTITIONED BY (id)
+         """.stripMargin)
+
+      testV1Command("LOAD DATA", s"INPATH 'filepath' INTO TABLE $t")
+      testV1Command("LOAD DATA", s"LOCAL INPATH 'filepath' INTO TABLE $t")
+      testV1Command("LOAD DATA", s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t")
+      testV1Command("LOAD DATA",
+        s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t PARTITION(id=1)")
+    }
+  }
+
+  test("SHOW CREATE TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      testV1Command("SHOW CREATE TABLE", t)
+    }
+  }
+
   test("CACHE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1289,6 +1355,55 @@ class DataSourceV2SQLSuite
 
       testV1Command("UNCACHE TABLE", t)
       testV1Command("UNCACHE TABLE", s"IF EXISTS $t")
+    }
+  }
+
+  test("SHOW COLUMNS") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      testV1Command("SHOW COLUMNS", s"FROM $t")
+      testV1Command("SHOW COLUMNS", s"IN $t")
+
+      val e3 = intercept[AnalysisException] {
+        sql(s"SHOW COLUMNS FROM tbl IN testcat.ns1.ns2")
+      }
+      assert(e3.message.contains("Namespace name should have " +
+        "only one part if specified: testcat.ns1.ns2"))
+    }
+  }
+
+  test("ALTER TABLE RECOVER PARTITIONS") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t RECOVER PARTITIONS")
+      }
+      assert(e.message.contains("ALTER TABLE RECOVER PARTITIONS is only supported with v1 tables"))
+    }
+  }
+
+  test("ALTER TABLE RENAME PARTITION") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
+      }
+      assert(e.message.contains("ALTER TABLE RENAME PARTITION is only supported with v1 tables"))
+    }
+  }
+
+  test("ALTER TABLE DROP PARTITIONS") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
+      }
+      assert(e.message.contains("ALTER TABLE DROP PARTITION is only supported with v1 tables"))
     }
   }
 

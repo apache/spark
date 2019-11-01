@@ -75,7 +75,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.default(DateType), LocalDate.ofEpochDay(0))
       checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
     }
-    checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0L))
+    checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0, 0L))
     checkEvaluation(Literal.default(ArrayType(StringType)), Array())
     checkEvaluation(Literal.default(MapType(IntegerType, StringType)), Map())
     checkEvaluation(Literal.default(StructType(StructField("a", StringType) :: Nil)), Row(""))

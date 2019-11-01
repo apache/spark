@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -597,7 +597,7 @@ class ExpressionParserSuite extends AnalysisTest {
     "microsecond")
 
   def intervalLiteral(u: String, s: String): Literal = {
-    Literal(CalendarInterval.fromUnitStrings(Array(u), Array(s)))
+    Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
   }
 
   test("intervals") {
@@ -628,7 +628,19 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Hive nanosecond notation.
     checkIntervals("13.123456789 seconds", intervalLiteral("second", "13.123456789"))
-    checkIntervals("-13.123456789 second", intervalLiteral("second", "-13.123456789"))
+    checkIntervals(
+      "-13.123456789 second",
+      Literal(new CalendarInterval(
+        0,
+        0,
+        -13 * DateTimeUtils.MICROS_PER_SECOND - 123 * DateTimeUtils.MICROS_PER_MILLIS - 456)))
+    checkIntervals(
+      "13.123456 second",
+      Literal(new CalendarInterval(
+        0,
+        0,
+        13 * DateTimeUtils.MICROS_PER_SECOND + 123 * DateTimeUtils.MICROS_PER_MILLIS + 456)))
+    checkIntervals("1.001 second", Literal(IntervalUtils.fromString("1 second 1 millisecond")))
 
     // Non Existing unit
     intercept("interval 10 nanoseconds",
@@ -637,7 +649,7 @@ class ExpressionParserSuite extends AnalysisTest {
     // Year-Month intervals.
     val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
     yearMonthValues.foreach { value =>
-      val result = Literal(CalendarInterval.fromYearMonthString(value))
+      val result = Literal(IntervalUtils.fromYearMonthString(value))
       checkIntervals(s"'$value' year to month", result)
     }
 
@@ -650,7 +662,7 @@ class ExpressionParserSuite extends AnalysisTest {
       "-1 0:0:0",
       "1 0:0:1")
     datTimeValues.foreach { value =>
-      val result = Literal(CalendarInterval.fromDayTimeString(value))
+      val result = Literal(IntervalUtils.fromDayTimeString(value))
       checkIntervals(s"'$value' day to second", result)
     }
 
@@ -662,7 +674,7 @@ class ExpressionParserSuite extends AnalysisTest {
       "0:0:0",
       "0:0:1")
     hourTimeValues.foreach { value =>
-      val result = Literal(CalendarInterval.fromDayTimeString(value))
+      val result = Literal(IntervalUtils.fromDayTimeString(value))
       checkIntervals(s"'$value' hour to second", result)
     }
 
@@ -672,12 +684,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Composed intervals.
     checkIntervals(
-      "3 months 22 seconds 1 millisecond",
-      Literal(new CalendarInterval(3, 22001000L)))
+      "3 months 4 days 22 seconds 1 millisecond",
+      Literal(new CalendarInterval(3, 4, 22001000L)))
     checkIntervals(
       "3 years '-1-10' year to month 3 weeks '1 0:0:2' day to second",
-      Literal(new CalendarInterval(14,
-        22 * CalendarInterval.MICROS_PER_DAY + 2 * CalendarInterval.MICROS_PER_SECOND)))
+      Literal(new CalendarInterval(14, 22, 2 * CalendarInterval.MICROS_PER_SECOND)))
   }
 
   test("SPARK-23264 Interval Compatibility tests") {
