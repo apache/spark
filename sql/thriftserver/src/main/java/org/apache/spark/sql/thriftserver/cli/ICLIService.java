@@ -77,7 +77,7 @@ public interface ICLIService {
                                  String catalogName, String schemaName, String functionName)
             throws SparkThriftServerSQLException;
 
-    OperationStatus getOperationStatus(OperationHandle opHandle, boolean getProgressUpdate)
+    OperationStatus getOperationStatus(OperationHandle opHandle)
             throws SparkThriftServerSQLException;
 
     String getQueryId(TOperationHandle operationHandle) throws SparkThriftServerSQLException;

@@ -280,7 +280,7 @@ class ThriftCLIServiceClient(val cliService: TCLIService.Iface) extends CLIServi
       checkStatus(resp.getStatus)
       val opState = OperationState.getOperationState(resp.getOperationState)
       var opException: SparkThriftServerSQLException = null
-      if (opState eq ERROR) {
+      if (opState eq OperationState.ERROR) {
         opException =
           new SparkThriftServerSQLException(
             resp.getErrorMessage,
