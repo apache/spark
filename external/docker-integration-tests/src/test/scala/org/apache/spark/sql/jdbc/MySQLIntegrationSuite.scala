@@ -84,7 +84,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types.length == 9)
     assert(types(0).equals("class java.lang.Boolean"))
     assert(types(1).equals("class java.lang.Long"))
-    assert(types(2).equals("class java.lang.Integer"))
+    assert(types(2).equals("class java.lang.Short"))
     assert(types(3).equals("class java.lang.Integer"))
     assert(types(4).equals("class java.lang.Integer"))
     assert(types(5).equals("class java.lang.Long"))
@@ -93,7 +93,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(8).equals("class java.lang.Double"))
     assert(rows(0).getBoolean(0) == false)
     assert(rows(0).getLong(1) == 0x225)
-    assert(rows(0).getInt(2) == 17)
+    assert(rows(0).getShort(2) == 17)
     assert(rows(0).getInt(3) == 77777)
     assert(rows(0).getInt(4) == 123456789)
     assert(rows(0).getLong(5) == 123456789012345L)
@@ -180,5 +180,47 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select x, y from queryOption").collect.toSet == expectedResult)
+  }
+
+  test("Write tables with ShortType") {
+    import testImplicits._
+    val df = Seq(-32768.toShort, 0.toShort, 1.toShort, 38.toShort, 32768.toShort).toDF("a")
+    val tablename = "shorttable"
+    df.write
+      .format("jdbc")
+      .mode("overwrite")
+      .option("url", jdbcUrl)
+      .option("dbtable", tablename)
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", tablename)
+      .load()
+    assert(df.count == df2.count)
+    val rows = df2.collect()
+    val colType = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(colType(0) == "class java.lang.Short")
+  }
+
+  test("Write tables with ByteType") {
+    import testImplicits._
+    val df = Seq(-127.toByte, 0.toByte, 1.toByte, 38.toByte, 128.toByte).toDF("a")
+    val tablename = "bytetable"
+    df.write
+      .format("jdbc")
+      .mode("overwrite")
+      .option("url", jdbcUrl)
+      .option("dbtable", tablename)
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", tablename)
+      .load()
+    assert(df.count == df2.count)
+    val rows = df2.collect()
+    val colType = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(colType(0) == "class java.lang.Byte")
   }
 }

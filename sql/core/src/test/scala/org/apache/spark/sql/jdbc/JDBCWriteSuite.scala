@@ -89,6 +89,8 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   private lazy val arr2x2 = Array[Row](Row.apply("dave", 42), Row.apply("mary", 222))
+  private lazy val shortarr2x2 = Array[Row](Row.apply("dave", 42.toShort), Row.apply("mary", 31.toShort))
+  private lazy val bytearr2x2 = Array[Row](Row.apply("dave", 42.toByte), Row.apply("mary", 31.toByte))
   private lazy val arr1x2 = Array[Row](Row.apply("fred", 3))
   private lazy val schema2 = StructType(
       StructField("name", StringType) ::
@@ -103,6 +105,14 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   private lazy val schema4 = StructType(
       StructField("NAME", StringType) ::
       StructField("ID", IntegerType) :: Nil)
+
+  private lazy val schema5 = StructType(
+    StructField("NAME", StringType) ::
+      StructField("ID", ShortType) :: Nil)
+
+  private lazy val schema6 = StructType(
+    StructField("NAME", StringType) ::
+      StructField("ID", ByteType) :: Nil)
 
   test("Basic CREATE") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
@@ -572,6 +582,46 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     runAndVerifyRecordsWritten(0) {
       df.write.mode(SaveMode.Ignore).jdbc(url, "TEST.BASICCREATETEST", new Properties())
     }
+  }
+
+  test("test writing table with ShortType") {
+    val df = spark.createDataFrame(sparkContext.parallelize(shortarr2x2), schema5)
+    val tablename = "shorttable"
+    df.write
+      .format("jdbc")
+      .mode("overwrite")
+      .option("url", url)
+      .option("dbtable", tablename)
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url", url)
+      .option("dbtable", tablename)
+      .load()
+    assert(df.count == df2.count)
+    val rows = df2.collect()
+    val colType = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(colType(1) == "class java.lang.Short")
+  }
+
+  test("test writing table with ByteType") {
+    val df = spark.createDataFrame(sparkContext.parallelize(bytearr2x2), schema6)
+    val tablename = "bytetable"
+    df.write
+      .format("jdbc")
+      .mode("overwrite")
+      .option("url", url)
+      .option("dbtable", tablename)
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url", url)
+      .option("dbtable", tablename)
+      .load()
+    assert(df.count == df2.count)
+    val rows = df2.collect()
+    val colType = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(colType(1) == "class java.lang.Byte")
   }
 
   private def runAndVerifyRecordsWritten(expected: Long)(job: => Unit): Unit = {
