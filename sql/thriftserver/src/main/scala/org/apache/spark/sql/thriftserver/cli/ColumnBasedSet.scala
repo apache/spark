@@ -18,6 +18,7 @@
 package org.apache.spark.sql.thriftserver.cli
 
 import java.nio.ByteBuffer
+import java.sql.Date
 import java.util.BitSet
 
 import scala.collection.JavaConverters._
@@ -27,6 +28,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.thriftserver.cli.thrift._
 import org.apache.spark.sql.types.{BinaryType, _}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 private[thriftserver] case class ColumnBasedSet(
     types: StructType,
@@ -170,6 +172,38 @@ private[thriftserver] case class ColumnBasedSet(
           } else {
             rows(i).getDecimal(ordinal).toPlainString
           }
+        }.asJava
+        TColumn.stringVal(new TStringColumn(values, bitSetToBuffer(nulls)))
+      case DateType =>
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
+            EMPTY_STRING
+          } else {
+            String.valueOf(rows(i).getAs[Date](ordinal).toString)
+          }
+        }.asJava
+        TColumn.stringVal(new TStringColumn(values, bitSetToBuffer(nulls)))
+      case CalendarIntervalType =>
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          val isNull = rows(i).isNullAt(ordinal)
+          nulls.set(i, isNull)
+          if (isNull) {
+            EMPTY_STRING
+          } else {
+            HiveResult.toHiveString(
+              (rows(i).getAs[CalendarInterval](ordinal), CalendarIntervalType))
+          }
+        }.asJava
+        TColumn.stringVal(new TStringColumn(values, bitSetToBuffer(nulls)))
+      case NullType =>
+        val values = rows.indices
+          .filter(i => ordinal < rows(i).length).map { i =>
+          nulls.set(i, true)
+          EMPTY_STRING
         }.asJava
         TColumn.stringVal(new TStringColumn(values, bitSetToBuffer(nulls)))
       case _ =>
