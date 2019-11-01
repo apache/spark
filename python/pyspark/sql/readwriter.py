@@ -733,7 +733,7 @@ class DataFrameWriter(OptionUtils):
         :param partitionBy: names of partitioning columns
         :param options: all other string options
 
-        >>> df.write.mode("overwrite").save("mydata.parquet")
+        >>> df.write.mode("append").save(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode).options(**options)
         if partitionBy is not None:
