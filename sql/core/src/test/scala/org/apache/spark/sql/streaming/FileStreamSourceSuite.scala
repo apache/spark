@@ -32,7 +32,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, FileStreamSourceCleaner, SeenFilesMap}
+import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, SeenFilesMap, SourceFileArchiver}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ExistsThrowsExceptionFileSystem._
@@ -1740,30 +1740,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   class FakeFileSystem(scheme: String) extends FileSystem {
-    val requestsExists = new mutable.MutableList[Path]()
-    val requestsMkdirs = new mutable.MutableList[Path]()
-    val requestsRename = new mutable.MutableList[(Path, Path)]()
+    override def exists(f: Path): Boolean = true
 
-    override def exists(f: Path): Boolean = {
-      requestsExists += f
-      true
-    }
+    override def mkdirs(f: Path, permission: FsPermission): Boolean = true
 
-    override def mkdirs(f: Path, permission: FsPermission): Boolean = {
-      requestsMkdirs += f
-      true
-    }
-
-    override def rename(src: Path, dst: Path): Boolean = {
-      requestsRename += ((src, dst))
-      true
-    }
-
-    def clearRecords(): Unit = {
-      requestsExists.clear()
-      requestsMkdirs.clear()
-      requestsRename.clear()
-    }
+    override def rename(src: Path, dst: Path): Boolean = true
 
     override def getUri: URI = URI.create(s"${scheme}:///")
 
@@ -1792,19 +1773,18 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     override def getFileStatus(f: Path): FileStatus = throw new NotImplementedError
   }
 
-  test("FileStreamSourceCleaner - archive - base archive path depth <= 2") {
+  test("SourceFileArchiver - base archive path depth <= 2") {
     val fakeFileSystem = new FakeFileSystem("fake")
 
     val sourcePatternPath = new Path("/hello*/h{e,f}ll?")
     val baseArchiveDirPath = new Path("/hello")
 
     intercept[IllegalArgumentException] {
-      new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
-        Some(fakeFileSystem), Some(baseArchiveDirPath))
+      new SourceFileArchiver(fakeFileSystem, sourcePatternPath, fakeFileSystem, baseArchiveDirPath)
     }
   }
 
-  test("FileStreamSourceCleaner - archive - different filesystems between source and archive") {
+  test("SourceFileArchiver - different filesystems between source and archive") {
     val fakeFileSystem = new FakeFileSystem("fake")
     val fakeFileSystem2 = new FakeFileSystem("fake2")
 
@@ -1812,26 +1792,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val baseArchiveDirPath = new Path("/hello")
 
     intercept[IllegalArgumentException] {
-      new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
-        Some(fakeFileSystem2), Some(baseArchiveDirPath))
+      new SourceFileArchiver(fakeFileSystem, sourcePatternPath, fakeFileSystem2,
+        baseArchiveDirPath)
     }
-  }
-
-  private def assertNoMove(fs: FakeFileSystem): Unit = {
-    assert(fs.requestsExists.isEmpty)
-    assert(fs.requestsMkdirs.isEmpty)
-    assert(fs.requestsRename.isEmpty)
-  }
-
-  private def assertMoveFile(
-      fs: FakeFileSystem,
-      sourcePath: Path,
-      expectedArchivePath: Path): Unit = {
-    assert(fs.requestsExists.nonEmpty)
-    assert(fs.requestsExists.head === expectedArchivePath.getParent)
-    assert(fs.requestsMkdirs.isEmpty)
-    assert(fs.requestsRename.nonEmpty)
-    assert(fs.requestsRename.head === ((sourcePath, expectedArchivePath)))
   }
 
   private def assertFileIsNotMoved(sourceDir: File, expectedDir: File, filePrefix: String): Unit = {
