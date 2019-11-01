@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.util.regex.Pattern
+import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
@@ -36,7 +36,7 @@ object IntervalUtils {
   final val MICROS_PER_MINUTE: Long =
     DateTimeUtils.MILLIS_PER_MINUTE * DateTimeUtils.MICROS_PER_MILLIS
   final val DAYS_PER_MONTH: Byte = 30
-  final val MICROS_PER_MONTH: Long = DAYS_PER_MONTH * DateTimeUtils.SECONDS_PER_DAY
+  final val MICROS_PER_MONTH: Long = DAYS_PER_MONTH * DateTimeUtils.MICROS_PER_DAY
   /* 365.25 days per year assumes leap year every four years */
   final val MICROS_PER_YEAR: Long = (36525L * DateTimeUtils.MICROS_PER_DAY) / 100
 
@@ -218,27 +218,22 @@ object IntervalUtils {
         minutes = toLongWithRange("second", m.group(7), 0, 59)
       }
       // Hive allow nanosecond precision interval
-      val nanoStr = if (m.group(9) == null) {
-        null
-      } else {
-        (m.group(9) + "000000000").substring(0, 9)
-      }
-      var nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L)
+      var secondsFraction = parseNanos(m.group(9), seconds < 0)
       to match {
         case "hour" =>
           minutes = 0
           seconds = 0
-          nanos = 0
+          secondsFraction = 0
         case "minute" =>
           seconds = 0
-          nanos = 0
+          secondsFraction = 0
         case "second" =>
           // No-op
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot support (interval '$input' $from to $to) expression")
       }
-      var micros = nanos / DateTimeUtils.NANOS_PER_MICROS
+      var micros = secondsFraction
       micros = Math.addExact(micros, Math.multiplyExact(days, DateTimeUtils.MICROS_PER_DAY))
       micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
       micros = Math.addExact(micros, Math.multiplyExact(minutes, MICROS_PER_MINUTE))
@@ -292,6 +287,21 @@ object IntervalUtils {
     new CalendarInterval(months, microseconds)
   }
 
+  // Parses a string with nanoseconds, truncates the result and returns microseconds
+  private def parseNanos(nanosStr: String, isNegative: Boolean): Long = {
+    if (nanosStr != null) {
+      val maxNanosLen = 9
+      val alignedStr = if (nanosStr.length < maxNanosLen) {
+        (nanosStr + "000000000").substring(0, maxNanosLen)
+      } else nanosStr
+      val nanos = toLongWithRange("nanosecond", alignedStr, 0L, 999999999L)
+      val micros = nanos / DateTimeUtils.NANOS_PER_MICROS
+      if (isNegative) -micros else micros
+    } else {
+      0L
+    }
+  }
+
   /**
    * Parse second_nano string in ss.nnnnnnnnn format to microseconds
    */
@@ -303,18 +313,54 @@ object IntervalUtils {
         Long.MinValue / DateTimeUtils.MICROS_PER_SECOND,
         Long.MaxValue / DateTimeUtils.MICROS_PER_SECOND) * DateTimeUtils.MICROS_PER_SECOND
     }
-    def parseNanos(nanosStr: String): Long = {
-      toLongWithRange("nanosecond", nanosStr, 0L, 999999999L) / DateTimeUtils.NANOS_PER_MICROS
-    }
 
     secondNano.split("\\.") match {
       case Array(secondsStr) => parseSeconds(secondsStr)
-      case Array("", nanosStr) => parseNanos(nanosStr)
+      case Array("", nanosStr) => parseNanos(nanosStr, false)
       case Array(secondsStr, nanosStr) =>
-        Math.addExact(parseSeconds(secondsStr), parseNanos(nanosStr))
+        val seconds = parseSeconds(secondsStr)
+        Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
       case _ =>
         throw new IllegalArgumentException(
           "Interval string does not match second-nano format of ss.nnnnnnnnn")
     }
+  }
+
+  /**
+   * Gets interval duration
+   *
+   * @param interval The interval to get duration
+   * @param targetUnit Time units of the result
+   * @param daysPerMonth The number of days per one month. The default value is 31 days
+   *                     per month. This value was taken as the default because it is used
+   *                     in Structured Streaming for watermark calculations. Having 31 days
+   *                     per month, we can guarantee that events are not dropped before
+   *                     the end of any month (February with 29 days or January with 31 days).
+   * @return Duration in the specified time units
+   */
+  def getDuration(
+      interval: CalendarInterval,
+      targetUnit: TimeUnit,
+      daysPerMonth: Int = 31): Long = {
+    val monthsDuration = Math.multiplyExact(
+      daysPerMonth * DateTimeUtils.MICROS_PER_DAY,
+      interval.months)
+    val result = Math.addExact(interval.microseconds, monthsDuration)
+    targetUnit.convert(result, TimeUnit.MICROSECONDS)
+  }
+
+  /**
+   * Checks the interval is negative
+   *
+   * @param interval The checked interval
+   * @param daysPerMonth The number of days per one month. The default value is 31 days
+   *                     per month. This value was taken as the default because it is used
+   *                     in Structured Streaming for watermark calculations. Having 31 days
+   *                     per month, we can guarantee that events are not dropped before
+   *                     the end of any month (February with 29 days or January with 31 days).
+   * @return true if duration of the given interval is less than 0 otherwise false
+   */
+  def isNegative(interval: CalendarInterval, daysPerMonth: Int = 31): Boolean = {
+    getDuration(interval, TimeUnit.MICROSECONDS, daysPerMonth) < 0
   }
 }

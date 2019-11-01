@@ -558,20 +558,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin)
   }
 
-  test("alter table: rename partition") {
-    val sql =
-      """
-       |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-       |RENAME TO PARTITION (dt='2008-09-09', country='uk')
-      """.stripMargin
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRenamePartitionCommand(
-      TableIdentifier("table_name", None),
-      Map("dt" -> "2008-08-08", "country" -> "us"),
-      Map("dt" -> "2008-09-09", "country" -> "uk"))
-    comparePlans(parsed, expected)
-  }
-
   test("alter table: exchange partition (not supported)") {
     assertUnsupported(
       """
@@ -633,18 +619,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assertUnsupported(
       "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
         "SET FILEFORMAT PARQUET")
-  }
-
-  test("alter table: set partition location") {
-    val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
-      "SET LOCATION 'new location'"
-    val parsed2 = parser.parsePlan(sql2)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected2 = AlterTableSetLocationCommand(
-      tableIdent,
-      Some(Map("dt" -> "2008-08-08", "country" -> "us")),
-      "new location")
-    comparePlans(parsed2, expected2)
   }
 
   test("alter table: change column name/type/comment") {
@@ -754,27 +728,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
     }.getMessage
     assert(e.contains("Found an empty partition key 'b'"))
-  }
-
-  test("show columns") {
-    val sql1 = "SHOW COLUMNS FROM t1"
-    val sql2 = "SHOW COLUMNS IN db1.t1"
-    val sql3 = "SHOW COLUMNS FROM t1 IN db1"
-    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db2"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val expected1 = ShowColumnsCommand(None, TableIdentifier("t1", None))
-    val parsed2 = parser.parsePlan(sql2)
-    val expected2 = ShowColumnsCommand(None, TableIdentifier("t1", Some("db1")))
-    val parsed3 = parser.parsePlan(sql3)
-    val expected3 = ShowColumnsCommand(Some("db1"), TableIdentifier("t1", None))
-    val parsed4 = parser.parsePlan(sql4)
-    val expected4 = ShowColumnsCommand(Some("db2"), TableIdentifier("t1", Some("db1")))
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
   }
 
   test("Test CTAS #1") {
