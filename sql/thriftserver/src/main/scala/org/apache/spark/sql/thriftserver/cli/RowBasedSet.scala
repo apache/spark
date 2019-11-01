@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.thriftserver.cli
 
+import java.sql.Date
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -24,6 +26,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.thriftserver.cli.thrift._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * A result set of Spark's [[Row]]s with its [[StructType]] as its schema,
@@ -116,11 +119,31 @@ private[thriftserver] case class RowBasedSet(types: StructType,
         val tStringValue = new TStringValue
         if (!row.isNullAt(ordinal)) {
           val bytes = row.getAs[Array[Byte]](ordinal)
-          tStringValue.setValue(HiveResult.toHiveString((bytes, types(ordinal).dataType)))
+          tStringValue.setValue(UTF8String.fromBytes(bytes).toString)
         }
         TColumnValue.stringVal(tStringValue)
 
-      case _: ArrayType | _: StructType | _: MapType =>
+      case DateType =>
+        val tStringValue = new TStringValue
+        if (!row.isNullAt(ordinal)) {
+          val date = row.getAs[Date](ordinal)
+          tStringValue.setValue(date.toString)
+        }
+        TColumnValue.stringVal(tStringValue)
+
+      case CalendarIntervalType =>
+        val tStringValue = new TStringValue
+        if (!row.isNullAt(ordinal)) {
+          val calendarInterval = row.getAs[CalendarInterval](ordinal)
+          tStringValue.setValue(HiveResult.toHiveString(calendarInterval, CalendarIntervalType))
+        }
+        TColumnValue.stringVal(tStringValue)
+
+      case NullType =>
+        val tStringValue = new TStringValue
+        TColumnValue.stringVal(tStringValue)
+
+      case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
         val tStrValue = new TStringValue
         if (!row.isNullAt(ordinal)) {
           tStrValue.setValue(
