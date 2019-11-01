@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 object V2ScanRelationPushDown extends Rule[LogicalPlan] {
   import DataSourceV2Implicits._
 
-  val PUSHED_FILTERS_TAG = TreeNodeTag[Array[org.apache.spark.sql.sources.Filter]]("pushed_filters")
+  val PUSHED_FILTERS_TAG = TreeNodeTag[Seq[org.apache.spark.sql.sources.Filter]]("pushed_filters")
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case ScanOperation(project, filters, relation: DataSourceV2Relation) =>

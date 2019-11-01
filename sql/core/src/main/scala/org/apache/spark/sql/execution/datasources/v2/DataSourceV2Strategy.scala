@@ -45,7 +45,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
       val output = relation.output
       val pushedFilters = relation.getTagValue(V2ScanRelationPushDown.PUSHED_FILTERS_TAG)
-        .getOrElse(Array.empty)
+        .getOrElse(Seq.empty)
 
       val (scanExec, needsUnsafeConversion) = relation.scan match {
         case v1Scan: V1Scan =>
