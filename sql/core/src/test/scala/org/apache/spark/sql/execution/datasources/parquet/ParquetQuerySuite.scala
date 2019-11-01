@@ -917,6 +917,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         "interval 9999 years 12 months 1 millisecond",
         "interval 9999 years 12 months 23 hours 59 minutes 59 seconds 999 milliseconds",
         "interval -9999 years -12 months -23 hours -59 minutes -59 seconds -999 milliseconds",
+        "interval 1000 months 1000 days 10000000 microseconds",
         "").toDF("intervalStr")
         .selectExpr("CAST(intervalStr AS interval) AS i")
       df.write.parquet(file.getCanonicalPath)
