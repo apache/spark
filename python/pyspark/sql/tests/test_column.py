@@ -18,12 +18,12 @@
 
 import sys
 
+from py4j.protocol import Py4JJavaError
+
 from pyspark.sql import Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-
-from py4j.protocol import Py4JJavaError
 
 
 class ColumnTests(ReusedSQLTestCase):
