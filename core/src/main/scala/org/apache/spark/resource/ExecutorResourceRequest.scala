@@ -27,7 +27,7 @@ package org.apache.spark.resource
  * @param amount Amount requesting
  * @param units Units of amount for things like Memory, default is no units, only byte
  *              types (b, mb, gb, etc) are supported.
- * @param discoveryScript Script used to discovery the resources
+ * @param discoveryScript Script used to discover the resources
  * @param vendor Vendor, required for some cluster managers
  *
  * This api is currently private until the rest of the pieces are in place and then it
