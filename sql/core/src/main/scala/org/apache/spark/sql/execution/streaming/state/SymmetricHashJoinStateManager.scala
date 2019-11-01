@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
+import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.KeyToValuePair
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
@@ -215,7 +216,7 @@ class SymmetricHashJoinStateManager(
 
       // Find the next value satisfying the condition, updating `currentKey` and `numValues` if
       // needed. Returns null when no value can be found.
-      private def findNextValueForIndex(): (UnsafeRow, Boolean) = {
+      private def findNextValueForIndex(): ValueAndMatchPair = {
         // Loop across all values for the current key, and then all other keys, until we find a
         // value satisfying the removal condition.
         def hasMoreValuesForCurrentKey = currentKey != null && index < numValues
@@ -223,9 +224,9 @@ class SymmetricHashJoinStateManager(
         while (hasMoreValuesForCurrentKey || hasMoreKeys) {
           if (hasMoreValuesForCurrentKey) {
             // First search the values for the current key.
-            val (currentValue, matched) = keyWithIndexToValue.getWithMatched(currentKey, index)
-            if (removalCondition(currentValue)) {
-              return (currentValue, matched)
+            val valuePair = keyWithIndexToValue.get(currentKey, index)
+            if (removalCondition(valuePair.value)) {
+              return valuePair
             } else {
               index += 1
             }
@@ -261,9 +262,13 @@ class SymmetricHashJoinStateManager(
         // any hole. So we swap the last element into the hole and decrement numValues to shorten.
         // clean
         if (numValues > 1) {
-          val (valueAtMaxIndex, matchedAtMaxIndex) = keyWithIndexToValue.getWithMatched(currentKey,
-            numValues - 1)
-          keyWithIndexToValue.put(currentKey, index, valueAtMaxIndex, matched = matchedAtMaxIndex)
+          val valuePairAtMaxIndex = keyWithIndexToValue.get(currentKey, numValues - 1)
+          if (valuePairAtMaxIndex != null) {
+            keyWithIndexToValue.put(currentKey, index, valuePairAtMaxIndex.value,
+              valuePairAtMaxIndex.matched)
+          } else {
+            keyWithIndexToValue.put(currentKey, index, null, false)
+          }
           keyWithIndexToValue.remove(currentKey, numValues - 1)
         } else {
           keyWithIndexToValue.remove(currentKey, 0)
@@ -271,7 +276,7 @@ class SymmetricHashJoinStateManager(
         numValues -= 1
         valueRemoved = true
 
-        return reusedRet.withNew(currentKey, currentValue._1, currentValue._2)
+        return reusedRet.withNew(currentKey, currentValue.value, currentValue.matched)
       }
 
       override def close: Unit = {}
@@ -414,6 +419,7 @@ class SymmetricHashJoinStateManager(
     var valueIndex: Long = -1,
     var value: UnsafeRow = null,
     var matched: Boolean = false) {
+
     def withNew(
         newKey: UnsafeRow,
         newIndex: Long,
@@ -425,12 +431,28 @@ class SymmetricHashJoinStateManager(
       this.matched = newMatched
       this
     }
+
+    def withNew(
+        newKey: UnsafeRow,
+        newIndex: Long,
+        newValue: ValueAndMatchPair): this.type = {
+      this.key = newKey
+      this.valueIndex = newIndex
+      if (newValue != null) {
+        this.value = newValue.value
+        this.matched = newValue.matched
+      } else {
+        this.value = null
+        this.matched = false
+      }
+      this
+    }
   }
 
   private trait KeyWithIndexToValueRowConverter {
     def valueAttributes: Seq[Attribute]
 
-    def convertValue(value: UnsafeRow): (UnsafeRow, Boolean)
+    def convertValue(value: UnsafeRow): ValueAndMatchPair
 
     def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow
   }
@@ -447,8 +469,8 @@ class SymmetricHashJoinStateManager(
   private class KeyWithIndexToValueRowConverterFormatV1 extends KeyWithIndexToValueRowConverter {
     override val valueAttributes: Seq[Attribute] = inputValueAttributes
 
-    override def convertValue(value: UnsafeRow): (UnsafeRow, Boolean) = {
-      if (value != null) (value, false) else (null, false)
+    override def convertValue(value: UnsafeRow): ValueAndMatchPair = {
+      if (value != null) ValueAndMatchPair(value, false) else null
     }
 
     override def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow = value
@@ -468,11 +490,12 @@ class SymmetricHashJoinStateManager(
     private val valueRowGenerator = UnsafeProjection.create(
       inputValueAttributes, valueAttributes)
 
-    override def convertValue(value: UnsafeRow): (UnsafeRow, Boolean) = {
+    override def convertValue(value: UnsafeRow): ValueAndMatchPair = {
       if (value != null) {
-        (valueRowGenerator(value), value.getBoolean(indexOrdinalInValueWithMatchedRow))
+        ValueAndMatchPair(valueRowGenerator(value),
+          value.getBoolean(indexOrdinalInValueWithMatchedRow))
       } else {
-        (null, false)
+        null
       }
     }
 
@@ -506,12 +529,7 @@ class SymmetricHashJoinStateManager(
     protected val stateStore = getStateStore(keyWithIndexSchema,
       valueRowConverter.valueAttributes.toStructType)
 
-    def get(key: UnsafeRow, valueIndex: Long): UnsafeRow = {
-      val row = valueRowConverter.convertValue(stateStore.get(keyWithIndexRow(key, valueIndex)))
-      if (row != null) row._1 else null
-    }
-
-    def getWithMatched(key: UnsafeRow, valueIndex: Long): (UnsafeRow, Boolean) = {
+    def get(key: UnsafeRow, valueIndex: Long): ValueAndMatchPair = {
       valueRowConverter.convertValue(stateStore.get(keyWithIndexRow(key, valueIndex)))
     }
 
@@ -520,7 +538,7 @@ class SymmetricHashJoinStateManager(
      * Should not return null.
      */
     def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
-      val keyWithIndexAndValueWithMatched = new KeyWithIndexAndValue()
+      val keyWithIndexAndValue = new KeyWithIndexAndValue()
       var index = 0
       new NextIterator[KeyWithIndexAndValue] {
         override protected def getNext(): KeyWithIndexAndValue = {
@@ -529,10 +547,10 @@ class SymmetricHashJoinStateManager(
             null
           } else {
             val keyWithIndex = keyWithIndexRow(key, index)
-            val (value, matched) = valueRowConverter.convertValue(stateStore.get(keyWithIndex))
-            keyWithIndexAndValueWithMatched.withNew(key, index, value, matched)
+            val valuePair = valueRowConverter.convertValue(stateStore.get(keyWithIndex))
+            keyWithIndexAndValue.withNew(key, index, valuePair)
             index += 1
-            keyWithIndexAndValueWithMatched
+            keyWithIndexAndValue
           }
         }
 
@@ -567,10 +585,9 @@ class SymmetricHashJoinStateManager(
     def iterator: Iterator[KeyWithIndexAndValue] = {
       val keyWithIndexAndValue = new KeyWithIndexAndValue()
       stateStore.getRange(None, None).map { pair =>
-        val (value, matched) = valueRowConverter.convertValue(pair.value)
+        val valuePair = valueRowConverter.convertValue(pair.value)
         keyWithIndexAndValue.withNew(
-          keyRowGenerator(pair.key), pair.key.getLong(indexOrdinalInKeyWithIndexRow),
-          value, matched)
+          keyRowGenerator(pair.key), pair.key.getLong(indexOrdinalInKeyWithIndexRow), valuePair)
         keyWithIndexAndValue
       }
     }
@@ -609,6 +626,9 @@ object SymmetricHashJoinStateManager {
     s"$joinSide-$storeType"
   }
 
+  /** Helper class for representing data (value, matched). */
+  case class ValueAndMatchPair(value: UnsafeRow, matched: Boolean)
+
   /**
    * Helper class for representing data key to (value, matched).
    * Designed for object reuse.
@@ -621,6 +641,18 @@ object SymmetricHashJoinStateManager {
       this.key = newKey
       this.value = newValue
       this.matched = newMatched
+      this
+    }
+
+    def withNew(newKey: UnsafeRow, newValue: ValueAndMatchPair): this.type = {
+      this.key = newKey
+      if (newValue != null) {
+        this.value = newValue.value
+        this.matched = newValue.matched
+      } else {
+        this.value = null
+        this.matched = false
+      }
       this
     }
   }
