@@ -87,12 +87,11 @@ public final class CalendarInterval implements Serializable, Ordered<CalendarInt
 
   @Override
   public int compare(CalendarInterval that) {
-    int adjustMonth1 = (int) (this.microseconds / MICROS_PER_MONTH) + this.months;
-    int adjustMonth2 = (int) (that.microseconds / MICROS_PER_MONTH) + that.months;
-    int monthDiff = adjustMonth1 - adjustMonth2;
-    if (monthDiff == 0) {
-      long msDiff =
-        (this.microseconds % MICROS_PER_MONTH) - (that.microseconds % MICROS_PER_MONTH);
+    long thisAdjustDays = this.microseconds / MICROS_PER_DAY + this.days + this.months * 30;
+    long thatAdjustDays = that.microseconds / MICROS_PER_DAY + that.days + that.months * 30;
+    long daysDiff = thisAdjustDays - thatAdjustDays;
+    if (daysDiff == 0) {
+      long msDiff = (this.microseconds % MICROS_PER_DAY) - (that.microseconds % MICROS_PER_DAY);
       if (msDiff == 0) {
         return 0;
       } else if (msDiff > 0) {
@@ -100,8 +99,10 @@ public final class CalendarInterval implements Serializable, Ordered<CalendarInt
       } else {
         return -1;
       }
+    } else if (daysDiff > 0){
+      return 1;
     } else {
-      return monthDiff;
+      return -1;
     }
   }
 

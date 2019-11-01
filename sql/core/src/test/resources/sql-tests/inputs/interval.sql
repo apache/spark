@@ -25,8 +25,12 @@ select INTERVAL '9 years 1 months -1 weeks -4 days -10 hours -46 minutes' > inte
 -- ordering
 select cast(v as interval) i from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v) order by i;
 
--- unlimited microseconds
+-- unlimited days
 select interval '1 month 120 days' > interval '2 month';
+select interval '1 month 30 days' = interval '2 month';
+
+-- unlimited microseconds
+select interval '1 month 29 days 40 hours' > interval '2 month';
 
 -- max
 select max(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v);
