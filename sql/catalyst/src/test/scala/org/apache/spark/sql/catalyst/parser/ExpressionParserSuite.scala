@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, IntervalUnit, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -597,7 +597,7 @@ class ExpressionParserSuite extends AnalysisTest {
     "microsecond")
 
   def intervalLiteral(u: String, s: String): Literal = {
-    Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
+    Literal(IntervalUtils.fromUnitStrings(Array(IntervalUnit.fromString(u)), Array(s)))
   }
 
   test("intervals") {

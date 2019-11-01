@@ -98,6 +98,11 @@ select interval '15:40:32.99899999' hour to second;
 select interval '20 40:32.99899999' minute to second;
 select interval '40:32.99899999' minute to second;
 select interval '40:32' minute to second;
+select interval '1 years 2 months 3 weeks 4 days 5 hours 6 minutes 7 seconds 8 milliseconds 9 microseconds';
+select interval '1 year 2 month 3 week 4 day 5 hour 6 minute 7 second 8 millisecond 9 microsecond';
+select interval '1 y 2 mon 3 w 4 d 5 h 6 m 7 s 8 ms 9 us';
+select interval '1 yrs 2 mons 3 w 4 d 5 hrs 6 mins 7 secs 8 msecs 9 usecs';
+
 -- ns is not supported
 select interval 10 nanoseconds;
 
