@@ -2069,7 +2069,7 @@ class DataFrame(object):
 
         This is only available if Pandas is installed and available.
 
-        .. note:: This method should only be used if the resulting Pandas's :class:`DataFrame` is 
+        .. note:: This method should only be used if the resulting Pandas's :class:`DataFrame` is
             expected to be small, as all the data is loaded into the driver's memory.
 
         .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
@@ -2219,8 +2219,8 @@ def _to_scala_map(sc, jm):
 
 def _to_corrected_pandas_type(dt):
     """
-    When converting Spark SQL records to Pandas :class:`DataFrame`, the inferred data type may be 
-    wrong. This method gets the corrected data type for Pandas if that type may be inferred 
+    When converting Spark SQL records to Pandas :class:`DataFrame`, the inferred data type may be
+    wrong. This method gets the corrected data type for Pandas if that type may be inferred
     uncorrectly.
     """
     import numpy as np
