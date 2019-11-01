@@ -333,13 +333,10 @@ private[parquet] class ParquetRowConverter(
                 s"but got a ${value.length()}-byte array.")
 
             val buf = value.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-            val milliseconds = buf.getInt
-            var microseconds = milliseconds * DateTimeUtils.MICROS_PER_MILLIS
+            val microseconds = buf.getInt * DateTimeUtils.MICROS_PER_MILLIS
             val days = buf.getInt
-            val daysInUs = Math.multiplyExact(days, DateTimeUtils.MICROS_PER_DAY)
-            microseconds = Math.addExact(microseconds, daysInUs)
             val months = buf.getInt
-            updater.set(new CalendarInterval(months, microseconds))
+            updater.set(new CalendarInterval(months, days, microseconds))
           }
         }
 

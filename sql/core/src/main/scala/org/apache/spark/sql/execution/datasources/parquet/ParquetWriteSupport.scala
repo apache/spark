@@ -211,13 +211,10 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       case CalendarIntervalType =>
         (row: SpecializedGetters, ordinal: Int) =>
           val interval = row.getInterval(ordinal)
-          val microseconds = interval.microseconds % DateTimeUtils.MICROS_PER_DAY
-          val milliseconds: Int = (microseconds / DateTimeUtils.MICROS_PER_MILLIS).toInt
-          val days: Int = Math.toIntExact(interval.microseconds / DateTimeUtils.MICROS_PER_DAY)
           val buf = ByteBuffer.wrap(reusableBuffer)
           buf.order(ByteOrder.LITTLE_ENDIAN)
-            .putInt(milliseconds)
-            .putInt(days)
+            .putInt((interval.milliseconds()).toInt)
+            .putInt(interval.days)
             .putInt(interval.months)
           recordConsumer.addBinary(Binary.fromReusedByteArray(reusableBuffer))
 
