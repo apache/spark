@@ -160,7 +160,7 @@ select interval 4 month 2 weeks 3 microseconds * 1.5
 -- !query 18 schema
 struct<multiply_interval(interval 4 months 2 weeks 3 microseconds, CAST(1.5 AS DOUBLE)):interval>
 -- !query 18 output
-interval 6 months 3 weeks 4 microseconds
+interval 6 months 3 weeks 5 microseconds
 
 
 -- !query 19
