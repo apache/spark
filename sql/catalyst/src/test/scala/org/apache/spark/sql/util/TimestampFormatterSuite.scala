@@ -25,7 +25,7 @@ import org.scalatest.Matchers
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, instantToMicros, MICROS_PER_DAY}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, instantToMicros}
 import org.apache.spark.sql.internal.SQLConf
 
 class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers {
@@ -146,12 +146,15 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper with Matchers
         assert(formatter.parse("EPOCH") === 0)
         val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
         formatter.parse("now") should be (now +- tolerance)
-        val today = instantToMicros(LocalDateTime.now(zoneId)
+        val localToday = LocalDateTime.now(zoneId)
           .`with`(LocalTime.MIDNIGHT)
-          .atZone(zoneId).toInstant)
-        formatter.parse("yesterday CET") should be (today - MICROS_PER_DAY +- tolerance)
+          .atZone(zoneId)
+        val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
+        formatter.parse("yesterday CET") should be (yesterday +- tolerance)
+        val today = instantToMicros(localToday.toInstant)
         formatter.parse(" TODAY ") should be (today +- tolerance)
-        formatter.parse("Tomorrow ") should be (today + MICROS_PER_DAY +- tolerance)
+        val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
+        formatter.parse("Tomorrow ") should be (tomorrow +- tolerance)
       }
     }
   }

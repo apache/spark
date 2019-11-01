@@ -1405,7 +1405,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val dateTimeOperations = TypeCoercion.DateTimeOperations
     val date = Literal(new java.sql.Date(0L))
     val timestamp = Literal(new Timestamp(0L))
-    val interval = Literal(new CalendarInterval(0, 0))
+    val interval = Literal(new CalendarInterval(0, 0, 0))
     val str = Literal("2015-01-01")
     val intValue = Literal(0, IntegerType)
 

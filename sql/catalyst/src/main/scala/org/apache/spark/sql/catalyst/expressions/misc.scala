@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.UUID
-
+import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -163,4 +162,18 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
   }
 
   override def freshCopy(): Uuid = Uuid(randomSeed)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.""",
+  since = "3.0.0")
+// scalastyle:on line.size.limit
+case class Version() extends LeafExpression with CodegenFallback {
+  override def nullable: Boolean = false
+  override def foldable: Boolean = true
+  override def dataType: DataType = StringType
+  override def eval(input: InternalRow): Any = {
+    UTF8String.fromString(SPARK_VERSION_SHORT + " " + SPARK_REVISION)
+  }
 }

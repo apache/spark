@@ -136,7 +136,7 @@ select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678'
 -- !query 15 schema
 struct<subtracttimestamps(CAST(DATE '2020-01-01' AS TIMESTAMP), TIMESTAMP('2019-10-06 10:11:12.345678')):interval>
 -- !query 15 output
-interval 12 weeks 2 days 14 hours 48 minutes 47 seconds 654 milliseconds 322 microseconds
+interval 2078 hours 48 minutes 47 seconds 654 milliseconds 322 microseconds
 
 
 -- !query 16
@@ -144,4 +144,4 @@ select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01'
 -- !query 16 schema
 struct<subtracttimestamps(TIMESTAMP('2019-10-06 10:11:12.345678'), CAST(DATE '2020-01-01' AS TIMESTAMP)):interval>
 -- !query 16 output
-interval -12 weeks -2 days -14 hours -48 minutes -47 seconds -654 milliseconds -322 microseconds
+interval -2078 hours -48 minutes -47 seconds -654 milliseconds -322 microseconds

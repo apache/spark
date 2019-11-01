@@ -37,6 +37,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.storage.StorageLevel
 
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
@@ -159,7 +160,10 @@ class LinearSVC @Since("2.2.0") (
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
   override protected def train(dataset: Dataset[_]): LinearSVCModel = instrumented { instr =>
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+
     val instances = extractInstances(dataset)
+    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
@@ -267,6 +271,8 @@ class LinearSVC @Since("2.2.0") (
       }
       (Vectors.dense(coefficientArray), intercept, scaledObjectiveHistory.result())
     }
+
+    if (handlePersistence) instances.unpersist()
 
     copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
   }
