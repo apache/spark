@@ -2050,6 +2050,12 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+
+  val SQL_DEBUG_CLASS = buildConf("spark.sql.debug.class")
+    .doc("If set, these classes log level will be changed to debug.")
+    .internal()
+    .stringConf
+    .createWithDefault("")
 }
 
 /**
@@ -2549,6 +2555,8 @@ class SQLConf extends Serializable with Logging {
   def defaultV2Catalog: Option[String] = getConf(DEFAULT_V2_CATALOG)
 
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
+
+  def debugClasses(): String = getConf(SQLConf.SQL_DEBUG_CLASS)
 
   /** ********************** SQLConf functionality methods ************ */
 

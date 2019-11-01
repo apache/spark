@@ -2339,6 +2339,8 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  val changedLogLevelClassMap = new ConcurrentHashMap[String, org.apache.log4j.Level]()
+
   /**
    * configure a new log4j level
    */
@@ -2347,6 +2349,23 @@ private[spark] object Utils extends Logging {
     rootLogger.setLevel(l)
     // Setting threshold to null as rootLevel will define log level for spark-shell
     Logging.sparkShellThresholdLevel = null
+  }
+
+  /**
+   * configure a new log4j level
+   */
+  def setLogLevel(l: org.apache.log4j.Level, loggerName: String): Unit = {
+    val logger = org.apache.log4j.Logger.getLogger(loggerName)
+    changedLogLevelClassMap.put(loggerName, logger.getLevel)
+    logger.setLevel(l)
+  }
+
+  def restoreLogLevel(): Unit = {
+    changedLogLevelClassMap.asScala.foreach { case (loggerName, level) =>
+      val logger = org.apache.log4j.Logger.getLogger(loggerName)
+      logger.setLevel(level)
+    }
+    changedLogLevelClassMap.clear()
   }
 
   /**

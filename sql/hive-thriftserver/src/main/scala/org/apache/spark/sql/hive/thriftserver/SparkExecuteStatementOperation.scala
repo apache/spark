@@ -261,6 +261,8 @@ private[hive] class SparkExecuteStatementOperation(
 
   private def execute(): Unit = withSchedulerPool {
     try {
+      prepareLogLevel()
+
       synchronized {
         if (getStatus.getState.isTerminal) {
           logInfo(s"Query with $statementId in terminal state before it started running")
@@ -370,6 +372,16 @@ private[hive] class SparkExecuteStatementOperation(
       if (pool != null) {
         sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, null)
       }
+    }
+  }
+
+  private def prepareLogLevel(): Unit = {
+    val debugClasses = sqlContext.conf.debugClasses()
+    if (debugClasses == null || debugClasses == "") {
+      SparkUtils.restoreLogLevel()
+    } else {
+      debugClasses.split(",").map(_.trim)
+        .foreach(sqlContext.sparkContext.setLogLevel(_, "debug"))
     }
   }
 }
