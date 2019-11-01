@@ -97,12 +97,12 @@ private[thriftserver] object SchemaMapper {
       case TTypeId.TIMESTAMP_TYPE => TimestampType
       case TTypeId.BINARY_TYPE => BinaryType
       case TTypeId.ARRAY_TYPE =>
-        ArrayType(StringType, true)
+        ArrayType.defaultConcreteType
       case TTypeId.MAP_TYPE =>
-        MapType(StringType, StringType, true)
+        MapType.defaultConcreteType
       case TTypeId.STRUCT_TYPE =>
-        StringType
-      case TTypeId.USER_DEFINED_TYPE => StringType
+        StructType.defaultConcreteType
+      case TTypeId.USER_DEFINED_TYPE => UserDefinedType[Any]
       case _ => StringType
     }
 }
