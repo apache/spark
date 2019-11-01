@@ -187,7 +187,7 @@ def get_default_python_executables():
             else:
                 LOGGER.warning("Not testing against `python3.6` because it could not be found; falling"
                                " back to %s instead" % p)
-                python_execs.insert(0, "python3")
+                python_execs.insert(0, p)
         else:
             LOGGER.error("No python3 executable found.  Exiting!")
             os._exit(1)
