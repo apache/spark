@@ -69,9 +69,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.get(SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME))
   private val createTimeNs = System.nanoTime()
 
-  private val taskResources: Map[String, ResourceRequirement] =
+  private val taskResourceNumParts: Map[String, Int] =
     if (scheduler.resourcesReqsPerTask != null) {
-      scheduler.resourcesReqsPerTask.map(req => req.resourceName -> req).toMap
+      scheduler.resourcesReqsPerTask.map(req => req.resourceName -> req.numParts).toMap
     } else {
       Map.empty
     }
@@ -227,9 +227,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
              new ExecutorResourceInfo(v.name, v.addresses,
                // tell the executor it can schedule resources up to numParts times,
                // as configured by the user, or set to 1 as that is the default (1 task/resource)
-               taskResources
-                 .getOrElse(v.name, ResourceRequirement(v.name, 1))
-                 .numParts))
+               taskResourceNumParts.getOrElse(v.name, 1)))
           }
           val data = new ExecutorData(executorRef, executorAddress, hostname,
             cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
