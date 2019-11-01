@@ -73,7 +73,7 @@ private[spark] case class ResourceRequest(
  * @param resourceName gpu, fpga, etc.
  * @param amount whole units of the resource we expect (e.g. 1 gpus, 2 fpgas)
  * @param numParts if not 1, the number of ways a whole resource is subdivided.
- *                 This is always an integer greater than or equal to 1, 
+ *                 This is always an integer greater than or equal to 1,
  *                 where 1 is whole resource, 2 is divide a resource in two, and so on.
  */
 private[spark] case class ResourceRequirement(
