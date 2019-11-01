@@ -199,12 +199,13 @@ case class CreateViewCommand(
             throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
               s"referencing a temporary view $ident")
           case other if !other.resolved => other.expressions.flatMap(_.collect {
+            // Traverse subquery plan for any unresolved relations.
+            case e: SubqueryExpression => verify(e.plan)
             // Disallow creating permanent views based on temporary UDFs.
             case e: UnresolvedFunction
               if sparkSession.sessionState.catalog.isTemporaryFunction(e.name) =>
               throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
                 s"referencing a temporary function `${e.name}`")
-            case e: SubqueryExpression => verify(e.plan)
           })
         }
       }

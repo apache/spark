@@ -94,6 +94,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("create a permanent view on a temp view used inside an expression") {
+    withTable("base_table") {
+      withTempView("temp_view") {
+        sql("CREATE TABLE base_table (id int) USING parquet")
+        sql("CREATE TEMPORARY VIEW temp_view AS SELECT * FROM base_table")
+        val e = intercept[AnalysisException] {
+          sql("CREATE VIEW per_view AS SELECT * FROM base_table " +
+            "WHERE EXISTS (SELECT * FROM temp_view)")
+        }.getMessage
+        assert(e.contains("Not allowed to create a permanent view `per_view` by referencing " +
+          "a temporary view `temp_view`"))
+      }
+    }
+  }
+
   test("error handling: existing a table with the duplicate name when creating/altering a view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1 (id int) USING parquet")
