@@ -18,6 +18,9 @@
 package org.apache.spark.sql.internal
 
 import java.io.File
+import java.util.{Map => JMap}
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -93,6 +96,10 @@ private[sql] class SessionState(
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
     sharedState.sparkContext.hadoopConfiguration,
     conf)
+
+  def newHadoopConfWithOptions(options: JMap[String, String]): Configuration = {
+    newHadoopConfWithOptions(options.asScala.toMap)
+  }
 
   def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {
     val hadoopConf = newHadoopConf()

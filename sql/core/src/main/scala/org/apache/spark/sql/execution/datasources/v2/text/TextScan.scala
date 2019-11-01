@@ -57,7 +57,7 @@ case class TextScan(
     assert(
       readDataSchema.length <= 1,
       "Text data source only produces a single data column named \"value\".")
-    TextPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf, readDataSchema,
+    TextPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf(), readDataSchema,
       readPartitionSchema, textOptions)
   }
 }

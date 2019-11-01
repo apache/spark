@@ -78,7 +78,7 @@ case class JsonScan(
     }
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
-    JsonPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
+    JsonPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf(),
       dataSchema, readDataSchema, readPartitionSchema, parsedOptions)
   }
 }
