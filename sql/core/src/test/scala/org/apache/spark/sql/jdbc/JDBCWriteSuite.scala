@@ -89,8 +89,6 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   }
 
   private lazy val arr2x2 = Array[Row](Row.apply("dave", 42), Row.apply("mary", 222))
-  private lazy val shortarr2x2 = Array[Row](Row.apply("dave", 42.toShort), Row.apply("mary", 31.toShort))
-  private lazy val bytearr2x2 = Array[Row](Row.apply("dave", 42.toByte), Row.apply("mary", 31.toByte))
   private lazy val arr1x2 = Array[Row](Row.apply("fred", 3))
   private lazy val schema2 = StructType(
       StructField("name", StringType) ::
@@ -105,14 +103,6 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   private lazy val schema4 = StructType(
       StructField("NAME", StringType) ::
       StructField("ID", IntegerType) :: Nil)
-
-  private lazy val schema5 = StructType(
-    StructField("NAME", StringType) ::
-      StructField("ID", ShortType) :: Nil)
-
-  private lazy val schema6 = StructType(
-    StructField("NAME", StringType) ::
-      StructField("ID", ByteType) :: Nil)
 
   test("Basic CREATE") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
@@ -584,8 +574,9 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
-  test("test writing table with ShortType") {
-    val df = spark.createDataFrame(sparkContext.parallelize(shortarr2x2), schema5)
+  test("Write tables with ShortType") {
+    import testImplicits._
+    val df = Seq(-32768.toShort, 0.toShort, 1.toShort, 38.toShort, 32768.toShort).toDF("a")
     val tablename = "shorttable"
     df.write
       .format("jdbc")
@@ -601,11 +592,12 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     assert(df.count == df2.count)
     val rows = df2.collect()
     val colType = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(colType(1) == "class java.lang.Short")
+    assert(colType(0) == "class java.lang.Short")
   }
 
-  test("test writing table with ByteType") {
-    val df = spark.createDataFrame(sparkContext.parallelize(bytearr2x2), schema6)
+  test("Write tables with ByteType") {
+    import testImplicits._
+    val df = Seq(-127.toByte, 0.toByte, 1.toByte, 38.toByte, 128.toByte).toDF("a")
     val tablename = "bytetable"
     df.write
       .format("jdbc")
@@ -621,7 +613,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     assert(df.count == df2.count)
     val rows = df2.collect()
     val colType = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(colType(1) == "class java.lang.Byte")
+    assert(colType(0) == "class java.lang.Byte")
   }
 
   private def runAndVerifyRecordsWritten(expected: Long)(job: => Unit): Unit = {
