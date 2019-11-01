@@ -615,7 +615,7 @@ struct<date_part('months', t2.`c`):tinyint>
 -- !query 76
 select date_part('day', c) from t2
 -- !query 76 schema
-struct<date_part('day', t2.`c`):bigint>
+struct<date_part('day', t2.`c`):int>
 -- !query 76 output
 8
 
@@ -623,7 +623,7 @@ struct<date_part('day', t2.`c`):bigint>
 -- !query 77
 select date_part('d', c) from t2
 -- !query 77 schema
-struct<date_part('d', t2.`c`):bigint>
+struct<date_part('d', t2.`c`):int>
 -- !query 77 output
 8
 
@@ -631,7 +631,7 @@ struct<date_part('d', t2.`c`):bigint>
 -- !query 78
 select date_part('days', c) from t2
 -- !query 78 schema
-struct<date_part('days', t2.`c`):bigint>
+struct<date_part('days', t2.`c`):int>
 -- !query 78 output
 8
 
@@ -639,7 +639,7 @@ struct<date_part('days', t2.`c`):bigint>
 -- !query 79
 select date_part('hour', c) from t2
 -- !query 79 schema
-struct<date_part('hour', t2.`c`):tinyint>
+struct<date_part('hour', t2.`c`):bigint>
 -- !query 79 output
 7
 
@@ -647,7 +647,7 @@ struct<date_part('hour', t2.`c`):tinyint>
 -- !query 80
 select date_part('h', c) from t2
 -- !query 80 schema
-struct<date_part('h', t2.`c`):tinyint>
+struct<date_part('h', t2.`c`):bigint>
 -- !query 80 output
 7
 
@@ -655,7 +655,7 @@ struct<date_part('h', t2.`c`):tinyint>
 -- !query 81
 select date_part('hours', c) from t2
 -- !query 81 schema
-struct<date_part('hours', t2.`c`):tinyint>
+struct<date_part('hours', t2.`c`):bigint>
 -- !query 81 output
 7
 
@@ -663,7 +663,7 @@ struct<date_part('hours', t2.`c`):tinyint>
 -- !query 82
 select date_part('hr', c) from t2
 -- !query 82 schema
-struct<date_part('hr', t2.`c`):tinyint>
+struct<date_part('hr', t2.`c`):bigint>
 -- !query 82 output
 7
 
@@ -671,7 +671,7 @@ struct<date_part('hr', t2.`c`):tinyint>
 -- !query 83
 select date_part('hrs', c) from t2
 -- !query 83 schema
-struct<date_part('hrs', t2.`c`):tinyint>
+struct<date_part('hrs', t2.`c`):bigint>
 -- !query 83 output
 7
 
@@ -857,7 +857,7 @@ select date_part('epoch', c) from t2
 -- !query 106 schema
 struct<date_part('epoch', t2.`c`):decimal(18,6)>
 -- !query 106 output
-31873892788.332003
+31897220765.004003
 
 
 -- !query 107

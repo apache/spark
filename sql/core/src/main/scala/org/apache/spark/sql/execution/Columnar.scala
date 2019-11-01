@@ -323,7 +323,8 @@ private object RowToColumnConverter {
       val c = row.getInterval(column)
       cv.appendStruct(false)
       cv.getChild(0).appendInt(c.months)
-      cv.getChild(1).appendLong(c.microseconds)
+      cv.getChild(1).appendInt(c.days)
+      cv.getChild(2).appendLong(c.microseconds)
     }
   }
 

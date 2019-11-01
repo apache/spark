@@ -123,19 +123,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * A command for users to list the column names for a table.
-   * This function creates a [[ShowColumnsCommand]] logical plan.
-   *
-   * The syntax of using this command in SQL is:
-   * {{{
-   *   SHOW COLUMNS (FROM | IN) table_identifier [(FROM | IN) database];
-   * }}}
-   */
-  override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
-    ShowColumnsCommand(Option(ctx.db).map(_.getText), visitTableIdentifier(ctx.tableIdentifier))
-  }
-
-  /**
    * Create a [[RefreshResource]] logical plan.
    */
   override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {
@@ -472,63 +459,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       visitTableIdentifier(ctx.tableIdentifier),
       specsAndLocs,
       ctx.EXISTS != null)
-  }
-
-  /**
-   * Create an [[AlterTableRenamePartitionCommand]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table PARTITION spec1 RENAME TO PARTITION spec2;
-   * }}}
-   */
-  override def visitRenameTablePartition(
-      ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenamePartitionCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitNonOptionalPartitionSpec(ctx.from),
-      visitNonOptionalPartitionSpec(ctx.to))
-  }
-
-  /**
-   * Create an [[AlterTableDropPartitionCommand]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
-   *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
-   * }}}
-   *
-   * ALTER VIEW ... DROP PARTITION ... is not supported because the concept of partitioning
-   * is associated with physical tables
-   */
-  override def visitDropTablePartitions(
-      ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.VIEW != null) {
-      operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
-    }
-    AlterTableDropPartitionCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
-      ifExists = ctx.EXISTS != null,
-      purge = ctx.PURGE != null,
-      retainData = false)
-  }
-
-  /**
-   * Create an [[AlterTableSetLocationCommand]] command for a partition.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table PARTITION spec SET LOCATION "loc";
-   * }}}
-   */
-  override def visitSetPartitionLocation(
-      ctx: SetPartitionLocationContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetLocationCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Some(visitNonOptionalPartitionSpec(ctx.partitionSpec)),
-      visitLocationSpec(ctx.locationSpec))
   }
 
   /**

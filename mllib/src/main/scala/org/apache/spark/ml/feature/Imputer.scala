@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
  * Params for [[Imputer]] and [[ImputerModel]].
  */
 private[feature] trait ImputerParams extends Params with HasInputCol with HasInputCols
-  with HasOutputCol with HasOutputCols {
+  with HasOutputCol with HasOutputCols with HasRelativeError {
 
   /**
    * The imputation strategy. Currently only "mean" and "median" are supported.
@@ -140,6 +140,10 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   @Since("2.2.0")
   def setMissingValue(value: Double): this.type = set(missingValue, value)
 
+  /** @group expertSetParam */
+  @Since("3.0.0")
+  def setRelativeError(value: Double): this.type = set(relativeError, value)
+
   setDefault(strategy -> Imputer.mean, missingValue -> Double.NaN)
 
   override def fit(dataset: Dataset[_]): ImputerModel = {
@@ -172,7 +176,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
       case Imputer.median =>
         // Function approxQuantile will ignore null automatically.
         // For a column only containing null, approxQuantile will return an empty array.
-        dataset.select(cols: _*).stat.approxQuantile(inputColumns, Array(0.5), 0.001)
+        dataset.select(cols: _*).stat.approxQuantile(inputColumns, Array(0.5), $(relativeError))
           .map { array =>
             if (array.isEmpty) {
               Double.NaN

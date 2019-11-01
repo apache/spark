@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -628,7 +628,19 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Hive nanosecond notation.
     checkIntervals("13.123456789 seconds", intervalLiteral("second", "13.123456789"))
-    checkIntervals("-13.123456789 second", intervalLiteral("second", "-13.123456789"))
+    checkIntervals(
+      "-13.123456789 second",
+      Literal(new CalendarInterval(
+        0,
+        0,
+        -13 * DateTimeUtils.MICROS_PER_SECOND - 123 * DateTimeUtils.MICROS_PER_MILLIS - 456)))
+    checkIntervals(
+      "13.123456 second",
+      Literal(new CalendarInterval(
+        0,
+        0,
+        13 * DateTimeUtils.MICROS_PER_SECOND + 123 * DateTimeUtils.MICROS_PER_MILLIS + 456)))
+    checkIntervals("1.001 second", Literal(IntervalUtils.fromString("1 second 1 millisecond")))
 
     // Non Existing unit
     intercept("interval 10 nanoseconds",
@@ -672,8 +684,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Composed intervals.
     checkIntervals(
-      "3 months 22 seconds 1 millisecond",
-      Literal(new CalendarInterval(3, 22001000L)))
+      "3 months 4 days 22 seconds 1 millisecond",
+      Literal(new CalendarInterval(3, 4, 22001000L)))
   }
 
   test("SPARK-23264 Interval Compatibility tests") {
