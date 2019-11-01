@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundEx
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -929,6 +929,15 @@ class PlanResolutionSuite extends AnalysisTest {
           }
           assert(e2.getMessage.contains(
             "ALTER COLUMN with qualified column is only supported with v2 tables"))
+
+          val sql5 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE char(1)"
+          val builder = new MetadataBuilder
+          builder.putString(HIVE_TYPE_STRING, CharType(1).catalogString)
+          val newColumnWithCleanedType = StructField("i", StringType, true, builder.build())
+          val expected5 = AlterTableChangeColumnCommand(
+            tableIdent, "i", newColumnWithCleanedType)
+          val parsed5 = parseAndResolve(sql5)
+          comparePlans(parsed5, expected5)
         } else {
           val parsed3 = parseAndResolve(sql3)
 
