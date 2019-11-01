@@ -126,13 +126,17 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     } else {
       None
     }
-
     val content =
-      <h5>SQL Statistics</h5> ++
-        <div>
-          <ul class="unstyled">
-            {table.getOrElse("No statistics have been generated yet.")}
-          </ul>
+      <span id="running" class="collapse-aggregated-sqlsessionstat collapse-tablestat"
+            onClick="collapseTable('collapse-aggregated-sqlsessionstat',
+                'aggregated-sqlsessionstat')">
+        <h4>
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>SQL Statistics</a>
+        </h4>
+      </span> ++
+        <div class="aggregated-sqlsessionstat collapsible-table">
+          {table.getOrElse("No statistics have been generated yet.")}
         </div>
 
     content
