@@ -25,7 +25,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -33,7 +33,7 @@ import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /** Private trait for params and common methods for OneHotEncoder and OneHotEncoderModel */
-private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid with HasAggregationDepth
+private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
   with HasInputCol with HasInputCols with HasOutputCol with HasOutputCols {
 
   /**
@@ -156,10 +156,6 @@ class OneHotEncoder @Since("3.0.0") (@Since("3.0.0") override val uid: String)
   @Since("3.0.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
-  /** @group expertSetParam */
-  @Since("3.0.0")
-  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-
   @Since("3.0.0")
   override def transformSchema(schema: StructType): StructType = {
     val keepInvalid = $(handleInvalid) == OneHotEncoder.KEEP_INVALID
@@ -198,7 +194,7 @@ class OneHotEncoder @Since("3.0.0") (@Since("3.0.0") override val uid: String)
       // When fitting data, we want the plain number of categories without `handleInvalid` and
       // `dropLast` taken into account.
       val attrGroups = OneHotEncoderCommon.getOutputAttrGroupFromData(
-        dataset, inputColNames, outputColNames, dropLast = false, $(aggregationDepth))
+        dataset, inputColNames, outputColNames, dropLast = false)
       attrGroups.zip(columnToScanIndices).foreach { case (attrGroup, idx) =>
         categorySizes(idx) = attrGroup.size
       }
@@ -498,8 +494,7 @@ private[feature] object OneHotEncoderCommon {
       dataset: Dataset[_],
       inputColNames: Seq[String],
       outputColNames: Seq[String],
-      dropLast: Boolean,
-      depth: Int): Seq[AttributeGroup] = {
+      dropLast: Boolean): Seq[AttributeGroup] = {
     // The RDD approach has advantage of early-stop if any values are invalid. It seems that
     // DataFrame ops don't have equivalent functions.
     val columns = inputColNames.map { inputColName =>
@@ -526,8 +521,7 @@ private[feature] object OneHotEncoderCommon {
           m0(idx) = math.max(m0(idx), m1(idx))
         }
         m0
-      },
-      depth
+      }
     ).map(_.toInt + 1)
 
     outputColNames.zip(numAttrsArray).map { case (outputColName, numAttrs) =>

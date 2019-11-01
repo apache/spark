@@ -2364,7 +2364,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
 
 class _OneHotEncoderParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols,
-                           HasHandleInvalid, HasAggregationDepth):
+                           HasHandleInvalid):
     """
     Params for :py:class:`OneHotEncoder` and :py:class:`OneHotEncoderModel`.
 
@@ -2415,7 +2415,7 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
-    >>> ohe = OneHotEncoder().setAggregationDepth(3)
+    >>> ohe = OneHotEncoder()
     >>> ohe.setInputCols(["input"])
     OneHotEncoder...
     >>> ohe.setOutputCols(["output"])
@@ -2445,25 +2445,25 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
 
     @keyword_only
     def __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True,
-                 inputCol=None, outputCol=None, aggregationDepth=2):
+                 inputCol=None, outputCol=None):
         """
         __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
-                 inputCol=None, outputCol=None, aggregationDepth=2)
+                 inputCol=None, outputCol=None)
         """
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.OneHotEncoder", self.uid)
-        self._setDefault(handleInvalid="error", dropLast=True, aggregationDepth=2)
+        self._setDefault(handleInvalid="error", dropLast=True)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.3.0")
     def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True,
-                  inputCol=None, outputCol=None, aggregationDepth=2):
+                  inputCol=None, outputCol=None):
         """
         setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
-                  inputCol=None, outputCol=None, aggregationDepth=2)
+                  inputCol=None, outputCol=None)
         Sets params for this OneHotEncoder.
         """
         kwargs = self._input_kwargs
@@ -2510,13 +2510,6 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
-
-    @since("3.0.0")
-    def setAggregationDepth(self, value):
-        """
-        Sets the value of :py:attr:`aggregationDepth`.
-        """
-        return self._set(aggregationDepth=value)
 
     def _create_model(self, java_model):
         return OneHotEncoderModel(java_model)
@@ -2873,7 +2866,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
                               handleInvalid=self.getHandleInvalid())
 
 
-class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError, HasAggregationDepth):
+class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError):
     """
     Params for :py:class:`RobustScaler` and :py:class:`RobustScalerModel`.
 
@@ -2935,7 +2928,7 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
     ...         (3, Vectors.dense([3.0, -3.0]),),
     ...         (4, Vectors.dense([4.0, -4.0]),),]
     >>> df = spark.createDataFrame(data, ["id", "features"])
-    >>> scaler = RobustScaler().setAggregationDepth(3)
+    >>> scaler = RobustScaler()
     >>> scaler.setInputCol("features")
     RobustScaler...
     >>> scaler.setOutputCol("scaled")
@@ -2969,25 +2962,25 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
 
     @keyword_only
     def __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
-                 inputCol=None, outputCol=None, relativeError=0.001, aggregationDepth=2):
+                 inputCol=None, outputCol=None, relativeError=0.001):
         """
         __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
-                 inputCol=None, outputCol=None, relativeError=0.001, aggregationDepth=2)
+                 inputCol=None, outputCol=None, relativeError=0.001)
         """
         super(RobustScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RobustScaler", self.uid)
         self._setDefault(lower=0.25, upper=0.75, withCentering=False, withScaling=True,
-                         relativeError=0.001, aggregationDepth=2)
+                         relativeError=0.001)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("3.0.0")
     def setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
-                  inputCol=None, outputCol=None, relativeError=0.001, aggregationDepth=2):
+                  inputCol=None, outputCol=None, relativeError=0.001):
         """
         setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
-                  inputCol=None, outputCol=None, relativeError=0.001, aggregationDepth=2)
+                  inputCol=None, outputCol=None, relativeError=0.001)
         Sets params for this RobustScaler.
         """
         kwargs = self._input_kwargs
@@ -3036,11 +3029,11 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
         return self._set(outputCol=value)
 
     @since("3.0.0")
-    def setAggregationDepth(self, value):
+    def setRelativeError(self, value):
         """
-        Sets the value of :py:attr:`aggregationDepth`.
+        Sets the value of :py:attr:`relativeError`.
         """
-        return self._set(aggregationDepth=value)
+        return self._set(relativeError=value)
 
     def _create_model(self, java_model):
         return RobustScalerModel(java_model)
@@ -4070,7 +4063,7 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
         return self._set(handleInvalid=value)
 
 
-class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid, HasAggregationDepth):
+class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
     """
     Params for :py:class:`VectorIndexer` and :py:class:`VectorIndexerModel`.
 
@@ -4138,7 +4131,7 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
     >>> df = spark.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 1.0]),), (Vectors.dense([0.0, 2.0]),)], ["a"])
     >>> indexer = VectorIndexer(maxCategories=2, inputCol="a")
-    >>> indexer.setOutputCol("indexed").setAggregationDepth(3)
+    >>> indexer.setOutputCol("indexed")
     VectorIndexer...
     >>> model = indexer.fit(df)
     >>> indexer.getHandleInvalid()
@@ -4183,25 +4176,21 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
     """
 
     @keyword_only
-    def __init__(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error",
-                 aggregationDepth=2):
+    def __init__(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        __init__(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error", \
-                 aggregationDepth=2)
+        __init__(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error")
         """
         super(VectorIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorIndexer", self.uid)
-        self._setDefault(maxCategories=20, handleInvalid="error", aggregationDepth=2)
+        self._setDefault(maxCategories=20, handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error",
-                  aggregationDepth=2):
+    def setParams(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        setParams(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error", \
-                  aggregationDepth=2)
+        setParams(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error")
         Sets params for this VectorIndexer.
         """
         kwargs = self._input_kwargs
@@ -4231,13 +4220,6 @@ class VectorIndexer(JavaEstimator, _VectorIndexerParams, JavaMLReadable, JavaMLW
         Sets the value of :py:attr:`handleInvalid`.
         """
         return self._set(handleInvalid=value)
-
-    @since("3.0.0")
-    def setAggregationDepth(self, value):
-        """
-        Sets the value of :py:attr:`aggregationDepth`.
-        """
-        return self._set(aggregationDepth=value)
 
     def _create_model(self, java_model):
         return VectorIndexerModel(java_model)

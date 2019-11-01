@@ -39,7 +39,7 @@ import org.apache.spark.util.collection.OpenHashSet
 
 /** Private trait for params for VectorIndexer and VectorIndexerModel */
 private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOutputCol
-  with HasHandleInvalid with HasAggregationDepth {
+  with HasHandleInvalid {
 
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
@@ -139,10 +139,6 @@ class VectorIndexer @Since("1.4.0") (
   @Since("2.3.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
-  /** @group expertSetParam */
-  @Since("3.0.0")
-  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): VectorIndexerModel = {
     transformSchema(dataset.schema, logging = true)
@@ -155,7 +151,7 @@ class VectorIndexer @Since("1.4.0") (
       val localCatStats = new VectorIndexer.CategoryStats(numFeatures, maxCats)
       iter.foreach(localCatStats.addVector)
       Iterator(localCatStats)
-    }.treeReduce((stats1, stats2) => stats1.merge(stats2), depth = $(aggregationDepth))
+    }.treeReduce((stats1, stats2) => stats1.merge(stats2))
     val model = new VectorIndexerModel(uid, numFeatures, categoryStats.getCategoryMaps)
       .setParent(this)
     copyValues(model)
