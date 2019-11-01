@@ -462,22 +462,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AlterTableRenamePartitionCommand]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table PARTITION spec1 RENAME TO PARTITION spec2;
-   * }}}
-   */
-  override def visitRenameTablePartition(
-      ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenamePartitionCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitNonOptionalPartitionSpec(ctx.from),
-      visitNonOptionalPartitionSpec(ctx.to))
-  }
-
-  /**
    * Create an [[AlterTableDropPartitionCommand]] command
    *
    * For example:
