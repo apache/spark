@@ -1374,16 +1374,27 @@ class DataSourceV2SQLSuite
     }
   }
 
- test("ALTER TABLE RECOVER PARTITIONS") {
+  test("ALTER TABLE RECOVER PARTITIONS") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
       val e = intercept[AnalysisException] {
-        val partition = sql(s"ALTER TABLE $t RECOVER PARTITIONS")
+        sql(s"ALTER TABLE $t RECOVER PARTITIONS")
       }
       assert(e.message.contains("ALTER TABLE RECOVER PARTITIONS is only supported with v1 tables"))
     }
- }
+  }
+
+  test("ALTER TABLE RENAME PARTITION") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
+      }
+      assert(e.message.contains("ALTER TABLE RENAME PARTITION is only supported with v1 tables"))
+    }
+  }
 
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {

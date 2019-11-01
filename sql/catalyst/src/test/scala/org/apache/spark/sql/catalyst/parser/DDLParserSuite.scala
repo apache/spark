@@ -1202,6 +1202,32 @@ class DDLParserSuite extends AnalysisTest {
       AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
   }
 
+  test("alter table: rename partition") {
+    val sql1 =
+      """
+        |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
+        |RENAME TO PARTITION (dt='2008-09-09', country='uk')
+      """.stripMargin
+    val parsed1 = parsePlan(sql1)
+    val expected1 = AlterTableRenamePartitionStatement(
+      Seq("table_name"),
+      Map("dt" -> "2008-08-08", "country" -> "us"),
+      Map("dt" -> "2008-09-09", "country" -> "uk"))
+    comparePlans(parsed1, expected1)
+
+    val sql2 =
+      """
+        |ALTER TABLE a.b.c PARTITION (ds='2017-06-10')
+        |RENAME TO PARTITION (ds='2018-06-10')
+      """.stripMargin
+    val parsed2 = parsePlan(sql2)
+    val expected2 = AlterTableRenamePartitionStatement(
+      Seq("a", "b", "c"),
+      Map("ds" -> "2017-06-10"),
+      Map("ds" -> "2018-06-10"))
+    comparePlans(parsed2, expected2)
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],
