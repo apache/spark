@@ -126,8 +126,7 @@ class SymmetricHashJoinStateManager(
    * This implies the iterator must be consumed fully without any other operations on this manager
    * or the underlying store being interleaved.
    */
-  def removeByKeyCondition(removalCondition: UnsafeRow => Boolean)
-      : Iterator[KeyToValuePair] = {
+  def removeByKeyCondition(removalCondition: UnsafeRow => Boolean): Iterator[KeyToValuePair] = {
     new NextIterator[KeyToValuePair] {
 
       private val allKeyToNumValues = keyToNumValues.iterator
@@ -184,8 +183,7 @@ class SymmetricHashJoinStateManager(
    * This implies the iterator must be consumed fully without any other operations on this manager
    * or the underlying store being interleaved.
    */
-  def removeByValueCondition(removalCondition: UnsafeRow => Boolean)
-      : Iterator[KeyToValuePair] = {
+  def removeByValueCondition(removalCondition: UnsafeRow => Boolean): Iterator[KeyToValuePair] = {
     new NextIterator[KeyToValuePair] {
 
       // Reuse this object to avoid creation+GC overhead.
@@ -450,7 +448,7 @@ class SymmetricHashJoinStateManager(
     override val valueAttributes: Seq[Attribute] = inputValueAttributes
 
     override def convertValue(value: UnsafeRow): (UnsafeRow, Boolean) = {
-      if (value != null) (value, false) else null
+      if (value != null) (value, false) else (null, false)
     }
 
     override def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow = value
@@ -473,7 +471,9 @@ class SymmetricHashJoinStateManager(
     override def convertValue(value: UnsafeRow): (UnsafeRow, Boolean) = {
       if (value != null) {
         (valueRowGenerator(value), value.getBoolean(indexOrdinalInValueWithMatchedRow))
-      } else null
+      } else {
+        (null, false)
+      }
     }
 
     override def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow = {

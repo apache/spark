@@ -296,11 +296,11 @@ case class StreamingSymmetricHashJoinExec(
         val removedRowIter = leftSideJoiner.removeOldState()
         val outerOutputIter = removedRowIter.filterNot { kv =>
           stateFormatVersion match {
-            case 1 => matchesWithRightSideState(
-              new UnsafeRowPair(kv.key, kv.value))
+            case 1 => matchesWithRightSideState(new UnsafeRowPair(kv.key, kv.value))
             case 2 => kv.matched
-            case _ => throw new IllegalStateException("Unexpected state format version! " +
-              s"version $stateFormatVersion")
+            case _ =>
+              throw new IllegalStateException("Unexpected state format version! " +
+                s"version $stateFormatVersion")
           }
         }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
 
@@ -315,11 +315,11 @@ case class StreamingSymmetricHashJoinExec(
         val removedRowIter = rightSideJoiner.removeOldState()
         val outerOutputIter = removedRowIter.filterNot { kv =>
           stateFormatVersion match {
-            case 1 => matchesWithLeftSideState(
-              new UnsafeRowPair(kv.key, kv.value))
+            case 1 => matchesWithLeftSideState(new UnsafeRowPair(kv.key, kv.value))
             case 2 => kv.matched
-            case _ => throw new IllegalStateException("Unexpected state format version! " +
-              s"version $stateFormatVersion")
+            case _ =>
+              throw new IllegalStateException("Unexpected state format version! " +
+                s"version $stateFormatVersion")
           }
         }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
 
