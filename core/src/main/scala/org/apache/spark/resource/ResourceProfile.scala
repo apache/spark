@@ -35,7 +35,7 @@ import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
  * specify executor and task requirements for an RDD that will get applied during a
  * stage. This allows the user to change the resource requirements between stages.
  *
- * Only support a subset of the resources for now. The config names supported correspond to the
+ * Only supports a subset of the resources for now. The config names supported correspond to the
  * regular Spark configs with the prefix removed. For instance overhead memory in this api
  * is memoryOverhead, which is spark.executor.memoryOverhead with spark.executor removed.
  * Resources like GPUs are resource.gpu (spark configs spark.executor.resource.gpu.*)

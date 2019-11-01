@@ -18,17 +18,40 @@
 package org.apache.spark.resource
 
 /**
- * An executor resource request. This is used in conjuntion with the ResourceProfile to
+ * An Executor resource request. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
+ *
+ * This is used to specify what the resource requirements are for an Executor and how
+ * Spark can find out specific details about those resources. Not all the parameters are
+ * required for every resource type. The resources names supported
+ * correspond to the regular Spark configs with the prefix removed. For instance overhead
+ * memory in this api is memoryOverhead, which is spark.executor.memoryOverhead with
+ * spark.executor removed. Resources like GPUs are resource.gpu
+ * (spark configs spark.executor.resource.gpu.*). The amount, discoveryScript, and vendor
+ * parameters for resources are all the same parameters a user would specify through the
+ * configs: spark.executor.resource.{resourceName}.{amount, discoveryScript, vendor}.
+ *
+ * For instance, a user wants to allocate an Executor with GPU resources on YARN. The user has
+ * to specify the resource name (resource.gpu), the amount or number of GPUs per Executor,
+ * units would not be used as its not a memory config, the discovery script would be specified
+ * so that when the Executor starts up it can discovery what GPU addresses are available for it to
+ * use because YARN doesn't tell Spark that, then vendor would not be used because
+ * its specific for Kubernetes.
+ *
+ * See the configuration and cluster specific docs for more details.
+ *
  * There are alternative constructors for working with Java.
  *
  * @param resourceName Name of the resource
  * @param amount Amount requesting
- * @param units Units of amount for things like Memory, default is no units, only byte
- *              types (b, mb, gb, etc) are supported.
- * @param discoveryScript Script used to discovery the resources
- * @param vendor Vendor, required for some cluster managers
+ * @param units Optional units of the amount. For things like Memory, default is no units, only byte
+ *              types (b, mb, gb, etc) are currently supported.
+ * @param discoveryScript Optional script used to discover the resources. This is required on some
+ *                        cluster managers that don't tell Spark the addresses of the resources
+ *                        allocated. The script runs on Executors startup to discover the addresses
+ *                        of the resources available.
+ * @param vendor Optional vendor, required for some cluster managers
  *
  * This api is currently private until the rest of the pieces are in place and then it
  * will become public.
