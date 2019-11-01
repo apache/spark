@@ -135,10 +135,12 @@ object LiteralGenerator {
       Instant.parse("0001-01-01T00:00:00.000000Z"),
       Instant.parse("9999-12-31T23:59:59.999999Z")).getSeconds
     val maxMicros = TimeUnit.SECONDS.toMicros(maxDurationInSec)
+    val maxDays = TimeUnit.SECONDS.toDays(maxDurationInSec).toInt
     for {
       months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths)
       micros <- Gen.choose(-1 * maxMicros, maxMicros)
-    } yield Literal.create(new CalendarInterval(months, micros), CalendarIntervalType)
+      days <- Gen.choose(-1 * maxDays, maxDays)
+    } yield Literal.create(new CalendarInterval(months, days, micros), CalendarIntervalType)
   }
 
 
