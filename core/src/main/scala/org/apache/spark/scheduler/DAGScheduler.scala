@@ -1399,20 +1399,15 @@ private[spark] class DAGScheduler(
           case _ =>
             updateAccumulators(event)
         }
-
-      case fail =>
-        if (task.metrics.shuffleReadMetrics.recordsRead == 0) {
-          val reduceId = task.partitionId
-          val shuffleReadSize = stage.parents.filter(_.isInstanceOf[ShuffleMapStage])
-            .map(_.asInstanceOf[ShuffleMapStage].shuffleDep.shuffleId)
-            .map(mapOutputTracker.shuffleStatuses.get(_)).map(_.get.mapStatuses)
-            .flatMap(_.map(_.getSizeForBlock(reduceId))).sum
-          task.metrics.shuffleReadMetrics.setRecordsRead(shuffleReadSize)
-        }
-        fail match {
-          case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
-          case _ =>
-        }
+      case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
+      case _: ExecutorLostFailure =>
+        val reduceId = task.partitionId
+        val shuffleReadSize = stage.parents.filter(_.isInstanceOf[ShuffleMapStage])
+          .map(_.asInstanceOf[ShuffleMapStage].shuffleDep.shuffleId)
+          .map(mapOutputTracker.shuffleStatuses.get(_)).map(_.get.mapStatuses)
+          .flatMap(_.map(_.getSizeForBlock(reduceId))).sum
+        task.metrics.shuffleReadMetrics.setRecordsRead(shuffleReadSize)
+      case _ =>
     }
     postTaskEnd(event)
 
