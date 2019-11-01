@@ -9,7 +9,7 @@
 -- [SPARK-19842] Informational Referential Integrity Constraints Support in Spark
 -- [SPARK-29119] DEFAULT option is not supported in Spark
 create table inserttest (col1 int, col2 int /* NOT NULL */, col3 string /* default 'testing' */) using parquet;
--- [SPARK-XXXXX] Support a DEFAULT value in INSERT
+-- [SPARK-29119] DEFAULT option is not supported in Spark
 -- [SPARK-20845] Support specification of column names in INSERT INTO
 -- Skip a test below because the PK constraint is violated and the query fails in PostgreSQL
 -- insert into inserttest (col1, col2, col3) values (DEFAULT, DEFAULT, DEFAULT);
@@ -28,6 +28,7 @@ select * from inserttest;
 -- insert with similar expression / target_list values (all fail)
 --
 -- [SPARK-20845] Support specification of column names in INSERT INTO
+-- [SPARK-29119] DEFAULT option is not supported in Spark
 -- insert into inserttest (col1, col2, col3) values (DEFAULT, DEFAULT);
 -- insert into inserttest (col1, col2, col3) values (1, 2);
 -- insert into inserttest (col1) values (1, 2);
@@ -38,8 +39,8 @@ select * from inserttest;
 --
 -- VALUES test
 --
--- [SPARK-XXXXX] Support a DEFAULT value in INSERT
--- [SPARK-XXXXX] Support SELECT statements in VALUES of INSERT INTO
+-- [SPARK-29119] DEFAULT option is not supported in Spark
+-- [SPARK-29715] Support SELECT statements in VALUES of INSERT INTO
 -- insert into inserttest values(10, 20, '40'), (-1, 2, 'testing' /* DEFAULT */),
 --     ((select 2), (select i from (values(3)) as foo (i)), 'values are fun!');
 
@@ -60,7 +61,7 @@ drop table inserttest;
 -- these tests are aware that transformInsertStmt has 3 separate code paths
 --
 
--- [SPARK-XXXXX] Support [CREATE|DROP] TYPE
+-- [SPARK-29716] Support [CREATE|DROP] TYPE
 -- create type insert_test_type as (if1 int, if2 array<string>);
 
 -- create table inserttest (f1 int, f2 int[],
@@ -87,8 +88,8 @@ drop table inserttest;
 -- select * from inserttest;
 
 -- also check reverse-listing
--- [SPARK-XXXXX] Support CREATE RULE
 -- create table inserttest2 (f1 bigint, f2 string);
+-- [SPARK-29717] Support [CREATE|DROP] RULE - define a new plan rewrite rule
 -- create rule irule1 as on insert to inserttest2 do also
 --   insert into inserttest (f3.if2[1], f3.if2[2])
 --   values (new.f1,new.f2);
@@ -102,11 +103,11 @@ drop table inserttest;
 
 -- drop table inserttest2;
 -- drop table inserttest;
--- [SPARK-XXXXX] Support [CREATE|DROP] TYPE
+-- [SPARK-29716] Support [CREATE|DROP] TYPE
 -- drop type insert_test_type;
 
 -- direct partition inserts should check partition bound constraint
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table range_parted (
 -- 	a string,
 -- 	b int
@@ -115,7 +116,7 @@ drop table inserttest;
 -- no partitions, so fail
 -- insert into range_parted values ('a', 11);
 
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table part1 partition of range_parted for values from ('a', 1) to ('a', 10);
 -- create table part2 partition of range_parted for values from ('a', 10) to ('a', 20);
 -- create table part3 partition of range_parted for values from ('b', 1) to ('b', 10);
@@ -137,7 +138,7 @@ drop table inserttest;
 -- fail (expression key (b+0) cannot be null either)
 -- insert into part1 values (1);
 
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table list_parted (
 -- 	a text,
 -- 	b int
@@ -155,7 +156,7 @@ drop table inserttest;
 -- insert into part_null values (null, 0);
 
 -- check in case of multi-level partitioned table
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table part_ee_ff partition of list_parted for values in ('ee', 'ff') partition by range (b);
 -- create table part_ee_ff1 partition of part_ee_ff for values from (1) to (10);
 -- create table part_ee_ff2 partition of part_ee_ff for values from (10) to (20);
@@ -171,11 +172,11 @@ drop table inserttest;
 -- test if default partition works as expected for multi-level partitioned
 -- table as well as when default partition itself is further partitioned
 -- drop table part_default;
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table part_xx_yy partition of list_parted for values in ('xx', 'yy') partition by list (a);
 -- create table part_xx_yy_p1 partition of part_xx_yy for values in ('xx');
 -- create table part_xx_yy_defpart partition of part_xx_yy default;
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table part_default partition of list_parted default partition by range(b);
 -- create table part_default_p1 partition of part_default for values from (20) to (30);
 -- create table part_default_p2 partition of part_default for values from (30) to (40);
@@ -235,14 +236,14 @@ drop table inserttest;
 -- select tableoid::regclass, * from list_parted;
 
 -- some more tests to exercise tuple-routing with multi-level partitioning
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table part_gg partition of list_parted for values in ('gg') partition by range (b);
 -- create table part_gg1 partition of part_gg for values from (minvalue) to (1);
 -- create table part_gg2 partition of part_gg for values from (1) to (10) partition by range (b);
 -- create table part_gg2_1 partition of part_gg2 for values from (1) to (5);
 -- create table part_gg2_2 partition of part_gg2 for values from (5) to (10);
 
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table part_ee_ff3 partition of part_ee_ff for values from (20) to (30) partition by range (b);
 -- create table part_ee_ff3_1 partition of part_ee_ff3 for values from (20) to (25);
 -- create table part_ee_ff3_2 partition of part_ee_ff3 for values from (25) to (30);
@@ -284,7 +285,7 @@ drop table inserttest;
 -- operator 1 =,
 -- function 2 part_hashtext_length(text, int8);
 
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table hash_parted (
 -- 	a int
 -- ) partition by hash (a part_test_int4_ops);
@@ -317,7 +318,7 @@ drop table inserttest;
 
 -- test that a default partition added as the first partition accepts any value
 -- including null
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table list_parted (a int) partition by list (a);
 -- create table part_default partition of list_parted default;
 -- \d+ part_default
@@ -329,7 +330,7 @@ drop table inserttest;
 -- drop table list_parted;
 
 -- more tests for certain multi-level partitioning scenarios
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table mlparted (a int, b int) partition by range (a, b);
 -- create table mlparted1 (b int not null, a int not null) partition by range ((b+0));
 -- create table mlparted11 (like mlparted1);
@@ -385,7 +386,7 @@ drop table inserttest;
 -- insert into mlparted1 (a, b) values (2, 3);
 
 -- check routing error through a list partitioned table when the key is null
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table lparted_nonullpart (a int, b char) partition by list (b);
 -- create table lparted_nonullpart_a partition of lparted_nonullpart for values in ('a');
 -- insert into lparted_nonullpart values (1);
@@ -407,7 +408,7 @@ drop table inserttest;
 --   select a, b, min(c), max(c) from ins group by a, b order by 1;
 
 -- alter table mlparted add c text;
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table mlparted5 (c text, a int not null, b int not null) partition by list (c);
 -- create table mlparted5a (a int not null, c text, b int not null);
 -- alter table mlparted5 attach partition mlparted5a for values in ('a');
@@ -421,7 +422,7 @@ drop table inserttest;
 -- alter table mlparted drop constraint check_b;
 
 -- Check multi-level default partition
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table mlparted_def partition of mlparted default partition by range(a);
 -- create table mlparted_def1 partition of mlparted_def for values from (40) to (50);
 -- create table mlparted_def2 partition of mlparted_def for values from (50) to (60);
@@ -442,7 +443,7 @@ drop table inserttest;
 -- top-most parent.  First remove the last attribute.
 -- alter table mlparted add d int, add e int;
 -- alter table mlparted drop e;
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table mlparted5 partition of mlparted
 --   for values from (1, 40) to (1, 50) partition by range (c);
 -- create table mlparted5_ab partition of mlparted5
@@ -476,7 +477,7 @@ drop table inserttest;
 
 -- check that message shown after failure to find a partition shows the
 -- appropriate key description (or none) in various situations
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table key_desc (a int, b int) partition by list ((a+0));
 -- create table key_desc_1 partition of key_desc for values in (1) partition by range (b);
 
@@ -503,7 +504,7 @@ drop table inserttest;
 -- drop table key_desc, key_desc_1;
 
 -- test minvalue/maxvalue restrictions
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table mcrparted (a int, b int, c int) partition by range (a, abs(b), c);
 -- create table mcrparted0 partition of mcrparted for values from (minvalue, 0, 0) to (1, maxvalue, maxvalue);
 -- create table mcrparted2 partition of mcrparted for values from (10, 6, minvalue) to (10, maxvalue, minvalue);
@@ -555,7 +556,7 @@ drop table inserttest;
 -- drop table mcrparted;
 
 -- check that a BR constraint can't make partition contain violating rows
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table brtrigpartcon (a int, b text) partition by list (a);
 -- create table brtrigpartcon1 partition of brtrigpartcon for values in (1);
 -- create or replace function brtrigpartcon1trigf() returns trigger as $$begin new.a := 2; return new; end$$ language plpgsql;
@@ -586,7 +587,7 @@ drop table inserttest;
 -- check that "do nothing" BR triggers work with tuple-routing (this checks
 -- that estate->es_result_relation_info is appropriately set/reset for each
 -- routed tuple)
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table donothingbrtrig_test (a int, b text) partition by list (a);
 -- create table donothingbrtrig_test1 (b text, a int);
 -- create table donothingbrtrig_test2 (c text, b text, a int);
@@ -609,7 +610,7 @@ drop table inserttest;
 -- drop function donothingbrtrig_func();
 
 -- check multi-column range partitioning with minvalue/maxvalue constraints
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table mcrparted (a text, b int) partition by range(a, b);
 -- create table mcrparted1_lt_b partition of mcrparted for values from (minvalue, minvalue) to ('b', minvalue);
 -- create table mcrparted2_b partition of mcrparted for values from ('b', minvalue) to ('c', minvalue);
@@ -637,7 +638,7 @@ drop table inserttest;
 -- drop table mcrparted;
 
 -- check that wholerow vars in the RETURNING list work with partitioned tables
--- [SPARK-XXXXX] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table returningwrtest (a int) partition by list (a);
 -- create table returningwrtest1 partition of returningwrtest for values in (1);
 -- insert into returningwrtest values (1) returning returningwrtest;
