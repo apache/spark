@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CacheTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropDatabaseCommand, DropTableCommand, LoadDataCommand, ShowColumnsCommand, ShowCreateTableCommand, ShowPartitionsCommand, ShowTablesCommand, TruncateTableCommand, UncacheTableCommand}
+import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableChangeColumnCommand, AlterTableRecoverPartitionsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, AnalyzeColumnCommand, AnalyzePartitionCommand, AnalyzeTableCommand, CacheTableCommand, CreateDatabaseCommand, DescribeColumnCommand, DescribeTableCommand, DropDatabaseCommand, DropTableCommand, LoadDataCommand, ShowColumnsCommand, ShowCreateTableCommand, ShowPartitionsCommand, ShowTablesCommand, TruncateTableCommand, UncacheTableCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, RefreshTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
@@ -62,8 +62,28 @@ class ResolveSessionCatalog(
          nameParts @ SessionCatalog(catalog, tableName), colName, dataType, comment) =>
       loadTable(catalog, tableName.asIdentifier).collect {
         case v1Table: V1Table =>
-          // TODO(SPARK-29353): we should fallback to the v1 `AlterTableChangeColumnCommand`.
-          throw new AnalysisException("ALTER COLUMN is only supported with v2 tables.")
+          if (colName.length > 1) {
+            throw new AnalysisException(
+              "ALTER COLUMN with qualified column is only supported with v2 tables.")
+          }
+          if (dataType.isEmpty) {
+            throw new AnalysisException(
+              "ALTER COLUMN with v1 tables must specify new data type.")
+          }
+          val builder = new MetadataBuilder
+          // Add comment to metadata
+          comment.map(c => builder.putString("comment", c))
+          // Add Hive type string to metadata.
+          val cleanedDataType = HiveStringType.replaceCharType(dataType.get)
+          if (dataType.get != cleanedDataType) {
+            builder.putString(HIVE_TYPE_STRING, dataType.get.catalogString)
+          }
+          val newColumn = StructField(
+            colName(0),
+            cleanedDataType,
+            nullable = true,
+            builder.build())
+          AlterTableChangeColumnCommand(tableName.asTableIdentifier, colName(0), newColumn)
       }.getOrElse {
         val typeChange = dataType.map { newDataType =>
           TableChange.updateColumnType(colName.toArray, newDataType, true)
