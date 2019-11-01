@@ -1600,7 +1600,7 @@ class TypeCoercionSuite extends AnalysisTest {
 
   test("rule for interval operations") {
     val dateTimeOperations = TypeCoercion.DateTimeOperations
-    val interval = Literal(new CalendarInterval(0, 0))
+    val interval = Literal(new CalendarInterval(0, 0, 0))
 
     Seq(
       Literal(10.toByte, ByteType),

@@ -97,21 +97,21 @@ public class CalendarIntervalSuite {
 
   @Test
   public void multiplyTest() {
-    CalendarInterval interval = new CalendarInterval(0, 0);
+    CalendarInterval interval = new CalendarInterval(0, 0, 0);
     assertEquals(interval, interval.multiply(0));
 
-    interval = new CalendarInterval(123, 456);
-    assertEquals(new CalendarInterval(123 * 42, 456 * 42), interval.multiply(42));
+    interval = new CalendarInterval(123, 456, 789);
+    assertEquals(new CalendarInterval(123 * 42, 456 * 42, 789 * 42), interval.multiply(42));
 
-    interval = new CalendarInterval(-123, -456);
-    assertEquals(new CalendarInterval(-123 * 42, -456 * 42), interval.multiply(42));
+    interval = new CalendarInterval(-123, -456, -789);
+    assertEquals(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42), interval.multiply(42));
 
     assertEquals(
-      new CalendarInterval(1, 22 * MICROS_PER_DAY + 12 * MICROS_PER_HOUR),
-      new CalendarInterval(1, 5 * MICROS_PER_DAY).multiply(1.5));
+      new CalendarInterval(1, 22, 12 * MICROS_PER_HOUR),
+      new CalendarInterval(1, 5, 0).multiply(1.5));
 
     try {
-      interval = new CalendarInterval(2, 0);
+      interval = new CalendarInterval(2, 0, 0);
       interval.multiply(Integer.MAX_VALUE);
       fail("Expected to throw an exception on months overflow");
     } catch (java.lang.ArithmeticException e) {
@@ -121,27 +121,27 @@ public class CalendarIntervalSuite {
 
     @Test
     public void divideTest() {
-      CalendarInterval interval = new CalendarInterval(0, 0);
+      CalendarInterval interval = new CalendarInterval(0, 0, 0);
       assertEquals(interval, interval.divide(10));
 
-      interval = new CalendarInterval(1, 30 * MICROS_PER_SECOND);
+      interval = new CalendarInterval(1, 0, 30 * MICROS_PER_SECOND);
       assertEquals(
-        new CalendarInterval(0, 15 * MICROS_PER_DAY + 15 * MICROS_PER_SECOND),
+        new CalendarInterval(0, 15, 15 * MICROS_PER_SECOND),
         interval.divide(2));
       assertEquals(
-        new CalendarInterval(2, MICROS_PER_MINUTE),
+        new CalendarInterval(2, 0, MICROS_PER_MINUTE),
         interval.divide(0.5));
 
-      interval = new CalendarInterval(-1, -30 * MICROS_PER_SECOND);
+      interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND);
       assertEquals(
-        new CalendarInterval(0, -15 * MICROS_PER_DAY - 15 * MICROS_PER_SECOND),
+        new CalendarInterval(0, -15, -15 * MICROS_PER_SECOND),
         interval.divide(2));
       assertEquals(
-        new CalendarInterval(-2, -1 * MICROS_PER_MINUTE),
+        new CalendarInterval(-2, 0, -1 * MICROS_PER_MINUTE),
         interval.divide(0.5));
 
       try {
-        interval = new CalendarInterval(123, 456);
+        interval = new CalendarInterval(123, 456, 789);
         interval.divide(0);
         fail("Expected to throw an exception on divide by zero");
       } catch (java.lang.ArithmeticException e) {
