@@ -256,7 +256,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           val castedLit = lit.dataType match {
             case CalendarIntervalType =>
               val calendarInterval = lit.value.asInstanceOf[CalendarInterval]
-              if (calendarInterval.months > 0) {
+              if (calendarInterval.months != 0) {
                 invalid = true
                 logWarning(
                   s"Failed to extract state value watermark from condition $exprToCollectFrom " +

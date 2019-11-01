@@ -74,51 +74,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }.head
   }
 
-  test("drop database") {
-    val sql1 = "DROP DATABASE IF EXISTS database_name RESTRICT"
-    val sql2 = "DROP DATABASE IF EXISTS database_name CASCADE"
-    val sql3 = "DROP SCHEMA IF EXISTS database_name RESTRICT"
-    val sql4 = "DROP SCHEMA IF EXISTS database_name CASCADE"
-    // The default is restrict=true
-    val sql5 = "DROP DATABASE IF EXISTS database_name"
-    // The default is ifExists=false
-    val sql6 = "DROP DATABASE database_name"
-    val sql7 = "DROP DATABASE database_name CASCADE"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val parsed3 = parser.parsePlan(sql3)
-    val parsed4 = parser.parsePlan(sql4)
-    val parsed5 = parser.parsePlan(sql5)
-    val parsed6 = parser.parsePlan(sql6)
-    val parsed7 = parser.parsePlan(sql7)
-
-    val expected1 = DropDatabaseCommand(
-      "database_name",
-      ifExists = true,
-      cascade = false)
-    val expected2 = DropDatabaseCommand(
-      "database_name",
-      ifExists = true,
-      cascade = true)
-    val expected3 = DropDatabaseCommand(
-      "database_name",
-      ifExists = false,
-      cascade = false)
-    val expected4 = DropDatabaseCommand(
-      "database_name",
-      ifExists = false,
-      cascade = true)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected1)
-    comparePlans(parsed4, expected2)
-    comparePlans(parsed5, expected1)
-    comparePlans(parsed6, expected3)
-    comparePlans(parsed7, expected4)
-  }
-
   test("alter database set dbproperties") {
     // ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
     val sql1 = "ALTER DATABASE database_name SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"
@@ -594,14 +549,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(parsed2, expected2)
   }
 
-  test("alter table: recover partitions") {
-    val sql = "ALTER TABLE table_name RECOVER PARTITIONS"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRecoverPartitionsCommand(
-      TableIdentifier("table_name", None))
-    comparePlans(parsed, expected)
-  }
-
   test("alter view: add partition (not supported)") {
     assertUnsupported(
       """
@@ -609,20 +556,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |(dt='2008-08-08', country='us') PARTITION
         |(dt='2009-09-09', country='uk')
       """.stripMargin)
-  }
-
-  test("alter table: rename partition") {
-    val sql =
-      """
-       |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-       |RENAME TO PARTITION (dt='2008-09-09', country='uk')
-      """.stripMargin
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRenamePartitionCommand(
-      TableIdentifier("table_name", None),
-      Map("dt" -> "2008-08-08", "country" -> "us"),
-      Map("dt" -> "2008-09-09", "country" -> "uk"))
-    comparePlans(parsed, expected)
   }
 
   test("alter table: exchange partition (not supported)") {
@@ -686,18 +619,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assertUnsupported(
       "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
         "SET FILEFORMAT PARQUET")
-  }
-
-  test("alter table: set partition location") {
-    val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
-      "SET LOCATION 'new location'"
-    val parsed2 = parser.parsePlan(sql2)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected2 = AlterTableSetLocationCommand(
-      tableIdent,
-      Some(Map("dt" -> "2008-08-08", "country" -> "us")),
-      "new location")
-    comparePlans(parsed2, expected2)
   }
 
   test("alter table: change column name/type/comment") {
@@ -807,27 +728,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
     }.getMessage
     assert(e.contains("Found an empty partition key 'b'"))
-  }
-
-  test("show columns") {
-    val sql1 = "SHOW COLUMNS FROM t1"
-    val sql2 = "SHOW COLUMNS IN db1.t1"
-    val sql3 = "SHOW COLUMNS FROM t1 IN db1"
-    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db2"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val expected1 = ShowColumnsCommand(None, TableIdentifier("t1", None))
-    val parsed2 = parser.parsePlan(sql2)
-    val expected2 = ShowColumnsCommand(None, TableIdentifier("t1", Some("db1")))
-    val parsed3 = parser.parsePlan(sql3)
-    val expected3 = ShowColumnsCommand(Some("db1"), TableIdentifier("t1", None))
-    val parsed4 = parser.parsePlan(sql4)
-    val expected4 = ShowColumnsCommand(Some("db2"), TableIdentifier("t1", Some("db1")))
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
   }
 
   test("Test CTAS #1") {
@@ -1409,30 +1309,5 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(source4.database.isEmpty)
     assert(source4.table == "table2")
     assert(location4 == Some("/spark/warehouse"))
-  }
-
-  test("load data") {
-    val v1 = "LOAD DATA INPATH 'path' INTO TABLE table1"
-    val (table, path, isLocal, isOverwrite, partition) = parser.parsePlan(v1).collect {
-      case LoadDataCommand(t, path, l, o, partition) => (t, path, l, o, partition)
-    }.head
-    assert(table.database.isEmpty)
-    assert(table.table == "table1")
-    assert(path == "path")
-    assert(!isLocal)
-    assert(!isOverwrite)
-    assert(partition.isEmpty)
-
-    val v2 = "LOAD DATA LOCAL INPATH 'path' OVERWRITE INTO TABLE table1 PARTITION(c='1', d='2')"
-    val (table2, path2, isLocal2, isOverwrite2, partition2) = parser.parsePlan(v2).collect {
-      case LoadDataCommand(t, path, l, o, partition) => (t, path, l, o, partition)
-    }.head
-    assert(table2.database.isEmpty)
-    assert(table2.table == "table1")
-    assert(path2 == "path")
-    assert(isLocal2)
-    assert(isOverwrite2)
-    assert(partition2.nonEmpty)
-    assert(partition2.get.apply("c") == "1" && partition2.get.apply("d") == "2")
   }
 }

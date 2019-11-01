@@ -108,7 +108,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       }.toArray
       val values = ctx.intervalValue().asScala.map(getIntervalValue).toArray
       try {
-        CalendarInterval.fromUnitStrings(units, values)
+        IntervalUtils.fromUnitStrings(units, values)
       } catch {
         case i: IllegalArgumentException =>
           val e = new ParseException(i.getMessage, ctx)
@@ -1769,7 +1769,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * {{{
    *   [TYPE] '[VALUE]'
    * }}}
-   * Currently Date, Timestamp, Interval and Binary typed literals are supported.
+   * Currently Date, Timestamp, Interval, Binary and INTEGER typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
@@ -1799,6 +1799,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
+        case "INTEGER" =>
+          val i = try {
+            value.toInt
+          } catch {
+            case e: NumberFormatException =>
+              val ex = new ParseException(s"Cannot parse the Int value: $value, $e", ctx)
+              ex.setStackTrace(e.getStackTrace)
+              throw ex
+          }
+          Literal(i, IntegerType)
         case other =>
           throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
       }
@@ -1953,21 +1963,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       val unitText = unit.getText.toLowerCase(Locale.ROOT)
       val interval = (unitText, Option(to).map(_.getText.toLowerCase(Locale.ROOT))) match {
         case (u, None) =>
-          CalendarInterval.fromUnitStrings(Array(normalizeInternalUnit(u)), Array(s))
+          IntervalUtils.fromUnitStrings(Array(normalizeInternalUnit(u)), Array(s))
         case ("year", Some("month")) =>
-          CalendarInterval.fromYearMonthString(s)
+          IntervalUtils.fromYearMonthString(s)
         case ("day", Some("hour")) =>
-          CalendarInterval.fromDayTimeString(s, "day", "hour")
+          IntervalUtils.fromDayTimeString(s, "day", "hour")
         case ("day", Some("minute")) =>
-          CalendarInterval.fromDayTimeString(s, "day", "minute")
+          IntervalUtils.fromDayTimeString(s, "day", "minute")
         case ("day", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s, "day", "second")
+          IntervalUtils.fromDayTimeString(s, "day", "second")
         case ("hour", Some("minute")) =>
-          CalendarInterval.fromDayTimeString(s, "hour", "minute")
+          IntervalUtils.fromDayTimeString(s, "hour", "minute")
         case ("hour", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s, "hour", "second")
+          IntervalUtils.fromDayTimeString(s, "hour", "second")
         case ("minute", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s, "minute", "second")
+          IntervalUtils.fromDayTimeString(s, "minute", "second")
         case (from, Some(t)) =>
           throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
       }
@@ -2376,6 +2386,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[DropNamespaceStatement]] command.
+   *
+   * For example:
+   * {{{
+   *   DROP (DATABASE|SCHEMA|NAMESPACE) [IF EXISTS] ns1.ns2 [RESTRICT|CASCADE];
+   * }}}
+   */
+  override def visitDropNamespace(ctx: DropNamespaceContext): LogicalPlan = withOrigin(ctx) {
+    DropNamespaceStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      ctx.EXISTS != null,
+      ctx.CASCADE != null)
+  }
+
+  /**
    * Create a [[ShowNamespacesStatement]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
@@ -2702,6 +2727,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
     AlterTableSetLocationStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
   }
 
@@ -2798,6 +2824,25 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[LoadDataStatement]].
+   *
+   * For example:
+   * {{{
+   *   LOAD DATA [LOCAL] INPATH 'filepath' [OVERWRITE] INTO TABLE multi_part_name
+   *   [PARTITION (partcol1=val1, partcol2=val2 ...)]
+   * }}}
+   */
+  override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
+    LoadDataStatement(
+      tableName = visitMultipartIdentifier(ctx.multipartIdentifier),
+      path = string(ctx.path),
+      isLocal = ctx.LOCAL != null,
+      isOverwrite = ctx.OVERWRITE != null,
+      partition = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    )
+  }
+
+  /**
    * Creates a [[ShowCreateTableStatement]]
    */
   override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
@@ -2876,5 +2921,50 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
     RefreshTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+  }
+
+  /**
+   * A command for users to list the column names for a table.
+   * This function creates a [[ShowColumnsStatement]] logical plan.
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW COLUMNS (FROM | IN) tableName=multipartIdentifier
+   *        ((FROM | IN) namespace=multipartIdentifier)?
+   * }}}
+   */
+  override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitMultipartIdentifier(ctx.table)
+    val namespace = Option(ctx.namespace).map(visitMultipartIdentifier)
+    ShowColumnsStatement(table, namespace)
+  }
+
+  /**
+   * Create an [[AlterTableRecoverPartitionsStatement]]
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name RECOVER PARTITIONS;
+   * }}}
+   */
+  override def visitRecoverPartitions(
+      ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableRecoverPartitionsStatement(visitMultipartIdentifier(ctx.multipartIdentifier))
+  }
+
+  /**
+   * Create an [[AlterTableRenamePartitionStatement]]
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE multi_part_name PARTITION spec1 RENAME TO PARTITION spec2;
+   * }}}
+   */
+  override def visitRenameTablePartition(
+      ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableRenamePartitionStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      visitNonOptionalPartitionSpec(ctx.from),
+      visitNonOptionalPartitionSpec(ctx.to))
   }
 }

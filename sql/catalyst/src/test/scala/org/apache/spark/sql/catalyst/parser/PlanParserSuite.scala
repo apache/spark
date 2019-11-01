@@ -624,6 +624,52 @@ class PlanParserSuite extends AnalysisTest {
           table("t").select(star()))))
 
     intercept("SELECT /*+ COALESCE(30 + 50) */ * FROM t", "mismatched input")
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(c) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("c")),
+        table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(100, c) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
+        table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(100, c), COALESCE(50) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
+        UnresolvedHint("COALESCE", Seq(Literal(50)),
+          table("t").select(star()))))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(100, c), BROADCASTJOIN(u), COALESCE(50) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
+        UnresolvedHint("BROADCASTJOIN", Seq($"u"),
+          UnresolvedHint("COALESCE", Seq(Literal(50)),
+            table("t").select(star())))))
+
+    comparePlans(
+      parsePlan(
+        """
+          |SELECT
+          |/*+ REPARTITION(100, c), BROADCASTJOIN(u), COALESCE(50), REPARTITION(300, c) */
+          |* FROM t
+        """.stripMargin),
+      UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
+        UnresolvedHint("BROADCASTJOIN", Seq($"u"),
+          UnresolvedHint("COALESCE", Seq(Literal(50)),
+            UnresolvedHint("REPARTITION", Seq(Literal(300), UnresolvedAttribute("c")),
+              table("t").select(star()))))))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t"),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("c")),
+        table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITION_BY_RANGE(100, c) */ * FROM t"),
+      UnresolvedHint("REPARTITION_BY_RANGE", Seq(Literal(100), UnresolvedAttribute("c")),
+        table("t").select(star())))
   }
 
   test("SPARK-20854: select hint syntax with expressions") {
