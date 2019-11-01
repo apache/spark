@@ -17,13 +17,20 @@
 
 package org.apache.spark.sql.thriftserver.cli
 
+import java.io.ByteArrayInputStream
 import java.nio.ByteBuffer
 import java.sql.Date
+import java.util
 import java.util.BitSet
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.thrift.TException
+import org.apache.thrift.protocol.TCompactProtocol
+import org.apache.thrift.transport.TIOStreamTransport
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.thriftserver.cli.thrift._
@@ -247,7 +254,50 @@ private[thriftserver] case class ColumnBasedSet(
   override def iterator: Iterator[Row] = rows.iterator
 }
 
-object ColumnBasedSet {
+object ColumnBasedSet extends Logging{
   private val EMPTY_STRING = ""
   private val EMPTY_BINARY = ByteBuffer.allocate(0)
+
+  def apply(tRowSet: TRowSet): ColumnBasedSet = {
+    val rows = new ArrayBuffer[Row]()
+    if (tRowSet.isSetBinaryColumns) {
+      val protocol =
+        new TCompactProtocol(
+          new TIOStreamTransport(
+            new ByteArrayInputStream(tRowSet.getBinaryColumns)))
+      // Read from the stream using the protocol for each column in final schema
+      val bufferMap = new util.HashMap[Int, ColumnBuffer]
+      var i = 0
+      while (i < tRowSet.getColumnCount) {
+        val tvalue = new TColumn
+        try {
+          tvalue.read(protocol)
+        } catch {
+          case e: TException =>
+            logError(e.getMessage, e)
+            throw new TException("Error reading column value from the row set blob", e)
+        }
+        bufferMap.put(i, new ColumnBuffer(tvalue))
+        i = i + 1
+      }
+      val columnsSize = bufferMap.values().asScala.map(_.size).max
+      val columnCount = tRowSet.getColumns.size()
+      (0 until columnsSize).foreach(index => {
+        val row = Row.fromSeq((0 until columnCount).map(bufferMap.get(_).get(index)))
+        rows += row
+      })
+    } else {
+      val bufferMap = new util.HashMap[Int, ColumnBuffer]
+      tRowSet.getColumns.asScala.zipWithIndex.foreach { case (tColumn, i) =>
+        bufferMap.put(i, new ColumnBuffer(tColumn))
+      }
+      val columnsSize = bufferMap.values().asScala.map(_.size).max
+      val columnCount = tRowSet.getColumns.size()
+      (0 until columnsSize).foreach(index => {
+        val row = Row.fromSeq((0 until columnCount).map(bufferMap.get(_).get(index)))
+        rows += row
+      })
+    }
+    ColumnBasedSet(null, rows, tRowSet.getStartRowOffset)
+  }
 }

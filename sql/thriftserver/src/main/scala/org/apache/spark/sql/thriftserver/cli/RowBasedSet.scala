@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * transform to [[TRowSet]].
  */
 private[thriftserver] case class RowBasedSet(types: StructType,
-                       rows: ArrayBuffer[Row], initStartOffset: Long)
+                                             rows: ArrayBuffer[Row], initStartOffset: Long)
   extends RowSet {
 
   var startOffset: Long = initStartOffset
@@ -174,4 +174,14 @@ private[thriftserver] case class RowBasedSet(types: StructType,
   override def setStartOffset(startOffset: Long): Unit = this.startOffset = startOffset
 
   override def iterator: Iterator[Row] = rows.iterator
+}
+
+object RowBasedSet {
+  def apply(tRowSet: TRowSet): RowBasedSet = {
+    val rows = new ArrayBuffer[Row]()
+    tRowSet.getRows.asScala.foreach(row => {
+      rows += Row.fromSeq(row.getColVals.asScala.map(_.getFieldValue))
+    })
+    RowBasedSet(null, rows, tRowSet.getStartRowOffset)
+  }
 }

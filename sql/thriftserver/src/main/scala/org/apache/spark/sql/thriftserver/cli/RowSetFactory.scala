@@ -51,52 +51,10 @@ private[thriftserver] object RowSetFactory extends Logging {
   }
 
   def create(tRowSet: TRowSet, version: TProtocolVersion): RowSet = {
-    val rows = new ArrayBuffer[Row]()
     if (version.getValue >= HIVE_CLI_SERVICE_PROTOCOL_V6.getValue) {
-      if (tRowSet.isSetBinaryColumns) {
-        val protocol =
-          new TCompactProtocol(
-            new TIOStreamTransport(
-              new ByteArrayInputStream(tRowSet.getBinaryColumns)))
-        // Read from the stream using the protocol for each column in final schema
-        val bufferMap = new util.HashMap[Int, ColumnBuffer]
-        var i = 0
-        while (i < tRowSet.getColumnCount) {
-          val tvalue = new TColumn
-          try {
-            tvalue.read(protocol)
-          } catch {
-            case e: TException =>
-              logError(e.getMessage, e)
-              throw new TException("Error reading column value from the row set blob", e)
-          }
-          bufferMap.put(i, new ColumnBuffer(tvalue))
-          i = i + 1
-        }
-        val columnsSize = bufferMap.values().asScala.map(_.size).max
-        val columnCount = tRowSet.getColumns.size()
-        (0 until columnsSize).foreach(index => {
-          val row = Row.fromSeq((0 until columnCount).map(bufferMap.get(_).get(index)))
-          rows += row
-        })
-      } else {
-        val bufferMap = new util.HashMap[Int, ColumnBuffer]
-        tRowSet.getColumns.asScala.zipWithIndex.foreach { case (tColumn, i) =>
-          bufferMap.put(i, new ColumnBuffer(tColumn))
-        }
-        val columnsSize = bufferMap.values().asScala.map(_.size).max
-        val columnCount = tRowSet.getColumns.size()
-        (0 until columnsSize).foreach(index => {
-          val row = Row.fromSeq((0 until columnCount).map(bufferMap.get(_).get(index)))
-          rows += row
-        })
-      }
-      ColumnBasedSet(null, rows, tRowSet.getStartRowOffset)
+      ColumnBasedSet(tRowSet)
     } else {
-      tRowSet.getRows.asScala.foreach(row => {
-        rows += Row.fromSeq(row.getColVals.asScala.map(_.getFieldValue))
-      })
-      RowBasedSet(null, rows, tRowSet.getStartRowOffset)
+      RowBasedSet(tRowSet)
     }
   }
 }
