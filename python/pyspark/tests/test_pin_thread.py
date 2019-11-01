@@ -103,7 +103,7 @@ class PinThreadTests(unittest.TestCase):
             """
             try:
                 self.sc.setJobGroup(job_group, "test rdd collect with setting job group")
-                self.sc.parallelize([3]).map(lambda x: time.sleep(x)).collect()
+                self.sc.parallelize([15]).map(lambda x: time.sleep(x)).collect()
                 is_job_cancelled[index] = False
             except Exception:
                 # Assume that exception means job cancellation.
@@ -125,7 +125,7 @@ class PinThreadTests(unittest.TestCase):
             threads.append(t)
 
         # Wait to make sure all jobs are executed.
-        time.sleep(1)
+        time.sleep(3)
         # And then, cancel one job group.
         self.sc.cancelJobGroup(group_a)
 
