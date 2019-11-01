@@ -184,4 +184,20 @@ class IntervalUtilsSuite extends SparkFunSuite {
     assert(!isNegative("1 year -360 days", 31))
     assert(!isNegative("-1 year 380 days", 31))
   }
+
+  test("from bounded day-time string") {
+    val input = "5 12:40:30.999999999"
+
+    def check(from: String, to: String, expected: String): Unit = {
+      withClue(s"from = $from, to = $to") {
+        assert(fromDayTimeString(input, from, to) === fromString(expected))
+      }
+    }
+
+    check("hour", "minute", "12 hours 40 minutes")
+    check("hour", "second", "12 hours 40 minutes 30.999999 seconds")
+    check("minute", "second", "40 minutes 30.999999 seconds")
+    check("day", "hour", "5 days 12 hours")
+    check("day", "minute", "5 days 12 hours 40 minutes")
+  }
 }
