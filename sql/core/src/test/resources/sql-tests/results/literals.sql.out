@@ -419,9 +419,9 @@ interval 15 hours 40 minutes 32 seconds 998 milliseconds 999 microseconds
 -- !query 46
 select interval '20 40:32.99899999' minute to second
 -- !query 46 schema
-struct<interval 2 weeks 6 days 40 minutes 32 seconds 998 milliseconds 999 microseconds:interval>
+struct<interval 40 minutes 32 seconds 998 milliseconds 999 microseconds:interval>
 -- !query 46 output
-interval 2 weeks 6 days 40 minutes 32 seconds 998 milliseconds 999 microseconds
+interval 40 minutes 32 seconds 998 milliseconds 999 microseconds
 
 
 -- !query 47
