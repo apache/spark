@@ -1648,8 +1648,8 @@ class JDBCSuite extends QueryTest
         }
       }
     }
-  } 
-  
+  }
+
   test("Add exception when isolationLevel is Illegal") {
     val e = intercept[IllegalArgumentException] {
       spark.read.format("jdbc")
