@@ -201,7 +201,7 @@ public class CalendarIntervalSuite {
     assertEquals(fromSingleUnitString("day", input), i);
 
     input = "1999.38888";
-    i = new CalendarInterval(0, 1999 * MICROS_PER_SECOND + 38);
+    i = new CalendarInterval(0, 1999 * MICROS_PER_SECOND + 388 * MICROS_PER_MILLI + 880);
     assertEquals(fromSingleUnitString("second", input), i);
 
     try {
