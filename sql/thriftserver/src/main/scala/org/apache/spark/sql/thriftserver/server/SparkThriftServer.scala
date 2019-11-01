@@ -17,22 +17,29 @@
 
 package org.apache.spark.sql.thriftserver.server
 
-import java.util
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.cli._
 import org.apache.hadoop.hive.common.LogUtils
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hive.common.util.{HiveStringUtils, HiveVersionInfo}
 
+import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_ENABLED
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.thriftserver.{CompositeService, SparkSQLEnv}
 import org.apache.spark.sql.thriftserver.cli.CLIService
 import org.apache.spark.sql.thriftserver.cli.thrift.{ThriftBinaryCLIService, ThriftCLIService, ThriftHttpCLIService}
-import org.apache.spark.util.ShutdownHookManager
+import org.apache.spark.sql.thriftserver.ui.ThriftServerTab
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 private[thriftserver] class SparkThriftServer(sqlContext: SQLContext)
   extends CompositeService(classOf[SparkThriftServer].getSimpleName)
@@ -68,11 +75,11 @@ private[thriftserver] class SparkThriftServer(sqlContext: SQLContext)
     // function
     ShutdownHookManager.addShutdownHook(() => {
       try {
-        logInfo("Hive Server Shutdown hook invoked")
+        logInfo("Spark Thrift Server Shutdown hook invoked")
         stop()
       } catch {
         case e: Throwable =>
-          logWarning("Ignoring Exception while stopping Hive Server from shutdown hook", e)
+          logWarning("Ignoring Exception while stopping Spark Thrift Server from shutdown hook", e)
       }
     })
   }
@@ -92,49 +99,252 @@ private[thriftserver] class SparkThriftServer(sqlContext: SQLContext)
 }
 
 object SparkThriftServer extends Logging {
-  @throws[Throwable]
-  private def startHiveServer2(): Unit = {
-    var attempts = 0
-    var maxAttempts: Long = 1
-    while (true) {
-      logInfo("Starting HiveServer2")
-      val hiveConf = new HiveConf
-      maxAttempts = hiveConf.getLongVar(HiveConf.ConfVars.HIVE_SERVER2_MAX_START_ATTEMPTS)
-      var server: SparkThriftServer = null
-      try {
-        server = new SparkThriftServer(SparkSQLEnv.sqlContext)
-        server.init(hiveConf)
-        server.start()
+  var uiTab: scala.Option[ThriftServerTab] = None
+  var listener: SparkThriftServerListener = _
 
-        // ToDo add a JVMPauseMonitor for spark
+  def hiveConfForExecution(sparkContext: SparkContext): HiveConf = {
+    val extraConfig = HiveUtils.newTemporaryConfiguration(true)
+    val hiveConf: HiveConf = new HiveConf()
+    (sparkContext.hadoopConfiguration
+      .iterator().asScala.map(kv => kv.getKey -> kv.getValue)
+      ++ sparkContext.conf.getAll.toMap ++ extraConfig).toMap
+      .foreach { case (k, v) => hiveConf.set(k, v) }
+    hiveConf
+  }
 
-      } catch {
-        case throwable: Throwable =>
-          if (server != null) {
-            try
-              server.stop()
-            catch {
-              case t: Throwable =>
-                logInfo("Exception caught when calling stop of HiveServer2 " +
-                  "before retrying start", t)
-            } finally server = null
-          }
-          if ( {
-            attempts += 1;
-            attempts
-          } >= maxAttempts) {
-            throw new Error("Max start attempts " + maxAttempts + " exhausted", throwable)
-          } else {
-            logWarning("Error starting HiveServer2 on attempt " +
-              attempts + ", will retry in 60 seconds", throwable)
-            try
-              Thread.sleep(60L * 1000L)
-            catch {
-              case e: InterruptedException =>
-                Thread.currentThread.interrupt()
-            }
-          }
+  /**
+   * :: DeveloperApi ::
+   * Starts a new thrift server with the given context.
+   */
+  @DeveloperApi
+  def startWithContext(sqlContext: SQLContext): SparkThriftServer = {
+    val server = new SparkThriftServer(sqlContext)
+
+    server.init(hiveConfForExecution(sqlContext.sparkContext))
+    server.start()
+    listener = new SparkThriftServerListener(server, sqlContext.conf)
+    sqlContext.sparkContext.addSparkListener(listener)
+    uiTab = if (sqlContext.sparkContext.getConf.get(UI_ENABLED)) {
+      Some(new ThriftServerTab(sqlContext.sparkContext))
+    } else {
+      None
+    }
+    server
+  }
+
+  private[thriftserver] class SessionInfo(
+                                           val sessionId: String,
+                                           val startTimestamp: Long,
+                                           val ip: String,
+                                           val userName: String) {
+    var finishTimestamp: Long = 0L
+    var totalExecution: Int = 0
+
+    def totalTime: Long = {
+      if (finishTimestamp == 0L) {
+        System.currentTimeMillis - startTimestamp
+      } else {
+        finishTimestamp - startTimestamp
       }
+    }
+  }
+
+  private[thriftserver] object ExecutionState extends Enumeration {
+    val STARTED, CANCELED, COMPILED, FAILED, FINISHED, CLOSED = Value
+    type ExecutionState = Value
+  }
+
+  private[thriftserver] class ExecutionInfo(
+                                             val statement: String,
+                                             val sessionId: String,
+                                             val startTimestamp: Long,
+                                             val userName: String) {
+    var finishTimestamp: Long = 0L
+    var closeTimestamp: Long = 0L
+    var executePlan: String = ""
+    var detail: String = ""
+    var state: ExecutionState.Value = ExecutionState.STARTED
+    val jobId: ArrayBuffer[String] = ArrayBuffer[String]()
+    var groupId: String = ""
+
+    def totalTime(endTime: Long): Long = {
+      if (endTime == 0L) {
+        System.currentTimeMillis - startTimestamp
+      } else {
+        endTime - startTimestamp
+      }
+    }
+  }
+
+
+  /**
+   * An inner sparkListener called in sc.stop to clean up the HiveThriftServer2
+   */
+  private[thriftserver] class SparkThriftServerListener(val server: SparkThriftServer,
+                                                        val conf: SQLConf) extends SparkListener {
+
+    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+      server.stop()
+    }
+
+    private val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
+    private val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
+    private val retainedStatements = conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT)
+    private val retainedSessions = conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
+
+    def getOnlineSessionNum: Int = synchronized {
+      sessionList.count(_._2.finishTimestamp == 0)
+    }
+
+    def isExecutionActive(execInfo: ExecutionInfo): Boolean = {
+      !(execInfo.state == ExecutionState.FAILED ||
+        execInfo.state == ExecutionState.CANCELED ||
+        execInfo.state == ExecutionState.CLOSED)
+    }
+
+    /**
+     * When an error or a cancellation occurs, we set the finishTimestamp of the statement.
+     * Therefore, when we count the number of running statements, we need to exclude errors and
+     * cancellations and count all statements that have not been closed so far.
+     */
+    def getTotalRunning: Int = synchronized {
+      executionList.count {
+        case (_, v) => isExecutionActive(v)
+      }
+    }
+
+    def getSessionList: Seq[SessionInfo] = synchronized {
+      sessionList.values.toSeq
+    }
+
+    def getSession(sessionId: String): scala.Option[SessionInfo] = synchronized {
+      sessionList.get(sessionId)
+    }
+
+    def getExecutionList: Seq[ExecutionInfo] = synchronized {
+      executionList.values.toSeq
+    }
+
+    override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
+      for {
+        props <- scala.Option(jobStart.properties)
+        groupId <- scala.Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+        (_, info) <- executionList if info.groupId == groupId
+      } {
+        info.jobId += jobStart.jobId.toString
+        info.groupId = groupId
+      }
+    }
+
+    def onSessionCreated(ip: String, sessionId: String, userName: String = "UNKNOWN"): Unit = {
+      synchronized {
+        val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
+        sessionList.put(sessionId, info)
+        trimSessionIfNecessary()
+      }
+    }
+
+    def onSessionClosed(sessionId: String): Unit = synchronized {
+      sessionList(sessionId).finishTimestamp = System.currentTimeMillis
+      trimSessionIfNecessary()
+    }
+
+    def onStatementStart(
+                          id: String,
+                          sessionId: String,
+                          statement: String,
+                          groupId: String,
+                          userName: String = "UNKNOWN"): Unit = synchronized {
+      val info = new ExecutionInfo(statement, sessionId, System.currentTimeMillis, userName)
+      info.state = ExecutionState.STARTED
+      executionList.put(id, info)
+      trimExecutionIfNecessary()
+      sessionList(sessionId).totalExecution += 1
+      executionList(id).groupId = groupId
+    }
+
+    def onStatementParsed(id: String, executionPlan: String): Unit = synchronized {
+      executionList(id).executePlan = executionPlan
+      executionList(id).state = ExecutionState.COMPILED
+    }
+
+    def onStatementCanceled(id: String): Unit = synchronized {
+      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).state = ExecutionState.CANCELED
+      trimExecutionIfNecessary()
+    }
+
+    def onStatementError(id: String, errorMsg: String, errorTrace: String): Unit = synchronized {
+      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).detail = errorMsg
+      executionList(id).state = ExecutionState.FAILED
+      trimExecutionIfNecessary()
+    }
+
+    def onStatementFinish(id: String): Unit = synchronized {
+      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).state = ExecutionState.FINISHED
+      trimExecutionIfNecessary()
+    }
+
+    def onOperationClosed(id: String): Unit = synchronized {
+      executionList(id).closeTimestamp = System.currentTimeMillis
+      executionList(id).state = ExecutionState.CLOSED
+    }
+
+    private def trimExecutionIfNecessary() = {
+      if (executionList.size > retainedStatements) {
+        val toRemove = math.max(retainedStatements / 10, 1)
+        executionList.filter(_._2.finishTimestamp != 0).take(toRemove).foreach { s =>
+          executionList.remove(s._1)
+        }
+      }
+    }
+
+    private def trimSessionIfNecessary() = {
+      if (sessionList.size > retainedSessions) {
+        val toRemove = math.max(retainedSessions / 10, 1)
+        sessionList.filter(_._2.finishTimestamp != 0).take(toRemove).foreach { s =>
+          sessionList.remove(s._1)
+        }
+      }
+
+    }
+  }
+
+  @throws[Throwable]
+  private def startSparkServer(): Unit = {
+    Utils.initDaemon(log)
+    logInfo("Starting SparkContext")
+    SparkSQLEnv.init()
+
+    ShutdownHookManager.addShutdownHook { () =>
+      SparkSQLEnv.stop()
+      uiTab.foreach(_.detach())
+    }
+
+    try {
+      val server = new SparkThriftServer(SparkSQLEnv.sqlContext)
+      server.init(hiveConfForExecution(SparkSQLEnv.sparkContext))
+      server.start()
+      logInfo("SparkThriftServer started")
+      listener = new SparkThriftServerListener(server, SparkSQLEnv.sqlContext.conf)
+      SparkSQLEnv.sparkContext.addSparkListener(listener)
+      uiTab = if (SparkSQLEnv.sparkContext.getConf.get(UI_ENABLED)) {
+        Some(new ThriftServerTab(SparkSQLEnv.sparkContext))
+      } else {
+        None
+      }
+      // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
+      // process can not exit, so check whether if SparkContext was stopped.
+      if (SparkSQLEnv.sparkContext.stopped.get()) {
+        logError("SparkContext has stopped even if SparkThriftServer has started, so exit")
+        System.exit(-1)
+      }
+    } catch {
+      case e: Exception =>
+        logError("Error starting SparkThriftServer", e)
+        System.exit(-1)
     }
   }
 
@@ -152,27 +362,8 @@ object SparkThriftServer extends Logging {
   def main(args: Array[String]): Unit = {
     HiveConf.setLoadHiveServer2Config(true)
     try {
-      val oproc = new ServerOptionsProcessor("hiveserver2")
+      val oproc = new ServerOptionsProcessor("SparkThriftServer")
       val oprocResponse = oproc.parse(args)
-      val classname = classOf[SparkThriftServer].getSimpleName
-      logInfo(toStartupShutdownString("STARTUP_MSG: ",
-        Array[String]("Starting " + classname,
-          "  host = " + HiveStringUtils.getHostname,
-          "  args = " + util.Arrays.asList(args),
-          "  version = " + HiveVersionInfo.getVersion,
-          "  classpath = " + System.getProperty("java.class.path"),
-          "  build = " + HiveVersionInfo.getUrl +
-            " -r " + HiveVersionInfo.getRevision +
-            "; compiled by '" + HiveVersionInfo.getUser +
-            "' on " + HiveVersionInfo.getDate)))
-      ShutdownHookManager.addShutdownHook(0)(() => {
-        logInfo(toStartupShutdownString(
-          "SHUTDOWN_MSG: ",
-          Array[String]("Shutting down " + classname +
-            " at " + HiveStringUtils.getHostname)))
-      })
-      // Log debug message from "oproc" after log4j initialize properly
-      logDebug(oproc.getDebugMessage.toString)
       // Call the executor which will execute the appropriate command based on the parsed options
       oprocResponse.getServerOptionsExecutor.execute()
     } catch {
@@ -180,22 +371,6 @@ object SparkThriftServer extends Logging {
         logError("Error initializing log: " + e.getMessage, e)
         System.exit(-1)
     }
-  }
-
-
-  private def toStartupShutdownString(prefix: String, msg: Array[String]) = {
-    val b = new StringBuilder(prefix)
-    b.append("\n/************************************************************")
-    val arr = msg
-    val len = msg.length
-    var i = 0
-    while (i < len) {
-      val s = arr(i)
-      b.append("\n" + prefix + s)
-      i += 1
-    }
-    b.append("\n************************************************************/")
-    b.toString
   }
 
   /**
@@ -242,7 +417,7 @@ object SparkThriftServer extends Logging {
       } catch {
         case e: ParseException =>
           // Error out & exit - we were not able to parse the args successfully
-          logError("Error starting HiveServer2 with given arguments: ")
+          logError("Error starting Spark Thrift Server with given arguments: ")
           logError(e.getMessage)
           System.exit(-1)
       }
@@ -287,10 +462,10 @@ object SparkThriftServer extends Logging {
   private[server] class StartOptionExecutor extends ServerOptionsExecutor {
     override def execute(): Unit = {
       try
-        startHiveServer2()
+        startSparkServer()
       catch {
         case t: Throwable =>
-          logError("Error starting HiveServer2", t)
+          logError("Error starting SparkThriftServer", t)
           System.exit(-1)
       }
     }

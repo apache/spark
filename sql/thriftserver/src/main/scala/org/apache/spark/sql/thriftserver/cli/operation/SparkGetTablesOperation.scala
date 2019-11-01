@@ -29,9 +29,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.thriftserver.SparkThriftServer2
 import org.apache.spark.sql.thriftserver.cli._
 import org.apache.spark.sql.thriftserver.cli.session.ThriftServerSession
+import org.apache.spark.sql.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.{Utils => SparkUtils}
 
@@ -80,7 +80,7 @@ private[thriftserver] class SparkGetTablesOperation(
 
   override def close(): Unit = {
     super.close()
-    SparkThriftServer2.listener.onOperationClosed(statementId)
+    SparkThriftServer.listener.onOperationClosed(statementId)
   }
 
   override def runInternal(): Unit = {
@@ -110,12 +110,12 @@ private[thriftserver] class SparkGetTablesOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr)
     }
 
-    SparkThriftServer2.listener.onStatementStart(
+    SparkThriftServer.listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
       statementId,
-      parentSession.getUsername)
+      parentSession.getUserName)
 
     try {
       // Tables and views
@@ -149,17 +149,17 @@ private[thriftserver] class SparkGetTablesOperation(
         setState(OperationState.ERROR)
         e match {
           case hiveException: SparkThriftServerSQLException =>
-            SparkThriftServer2.listener.onStatementError(
+            SparkThriftServer.listener.onStatementError(
               statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
             throw hiveException
           case _ =>
             val root = ExceptionUtils.getRootCause(e)
-            SparkThriftServer2.listener.onStatementError(
+            SparkThriftServer.listener.onStatementError(
               statementId, root.getMessage, SparkUtils.exceptionString(root))
             throw new SparkThriftServerSQLException("Error getting tables: " + root.toString, root)
         }
     }
-    SparkThriftServer2.listener.onStatementFinish(statementId)
+    SparkThriftServer.listener.onStatementFinish(statementId)
   }
 
   private def addToRowSet(

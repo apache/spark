@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.thriftserver.{CompositeService, SparkThriftServer2}
+import org.apache.spark.sql.thriftserver.CompositeService
 import org.apache.spark.sql.thriftserver.cli.{SessionHandle, SparkThriftServerSQLException}
 import org.apache.spark.sql.thriftserver.cli.operation.OperationManager
 import org.apache.spark.sql.thriftserver.cli.thrift.TProtocolVersion
@@ -260,8 +260,8 @@ private[thriftserver] class SessionManager(hiveServer2: SparkThriftServer, sqlCo
     }
     handleToSession.put(session.getSessionHandle, session)
     val sessionHandle = session.getSessionHandle
-    SparkThriftServer2.listener.onSessionCreated(
-      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
+    SparkThriftServer.listener.onSessionCreated(
+      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUserName)
     val ctx = if (sqlContext.conf.hiveThriftServerSingleSession) {
       sqlContext
     } else {
@@ -281,7 +281,7 @@ private[thriftserver] class SessionManager(hiveServer2: SparkThriftServer, sqlCo
 
   @throws[SparkThriftServerSQLException]
   def closeSession(sessionHandle: SessionHandle): Unit = {
-    SparkThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
+    SparkThriftServer.listener.onSessionClosed(sessionHandle.getSessionId.toString)
     val session = handleToSession.remove(sessionHandle)
     operationManager.sessionToActivePool.remove(sessionHandle)
     operationManager.sessionToContexts.remove(sessionHandle)

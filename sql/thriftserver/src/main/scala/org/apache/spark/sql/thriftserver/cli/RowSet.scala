@@ -15,23 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.thriftserver.auth
+package org.apache.spark.sql.thriftserver.cli
 
-abstract class AuthType(authType: String) {
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.thriftserver.cli.thrift.TRowSet
 
-  def getAuthName: String = authType
+private[thriftserver] trait RowSet {
+  def addRow(row: Row): RowSet
 
-  override def toString: String = getAuthName
+  def extractSubset(maxRows: Int): RowSet
+
+  def numColumns: Int
+
+  def numRows: Int
+
+  def getStartOffset: Long
+
+  def setStartOffset(startOffset: Long): Unit
+
+  def toTRowSet: TRowSet
+
+  def iterator: Iterator[Row]
 }
-
-case object NOSASL extends AuthType("NOSASL")
-
-case object NONE extends AuthType("NONE")
-
-case object LDAP extends AuthType("LDAP")
-
-case object KERBEROS extends AuthType("KERBEROS")
-
-case object CUSTOM extends AuthType("CUSTOM")
-
-case object PAM extends AuthType("PAM")

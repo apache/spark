@@ -20,15 +20,14 @@ package org.apache.spark.sql.thriftserver.cli.operation
 import java.util.UUID
 
 import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.thriftserver.SparkThriftServer2
 import org.apache.spark.sql.thriftserver.cli._
 import org.apache.spark.sql.thriftserver.cli.session.ThriftServerSession
+import org.apache.spark.sql.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.{Utils => SparkUtils}
 
@@ -51,7 +50,7 @@ private[thriftserver] class SparkGetTableTypesOperation(
 
   override def close(): Unit = {
     super.close()
-    SparkThriftServer2.listener.onOperationClosed(statementId)
+    SparkThriftServer.listener.onOperationClosed(statementId)
   }
 
   override def runInternal(): Unit = {
@@ -67,12 +66,12 @@ private[thriftserver] class SparkGetTableTypesOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLETYPES, null)
     }
 
-    SparkThriftServer2.listener.onStatementStart(
+    SparkThriftServer.listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
       statementId,
-      parentSession.getUsername)
+      parentSession.getUserName)
 
     try {
       val tableTypes = CatalogTableType.tableTypes.map(tableTypeString).toSet
@@ -86,18 +85,18 @@ private[thriftserver] class SparkGetTableTypesOperation(
         setState(OperationState.ERROR)
         e match {
           case hiveException: SparkThriftServerSQLException =>
-            SparkThriftServer2.listener.onStatementError(
+            SparkThriftServer.listener.onStatementError(
               statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
             throw hiveException
           case _ =>
             val root = ExceptionUtils.getRootCause(e)
-            SparkThriftServer2.listener.onStatementError(
+            SparkThriftServer.listener.onStatementError(
               statementId, root.getMessage, SparkUtils.exceptionString(root))
             throw new SparkThriftServerSQLException("Error getting table types: " +
               root.toString, root)
         }
     }
-    SparkThriftServer2.listener.onStatementFinish(statementId)
+    SparkThriftServer.listener.onStatementFinish(statementId)
   }
 
   override def getResultSetSchema: StructType = {

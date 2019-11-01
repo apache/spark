@@ -286,7 +286,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     logInfo(s"Trying to start HiveThriftServer2: port=$port, attempt=$attempt")
     val sqlContext = spark.newSession().sqlContext
     sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname, port.toString)
-    hiveServer2 = SparkThriftServer2.startWithContext(sqlContext)
+    hiveServer2 = SparkThriftServer.startWithContext(sqlContext)
   }
 
   private def withJdbcStatement(fs: (Statement => Unit)*): Unit = {

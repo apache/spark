@@ -43,7 +43,7 @@ private[thriftserver] abstract class SparkMetadataOperation(
   setHasResultSet(true)
 
   /* (non-Javadoc)
-   * @see org.apache.hive.service.cli.Operation#close()
+   * @see org.apache.spark.sql.thriftserver.cli.Operation#close()
    */
   @throws[SparkThriftServerSQLException]
   override def close(): Unit = {

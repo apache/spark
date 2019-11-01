@@ -19,13 +19,12 @@
 package org.apache.spark.sql.thriftserver.cli.session;
 
 import java.io.File;
-import java.util.List;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.hive.service.rpc.thrift.TProtocolVersion;
 import org.apache.spark.sql.thriftserver.cli.SessionHandle;
 import org.apache.spark.sql.thriftserver.cli.operation.OperationManager;
+import org.apache.spark.sql.thriftserver.cli.thrift.TProtocolVersion;
 
 /**
  * Methods that don't need to be executed under a doAs
@@ -85,13 +84,5 @@ public interface ThriftServerSessionBase {
 
     void setIpAddress(String ipAddress);
 
-    List<String> getForwardedAddresses();
-
-    void setForwardedAddresses(List<String> forwardedAddresses);
-
     long getLastAccessTime();
-
-    long getCreationTime();
-
-    int getOpenOperationCount();
 }

@@ -145,8 +145,8 @@ class ColumnBuffer() {
         return _stringVars(index)
       case Type.BINARY_TYPE =>
         return _binaryVars(index).array
+      case _ => null
     }
-    null
   }
 
   def size: Int = _size

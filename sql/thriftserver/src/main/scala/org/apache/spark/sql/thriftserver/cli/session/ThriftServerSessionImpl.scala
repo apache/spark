@@ -686,7 +686,7 @@ private[thriftserver] class ThriftServerSessionImpl(
                                   owner: String,
                                   renewer: String): String = {
     HiveAuthFactory.verifyProxyAccess(
-      getUsername,
+      getUserName,
       owner,
       getIpAddress,
       getHiveConf)
@@ -695,7 +695,7 @@ private[thriftserver] class ThriftServerSessionImpl(
 
   override def cancelDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit = {
     HiveAuthFactory.verifyProxyAccess(
-      getUsername,
+      getUserName,
       getUserFromToken(authFactory, tokenStr),
       getIpAddress,
       getHiveConf)
@@ -704,7 +704,7 @@ private[thriftserver] class ThriftServerSessionImpl(
 
   override def renewDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit = {
     HiveAuthFactory.verifyProxyAccess(
-      getUsername,
+      getUserName,
       getUserFromToken(authFactory, tokenStr),
       getIpAddress,
       getHiveConf)
@@ -860,8 +860,6 @@ private[thriftserver] class ThriftServerSessionImpl(
   protected def getSession: ThriftServerSession = this
 
   override def getSessionHandle: SessionHandle = _sessionHandle
-
-  override def getUsername: String = username
 
   override def getPassword: String = password
 

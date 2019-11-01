@@ -99,6 +99,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
 
   def getHttpUGI: UserGroupInformation = this.httpUGI
 
+  @throws[SparkThriftServerSQLException]
   def openSession(protocol: TProtocolVersion,
                   username: String,
                   password: String,
@@ -165,6 +166,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
     sessionHandle
   }
 
+  @throws[SparkThriftServerSQLException]
   override def closeSession(sessionHandle: SessionHandle): Unit = {
     sessionManager.closeSession(sessionHandle)
     logDebug(sessionHandle + ": closeSession()")
@@ -358,12 +360,13 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
     opStatus
   }
 
+  @throws[SparkThriftServerSQLException]
   override def getQueryId(opHandle: TOperationHandle): String = {
     val operation: Operation =
       sessionManager.getOperationManager.getOperation(new OperationHandle(opHandle))
     val queryId = operation.statementId
     logDebug(opHandle + ": getQueryId() " + queryId)
-    return queryId
+    queryId
   }
 
   override def cancelOperation(opHandle: OperationHandle): Unit = {
