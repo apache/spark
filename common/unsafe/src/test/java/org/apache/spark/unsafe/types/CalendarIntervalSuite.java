@@ -109,6 +109,9 @@ public class CalendarIntervalSuite {
     assertEquals(
       new CalendarInterval(1, 22, 12 * MICROS_PER_HOUR),
       new CalendarInterval(1, 5, 0).multiply(1.5));
+    assertEquals(
+      new CalendarInterval(2, 14, 12 * MICROS_PER_HOUR),
+      new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR).multiply(1.2));
 
     try {
       interval = new CalendarInterval(2, 0, 0);

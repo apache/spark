@@ -68,7 +68,8 @@ public final class CalendarInterval implements Serializable {
     double days = daysWithFraction + 30 * (monthsWithFraction - truncatedMonths);
     int truncatedDays = Math.toIntExact((long)days);
     double micros = microsWithFraction + MICROS_PER_DAY * (days - truncatedDays);
-    return new CalendarInterval(truncatedMonths, truncatedDays, (long)micros);
+    long truncatedMicros = Math.round(micros);
+    return new CalendarInterval(truncatedMonths, truncatedDays, truncatedMicros);
   }
 
   public CalendarInterval multiply(double num) {
