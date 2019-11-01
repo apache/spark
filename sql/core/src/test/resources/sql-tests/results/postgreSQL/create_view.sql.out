@@ -542,7 +542,8 @@ CREATE VIEW v6_temp AS SELECT * FROM base_table WHERE id IN (SELECT id FROM temp
 -- !query 47 schema
 struct<>
 -- !query 47 output
-
+org.apache.spark.sql.AnalysisException
+Not allowed to create a permanent view `v6_temp` by referencing a temporary view `temp_table`;
 
 
 -- !query 48
@@ -559,7 +560,8 @@ CREATE VIEW v8_temp AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM temp
 -- !query 49 schema
 struct<>
 -- !query 49 output
-
+org.apache.spark.sql.AnalysisException
+Not allowed to create a permanent view `v9_temp` by referencing a temporary view `temp_table`;
 
 
 -- !query 50
@@ -567,7 +569,8 @@ CREATE VIEW v9_temp AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM 
 -- !query 50 schema
 struct<>
 -- !query 50 output
-
+org.apache.spark.sql.AnalysisException
+Not allowed to create a permanent view `v9_temp` by referencing a temporary view `temp_table`;
 
 
 -- !query 51
@@ -887,7 +890,8 @@ AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)
 -- !query 78 schema
 struct<>
 -- !query 78 output
-
+org.apache.spark.sql.AnalysisException
+Not allowed to create a permanent view `mytempview` by referencing a temporary view `tmptbl`;
 
 
 -- !query 79

@@ -174,7 +174,6 @@ DESC TABLE EXTENDED v7;
 CREATE VIEW v8 AS SELECT * FROM base_table WHERE EXISTS (SELECT 1);
 DESC TABLE EXTENDED v8;
 
--- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW v6_temp AS SELECT * FROM base_table WHERE id IN (SELECT id FROM temp_table);
 CREATE VIEW v7_temp AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM temp_table) t2;
 -- [SPARK-29630] Not allowed to create a permanent view by referencing a temporary view in EXISTS
