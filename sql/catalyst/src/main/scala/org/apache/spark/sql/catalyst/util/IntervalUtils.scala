@@ -198,7 +198,7 @@ object IntervalUtils {
 
     try {
       val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
-      val days = if (m.group(2) == null) {
+      var days = if (m.group(2) == null) {
         0
       } else {
         toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE)
@@ -219,16 +219,24 @@ object IntervalUtils {
       }
       // Hive allow nanosecond precision interval
       var secondsFraction = parseNanos(m.group(9), seconds < 0)
-      to match {
-        case "hour" =>
+      (from, to) match {
+        case ("day", "second") => // No-op
+        case ("day", "minute") =>
+          seconds = 0
+          secondsFraction = 0
+        case ("day", "hour") =>
           minutes = 0
           seconds = 0
           secondsFraction = 0
-        case "minute" =>
+        case ("hour", "second") =>
+          days = 0
+        case ("hour", "minute") =>
+          days = 0
           seconds = 0
           secondsFraction = 0
-        case "second" =>
-          // No-op
+        case ("minute", "second") =>
+          days = 0
+          hours = 0
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot support (interval '$input' $from to $to) expression")
