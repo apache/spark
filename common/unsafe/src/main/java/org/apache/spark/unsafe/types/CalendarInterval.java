@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.Objects;
 
 /**
@@ -87,10 +88,7 @@ public final class CalendarInterval implements Serializable {
       appendUnit(sb, months % 12, "month");
     }
 
-    if (days != 0) {
-      appendUnit(sb, days / 7, "week");
-      appendUnit(sb, days % 7, "day");
-    }
+    appendUnit(sb, days, "day");
 
     if (microseconds != 0) {
       long rest = microseconds;
@@ -98,11 +96,9 @@ public final class CalendarInterval implements Serializable {
       rest %= MICROS_PER_HOUR;
       appendUnit(sb, rest / MICROS_PER_MINUTE, "minute");
       rest %= MICROS_PER_MINUTE;
-      appendUnit(sb, rest / MICROS_PER_SECOND, "second");
-      rest %= MICROS_PER_SECOND;
-      appendUnit(sb, rest / MICROS_PER_MILLI, "millisecond");
-      rest %= MICROS_PER_MILLI;
-      appendUnit(sb, rest, "microsecond");
+      if (rest != 0) {
+        sb.append(' ').append(BigDecimal.valueOf(rest, 6).toString()).append(" seconds");
+      }
     } else if (months == 0 && days == 0) {
       sb.append(" 0 microseconds");
     }
