@@ -25,11 +25,11 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.hive.common.auth.HiveAuthUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.spark.sql.thriftserver.auth.HiveAuthFactory;
+import org.apache.spark.sql.thriftserver.auth.HiveAuthUtils;
 import org.apache.spark.sql.thriftserver.cli.CLIService;
 import org.apache.spark.sql.thriftserver.server.ThreadFactoryWithGarbageCleanup;
 import org.apache.thrift.TProcessorFactory;

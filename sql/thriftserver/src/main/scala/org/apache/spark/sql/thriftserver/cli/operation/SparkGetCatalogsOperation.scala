@@ -41,10 +41,10 @@ private[thriftserver] class SparkGetCatalogsOperation(
     parentSession: ThriftServerSession)
   extends SparkMetadataOperation(parentSession, OperationType.GET_CATALOGS) with Logging {
 
-  RESULT_SET_SCHEMA = new StructType()
-    .add(StructField("TABLE_CAT", StringType))
+  RESULT_SET_SCHEMA = new TableSchema()
+    .addStringColumn("TABLE_CAT", "Catalog name. NULL if not applicable.")
 
-  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion, false)
 
   override def close(): Unit = {
     super.close()
@@ -52,7 +52,7 @@ private[thriftserver] class SparkGetCatalogsOperation(
   }
 
   override def runInternal(): Unit = {
-    setStatementId(UUID.randomUUID().toString)
+    statementId = UUID.randomUUID().toString
     val logMsg = "Listing catalogs"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
@@ -92,8 +92,7 @@ private[thriftserver] class SparkGetCatalogsOperation(
     SparkThriftServer.listener.onStatementFinish(statementId)
   }
 
-  override def getResultSetSchema: StructType = {
-    assertState(OperationState.FINISHED)
+  override def getResultSetSchema: TableSchema = {
     RESULT_SET_SCHEMA
   }
 

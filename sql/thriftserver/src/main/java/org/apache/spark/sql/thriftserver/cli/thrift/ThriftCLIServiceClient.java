@@ -365,13 +365,13 @@ public class ThriftCLIServiceClient extends CLIServiceClient {
      * @see org.apache.spark.sql.thriftserver.cli.ICLIService#getResultSetMetadata(org.apache.spark.sql.thriftserver.cli.OperationHandle)
      */
     @Override
-    public StructType getResultSetMetadata(OperationHandle opHandle)
+    public TableSchema getResultSetMetadata(OperationHandle opHandle)
             throws SparkThriftServerSQLException {
         try {
             TGetResultSetMetadataReq req = new TGetResultSetMetadataReq(opHandle.toTOperationHandle());
             TGetResultSetMetadataResp resp = cliService.GetResultSetMetadata(req);
             checkStatus(resp.getStatus());
-            return SchemaMapper.toStructType(resp.getSchema());
+            return new TableSchema(resp.getSchema());
         } catch (SparkThriftServerSQLException e) {
             throw e;
         } catch (Exception e) {

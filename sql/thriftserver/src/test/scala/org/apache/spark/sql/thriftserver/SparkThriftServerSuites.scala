@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
 import java.util.{Locale, UUID}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -690,7 +691,7 @@ class SparkThriftBinaryServerSuite extends SparkThriftJdbcTest {
     def checkResult(rows: RowSet, start: Long, end: Long): Unit = {
       assert(rows.getStartOffset == start)
       assert(rows.numRows == end - start)
-      rows.iterator.zip((start until end).iterator).foreach { case (row, v) =>
+      rows.iterator().asScala.zip((start until end).iterator).foreach { case (row, v) =>
         assert(row(0).asInstanceOf[Long] === v)
       }
     }

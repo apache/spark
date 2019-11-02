@@ -607,8 +607,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
             throws TException {
         TGetResultSetMetadataResp resp = new TGetResultSetMetadataResp();
         try {
-            StructType schema = cliService.getResultSetMetadata(new OperationHandle(req.getOperationHandle()));
-            resp.setSchema(SchemaMapper.toTTableSchema(schema));
+            TableSchema schema = cliService.getResultSetMetadata(new OperationHandle(req.getOperationHandle()));
+            resp.setSchema(schema.toTTableSchema());
             resp.setStatus(OK_STATUS);
         } catch (Exception e) {
             LOG.warn("Error getting result set metadata: ", e);

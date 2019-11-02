@@ -26,11 +26,10 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.thriftserver.cli._
 import org.apache.spark.sql.thriftserver.cli.session.ThriftServerSession
 import org.apache.spark.sql.thriftserver.server.SparkThriftServer
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -50,15 +49,21 @@ private[thriftserver] class SparkGetFunctionsOperation(
     functionName: String)
   extends SparkMetadataOperation(parentSession, OperationType.GET_FUNCTIONS) with Logging {
 
-  RESULT_SET_SCHEMA = new StructType()
-    .add(StructField("FUNCTION_CAT", StringType))
-    .add(StructField("FUNCTION_SCHEM", StringType))
-    .add(StructField("FUNCTION_NAME", StringType))
-    .add(StructField("REMARKS", StringType))
-    .add(StructField("FUNCTION_TYPE", IntegerType))
-    .add(StructField("SPECIFIC_NAME", StringType))
+  RESULT_SET_SCHEMA = new TableSchema()
+    .addPrimitiveColumn("FUNCTION_CAT", Type.STRING_TYPE,
+      "Function catalog (may be null)")
+    .addPrimitiveColumn("FUNCTION_SCHEM", Type.STRING_TYPE,
+      "Function schema (may be null)")
+    .addPrimitiveColumn("FUNCTION_NAME", Type.STRING_TYPE,
+      "Function name. This is the name used to invoke the function")
+    .addPrimitiveColumn("REMARKS", Type.STRING_TYPE,
+      "Explanatory comment on the function")
+    .addPrimitiveColumn("FUNCTION_TYPE", Type.INT_TYPE,
+      "Kind of function.")
+    .addPrimitiveColumn("SPECIFIC_NAME", Type.STRING_TYPE,
+      "The name which uniquely identifies this function within its schema")
 
-  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion, false)
 
   override def close(): Unit = {
     super.close()
@@ -66,7 +71,7 @@ private[thriftserver] class SparkGetFunctionsOperation(
   }
 
   override def runInternal(): Unit = {
-    setStatementId(UUID.randomUUID().toString)
+    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing functions '$cmdStr, functionName : $functionName'"
@@ -101,7 +106,7 @@ private[thriftserver] class SparkGetFunctionsOperation(
         catalog.listFunctions(db, functionPattern).foreach {
           case (funcIdentifier, _) =>
             val info = catalog.lookupFunctionInfo(funcIdentifier)
-            val rowData = Row(
+            val rowData = Array[AnyRef](
               DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
               db, // FUNCTION_SCHEM
               funcIdentifier.funcName, // FUNCTION_NAME
@@ -132,7 +137,7 @@ private[thriftserver] class SparkGetFunctionsOperation(
     SparkThriftServer.listener.onStatementFinish(statementId)
   }
 
-  override def getResultSetSchema: StructType = {
+  override def getResultSetSchema: TableSchema = {
     assertState(OperationState.FINISHED)
     RESULT_SET_SCHEMA
   }

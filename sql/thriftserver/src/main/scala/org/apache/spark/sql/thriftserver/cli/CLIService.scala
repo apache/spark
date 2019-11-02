@@ -364,7 +364,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
   override def getQueryId(opHandle: TOperationHandle): String = {
     val operation: Operation =
       sessionManager.getOperationManager.getOperation(new OperationHandle(opHandle))
-    val queryId = operation.statementId
+    val queryId = operation.getStatementId
     logDebug(opHandle + ": getQueryId() " + queryId)
     queryId
   }
@@ -385,7 +385,7 @@ private[thriftserver] class CLIService(hiveServer2: SparkThriftServer, sqlContex
     logDebug(opHandle + ": closeOperation")
   }
 
-  override def getResultSetMetadata(opHandle: OperationHandle): StructType = {
+  override def getResultSetMetadata(opHandle: OperationHandle): TableSchema = {
     val tableSchema = sessionManager
       .getOperationManager
       .getOperation(opHandle)

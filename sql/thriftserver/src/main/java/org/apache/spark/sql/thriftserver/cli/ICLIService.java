@@ -88,7 +88,7 @@ public interface ICLIService {
     void closeOperation(OperationHandle opHandle)
             throws SparkThriftServerSQLException;
 
-    StructType getResultSetMetadata(OperationHandle opHandle)
+    TableSchema getResultSetMetadata(OperationHandle opHandle)
             throws SparkThriftServerSQLException;
 
     RowSet fetchResults(OperationHandle opHandle)

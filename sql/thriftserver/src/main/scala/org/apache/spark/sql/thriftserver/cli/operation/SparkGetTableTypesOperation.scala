@@ -23,12 +23,11 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.thriftserver.cli._
 import org.apache.spark.sql.thriftserver.cli.session.ThriftServerSession
 import org.apache.spark.sql.thriftserver.server.SparkThriftServer
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -43,10 +42,10 @@ private[thriftserver] class SparkGetTableTypesOperation(
   extends SparkMetadataOperation(parentSession, OperationType.GET_TABLE_TYPES)
   with Logging {
 
-  RESULT_SET_SCHEMA = new StructType()
-    .add(StructField("TABLE_TYPE", StringType))
+  RESULT_SET_SCHEMA = new TableSchema()
+    .addStringColumn("TABLE_TYPE", "Table type name.")
 
-  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion, false)
 
   override def close(): Unit = {
     super.close()
@@ -54,7 +53,7 @@ private[thriftserver] class SparkGetTableTypesOperation(
   }
 
   override def runInternal(): Unit = {
-    setStatementId(UUID.randomUUID().toString)
+    statementId = UUID.randomUUID().toString
     val logMsg = "Listing table types"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
@@ -76,7 +75,7 @@ private[thriftserver] class SparkGetTableTypesOperation(
     try {
       val tableTypes = CatalogTableType.tableTypes.map(tableTypeString).toSet
       tableTypes.foreach { tableType =>
-        rowSet.addRow(Row(tableType))
+        rowSet.addRow(Array[AnyRef](tableType))
       }
       setState(OperationState.FINISHED)
     } catch {
@@ -99,7 +98,7 @@ private[thriftserver] class SparkGetTableTypesOperation(
     SparkThriftServer.listener.onStatementFinish(statementId)
   }
 
-  override def getResultSetSchema: StructType = {
+  override def getResultSetSchema: TableSchema = {
     assertState(OperationState.FINISHED)
     RESULT_SET_SCHEMA
   }

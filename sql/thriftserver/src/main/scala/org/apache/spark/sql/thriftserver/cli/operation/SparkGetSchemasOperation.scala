@@ -46,12 +46,11 @@ private[thriftserver] class SparkGetSchemasOperation(
     schemaName: String)
   extends SparkMetadataOperation(parentSession, OperationType.GET_SCHEMAS) with Logging {
 
-  RESULT_SET_SCHEMA = new StructType()
-    .add(StructField("TABLE_SCHEM", StringType))
-    .add(StructField("TABLE_CATALOG", StringType))
+  RESULT_SET_SCHEMA = new TableSchema()
+    .addStringColumn("TABLE_SCHEM", "Schema name.")
+    .addStringColumn("TABLE_CATALOG", "Catalog name.")
 
-
-  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion, false)
 
   override def close(): Unit = {
     super.close()
@@ -59,7 +58,7 @@ private[thriftserver] class SparkGetSchemasOperation(
   }
 
   override def runInternal(): Unit = {
-    setStatementId(UUID.randomUUID().toString)
+    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing databases '$cmdStr'"
@@ -83,13 +82,13 @@ private[thriftserver] class SparkGetSchemasOperation(
     try {
       val schemaPattern = convertSchemaPattern(schemaName)
       sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
-        rowSet.addRow(Row(dbName, DEFAULT_HIVE_CATALOG))
+        rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
       }
 
       val globalTempViewDb = sqlContext.sessionState.catalog.globalTempViewManager.database
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (databasePattern.matcher(globalTempViewDb).matches()) {
-        rowSet.addRow(Row(globalTempViewDb, DEFAULT_HIVE_CATALOG))
+        rowSet.addRow(Array[AnyRef](globalTempViewDb, DEFAULT_HIVE_CATALOG))
       }
       setState(OperationState.FINISHED)
     } catch {
@@ -111,7 +110,7 @@ private[thriftserver] class SparkGetSchemasOperation(
     SparkThriftServer.listener.onStatementFinish(statementId)
   }
 
-  override def getResultSetSchema: StructType = {
+  override def getResultSetSchema: TableSchema = {
     assertState(OperationState.FINISHED)
     RESULT_SET_SCHEMA
   }

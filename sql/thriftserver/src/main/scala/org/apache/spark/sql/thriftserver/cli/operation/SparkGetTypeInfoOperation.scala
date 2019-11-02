@@ -23,11 +23,10 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.thriftserver.cli._
 import org.apache.spark.sql.thriftserver.cli.session.ThriftServerSession
 import org.apache.spark.sql.thriftserver.server.SparkThriftServer
-import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -41,28 +40,47 @@ private[thriftserver] class SparkGetTypeInfoOperation(
     parentSession: ThriftServerSession)
   extends SparkMetadataOperation(parentSession, OperationType.GET_TYPE_INFO) with Logging {
 
-  RESULT_SET_SCHEMA = new StructType()
-    .add(StructField("TYPE_NAME", StringType))
-    .add(StructField("DATA_TYPE", IntegerType))
-    .add(StructField("PRECISION", IntegerType))
-    .add(StructField("LITERAL_PREFIX", StringType))
-    .add(StructField("LITERAL_SUFFIX", StringType))
-    .add(StructField("CREATE_PARAMS", StringType))
-    .add(StructField("NULLABLE", ShortType))
-    .add(StructField("CASE_SENSITIVE", BooleanType))
-    .add(StructField("SEARCHABLE", ShortType))
-    .add(StructField("UNSIGNED_ATTRIBUTE", BooleanType))
-    .add(StructField("FIXED_PREC_SCALE", BooleanType))
-    .add(StructField("AUTO_INCREMENT", BooleanType))
-    .add(StructField("LOCAL_TYPE_NAME", StringType))
-    .add(StructField("MINIMUM_SCALE", ShortType))
-    .add(StructField("MAXIMUM_SCALE", ShortType))
-    .add(StructField("SQL_DATA_TYPE", IntegerType))
-    .add(StructField("SQL_DATETIME_SUB", IntegerType))
-    .add(StructField("NUM_PREC_RADIX", IntegerType))
+  RESULT_SET_SCHEMA = new TableSchema()
+    .addPrimitiveColumn("TYPE_NAME", Type.STRING_TYPE,
+      "Type name")
+    .addPrimitiveColumn("DATA_TYPE", Type.INT_TYPE,
+      "SQL data type from java.sql.Types")
+    .addPrimitiveColumn("PRECISION", Type.INT_TYPE,
+      "Maximum precision")
+    .addPrimitiveColumn("LITERAL_PREFIX", Type.STRING_TYPE,
+      "Prefix used to quote a literal (may be null)")
+    .addPrimitiveColumn("LITERAL_SUFFIX", Type.STRING_TYPE,
+      "Suffix used to quote a literal (may be null)")
+    .addPrimitiveColumn("CREATE_PARAMS", Type.STRING_TYPE,
+      "Parameters used in creating the type (may be null)")
+    .addPrimitiveColumn("NULLABLE", Type.SMALLINT_TYPE,
+      "Can you use NULL for this type")
+    .addPrimitiveColumn("CASE_SENSITIVE", Type.BOOLEAN_TYPE,
+      "Is it case sensitive")
+    .addPrimitiveColumn("SEARCHABLE", Type.SMALLINT_TYPE,
+      "Can you use \"WHERE\" based on this type")
+    .addPrimitiveColumn("UNSIGNED_ATTRIBUTE", Type.BOOLEAN_TYPE,
+      "Is it unsigned")
+    .addPrimitiveColumn("FIXED_PREC_SCALE", Type.BOOLEAN_TYPE,
+      "Can it be a money value")
+    .addPrimitiveColumn("AUTO_INCREMENT", Type.BOOLEAN_TYPE,
+      "Can it be used for an auto-increment value")
+    .addPrimitiveColumn("LOCAL_TYPE_NAME", Type.STRING_TYPE,
+      "Localized version of type name (may be null)")
+    .addPrimitiveColumn("MINIMUM_SCALE", Type.SMALLINT_TYPE,
+      "Minimum scale supported")
+    .addPrimitiveColumn("MAXIMUM_SCALE", Type.SMALLINT_TYPE,
+      "Maximum scale supported")
+    .addPrimitiveColumn("SQL_DATA_TYPE", Type.INT_TYPE,
+      "Unused")
+    .addPrimitiveColumn("SQL_DATETIME_SUB", Type.INT_TYPE,
+      "Unused")
+    .addPrimitiveColumn("NUM_PREC_RADIX", Type.INT_TYPE,
+      "Usually 2 or 10");
 
 
-  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
+
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion, false)
 
   override def close(): Unit = {
     super.close()
@@ -70,7 +88,7 @@ private[thriftserver] class SparkGetTypeInfoOperation(
   }
 
   override def runInternal(): Unit = {
-    setStatementId(UUID.randomUUID().toString)
+    statementId = UUID.randomUUID().toString
     val logMsg = "Listing type info"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
@@ -91,9 +109,9 @@ private[thriftserver] class SparkGetTypeInfoOperation(
 
     try {
       Type.values().foreach(typeInfo => {
-        val rowData = Row(
+        val rowData = Array[AnyRef](
           typeInfo.getName, // TYPE_NAME
-          typeInfo.toJavaSQLType, // DATA_TYPE
+          typeInfo.toJavaSQLType.asInstanceOf[AnyRef], // DATA_TYPE
           typeInfo.getMaxPrecision, // PRECISION
           typeInfo.getLiteralPrefix, // LITERAL_PREFIX
           typeInfo.getLiteralSuffix, // LITERAL_SUFFIX
@@ -134,7 +152,7 @@ private[thriftserver] class SparkGetTypeInfoOperation(
     SparkThriftServer.listener.onStatementFinish(statementId)
   }
 
-  override def getResultSetSchema: StructType = {
+  override def getResultSetSchema: TableSchema = {
     assertState(OperationState.FINISHED)
     RESULT_SET_SCHEMA
   }

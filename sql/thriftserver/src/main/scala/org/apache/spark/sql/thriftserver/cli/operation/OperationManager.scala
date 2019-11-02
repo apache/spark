@@ -25,11 +25,12 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.session.OperationLog
 import org.apache.log4j.Logger
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.thriftserver.AbstractService
@@ -268,7 +269,7 @@ private[thriftserver] class OperationManager
   }
 
   @throws[SparkThriftServerSQLException]
-  def getOperationResultSetSchema(opHandle: OperationHandle): StructType = {
+  def getOperationResultSetSchema(opHandle: OperationHandle): TableSchema = {
     getOperation(opHandle).getResultSetSchema
   }
 
@@ -303,10 +304,23 @@ private[thriftserver] class OperationManager
         throw new SparkThriftServerSQLException(e.getMessage, e.getCause)
     }
     // convert logs to RowSet
+    // convert logs to RowSet
+    val tableSchema: TableSchema = new TableSchema(getLogSchema)
     val rowSet: RowSet =
-      RowSetFactory.create(logSchema, logs.asScala.map(Row(_)),
-        getOperation(opHandle).getProtocolVersion)
+      RowSetFactory.create(tableSchema, getOperation(opHandle).getProtocolVersion, false)
+    for (log <- logs.asScala) {
+      rowSet.addRow(Array[AnyRef](log))
+    }
     rowSet
+  }
+
+  private def getLogSchema = {
+    val schema = new Schema
+    val fieldSchema = new FieldSchema
+    fieldSchema.setName("operation_log")
+    fieldSchema.setType("string")
+    schema.addToFieldSchemas(fieldSchema)
+    schema
   }
 
   private def isFetchFirst(fetchOrientation: FetchOrientation): Boolean = {

@@ -18,25 +18,29 @@
 package org.apache.spark.sql.thriftserver.cli.operation
 
 import java.security.PrivilegedExceptionAction
-import java.util.{Map => JMap, UUID}
+import java.sql.{Date, Timestamp}
+import java.util.{Arrays, Map => JMap, UUID}
 import java.util.concurrent.RejectedExecutionException
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.hadoop.hive.ql.session.OperationLog
+import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.shims.Utils
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
+import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.thriftserver.cli._
 import org.apache.spark.sql.thriftserver.cli.session.ThriftServerSession
 import org.apache.spark.sql.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{Utils => SparkUtils}
 
 private[thriftserver] class SparkExecuteStatementOperation(
@@ -45,8 +49,8 @@ private[thriftserver] class SparkExecuteStatementOperation(
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true)(sqlContext: SQLContext,
                                      sessionToActivePool: JMap[SessionHandle, String])
-  extends Operation(parentSession, OperationType.EXECUTE_STATEMENT, runInBackground)
-  with Logging {
+  extends Operation(parentSession, confOverlay, OperationType.EXECUTE_STATEMENT, runInBackground)
+    with Logging {
 
   private var result: DataFrame = _
 
@@ -59,15 +63,26 @@ private[thriftserver] class SparkExecuteStatementOperation(
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
 
+  private lazy val resultSchema: TableSchema = {
+    if (result == null || result.schema.isEmpty) {
+      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
+    } else {
+      logInfo(s"Result Schema: ${result.schema}")
+      SparkExecuteStatementOperation.getTableSchema(result.schema)
+    }
+  }
+
+  import org.apache.hadoop.hive.ql.session.OperationLog
+
   def registerCurrentOperationLog(): Unit = {
-    if (_isOperationLogEnabled) {
-      if (_operationLog == null) {
-        logWarning("Failed to get current OperationLog object of Operation: "
-          + getHandle.getHandleIdentifier)
-        _isOperationLogEnabled = false
-      } else {
-        OperationLog.setCurrentOperationLog(_operationLog)
+    if (isOperationLogEnabled) {
+      if (operationLog == null) {
+        logWarning("Failed to get current OperationLog object of Operation: " +
+          getHandle.getHandleIdentifier)
+        isOperationLogEnabled = false
+        return
       }
+      OperationLog.setCurrentOperationLog(operationLog)
     }
   }
 
@@ -78,14 +93,48 @@ private[thriftserver] class SparkExecuteStatementOperation(
     SparkThriftServer.listener.onOperationClosed(statementId)
   }
 
+  def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int): Unit = {
+    dataTypes(ordinal) match {
+      case StringType =>
+        to += from.getString(ordinal)
+      case IntegerType =>
+        to += from.getInt(ordinal)
+      case BooleanType =>
+        to += from.getBoolean(ordinal)
+      case DoubleType =>
+        to += from.getDouble(ordinal)
+      case FloatType =>
+        to += from.getFloat(ordinal)
+      case DecimalType() =>
+        to += from.getDecimal(ordinal)
+      case LongType =>
+        to += from.getLong(ordinal)
+      case ByteType =>
+        to += from.getByte(ordinal)
+      case ShortType =>
+        to += from.getShort(ordinal)
+      case DateType =>
+        to += from.getAs[Date](ordinal)
+      case TimestampType =>
+        to += from.getAs[Timestamp](ordinal)
+      case BinaryType =>
+        to += from.getAs[Array[Byte]](ordinal)
+      case CalendarIntervalType =>
+        to += HiveResult.toHiveString((from.getAs[CalendarInterval](ordinal), CalendarIntervalType))
+      case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
+        val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
+        to += hiveString
+    }
+  }
+
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = withSchedulerPool {
-    logInfo(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
+    log.info(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
       s"with ${statementId}")
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
     val resultRowSet: RowSet =
-      RowSetFactory.create(getResultSetSchema, getProtocolVersion)
+      RowSetFactory.create(getResultSetSchema, getProtocolVersion, false)
 
     // Reset iter when FETCH_FIRST or FETCH_PRIOR
     if ((order.equals(FetchOrientation.FETCH_FIRST) ||
@@ -132,29 +181,32 @@ private[thriftserver] class SparkExecuteStatementOperation(
       var curRow = 0
       while (curRow < maxRows && iter.hasNext) {
         val sparkRow = iter.next()
-        resultRowSet.addRow(sparkRow)
+        val row = ArrayBuffer[Any]()
+        var curCol = 0
+        while (curCol < sparkRow.length) {
+          if (sparkRow.isNullAt(curCol)) {
+            row += null
+          } else {
+            addNonNullColumnValue(sparkRow, row, curCol)
+          }
+          curCol += 1
+        }
+        resultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
         curRow += 1
         resultOffset += 1
       }
       previousFetchEndOffset = resultOffset
-      logInfo(s"Returning result set with ${curRow} rows from offsets " +
+      log.info(s"Returning result set with ${curRow} rows from offsets " +
         s"[$previousFetchStartOffset, $previousFetchEndOffset) with $statementId")
       resultRowSet
     }
   }
 
-  def getResultSetSchema: StructType = {
-    assertState(OperationState.FINISHED)
-    if (result == null || result.schema.isEmpty) {
-      new StructType().add("Result", "string")
-    } else {
-      result.schema
-    }
-  }
+  def getResultSetSchema: TableSchema = resultSchema
 
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
-    setStatementId(UUID.randomUUID().toString)
+    statementId = UUID.randomUUID().toString
     logInfo(s"Submitting query '$statement' with $statementId")
     SparkThriftServer.listener.onStatementStart(
       statementId,
@@ -182,7 +234,7 @@ private[thriftserver] class SparkExecuteStatementOperation(
               } catch {
                 case e: SparkThriftServerSQLException =>
                   setOperationException(e)
-                  logError("Error running hive query: ", e)
+                  log.error("Error running hive query: ", e)
               }
             }
           }
@@ -200,7 +252,7 @@ private[thriftserver] class SparkExecuteStatementOperation(
       try {
         // This submit blocks if no background threads are available to run this operation
         val backgroundHandle =
-          parentSession.getSessionManager.submitBackgroundOperation(backgroundOperation)
+          parentSession.getSessionManager().submitBackgroundOperation(backgroundOperation)
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>
@@ -267,7 +319,7 @@ private[thriftserver] class SparkExecuteStatementOperation(
         if (statementId != null) {
           sqlContext.sparkContext.cancelJobGroup(statementId)
         }
-        val currentState = getStatus.getState
+        val currentState = getStatus().getState()
         if (currentState.isTerminal) {
           // This may happen if the execution was cancelled, and then closed from another thread.
           logWarning(s"Ignore exception in terminal state with $statementId: $e")
@@ -310,7 +362,7 @@ private[thriftserver] class SparkExecuteStatementOperation(
   private def cleanup(state: OperationState): Unit = {
     setState(state)
     if (runInBackground) {
-      val backgroundHandle = getBackgroundHandle
+      val backgroundHandle = getBackgroundHandle()
       if (backgroundHandle != null) {
         backgroundHandle.cancel(true)
       }
@@ -332,5 +384,19 @@ private[thriftserver] class SparkExecuteStatementOperation(
         sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, null)
       }
     }
+  }
+}
+
+object SparkExecuteStatementOperation {
+  def getTableSchema(structType: StructType): TableSchema = {
+    val schema = structType.map { field =>
+      val attrTypeString = field.dataType match {
+        case NullType => "void"
+        case CalendarIntervalType => StringType.catalogString
+        case other => other.catalogString
+      }
+      new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
+    }
+    new TableSchema(schema.asJava)
   }
 }

@@ -658,7 +658,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     }
   }
 
-  override def getResultSetMetadata(opHandle: OperationHandle): StructType = {
+  override def getResultSetMetadata(opHandle: OperationHandle): TableSchema = {
     acquire(true)
     try {
       _sessionManager.getOperationManager.getOperationResultSetSchema(opHandle)

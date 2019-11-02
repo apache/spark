@@ -26,18 +26,17 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
-import org.apache.spark.sql.thriftserver.cli.{OperationState, OperationType, SparkThriftServerSQLException}
+import org.apache.spark.sql.thriftserver.cli.{OperationState, OperationType, SparkThriftServerSQLException, TableSchema}
 import org.apache.spark.sql.thriftserver.cli.session.ThriftServerSession
-import org.apache.spark.sql.types.StructType
 
 
 private[thriftserver] abstract class SparkMetadataOperation(
     session: ThriftServerSession,
     opType: OperationType)
-  extends Operation(session, opType, false) with Logging {
+  extends Operation(session, opType) with Logging {
 
   protected val DEFAULT_HIVE_CATALOG: String = ""
-  protected var RESULT_SET_SCHEMA: StructType = null
+  protected var RESULT_SET_SCHEMA: TableSchema = null
   protected val SEARCH_STRING_ESCAPE: Char = '\\'
 
   setHasResultSet(true)

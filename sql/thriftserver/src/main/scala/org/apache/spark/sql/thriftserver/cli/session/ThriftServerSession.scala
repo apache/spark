@@ -199,7 +199,7 @@ private[thriftserver] trait ThriftServerSession extends ThriftServerSessionBase 
   def closeOperation(opHandle: OperationHandle): Unit
 
   @throws[SparkThriftServerSQLException]
-  def getResultSetMetadata(opHandle: OperationHandle): StructType
+  def getResultSetMetadata(opHandle: OperationHandle): TableSchema
 
   @throws[SparkThriftServerSQLException]
   def fetchResults(opHandle: OperationHandle,

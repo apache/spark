@@ -56,27 +56,42 @@ private[thriftserver] class SparkGetTablesOperation(
   with Logging {
 
   if (HiveUtils.isHive23) {
-    RESULT_SET_SCHEMA = new StructType()
-      .add(StructField("TABLE_CAT", StringType))
-      .add(StructField("TABLE_SCHEM", StringType))
-      .add(StructField("TABLE_NAME", StringType))
-      .add(StructField("TABLE_TYPE", StringType))
-      .add(StructField("REMARKS", StringType))
-      .add(StructField("TYPE_CAT", StringType))
-      .add(StructField("TYPE_SCHEM", StringType))
-      .add(StructField("TYPE_NAME", StringType))
-      .add(StructField("SELF_REFERENCING_COL_NAME", StringType))
-      .add(StructField("REF_GENERATION", StringType))
+    RESULT_SET_SCHEMA = new TableSchema()
+      .addStringColumn("TABLE_CAT",
+        "Catalog name. NULL if not applicable.")
+      .addStringColumn("TABLE_SCHEM",
+        "Schema name.")
+      .addStringColumn("TABLE_NAME",
+        "Table name.")
+      .addStringColumn("TABLE_TYPE",
+        "The table type, e.g. \"TABLE\", \"VIEW\", etc.")
+      .addStringColumn("REMARKS",
+        "Comments about the table.")
+      .addStringColumn("TYPE_CAT",
+        "The types catalog.")
+      .addStringColumn("TYPE_SCHEM",
+        "The types schema.")
+      .addStringColumn("TYPE_NAME",
+        "Type name.")
+      .addStringColumn("SELF_REFERENCING_COL_NAME",
+        "Name of the designated \"identifier\" column of a typed table.")
+      .addStringColumn("REF_GENERATION",
+        "Specifies how values in SELF_REFERENCING_COL_NAME are created.")
   } else {
-    RESULT_SET_SCHEMA = new StructType()
-      .add(StructField("TABLE_CAT", StringType))
-      .add(StructField("TABLE_SCHEM", StringType))
-      .add(StructField("TABLE_NAME", StringType))
-      .add(StructField("TABLE_TYPE", StringType))
-      .add(StructField("REMARKS", StringType))
+    RESULT_SET_SCHEMA = new TableSchema()
+      .addStringColumn("TABLE_CAT",
+        "Catalog name. NULL if not applicable.")
+      .addStringColumn("TABLE_SCHEM",
+        "Schema name.")
+      .addStringColumn("TABLE_NAME",
+        "Table name.")
+      .addStringColumn("TABLE_TYPE",
+        "The table type, e.g. \"TABLE\", \"VIEW\", etc.")
+      .addStringColumn("REMARKS",
+        "Comments about the table.")
   }
 
-  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion, false)
 
   override def close(): Unit = {
     super.close()
@@ -84,7 +99,7 @@ private[thriftserver] class SparkGetTablesOperation(
   }
 
   override def runInternal(): Unit = {
-    setStatementId(UUID.randomUUID().toString)
+    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val tableTypesStr = if (tableTypes == null) {
@@ -167,16 +182,21 @@ private[thriftserver] class SparkGetTablesOperation(
       tableName: String,
       tableType: String,
       comment: Option[String]): Unit = {
+    val rowData = Array[AnyRef](
+      "",
+      dbName,
+      tableName,
+      tableType,
+      comment.getOrElse(""))
     // Since HIVE-7575(Hive 2.0.0), adds 5 additional columns to the ResultSet of GetTables.
     if (HiveUtils.isHive23) {
-      rowSet.addRow(Row("", dbName, tableName, tableType, comment.getOrElse(""),
-        null, null, null, null, null))
+      rowSet.addRow(rowData ++ Array(null, null, null, null, null))
     } else {
-      rowSet.addRow(Row("", dbName, tableName, tableType, comment.getOrElse("")))
+      rowSet.addRow(rowData)
     }
   }
 
-  override def getResultSetSchema: StructType = {
+  override def getResultSetSchema: TableSchema = {
     assertState(OperationState.FINISHED)
     RESULT_SET_SCHEMA
   }
