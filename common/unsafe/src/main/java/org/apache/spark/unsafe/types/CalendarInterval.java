@@ -132,5 +132,5 @@ public final class CalendarInterval implements Serializable {
    *         of the given interval, not null.
    * @throws ArithmeticException if a numeric overflow occurs
    */
-  public Duration duration() { return Duration.of(microseconds, ChronoUnit.MICROS);}
+  public Duration duration() { return Duration.of(microseconds, ChronoUnit.MICROS); }
 }
