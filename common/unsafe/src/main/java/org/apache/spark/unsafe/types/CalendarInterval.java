@@ -18,6 +18,9 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
+import java.time.Duration;
+import java.time.Period;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 /**
@@ -115,4 +118,19 @@ public final class CalendarInterval implements Serializable {
       sb.append(' ').append(value).append(' ').append(unit).append('s');
     }
   }
+
+  /**
+   * Extracts the date part of the interval.
+   * @return an instance of {@code java.time.Period} based on the months and days fields
+   *         of the given interval, not null.
+   */
+  public Period period() { return Period.of(0, months, days); }
+
+  /**
+   * Extracts the time part of the interval.
+   * @return an instance of {@code java.time.Duration} based on the microseconds field
+   *         of the given interval, not null.
+   * @throws ArithmeticException if a numeric overflow occurs
+   */
+  public Duration duration() { return Duration.of(microseconds, ChronoUnit.MICROS);}
 }
