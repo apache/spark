@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
 private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
   extends WebUIPage("session") with Logging {
 
-  private val listener = parent.listener
+  private val store = parent.store
   private val startTime = Calendar.getInstance().getTime()
 
   /** Render the page */
@@ -41,8 +41,8 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val content =
-      listener.synchronized { // make sure all parts in this page are consistent
-        val sessionStat = listener.getSession(parameterId).getOrElse(null)
+      store.synchronized { // make sure all parts in this page are consistent
+        val sessionStat = store.getSession(parameterId).getOrElse(null)
         require(sessionStat != null, "Invalid sessionID[" + parameterId + "]")
 
         generateBasicStats() ++
@@ -73,7 +73,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
   /** Generate stats of batch statements of the thrift server program */
   private def generateSQLStatsTable(request: HttpServletRequest, sessionID: String): Seq[Node] = {
-    val executionList = listener.getExecutionList
+    val executionList = store.getExecutionList
       .filter(_.sessionId == sessionID)
     val numStatement = executionList.size
     val table = if (numStatement > 0) {

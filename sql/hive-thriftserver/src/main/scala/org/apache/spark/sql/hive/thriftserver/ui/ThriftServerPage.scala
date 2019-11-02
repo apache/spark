@@ -28,7 +28,6 @@ import scala.xml.{Node, Unparsed}
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, SessionInfo}
 import org.apache.spark.sql.hive.thriftserver.ui.ToolTips._
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
@@ -37,18 +36,18 @@ import org.apache.spark.util.Utils
 /** Page for Spark Web UI that shows statistics of the thrift server */
 private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage("") with Logging {
 
-  private val listener = parent.listener
+  private val store = parent.store
   private val startTime = Calendar.getInstance().getTime()
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =
-      listener.synchronized { // make sure all parts in this page are consistent
+      store.synchronized { // make sure all parts in this page are consistent
         generateBasicStats() ++
         <br/> ++
         <h4>
-        {listener.getOnlineSessionNum} session(s) are online,
-        running {listener.getTotalRunning} SQL statement(s)
+        {store.getOnlineSessionNum} session(s) are online,
+        running {store.getTotalRunning} SQL statement(s)
         </h4> ++
         generateSessionStatsTable(request) ++
         generateSQLStatsTable(request)
@@ -72,7 +71,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   /** Generate stats of batch statements of the thrift server program */
   private def generateSQLStatsTable(request: HttpServletRequest): Seq[Node] = {
 
-    val numStatement = listener.getExecutionList.size
+    val numStatement = store.getExecutionList.size
 
     val table = if (numStatement > 0) {
 
@@ -103,7 +102,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         Some(new SqlStatsPagedTable(
           request,
           parent,
-          listener.getExecutionList,
+          store.getExecutionList,
           "sqlserver",
           UIUtils.prependBaseUri(request, parent.basePath),
           parameterOtherTable,
@@ -138,7 +137,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
   /** Generate stats of batch sessions of the thrift server program */
   private def generateSessionStatsTable(request: HttpServletRequest): Seq[Node] = {
-    val numSessions = listener.getSessionList.size
+    val numSessions = store.getSessionList.size
     val table = if (numSessions > 0) {
 
       val sessionTableTag = "sessionstat"
@@ -168,7 +167,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         Some(new SessionStatsPagedTable(
           request,
           parent,
-          listener.getSessionList,
+          store.getSessionList,
           "sqlserver",
           UIUtils.prependBaseUri(request, parent.basePath),
           parameterOtherTable,
@@ -205,7 +204,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 private[ui] class SqlStatsPagedTable(
     request: HttpServletRequest,
     parent: ThriftServerTab,
-    data: Seq[ExecutionInfo],
+    data: Seq[LiveExecutionData],
     subPath: String,
     basePath: String,
     parameterOtherTable: Iterable[String],
@@ -392,14 +391,14 @@ private[ui] class SqlStatsPagedTable(
 private[ui] class SessionStatsPagedTable(
     request: HttpServletRequest,
     parent: ThriftServerTab,
-    data: Seq[SessionInfo],
+    data: Seq[LiveSessionData],
     subPath: String,
     basePath: String,
     parameterOtherTable: Iterable[String],
     sessionStatsTableTag: String,
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedTable[SessionInfo] {
+    desc: Boolean) extends PagedTable[LiveSessionData] {
 
   override val dataSource = new SessionStatsTableDataSource(data, pageSize, sortColumn, desc)
 
@@ -471,7 +470,7 @@ private[ui] class SessionStatsPagedTable(
     </thead>
   }
 
-  override def row(session: SessionInfo): Seq[Node] = {
+  override def row(session: LiveSessionData): Seq[Node] = {
     val sessionLink = "%s/%s/session/?id=%s".format(
       UIUtils.prependBaseUri(request, parent.basePath), parent.prefix, session.sessionId)
     <tr>
@@ -490,11 +489,11 @@ private[ui] class SessionStatsPagedTable(
     val jobId: Seq[String],
     val duration: Long,
     val executionTime: Long,
-    val executionInfo: ExecutionInfo,
+    val executionInfo: LiveExecutionData,
     val detail: String)
 
   private[ui] class SqlStatsTableDataSource(
-    info: Seq[ExecutionInfo],
+    info: Seq[LiveExecutionData],
     pageSize: Int,
     sortColumn: String,
     desc: Boolean) extends PagedDataSource[SqlStatsTableRow](pageSize) {
@@ -513,7 +512,7 @@ private[ui] class SessionStatsPagedTable(
       r
     }
 
-    private def sqlStatsTableRow(executionInfo: ExecutionInfo): SqlStatsTableRow = {
+    private def sqlStatsTableRow(executionInfo: LiveExecutionData): SqlStatsTableRow = {
       val duration = executionInfo.totalTime(executionInfo.closeTimestamp)
       val executionTime = executionInfo.totalTime(executionInfo.finishTimestamp)
       val detail = Option(executionInfo.detail).filter(!_.isEmpty)
@@ -552,10 +551,10 @@ private[ui] class SessionStatsPagedTable(
   }
 
   private[ui] class SessionStatsTableDataSource(
-    info: Seq[SessionInfo],
+    info: Seq[LiveSessionData],
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedDataSource[SessionInfo](pageSize) {
+    desc: Boolean) extends PagedDataSource[LiveSessionData](pageSize) {
 
     // Sorting SessionInfo data
     private val data = info.sorted(ordering(sortColumn, desc))
@@ -564,7 +563,7 @@ private[ui] class SessionStatsPagedTable(
 
     override def dataSize: Int = data.size
 
-    override def sliceData(from: Int, to: Int): Seq[SessionInfo] = {
+    override def sliceData(from: Int, to: Int): Seq[LiveSessionData] = {
       val r = data.slice(from, to)
       _slicedStartTime = r.map(_.startTimestamp).toSet
       r
@@ -573,8 +572,8 @@ private[ui] class SessionStatsPagedTable(
     /**
      * Return Ordering according to sortColumn and desc.
      */
-    private def ordering(sortColumn: String, desc: Boolean): Ordering[SessionInfo] = {
-      val ordering: Ordering[SessionInfo] = sortColumn match {
+    private def ordering(sortColumn: String, desc: Boolean): Ordering[LiveSessionData] = {
+      val ordering: Ordering[LiveSessionData] = sortColumn match {
         case "User" => Ordering.by(_.userName)
         case "IP" => Ordering.by(_.ip)
         case "Session ID" => Ordering.by(_.sessionId)
