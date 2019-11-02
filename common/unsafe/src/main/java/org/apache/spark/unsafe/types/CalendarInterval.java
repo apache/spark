@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
+import java.util.Objects;
 
 /**
  * The internal representation of interval type.
@@ -31,45 +32,50 @@ public final class CalendarInterval implements Serializable {
   public static final long MICROS_PER_WEEK = MICROS_PER_DAY * 7;
 
   public final int months;
+  public final int days;
   public final long microseconds;
 
   public long milliseconds() {
     return this.microseconds / MICROS_PER_MILLI;
   }
 
-  public CalendarInterval(int months, long microseconds) {
+  public CalendarInterval(int months, int days, long microseconds) {
     this.months = months;
+    this.days = days;
     this.microseconds = microseconds;
   }
 
   public CalendarInterval add(CalendarInterval that) {
     int months = this.months + that.months;
+    int days = this.days + that.days;
     long microseconds = this.microseconds + that.microseconds;
-    return new CalendarInterval(months, microseconds);
+    return new CalendarInterval(months, days, microseconds);
   }
 
   public CalendarInterval subtract(CalendarInterval that) {
     int months = this.months - that.months;
+    int days = this.days - that.days;
     long microseconds = this.microseconds - that.microseconds;
-    return new CalendarInterval(months, microseconds);
+    return new CalendarInterval(months, days, microseconds);
   }
 
   public CalendarInterval negate() {
-    return new CalendarInterval(-this.months, -this.microseconds);
+    return new CalendarInterval(-this.months, -this.days, -this.microseconds);
   }
 
   @Override
-  public boolean equals(Object other) {
-    if (this == other) return true;
-    if (other == null || !(other instanceof CalendarInterval)) return false;
-
-    CalendarInterval o = (CalendarInterval) other;
-    return this.months == o.months && this.microseconds == o.microseconds;
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    CalendarInterval that = (CalendarInterval) o;
+    return months == that.months &&
+      days == that.days &&
+      microseconds == that.microseconds;
   }
 
   @Override
   public int hashCode() {
-    return 31 * months + (int) microseconds;
+    return Objects.hash(months, days, microseconds);
   }
 
   @Override
@@ -81,12 +87,13 @@ public final class CalendarInterval implements Serializable {
       appendUnit(sb, months % 12, "month");
     }
 
+    if (days != 0) {
+      appendUnit(sb, days / 7, "week");
+      appendUnit(sb, days % 7, "day");
+    }
+
     if (microseconds != 0) {
       long rest = microseconds;
-      appendUnit(sb, rest / MICROS_PER_WEEK, "week");
-      rest %= MICROS_PER_WEEK;
-      appendUnit(sb, rest / MICROS_PER_DAY, "day");
-      rest %= MICROS_PER_DAY;
       appendUnit(sb, rest / MICROS_PER_HOUR, "hour");
       rest %= MICROS_PER_HOUR;
       appendUnit(sb, rest / MICROS_PER_MINUTE, "minute");
@@ -96,7 +103,7 @@ public final class CalendarInterval implements Serializable {
       appendUnit(sb, rest / MICROS_PER_MILLI, "millisecond");
       rest %= MICROS_PER_MILLI;
       appendUnit(sb, rest, "microsecond");
-    } else if (months == 0) {
+    } else if (months == 0 && days == 0) {
       sb.append(" 0 microseconds");
     }
 

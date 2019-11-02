@@ -462,47 +462,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AlterTableRenamePartitionCommand]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table PARTITION spec1 RENAME TO PARTITION spec2;
-   * }}}
-   */
-  override def visitRenameTablePartition(
-      ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenamePartitionCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitNonOptionalPartitionSpec(ctx.from),
-      visitNonOptionalPartitionSpec(ctx.to))
-  }
-
-  /**
-   * Create an [[AlterTableDropPartitionCommand]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
-   *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
-   * }}}
-   *
-   * ALTER VIEW ... DROP PARTITION ... is not supported because the concept of partitioning
-   * is associated with physical tables
-   */
-  override def visitDropTablePartitions(
-      ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.VIEW != null) {
-      operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
-    }
-    AlterTableDropPartitionCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
-      ifExists = ctx.EXISTS != null,
-      purge = ctx.PURGE != null,
-      retainData = false)
-  }
-
-  /**
    * Convert a nested constants list into a sequence of string sequences.
    */
   override def visitNestedConstantList(

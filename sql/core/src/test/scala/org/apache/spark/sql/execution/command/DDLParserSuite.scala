@@ -558,65 +558,12 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin)
   }
 
-  test("alter table: rename partition") {
-    val sql =
-      """
-       |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-       |RENAME TO PARTITION (dt='2008-09-09', country='uk')
-      """.stripMargin
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableRenamePartitionCommand(
-      TableIdentifier("table_name", None),
-      Map("dt" -> "2008-08-08", "country" -> "us"),
-      Map("dt" -> "2008-09-09", "country" -> "uk"))
-    comparePlans(parsed, expected)
-  }
-
   test("alter table: exchange partition (not supported)") {
     assertUnsupported(
       """
        |ALTER TABLE table_name_1 EXCHANGE PARTITION
        |(dt='2008-08-08', country='us') WITH TABLE table_name_2
       """.stripMargin)
-  }
-
-  // ALTER TABLE table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...]
-  // ALTER VIEW table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...]
-  test("alter table/view: drop partitions") {
-    val sql1_table =
-      """
-       |ALTER TABLE table_name DROP IF EXISTS PARTITION
-       |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk')
-      """.stripMargin
-    val sql2_table =
-      """
-       |ALTER TABLE table_name DROP PARTITION
-       |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk')
-      """.stripMargin
-    val sql1_view = sql1_table.replace("TABLE", "VIEW")
-    val sql2_view = sql2_table.replace("TABLE", "VIEW")
-
-    val parsed1_table = parser.parsePlan(sql1_table)
-    val parsed2_table = parser.parsePlan(sql2_table)
-    val parsed1_purge = parser.parsePlan(sql1_table + " PURGE")
-    assertUnsupported(sql1_view)
-    assertUnsupported(sql2_view)
-
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1_table = AlterTableDropPartitionCommand(
-      tableIdent,
-      Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = true,
-      purge = false,
-      retainData = false)
-    val expected2_table = expected1_table.copy(ifExists = false)
-    val expected1_purge = expected1_table.copy(purge = true)
-
-    comparePlans(parsed1_table, expected1_table)
-    comparePlans(parsed2_table, expected2_table)
-    comparePlans(parsed1_purge, expected1_purge)
   }
 
   test("alter table: archive partition (not supported)") {

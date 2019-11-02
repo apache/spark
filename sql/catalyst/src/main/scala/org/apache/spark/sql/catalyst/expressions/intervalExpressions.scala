@@ -63,10 +63,10 @@ case class ExtractIntervalMonths(child: Expression)
     extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths")
 
 case class ExtractIntervalDays(child: Expression)
-    extends ExtractIntervalPart(child, LongType, getDays, "getDays")
+    extends ExtractIntervalPart(child, IntegerType, getDays, "getDays")
 
 case class ExtractIntervalHours(child: Expression)
-    extends ExtractIntervalPart(child, ByteType, getHours, "getHours")
+    extends ExtractIntervalPart(child, LongType, getHours, "getHours")
 
 case class ExtractIntervalMinutes(child: Expression)
     extends ExtractIntervalPart(child, ByteType, getMinutes, "getMinutes")
