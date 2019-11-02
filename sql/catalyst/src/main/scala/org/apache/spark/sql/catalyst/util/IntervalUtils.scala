@@ -403,7 +403,8 @@ object IntervalUtils {
     var state = PREFIX
     var i = 0
     var currentValue: Long = 0
-    var months: Long = 0
+    var months: Int = 0
+    var days: Int = 0
     var microseconds: Long = 0
 
     while (i < bytes.length) {
@@ -457,17 +458,15 @@ object IntervalUtils {
             try {
               b match {
                 case 'y' if s.matchAt(yearStr, i) =>
-                  months = Math.addExact(months, Math.multiplyExact(12, currentValue))
+                  val monthsInYears = Math.multiplyExact(12, Math.toIntExact(currentValue))
+                  months = Math.addExact(months, monthsInYears)
                   i += yearStr.numBytes()
                 case 'w' if s.matchAt(weekStr, i) =>
-                  val daysUs = Math.multiplyExact(
-                    Math.multiplyExact(7, currentValue),
-                    DateTimeUtils.MICROS_PER_DAY)
-                  microseconds = Math.addExact(microseconds, daysUs)
+                  val daysInWeeks = Math.multiplyExact(7, Math.toIntExact(currentValue))
+                  days = Math.addExact(days, daysInWeeks)
                   i += weekStr.numBytes()
                 case 'd' if s.matchAt(dayStr, i) =>
-                  val daysUs = Math.multiplyExact(currentValue, DateTimeUtils.MICROS_PER_DAY)
-                  microseconds = Math.addExact(microseconds, daysUs)
+                  days = Math.addExact(days, Math.toIntExact(currentValue))
                   i += dayStr.numBytes()
                 case 'h' if s.matchAt(hourStr, i) =>
                   val hoursUs = Math.multiplyExact(currentValue, MICROS_PER_HOUR)
@@ -479,7 +478,7 @@ object IntervalUtils {
                   i += secondStr.numBytes()
                 case 'm' =>
                   if (s.matchAt(monthStr, i)) {
-                    months = Math.addExact(months, currentValue)
+                    months = Math.addExact(months, Math.toIntExact(currentValue))
                     i += monthStr.numBytes()
                   } else if (s.matchAt(minuteStr, i)) {
                     val minutesUs = Math.multiplyExact(currentValue, MICROS_PER_MINUTE)
@@ -523,7 +522,7 @@ object IntervalUtils {
 
     val result = state match {
       case UNIT_NAME_SUFFIX | END_UNIT_NAME | BEGIN_VALUE =>
-        Some(new CalendarInterval(Math.toIntExact(months), microseconds))
+        Some(new CalendarInterval(months, days, microseconds))
       case _ => None
     }
 
