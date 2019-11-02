@@ -19,6 +19,9 @@ package org.apache.spark.unsafe.types;
 
 import org.junit.Test;
 
+import java.time.Duration;
+import java.time.Period;
+
 import static org.junit.Assert.*;
 import static org.apache.spark.unsafe.types.CalendarInterval.*;
 
@@ -93,5 +96,12 @@ public class CalendarIntervalSuite {
     input1 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR);
     input2 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR);
     assertEquals(input1.subtract(input2), new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR));
+  }
+
+  @Test
+  public void periodAndDurationTest() {
+    CalendarInterval interval = new CalendarInterval(120, -40, 123456);
+    assertEquals(Period.of(0, 120, -40), interval.period());
+    assertEquals(Duration.ofNanos(123456000), interval.duration());
   }
 }
