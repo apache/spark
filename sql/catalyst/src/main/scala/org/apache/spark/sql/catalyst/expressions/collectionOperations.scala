@@ -3936,7 +3936,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 3);
-       [1, 2, 3, 3]
+       [1,2,3,3]
   """,
   since = "3.0.0")
 case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpression {
@@ -4000,11 +4000,7 @@ case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpres
          |for (int $i = 0; i < $inputArray.numElements(); $i ++) {
          |  $assignment
          |}
-         |if ($ne == null) {
-         |  $newArray.setNullAt($oldArraySize);
-         |} else {
-         |  $setNewValue
-         |}
+         |$setNewValue
          |${ev.value} = $newArray;
          |""".stripMargin
     })
