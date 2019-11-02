@@ -162,14 +162,12 @@ statement
         partitionSpecLocation+                                         #addTablePartition
     | ALTER VIEW tableIdentifier ADD (IF NOT EXISTS)?
         partitionSpec+                                                 #addTablePartition
-    | ALTER TABLE tableIdentifier
+    | ALTER TABLE multipartIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
-    | ALTER TABLE tableIdentifier
+    | ALTER (TABLE | VIEW) multipartIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
-    | ALTER VIEW tableIdentifier
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
-    | ALTER TABLE multipartIdentifier SET locationSpec                 #setTableLocation
-    | ALTER TABLE tableIdentifier partitionSpec SET locationSpec       #setPartitionLocation
+    | ALTER TABLE multipartIdentifier
+        (partitionSpec)? SET locationSpec                              #setTableLocation
     | ALTER TABLE multipartIdentifier RECOVER PARTITIONS               #recoverPartitions
     | DROP TABLE (IF EXISTS)? multipartIdentifier PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? multipartIdentifier                       #dropView
@@ -196,8 +194,8 @@ statement
         LIKE pattern=STRING partitionSpec?                             #showTable
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
-    | SHOW COLUMNS (FROM | IN) tableIdentifier
-        ((FROM | IN) db=errorCapturingIdentifier)?                     #showColumns
+    | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
+        ((FROM | IN) namespace=multipartIdentifier)?                   #showColumns
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions

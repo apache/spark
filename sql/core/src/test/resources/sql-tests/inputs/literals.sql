@@ -125,3 +125,8 @@ select map(1, interval 1 day, 2, interval 3 week);
 -- typed interval expression
 select interval 'interval 3 year 1 hour';
 select interval '3 year 1 hour';
+
+-- typed integer expression
+select integer '7';
+select integer'7';
+select integer '2147483648';

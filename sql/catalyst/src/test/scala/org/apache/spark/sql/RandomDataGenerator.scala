@@ -193,8 +193,9 @@ object RandomDataGenerator {
         Some(generator)
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
+        val days = rand.nextInt(10000)
         val ns = rand.nextLong()
-        new CalendarInterval(months, ns)
+        new CalendarInterval(months, days, ns)
       })
       case DecimalType.Fixed(precision, scale) => Some(
         () => BigDecimal.apply(
