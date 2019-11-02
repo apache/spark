@@ -561,7 +561,7 @@ CREATE VIEW v8_temp AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM temp
 struct<>
 -- !query 49 output
 org.apache.spark.sql.AnalysisException
-Not allowed to create a permanent view `v9_temp` by referencing a temporary view `temp_table`;
+Not allowed to create a permanent view `v8_temp` by referencing a temporary view `temp_table`;
 
 
 -- !query 50
@@ -897,29 +897,10 @@ Not allowed to create a permanent view `mytempview` by referencing a temporary v
 -- !query 79
 DESC TABLE EXTENDED mytempview
 -- !query 79 schema
-struct<col_name:string,data_type:string,comment:string>
+struct<>
 -- !query 79 output
-a                   	int                 	                    
-b                   	int                 	                    
-                    	                    	                    
-# Detailed Table Information	                    	                    
-Database            	testviewschm2       	                    
-Table               	mytempview          	                    
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type                	VIEW                	                    
-View Text           	SELECT * FROM tbl1 WHERE tbl1.a
-BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
-AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
-AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)	                    
-View Original Text  	SELECT * FROM tbl1 WHERE tbl1.a
-BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
-AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
-AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)	                    
-View Default Database	testviewschm2       	                    
-View Query Output Columns	[a, b]              	                    
-Table Properties    	[view.default.database=testviewschm2, view.query.out.col.1=b, view.query.out.col.0=a, view.query.out.numCols=2]
+org.apache.spark.sql.AnalysisException
+Table not found: mytempview;
 
 
 -- !query 80
