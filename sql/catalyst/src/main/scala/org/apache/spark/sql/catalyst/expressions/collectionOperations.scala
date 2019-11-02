@@ -3928,3 +3928,92 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 
   override def prettyName: String = "array_except"
 }
+
+@ExpressionDescription(
+  usage = """
+  _FUNC_(array, element) - Returns an array of appending an element to the end of an array
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 3);
+       [1, 2, 3, 3]
+  """,
+  since = "3.0.0")
+case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpression {
+
+  override def checkInputDataTypes(): TypeCheckResult = left.dataType match {
+    case ArrayType(et, _) => right.dataType match {
+      case NullType =>
+        TypeCheckResult.TypeCheckSuccess
+      case _: AtomicType =>
+        TypeUtils.checkForSameTypeInputExpr(Seq(et, right.dataType), s"function $prettyName")
+      case o => TypeCheckResult.TypeCheckFailure(
+        s"function $prettyName not support append ${o.typeName} to array[${et.typeName}]")
+    }
+    case NullType => right.dataType match {
+      case _: AtomicType =>
+        TypeCheckResult.TypeCheckSuccess
+      case o => TypeCheckResult.TypeCheckFailure(
+        s"function $prettyName not support append ${o.typeName} to array")
+    }
+    case o => TypeCheckResult.TypeCheckFailure(
+      s"function $prettyName not support append to ${o.typeName} type")
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val array = left.eval(input)
+    val elem = right.eval(input)
+    if (array == null) {
+      new GenericArrayData(Array(elem))
+    } else {
+      new GenericArrayData(array.asInstanceOf[ArrayData].array ++ Array(elem))
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = left.dataType match {
+    case NullType =>
+      val (allocation, assigns, arrayData) =
+        GenArrayData.genCodeToCreateArrayData(ctx, right.dataType, Seq(right), prettyName)
+      ev.copy(
+        code = code"""$allocation$assigns""",
+        value = JavaCode.variable(arrayData, dataType),
+        isNull = FalseLiteral)
+    case ArrayType(et, _) => defineCodeGen(ctx, ev, (inputArray, ne) => {
+      val newArray = ctx.freshName("newArray")
+      val oldArraySize = ctx.freshName("oldArraySize")
+      val newArraySize = ctx.freshName("newArraySize")
+
+      val allocation =
+        CodeGenerator.createArrayData(newArray, et, newArraySize, s"$prettyName failed")
+
+      val i = ctx.freshName("i")
+      val assignment =
+        CodeGenerator.createArrayAssignment(newArray, et, inputArray, i, i, true)
+
+      val setNewValue =
+        CodeGenerator.setArrayElement(newArray, et, oldArraySize, ne, Some(s"$ne == null"))
+
+      s"""
+         |int $oldArraySize = $inputArray.numElements();
+         |int $newArraySize = $inputArray.numElements() + 1;
+         |$allocation
+         |for (int $i = 0; i < $inputArray.numElements(); $i ++) {
+         |  $assignment
+         |}
+         |if ($ne == null) {
+         |  $newArray.setNullAt($oldArraySize);
+         |} else {
+         |  $setNewValue
+         |}
+         |${ev.value} = $newArray;
+         |""".stripMargin
+    })
+  }
+
+  override def dataType: DataType = left.dataType match {
+    case NullType => ArrayType(right.dataType, containsNull = false)
+    case at: ArrayType => at
+  }
+
+  override def prettyName: String = "array_append"
+}

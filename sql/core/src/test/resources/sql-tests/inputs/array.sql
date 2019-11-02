@@ -90,3 +90,19 @@ select
   size(date_array),
   size(timestamp_array)
 from primitive_arrays;
+
+-- array_append
+-- supported cases
+select array_append(array(1,2), 3);
+select array_append(array(1,2), null);
+select array_append(array('3', '2'), '3');
+select array_append(array(null), null);
+select array_append(null, 3);
+
+-- unsupported cases
+select array_append(array(1.1, 2.2), 3);
+select array_append(array(1,2), '3');
+select array_append(array('1', '2'), 3);
+select array_append(1, 2);
+select array_append(array(array(1)), array(1));
+
