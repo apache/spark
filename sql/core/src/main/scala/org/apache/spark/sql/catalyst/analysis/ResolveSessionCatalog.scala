@@ -370,13 +370,6 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
-    case AlterTableChangeColumnStatement(tableName, columnName, newColumn) =>
-      val v1TableName = parseV1Table(tableName, "ALTER TABLE CHANGE COLUMN")
-      AlterTableChangeColumnCommand(
-        v1TableName.asTableIdentifier,
-        columnName,
-        newColumn)
-
     case AlterTableRenamePartitionStatement(tableName, from, to) =>
       val v1TableName = parseV1Table(tableName, "ALTER TABLE RENAME PARTITION")
       AlterTableRenamePartitionCommand(

@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * A logical plan node that contains exactly what was parsed from SQL.
@@ -136,7 +136,7 @@ case class AlterTableAddColumnsStatement(
     columnsToAdd: Seq[QualifiedColType]) extends ParsedStatement
 
 /**
- * ALTER TABLE ... ALTER COLUMN command, as parsed from SQL.
+ * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
  */
 case class AlterTableAlterColumnStatement(
     tableName: Seq[String],
@@ -187,14 +187,6 @@ case class AlterTableSetLocationStatement(
  */
 case class AlterTableRecoverPartitionsStatement(
     tableName: Seq[String]) extends ParsedStatement
-
-/**
- * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
- */
-case class AlterTableChangeColumnStatement(
-    tableName: Seq[String],
-    columnName: String,
-    newColumn: StructField) extends ParsedStatement
 
 /**
  * ALTER TABLE ... RENAME PARTITION command, as parsed from SQL.
