@@ -310,9 +310,9 @@ object HiveThriftServer2 extends Logging {
     }
 
     /**
-      * Remove at least (retainedSize / 10) items to reduce friction. Because tracking may be done
-      * asynchronously, this method may return 0 in case enough items have been deleted already.
-      */
+     * Remove at least (retainedSize / 10) items to reduce friction. Because tracking may be done
+     * asynchronously, this method may return 0 in case enough items have been deleted already.
+     */
     private def calculateNumberToRemove(dataSize: Long, retainedSize: Long): Long = {
       if (dataSize > retainedSize) {
         math.max(retainedSize / 10L, dataSize - retainedSize)

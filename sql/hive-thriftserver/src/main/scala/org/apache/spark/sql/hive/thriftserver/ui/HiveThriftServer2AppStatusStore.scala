@@ -18,9 +18,9 @@
 package org.apache.spark.sql.hive.thriftserver.ui
 
 import com.fasterxml.jackson.annotation.JsonIgnore
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionState, HiveThriftServer2Listener}
 import org.apache.spark.status.KVUtils.KVIndexParam
 import org.apache.spark.util.kvstore.KVStore
