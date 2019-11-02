@@ -669,7 +669,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Cast(Literal.create(
       new CalendarInterval(15, 9, -3 * CalendarInterval.MICROS_PER_HOUR), CalendarIntervalType),
       StringType),
-      "interval 1 years 3 months 1 weeks 2 days -3 hours")
+      "interval 1 years 3 months 9 days -3 hours")
     checkEvaluation(Cast(Literal("INTERVAL 1 Second 1 microsecond"), CalendarIntervalType),
       new CalendarInterval(0, 0, 1000001))
     checkEvaluation(Cast(Literal("1 MONTH 1 Microsecond"), CalendarIntervalType),
