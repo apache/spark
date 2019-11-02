@@ -335,7 +335,6 @@ private[thriftserver] object SessionManager extends Logging {
     threadLocalProxyUserName.remove()
   }
 
-
   def setIpAddress(ipAddress: String): Unit = {
     threadLocalIpAddress.set(ipAddress)
   }
@@ -345,7 +344,6 @@ private[thriftserver] object SessionManager extends Logging {
   }
 
   def getIpAddress: String = threadLocalIpAddress.get
-
 
   def setUserName(userName: String): Unit = {
     threadLocalUserName.set(userName)

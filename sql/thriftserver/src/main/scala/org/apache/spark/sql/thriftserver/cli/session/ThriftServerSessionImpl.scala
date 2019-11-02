@@ -47,34 +47,34 @@ private[thriftserver] class ThriftServerSessionImpl(
     serverHiveConf: HiveConf,
     var ipAddress: String) extends ThriftServerSession with Logging {
 
-  private val _sessionHandle: SessionHandle = new SessionHandle(protocol)
-  private val _hiveConf: HiveConf = {
+  private val sessionHandle: SessionHandle = new SessionHandle(protocol)
+  private val hiveConf: HiveConf = {
     val conf = new HiveConf(serverHiveConf)
     // Set an explicit session name to control the download directory name
-    conf.set(ConfVars.HIVESESSIONID.varname, _sessionHandle.getHandleIdentifier.toString)
+    conf.set(ConfVars.HIVESESSIONID.varname, sessionHandle.getHandleIdentifier.toString)
     conf
   }
-  private var _sessionState: SessionState = null
-  private var _sessionManager: SessionManager = null
-  private var _operationManager: OperationManager = new OperationManager()
-  private val _opHandleSet: util.Set[OperationHandle] = new util.HashSet[OperationHandle]()
-  private var _isOperationLogEnabled: Boolean = false
-  private var _sessionLogDir: File = _
-  private var _lastAccessTime: Long = 0L
-  private var _lastIdleTime: Long = 0L
+  private var sessionState: SessionState = null
+  private var sessionManager: SessionManager = null
+  private var operationManager: OperationManager = new OperationManager()
+  private val opHandleSet: util.Set[OperationHandle] = new util.HashSet[OperationHandle]()
+  private var operationLogEnabled: Boolean = false
+  private var sessionLogDir: File = _
+  private var lastAccessTime: Long = 0L
+  private var lastIdleTime: Long = 0L
 
   @throws[SparkThriftServerSQLException]
   override def open(sessionConfMap: JMap[String, String]): Unit = {
-    _sessionState = new SessionState(_hiveConf, username)
-    _sessionState.setUserIpAddress(ipAddress)
-    _sessionState.setIsHiveServerQuery(true)
-    SessionState.start(_sessionState)
+    sessionState = new SessionState(hiveConf, username)
+    sessionState.setUserIpAddress(ipAddress)
+    sessionState.setIsHiveServerQuery(true)
+    SessionState.start(sessionState)
     processGlobalInitFile()
     if (sessionConfMap != null) {
       configureSession(sessionConfMap)
     }
-    _lastAccessTime = System.currentTimeMillis
-    _lastIdleTime = _lastAccessTime
+    lastAccessTime = System.currentTimeMillis
+    lastIdleTime = lastAccessTime
   }
 
 
@@ -108,7 +108,7 @@ private[thriftserver] class ThriftServerSessionImpl(
   private def processGlobalInitFile(): Unit = {
     val processor = new GlobalHivercFileProcessor
     try {
-      val hiverc = _hiveConf.getVar(ConfVars.HIVE_SERVER2_GLOBAL_INIT_FILE_LOCATION)
+      val hiverc = hiveConf.getVar(ConfVars.HIVE_SERVER2_GLOBAL_INIT_FILE_LOCATION)
       if (hiverc != null) {
         var hivercFile = new File(hiverc)
         if (hivercFile.isDirectory) {
@@ -132,7 +132,7 @@ private[thriftserver] class ThriftServerSessionImpl(
 
   @throws[SparkThriftServerSQLException]
   private def configureSession(sessionConfMap: JMap[String, String]): Unit = {
-    SessionState.setCurrentSessionState(_sessionState)
+    SessionState.setCurrentSessionState(sessionState)
 
     sessionConfMap.entrySet().forEach(entry => {
       val key = entry.getKey
@@ -146,7 +146,7 @@ private[thriftserver] class ThriftServerSessionImpl(
       } else if (key.startsWith("use:")) {
         SessionState.get.setCurrentDatabase(entry.getValue)
       } else {
-        _hiveConf.verifyAndSet(key, entry.getValue)
+        hiveConf.verifyAndSet(key, entry.getValue)
       }
     })
   }
@@ -289,7 +289,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     val opHandle = operation.getHandle
     try {
       operation.run
-      _opHandleSet.add(opHandle)
+      opHandleSet.add(opHandle)
       opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
@@ -318,7 +318,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     val opHandle = operation.getHandle
     try {
       operation.run
-      _opHandleSet.add(opHandle)
+      opHandleSet.add(opHandle)
       return opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
@@ -343,7 +343,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     val opHandle = operation.getHandle
     try {
       operation.run
-      _opHandleSet.add(opHandle)
+      opHandleSet.add(opHandle)
       return opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
@@ -370,7 +370,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     val opHandle = operation.getHandle
     try {
       operation.run
-      _opHandleSet.add(opHandle)
+      opHandleSet.add(opHandle)
       return opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
@@ -407,7 +407,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     val opHandle = operation.getHandle
     try {
       operation.run
-      _opHandleSet.add(opHandle)
+      opHandleSet.add(opHandle)
       return opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
@@ -432,7 +432,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     val opHandle = operation.getHandle
     try {
       operation.run
-      _opHandleSet.add(opHandle)
+      opHandleSet.add(opHandle)
       return opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
@@ -469,7 +469,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     val opHandle = operation.getHandle
     try {
       operation.run
-      _opHandleSet.add(opHandle)
+      opHandleSet.add(opHandle)
       opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
@@ -503,7 +503,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     val opHandle = operation.getHandle
     try {
       operation.run
-      _opHandleSet.add(opHandle)
+      opHandleSet.add(opHandle)
       opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
@@ -527,7 +527,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     val opHandle = operation.getHandle
     try {
       operation.run
-      _opHandleSet.add(opHandle)
+      opHandleSet.add(opHandle)
       opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
@@ -559,7 +559,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     val opHandle = operation.getHandle
     try {
       operation.run
-      _opHandleSet.add(opHandle)
+      opHandleSet.add(opHandle)
       opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
@@ -579,34 +579,34 @@ private[thriftserver] class ThriftServerSessionImpl(
     try {
       acquire(true)
       // Iterate through the opHandles and close their operations
-      for (opHandle <- _opHandleSet.asScala) {
-        _operationManager.closeOperation(opHandle)
+      for (opHandle <- opHandleSet.asScala) {
+        operationManager.closeOperation(opHandle)
       }
-      _opHandleSet.clear
+      opHandleSet.clear
       // Cleanup session log directory.
       cleanupSessionLogDir
       cleanupPipeoutFile
-      val hiveHist = _sessionState.getHiveHistory
+      val hiveHist = sessionState.getHiveHistory
       if (null != hiveHist) {
         hiveHist.closeStream()
       }
       try {
-        _sessionState.close
+        sessionState.close
       } finally {
-        _sessionState = null
+        sessionState = null
       }
     } catch {
       case ioe: IOException =>
         throw new SparkThriftServerSQLException("Failure to close", ioe)
     } finally {
-      if (_sessionState != null) {
+      if (sessionState != null) {
         try {
-          _sessionState.close
+          sessionState.close
         } catch {
           case t: Throwable =>
             logWarning("Error closing session", t)
         }
-        _sessionState = null
+        sessionState = null
       }
       release(true)
     }
@@ -615,7 +615,7 @@ private[thriftserver] class ThriftServerSessionImpl(
   override def cancelOperation(opHandle: OperationHandle): Unit = {
     acquire(true)
     try {
-      _sessionManager.getOperationManager.cancelOperation(opHandle)
+      sessionManager.getOperationManager.cancelOperation(opHandle)
     } finally {
       release(true)
     }
@@ -624,8 +624,8 @@ private[thriftserver] class ThriftServerSessionImpl(
   override def closeOperation(opHandle: OperationHandle): Unit = {
     acquire(true)
     try {
-      _operationManager.closeOperation(opHandle)
-      _opHandleSet.remove(opHandle)
+      operationManager.closeOperation(opHandle)
+      opHandleSet.remove(opHandle)
     } finally {
       release(true)
     }
@@ -634,18 +634,18 @@ private[thriftserver] class ThriftServerSessionImpl(
   private def cleanupSessionLogDir(): Unit = {
     if (isOperationLogEnabled) {
       try {
-        FileUtils.forceDelete(_sessionLogDir)
+        FileUtils.forceDelete(sessionLogDir)
       }
       catch {
         case e: Exception =>
-          logError("Failed to cleanup session log dir: " + _sessionHandle, e)
+          logError("Failed to cleanup session log dir: " + sessionHandle, e)
       }
     }
   }
 
   private def cleanupPipeoutFile(): Unit = {
-    val lScratchDir = _hiveConf.getVar(ConfVars.LOCALSCRATCHDIR)
-    val sessionID = _hiveConf.getVar(ConfVars.HIVESESSIONID)
+    val lScratchDir = hiveConf.getVar(ConfVars.LOCALSCRATCHDIR)
+    val sessionID = hiveConf.getVar(ConfVars.HIVESESSIONID)
     val fileAry = new File(lScratchDir)
       .listFiles((dir, name) => name.startsWith(sessionID) && name.endsWith(".pipeout"))
     for (file <- fileAry) {
@@ -661,7 +661,7 @@ private[thriftserver] class ThriftServerSessionImpl(
   override def getResultSetMetadata(opHandle: OperationHandle): TableSchema = {
     acquire(true)
     try {
-      _sessionManager.getOperationManager.getOperationResultSetSchema(opHandle)
+      sessionManager.getOperationManager.getOperationResultSetSchema(opHandle)
     } finally {
       release(true)
     }
@@ -674,9 +674,9 @@ private[thriftserver] class ThriftServerSessionImpl(
     acquire(true)
     try {
       if (fetchType eq FetchType.QUERY_OUTPUT) {
-        return _operationManager.getOperationNextRowSet(opHandle, orientation, maxRows)
+        return operationManager.getOperationNextRowSet(opHandle, orientation, maxRows)
       }
-      return _operationManager.getOperationLogRowSet(opHandle, orientation, maxRows)
+      return operationManager.getOperationLogRowSet(opHandle, orientation, maxRows)
     } finally {
       release(true)
     }
@@ -721,9 +721,9 @@ private[thriftserver] class ThriftServerSessionImpl(
   protected def acquire(userAccess: Boolean): Unit = {
     // Need to make sure that the this HiveServer2's session's SessionState is
     // stored in the thread local for the handler thread.
-    SessionState.setCurrentSessionState(_sessionState)
+    SessionState.setCurrentSessionState(sessionState)
     if (userAccess) {
-      _lastAccessTime = System.currentTimeMillis
+      lastAccessTime = System.currentTimeMillis
     }
   }
 
@@ -740,20 +740,20 @@ private[thriftserver] class ThriftServerSessionImpl(
       currentThread.cacheThreadLocalRawStore
     }
     if (userAccess) {
-      _lastAccessTime = System.currentTimeMillis
+      lastAccessTime = System.currentTimeMillis
     }
-    if (_opHandleSet.isEmpty) {
-      _lastIdleTime = System.currentTimeMillis
+    if (opHandleSet.isEmpty) {
+      lastIdleTime = System.currentTimeMillis
     } else {
-      _lastIdleTime = 0
+      lastIdleTime = 0
     }
   }
 
 
   override def closeExpiredOperations(): Unit = {
-    val handles = _opHandleSet.toArray(new Array[OperationHandle](_opHandleSet.size))
+    val handles = opHandleSet.toArray(new Array[OperationHandle](opHandleSet.size))
     if (handles.length > 0) {
-      val operations = _operationManager.removeExpiredOperations(handles)
+      val operations = operationManager.removeExpiredOperations(handles)
       if (!operations.isEmpty) {
         closeTimedOutOperations(operations)
       }
@@ -764,7 +764,7 @@ private[thriftserver] class ThriftServerSessionImpl(
     acquire(false)
     try {
       for (operation <- operations) {
-        _opHandleSet.remove(operation.getHandle)
+        opHandleSet.remove(operation.getHandle)
         try {
           operation.close
         } catch {
@@ -778,8 +778,8 @@ private[thriftserver] class ThriftServerSessionImpl(
   }
 
   override def getNoOperationTime: Long = {
-    if (_lastIdleTime > 0) {
-      System.currentTimeMillis - _lastIdleTime
+    if (lastIdleTime > 0) {
+      System.currentTimeMillis - lastIdleTime
     } else {
       0
     }
@@ -793,16 +793,16 @@ private[thriftserver] class ThriftServerSessionImpl(
    * @param sessionManager
    */
   override def setSessionManager(sessionManager: SessionManager): Unit = {
-    _sessionManager = sessionManager
+    this.sessionManager = sessionManager
   }
 
   /**
    * Get the session manager for the session
    */
-  override def getSessionManager: SessionManager = _sessionManager
+  override def getSessionManager: SessionManager = sessionManager
 
 
-  private def getOperationManager: OperationManager = _operationManager
+  private def getOperationManager: OperationManager = operationManager
 
   /**
    * Set operation manager for the session
@@ -810,20 +810,20 @@ private[thriftserver] class ThriftServerSessionImpl(
    * @param operationManager
    */
   override def setOperationManager(operationManager: OperationManager): Unit = {
-    _operationManager = operationManager
+    this.operationManager = operationManager
   }
 
   /**
    * Check whether operation logging is enabled and session dir is created successfully
    */
-  override def isOperationLogEnabled: Boolean = _isOperationLogEnabled
+  override def isOperationLogEnabled(): Boolean = this.operationLogEnabled
 
   /**
    * Get the session dir, which is the parent dir of operation logs
    *
    * @return a file representing the parent directory of operation logs
    */
-  override def getOperationLogSessionDir: File = _sessionLogDir
+  override def getOperationLogSessionDir: File = sessionLogDir
 
   /**
    * Set the session dir, which is the parent dir of operation logs
@@ -843,29 +843,29 @@ private[thriftserver] class ThriftServerSessionImpl(
       logWarning("The operation log root directory is not writable: " +
         operationLogRootDir.getAbsolutePath)
     }
-    _sessionLogDir = new File(operationLogRootDir, _sessionHandle.getHandleIdentifier.toString)
-    _isOperationLogEnabled = true
-    if (!_sessionLogDir.exists) {
-      if (!_sessionLogDir.mkdir) {
+    sessionLogDir = new File(operationLogRootDir, sessionHandle.getHandleIdentifier.toString)
+    operationLogEnabled = true
+    if (!sessionLogDir.exists) {
+      if (!sessionLogDir.mkdir) {
         logWarning("Unable to create operation log session directory: " +
-          _sessionLogDir.getAbsolutePath)
-        _isOperationLogEnabled = false
+          sessionLogDir.getAbsolutePath)
+        operationLogEnabled = false
       }
     }
     if (isOperationLogEnabled) {
-      logInfo("Operation log session directory is created: " + _sessionLogDir.getAbsolutePath)
+      logInfo("Operation log session directory is created: " + sessionLogDir.getAbsolutePath)
     }
   }
 
   protected def getSession: ThriftServerSession = this
 
-  override def getSessionHandle: SessionHandle = _sessionHandle
+  override def getSessionHandle: SessionHandle = sessionHandle
 
   override def getPassword: String = password
 
-  override def getHiveConf: HiveConf = _hiveConf
+  override def getHiveConf: HiveConf = hiveConf
 
-  override def getSessionState: SessionState = _sessionState
+  override def getSessionState: SessionState = sessionState
 
   override def getUserName: String = username
 
@@ -875,6 +875,6 @@ private[thriftserver] class ThriftServerSessionImpl(
 
   override def setIpAddress(ipAddr: String): Unit = ipAddress = ipAddr
 
-  override def getLastAccessTime: Long = _lastAccessTime
+  override def getLastAccessTime: Long = lastAccessTime
 
 }
