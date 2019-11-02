@@ -320,7 +320,7 @@ private[ui] class SqlStatsPagedTable(
       }
     }
 
-    def statement(infoData: ExecutionInfo):Seq[Node] = {
+    def statement(infoData: ExecutionInfo): Seq[Node] = {
       if (infoData.statement != null && infoData.statement.nonEmpty) {
         <span class="description-input">
           {infoData.statement}
