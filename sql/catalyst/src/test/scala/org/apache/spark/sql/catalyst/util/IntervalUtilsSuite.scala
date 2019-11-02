@@ -20,11 +20,13 @@ package org.apache.spark.sql.catalyst.util
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromString, fromYearMonthString}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.unsafe.types.CalendarInterval._
 
-class IntervalUtilsSuite extends SparkFunSuite {
+class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("fromString: basic") {
     testSingleUnit("YEAR", 3, 36, 0)
@@ -194,10 +196,20 @@ class IntervalUtilsSuite extends SparkFunSuite {
       }
     }
 
-    check("hour", "minute", "12 hours 40 minutes")
-    check("hour", "second", "12 hours 40 minutes 30.999999 seconds")
-    check("minute", "second", "40 minutes 30.999999 seconds")
-    check("day", "hour", "5 days 12 hours")
-    check("day", "minute", "5 days 12 hours 40 minutes")
+    withSQLConf(SQLConf.DIALECT.key -> "Spark") {
+      check("hour", "minute", "12 hours 40 minutes")
+      check("hour", "second", "12 hours 40 minutes 30.999999 seconds")
+      check("minute", "second", "40 minutes 30.999999 seconds")
+      check("day", "hour", "5 days 12 hours")
+      check("day", "minute", "5 days 12 hours 40 minutes")
+    }
+
+    withSQLConf(SQLConf.DIALECT.key -> "PostgreSQL") {
+      check("hour", "minute", "5 days 12 hours 40 minutes")
+      check("hour", "second", "5 days 12 hours 40 minutes 30.999999 seconds")
+      check("minute", "second", "5 days 12 hours 40 minutes 30.999999 seconds")
+      check("day", "hour", "5 days 12 hours")
+      check("day", "minute", "5 days 12 hours 40 minutes")
+    }
   }
 }

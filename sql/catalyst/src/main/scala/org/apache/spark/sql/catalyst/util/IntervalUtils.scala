@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -219,6 +220,7 @@ object IntervalUtils {
       }
       // Hive allow nanosecond precision interval
       var secondsFraction = parseNanos(m.group(9), seconds < 0)
+      val resetValuesUpToFrom = !SQLConf.get.usePostgreSQLDialect
       (from, to) match {
         case ("day", "second") => // No-op
         case ("day", "minute") =>
@@ -229,14 +231,16 @@ object IntervalUtils {
           seconds = 0
           secondsFraction = 0
         case ("hour", "second") =>
-          days = 0
+          if (resetValuesUpToFrom) days = 0
         case ("hour", "minute") =>
-          days = 0
+          if (resetValuesUpToFrom) days = 0
           seconds = 0
           secondsFraction = 0
         case ("minute", "second") =>
-          days = 0
-          hours = 0
+          if (resetValuesUpToFrom) {
+            days = 0
+            hours = 0
+          }
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot support (interval '$input' $from to $to) expression")
