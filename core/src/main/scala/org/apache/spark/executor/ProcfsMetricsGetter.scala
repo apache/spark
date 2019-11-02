@@ -26,6 +26,8 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
+import org.apache.hadoop.util.Shell
+
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.Utils
@@ -62,13 +64,14 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
         SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
       val shouldLogStageExecutorProcessTreeMetrics =
         SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
-      procDirExists.get && shouldLogStageExecutorProcessTreeMetrics && shouldLogStageExecutorMetrics
+      procDirExists.get && shouldLogStageExecutorProcessTreeMetrics &&
+        shouldLogStageExecutorMetrics && Shell.LINUX
     }
   }
 
   private def computePid(): Int = {
     if (!isAvailable || testing) {
-      return -1;
+      return -1
     }
     try {
       // This can be simplified in java9:
@@ -88,7 +91,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
 
   private def computePageSize(): Long = {
     if (testing) {
-      return 4096;
+      return 4096
     }
     try {
       val cmd = Array("getconf", "PAGESIZE")
