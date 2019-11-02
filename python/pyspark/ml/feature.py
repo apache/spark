@@ -24,7 +24,8 @@ from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, \
+    JavaUnaryTransformer, _jvm
 from pyspark.ml.common import inherit_doc
 
 __all__ = ['Binarizer',
@@ -929,7 +930,7 @@ class CountVectorizerModel(JavaModel, _CountVectorizerParams, JavaMLReadable, Ja
 
 
 @inherit_doc
-class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class DCT(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that takes the 1D discrete cosine transform
     of a real vector. No zero padding is performed on the input vector.
@@ -1014,10 +1015,24 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
         """
         return self._set(outputCol=value)
 
+    @since("3.0.0")
+    def createTransformFunc(self):
+        self._transfer_params_to_java()
+        return self._java_obj.createTransformFunc()
+
+    @since("3.0.0")
+    def outputDataType(self):
+        self._transfer_params_to_java()
+        return self._java_obj.outputDataType()
+
+    @since("3.0.0")
+    def validateInputType(self, inputType):
+        self._transfer_params_to_java()
+        self._java_obj.validateInputType(inputType)
+
 
 @inherit_doc
-class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
-                         JavaMLWritable):
+class ElementwiseProduct(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     Outputs the Hadamard product (i.e., the element-wise product) of each input vector
     with a provided "weight" vector. In other words, it scales each column of the dataset
@@ -1094,6 +1109,21 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def createTransformFunc(self):
+        self._transfer_params_to_java()
+        return self._java_obj.createTransformFunc()
+
+    @since("3.0.0")
+    def outputDataType(self):
+        self._transfer_params_to_java()
+        return self._java_obj.outputDataType()
+
+    @since("3.0.0")
+    def validateInputType(self, inputType):
+        self._transfer_params_to_java()
+        self._java_obj.validateInputType(inputType)
 
 
 @inherit_doc
@@ -2192,7 +2222,7 @@ class MinMaxScalerModel(JavaModel, _MinMaxScalerParams, JavaMLReadable, JavaMLWr
 
 @inherit_doc
 @ignore_unicode_prefix
-class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class NGram(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that converts the input array of strings into an array of n-grams. Null
     values in the input array are ignored.
@@ -2282,9 +2312,24 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
         """
         return self._set(outputCol=value)
 
+    @since("3.0.0")
+    def createTransformFunc(self):
+        self._transfer_params_to_java()
+        return self._java_obj.createTransformFunc()
+
+    @since("3.0.0")
+    def outputDataType(self):
+        self._transfer_params_to_java()
+        return self._java_obj.outputDataType()
+
+    @since("3.0.0")
+    def validateInputType(self, inputType):
+        self._transfer_params_to_java()
+        self._java_obj.validateInputType(inputType)
+
 
 @inherit_doc
-class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class Normalizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
      Normalize a vector to have unit norm using the given p-norm.
 
@@ -2361,6 +2406,21 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def createTransformFunc(self):
+        self._transfer_params_to_java()
+        return self._java_obj.createTransformFunc()
+
+    @since("3.0.0")
+    def outputDataType(self):
+        self._transfer_params_to_java()
+        return self._java_obj.outputDataType()
+
+    @since("3.0.0")
+    def validateInputType(self, inputType):
+        self._transfer_params_to_java()
+        self._java_obj.validateInputType(inputType)
 
 
 class _OneHotEncoderParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols,
@@ -2561,8 +2621,7 @@ class OneHotEncoderModel(JavaModel, _OneHotEncoderParams, JavaMLReadable, JavaML
 
 
 @inherit_doc
-class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
-                          JavaMLWritable):
+class PolynomialExpansion(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     Perform feature expansion in a polynomial space. As said in `wikipedia of Polynomial Expansion
     <http://en.wikipedia.org/wiki/Polynomial_expansion>`_, "In mathematics, an
@@ -2640,6 +2699,21 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def createTransformFunc(self):
+        self._transfer_params_to_java()
+        return self._java_obj.createTransformFunc()
+
+    @since("3.0.0")
+    def outputDataType(self):
+        self._transfer_params_to_java()
+        return self._java_obj.outputDataType()
+
+    @since("3.0.0")
+    def validateInputType(self, inputType):
+        self._transfer_params_to_java()
+        self._java_obj.validateInputType(inputType)
 
 
 @inherit_doc
@@ -3079,7 +3153,7 @@ class RobustScalerModel(JavaModel, _RobustScalerParams, JavaMLReadable, JavaMLWr
 
 @inherit_doc
 @ignore_unicode_prefix
-class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class RegexTokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     A regex based tokenizer that extracts tokens either by using the
     provided regex pattern (in Java dialect) to split the text
@@ -3221,6 +3295,21 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def createTransformFunc(self):
+        self._transfer_params_to_java()
+        return self._java_obj.createTransformFunc()
+
+    @since("3.0.0")
+    def outputDataType(self):
+        self._transfer_params_to_java()
+        return self._java_obj.outputDataType()
+
+    @since("3.0.0")
+    def validateInputType(self, inputType):
+        self._transfer_params_to_java()
+        self._java_obj.validateInputType(inputType)
 
 
 @inherit_doc
@@ -3901,7 +3990,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
 
 @inherit_doc
 @ignore_unicode_prefix
-class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class Tokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
     """
     A tokenizer that converts the input string to lowercase and then
     splits it by white spaces.
@@ -3965,6 +4054,21 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def createTransformFunc(self):
+        self._transfer_params_to_java()
+        return self._java_obj.createTransformFunc()
+
+    @since("3.0.0")
+    def outputDataType(self):
+        self._transfer_params_to_java()
+        return self._java_obj.outputDataType()
+
+    @since("3.0.0")
+    def validateInputType(self, inputType):
+        self._transfer_params_to_java()
+        self._java_obj.validateInputType(inputType)
 
 
 @inherit_doc
