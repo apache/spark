@@ -160,6 +160,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     new HistoryServerDiskManager(conf, path, listing, clock)
   }
 
+  private val fileCompactor = new EventLogFileCompactor(conf, hadoopConf, fs)
+
   private val blacklist = new ConcurrentHashMap[String, Long]
 
   // Visible for testing
@@ -963,8 +965,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } replayBus.addListener(listener)
 
     try {
+      logInfo(s"Compacting ${reader.rootPath}...")
+      val newEventLogFiles = fileCompactor.compact(reader.listEventLogFiles)
       logInfo(s"Parsing ${reader.rootPath} to re-build UI...")
-      parseAppEventLogs(reader.listEventLogFiles, replayBus, !reader.completed)
+      parseAppEventLogs(newEventLogFiles, replayBus, !reader.completed)
       trackingStore.close(false)
       logInfo(s"Finished parsing ${reader.rootPath}")
     } catch {

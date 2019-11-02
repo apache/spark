@@ -113,9 +113,9 @@ abstract class EventLogFileWriter(
     }
   }
 
-  protected def writeJson(json: String, flushLogger: Boolean = false): Unit = {
+  protected def writeLine(line: String, flushLogger: Boolean = false): Unit = {
     // scalastyle:off println
-    writer.foreach(_.println(json))
+    writer.foreach(_.println(line))
     // scalastyle:on println
     if (flushLogger) {
       writer.foreach(_.flush())
@@ -164,6 +164,7 @@ abstract class EventLogFileWriter(
 object EventLogFileWriter {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
+  val COMPACTED = ".compact"
 
   val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
@@ -192,9 +193,11 @@ object EventLogFileWriter {
   def codecName(log: Path): Option[String] = {
     // Compression codec is encoded as an extension, e.g. app_123.lzf
     // Since we sanitize the app ID to not include periods, it is safe to split on it
-    val logName = log.getName.stripSuffix(IN_PROGRESS)
+    val logName = log.getName.stripSuffix(COMPACTED).stripSuffix(IN_PROGRESS)
     logName.split("\\.").tail.lastOption
   }
+
+  def isCompacted(log: Path): Boolean = log.getName.endsWith(COMPACTED)
 }
 
 /**
@@ -222,7 +225,7 @@ class SingleEventLogFileWriter(
   }
 
   override def writeEvent(eventJson: String, flushLogger: Boolean = false): Unit = {
-    writeJson(eventJson, flushLogger)
+    writeLine(eventJson, flushLogger)
   }
 
   /**
@@ -327,7 +330,7 @@ class RollingEventLogFilesWriter(
       }
     }
 
-    writeJson(eventJson, flushLogger)
+    writeLine(eventJson, flushLogger)
   }
 
   private def rollEventLogFile(): Unit = {
