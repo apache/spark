@@ -84,6 +84,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-activeBatches','aggregated-activeBatches');
   collapseTablePageLoad('collapse-aggregated-completedBatches','aggregated-completedBatches');
 });
+
 $(function() {
     // Show/hide full job description on click event.
     $(".description-input").click(function() {
