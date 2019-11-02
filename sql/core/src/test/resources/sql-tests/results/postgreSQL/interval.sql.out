@@ -149,46 +149,46 @@ interval 1 days 2 hours 3 minutes 4 seconds
 -- !query 18
 SELECT interval '1 2:03' hour to minute
 -- !query 18 schema
-struct<interval 2 hours 3 minutes:interval>
+struct<interval 1 days 2 hours 3 minutes:interval>
 -- !query 18 output
-interval 2 hours 3 minutes
+interval 1 days 2 hours 3 minutes
 
 
 -- !query 19
 SELECT interval '1 2:03:04' hour to minute
 -- !query 19 schema
-struct<interval 2 hours 3 minutes:interval>
+struct<interval 1 days 2 hours 3 minutes:interval>
 -- !query 19 output
-interval 2 hours 3 minutes
+interval 1 days 2 hours 3 minutes
 
 
 -- !query 20
 SELECT interval '1 2:03' hour to second
 -- !query 20 schema
-struct<interval 2 hours 3 minutes:interval>
+struct<interval 1 days 2 hours 3 minutes:interval>
 -- !query 20 output
-interval 2 hours 3 minutes
+interval 1 days 2 hours 3 minutes
 
 
 -- !query 21
 SELECT interval '1 2:03:04' hour to second
 -- !query 21 schema
-struct<interval 2 hours 3 minutes 4 seconds:interval>
+struct<interval 1 days 2 hours 3 minutes 4 seconds:interval>
 -- !query 21 output
-interval 2 hours 3 minutes 4 seconds
+interval 1 days 2 hours 3 minutes 4 seconds
 
 
 -- !query 22
 SELECT interval '1 2:03' minute to second
 -- !query 22 schema
-struct<interval 2 minutes 3 seconds:interval>
+struct<interval 1 days 2 minutes 3 seconds:interval>
 -- !query 22 output
-interval 2 minutes 3 seconds
+interval 1 days 2 minutes 3 seconds
 
 
 -- !query 23
 SELECT interval '1 2:03:04' minute to second
 -- !query 23 schema
-struct<interval 3 minutes 4 seconds:interval>
+struct<interval 1 days 2 hours 3 minutes 4 seconds:interval>
 -- !query 23 output
-interval 3 minutes 4 seconds
+interval 1 days 2 hours 3 minutes 4 seconds
