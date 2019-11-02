@@ -84,7 +84,7 @@ select timestamp '2016-33-11 20:54:00.000';
 
 -- interval
 select interval 13.123456789 seconds, interval -13.123456789 second;
-select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond, 9 microsecond;
+select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond;
 select interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second;
 select interval '0 0:0:0.1' day to second;
 select interval '10-9' year to month;

@@ -323,33 +323,33 @@ select timestamp '2016-33-11 20:54:00.000'
 -- !query 34
 select interval 13.123456789 seconds, interval -13.123456789 second
 -- !query 34 schema
-struct<interval 13 seconds 123 milliseconds 456 microseconds:interval,interval -13 seconds -123 milliseconds -456 microseconds:interval>
+struct<interval 13.123456 seconds:interval,interval -13.123456 seconds:interval>
 -- !query 34 output
-interval 13 seconds 123 milliseconds 456 microseconds	interval -13 seconds -123 milliseconds -456 microseconds
+interval 13.123456 seconds	interval -13.123456 seconds
 
 
 -- !query 35
-select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond, 9 microsecond
+select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond
 -- !query 35 schema
-struct<interval 1 years 2 months 3 weeks 4 days 5 hours 6 minutes 7 seconds 8 milliseconds:interval,microsecond:int>
+struct<interval 1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds:interval>
 -- !query 35 output
-interval 1 years 2 months 3 weeks 4 days 5 hours 6 minutes 7 seconds 8 milliseconds	9
+interval 1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds
 
 
 -- !query 36
 select interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second
 -- !query 36 schema
-struct<interval 32 years 1 months -14 weeks -2 days 41 hours 24 minutes 59 seconds 889 milliseconds 987 microseconds:interval>
+struct<interval 32 years 1 months -100 days 41 hours 24 minutes 59.889987 seconds:interval>
 -- !query 36 output
-interval 32 years 1 months -14 weeks -2 days 41 hours 24 minutes 59 seconds 889 milliseconds 987 microseconds
+interval 32 years 1 months -100 days 41 hours 24 minutes 59.889987 seconds
 
 
 -- !query 37
 select interval '0 0:0:0.1' day to second
 -- !query 37 schema
-struct<interval 100 milliseconds:interval>
+struct<interval 0.1 seconds:interval>
 -- !query 37 output
-interval 100 milliseconds
+interval 0.1 seconds
 
 
 -- !query 38
@@ -363,25 +363,25 @@ interval 10 years 9 months
 -- !query 39
 select interval '20 15:40:32.99899999' day to hour
 -- !query 39 schema
-struct<interval 2 weeks 6 days 15 hours:interval>
+struct<interval 20 days 15 hours:interval>
 -- !query 39 output
-interval 2 weeks 6 days 15 hours
+interval 20 days 15 hours
 
 
 -- !query 40
 select interval '20 15:40:32.99899999' day to minute
 -- !query 40 schema
-struct<interval 2 weeks 6 days 15 hours 40 minutes:interval>
+struct<interval 20 days 15 hours 40 minutes:interval>
 -- !query 40 output
-interval 2 weeks 6 days 15 hours 40 minutes
+interval 20 days 15 hours 40 minutes
 
 
 -- !query 41
 select interval '20 15:40:32.99899999' day to second
 -- !query 41 schema
-struct<interval 2 weeks 6 days 15 hours 40 minutes 32 seconds 998 milliseconds 999 microseconds:interval>
+struct<interval 20 days 15 hours 40 minutes 32.998999 seconds:interval>
 -- !query 41 output
-interval 2 weeks 6 days 15 hours 40 minutes 32 seconds 998 milliseconds 999 microseconds
+interval 20 days 15 hours 40 minutes 32.998999 seconds
 
 
 -- !query 42
@@ -395,9 +395,9 @@ interval 15 hours 40 minutes
 -- !query 43
 select interval '15:40.99899999' hour to second
 -- !query 43 schema
-struct<interval 15 minutes 40 seconds 998 milliseconds 999 microseconds:interval>
+struct<interval 15 minutes 40.998999 seconds:interval>
 -- !query 43 output
-interval 15 minutes 40 seconds 998 milliseconds 999 microseconds
+interval 15 minutes 40.998999 seconds
 
 
 -- !query 44
@@ -411,25 +411,25 @@ interval 15 hours 40 minutes
 -- !query 45
 select interval '15:40:32.99899999' hour to second
 -- !query 45 schema
-struct<interval 15 hours 40 minutes 32 seconds 998 milliseconds 999 microseconds:interval>
+struct<interval 15 hours 40 minutes 32.998999 seconds:interval>
 -- !query 45 output
-interval 15 hours 40 minutes 32 seconds 998 milliseconds 999 microseconds
+interval 15 hours 40 minutes 32.998999 seconds
 
 
 -- !query 46
 select interval '20 40:32.99899999' minute to second
 -- !query 46 schema
-struct<interval 2 weeks 6 days 40 minutes 32 seconds 998 milliseconds 999 microseconds:interval>
+struct<interval 20 days 40 minutes 32.998999 seconds:interval>
 -- !query 46 output
-interval 2 weeks 6 days 40 minutes 32 seconds 998 milliseconds 999 microseconds
+interval 20 days 40 minutes 32.998999 seconds
 
 
 -- !query 47
 select interval '40:32.99899999' minute to second
 -- !query 47 schema
-struct<interval 40 minutes 32 seconds 998 milliseconds 999 microseconds:interval>
+struct<interval 40 minutes 32.998999 seconds:interval>
 -- !query 47 output
-interval 40 minutes 32 seconds 998 milliseconds 999 microseconds
+interval 40 minutes 32.998999 seconds
 
 
 -- !query 48
@@ -523,9 +523,9 @@ struct<3.14:decimal(3,2),-3.14:decimal(3,2),3.14E+8:decimal(3,-6),3.14E-8:decima
 -- !query 56
 select map(1, interval 1 day, 2, interval 3 week)
 -- !query 56 schema
-struct<map(1, interval 1 days, 2, interval 3 weeks):map<int,interval>>
+struct<map(1, interval 1 days, 2, interval 21 days):map<int,interval>>
 -- !query 56 output
-{1:interval 1 days,2:interval 3 weeks}
+{1:interval 1 days,2:interval 21 days}
 
 
 -- !query 57
