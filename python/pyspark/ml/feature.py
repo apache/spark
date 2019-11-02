@@ -1015,17 +1015,14 @@ class DCT(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @since("3.0.0")
     def createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    @since("3.0.0")
     def outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    @since("3.0.0")
     def validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
@@ -1110,17 +1107,14 @@ class ElementwiseProduct(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @since("3.0.0")
     def createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    @since("3.0.0")
     def outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    @since("3.0.0")
     def validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
@@ -2312,17 +2306,14 @@ class NGram(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @since("3.0.0")
     def createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    @since("3.0.0")
     def outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    @since("3.0.0")
     def validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
@@ -2407,17 +2398,14 @@ class Normalizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @since("3.0.0")
     def createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    @since("3.0.0")
     def outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    @since("3.0.0")
     def validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
@@ -2700,17 +2688,14 @@ class PolynomialExpansion(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @since("3.0.0")
     def createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    @since("3.0.0")
     def outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    @since("3.0.0")
     def validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
@@ -3296,17 +3281,14 @@ class RegexTokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @since("3.0.0")
     def createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    @since("3.0.0")
     def outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    @since("3.0.0")
     def validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
@@ -4055,17 +4037,14 @@ class Tokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    @since("3.0.0")
     def createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    @since("3.0.0")
     def outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    @since("3.0.0")
     def validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
