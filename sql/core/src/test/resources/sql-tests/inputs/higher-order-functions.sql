@@ -12,9 +12,14 @@ select transform(zs, z -> z) as v from nested;
 
 -- Transform an array
 select transform(ys, y -> y * y) as v from nested;
+-- use non reversed keywords
+select transform(ys, left -> left * left) as v from nested;
+
 
 -- Transform an array with index
 select transform(ys, (y, i) -> y + i) as v from nested;
+-- use non reversed keywords
+select transform(ys, (cost, i) -> cost + i) as v from nested;
 
 -- Transform an array with reference
 select transform(zs, z -> concat(ys, z)) as v from nested;
