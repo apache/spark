@@ -26,11 +26,12 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
+class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   val TimeZonePST = TimeZone.getTimeZone("PST")
   private def defaultZoneId = ZoneId.systemDefault()
@@ -605,48 +606,34 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
   }
 
   test("special timestamp values") {
-    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-      withClue(s"zoneId = $zoneId, current time = ${LocalDateTime.now(zoneId)}") {
-        // The test can fail around midnight if it gets the reference value
-        // before midnight but tested code resolves special value after midnight.
-        // Retry can guarantee that both values were taken on the same day.
-        retry(1) {
-          val tolerance = TimeUnit.SECONDS.toMicros(30)
+    testSpecialDatetimeValues { zoneId =>
+      val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-          assert(toTimestamp("Epoch", zoneId).get === 0)
-          val now = instantToMicros(Instant.now())
-          toTimestamp("NOW", zoneId).get should be(now +- tolerance)
-          assert(toTimestamp("now UTC", zoneId) === None)
-          val localToday = LocalDateTime.now(zoneId)
-            .`with`(LocalTime.MIDNIGHT)
-            .atZone(zoneId)
-          val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
-          toTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
-          val today = instantToMicros(localToday.toInstant)
-          toTimestamp("Today ", zoneId).get should be(today +- tolerance)
-          val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
-          toTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
-        }
-      }
+      assert(toTimestamp("Epoch", zoneId).get === 0)
+      val now = instantToMicros(Instant.now())
+      toTimestamp("NOW", zoneId).get should be(now +- tolerance)
+      assert(toTimestamp("now UTC", zoneId) === None)
+      val localToday = LocalDateTime.now(zoneId)
+        .`with`(LocalTime.MIDNIGHT)
+        .atZone(zoneId)
+      val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
+      toTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
+      val today = instantToMicros(localToday.toInstant)
+      toTimestamp("Today ", zoneId).get should be(today +- tolerance)
+      val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
+      toTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
     }
   }
 
   test("special date values") {
-    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-      withClue(s"zoneId = $zoneId, current time = ${LocalDateTime.now(zoneId)}") {
-        // The test can fail around midnight if it gets the reference value
-        // before midnight but tested code resolves special value after midnight.
-        // Retry can guarantee that both values were taken on the same day.
-        retry(1) {
-          assert(toDate("epoch", zoneId).get === 0)
-          val today = localDateToDays(LocalDate.now(zoneId))
-          assert(toDate("YESTERDAY", zoneId).get === today - 1)
-          assert(toDate(" Now ", zoneId).get === today)
-          assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
-          assert(toDate("today", zoneId).get === today)
-          assert(toDate("tomorrow CET ", zoneId).get === today + 1)
-        }
-      }
+    testSpecialDatetimeValues { zoneId =>
+      assert(toDate("epoch", zoneId).get === 0)
+      val today = localDateToDays(LocalDate.now(zoneId))
+      assert(toDate("YESTERDAY", zoneId).get === today - 1)
+      assert(toDate(" Now ", zoneId).get === today)
+      assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
+      assert(toDate("today", zoneId).get === today)
+      assert(toDate("tomorrow CET ", zoneId).get === today + 1)
     }
   }
 }
