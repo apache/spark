@@ -1202,6 +1202,12 @@ class DDLParserSuite extends AnalysisTest {
       AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
   }
 
+  test("show current catalog") {
+    comparePlans(
+      parsePlan("SHOW CURRENT CATALOG"),
+      ShowCurrentCatalogStatement())
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],

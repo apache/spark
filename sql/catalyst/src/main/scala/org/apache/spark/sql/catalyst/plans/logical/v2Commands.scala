@@ -362,3 +362,11 @@ case class SetCatalogAndNamespace(
 case class RefreshTable(
     catalog: TableCatalog,
     ident: Identifier) extends Command
+
+/**
+ * The logical plan of the SHOW CURRENT CATALOG command that works for v2 catalogs.
+ */
+case class ShowCurrentCatalog(catalogManager: CatalogManager) extends Command {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("catalogName", StringType, nullable = false)())
+}

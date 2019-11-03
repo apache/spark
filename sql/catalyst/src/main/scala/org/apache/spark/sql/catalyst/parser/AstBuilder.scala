@@ -2951,4 +2951,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRecoverPartitionsStatement(visitMultipartIdentifier(ctx.multipartIdentifier))
   }
+
+  /**
+   * Create a [[ShowCurrentCatalogStatement]].
+   */
+  override def visitShowCurrentCatalog(
+      ctx: ShowCurrentCatalogContext) : LogicalPlan = withOrigin(ctx) {
+    ShowCurrentCatalogStatement()
+  }
 }

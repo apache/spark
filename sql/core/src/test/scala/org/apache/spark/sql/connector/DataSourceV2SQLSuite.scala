@@ -990,6 +990,24 @@ class DataSourceV2SQLSuite
     assert(catalogManager.currentNamespace === Array("ns1", "ns2"))
   }
 
+  test("ShowCurrentCatalog: basic tests") {
+    def testShowCurrentCatalog(expectedCatalogName: String): Unit = {
+      val schema = new StructType().add("catalogName", StringType, nullable = false)
+      val df = sql("SHOW CURRENT CATALOG")
+      val rows = df.collect
+
+      assert(df.schema === schema)
+      assert(rows.length == 1)
+      assert(rows(0).getAs[String](0) === expectedCatalogName)
+    }
+
+    // Initially, the v2 session catalog is set as a current catalog.
+    testShowCurrentCatalog("spark_catalog")
+
+    sql("Use testcat")
+    testShowCurrentCatalog("testcat")
+  }
+
   test("tableCreation: partition column case insensitive resolution") {
     val testCatalog = catalog("testcat").asTableCatalog
     val sessionCatalog = catalog(SESSION_CATALOG_NAME).asTableCatalog

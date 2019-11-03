@@ -401,3 +401,8 @@ case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
 case class ShowColumnsStatement(
     table: Seq[String],
     namespace: Option[Seq[String]]) extends ParsedStatement
+
+/**
+ * A SHOW CURRENT CATALOG statement, as parsed from SQL
+ */
+case class ShowCurrentCatalogStatement() extends ParsedStatement
