@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
+import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
@@ -606,33 +606,47 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
 
   test("special timestamp values") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-      val tolerance = TimeUnit.SECONDS.toMicros(30)
+      withClue(s"zoneId = $zoneId, current time = ${LocalDateTime.now(zoneId)}") {
+        // The test can fail around midnight if it gets the reference value
+        // before midnight but tested code resolves special value after midnight.
+        // Retry can guarantee that both values were taken on the same day.
+        retry(1) {
+          val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-      assert(toTimestamp("Epoch", zoneId).get === 0)
-      val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
-      toTimestamp("NOW", zoneId).get should be (now +- tolerance)
-      assert(toTimestamp("now UTC", zoneId) === None)
-      val localToday = LocalDateTime.now(zoneId)
-        .`with`(LocalTime.MIDNIGHT)
-        .atZone(zoneId)
-      val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
-      toTimestamp(" Yesterday", zoneId).get should be (yesterday +- tolerance)
-      val today = instantToMicros(localToday.toInstant)
-      toTimestamp("Today ", zoneId).get should be (today +- tolerance)
-      val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
-      toTimestamp(" tomorrow CET ", zoneId).get should be (tomorrow +- tolerance)
+          assert(toTimestamp("Epoch", zoneId).get === 0)
+          val now = instantToMicros(Instant.now())
+          toTimestamp("NOW", zoneId).get should be(now +- tolerance)
+          assert(toTimestamp("now UTC", zoneId) === None)
+          val localToday = LocalDateTime.now(zoneId)
+            .`with`(LocalTime.MIDNIGHT)
+            .atZone(zoneId)
+          val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
+          toTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
+          val today = instantToMicros(localToday.toInstant)
+          toTimestamp("Today ", zoneId).get should be(today +- tolerance)
+          val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
+          toTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
+        }
+      }
     }
   }
 
   test("special date values") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-      assert(toDate("epoch", zoneId).get === 0)
-      val today = localDateToDays(LocalDate.now(zoneId))
-      assert(toDate("YESTERDAY", zoneId).get === today - 1)
-      assert(toDate(" Now ", zoneId).get === today)
-      assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
-      assert(toDate("today", zoneId).get === today)
-      assert(toDate("tomorrow CET ", zoneId).get === today + 1)
+      withClue(s"zoneId = $zoneId, current time = ${LocalDateTime.now(zoneId)}") {
+        // The test can fail around midnight if it gets the reference value
+        // before midnight but tested code resolves special value after midnight.
+        // Retry can guarantee that both values were taken on the same day.
+        retry(1) {
+          assert(toDate("epoch", zoneId).get === 0)
+          val today = localDateToDays(LocalDate.now(zoneId))
+          assert(toDate("YESTERDAY", zoneId).get === today - 1)
+          assert(toDate(" Now ", zoneId).get === today)
+          assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
+          assert(toDate("today", zoneId).get === today)
+          assert(toDate("tomorrow CET ", zoneId).get === today + 1)
+        }
+      }
     }
   }
 }
