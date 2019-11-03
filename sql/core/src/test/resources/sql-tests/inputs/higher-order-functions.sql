@@ -12,14 +12,9 @@ select transform(zs, z -> z) as v from nested;
 
 -- Transform an array
 select transform(ys, y -> y * y) as v from nested;
--- use non reversed keywords
-select transform(ys, left -> left * left) as v from nested;
-
 
 -- Transform an array with index
 select transform(ys, (y, i) -> y + i) as v from nested;
--- use non reversed keywords
-select transform(ys, (cost, i) -> cost + i) as v from nested;
 
 -- Transform an array with reference
 select transform(zs, z -> concat(ys, z)) as v from nested;
@@ -88,3 +83,12 @@ select transform_values(ys, (k, v) -> v + 1) as v from nested;
 
 -- Transform values in a map using values
 select transform_values(ys, (k, v) -> k + v) as v from nested;
+
+-- use non reversed keywords: all is non reversed only if !ansi
+select transform(ys, all -> all * all) as v from values (array(32, 97)) as t(ys);
+select transform(ys, (all, i) -> all + i) as v from values (array(32, 97)) as t(ys);
+
+set spark.sql.ansi.enabled=true;
+select transform(ys, all -> all * all) as v from values (array(32, 97)) as t(ys);
+select transform(ys, (all, i) -> all + i) as v from values (array(32, 97)) as t(ys);
+set spark.sql.ansi.enabled=false;
