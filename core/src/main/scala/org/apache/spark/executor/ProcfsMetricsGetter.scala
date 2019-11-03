@@ -26,8 +26,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
-import org.apache.hadoop.util.Shell
-
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.Utils
@@ -64,8 +62,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
         SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
       val shouldLogStageExecutorProcessTreeMetrics =
         SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
-      procDirExists.get && shouldLogStageExecutorProcessTreeMetrics &&
-        shouldLogStageExecutorMetrics && Shell.LINUX
+      System.getProperty("os.name").startsWith("Linux") && procDirExists.get &&
+        shouldLogStageExecutorProcessTreeMetrics && shouldLogStageExecutorMetrics
     }
   }
 
