@@ -217,6 +217,8 @@ license: |
   For example `SELECT timestamp 'tomorrow';`.
 
   - Since Spark 3.0, the `size` function returns `NULL` for the `NULL` input. In Spark version 2.4 and earlier, this function gives `-1` for the same input. To restore the behavior before Spark 3.0, you can set `spark.sql.legacy.sizeOfNull` to `true`.
+  
+  - Since Spark 3.0, when `array` function is called without parameters, it returns `array<null>`.
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
