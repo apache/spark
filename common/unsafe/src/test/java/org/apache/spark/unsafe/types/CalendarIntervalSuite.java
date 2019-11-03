@@ -77,21 +77,21 @@ public class CalendarIntervalSuite {
   public void addTest() {
     CalendarInterval input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR);
     CalendarInterval input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR);
-    assertEquals(input1.add(input2), new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR));
+    assertEquals(new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR), input1.add(input2));
 
     input1 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR);
     input2 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR);
-    assertEquals(input1.add(input2), new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR));
+    assertEquals(new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR), input1.add(input2));
   }
 
   @Test
   public void subtractTest() {
     CalendarInterval input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR);
     CalendarInterval input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR);
-    assertEquals(input1.subtract(input2), new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR));
+    assertEquals(new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR), input1.subtract(input2));
 
     input1 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR);
     input2 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR);
-    assertEquals(input1.subtract(input2), new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR));
+    assertEquals(new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR), input1.subtract(input2));
   }
 }
