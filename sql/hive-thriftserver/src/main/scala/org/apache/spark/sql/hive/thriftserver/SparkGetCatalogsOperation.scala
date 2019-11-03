@@ -44,7 +44,8 @@ private[hive] class SparkGetCatalogsOperation(
 
   override def close(): Unit = {
     super.close()
-    HiveThriftServer2.listener.onOperationClosed(statementId)
+    HiveThriftServer2.listener.postLiveListenerBus(SparkListenerOperationClosed(statementId,
+      System.currentTimeMillis()))
   }
 
   override def runInternal(): Unit = {
@@ -56,12 +57,13 @@ private[hive] class SparkGetCatalogsOperation(
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-    HiveThriftServer2.listener.onStatementStart(
+    HiveThriftServer2.listener.postLiveListenerBus(SparkListenerStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
       statementId,
-      parentSession.getUsername)
+      System.currentTimeMillis(),
+      parentSession.getUsername))
 
     try {
       if (isAuthV2Enabled) {
@@ -74,16 +76,19 @@ private[hive] class SparkGetCatalogsOperation(
         setState(OperationState.ERROR)
         e match {
           case hiveException: HiveSQLException =>
-            HiveThriftServer2.listener.onStatementError(
-              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+            HiveThriftServer2.listener.postLiveListenerBus(SparkListenerStatementError(
+              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException),
+              System.currentTimeMillis()))
             throw hiveException
           case _ =>
             val root = ExceptionUtils.getRootCause(e)
-            HiveThriftServer2.listener.onStatementError(
-              statementId, root.getMessage, SparkUtils.exceptionString(root))
+            HiveThriftServer2.listener.postLiveListenerBus(SparkListenerStatementError(
+              statementId, root.getMessage, SparkUtils.exceptionString(root),
+              System.currentTimeMillis()))
             throw new HiveSQLException("Error getting catalogs: " + root.toString, root)
         }
     }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    HiveThriftServer2.listener.postLiveListenerBus(SparkListenerStatementFinish(statementId,
+      System.currentTimeMillis()))
   }
 }

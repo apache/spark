@@ -59,7 +59,8 @@ private[hive] class SparkGetTablesOperation(
 
   override def close(): Unit = {
     super.close()
-    HiveThriftServer2.listener.onOperationClosed(statementId)
+    HiveThriftServer2.listener.postLiveListenerBus(SparkListenerOperationClosed(statementId,
+      System.currentTimeMillis()))
   }
 
   override def runInternal(): Unit = {
@@ -85,12 +86,13 @@ private[hive] class SparkGetTablesOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr)
     }
 
-    HiveThriftServer2.listener.onStatementStart(
+    HiveThriftServer2.listener.postLiveListenerBus(SparkListenerStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       logMsg,
       statementId,
-      parentSession.getUsername)
+      System.currentTimeMillis(),
+      parentSession.getUsername))
 
     try {
       // Tables and views
@@ -124,17 +126,20 @@ private[hive] class SparkGetTablesOperation(
         setState(OperationState.ERROR)
         e match {
           case hiveException: HiveSQLException =>
-            HiveThriftServer2.listener.onStatementError(
-              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+            HiveThriftServer2.listener.postLiveListenerBus(SparkListenerStatementError(
+              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException),
+              System.currentTimeMillis()))
             throw hiveException
           case _ =>
             val root = ExceptionUtils.getRootCause(e)
-            HiveThriftServer2.listener.onStatementError(
-              statementId, root.getMessage, SparkUtils.exceptionString(root))
+            HiveThriftServer2.listener.postLiveListenerBus(SparkListenerStatementError(
+              statementId, root.getMessage, SparkUtils.exceptionString(root),
+              System.currentTimeMillis()))
             throw new HiveSQLException("Error getting tables: " + root.toString, root)
         }
     }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    HiveThriftServer2.listener.postLiveListenerBus(SparkListenerStatementFinish(statementId,
+      System.currentTimeMillis()))
   }
 
   private def addToRowSet(

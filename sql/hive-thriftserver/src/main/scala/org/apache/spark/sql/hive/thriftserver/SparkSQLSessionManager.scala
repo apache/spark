@@ -55,8 +55,12 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       super.openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
           delegationToken)
     val session = super.getSession(sessionHandle)
-    HiveThriftServer2.listener.onSessionCreated(
-      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
+
+    HiveThriftServer2.listener.postLiveListenerBus(SparkListenerSessionCreated(
+      session.getIpAddress,
+      sessionHandle.getSessionId.toString,
+      session.getUsername,
+      System.currentTimeMillis()))
     val ctx = if (sqlContext.conf.hiveThriftServerSingleSession) {
       sqlContext
     } else {
@@ -74,7 +78,8 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
   }
 
   override def closeSession(sessionHandle: SessionHandle): Unit = {
-    HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
+    HiveThriftServer2.listener.postLiveListenerBus(
+      SparkListenerSessionClosed(sessionHandle.getSessionId.toString, System.currentTimeMillis()))
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
