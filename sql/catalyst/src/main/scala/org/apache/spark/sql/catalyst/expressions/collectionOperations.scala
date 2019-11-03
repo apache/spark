@@ -3937,9 +3937,20 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 3);
        [1,2,3,3]
+      > SELECT _FUNC_(array(1, 2, 3), null);
+       [1,2,3,null]
+      > SELECT _FUNC_(a, e) FROM VALUES (array(1,2), 3), (array(3, 4), null), (null, 3) tbl(a, e);
+       NULL
+       [1,2,3]
+       [3,4,null]
   """,
   since = "3.0.0")
 case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpression {
+
+  override def nullable: Boolean = left.dataType match {
+    case  _: ArrayType => left.nullable
+    case _ => false
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = left.dataType match {
     case ArrayType(et, _) => right.dataType match {
@@ -3964,7 +3975,11 @@ case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpres
     val array = left.eval(input)
     val elem = right.eval(input)
     if (array == null) {
-      new GenericArrayData(Array(elem))
+      if (elem == null) {
+        null
+      } else {
+        new GenericArrayData(Array(elem))
+      }
     } else {
       new GenericArrayData(array.asInstanceOf[ArrayData].array ++ Array(elem))
     }
@@ -3978,11 +3993,14 @@ case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpres
         code = code"""$allocation$assigns""",
         value = JavaCode.variable(arrayData, dataType),
         isNull = FalseLiteral)
-    case ArrayType(et, _) => defineCodeGen(ctx, ev, (inputArray, ne) => {
+    case ArrayType(et, _) =>
+      val leftGen = left.genCode(ctx)
+      val rightGen = right.genCode(ctx)
+      val inputArray = leftGen.value
+      val elementToAppend = rightGen.value
       val newArray = ctx.freshName("newArray")
       val oldArraySize = ctx.freshName("oldArraySize")
       val newArraySize = ctx.freshName("newArraySize")
-
       val allocation =
         CodeGenerator.createArrayData(newArray, et, newArraySize, s"$prettyName failed")
 
@@ -3990,25 +4008,47 @@ case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpres
       val assignment =
         CodeGenerator.createArrayAssignment(newArray, et, inputArray, i, i, true)
 
-      val setNewValue =
-        CodeGenerator.setArrayElement(newArray, et, oldArraySize, ne, Some(s"$ne == null"))
+      val setNewValue = CodeGenerator.setArrayElement(
+        newArray, et, oldArraySize, elementToAppend, Some(s"${rightGen.isNull}"))
 
-      s"""
-         |int $oldArraySize = $inputArray.numElements();
-         |int $newArraySize = $inputArray.numElements() + 1;
-         |$allocation
-         |for (int $i = 0; i < $inputArray.numElements(); $i ++) {
-         |  $assignment
-         |}
-         |$setNewValue
-         |${ev.value} = $newArray;
-         |""".stripMargin
-    })
+      val resultCode =
+        s"""
+           |int $oldArraySize = $inputArray.numElements();
+           |int $newArraySize = $oldArraySize + 1;
+           |$allocation
+           |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
+           |  $assignment
+           |}
+           |$setNewValue
+           |${ev.value} = $newArray;
+           |""".stripMargin
+
+      if (nullable) {
+        val nullSafeEval =
+          leftGen.code + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
+            s"""
+               |${rightGen.code}
+               |${ev.isNull} = false; // resultCode could change nullability.
+               |$resultCode
+               |""".stripMargin
+          }
+        ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+      } else {
+        ev.copy(code = code"""
+        ${leftGen.code}
+        ${rightGen.code}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+      }
   }
 
   override def dataType: DataType = left.dataType match {
     case NullType => ArrayType(right.dataType, containsNull = false)
-    case at: ArrayType => at
+    case ArrayType(elementType, containsNull) =>
+      ArrayType(elementType, containsNull || right.nullable)
   }
 
   override def prettyName: String = "array_append"

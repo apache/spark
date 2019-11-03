@@ -96,8 +96,11 @@ from primitive_arrays;
 select array_append(array(1,2), 3);
 select array_append(array(1,2), null);
 select array_append(array('3', '2'), '3');
+select array_append(array('3', '2'), null);
 select array_append(array(null), null);
 select array_append(null, 3);
+
+select array_append(a, e) from VALUES (array(1,2), 3), (array(3, 4), null), (null, 3), (null, null) tbl(a, e);
 
 -- unsupported cases
 select array_append(array(1.1, 2.2), 3);
