@@ -264,7 +264,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
                     s"watermark calculation. Use interval in terms of day instead.")
                 Literal(0.0)
               } else {
-                Literal(calendarInterval.microseconds.toDouble)
+                Literal(calendarInterval.days * CalendarInterval.MICROS_PER_DAY.toDouble +
+                  calendarInterval.microseconds.toDouble)
               }
             case DoubleType =>
               Multiply(lit, Literal(1000000.0))

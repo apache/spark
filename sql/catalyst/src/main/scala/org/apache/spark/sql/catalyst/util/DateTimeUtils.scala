@@ -575,11 +575,13 @@ object DateTimeUtils {
   def timestampAddInterval(
       start: SQLTimestamp,
       months: Int,
+      days: Int,
       microseconds: Long,
       zoneId: ZoneId): SQLTimestamp = {
     val resultTimestamp = microsToInstant(start)
       .atZone(zoneId)
       .plusMonths(months)
+      .plusDays(days)
       .plus(microseconds, ChronoUnit.MICROS)
     instantToMicros(resultTimestamp.toInstant)
   }
@@ -963,7 +965,7 @@ object DateTimeUtils {
       LocalDate.ofEpochDay(startDate),
       LocalDate.ofEpochDay(endDate))
     val months = period.getMonths + 12 * period.getYears
-    val microseconds = period.getDays * MICROS_PER_DAY
-    new CalendarInterval(months, microseconds)
+    val days = period.getDays
+    new CalendarInterval(months, days, 0)
   }
 }
