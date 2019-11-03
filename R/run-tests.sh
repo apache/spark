@@ -32,10 +32,8 @@ NUM_TEST_WARNING="$(grep -c -e 'Warnings ----------------' $LOGFILE)"
 CRAN_CHECK_LOG_FILE=$FWDIR/cran-check.out
 rm -f $CRAN_CHECK_LOG_FILE
 
-# SPARK-24152 We will add this test back as a separate Jenkins job
-# NO_TESTS=1 NO_MANUAL=1 $FWDIR/check-cran.sh 2>&1 | tee -a $CRAN_CHECK_LOG_FILE
-# FAILED=$((PIPESTATUS[0]||$FAILED))
-touch $CRAN_CHECK_LOG_FILE
+NO_TESTS=1 NO_MANUAL=1 $FWDIR/check-cran.sh 2>&1 | tee -a $CRAN_CHECK_LOG_FILE
+FAILED=$((PIPESTATUS[0]||$FAILED))
 
 NUM_CRAN_WARNING="$(grep -c WARNING$ $CRAN_CHECK_LOG_FILE)"
 NUM_CRAN_ERROR="$(grep -c ERROR$ $CRAN_CHECK_LOG_FILE)"
