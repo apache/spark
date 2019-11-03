@@ -154,9 +154,9 @@ statement
     | ALTER TABLE tableIdentifier partitionSpec?
         CHANGE COLUMN?
         colName=errorCapturingIdentifier colType colPosition?          #changeColumn
-    | ALTER TABLE tableIdentifier (partitionSpec)?
+    | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
-    | ALTER TABLE tableIdentifier (partitionSpec)?
+    | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDEPROPERTIES tablePropertyList                          #setTableSerDe
     | ALTER (TABLE | VIEW) multipartIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
