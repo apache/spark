@@ -3317,6 +3317,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         """.stripMargin).collect()
     }
   }
+
+  test("SPARK-29595: Unorder insertion in NAMED_STRUCT should throw exception") {
+    sql("CREATE TABLE tb1 USING PARQUET AS (SELECT NAMED_STRUCT('a', 1, 'b', 2) AS data)")
+    val error = intercept[AnalysisException] {
+      sql("INSERT INTO tb1 VALUES NAMED_STRUCT('b', 4, 'a', 3)")
+    }.getMessage
+    assert(error contains
+      "Struct 'data' 0-th field name does not match" +
+        " (may be out of order): expected 'a', found 'b'")
+    assert(error contains
+      "Struct 'data' 1-th field name does not match" +
+        " (may be out of order): expected 'b', found 'a'")
+  }
 }
 
 case class Foo(bar: Option[String])

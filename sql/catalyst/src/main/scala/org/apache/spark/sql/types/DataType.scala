@@ -418,7 +418,7 @@ object DataType {
               wField.dataType, rField.dataType, byName, resolver, fieldContext,
               storeAssignmentPolicy, addError)
 
-            // [SPARK-29565] StructFields should always be matched.
+            // [SPARK-29595] StructFields should always be matched.
             if (!nameMatch) {
               addError(s"Struct '$context' $i-th field name does not match " +
                 s"(may be out of order): expected '${rField.name}', found '${wField.name}'")
