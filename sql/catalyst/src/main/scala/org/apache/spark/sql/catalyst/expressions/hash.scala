@@ -495,7 +495,7 @@ abstract class InterpretedHashFunction {
           val bytes = d.toJavaBigDecimal.unscaledValue().toByteArray
           hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, seed)
         }
-      case c: CalendarInterval => hashInt(c.months, hashLong(c.microseconds, seed))
+      case c: CalendarInterval => hashInt(c.months, hashInt(c.days, hashLong(c.microseconds, seed)))
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
@@ -902,11 +902,13 @@ object HiveHashFunction extends InterpretedHashFunction {
    *   with nanosecond values will lead to wrong output hashes (ie. non adherent with Hive output)
    */
   def hashCalendarInterval(calendarInterval: CalendarInterval): Long = {
-    val totalSeconds = calendarInterval.microseconds / CalendarInterval.MICROS_PER_SECOND.toInt
+    val totalMicroSeconds =
+      calendarInterval.days * CalendarInterval.MICROS_PER_DAY + calendarInterval.microseconds
+    val totalSeconds = totalMicroSeconds / CalendarInterval.MICROS_PER_SECOND.toInt
     val result: Int = (17 * 37) + (totalSeconds ^ totalSeconds >> 32).toInt
 
     val nanoSeconds =
-      (calendarInterval.microseconds -
+      (totalMicroSeconds -
         (totalSeconds * CalendarInterval.MICROS_PER_SECOND.toInt)).toInt * 1000
      (result * 37) + nanoSeconds
   }

@@ -80,7 +80,7 @@ singleTableSchema
     ;
 
 singleInterval
-    : INTERVAL? (intervalValue intervalUnit)+ EOF
+    : INTERVAL? multiUnitsInterval EOF
     ;
 
 statement
@@ -164,10 +164,8 @@ statement
         partitionSpec+                                                 #addTablePartition
     | ALTER TABLE multipartIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
-    | ALTER TABLE tableIdentifier
+    | ALTER (TABLE | VIEW) multipartIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
-    | ALTER VIEW tableIdentifier
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
     | ALTER TABLE multipartIdentifier
         (partitionSpec)? SET locationSpec                              #setTableLocation
     | ALTER TABLE multipartIdentifier RECOVER PARTITIONS               #recoverPartitions
@@ -720,8 +718,8 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | IDENTIFIER '->' expression                                                               #lambda
-    | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
+    | identifier '->' expression                                                               #lambda
+    | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -761,12 +759,24 @@ booleanValue
     ;
 
 interval
-    : {ansi}? INTERVAL? intervalField+
-    | {!ansi}? INTERVAL intervalField*
+    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
+    | {ansi}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
-intervalField
-    : value=intervalValue unit=intervalUnit (TO to=intervalUnit)?
+errorCapturingMultiUnitsInterval
+    : multiUnitsInterval unitToUnitInterval?
+    ;
+
+multiUnitsInterval
+    : (intervalValue intervalUnit)+
+    ;
+
+errorCapturingUnitToUnitInterval
+    : body=unitToUnitInterval (error1=multiUnitsInterval | error2=unitToUnitInterval)?
+    ;
+
+unitToUnitInterval
+    : value=intervalValue from=intervalUnit TO to=intervalUnit
     ;
 
 intervalValue

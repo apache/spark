@@ -376,6 +376,15 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         from,
         to)
+
+    case AlterTableDropPartitionStatement(tableName, specs, ifExists, purge, retainData) =>
+      val v1TableName = parseV1Table(tableName, "ALTER TABLE DROP PARTITION")
+      AlterTableDropPartitionCommand(
+        v1TableName.asTableIdentifier,
+        specs,
+        ifExists,
+        purge,
+        retainData)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
