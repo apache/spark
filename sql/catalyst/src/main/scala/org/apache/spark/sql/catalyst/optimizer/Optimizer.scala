@@ -956,8 +956,10 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * 1) if the sort order is empty or the sort order does not have any reference
  * 2) if the child is already sorted
  * 3) if there is another Sort operator separated by 0...n Project/Filter operators
- * 4) if the Sort operator is within Join without Limit and having deterministic conditions only
- * 5) if the Sort operator is within GroupBy and the aggregate function is order irrelevant
+ * 4) if the Sort operator is within Join separated by 0...n Project/Filter operators only,
+ *    and the Join conditions is deterministic
+ * 5) if the Sort operator is within GroupBy separated by 0...n Project/Filter operators only,
+ *    and the aggregate function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
