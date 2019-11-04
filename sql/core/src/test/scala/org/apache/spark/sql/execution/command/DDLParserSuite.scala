@@ -520,44 +520,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       containsThesePhrases = Seq("key_without_value"))
   }
 
-  // ALTER TABLE table_name ADD [IF NOT EXISTS] PARTITION partition_spec
-  // [LOCATION 'location1'] partition_spec [LOCATION 'location2'] ...;
-  test("alter table: add partition") {
-    val sql1 =
-      """
-       |ALTER TABLE table_name ADD IF NOT EXISTS PARTITION
-       |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
-       |(dt='2009-09-09', country='uk')
-      """.stripMargin
-    val sql2 = "ALTER TABLE table_name ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-
-    val expected1 = AlterTableAddPartitionCommand(
-      TableIdentifier("table_name", None),
-      Seq(
-        (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
-        (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
-      ifNotExists = true)
-    val expected2 = AlterTableAddPartitionCommand(
-      TableIdentifier("table_name", None),
-      Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
-      ifNotExists = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
-  test("alter view: add partition (not supported)") {
-    assertUnsupported(
-      """
-        |ALTER VIEW view_name ADD IF NOT EXISTS PARTITION
-        |(dt='2008-08-08', country='us') PARTITION
-        |(dt='2009-09-09', country='uk')
-      """.stripMargin)
-  }
-
   test("alter table: exchange partition (not supported)") {
     assertUnsupported(
       """

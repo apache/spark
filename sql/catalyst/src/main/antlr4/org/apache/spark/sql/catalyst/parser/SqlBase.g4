@@ -158,10 +158,8 @@ statement
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDEPROPERTIES tablePropertyList                          #setTableSerDe
-    | ALTER TABLE tableIdentifier ADD (IF NOT EXISTS)?
+    | ALTER (TABLE | VIEW) multipartIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
-    | ALTER VIEW tableIdentifier ADD (IF NOT EXISTS)?
-        partitionSpec+                                                 #addTablePartition
     | ALTER TABLE multipartIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER (TABLE | VIEW) multipartIdentifier

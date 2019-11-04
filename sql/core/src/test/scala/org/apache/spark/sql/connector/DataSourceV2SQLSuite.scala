@@ -1385,6 +1385,17 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("ALTER TABLE ADD PARTITION") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
+      }
+      assert(e.message.contains("ALTER TABLE ADD PARTITION is only supported with v1 tables"))
+    }
+  }
+
   test("ALTER TABLE RENAME PARTITION") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
