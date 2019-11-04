@@ -19,8 +19,9 @@ package org.apache.spark.ml.regression
 
 import scala.util.Random
 
-import org.apache.spark.ml.linalg.{DenseVector, Vectors}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.regression.FactorizationMachines._
 import org.apache.spark.ml.regression.FMRegressorSuite._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
@@ -42,7 +43,8 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new FMRegressor)
-    val model = new FMRegressorModel("fmr_test", Vectors.dense(0.0), 0)
+    val model = new FMRegressorModel("fmr_test", 0.0, Vectors.dense(0.0),
+      new DenseMatrix(1, 8, new Array[Double](8)), 1)
     ParamsSuite.checkParams(model)
   }
 
@@ -74,7 +76,9 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
       model: FMRegressorModel,
       model2: FMRegressorModel
     ): Unit = {
-      assert(model.coefficients.toArray === model2.coefficients.toArray)
+      assert(model.bias === model2.bias)
+      assert(model.linearVector.toArray === model2.linearVector.toArray)
+      assert(model.factorMatrix.toArray === model2.factorMatrix.toArray)
       assert(model.numFeatures === model2.numFeatures)
     }
     val fm = new FMRegressor()
@@ -122,6 +126,8 @@ object FMRegressorSuite {
     val rnd = new Random(seed)
     val coefficientsSize = numFactors * numFeatures + numFeatures + 1
     val coefficients = Array.fill(coefficientsSize)(rnd.nextDouble() - 0.5)
+    val (bias, linearVector, factorMatrix) = splitCoefficients(
+      Vectors.dense(coefficients), numFeatures, numFactors, true, true)
 
     val X: DataFrame = sc.parallelize(0 until numSamples).map { i =>
       val x = new DenseVector(Array.fill(numFeatures)(rnd.nextDouble() - 0.5))
@@ -129,7 +135,7 @@ object FMRegressorSuite {
     }.toDF("id", "features")
 
     val fmModel = new FMRegressorModel(
-      "fmr_test", Vectors.dense(coefficients), numFeatures)
+      "fmr_test", bias, linearVector, factorMatrix, numFeatures)
     fmModel.set(fmModel.numFactors, numFactors)
     fmModel.set(fmModel.fitBias, true)
     fmModel.set(fmModel.fitLinear, true)

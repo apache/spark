@@ -18,8 +18,9 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
-import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.regression.FactorizationMachines._
 import org.apache.spark.ml.regression.FMRegressorSuite._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
@@ -40,7 +41,8 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new FMClassifier)
-    val model = new FMClassifierModel("fmc_test", Vectors.dense(0.0), 0, 2)
+    val model = new FMClassifierModel("fmc_test", 0.0, Vectors.dense(0.0),
+      new DenseMatrix(1, 8, new Array[Double](8)), 1, 2)
     ParamsSuite.checkParams(model)
   }
 
@@ -103,7 +105,9 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
       model: FMClassifierModel,
       model2: FMClassifierModel
     ): Unit = {
-      assert(model.coefficients.toArray === model2.coefficients.toArray)
+      assert(model.bias === model2.bias)
+      assert(model.linearVector.toArray === model2.linearVector.toArray)
+      assert(model.factorMatrix.toArray === model2.factorMatrix.toArray)
       assert(model.numFeatures === model2.numFeatures)
     }
     val fm = new FMClassifier()

@@ -2509,17 +2509,27 @@ class FMClassifierModel(JavaProbabilisticClassificationModel, JavaMLWritable, Ja
 
     @property
     @since("3.0.0")
-    def coefficients(self):
+    def bias(self):
         """
-        Model coefficients.
-
-        coefficients concat from 2-way coefficients, 1-way coefficients, global bias.
-
-        Index 0 ~ numFeatures*numFactors is 2-way coefficients,
-        coefficients(i * numFactors + f) denotes i-th feature and f-th factor,
-        following indices are 1-way coefficients and global bias.
+        Model bias.
         """
-        return self._call_java("coefficients")
+        return self._call_java("bias")
+
+    @property
+    @since("3.0.0")
+    def linearVector(self):
+        """
+        Model linear term.
+        """
+        return self._call_java("linearVector")
+
+    @property
+    @since("3.0.0")
+    def factorMatrix(self):
+        """
+        Model factor term.
+        """
+        return self._call_java("factorMatrix")
 
 
 if __name__ == "__main__":
