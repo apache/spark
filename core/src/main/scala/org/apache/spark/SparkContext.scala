@@ -48,6 +48,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
@@ -220,6 +221,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _heartbeater: Heartbeater = _
   private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
   private var _shuffleDriverComponents: ShuffleDriverComponents = _
+  private var _plugins: Option[PluginContainer] = None
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -539,6 +541,9 @@ class SparkContext(config: SparkConf) extends Logging {
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
+    // Initialize any plugins before the task scheduler is initialized.
+    _plugins = PluginContainer(this)
+
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
@@ -621,6 +626,7 @@ class SparkContext(config: SparkConf) extends Logging {
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
     }
     appStatusSource.foreach(_env.metricsSystem.registerSource(_))
+    _plugins.foreach(_.registerMetrics(applicationId))
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
@@ -1975,6 +1981,9 @@ class SparkContext(config: SparkConf) extends Logging {
         listenerBus.stop()
         _listenerBusStarted = false
       }
+    }
+    Utils.tryLogNonFatalError {
+      _plugins.foreach(_.shutdown())
     }
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())

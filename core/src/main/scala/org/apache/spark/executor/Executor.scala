@@ -37,6 +37,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.rpc.RpcTimeout
@@ -163,6 +164,11 @@ private[spark] class Executor(
     } else {
       Nil
     }
+  }
+
+  // Plugins need to load using a class loader that includes the executor's user classpath
+  private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
+    PluginContainer(env)
   }
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
@@ -297,6 +303,7 @@ private[spark] class Executor(
             logWarning("Plugin " + plugin.getClass().getCanonicalName() + " shutdown failed", e)
         }
       }
+      plugins.foreach(_.shutdown())
     }
     if (!isLocal) {
       env.stop()
