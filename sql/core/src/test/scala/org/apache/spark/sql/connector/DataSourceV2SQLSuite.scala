@@ -993,7 +993,7 @@ class DataSourceV2SQLSuite
   test("ShowCurrentNamespace: basic tests") {
     def testShowCurrentNamespace(expectedCatalogName: String, expectedNamespace: String): Unit = {
       val schema = new StructType()
-        .add("catalogName", StringType, nullable = false)
+        .add("catalog", StringType, nullable = false)
         .add("namespace", StringType, nullable = false)
       val df = sql("SHOW CURRENT NAMESPACE")
       val rows = df.collect

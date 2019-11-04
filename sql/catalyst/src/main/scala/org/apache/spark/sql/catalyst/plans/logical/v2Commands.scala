@@ -368,6 +368,6 @@ case class RefreshTable(
  */
 case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command {
   override val output: Seq[Attribute] = Seq(
-    AttributeReference("catalogName", StringType, nullable = false)(),
+    AttributeReference("catalog", StringType, nullable = false)(),
     AttributeReference("namespace", StringType, nullable = false)())
 }
