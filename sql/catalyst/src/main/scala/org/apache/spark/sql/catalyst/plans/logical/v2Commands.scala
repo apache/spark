@@ -188,6 +188,16 @@ case class CreateTableAsSelect(
 }
 
 /**
+ * Create a new table with the same table definition of the source table.
+ */
+case class CreateTableLike(
+    targetCatalog: TableCatalog,
+    targetTableName: Identifier,
+    sourceCatalog: TableCatalog,
+    sourceTableName: Identifier,
+    ifNotExists: Boolean) extends Command
+
+/**
  * Replace a table with a v2 catalog.
  *
  * If the table does not exist, and orCreate is true, then it will be created.

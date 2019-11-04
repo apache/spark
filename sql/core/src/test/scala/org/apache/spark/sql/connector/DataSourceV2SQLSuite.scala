@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
+import org.apache.spark.sql.connector.expressions.{Expression, LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -1563,24 +1564,45 @@ class DataSourceV2SQLSuite
   }
 
   test("CREATE TABLE LIKE") {
-    val targetTable = "testcat.ns1.ns2.tbl1"
-    val sourceTable = "testcat.ns1.ns2.tbl2"
+    val targetTable = "testcat.target_tab"
+    val sourceTable = "testcat.source_tab"
 
-    val e1 = intercept[AnalysisException] {
+    withTable(targetTable, sourceTable) {
+      val e1 = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $targetTable LIKE $sourceTable")
+      }
+      assert(e1.message.contains("Table source_tab not found"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $targetTable LIKE $sourceTable LOCATION '/tmp'")
+      }
+      assert(e2.message.contains("Location clause not supported for CREATE TABLE LIKE" +
+        " statement when tables are of V2 type"))
+
+      sql(
+        s"""
+          |CREATE TABLE $sourceTable
+          |(id bigint, data string, p int) USING foo PARTITIONED BY (id, p)
+          |TBLPROPERTIES ('prop'='propvalue')
+          |""".stripMargin)
       sql(s"CREATE TABLE $targetTable LIKE $sourceTable")
-    }
-    assert(e1.message.contains("CREATE TABLE LIKE is only supported with v1 tables"))
+      val testCatalog = catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array(), "target_tab"))
+      assert(table.name == targetTable)
+      assert(table.partitioning().size == 2)
+      assert(table.partitioning()(0) == LogicalExpressions.identity("id"))
+      assert(table.partitioning()(1) == LogicalExpressions.identity("p"))
+      assert(table.properties.asScala == Map("prop" -> "propvalue", "provider" -> "foo"))
 
-    val e2 = intercept[AnalysisException] {
+      // 2nd invocation should result in error.
+      val e3 = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $targetTable LIKE $sourceTable")
+      }
+      assert(e3.message.contains("Table target_tab already exists"))
+
+      // No error when IF NOT EXISTS is specified.
       sql(s"CREATE TABLE IF NOT EXISTS $targetTable LIKE $sourceTable")
     }
-    assert(e2.message.contains("CREATE TABLE LIKE is only supported with v1 tables"))
-
-    val e3 = intercept[AnalysisException] {
-      sql(s"CREATE TABLE IF NOT EXISTS $targetTable LIKE " +
-        s"$sourceTable LOCATION 'AnyLocation'")
-    }
-    assert(e3.message.contains("CREATE TABLE LIKE is only supported with v1 tables"))
   }
 
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {

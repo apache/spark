@@ -141,6 +141,18 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         writeOptions = c.options.filterKeys(_ != "path"),
         ignoreIfExists = c.ifNotExists)
 
+    case CreateTableLikeStatement(
+         NonSessionCatalog(tCatalog, t), NonSessionCatalog(sCatalog, s), loc, ifNotExists ) =>
+      if (loc.nonEmpty) {
+        throw new AnalysisException("Location clause not supported for" +
+          " CREATE TABLE LIKE statement when tables are of V2 type.")
+      }
+      CreateTableLike(tCatalog.asTableCatalog,
+        t.asIdentifier,
+        sCatalog.asTableCatalog,
+        s.asIdentifier,
+        ifNotExists)
+
     case RefreshTableStatement(NonSessionCatalog(catalog, tableName)) =>
       RefreshTable(catalog.asTableCatalog, tableName.asIdentifier)
 
