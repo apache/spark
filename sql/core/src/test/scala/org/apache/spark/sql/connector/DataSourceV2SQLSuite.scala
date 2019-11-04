@@ -1007,9 +1007,9 @@ class DataSourceV2SQLSuite
     // Initially, the v2 session catalog is set as a current catalog.
     testShowCurrentNamespace("spark_catalog", "default")
 
-    sql("Use testcat")
+    sql("USE testcat")
     testShowCurrentNamespace("testcat", "")
-    sql("Use testcat.ns1.ns2")
+    sql("USE testcat.ns1.ns2")
     testShowCurrentNamespace("testcat", "ns1.ns2")
   }
 
