@@ -80,7 +80,7 @@ singleTableSchema
     ;
 
 singleInterval
-    : INTERVAL? (intervalValue intervalUnit)+ EOF
+    : INTERVAL? multiUnitsInterval EOF
     ;
 
 statement
@@ -718,8 +718,8 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | IDENTIFIER '->' expression                                                               #lambda
-    | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
+    | identifier '->' expression                                                               #lambda
+    | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -759,12 +759,24 @@ booleanValue
     ;
 
 interval
-    : {ansi}? INTERVAL? intervalField+
-    | {!ansi}? INTERVAL intervalField*
+    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
+    | {ansi}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
-intervalField
-    : value=intervalValue unit=intervalUnit (TO to=intervalUnit)?
+errorCapturingMultiUnitsInterval
+    : multiUnitsInterval unitToUnitInterval?
+    ;
+
+multiUnitsInterval
+    : (intervalValue intervalUnit)+
+    ;
+
+errorCapturingUnitToUnitInterval
+    : body=unitToUnitInterval (error1=multiUnitsInterval | error2=unitToUnitInterval)?
+    ;
+
+unitToUnitInterval
+    : value=intervalValue from=intervalUnit TO to=intervalUnit
     ;
 
 intervalValue
