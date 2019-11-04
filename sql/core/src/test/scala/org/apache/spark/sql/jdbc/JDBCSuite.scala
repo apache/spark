@@ -58,7 +58,7 @@ class JDBCSuite extends QueryTest
   }
 
   val testH2DialectTinyInt = new JdbcDialect {
-    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
     override def getCatalystType(
         sqlType: Int,
         typeName: String,
