@@ -1967,6 +1967,21 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * To figure out which shutdown hook makes execution slow, a logWrapper for shutdown hook
+   * is used to record execute time for each shutdown hook.
+   */
+  def shutdownHookLogWrapper[T](f: => T, nextHook: SparkShutdownHook): Unit = {
+    val startTime = System.currentTimeMillis()
+    try {
+      logInfo(s"Shutdown hook ${nextHook.name} starts!")
+      f
+    } finally {
+      val duration = System.currentTimeMillis() - startTime
+      logInfo(s"Shutdown hook ${nextHook.name} ends! Duration: ${duration}ms")
+    }
+  }
+
   /** Executes the given block in a Try, logging any uncaught exceptions. */
   def tryLog[T](f: => T): Try[T] = {
     try {

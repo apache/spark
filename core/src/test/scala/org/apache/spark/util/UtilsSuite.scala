@@ -744,7 +744,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val hook1 = manager.add(1, () => output += 1)
     manager.add(3, () => output += 3)
     manager.add(2, () => output += 2)
-    manager.add(4, () => output += 4)
+    manager.add(4, () => output += 4, "Hook For Test")
     manager.remove(hook1)
 
     manager.runAll()

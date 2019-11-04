@@ -189,12 +189,12 @@ private [util] class SparkShutdownHookManager {
     }
   }
 
-  def add(priority: Int, hook: () => Unit): AnyRef = {
+  def add(priority: Int, hook: () => Unit, hookName: String = "Anonymous Hook"): AnyRef = {
     hooks.synchronized {
       if (shuttingDown) {
         throw new IllegalStateException("Shutdown hooks cannot be modified during shutdown.")
       }
-      val hookRef = new SparkShutdownHook(priority, hook)
+      val hookRef = new SparkShutdownHook(priority, hook, hookName)
       hooks.add(hookRef)
       hookRef
     }
@@ -206,7 +206,8 @@ private [util] class SparkShutdownHookManager {
 
 }
 
-private class SparkShutdownHook(private val priority: Int, hook: () => Unit)
+private class SparkShutdownHook(private val priority: Int, hook: () => Unit,
+                                hookName: String)
   extends Comparable[SparkShutdownHook] {
 
   override def compareTo(other: SparkShutdownHook): Int = {
@@ -215,4 +216,5 @@ private class SparkShutdownHook(private val priority: Int, hook: () => Unit)
 
   def run(): Unit = hook()
 
+  def name: String = hookName
 }
