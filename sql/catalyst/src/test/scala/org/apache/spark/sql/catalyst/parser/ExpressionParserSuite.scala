@@ -644,7 +644,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Non Existing unit
     intercept("interval 10 nanoseconds",
-      "no viable alternative at input 'interval 10 nanoseconds'")
+      "no viable alternative at input '10 nanoseconds'")
 
     // Year-Month intervals.
     val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
@@ -679,16 +679,13 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // Unknown FROM TO intervals
-    intercept("interval 10 month to second",
+    intercept("interval '10' month to second",
       "Intervals FROM month TO second are not supported.")
 
     // Composed intervals.
     checkIntervals(
       "3 months 4 days 22 seconds 1 millisecond",
       Literal(new CalendarInterval(3, 4, 22001000L)))
-    checkIntervals(
-      "3 years '-1-10' year to month 3 weeks '1 0:0:2' day to second",
-      Literal(new CalendarInterval(14, 22, 2 * CalendarInterval.MICROS_PER_SECOND)))
   }
 
   test("SPARK-23264 Interval Compatibility tests") {

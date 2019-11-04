@@ -57,19 +57,19 @@ public class CalendarIntervalSuite {
     assertEquals("interval -2 years -10 months", i.toString());
 
     i = new CalendarInterval(0, 31, 0);
-    assertEquals("interval 4 weeks 3 days", i.toString());
+    assertEquals("interval 31 days", i.toString());
 
     i = new CalendarInterval(0, -31, 0);
-    assertEquals("interval -4 weeks -3 days", i.toString());
+    assertEquals("interval -31 days", i.toString());
 
     i = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
-    assertEquals("interval 3 hours 13 minutes 123 microseconds", i.toString());
+    assertEquals("interval 3 hours 13 minutes 0.000123 seconds", i.toString());
 
     i = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123);
-    assertEquals("interval -3 hours -13 minutes -123 microseconds", i.toString());
+    assertEquals("interval -3 hours -13 minutes -0.000123 seconds", i.toString());
 
     i = new CalendarInterval(34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
-    assertEquals("interval 2 years 10 months 4 weeks 3 days 3 hours 13 minutes 123 microseconds",
+    assertEquals("interval 2 years 10 months 31 days 3 hours 13 minutes 0.000123 seconds",
       i.toString());
   }
 
@@ -77,22 +77,22 @@ public class CalendarIntervalSuite {
   public void addTest() {
     CalendarInterval input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR);
     CalendarInterval input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR);
-    assertEquals(input1.add(input2), new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR));
+    assertEquals(new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR), input1.add(input2));
 
     input1 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR);
     input2 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR);
-    assertEquals(input1.add(input2), new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR));
+    assertEquals(new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR), input1.add(input2));
   }
 
   @Test
   public void subtractTest() {
     CalendarInterval input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR);
     CalendarInterval input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR);
-    assertEquals(input1.subtract(input2), new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR));
+    assertEquals(new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR), input1.subtract(input2));
 
     input1 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR);
     input2 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR);
-    assertEquals(input1.subtract(input2), new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR));
+    assertEquals(new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR), input1.subtract(input2));
   }
 
   @Test

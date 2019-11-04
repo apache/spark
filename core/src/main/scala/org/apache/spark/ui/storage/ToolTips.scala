@@ -15,28 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.metrics.sink
+package org.apache.spark.ui.storage
 
-import java.util.Properties
+private[ui] object ToolTips {
 
-import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.jmx.JmxReporter
+  val RDD_NAME =
+    "Name of the persisted RDD"
 
-import org.apache.spark.SecurityManager
+  val STORAGE_LEVEL =
+    "StorageLevel displays where the persisted RDD is stored, " +
+      "format of the persisted RDD (serialized or de-serialized) and" +
+      "replication factor of the persisted RDD"
 
-private[spark] class JmxSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
+  val CACHED_PARTITIONS =
+    "Number of partitions cached"
 
-  val reporter: JmxReporter = JmxReporter.forRegistry(registry).build()
+  val FRACTION_CACHED =
+    "Fraction of total partitions cached"
 
-  override def start(): Unit = {
-    reporter.start()
-  }
+  val SIZE_IN_MEMORY =
+    "Total size of partitions in memory"
 
-  override def stop(): Unit = {
-    reporter.stop()
-  }
-
-  override def report(): Unit = { }
-
+  val SIZE_ON_DISK =
+    "Total size of partitions on the disk"
 }
+
