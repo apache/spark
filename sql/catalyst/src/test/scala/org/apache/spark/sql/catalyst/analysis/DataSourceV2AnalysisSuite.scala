@@ -535,14 +535,10 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
       val parsedPlan = byPosition(tableWithStructCol, query)
       assertNotResolved(parsedPlan)
 
-      val expectedQuery = Project(Seq(Alias(
-        Cast(
-          query.output.head,
-          new StructType().add("a", IntegerType).add("b", IntegerType),
-          Some(conf.sessionLocalTimeZone)),
-        "col")()),
-        query)
-      checkAnalysis(parsedPlan, byPosition(tableWithStructCol, expectedQuery))
+      assertAnalysisError(parsedPlan, Seq(
+        "Cannot write incompatible data to table", "'table-name'",
+        "Struct 'col' 0-th field name does not match", "expected 'a', found 'x'",
+        "Struct 'col' 1-th field name does not match", "expected 'b', found 'y'"))
     }
   }
 
