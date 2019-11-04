@@ -3939,13 +3939,18 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
        [1,2,3,3]
       > SELECT _FUNC_(array(1, 2, 3), null);
        [1,2,3,null]
-      > SELECT _FUNC_(a, e) FROM VALUES (array(1,2), 3), (array(3, 4), null), (null, 3) tbl(a, e);
-       NULL
+      > SELECT _FUNC_(a, e) FROM VALUES (array(1,2), 3), (array(3, 4), null), (null, 5) tbl(a, e);
        [1,2,3]
        [3,4,null]
+       [5]
   """,
   since = "3.0.0")
 case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpression {
+
+  private lazy val elementType: DataType = left.dataType match {
+    case ArrayType(elementType, containsNull) => elementType
+    case _ => right.dataType
+  }
 
   override def nullable: Boolean = left.dataType match {
     case  _: ArrayType => left.nullable
@@ -3971,18 +3976,32 @@ case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpres
       s"function $prettyName not support append to ${o.typeName} type")
   }
 
-  override def eval(input: InternalRow): Any = {
-    val array = left.eval(input)
-    val elem = right.eval(input)
-    if (array == null) {
+  override def eval(input: InternalRow): Any = left.dataType match {
+    case NullType =>
+      val elem = right.eval(input)
       if (elem == null) {
         null
       } else {
         new GenericArrayData(Array(elem))
       }
-    } else {
-      new GenericArrayData(array.asInstanceOf[ArrayData].array ++ Array(elem))
-    }
+    case ArrayType(elementType, containsNull) =>
+      val array = left.eval(input)
+      val elem = right.eval(input)
+      if (array == null) {
+        if (elem == null) {
+          null
+        } else {
+          new GenericArrayData(Array(elem))
+      }
+     } else {
+        val arrayData = array.asInstanceOf[ArrayData]
+        val numElements = arrayData.numElements() + 1
+        val finalData = new Array[AnyRef](numElements)
+        val srcData = arrayData.toObjectArray(elementType)
+        Array.copy(srcData, 0, finalData, 0, srcData.length)
+        finalData.update(numElements - 1, elem.asInstanceOf[AnyRef])
+        new GenericArrayData(finalData)
+      }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = left.dataType match {
@@ -4001,8 +4020,11 @@ case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpres
       val newArray = ctx.freshName("newArray")
       val oldArraySize = ctx.freshName("oldArraySize")
       val newArraySize = ctx.freshName("newArraySize")
-      val allocation =
+      val allocation1 =
         CodeGenerator.createArrayData(newArray, et, newArraySize, s"$prettyName failed")
+
+      val allocation2 =
+        CodeGenerator.createArrayData(newArray, et, "1", s"$prettyName failed")
 
       val i = ctx.freshName("i")
       val assignment =
@@ -4015,7 +4037,7 @@ case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpres
         s"""
            |int $oldArraySize = $inputArray.numElements();
            |int $newArraySize = $oldArraySize + 1;
-           |$allocation
+           |$allocation1
            |for (int $i = 0; $i < $inputArray.numElements(); $i ++) {
            |  $assignment
            |}
@@ -4024,18 +4046,24 @@ case class ArrayAppend(left: Expression, right: Expression) extends BinaryExpres
            |""".stripMargin
 
       if (nullable) {
-        val nullSafeEval =
-          leftGen.code + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
-            s"""
-               |${rightGen.code}
-               |${ev.isNull} = false; // resultCode could change nullability.
-               |$resultCode
-               |""".stripMargin
-          }
-        ev.copy(code = code"""
-        boolean ${ev.isNull} = true;
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $nullSafeEval""")
+        ev.copy(code =
+          code"""
+          boolean ${ev.isNull} = true;
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          ${leftGen.code}
+          ${rightGen.code}
+          if (${leftGen.isNull}) {
+            if (!${rightGen.isNull}) {
+               ${ev.isNull} = false; // resultCode could change nullability.
+               int $oldArraySize = 0;
+               $allocation2
+               $setNewValue
+               ${ev.value} = $newArray;
+             }
+          } else {
+            ${ev.isNull} = false; // resultCode could change nullability.
+            $resultCode
+          }""")
       } else {
         ev.copy(code = code"""
         ${leftGen.code}

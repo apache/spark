@@ -109,3 +109,6 @@ select array_append(array('1', '2'), 3);
 select array_append(1, 2);
 select array_append(array(array(1)), array(1));
 
+explain codegen select array_append(a, e) from VALUES (array(1,2), 3), (array(3, 4), null), (null, 3), (null, null) tbl(a, e)
+
+
