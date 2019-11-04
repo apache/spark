@@ -1,25 +1,24 @@
 -- average with interval type
-
 -- null
 select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where v is null;
 
 -- empty set
 select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where 1=0;
 
---
+-- basic interval avg
 select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v);
 select avg(cast(v as interval)) from VALUES ('-1 seconds'), ('2 seconds'), (null) t(v);
 select avg(cast(v as interval)) from VALUES ('-1 seconds'), ('-2 seconds'), (null) t(v);
 select avg(cast(v as interval)) from VALUES ('-1 weeks'), ('2 seconds'), (null) t(v);
 
---group by
+-- group by
 select
  i,
  avg(cast(v as interval))
 from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
 group by i;
 
---having
+-- having
 select
  avg(cast(v as interval)) as sv
 from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
