@@ -2750,9 +2750,13 @@
           <sourceDirectories>
             <directory>${basedir}/src/main/java</directory>
             <directory>${basedir}/src/main/scala</directory>
+            <directory>v${hive.version.short}/src/main/java</directory>
+            <directory>v${hive.version.short}/src/main/scala</directory>
           </sourceDirectories>
           <testSourceDirectories>
             <directory>${basedir}/src/test/java</directory>
+            <directory>v${hive.version.short}/src/test/java</directory>
+            <directory>v${hive.version.short}/src/test/scala</directory>
           </testSourceDirectories>
           <configLocation>dev/checkstyle.xml</configLocation>
           <outputFile>${basedir}/target/checkstyle-output.xml</outputFile>
