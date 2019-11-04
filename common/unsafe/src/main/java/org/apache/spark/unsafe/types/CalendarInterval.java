@@ -121,7 +121,7 @@ public final class CalendarInterval implements Serializable {
    * @return an instance of {@code java.time.Period} based on the months and days fields
    *         of the given interval, not null.
    */
-  public Period period() { return Period.of(0, months, days); }
+  public Period extractAsPeriod() { return Period.of(0, months, days); }
 
   /**
    * Extracts the time part of the interval.
@@ -129,5 +129,5 @@ public final class CalendarInterval implements Serializable {
    *         of the given interval, not null.
    * @throws ArithmeticException if a numeric overflow occurs
    */
-  public Duration duration() { return Duration.of(microseconds, ChronoUnit.MICROS); }
+  public Duration extractAsDuration() { return Duration.of(microseconds, ChronoUnit.MICROS); }
 }

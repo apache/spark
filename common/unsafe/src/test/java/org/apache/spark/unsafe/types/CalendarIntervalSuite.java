@@ -101,7 +101,7 @@ public class CalendarIntervalSuite {
   @Test
   public void periodAndDurationTest() {
     CalendarInterval interval = new CalendarInterval(120, -40, 123456);
-    assertEquals(Period.of(0, 120, -40), interval.period());
-    assertEquals(Duration.ofNanos(123456000), interval.duration());
+    assertEquals(Period.of(0, 120, -40), interval.extractAsPeriod());
+    assertEquals(Duration.ofNanos(123456000), interval.extractAsDuration());
   }
 }
