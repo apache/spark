@@ -36,7 +36,6 @@ import org.apache.spark.mllib.{linalg => OldLinalg}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.optimization.{Gradient, GradientDescent, SquaredL2Updater, Updater}
-import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
@@ -125,15 +124,6 @@ private[ml] trait FactorizationMachinesParams
   @Since("3.0.0")
   final def getInitStd: Double = $(initStd)
 
-  /** String name for "gd". */
-  private[ml] val GD = "gd"
-
-  /** String name for "adamW". */
-  private[ml] val AdamW = "adamW"
-
-  /** Set of solvers that FactorizationMachines supports. */
-  private[ml] val supportedSolvers = Array(GD, AdamW)
-
   /**
    * The solver algorithm for optimization.
    * Supported options: "gd", "adamW".
@@ -144,13 +134,89 @@ private[ml] trait FactorizationMachinesParams
   @Since("3.0.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
-      s"${supportedSolvers.mkString(", ")}. (Default adamW)",
-    ParamValidators.inArray[String](supportedSolvers))
+      s"${FactorizationMachines.supportedSolvers.mkString(", ")}. (Default adamW)",
+    ParamValidators.inArray[String](FactorizationMachines.supportedSolvers))
+}
 
-  private[ml] def parseSolver(solver: String, coefficientsSize: Int): Updater = {
+private[ml] trait FactorizationMachines extends FactorizationMachinesParams {
+
+  private[ml] def initCoefficients(numFeatures: Int): OldVector = {
+    val initialCoefficients =
+      OldVectors.dense(
+        Array.fill($(numFactors) * numFeatures)(Random.nextGaussian() * $(initStd)) ++
+        (if ($(fitLinear)) new Array[Double](numFeatures) else Array.emptyDoubleArray) ++
+        (if ($(fitBias)) new Array[Double](1) else Array.emptyDoubleArray))
+    initialCoefficients
+  }
+
+  private[ml] def _train(
+      data: RDD[(Double, OldVector)],
+      numFeatures: Int,
+      loss: String
+    ): Vector = {
+
+    // initialize coefficients
+    val initialCoefficients = initCoefficients(numFeatures)
+    val coefficientsSize = initialCoefficients.size
+
+    // optimize coefficients with gradient descent
+    val gradient = FactorizationMachines.parseLoss(
+      loss, $(numFactors), $(fitBias), $(fitLinear), numFeatures)
+
+    val updater = FactorizationMachines.parseSolver($(solver), coefficientsSize)
+
+    val optimizer = new GradientDescent(gradient, updater)
+      .setStepSize($(stepSize))
+      .setNumIterations($(maxIter))
+      .setRegParam($(regParam))
+      .setMiniBatchFraction($(miniBatchFraction))
+      .setConvergenceTol($(tol))
+    val coefficients = optimizer.optimize(data, initialCoefficients)
+    coefficients.asML
+  }
+}
+
+private[ml] object FactorizationMachines {
+
+  /** String name for "gd". */
+  val GD = "gd"
+
+  /** String name for "adamW". */
+  val AdamW = "adamW"
+
+  /** Set of solvers that FactorizationMachines supports. */
+  val supportedSolvers = Array(GD, AdamW)
+
+  /** String name for "logisticLoss". */
+  val LogisticLoss = "logisticLoss"
+
+  /** String name for "squaredError". */
+  val SquaredError = "squaredError"
+
+  /** Set of loss function names that FactorizationMachines supports. */
+  val supportedRegressorLosses = Array(SquaredError)
+  val supportedClassifierLosses = Array(LogisticLoss)
+  val supportedLosses = supportedRegressorLosses ++ supportedClassifierLosses
+
+  def parseSolver(solver: String, coefficientsSize: Int): Updater = {
     solver match {
       case GD => new SquaredL2Updater()
       case AdamW => new AdamWUpdater(coefficientsSize)
+    }
+  }
+
+  def parseLoss(
+      lossFunc: String,
+      numFactors: Int,
+      fitBias: Boolean,
+      fitLinear: Boolean,
+      numFeatures: Int): BaseFactorizationMachinesGradient = {
+    lossFunc match {
+      case LogisticLoss =>
+        new LogisticFactorizationMachinesGradient(numFactors, fitBias, fitLinear, numFeatures)
+      case SquaredError =>
+        new MSEFactorizationMachinesGradient(numFactors, fitBias, fitLinear, numFeatures)
+      case _ => throw new IllegalArgumentException(s"loss function type $lossFunc is invalidation")
     }
   }
 }
@@ -187,10 +253,7 @@ private[regression] trait FMRegressorParams extends FactorizationMachinesParams 
 class FMRegressor @Since("3.0.0") (
     @Since("3.0.0") override val uid: String)
   extends Predictor[Vector, FMRegressor, FMRegressorModel]
-  with FMRegressorParams with DefaultParamsWritable with Logging {
-
-  import org.apache.spark.ml.regression.BaseFactorizationMachinesGradient.{SquaredError, parseLoss}
-  import org.apache.spark.ml.regression.FMRegressor.initCoefficients
+  with FactorizationMachines with FMRegressorParams with DefaultParamsWritable with Logging {
 
   @Since("3.0.0")
   def this() = this(Identifiable.randomUID("fmr"))
@@ -242,11 +305,7 @@ class FMRegressor @Since("3.0.0") (
    * @group setParam
    */
   @Since("3.0.0")
-  def setMiniBatchFraction(value: Double): this.type = {
-    require(value > 0 && value <= 1.0,
-      s"Fraction for mini-batch SGD must be in range (0, 1] but got $value")
-    set(miniBatchFraction, value)
-  }
+  def setMiniBatchFraction(value: Double): this.type = set(miniBatchFraction, value)
   setDefault(miniBatchFraction -> 1.0)
 
   /**
@@ -297,55 +356,27 @@ class FMRegressor @Since("3.0.0") (
    */
   @Since("3.0.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> AdamW)
+  setDefault(solver -> FactorizationMachines.AdamW)
 
-  override protected[spark] def train(dataset: Dataset[_]): FMRegressorModel = {
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    train(dataset, handlePersistence)
-  }
-
-  protected[spark] def train(
-      dataset: Dataset[_],
-      handlePersistence: Boolean): FMRegressorModel = instrumented { instr =>
-    val instances: RDD[OldLabeledPoint] =
+  override protected def train(dataset: Dataset[_]): FMRegressorModel = instrumented { instr =>
+    val data: RDD[(Double, OldVector)] =
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
-          OldLabeledPoint(label, features)
+          (label, features)
       }
-
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+    data.persist(StorageLevel.MEMORY_AND_DISK)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, numFactors, fitBias, fitLinear, regParam,
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
 
-    val numFeatures = instances.first().features.size
+    val numFeatures = data.first()._2.size
     instr.logNumFeatures(numFeatures)
 
-    val data = instances.map { case OldLabeledPoint(label, features) => (label, features) }
+    val coefficients = _train(data, numFeatures, FactorizationMachines.SquaredError)
 
-    // initialize coefficients
-    val (initialCoefficients, coefficientsSize) = initCoefficients(
-      numFeatures, $(numFactors), $(fitBias), $(fitLinear), $(initStd))
-
-    // optimize coefficients with gradient descent
-    val gradient = parseLoss(
-      SquaredError, $(numFactors), $(fitBias), $(fitLinear), numFeatures)
-
-    val updater = parseSolver($(solver), coefficientsSize)
-
-    val optimizer = new GradientDescent(gradient, updater)
-      .setStepSize($(stepSize))
-      .setNumIterations($(maxIter))
-      .setRegParam($(regParam))
-      .setMiniBatchFraction($(miniBatchFraction))
-      .setConvergenceTol($(tol))
-    val coefficients = optimizer.optimize(data, initialCoefficients)
-
-    if (handlePersistence) instances.unpersist()
-
-    val model = copyValues(new FMRegressorModel(uid, coefficients.asML, numFeatures))
+    val model = copyValues(new FMRegressorModel(uid, coefficients, numFeatures))
     model
   }
 
@@ -358,21 +389,6 @@ object FMRegressor extends DefaultParamsReadable[FMRegressor] {
 
   @Since("3.0.0")
   override def load(path: String): FMRegressor = super.load(path)
-
-  private[ml] def initCoefficients(
-    numFeatures: Int,
-    numFactors: Int,
-    fitBias: Boolean,
-    fitLinear: Boolean,
-    initStd: Double
-  ): (Vector, Int) = {
-    val initialCoefficients =
-      Vectors.dense(Array.fill(numFactors * numFeatures)(Random.nextGaussian() * initStd) ++
-        (if (fitLinear) new Array[Double](numFeatures) else Array.emptyDoubleArray) ++
-        (if (fitBias) new Array[Double](1) else Array.emptyDoubleArray))
-    val coefficientsSize = initialCoefficients.size
-    (initialCoefficients, coefficientsSize)
-  }
 }
 
 /**
@@ -386,8 +402,6 @@ class FMRegressorModel (
   extends PredictionModel[Vector, FMRegressorModel]
   with FMRegressorParams with MLWritable {
 
-  import org.apache.spark.ml.regression.BaseFactorizationMachinesGradient.SquaredError
-
   /**
    * Returns Factorization Machines coefficients
    * coefficients concat from 2-way coefficients, 1-way coefficients, global bias
@@ -395,10 +409,10 @@ class FMRegressorModel (
    *   [i * numFactors + f] denotes i-th feature and f-th factor
    * Following indices are 1-way coefficients and global bias.
    */
-  private val oldCoefficients: OldVector = coefficients
+  @transient private lazy val oldCoefficients: OldVector = coefficients
 
-  private lazy val gradient = BaseFactorizationMachinesGradient.parseLoss(
-    SquaredError, $(numFactors), $(fitBias), $(fitLinear), numFeatures)
+  @transient private lazy val gradient = FactorizationMachines.parseLoss(
+    FactorizationMachines.SquaredError, $(numFactors), $(fitBias), $(fitLinear), numFeatures)
 
   override def predict(features: Vector): Double = {
     val rawPrediction = gradient.getRawPrediction(features, oldCoefficients)
@@ -437,7 +451,7 @@ object FMRegressorModel extends MLReadable[FMRegressorModel] {
 
     private case class Data(
         numFeatures: Int,
-        coefficients: OldVector)
+        coefficients: Vector)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
@@ -456,7 +470,7 @@ object FMRegressorModel extends MLReadable[FMRegressorModel] {
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val Row(numFeatures: Int, coefficients: OldVector) = data
+      val Row(numFeatures: Int, coefficients: Vector) = data
         .select("numFeatures", "coefficients").head()
       val model = new FMRegressorModel(
         metadata.uid, coefficients, numFeatures)
@@ -613,36 +627,6 @@ private[ml] abstract class BaseFactorizationMachinesGradient(
         }
 
         OldVectors.dense(gradient)
-    }
-  }
-}
-
-private[ml] object BaseFactorizationMachinesGradient {
-
-  /** String name for "logisticLoss". */
-  val LogisticLoss = "logisticLoss"
-
-  /** String name for "squaredError". */
-  val SquaredError = "squaredError"
-
-  /** Set of loss function names that FactorizationMachines supports. */
-  val supportedRegressorLosses = Array(SquaredError)
-  val supportedClassifierLosses = Array(LogisticLoss)
-  val supportedLosses = supportedRegressorLosses ++ supportedClassifierLosses
-
-  def parseLoss(
-      lossFunc: String,
-      numFactors: Int,
-      fitBias: Boolean,
-      fitLinear: Boolean,
-      numFeatures: Int): BaseFactorizationMachinesGradient = {
-
-    lossFunc match {
-      case LogisticLoss =>
-        new LogisticFactorizationMachinesGradient(numFactors, fitBias, fitLinear, numFeatures)
-      case SquaredError =>
-        new MSEFactorizationMachinesGradient(numFactors, fitBias, fitLinear, numFeatures)
-      case _ => throw new IllegalArgumentException(s"loss function type $lossFunc is invalidation")
     }
   }
 }

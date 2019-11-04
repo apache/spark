@@ -23,13 +23,12 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.regression._
+import org.apache.spark.ml.regression.{FactorizationMachines, FactorizationMachinesParams}
+import org.apache.spark.ml.regression.FactorizationMachines._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Vector => OldVector}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.optimization.GradientDescent
-import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.col
@@ -68,12 +67,9 @@ private[classification] trait FMClassifierParams extends ProbabilisticClassifier
  */
 @Since("3.0.0")
 class FMClassifier @Since("3.0.0") (
-  @Since("3.0.0") override val uid: String)
+    @Since("3.0.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, FMClassifier, FMClassifierModel]
-  with FMClassifierParams with DefaultParamsWritable with Logging {
-
-  import org.apache.spark.ml.regression.BaseFactorizationMachinesGradient.{LogisticLoss, parseLoss}
-  import org.apache.spark.ml.regression.FMRegressor.initCoefficients
+  with FactorizationMachines with FMClassifierParams with DefaultParamsWritable with Logging {
 
   @Since("3.0.0")
   def this() = this(Identifiable.randomUID("fmc"))
@@ -125,11 +121,7 @@ class FMClassifier @Since("3.0.0") (
    * @group setParam
    */
   @Since("3.0.0")
-  def setMiniBatchFraction(value: Double): this.type = {
-    require(value > 0 && value <= 1.0,
-      s"Fraction for mini-batch SGD must be in range (0, 1] but got $value")
-    set(miniBatchFraction, value)
-  }
+  def setMiniBatchFraction(value: Double): this.type = set(miniBatchFraction, value)
   setDefault(miniBatchFraction -> 1.0)
 
   /**
@@ -182,24 +174,16 @@ class FMClassifier @Since("3.0.0") (
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> AdamW)
 
-  override protected[spark] def train(dataset: Dataset[_]): FMClassifierModel = {
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    train(dataset, handlePersistence)
-  }
-
-  protected[spark] def train(
-      dataset: Dataset[_],
-      handlePersistence: Boolean): FMClassifierModel = instrumented { instr =>
-    val instances: RDD[OldLabeledPoint] =
+  override protected def train(dataset: Dataset[_]): FMClassifierModel = instrumented { instr =>
+    val data: RDD[(Double, OldVector)] =
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
           require(label == 0 || label == 1, s"FMClassifier was given" +
             s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
             s" FMClassifier currently only supports binary classification.")
-          OldLabeledPoint(label, features)
+          (label, features)
       }
-
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+    data.persist(StorageLevel.MEMORY_AND_DISK)
 
     val numClasses = 2
     if (isDefined(thresholds)) {
@@ -214,32 +198,12 @@ class FMClassifier @Since("3.0.0") (
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver)
     instr.logNumClasses(numClasses)
 
-    val numFeatures = instances.first().features.size
+    val numFeatures = data.first()._2.size
     instr.logNumFeatures(numFeatures)
 
-    val data = instances.map{ case OldLabeledPoint(label, features) => (label, features) }
+    val coefficients = _train(data, numFeatures, LogisticLoss)
 
-    // initialize coefficients
-    val (initialCoefficients, coefficientsSize) = initCoefficients(
-      numFeatures, $(numFactors), $(fitBias), $(fitLinear), $(initStd))
-
-    // optimize coefficients with gradient descent
-    val gradient = parseLoss(
-      LogisticLoss, $(numFactors), $(fitBias), $(fitLinear), numFeatures)
-
-    val updater = parseSolver($(solver), coefficientsSize)
-
-    val optimizer = new GradientDescent(gradient, updater)
-      .setStepSize($(stepSize))
-      .setNumIterations($(maxIter))
-      .setRegParam($(regParam))
-      .setMiniBatchFraction($(miniBatchFraction))
-      .setConvergenceTol($(tol))
-    val coefficients = optimizer.optimize(data, initialCoefficients)
-
-    if (handlePersistence) instances.unpersist()
-
-    val model = copyValues(new FMClassifierModel(uid, coefficients.asML, numFeatures, numClasses))
+    val model = copyValues(new FMClassifierModel(uid, coefficients, numFeatures, numClasses))
     model
   }
 
@@ -266,8 +230,6 @@ class FMClassifierModel (
   extends ProbabilisticClassificationModel[Vector, FMClassifierModel]
     with FMClassifierParams with MLWritable {
 
-  import org.apache.spark.ml.regression.BaseFactorizationMachinesGradient.LogisticLoss
-
   /**
    * Returns Factorization Machines coefficients
    * coefficients concat from 2-way coefficients, 1-way coefficients, global bias
@@ -275,9 +237,9 @@ class FMClassifierModel (
    *   [i * numFactors + f] denotes i-th feature and f-th factor
    * Following indices are 1-way coefficients and global bias.
    */
-  private val oldCoefficients: OldVector = coefficients
+  @transient private lazy val oldCoefficients: OldVector = coefficients
 
-  private lazy val gradient = BaseFactorizationMachinesGradient.parseLoss(
+  @transient private lazy val gradient = parseLoss(
     LogisticLoss, $(numFactors), $(fitBias), $(fitLinear), numFeatures)
 
   override protected def predictRaw(features: Vector): Vector = {
@@ -330,7 +292,7 @@ object FMClassifierModel extends MLReadable[FMClassifierModel] {
     private case class Data(
       numFeatures: Int,
       numClasses: Int,
-      coefficients: OldVector)
+      coefficients: Vector)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
@@ -349,7 +311,7 @@ object FMClassifierModel extends MLReadable[FMClassifierModel] {
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val Row(numFeatures: Int, numClasses: Int, coefficients: OldVector) = data
+      val Row(numFeatures: Int, numClasses: Int, coefficients: Vector) = data
         .select("numFeatures", "numClasses", "coefficients").head()
       val model = new FMClassifierModel(
         metadata.uid, coefficients, numFeatures, numClasses)
