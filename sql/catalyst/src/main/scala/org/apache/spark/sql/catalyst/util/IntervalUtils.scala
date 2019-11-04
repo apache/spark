@@ -65,12 +65,12 @@ object IntervalUtils {
     (getMonths(interval) / MONTHS_PER_QUARTER + 1).toByte
   }
 
-  def getDays(interval: CalendarInterval): Long = {
-    interval.microseconds / DateTimeUtils.MICROS_PER_DAY
+  def getDays(interval: CalendarInterval): Int = {
+    interval.days
   }
 
-  def getHours(interval: CalendarInterval): Byte = {
-    ((interval.microseconds % DateTimeUtils.MICROS_PER_DAY) / MICROS_PER_HOUR).toByte
+  def getHours(interval: CalendarInterval): Long = {
+    interval.microseconds / MICROS_PER_HOUR
   }
 
   def getMinutes(interval: CalendarInterval): Byte = {
@@ -92,6 +92,7 @@ object IntervalUtils {
   // Returns total number of seconds with microseconds fractional part in the given interval.
   def getEpoch(interval: CalendarInterval): Decimal = {
     var result = interval.microseconds
+    result += DateTimeUtils.MICROS_PER_DAY * interval.days
     result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
     result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
     Decimal(result, 18, 6)
@@ -151,7 +152,7 @@ object IntervalUtils {
         val years = toLongWithRange("year", yearStr, 0, Integer.MAX_VALUE).toInt
         val months = toLongWithRange("month", monthStr, 0, 11).toInt
         val totalMonths = Math.addExact(Math.multiplyExact(years, 12), months)
-        new CalendarInterval(totalMonths, 0)
+        new CalendarInterval(totalMonths, 0, 0)
       } catch {
         case NonFatal(e) =>
           throw new IllegalArgumentException(
@@ -202,7 +203,7 @@ object IntervalUtils {
       var days = if (m.group(2) == null) {
         0
       } else {
-        toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE)
+        toLongWithRange("day", m.group(3), 0, Integer.MAX_VALUE).toInt
       }
       var hours: Long = 0L
       var minutes: Long = 0L
@@ -246,11 +247,10 @@ object IntervalUtils {
             s"Cannot support (interval '$input' $from to $to) expression")
       }
       var micros = secondsFraction
-      micros = Math.addExact(micros, Math.multiplyExact(days, DateTimeUtils.MICROS_PER_DAY))
       micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
       micros = Math.addExact(micros, Math.multiplyExact(minutes, MICROS_PER_MINUTE))
       micros = Math.addExact(micros, Math.multiplyExact(seconds, DateTimeUtils.MICROS_PER_SECOND))
-      new CalendarInterval(0, sign * micros)
+      new CalendarInterval(0, sign * days, sign * micros)
     } catch {
       case e: Exception =>
         throw new IllegalArgumentException(
@@ -261,6 +261,7 @@ object IntervalUtils {
   def fromUnitStrings(units: Array[String], values: Array[String]): CalendarInterval = {
     assert(units.length == values.length)
     var months: Int = 0
+    var days: Int = 0
     var microseconds: Long = 0
     var i = 0
     while (i < units.length) {
@@ -271,11 +272,9 @@ object IntervalUtils {
           case "month" =>
             months = Math.addExact(months, values(i).toInt)
           case "week" =>
-            val weeksUs = Math.multiplyExact(values(i).toLong, 7 * DateTimeUtils.MICROS_PER_DAY)
-            microseconds = Math.addExact(microseconds, weeksUs)
+            days = Math.addExact(days, Math.multiplyExact(values(i).toInt, 7))
           case "day" =>
-            val daysUs = Math.multiplyExact(values(i).toLong, DateTimeUtils.MICROS_PER_DAY)
-            microseconds = Math.addExact(microseconds, daysUs)
+            days = Math.addExact(days, values(i).toInt)
           case "hour" =>
             val hoursUs = Math.multiplyExact(values(i).toLong, MICROS_PER_HOUR)
             microseconds = Math.addExact(microseconds, hoursUs)
@@ -296,7 +295,7 @@ object IntervalUtils {
       }
       i += 1
     }
-    new CalendarInterval(months, microseconds)
+    new CalendarInterval(months, days, microseconds)
   }
 
   // Parses a string with nanoseconds, truncates the result and returns microseconds
@@ -357,7 +356,10 @@ object IntervalUtils {
     val monthsDuration = Math.multiplyExact(
       daysPerMonth * DateTimeUtils.MICROS_PER_DAY,
       interval.months)
-    val result = Math.addExact(interval.microseconds, monthsDuration)
+    val daysDuration = Math.multiplyExact(
+      DateTimeUtils.MICROS_PER_DAY,
+      interval.days)
+    val result = Math.addExact(interval.microseconds, Math.addExact(daysDuration, monthsDuration))
     targetUnit.convert(result, TimeUnit.MICROSECONDS)
   }
 

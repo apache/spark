@@ -29,15 +29,15 @@ import org.apache.spark.unsafe.types.CalendarInterval._
 class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("fromString: basic") {
-    testSingleUnit("YEAR", 3, 36, 0)
-    testSingleUnit("Month", 3, 3, 0)
-    testSingleUnit("Week", 3, 0, 3 * MICROS_PER_WEEK)
-    testSingleUnit("DAY", 3, 0, 3 * MICROS_PER_DAY)
-    testSingleUnit("HouR", 3, 0, 3 * MICROS_PER_HOUR)
-    testSingleUnit("MiNuTe", 3, 0, 3 * MICROS_PER_MINUTE)
-    testSingleUnit("Second", 3, 0, 3 * MICROS_PER_SECOND)
-    testSingleUnit("MilliSecond", 3, 0, 3 * MICROS_PER_MILLI)
-    testSingleUnit("MicroSecond", 3, 0, 3)
+    testSingleUnit("YEAR", 3, 36, 0, 0)
+    testSingleUnit("Month", 3, 3, 0, 0)
+    testSingleUnit("Week", 3, 0, 21, 0)
+    testSingleUnit("DAY", 3, 0, 3, 0)
+    testSingleUnit("HouR", 3, 0, 0, 3 * MICROS_PER_HOUR)
+    testSingleUnit("MiNuTe", 3, 0, 0, 3 * MICROS_PER_MINUTE)
+    testSingleUnit("Second", 3, 0, 0, 3 * MICROS_PER_SECOND)
+    testSingleUnit("MilliSecond", 3, 0, 0, 3 * MICROS_PER_MILLI)
+    testSingleUnit("MicroSecond", 3, 0, 0, 3)
 
     for (input <- Seq(null, "", " ")) {
       try {
@@ -66,36 +66,37 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("fromString: random order field") {
     val input = "1 day 1 year"
-    val result = new CalendarInterval(12, MICROS_PER_DAY)
+    val result = new CalendarInterval(12, 1, 0)
     assert(fromString(input) == result)
   }
 
   test("fromString: duplicated fields") {
     val input = "1 day 1 day"
-    val result = new CalendarInterval(0, 2 * MICROS_PER_DAY)
+    val result = new CalendarInterval(0, 2, 0)
     assert(fromString(input) == result)
   }
 
   test("fromString: value with +/-") {
     val input = "+1 year -1 day"
-    val result = new CalendarInterval(12, -MICROS_PER_DAY)
+    val result = new CalendarInterval(12, -1, 0)
     assert(fromString(input) == result)
   }
 
-  private def testSingleUnit(unit: String, number: Int, months: Int, microseconds: Long): Unit = {
+  private def testSingleUnit(
+      unit: String, number: Int, months: Int, days: Int, microseconds: Long): Unit = {
     for (prefix <- Seq("interval ", "")) {
       val input1 = prefix + number + " " + unit
       val input2 = prefix + number + " " + unit + "s"
-      val result = new CalendarInterval(months, microseconds)
+      val result = new CalendarInterval(months, days, microseconds)
       assert(fromString(input1) == result)
       assert(fromString(input2) == result)
     }
   }
 
   test("from year-month string") {
-    assert(fromYearMonthString("99-10") === new CalendarInterval(99 * 12 + 10, 0L))
-    assert(fromYearMonthString("+99-10") === new CalendarInterval(99 * 12 + 10, 0L))
-    assert(fromYearMonthString("-8-10") === new CalendarInterval(-8 * 12 - 10, 0L))
+    assert(fromYearMonthString("99-10") === new CalendarInterval(99 * 12 + 10, 0, 0L))
+    assert(fromYearMonthString("+99-10") === new CalendarInterval(99 * 12 + 10, 0, 0L))
+    assert(fromYearMonthString("-8-10") === new CalendarInterval(-8 * 12 - 10, 0, 0L))
 
     try {
       fromYearMonthString("99-15")
@@ -118,15 +119,16 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(fromDayTimeString("5 12:40:30.999999999") ===
       new CalendarInterval(
         0,
-        5 * MICROS_PER_DAY +
+        5,
         12 * MICROS_PER_HOUR +
         40 * MICROS_PER_MINUTE +
         30 * MICROS_PER_SECOND + 999999L))
     assert(fromDayTimeString("10 0:12:0.888") ===
       new CalendarInterval(
         0,
-        10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLI))
-    assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3 * MICROS_PER_DAY))
+        10,
+        12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLI))
+    assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
 
     try {
       fromDayTimeString("5 30:12:20")
