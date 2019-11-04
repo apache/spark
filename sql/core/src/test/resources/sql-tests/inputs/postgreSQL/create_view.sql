@@ -248,8 +248,8 @@ CREATE TABLE tbl3 (e int, f int) using parquet;
 CREATE TABLE tbl4 (g int, h int) using parquet;
 -- Since Spark doesn't support CREATE TEMPORARY TABLE, we used CREATE TEMPORARY VIEW instead
 -- CREATE TEMP TABLE tmptbl (i int, j int);
-CREATE TEMP VIEW tmptbl AS SELECT * FROM VALUES
-  (1, 1) AS temptbl(i, j);
+CREATE TABLE tmptbl (i int, j int) using parquet;
+INSERT INTO tmptbl VALUES (1, 1);
 
 --Should be in testviewschm2
 CREATE   VIEW  pubview AS SELECT * FROM tbl1 WHERE tbl1.a
