@@ -280,7 +280,9 @@ case class SampleExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def needCopyResult: Boolean = withReplacement
+  override def needCopyResult: Boolean = {
+    child.asInstanceOf[CodegenSupport].needCopyResult || withReplacement
+  }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")

@@ -2631,4 +2631,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val cast = sql("SELECT cast(struct(1, null) AS struct<a:int,b:int>)")
     checkAnswer(cast, Row(Row(1, null)) :: Nil)
   }
+
+  test("sample should not duplicated the input data") {
+    val df1 = spark.range(10).select($"id" as "id1", $"id" % 5 as "key1")
+    val df2 = spark.range(10).select($"id" as "id2", $"id" % 5 as "key2")
+    val sampled = df1.join(df2, $"key1" === $"key2")
+      .sample(0.5, 42)
+      .select("id1", "id2")
+    val idTuples = sampled.collect().map(row => row.getLong(0) -> row.getLong(1))
+    assert(idTuples.length == idTuples.toSet.size)
+  }
 }
