@@ -169,20 +169,20 @@ select sum(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null)
 -- empty set
 select sum(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where 1=0;
 
---
+-- basic interval sum
 select sum(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v);
 select sum(cast(v as interval)) from VALUES ('-1 seconds'), ('2 seconds'), (null) t(v);
 select sum(cast(v as interval)) from VALUES ('-1 seconds'), ('-2 seconds'), (null) t(v);
 select sum(cast(v as interval)) from VALUES ('-1 weeks'), ('2 seconds'), (null) t(v);
 
---group by
+-- group by
 select
     i,
     sum(cast(v as interval))
 from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
 group by i;
 
---having
+-- having
 select
     sum(cast(v as interval)) as sv
 from VALUES (1, '-1 weeks'), (2, '2 seconds'), (3, null), (1, '5 days') t(i, v)
