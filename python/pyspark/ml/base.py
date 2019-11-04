@@ -207,7 +207,7 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
         return self._set(outputCol=value)
 
     @abstractmethod
-    def createTransformFunc(self):
+    def _createTransformFunc(self):
         """
         Creates the transform function using the given param map. The input param map already takes
         account of the embedded param map. So the param values should be determined
@@ -216,33 +216,33 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
         raise NotImplementedError()
 
     @abstractmethod
-    def outputDataType(self):
+    def _outputDataType(self):
         """
         Returns the data type of the output column.
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def validateInputType(self, inputType):
+    def _validateInputType(self, inputType):
         """
         Validates the input type. Throw an exception if it is invalid.
         """
         raise NotImplementedError()
 
-    def transformSchema(self, schema):
+    def _transformSchema(self, schema):
         inputType = schema[self.getInputCol()].dataType
-        self.validateInputType(inputType)
+        self._validateInputType(inputType)
         if self.getOutputCol() in schema.names:
             raise ValueError("Output column %s already exists." % self.getOutputCol())
         outputFields = copy.copy(schema.fields)
         outputFields.append(StructField(self.getOutputCol(),
-                                        self.outputDataType(),
+                                        self._outputDataType(),
                                         nullable=False))
         return StructType(outputFields)
 
     def _transform(self, dataset):
-        self.transformSchema(dataset.schema)
-        transformUDF = udf(self.createTransformFunc(), self.outputDataType())
+        self._transformSchema(dataset.schema)
+        transformUDF = udf(self._createTransformFunc(), self._outputDataType())
         transformedDataset = dataset.withColumn(self.getOutputCol(),
                                                 transformUDF(dataset[self.getInputCol()]))
         return transformedDataset

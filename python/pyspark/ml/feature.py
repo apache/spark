@@ -1015,15 +1015,15 @@ class DCT(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    def createTransformFunc(self):
+    def _createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    def outputDataType(self):
+    def _outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    def validateInputType(self, inputType):
+    def _validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
 
@@ -1107,15 +1107,15 @@ class ElementwiseProduct(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    def createTransformFunc(self):
+    def _createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    def outputDataType(self):
+    def _outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    def validateInputType(self, inputType):
+    def _validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
 
@@ -2306,15 +2306,15 @@ class NGram(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    def createTransformFunc(self):
+    def _createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    def outputDataType(self):
+    def _outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    def validateInputType(self, inputType):
+    def _validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
 
@@ -2398,15 +2398,15 @@ class Normalizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    def createTransformFunc(self):
+    def _createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    def outputDataType(self):
+    def _outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    def validateInputType(self, inputType):
+    def _validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
 
@@ -2688,15 +2688,15 @@ class PolynomialExpansion(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    def createTransformFunc(self):
+    def _createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    def outputDataType(self):
+    def _outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    def validateInputType(self, inputType):
+    def _validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
 
@@ -3281,15 +3281,15 @@ class RegexTokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    def createTransformFunc(self):
+    def _createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    def outputDataType(self):
+    def _outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    def validateInputType(self, inputType):
+    def _validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
 
@@ -4037,15 +4037,15 @@ class Tokenizer(JavaUnaryTransformer, JavaMLReadable, JavaMLWritable):
         """
         return self._set(outputCol=value)
 
-    def createTransformFunc(self):
+    def _createTransformFunc(self):
         self._transfer_params_to_java()
         return self._java_obj.createTransformFunc()
 
-    def outputDataType(self):
+    def _outputDataType(self):
         self._transfer_params_to_java()
         return self._java_obj.outputDataType()
 
-    def validateInputType(self, inputType):
+    def _validateInputType(self, inputType):
         self._transfer_params_to_java()
         self._java_obj.validateInputType(inputType)
 

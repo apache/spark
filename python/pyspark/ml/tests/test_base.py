@@ -30,11 +30,11 @@ class UnaryTransformerTests(SparkSessionTestCase):
             .setInputCol("input").setOutputCol("output")
 
         # should not raise any errors
-        transformer.validateInputType(DoubleType())
+        transformer._validateInputType(DoubleType())
 
         with self.assertRaises(TypeError):
             # passing the wrong input type should raise an error
-            transformer.validateInputType(IntegerType())
+            transformer._validateInputType(IntegerType())
 
     def test_unary_transformer_transform(self):
         shiftVal = 3

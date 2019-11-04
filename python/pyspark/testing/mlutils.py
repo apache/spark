@@ -131,14 +131,14 @@ class MockUnaryTransformer(UnaryTransformer, DefaultParamsReadable, DefaultParam
     def setShift(self, shift):
         self._set(shift=shift)
 
-    def createTransformFunc(self):
+    def _createTransformFunc(self):
         shiftVal = self.getShift()
         return lambda x: x + shiftVal
 
-    def outputDataType(self):
+    def _outputDataType(self):
         return DoubleType()
 
-    def validateInputType(self, inputType):
+    def _validateInputType(self, inputType):
         if inputType != DoubleType():
             raise TypeError("Bad input type: {}. ".format(inputType) +
                             "Requires Double.")
