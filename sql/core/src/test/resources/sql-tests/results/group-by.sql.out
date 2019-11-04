@@ -620,7 +620,7 @@ select sum(cast(v as interval)) from VALUES ('-1 weeks'), ('2 seconds'), (null) 
 -- !query 61 schema
 struct<sum(CAST(v AS INTERVAL)):interval>
 -- !query 61 output
-interval -6 days -23 hours -59 minutes -58 seconds
+interval -7 days 2 seconds
 
 
 -- !query 62
@@ -645,7 +645,7 @@ having sv is not null
 -- !query 63 schema
 struct<sv:interval>
 -- !query 63 output
-interval -1 days -23 hours -59 minutes -58 seconds
+interval -2 days 2 seconds
 
 
 -- !query 64
