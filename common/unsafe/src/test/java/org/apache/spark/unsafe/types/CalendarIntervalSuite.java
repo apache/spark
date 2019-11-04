@@ -57,19 +57,19 @@ public class CalendarIntervalSuite {
     assertEquals("interval -2 years -10 months", i.toString());
 
     i = new CalendarInterval(0, 31, 0);
-    assertEquals("interval 4 weeks 3 days", i.toString());
+    assertEquals("interval 31 days", i.toString());
 
     i = new CalendarInterval(0, -31, 0);
-    assertEquals("interval -4 weeks -3 days", i.toString());
+    assertEquals("interval -31 days", i.toString());
 
     i = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
-    assertEquals("interval 3 hours 13 minutes 123 microseconds", i.toString());
+    assertEquals("interval 3 hours 13 minutes 0.000123 seconds", i.toString());
 
     i = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123);
-    assertEquals("interval -3 hours -13 minutes -123 microseconds", i.toString());
+    assertEquals("interval -3 hours -13 minutes -0.000123 seconds", i.toString());
 
     i = new CalendarInterval(34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
-    assertEquals("interval 2 years 10 months 4 weeks 3 days 3 hours 13 minutes 123 microseconds",
+    assertEquals("interval 2 years 10 months 31 days 3 hours 13 minutes 0.000123 seconds",
       i.toString());
   }
 
