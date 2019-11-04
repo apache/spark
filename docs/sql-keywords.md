@@ -57,7 +57,6 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>CASCADE</td><td>non-reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>CASE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>CAST</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
-  <tr><td>CATALOG</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>CHANGE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>CHECK</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>CLEAR</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>

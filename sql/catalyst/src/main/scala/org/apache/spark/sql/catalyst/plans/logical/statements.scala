@@ -421,6 +421,6 @@ case class ShowColumnsStatement(
     namespace: Option[Seq[String]]) extends ParsedStatement
 
 /**
- * A SHOW CURRENT CATALOG statement, as parsed from SQL
+ * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
-case class ShowCurrentCatalogStatement() extends ParsedStatement
+case class ShowCurrentNamespaceStatement() extends ParsedStatement

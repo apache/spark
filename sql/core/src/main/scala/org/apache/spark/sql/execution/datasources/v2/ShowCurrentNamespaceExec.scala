@@ -21,18 +21,20 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 
 /**
- * Physical plan node for showing current catalog.
+ * Physical plan node for showing current catalog/namespace.
  */
-case class ShowCurrentCatalogExec(
+case class ShowCurrentNamespaceExec(
     output: Seq[Attribute],
     catalogManager: CatalogManager)
   extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val encoder = RowEncoder(schema).resolveAndBind()
     Seq(encoder
-      .toRow(new GenericRowWithSchema(Array(catalogManager.currentCatalog.name), schema))
+      .toRow(new GenericRowWithSchema(
+        Array(catalogManager.currentCatalog.name, catalogManager.currentNamespace.quoted), schema))
       .copy())
   }
 }

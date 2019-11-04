@@ -2593,11 +2593,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[ShowCurrentCatalogStatement]].
+   * Create a [[ShowCurrentNamespaceStatement]].
    */
-  override def visitShowCurrentCatalog(
-      ctx: ShowCurrentCatalogContext) : LogicalPlan = withOrigin(ctx) {
-    ShowCurrentCatalogStatement()
+  override def visitShowCurrentNamespace(
+      ctx: ShowCurrentNamespaceContext) : LogicalPlan = withOrigin(ctx) {
+    ShowCurrentNamespaceStatement()
   }
 
   /**

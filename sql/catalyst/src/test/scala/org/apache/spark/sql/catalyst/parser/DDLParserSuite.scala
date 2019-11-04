@@ -1278,10 +1278,10 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed3_table, expected3_table)
   }
 
-  test("show current catalog") {
+  test("show current namespace") {
     comparePlans(
-      parsePlan("SHOW CURRENT CATALOG"),
-      ShowCurrentCatalogStatement())
+      parsePlan("SHOW CURRENT NAMESPACE"),
+      ShowCurrentNamespaceStatement())
   }
 
   private case class TableSpec(

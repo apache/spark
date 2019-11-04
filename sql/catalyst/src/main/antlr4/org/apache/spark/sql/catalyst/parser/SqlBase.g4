@@ -200,7 +200,7 @@ statement
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
-    | SHOW CURRENT CATALOG                                             #showCurrentCatalog
+    | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
@@ -949,7 +949,6 @@ ansiNonReserved
     | BY
     | CACHE
     | CASCADE
-    | CATALOG
     | CHANGE
     | CLEAR
     | CLUSTER
@@ -1173,7 +1172,6 @@ nonReserved
     | CASCADE
     | CASE
     | CAST
-    | CATALOG
     | CHANGE
     | CHECK
     | CLEAR
@@ -1432,7 +1430,6 @@ CACHE: 'CACHE';
 CASCADE: 'CASCADE';
 CASE: 'CASE';
 CAST: 'CAST';
-CATALOG: 'CATALOG';
 CHANGE: 'CHANGE';
 CHECK: 'CHECK';
 CLEAR: 'CLEAR';
