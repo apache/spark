@@ -25,8 +25,9 @@ Output includes basic table information and file system information like `Last A
 `Created By`, `Type`, `Provider`, `Table Properties`, `Location`, `Serde Library`, `InputFormat`, 
 `OutputFormat`, `Storage Properties`, `Partition Provider`, `Partition Columns` and `Schema`.
 
-Users cannot use regular expression for the table name if a partition specification is present. It will output 
-the given partition's file-system-specific information such as `Partition Parameters` and `Partition Statistics` 
+If a partition specification is present, it outputs the given partition's file-system-specific 
+information such as `Partition Parameters` and `Partition Statistics`. Note that a table regex 
+cannot be used with a partition specification.
 
 ### Syntax
 {% highlight sql %}
@@ -51,7 +52,8 @@ SHOW TABLE EXTENDED [IN|FROM database_name] LIKE 'identifier_with_wildcards' [PA
   </dd>
   <dt><code><em>PARTITION(partition_spec)</em></code></dt>
   <dd>
-    Specifies partition column and its value which is exists in the table. With this user cannot use regular expression for table name.
+    Specifies partition column and its value which is exists in the table. Note that a table regex 
+    cannot be used with a partition specification..
   </dd>
 </dl>
 ### Examples
