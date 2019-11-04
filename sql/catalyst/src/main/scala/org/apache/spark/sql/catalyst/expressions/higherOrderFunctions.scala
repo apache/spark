@@ -24,7 +24,6 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -314,39 +313,33 @@ case class ArraySort(
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  def this(argument: Expression) = this(argument, Literal(true))
+  def this(argument: Expression) = this(argument, ArraySort.defaultComparator)
 
-  @transient lazy val argumentsType: DataType =
+  @transient lazy val elementType: DataType =
     argument.dataType.asInstanceOf[ArrayType].elementType
 
   override def dataType: ArrayType = argument.dataType.asInstanceOf[ArrayType]
 
   override def checkInputDataTypes(): TypeCheckResult = {
-
-    if (function.dataType == BooleanType) {
-      argument.dataType match {
-        case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
-          TypeCheckResult.TypeCheckSuccess
-        case ArrayType(dt, _) =>
-          val dtSimple = dt.catalogString
-          TypeCheckResult.TypeCheckFailure(
-            s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
-        case _ =>
-          TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
-      }
-    } else {
-      checkArgumentDataTypes() match {
-        case TypeCheckResult.TypeCheckSuccess =>
-          val LambdaFunction(_, arguments, _) = function
-          if (arguments.size == 2 && function.dataType == IntegerType) {
-            TypeCheckResult.TypeCheckSuccess
-          } else {
-            TypeCheckResult.TypeCheckFailure("Return type of the given function has to be " +
-              "IntegerType")
-          }
-
-        case failure => failure
-      }
+    checkArgumentDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        argument.dataType match {
+          case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+            if (function.dataType == IntegerType) {
+              TypeCheckResult.TypeCheckSuccess
+            } else {
+              TypeCheckResult.TypeCheckFailure("Return type of the given function has to be " +
+                "IntegerType")
+            }
+          case ArrayType(dt, _) =>
+            val dtSimple = dt.catalogString
+            TypeCheckResult.TypeCheckFailure(
+              s"$prettyName does not support sorting array of type $dtSimple which is not " +
+                "orderable")
+          case _ =>
+            TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
+        }
+      case failure => failure
     }
   }
 
@@ -356,58 +349,47 @@ case class ArraySort(
           f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
   }
 
-  @transient lazy val (firstParam, secondParam) = {
-    val LambdaFunction(_, (firstParam: NamedLambdaVariable) +: tail, _) = function
-    val secondParam = tail.head.asInstanceOf[NamedLambdaVariable]
-    (firstParam, secondParam)
-  }
+  @transient lazy val LambdaFunction(_,
+    Seq(firstElemVar: NamedLambdaVariable, secondElemVar: NamedLambdaVariable), _) = function
 
   def comparator(inputRow: InternalRow): Comparator[Any] = {
     val f = functionForEval
     (o1: Any, o2: Any) => {
-        firstParam.value.set(o2)
-        secondParam.value.set(o1)
-        f.eval(inputRow).asInstanceOf[Int]
+      firstElemVar.value.set(o1)
+      secondElemVar.value.set(o2)
+      f.eval(inputRow).asInstanceOf[Int]
     }
   }
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
-    val arr = argumentValue.asInstanceOf[ArrayData]
-    sortEval(arr, if (function.dataType == BooleanType) lt else comparator(inputRow))
-  }
-
-  def sortEval(array: Any, comparator: Comparator[Any]): Any = {
-    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](argumentsType)
-    if (argumentsType != NullType) {
-      java.util.Arrays.sort(data, comparator)
+    val arr = argumentValue.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
+    if (elementType != NullType) {
+      java.util.Arrays.sort(arr, comparator(inputRow))
     }
-    new GenericArrayData(data.asInstanceOf[Array[Any]])
-  }
-
-  @transient lazy val lt: Comparator[Any] = {
-    val ordering = argument.dataType match {
-      case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
-    }
-
-    (o1: Any, o2: Any) => {
-      if (o1 == null && o2 == null) {
-        0
-      } else if (o1 == null) {
-        1
-      } else if (o2 == null) {
-        -1
-      } else {
-        ordering.compare(o1, o2)
-      }
-    }
+    new GenericArrayData(arr.asInstanceOf[Array[Any]])
   }
 
   override def prettyName: String = "array_sort"
-
 }
 
+object ArraySort {
+
+  def comparator(left: Expression, right: Expression): Expression = {
+    val lit0 = Literal(0)
+    val lit1 = Literal(1)
+    val litm1 = Literal(-1)
+
+    If(And(IsNull(left), IsNull(right)), lit0,
+      If(IsNull(left), lit1, If(IsNull(right), litm1,
+        If(LessThan(left, right), litm1, If(GreaterThan(left, right), lit1, lit0)))))
+  }
+
+  val defaultComparator: LambdaFunction = {
+    val left = UnresolvedNamedLambdaVariable(Seq("left"))
+    val right = UnresolvedNamedLambdaVariable(Seq("right"))
+    LambdaFunction(comparator(left, right), Seq(left, right))
+  }
+}
 
 /**
  * Filters entries in a map using the provided function.
