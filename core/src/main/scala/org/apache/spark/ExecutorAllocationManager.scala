@@ -267,7 +267,6 @@ private[spark] class ExecutorAllocationManager(
    */
   def reset(): Unit = synchronized {
     addTime = 0L
-    // numExecutorsTarget = initialNumExecutors
     numExecutorsTargetPerResourceProfile.keys.foreach { rp =>
       // Note this means every profile will be allowed to have initial number
       // we may want to make this configurable per Profile in the future
@@ -512,16 +511,20 @@ private[spark] class ExecutorAllocationManager(
     val executorIdsToBeRemoved = new ArrayBuffer[String]
 
     logInfo("Request to remove executorIds: " + executors.mkString(", "))
-    val numExistingExecutors = executorMonitor.executorCount - executorMonitor.pendingRemovalCount
+    val numExecutorsTotalPerRpId = mutable.Map[Int, Int]()
 
-    var newExecutorTotal = numExistingExecutors
     executors.foreach { executorIdToBeRemoved =>
       val rpId = getResourceProfileIdOfExecutor(executorIdToBeRemoved)
       if (rpId == UNKNOWN_RESOURCE_PROFILE_ID) {
         logWarning(s"Not removing executor $executorIdsToBeRemoved because couldn't find " +
           "ResourceProfile for it!")
       }
+
+      val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
+        (executorMonitor.executorCountWithResourceProfile(rpId) -
+          executorMonitor.pendingRemovalCountPerResourceProfileId(rpId)))
       val rp = listener.resourceProfileIdToResourceProfile(rpId)
+
       // TODO - ideally min num per stage (or ResourceProfile), otherwise min * num stages executors
       if (newExecutorTotal - 1 < minNumExecutors) {
         logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
@@ -532,7 +535,7 @@ private[spark] class ExecutorAllocationManager(
           s"target ${numExecutorsTargetPerResourceProfile(rp)})")
       } else {
         executorIdsToBeRemoved += executorIdToBeRemoved
-        newExecutorTotal -= 1
+        numExecutorsTotalPerRpId(rpId) -= 1
       }
     }
 
@@ -554,13 +557,11 @@ private[spark] class ExecutorAllocationManager(
     // So we need to update the target with desired value.
     client.requestTotalExecutors(0, numLocalityAwareTasksPerResourceProfileId.toMap,
         hostToLocalTaskCount, Some(numExecutorsTargetPerResourceProfile.toMap))
-      // reset the newExecutorTotal to the existing number of executors
-    newExecutorTotal = numExistingExecutors
+
+    // reset the newExecutorTotal to the existing number of executors
     if (testing || executorsRemoved.nonEmpty) {
-      newExecutorTotal -= executorsRemoved.size
       executorMonitor.executorsKilled(executorsRemoved)
-      logInfo(s"Executors ${executorsRemoved.mkString(",")} removed due to idle timeout." +
-        s"(new desired total will be $newExecutorTotal)")
+      logInfo(s"Executors ${executorsRemoved.mkString(",")} removed due to idle timeout.")
       executorsRemoved
     } else {
       logWarning(s"Unable to reach the cluster manager to kill executor/s " +
