@@ -51,7 +51,7 @@ class JDBCSuite extends QueryTest
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
 
   val testH2Dialect = new JdbcDialect {
-    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
     override def getCatalystType(
         sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
       Some(StringType)
@@ -1663,49 +1663,20 @@ class JDBCSuite extends QueryTest
       "`NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`."))
   }
 
-  test("SPARK-28552: Check whether a dialect instance can be applied on the given jdbc url") {
-    var dialects = List[JdbcDialect]()
-
-    def registerDialect(dialect: JdbcDialect): Unit = {
-      dialects = dialect :: dialects.filterNot(_ == dialect)
-    }
-
-    registerDialect(MySQLDialect)
-    registerDialect(PostgresDialect)
-    registerDialect(DB2Dialect)
-    registerDialect(MsSqlServerDialect)
-    registerDialect(DerbyDialect)
-    registerDialect(OracleDialect)
-    registerDialect(TeradataDialect)
-
-    def get(url: String): JdbcDialect = {
-      val matchingDialects = dialects.filter(_.canHandle(url))
-      matchingDialects.length match {
-        case 0 => NoopDialect
-        case 1 => matchingDialects.head
-        case _ => new AggregatedDialect(matchingDialects)
-      }
-    }
-
-    assert(get("jdbc:mysql://localhost/db") == MySQLDialect)
-    assert(get("jdbc:MySQL://localhost/db") == MySQLDialect)
-
-    assert(get("jdbc:postgresql://localhost/db") == PostgresDialect)
-    assert(get("jdbc:postGresql://localhost/db") == PostgresDialect)
-
-    assert(get("jdbc:db2://localhost/db") == DB2Dialect)
-    assert(get("jdbc:DB2://localhost/db") == DB2Dialect)
-
-    assert(get("jdbc:sqlserver://localhost/db") == MsSqlServerDialect)
-    assert(get("jdbc:sqlServer://localhost/db") == MsSqlServerDialect)
-
-    assert(get("jdbc:derby://localhost/db") == DerbyDialect)
-    assert(get("jdbc:derBy://localhost/db") == DerbyDialect)
-
-    assert(get("jdbc:oracle://localhost/db") == OracleDialect)
-    assert(get("jdbc:Oracle://localhost/db") == OracleDialect)
-
-    assert(get("jdbc:teradata://localhost/db") == TeradataDialect)
-    assert(get("jdbc:Teradata://localhost/db") == TeradataDialect)
+  test("SPARK-28552: Case-insensitive database URLs in JdbcDialect") {
+    assert(JdbcDialects.get("jdbc:mysql://localhost/db") === MySQLDialect)
+    assert(JdbcDialects.get("jdbc:MySQL://localhost/db") === MySQLDialect)
+    assert(JdbcDialects.get("jdbc:postgresql://localhost/db") === PostgresDialect)
+    assert(JdbcDialects.get("jdbc:postGresql://localhost/db") === PostgresDialect)
+    assert(JdbcDialects.get("jdbc:db2://localhost/db") === DB2Dialect)
+    assert(JdbcDialects.get("jdbc:DB2://localhost/db") === DB2Dialect)
+    assert(JdbcDialects.get("jdbc:sqlserver://localhost/db") === MsSqlServerDialect)
+    assert(JdbcDialects.get("jdbc:sqlServer://localhost/db") === MsSqlServerDialect)
+    assert(JdbcDialects.get("jdbc:derby://localhost/db") === DerbyDialect)
+    assert(JdbcDialects.get("jdbc:derBy://localhost/db") === DerbyDialect)
+    assert(JdbcDialects.get("jdbc:oracle://localhost/db") === OracleDialect)
+    assert(JdbcDialects.get("jdbc:Oracle://localhost/db") === OracleDialect)
+    assert(JdbcDialects.get("jdbc:teradata://localhost/db") === TeradataDialect)
+    assert(JdbcDialects.get("jdbc:Teradata://localhost/db") === TeradataDialect)
   }
 }
