@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundEx
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -894,6 +894,75 @@ class PlanResolutionSuite extends AnalysisTest {
       case u: UpdateTable =>
         assert(u.table.isInstanceOf[UnresolvedV2Relation])
       case _ => fail("Expect UpdateTable, but got:\n" + parsed.treeString)
+    }
+  }
+
+  test("alter table: alter column") {
+    Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
+      case (tblName, useV1Command) =>
+        val sql1 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint"
+        val sql2 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE bigint COMMENT 'new comment'"
+        val sql3 = s"ALTER TABLE $tblName ALTER COLUMN i COMMENT 'new comment'"
+
+        val parsed1 = parseAndResolve(sql1)
+        val parsed2 = parseAndResolve(sql2)
+
+        val tableIdent = TableIdentifier(tblName, None)
+        if (useV1Command) {
+          val newColumn = StructField("i", LongType)
+          val expected1 = AlterTableChangeColumnCommand(
+            tableIdent, "i", newColumn)
+          val expected2 = AlterTableChangeColumnCommand(
+            tableIdent, "i", newColumn.withComment("new comment"))
+
+          comparePlans(parsed1, expected1)
+          comparePlans(parsed2, expected2)
+
+          val e1 = intercept[AnalysisException] {
+            parseAndResolve(sql3)
+          }
+          assert(e1.getMessage.contains("ALTER COLUMN with v1 tables must specify new data type"))
+
+          val sql4 = s"ALTER TABLE $tblName ALTER COLUMN a.b.c TYPE bigint"
+          val e2 = intercept[AnalysisException] {
+            parseAndResolve(sql4)
+          }
+          assert(e2.getMessage.contains(
+            "ALTER COLUMN with qualified column is only supported with v2 tables"))
+
+          val sql5 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE char(1)"
+          val builder = new MetadataBuilder
+          builder.putString(HIVE_TYPE_STRING, CharType(1).catalogString)
+          val newColumnWithCleanedType = StructField("i", StringType, true, builder.build())
+          val expected5 = AlterTableChangeColumnCommand(
+            tableIdent, "i", newColumnWithCleanedType)
+          val parsed5 = parseAndResolve(sql5)
+          comparePlans(parsed5, expected5)
+        } else {
+          val parsed3 = parseAndResolve(sql3)
+
+          parsed1 match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(
+                TableChange.updateColumnType(Array("i"), LongType)))
+            case _ => fail("expect AlterTable")
+          }
+
+          parsed2 match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(
+                TableChange.updateColumnType(Array("i"), LongType),
+                TableChange.updateColumnComment(Array("i"), "new comment")))
+            case _ => fail("expect AlterTable")
+          }
+
+          parsed3 match {
+            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
+              assert(changes == Seq(
+                TableChange.updateColumnComment(Array("i"), "new comment")))
+            case _ => fail("expect AlterTable")
+          }
+        }
     }
   }
 
