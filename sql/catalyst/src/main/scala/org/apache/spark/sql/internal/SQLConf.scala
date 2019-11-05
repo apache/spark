@@ -2009,8 +2009,8 @@ object SQLConf {
     .createWithDefault(false)
 
   val DEFAULT_CATALOG = buildConf("spark.sql.defaultCatalog")
-    .doc("Name of the default catalog. This will be as the current catalog if users have not " +
-      "explicitly set the current catalog.")
+    .doc("Name of the default catalog. This will be the current catalog if users have not " +
+      "explicitly set the current catalog yet.")
     .stringConf
     .createWithDefault(SESSION_CATALOG_NAME)
 
