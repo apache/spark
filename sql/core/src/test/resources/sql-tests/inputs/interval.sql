@@ -11,6 +11,10 @@ select interval '1 minutes' < interval '1 hour';
 select interval '-1 day' >= interval '-23 hour';
 
 -- equal
+select interval '1 year' = interval '360 days';
+select interval '1 year 2 month' = interval '420 days';
+select interval '1 year' = interval '365 days';
+select interval '1 month' = interval '30 days';
 select interval '1 minutes' = interval '1 hour';
 select interval '1 minutes' = null;
 select null = interval '-1 day';

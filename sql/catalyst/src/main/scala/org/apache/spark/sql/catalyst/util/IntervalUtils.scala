@@ -35,8 +35,7 @@ object IntervalUtils {
     DateTimeUtils.MILLIS_PER_HOUR * DateTimeUtils.MICROS_PER_MILLIS
   final val MICROS_PER_MINUTE: Long =
     DateTimeUtils.MILLIS_PER_MINUTE * DateTimeUtils.MICROS_PER_MILLIS
-  final val DAYS_PER_MONTH: Byte = 30
-  final val MICROS_PER_MONTH: Long = DAYS_PER_MONTH * DateTimeUtils.MICROS_PER_DAY
+  final val MICROS_PER_MONTH: Long = CalendarInterval.DAYS_PER_MONTH * DateTimeUtils.MICROS_PER_DAY
   /* 365.25 days per year assumes leap year every four years */
   final val MICROS_PER_YEAR: Long = (36525L * DateTimeUtils.MICROS_PER_DAY) / 100
 

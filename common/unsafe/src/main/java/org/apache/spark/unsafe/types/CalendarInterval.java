@@ -36,6 +36,7 @@ public final class CalendarInterval implements Serializable, Ordered<CalendarInt
   public static final long MICROS_PER_HOUR = MICROS_PER_MINUTE * 60;
   public static final long MICROS_PER_DAY = MICROS_PER_HOUR * 24;
   public static final long MICROS_PER_WEEK = MICROS_PER_DAY * 7;
+  public static final Byte DAYS_PER_MONTH = 30;
 
   public final int months;
   public final int days;
@@ -86,8 +87,10 @@ public final class CalendarInterval implements Serializable, Ordered<CalendarInt
 
   @Override
   public int compare(CalendarInterval that) {
-    long thisAdjustDays = this.microseconds / MICROS_PER_DAY + this.days + this.months * 30;
-    long thatAdjustDays = that.microseconds / MICROS_PER_DAY + that.days + that.months * 30;
+    long thisAdjustDays =
+      this.microseconds / MICROS_PER_DAY + this.days + this.months * DAYS_PER_MONTH;
+    long thatAdjustDays =
+      that.microseconds / MICROS_PER_DAY + that.days + that.months * DAYS_PER_MONTH;
     long daysDiff = thisAdjustDays - thatAdjustDays;
     if (daysDiff == 0) {
       long msDiff = (this.microseconds % MICROS_PER_DAY) - (that.microseconds % MICROS_PER_DAY);
