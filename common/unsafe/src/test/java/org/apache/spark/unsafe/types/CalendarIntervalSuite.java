@@ -51,28 +51,28 @@ public class CalendarIntervalSuite {
     CalendarInterval i;
 
     i = new CalendarInterval(0, 0, 0);
-    assertEquals("interval 0 microseconds", i.toString());
+    assertEquals("0 microseconds", i.toString());
 
     i = new CalendarInterval(34, 0, 0);
-    assertEquals("interval 2 years 10 months", i.toString());
+    assertEquals("2 years 10 months", i.toString());
 
     i = new CalendarInterval(-34, 0, 0);
-    assertEquals("interval -2 years -10 months", i.toString());
+    assertEquals("-2 years -10 months", i.toString());
 
     i = new CalendarInterval(0, 31, 0);
-    assertEquals("interval 31 days", i.toString());
+    assertEquals("31 days", i.toString());
 
     i = new CalendarInterval(0, -31, 0);
-    assertEquals("interval -31 days", i.toString());
+    assertEquals("-31 days", i.toString());
 
     i = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
-    assertEquals("interval 3 hours 13 minutes 0.000123 seconds", i.toString());
+    assertEquals("3 hours 13 minutes 0.000123 seconds", i.toString());
 
     i = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123);
-    assertEquals("interval -3 hours -13 minutes -0.000123 seconds", i.toString());
+    assertEquals("-3 hours -13 minutes -0.000123 seconds", i.toString());
 
     i = new CalendarInterval(34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
-    assertEquals("interval 2 years 10 months 31 days 3 hours 13 minutes 0.000123 seconds",
+    assertEquals("2 years 10 months 31 days 3 hours 13 minutes 0.000123 seconds",
       i.toString());
   }
 
