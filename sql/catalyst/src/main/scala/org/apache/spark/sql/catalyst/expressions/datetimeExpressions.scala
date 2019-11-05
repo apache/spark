@@ -2170,7 +2170,7 @@ case class SubtractDates(left: Expression, right: Expression)
   examples = """
     Examples:
       > SELECT interval '1 year 2 month' / 3.0;
-       interval 4 months 2 weeks 6 days
+       interval 4 months 20 days
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
