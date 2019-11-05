@@ -99,7 +99,9 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
   }
 }
 
-case class LocalShuffleReaderExec(child: QueryStageExec) extends UnaryExecNode {
+// `child` is usually `ShuffleQueryStageExec` or `ReusedQueryStageExec`, but can be the shuffle
+// exchange node during canonicalization.
+case class LocalShuffleReaderExec(child: SparkPlan) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 

@@ -182,7 +182,9 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 }
 
 case class CoalescedShuffleReaderExec(
-    child: QueryStageExec,
+    // `child` is usually `ShuffleQueryStageExec` or `ReusedQueryStageExec`, but can be the shuffle
+    // exchange node during canonicalization.
+    child: SparkPlan,
     partitionStartIndices: Array[Int]) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
