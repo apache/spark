@@ -31,10 +31,11 @@ import org.apache.spark.sql.internal.SQLConf
 class ThriftServerPageSuite extends SparkFunSuite {
 
   /**
-    * Run a dummy session and return the listener
-    */
+   * Run a dummy session and return the listener
+   */
   private def getListener: HiveThriftServer2Listener = {
     val listener = new HiveThriftServer2Listener(mock(classOf[HiveThriftServer2]), new SQLConf)
+
     listener.onSessionCreated("localhost", "sessionid", "user")
     listener.onStatementStart("id", "sessionid", "dummy query", "groupid", "user")
     listener.onStatementParsed("id", "dummy plan")
