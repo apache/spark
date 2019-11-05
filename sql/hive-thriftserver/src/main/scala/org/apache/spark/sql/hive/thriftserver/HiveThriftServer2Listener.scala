@@ -38,6 +38,7 @@ private[thriftserver] class HiveThriftServer2Listener(
   kvstore: ElementTrackingStore,
   server: Option[HiveServer2],
   sqlContext: Option[SQLContext],
+  sc: Option[SparkContext],
   sparkConf: Option[SparkConf] = None,
   live: Boolean = true) extends SparkListener {
 
@@ -54,12 +55,6 @@ private[thriftserver] class HiveThriftServer2Listener(
       (conf.get(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT),
         conf.get(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT))
     }
-  }
-
-  private val sc: Option[SparkContext] = if (live) {
-    Some(sqlContext.get.sparkContext)
-  } else {
-    None
   }
 
   kvstore.addTrigger(classOf[SessionInfo], retainedSessions) { count =>

@@ -59,11 +59,11 @@ object HiveThriftServer2 extends Logging {
 
     server.init(executionHive.conf)
     server.start()
-    val kvStore = SparkSQLEnv.sqlContext.sparkContext
-      .statusStore.store.asInstanceOf[ElementTrackingStore]
-    listener = new HiveThriftServer2Listener(kvStore, Some(server), Some(sqlContext))
-    sqlContext.sparkContext.addSparkListener(listener)
-    uiTab = if (sqlContext.sparkContext.getConf.get(UI_ENABLED)) {
+    val sc = sqlContext.sparkContext
+    val kvStore = sc.statusStore.store.asInstanceOf[ElementTrackingStore]
+    listener = new HiveThriftServer2Listener(kvStore, Some(server), Some(sqlContext), Some(sc))
+    sc.addSparkListener(listener)
+    uiTab = if (sc.getConf.get(UI_ENABLED)) {
       Some(new ThriftServerTab(new HiveThriftServer2AppStatusStore(kvStore, Some(listener)),
         getSparkUI(sqlContext.sparkContext)))
     } else {
@@ -108,9 +108,11 @@ object HiveThriftServer2 extends Logging {
       server.start()
       logInfo("HiveThriftServer2 started")
       val kvStore = SparkSQLEnv.sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
-      listener = new HiveThriftServer2Listener(kvStore, Some(server), Some(SparkSQLEnv.sqlContext))
-      SparkSQLEnv.sparkContext.addSparkListener(listener)
-      uiTab = if (SparkSQLEnv.sparkContext.getConf.get(UI_ENABLED)) {
+      val sc = SparkSQLEnv.sparkContext
+      listener = new HiveThriftServer2Listener(kvStore, Some(server),
+        Some(SparkSQLEnv.sqlContext), Some(sc))
+      sc.addSparkListener(listener)
+      uiTab = if (sc.getConf.get(UI_ENABLED)) {
         Some(new ThriftServerTab(new HiveThriftServer2AppStatusStore(kvStore, Some(listener)),
           getSparkUI(SparkSQLEnv.sparkContext)))
       } else {

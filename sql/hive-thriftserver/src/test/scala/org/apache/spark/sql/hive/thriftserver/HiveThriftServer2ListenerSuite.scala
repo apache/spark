@@ -56,7 +56,7 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite
     val sqlConf = new SQLConf
     when(sqlContext.conf).thenReturn(sqlConf)
     when(sqlContext.sparkContext).thenReturn(sc)
-    val listener = new HiveThriftServer2Listener(kvstore, Some(server), Some(sqlContext))
+    val listener = new HiveThriftServer2Listener(kvstore, Some(server), Some(sqlContext), Some(sc))
     new HiveThriftServer2AppStatusStore(kvstore, Some(listener))
   }
 
