@@ -336,11 +336,9 @@ private[spark] class ExecutorAllocationManager(
         ExecutorAllocationManager.TargetNumUpdates]
 
       // Update targets for all ResourceProfiles then do a single request to the cluster manager
-      // TODO - see about removing execResourceProfIdToNumTasks since don't need num tasks
-      listener.execResourceProfIdToNumTasks.foreach { case (rProfId, foo) =>
+      listener.resourceProfileIdToResourceProfile.foreach { case (rProfId, resourceProfile) =>
         val maxNeeded = maxNumExecutorsNeededPerResourceProfile(rProfId)
         logInfo("max needed for rp: " + rProfId + " is: " + maxNeeded)
-        val resourceProfile = listener.resourceProfileIdToResourceProfile(rProfId)
         val targetExecs =
           numExecutorsTargetPerResourceProfile.getOrElseUpdate(resourceProfile, initialNumExecutors)
         if (maxNeeded < targetExecs) {
@@ -648,16 +646,12 @@ private[spark] class ExecutorAllocationManager(
 
     private val stageAttemptToResourceProfile =
       new mutable.HashMap[StageAttempt, ResourceProfile]
-    // TODO - make private - ResourceProfileId to num tasks
-    val execResourceProfIdToNumTasks = new mutable.HashMap[Int, Int]
     val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
-    // val resourceProfileIdToExecutor = new mutable.HashMap[Int, mutable.Set[String]]
     val resourceProfileIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
 
     // initialize default ResourceProfile
     resourceProfileIdToResourceProfile(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = defaultProfile
-    execResourceProfIdToNumTasks(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = 0
 
     // stageAttempt to tuple (the number of task with locality preferences, a map where each pair
     // is a node and the number of tasks that would like to be scheduled on that node, and
@@ -684,20 +678,15 @@ private[spark] class ExecutorAllocationManager(
         resourceProfileIdToStageAttempt.getOrElseUpdate(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
         logInfo("adding to execResourceReqsToNumTasks: " + numTasks)
-        execResourceProfIdToNumTasks(stageResourceProf.id) =
-          execResourceProfIdToNumTasks.getOrElse(stageResourceProf.id, 0) + numTasks
         numExecutorsToAddPerResourceProfileId.getOrElseUpdate(profId, 1)
         // TODO - currently never remove, we could remove is all executors using a profile exit
         resourceProfileIdToResourceProfile.getOrElseUpdate(profId, stageResourceProf)
         numExecutorsTargetPerResourceProfile.getOrElseUpdate(stageResourceProf, 0)
-        logInfo("value to execResourceReqsToNumTasks: " +
-          execResourceProfIdToNumTasks(profId))
+
 
         // Compute the number of tasks requested by the stage on each host
         var numTasksPending = 0
         val hostToLocalTaskCountPerStage = new mutable.HashMap[String, Int]()
-        // TODO - what if locality preference and resourceprofile conflict?? Do we want to change
-        // this logic?
         stageSubmitted.stageInfo.taskLocalityPreferences.foreach { locality =>
           if (!locality.isEmpty) {
             numTasksPending += 1
@@ -731,10 +720,10 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToTaskIndices -= stageAttempt
         stageAttemptToSpeculativeTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
-        val rp = stageAttemptToResourceProfile(stageAttempt)
-        logInfo("stage completed rp is: " + rp)
-        // TODO - we don't use the num tasks from this can we remove?
-        execResourceProfIdToNumTasks(rp.id) -= numTasks
+        // TODO - need to do this somewhere but have to be careful about late events
+        // val rp = stageAttemptToResourceProfile(stageAttempt)
+        // resourceProfileIdToStageAttempt(rp.id) -= stageAttempt
+        // stageAttemptToResourceProfile -= stageAttempt
 
         // Update the executor placement hints
         updateExecutorPlacementHints()
@@ -782,10 +771,6 @@ private[spark] class ExecutorAllocationManager(
           if (stageAttemptToNumRunningTask(stageAttempt) == 0) {
             logWarning("stage attempt num running 0: " + stageAttempt)
             stageAttemptToNumRunningTask -= stageAttempt
-            // TODO - need to do this somewhere but have to be careful about late events
-            // val rp = stageAttemptToResourceProfile(stageAttempt)
-            // resourceProfileIdToStageAttempt(rp.id) -= stageAttempt
-            // stageAttemptToResourceProfile -= stageAttempt
           }
         }
         // If the task failed, we expect it to be resubmitted later. To ensure we have
