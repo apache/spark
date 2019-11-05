@@ -154,7 +154,7 @@ SELECT val_timestamp, udf(cate), avg(val_timestamp) OVER(PARTITION BY udf(cate) 
 RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
 ORDER BY udf(cate), val_timestamp
 -- !query 9 schema
-struct<val_timestamp:timestamp,CAST(udf(cast(cate as string)) AS STRING):string,avg(CAST(val_timestamp AS DOUBLE)) OVER (PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND interval 3 weeks 2 days 4 hours FOLLOWING):double>
+struct<val_timestamp:timestamp,CAST(udf(cast(cate as string)) AS STRING):string,avg(CAST(val_timestamp AS DOUBLE)) OVER (PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING):double>
 -- !query 9 output
 NULL	NULL	NULL
 2017-07-31 17:00:00	NULL	1.5015456E9

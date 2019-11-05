@@ -45,45 +45,45 @@ abstract class ExtractIntervalPart(
 }
 
 case class ExtractIntervalMillenniums(child: Expression)
-    extends ExtractIntervalPart(child, IntegerType, getMillenniums, "getMillenniums")
+  extends ExtractIntervalPart(child, IntegerType, getMillenniums, "getMillenniums")
 
 case class ExtractIntervalCenturies(child: Expression)
-    extends ExtractIntervalPart(child, IntegerType, getCenturies, "getCenturies")
+  extends ExtractIntervalPart(child, IntegerType, getCenturies, "getCenturies")
 
 case class ExtractIntervalDecades(child: Expression)
-    extends ExtractIntervalPart(child, IntegerType, getDecades, "getDecades")
+  extends ExtractIntervalPart(child, IntegerType, getDecades, "getDecades")
 
 case class ExtractIntervalYears(child: Expression)
-    extends ExtractIntervalPart(child, IntegerType, getYears, "getYears")
+  extends ExtractIntervalPart(child, IntegerType, getYears, "getYears")
 
 case class ExtractIntervalQuarters(child: Expression)
-    extends ExtractIntervalPart(child, ByteType, getQuarters, "getQuarters")
+  extends ExtractIntervalPart(child, ByteType, getQuarters, "getQuarters")
 
 case class ExtractIntervalMonths(child: Expression)
-    extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths")
+  extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths")
 
 case class ExtractIntervalDays(child: Expression)
-    extends ExtractIntervalPart(child, IntegerType, getDays, "getDays")
+  extends ExtractIntervalPart(child, IntegerType, getDays, "getDays")
 
 case class ExtractIntervalHours(child: Expression)
-    extends ExtractIntervalPart(child, LongType, getHours, "getHours")
+  extends ExtractIntervalPart(child, LongType, getHours, "getHours")
 
 case class ExtractIntervalMinutes(child: Expression)
-    extends ExtractIntervalPart(child, ByteType, getMinutes, "getMinutes")
+  extends ExtractIntervalPart(child, ByteType, getMinutes, "getMinutes")
 
 case class ExtractIntervalSeconds(child: Expression)
-    extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
+  extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
 
 case class ExtractIntervalMilliseconds(child: Expression)
-    extends ExtractIntervalPart(child, DecimalType(8, 3), getMilliseconds, "getMilliseconds")
+  extends ExtractIntervalPart(child, DecimalType(8, 3), getMilliseconds, "getMilliseconds")
 
 case class ExtractIntervalMicroseconds(child: Expression)
-    extends ExtractIntervalPart(child, LongType, getMicroseconds, "getMicroseconds")
+  extends ExtractIntervalPart(child, LongType, getMicroseconds, "getMicroseconds")
 
 // Number of seconds in 10000 years is 315576000001 (30 days per one month)
 // which is 12 digits + 6 digits for the fractional part of seconds.
 case class ExtractIntervalEpoch(child: Expression)
-    extends ExtractIntervalPart(child, DecimalType(18, 6), getEpoch, "getEpoch")
+  extends ExtractIntervalPart(child, DecimalType(18, 6), getEpoch, "getEpoch")
 
 object ExtractIntervalPart {
 
@@ -109,3 +109,47 @@ object ExtractIntervalPart {
     case _ => errorHandleFunc
   }
 }
+
+abstract class IntervalNumOperation(
+    interval: Expression,
+    num: Expression,
+    operation: (CalendarInterval, Double) => CalendarInterval,
+    operationName: String)
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def left: Expression = interval
+  override def right: Expression = num
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, DoubleType)
+  override def dataType: DataType = CalendarIntervalType
+
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(interval: Any, num: Any): Any = {
+    try {
+      operation(interval.asInstanceOf[CalendarInterval], num.asInstanceOf[Double])
+    } catch {
+      case _: java.lang.ArithmeticException => null
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (interval, num) => {
+      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+      s"""
+        try {
+          ${ev.value} = $iu.$operationName($interval, $num);
+        } catch (java.lang.ArithmeticException e) {
+          ${ev.isNull} = true;
+        }
+      """
+    })
+  }
+
+  override def prettyName: String = operationName + "_interval"
+}
+
+case class MultiplyInterval(interval: Expression, num: Expression)
+  extends IntervalNumOperation(interval, num, multiply, "multiply")
+
+case class DivideInterval(interval: Expression, num: Expression)
+  extends IntervalNumOperation(interval, num, divide, "divide")

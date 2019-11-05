@@ -87,6 +87,9 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-runningExecutions','aggregated-runningExecutions');
   collapseTablePageLoad('collapse-aggregated-completedExecutions','aggregated-completedExecutions');
   collapseTablePageLoad('collapse-aggregated-failedExecutions','aggregated-failedExecutions');
+  collapseTablePageLoad('collapse-aggregated-sessionstat','aggregated-sessionstat');
+  collapseTablePageLoad('collapse-aggregated-sqlstat','aggregated-sqlstat');
+  collapseTablePageLoad('collapse-aggregated-sqlsessionstat','aggregated-sqlsessionstat');
 });
 
 $(function() {

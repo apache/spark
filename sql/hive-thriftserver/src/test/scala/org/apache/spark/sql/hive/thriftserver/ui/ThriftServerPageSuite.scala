@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive.thriftserver.ui
 import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.Node
-
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 
 import org.apache.spark.SparkFunSuite
@@ -32,45 +30,11 @@ import org.apache.spark.sql.internal.SQLConf
 
 class ThriftServerPageSuite extends SparkFunSuite {
 
-  test("Thriftserver page should load successfully") {
-    val tab = mock(classOf[ThriftServerTab], RETURNS_SMART_NULLS)
-    val request = mock(classOf[HttpServletRequest])
-    val listener = new HiveThriftServer2Listener(mock(classOf[HiveThriftServer2]), new SQLConf)
-    when(tab.listener).thenReturn(listener)
-    when(tab.appName).thenReturn("testing")
-    when(tab.headerTabs).thenReturn(Seq.empty)
-    // when(request.getParameter("failed.sort")).thenReturn("Duration")
-//    val map = new util.HashMap[String, Array[String]]()
-//    map.put("failed.sort", Array("duration"))
-//    when(request.getParameterMap()).thenReturn(map)
-    val html = renderThriftServerPage(request, listener, tab).toString().toLowerCase(Locale.ROOT)
-    println(html)
-    // session statistics and sql statistics tables should load successfully
-    assert(html.contains("session statistics (1)") && html.contains("sql statistics (1)"))
-    assert(html.contains("dummy query") && html.contains("dummy plan"))
-    // Pagination support
-    assert(html.contains("<label>1 pages. jump to</label>\n" +
-      "          <input type=\"text\" name=\"sessionstat.page\"" +
-      " id=\"form-sessionstat-page-no\" value=\"1\" class=\"span1\"/>\n\n  " +
-      "        <label>. show </label>\n" +
-      "          <input type=\"text\" id=\"form-sessionstat-page-size\" " +
-      "name=\"sessionstat.pagesize\" value=\"100\" class=\"span1\"/>\n" +
-      "          <label>items in a page.</label>")
-      // Hiding table support
-//    assert(html.contains("sessions"))
-  }
-
   /**
-    * Render a thriftserver page started with the given conf and return the HTML.
+    * Run a dummy session and return the listener
     */
-  private def renderThriftServerPage(
-    request: HttpServletRequest,
-    listener: HiveThriftServer2Listener,
-    tab: ThriftServerTab): Seq[Node] = {
-
-
-
-    val page = new ThriftServerPage(tab)
+  private def getListener: HiveThriftServer2Listener = {
+    val listener = new HiveThriftServer2Listener(mock(classOf[HiveThriftServer2]), new SQLConf)
     listener.onSessionCreated("localhost", "sessionid", "user")
     listener.onStatementStart("id", "sessionid", "dummy query", "groupid", "user")
     listener.onStatementParsed("id", "dummy plan")
@@ -78,7 +42,52 @@ class ThriftServerPageSuite extends SparkFunSuite {
     listener.onStatementFinish("id")
     listener.onOperationClosed("id")
     listener.onSessionClosed("sessionid")
-    page.render(request)
+    listener
+  }
+
+  test("thriftserver page should load successfully") {
+    val request = mock(classOf[HttpServletRequest])
+    val tab = mock(classOf[ThriftServerTab], RETURNS_SMART_NULLS)
+    when(tab.listener).thenReturn(getListener)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+    val page = new ThriftServerPage(tab)
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+
+    // session statistics and sql statistics tables should load successfully
+    assert(html.contains("session statistics (1)") && html.contains("sql statistics (1)"))
+    assert(html.contains("dummy query") && html.contains("dummy plan"))
+
+    // Pagination support
+    assert(html.contains("name=\"sessionstat.pagesize\" value=\"100\" class=\"span1\"/>\n" +
+      "          <label>items in a page.</label>"))
+
+      // Hiding table support
+     assert(html.contains("class=\"collapse-aggregated-sessionstat" +
+       " collapse-table\" onclick=\"collapsetable"))
+  }
+
+  test("thriftserver session page should load successfully") {
+    val request = mock(classOf[HttpServletRequest])
+    when(request.getParameter("id")).thenReturn("sessionid")
+    val tab = mock(classOf[ThriftServerTab], RETURNS_SMART_NULLS)
+    when(tab.listener).thenReturn(getListener)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+    val page = new ThriftServerSessionPage(tab)
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+
+    // session sql statistics table should load successfully
+    assert(html.contains("sql statistics"))
+    assert(html.contains("user") && html.contains("groupid"))
+
+    // Pagination support
+    assert(html.contains("name=\"sqlsessionstat.pagesize\" value=\"100\" class=\"span1\"/>\n" +
+      "          <label>items in a page.</label>"))
+
+    // Hiding table support
+        assert(html.contains("collapse-aggregated-sqlsessionstat collapse-table\"" +
+          " onclick=\"collapsetable"))
   }
 }
 

@@ -458,104 +458,11 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       containsThesePhrases = Seq("key_with_value"))
   }
 
-  test("alter table: SerDe properties") {
-    val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
-    val sql2 =
-      """
-       |ALTER TABLE table_name SET SERDE 'org.apache.class'
-       |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val sql3 =
-      """
-       |ALTER TABLE table_name SET SERDEPROPERTIES ('columns'='foo,bar',
-       |'field.delim' = ',')
-      """.stripMargin
-    val sql4 =
-      """
-       |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08',
-       |country='us') SET SERDE 'org.apache.class' WITH SERDEPROPERTIES ('columns'='foo,bar',
-       |'field.delim' = ',')
-      """.stripMargin
-    val sql5 =
-      """
-       |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08',
-       |country='us') SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
-      """.stripMargin
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val parsed3 = parser.parsePlan(sql3)
-    val parsed4 = parser.parsePlan(sql4)
-    val parsed5 = parser.parsePlan(sql5)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableSerDePropertiesCommand(
-      tableIdent, Some("org.apache.class"), None, None)
-    val expected2 = AlterTableSerDePropertiesCommand(
-      tableIdent,
-      Some("org.apache.class"),
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      None)
-    val expected3 = AlterTableSerDePropertiesCommand(
-      tableIdent, None, Some(Map("columns" -> "foo,bar", "field.delim" -> ",")), None)
-    val expected4 = AlterTableSerDePropertiesCommand(
-      tableIdent,
-      Some("org.apache.class"),
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
-    val expected5 = AlterTableSerDePropertiesCommand(
-      tableIdent,
-      None,
-      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-    comparePlans(parsed5, expected5)
-  }
-
   test("alter table - SerDe property values must be set") {
     assertUnsupported(
       sql = "ALTER TABLE my_tab SET SERDE 'serde' " +
         "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
       containsThesePhrases = Seq("key_without_value"))
-  }
-
-  // ALTER TABLE table_name ADD [IF NOT EXISTS] PARTITION partition_spec
-  // [LOCATION 'location1'] partition_spec [LOCATION 'location2'] ...;
-  test("alter table: add partition") {
-    val sql1 =
-      """
-       |ALTER TABLE table_name ADD IF NOT EXISTS PARTITION
-       |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
-       |(dt='2009-09-09', country='uk')
-      """.stripMargin
-    val sql2 = "ALTER TABLE table_name ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
-
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-
-    val expected1 = AlterTableAddPartitionCommand(
-      TableIdentifier("table_name", None),
-      Seq(
-        (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
-        (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
-      ifNotExists = true)
-    val expected2 = AlterTableAddPartitionCommand(
-      TableIdentifier("table_name", None),
-      Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
-      ifNotExists = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
-  test("alter view: add partition (not supported)") {
-    assertUnsupported(
-      """
-        |ALTER VIEW view_name ADD IF NOT EXISTS PARTITION
-        |(dt='2008-08-08', country='us') PARTITION
-        |(dt='2009-09-09', country='uk')
-      """.stripMargin)
   }
 
   test("alter table: exchange partition (not supported)") {
