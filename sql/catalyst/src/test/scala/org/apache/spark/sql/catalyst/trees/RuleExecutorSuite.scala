@@ -30,9 +30,25 @@ class RuleExecutorSuite extends SparkFunSuite {
     }
   }
 
+  object SetToZero extends Rule[Expression] {
+    def apply(e: Expression): Expression = e transform {
+      case IntegerLiteral(_) => Literal(0)
+    }
+  }
+
+  test("idempotence") {
+    object ApplyIdempotent extends RuleExecutor[Expression] {
+      val batches = Batch("idempotent", Once, SetToZero) :: Nil
+    }
+
+    assert(ApplyIdempotent.execute(Literal(10)) === Literal(0))
+    assert(ApplyIdempotent.execute(ApplyIdempotent.execute(Literal(10))) ===
+      ApplyIdempotent.execute(Literal(10)))
+  }
+
   test("only once") {
     object ApplyOnce extends RuleExecutor[Expression] {
-      val batches = Batch("once", Once, DecrementLiterals) :: Nil
+      val batches = Batch("once", FixedPoint(1), DecrementLiterals) :: Nil
     }
 
     assert(ApplyOnce.execute(Literal(10)) === Literal(9))
@@ -63,7 +79,7 @@ class RuleExecutorSuite extends SparkFunSuite {
         case IntegerLiteral(_) => true
         case _ => false
       }
-      val batches = Batch("once", Once, DecrementLiterals) :: Nil
+      val batches = Batch("once", FixedPoint(1), DecrementLiterals) :: Nil
     }
 
     assert(WithSIChecker.execute(Literal(10)) === Literal(9))
@@ -81,7 +97,7 @@ class RuleExecutorSuite extends SparkFunSuite {
         case IntegerLiteral(i) if i > 0 => true
         case _ => false
       }
-      val batches = Batch("once", Once, DecrementLiterals) :: Nil
+      val batches = Batch("once", FixedPoint(1), DecrementLiterals) :: Nil
     }
 
     assert(WithSICheckerForPositiveLiteral.execute(Literal(2)) === Literal(1))
@@ -90,5 +106,11 @@ class RuleExecutorSuite extends SparkFunSuite {
       WithSICheckerForPositiveLiteral.execute(Literal(1))
     }.getMessage
     assert(message.contains("the structural integrity of the plan is broken"))
+  }
+
+  test("SPARK-27243: dumpTimeSpent when no rule has run") {
+    RuleExecutor.resetMetrics()
+    // This should not throw an exception
+    RuleExecutor.dumpTimeSpent()
   }
 }

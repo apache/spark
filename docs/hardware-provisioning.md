@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Hardware Provisioning
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 A common question received by Spark developers is how to configure hardware for it. While the right
@@ -30,7 +45,7 @@ nodes than the storage system to avoid interference.
 While Spark can perform a lot of its computation in memory, it still uses local disks to store
 data that doesn't fit in RAM, as well as to preserve intermediate output between stages. We
 recommend having **4-8 disks** per node, configured _without_ RAID (just as separate mount points).
-In Linux, mount the disks with the [`noatime` option](http://www.centos.org/docs/5/html/Global_File_System/s2-manage-mountnoatime.html)
+In Linux, mount the disks with the `noatime` option
 to reduce unnecessary writes. In Spark, [configure](configuration.html) the `spark.local.dir`
 variable to be a comma-separated list of the local disks. If you are running HDFS, it's fine to
 use the same disks as HDFS.

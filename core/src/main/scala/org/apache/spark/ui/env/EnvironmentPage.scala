@@ -39,15 +39,15 @@ private[ui] class EnvironmentPage(
       "Scala Version" -> appEnv.runtime.scalaVersion)
 
     val runtimeInformationTable = UIUtils.listingTable(
-      propertyHeader, jvmRow, jvmInformation, fixedWidth = true)
+      propertyHeader, jvmRow, jvmInformation.toSeq.sorted, fixedWidth = true)
     val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.sparkProperties.toSeq), fixedWidth = true)
+      Utils.redact(conf, appEnv.sparkProperties.sorted), fixedWidth = true)
     val hadoopPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.hadoopProperties.toSeq), fixedWidth = true)
-    val systemPropertiesTable = UIUtils.listingTable(
-      propertyHeader, propertyRow, appEnv.systemProperties, fixedWidth = true)
+      Utils.redact(conf, appEnv.hadoopProperties.sorted), fixedWidth = true)
+    val systemPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(conf, appEnv.systemProperties.sorted), fixedWidth = true)
     val classpathEntriesTable = UIUtils.listingTable(
-      classPathHeaders, classPathRow, appEnv.classpathEntries, fixedWidth = true)
+      classPathHeaders, classPathRow, appEnv.classpathEntries.sorted, fixedWidth = true)
     val content =
       <span>
         <span class="collapse-aggregated-runtimeInformation collapse-table"

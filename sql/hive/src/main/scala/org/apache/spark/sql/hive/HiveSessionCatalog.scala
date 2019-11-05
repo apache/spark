@@ -142,8 +142,6 @@ private[sql] class HiveSessionCatalog(
           // let's try to load it as a Hive's built-in function.
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
-          logWarning("Encountered a failure during looking up function:" +
-            s" ${Utils.exceptionString(error)}")
           if (!hiveFunctions.contains(functionName)) {
             failFunctionLookup(funcName, Some(error))
           }

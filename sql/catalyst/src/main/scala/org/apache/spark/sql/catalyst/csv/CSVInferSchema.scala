@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import java.util.Locale
+
 import scala.util.control.Exception.allCatch
 
 import org.apache.spark.rdd.RDD
@@ -29,10 +31,13 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private val timestampParser = TimestampFormatter(
     options.timestampFormat,
-    options.timeZone,
+    options.zoneId,
     options.locale)
 
-  private val decimalParser = {
+  private val decimalParser = if (options.locale == Locale.US) {
+    // Special handling the default locale for backward compatibility
+    s: String => new java.math.BigDecimal(s)
+  } else {
     ExprUtils.getDecimalParser(options.locale)
   }
 

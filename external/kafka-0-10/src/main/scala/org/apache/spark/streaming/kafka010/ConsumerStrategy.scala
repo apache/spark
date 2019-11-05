@@ -27,6 +27,7 @@ import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.kafka010.KafkaConfigUpdater
 
 /**
  * Choice of how to create and configure underlying Kafka Consumers on driver and executors.
@@ -54,6 +55,15 @@ abstract class ConsumerStrategy[K, V] {
    * checkpoint.
    */
   def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V]
+
+  /**
+   * Updates the parameters with security if needed.
+   * Added a function to hide internals and reduce code duplications because all strategy uses it.
+   */
+  protected def setAuthenticationConfigIfNeeded(kafkaParams: ju.Map[String, Object]) =
+    KafkaConfigUpdater("source", kafkaParams.asScala.toMap)
+      .setAuthenticationConfigIfNeeded()
+      .build()
 }
 
 /**
@@ -78,7 +88,8 @@ private case class Subscribe[K, V](
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
 
   def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V] = {
-    val consumer = new KafkaConsumer[K, V](kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[K, V](updatedKafkaParams)
     consumer.subscribe(topics)
     val toSeek = if (currentOffsets.isEmpty) {
       offsets
@@ -134,7 +145,8 @@ private case class SubscribePattern[K, V](
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
 
   def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V] = {
-    val consumer = new KafkaConsumer[K, V](kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[K, V](updatedKafkaParams)
     consumer.subscribe(pattern, new NoOpConsumerRebalanceListener())
     val toSeek = if (currentOffsets.isEmpty) {
       offsets
@@ -186,7 +198,8 @@ private case class Assign[K, V](
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
 
   def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V] = {
-    val consumer = new KafkaConsumer[K, V](kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[K, V](updatedKafkaParams)
     consumer.assign(topicPartitions)
     val toSeek = if (currentOffsets.isEmpty) {
       offsets

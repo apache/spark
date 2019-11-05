@@ -40,6 +40,7 @@ import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
@@ -77,14 +78,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         withTempDir { tempDir =>
           // EXTERNAL OpenCSVSerde table pointing to LOCATION
           val file1 = new File(tempDir + "/data1")
-          val writer1 = new PrintWriter(file1)
-          writer1.write("1,2")
-          writer1.close()
+          Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+            writer.write("1,2")
+          }
 
           val file2 = new File(tempDir + "/data2")
-          val writer2 = new PrintWriter(file2)
-          writer2.write("1,2")
-          writer2.close()
+          Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+            writer.write("1,2")
+          }
 
           sql(
             s"""
@@ -100,11 +101,51 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .asInstanceOf[HiveTableRelation]
 
           val properties = relation.tableMeta.ignoredProperties
-          assert(properties("totalSize").toLong <= 0, "external table totalSize must be <= 0")
-          assert(properties("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
+          if (HiveUtils.isHive23) {
+            // Since HIVE-6727, Hive fixes table-level stats for external tables are incorrect.
+            assert(properties("totalSize").toLong == 6)
+            assert(properties.get("rawDataSize").isEmpty)
+          } else {
+            assert(properties("totalSize").toLong <= 0, "external table totalSize must be <= 0")
+            assert(properties("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
+          }
 
           val sizeInBytes = relation.stats.sizeInBytes
           assert(sizeInBytes === BigInt(file1.length() + file2.length()))
+        }
+      }
+    }
+  }
+
+  test("Hive serde table with incorrect statistics") {
+    withTempDir { tempDir =>
+      withTable("t1") {
+        spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+        val dataSize = getDataSize(tempDir)
+        spark.sql(
+          s"""
+             |CREATE EXTERNAL TABLE t1(id BIGINT)
+             |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+             |STORED AS
+             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+             |LOCATION '${tempDir.getCanonicalPath}'
+             |TBLPROPERTIES (
+             |'rawDataSize'='-1', 'numFiles'='0', 'totalSize'='0',
+             |'COLUMN_STATS_ACCURATE'='false', 'numRows'='-1'
+             |)""".stripMargin)
+
+        spark.sql("REFRESH TABLE t1")
+        // After SPARK-28573, sizeInBytes should be equal to dataSize.
+        val relation1 = spark.table("t1").queryExecution.analyzed.children.head
+        assert(relation1.stats.sizeInBytes === dataSize)
+
+        spark.sql("REFRESH TABLE t1")
+        // After SPARK-19678 and enable ENABLE_FALL_BACK_TO_HDFS_FOR_STATS,
+        // sizeInBytes should be equal to dataSize.
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+          val relation2 = spark.table("t1").queryExecution.analyzed.children.head
+          assert(relation2.stats.sizeInBytes === dataSize)
         }
       }
     }
@@ -830,17 +871,25 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         val totalSize = extractStatsPropValues(describeResult, "totalSize")
         assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
 
-        // ALTER TABLE SET/UNSET TBLPROPERTIES invalidates some Hive specific statistics, but not
-        // Spark specific statistics. This is triggered by the Hive alterTable API.
         val numRows = extractStatsPropValues(describeResult, "numRows")
-        assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
-        val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
-        assert(rawDataSize.isDefined && rawDataSize.get == -1, "rawDataSize is lost")
-
-        if (analyzedBySpark) {
+        if (HiveUtils.isHive23) {
+          // Since HIVE-15653(Hive 2.3.0), Hive fixs some ALTER TABLE commands drop table stats.
+          assert(numRows.isDefined && numRows.get == 500)
+          val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
+          assert(rawDataSize.isDefined && rawDataSize.get == 5312)
           checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
         } else {
-          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = None)
+          // ALTER TABLE SET/UNSET TBLPROPERTIES invalidates some Hive specific statistics, but not
+          // Spark specific statistics. This is triggered by the Hive alterTable API.
+          assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
+          val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
+          assert(rawDataSize.isDefined && rawDataSize.get == -1, "rawDataSize is lost")
+
+          if (analyzedBySpark) {
+            checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
+          } else {
+            checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = None)
+          }
         }
       }
     }
@@ -908,9 +957,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           withTempDir { loadPath =>
             // load data command
             val file = new File(loadPath + "/data")
-            val writer = new PrintWriter(file)
-            writer.write("2,xyz")
-            writer.close()
+            Utils.tryWithResource(new PrintWriter(file)) { writer =>
+              writer.write("2,xyz")
+            }
             sql(s"LOAD DATA INPATH '${loadPath.toURI.toString}' INTO TABLE $table")
             if (autoUpdate) {
               val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
@@ -945,14 +994,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
             val file1 = new File(dir1 + "/data")
-            val writer1 = new PrintWriter(file1)
-            writer1.write("1,a")
-            writer1.close()
+            Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+              writer.write("1,a")
+            }
 
             val file2 = new File(dir2 + "/data")
-            val writer2 = new PrintWriter(file2)
-            writer2.write("1,a")
-            writer2.close()
+            Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+              writer.write("1,a")
+            }
 
             // add partition command
             sql(
@@ -1379,6 +1428,90 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val catalogStats = catalogTable.stats.get
       assert(catalogStats.sizeInBytes > 0)
       assert(catalogStats.rowCount.isEmpty)
+    }
+  }
+
+  test(s"CTAS should update statistics if ${SQLConf.AUTO_SIZE_UPDATE_ENABLED.key} is enabled") {
+    val tableName = "SPARK_23263"
+    Seq(false, true).foreach { isConverted =>
+      Seq(false, true).foreach { updateEnabled =>
+        withSQLConf(
+          SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString,
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> isConverted.toString) {
+          withTable(tableName) {
+            sql(s"CREATE TABLE $tableName STORED AS parquet AS SELECT 'a', 'b'")
+            val catalogTable = getCatalogTable(tableName)
+            // Hive serde tables always update statistics by Hive metastore
+            if (!isConverted || updateEnabled) {
+              assert(catalogTable.stats.nonEmpty)
+            } else {
+              assert(catalogTable.stats.isEmpty)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-28518 fix getDataSize refer to ChecksumFileSystem#isChecksumFile") {
+    withTempDir { tempDir =>
+      withTable("t1") {
+        spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+        Utils.tryWithResource(new PrintWriter(new File(tempDir + "/temp.crc"))) { writer =>
+          writer.write("1,2")
+        }
+
+        spark.sql(
+          s"""
+             |CREATE EXTERNAL TABLE t1(id BIGINT)
+             |STORED AS parquet
+             |LOCATION '${tempDir.getCanonicalPath}'
+             |TBLPROPERTIES (
+             |'rawDataSize'='-1', 'numFiles'='0', 'totalSize'='0',
+             |'COLUMN_STATS_ACCURATE'='false', 'numRows'='-1'
+             |)""".stripMargin)
+
+        spark.sql("REFRESH TABLE t1")
+        val relation1 = spark.table("t1").queryExecution.analyzed.children.head
+        // After SPARK-28573, sizeInBytes should be the actual size.
+        assert(relation1.stats.sizeInBytes === getDataSize(tempDir))
+
+        spark.sql("REFRESH TABLE t1")
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+          val relation2 = spark.table("t1").queryExecution.analyzed.children.head
+          assert(relation2.stats.sizeInBytes === getDataSize(tempDir))
+        }
+      }
+    }
+  }
+
+  test("fallBackToHdfs should not support Hive partitioned table") {
+    Seq(true, false).foreach { fallBackToHdfs =>
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHdfs",
+        HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+        withTempDir { dir =>
+          val tableDir = new File(dir, "table")
+          val partitionDir = new File(dir, "partition")
+          withTable("spark_28876") {
+            sql(
+              s"""
+                 |CREATE TABLE spark_28876(id bigint)
+                 |PARTITIONED BY (ds STRING)
+                 |STORED AS PARQUET
+                 |LOCATION '${tableDir.toURI}'
+             """.stripMargin)
+
+            spark.range(5).write.mode(SaveMode.Overwrite).parquet(partitionDir.getCanonicalPath)
+            sql(s"ALTER TABLE spark_28876 ADD PARTITION (ds='p1') LOCATION '$partitionDir'")
+
+            assert(getCatalogTable("spark_28876").stats.isEmpty)
+            val sizeInBytes = spark.table("spark_28876").queryExecution.analyzed.children.head
+              .asInstanceOf[HiveTableRelation].stats.sizeInBytes
+            assert(sizeInBytes === conf.defaultSizeInBytes)
+            assert(spark.table("spark_28876").count() === 5)
+          }
+        }
+      }
     }
   }
 }

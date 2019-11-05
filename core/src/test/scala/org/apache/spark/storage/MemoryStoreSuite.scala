@@ -20,13 +20,12 @@ package org.apache.spark.storage
 import java.nio.ByteBuffer
 
 import scala.language.implicitConversions
-import scala.language.reflectiveCalls
 import scala.reflect.ClassTag
 
 import org.scalatest._
 
 import org.apache.spark._
-import org.apache.spark.internal.config.STORAGE_UNROLL_MEMORY_THRESHOLD
+import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
@@ -43,7 +42,8 @@ class MemoryStoreSuite
     .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
-  val serializer = new KryoSerializer(new SparkConf(false).set("spark.kryoserializer.buffer", "1m"))
+  val serializer = new KryoSerializer(
+    new SparkConf(false).set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m"))
 
   val serializerManager = new SerializerManager(serializer, conf)
 
@@ -55,15 +55,15 @@ class MemoryStoreSuite
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     System.setProperty("os.arch", "amd64")
-    val initialize = PrivateMethod[Unit]('initialize)
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
     SizeEstimator invokePrivate initialize()
   }
 
   def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
     val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
     val blockInfoManager = new BlockInfoManager
+    var memoryStore: MemoryStore = null
     val blockEvictionHandler = new BlockEvictionHandler {
-      var memoryStore: MemoryStore = _
       override private[storage] def dropFromMemory[T: ClassTag](
           blockId: BlockId,
           data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
@@ -71,10 +71,9 @@ class MemoryStoreSuite
         StorageLevel.NONE
       }
     }
-    val memoryStore =
+    memoryStore =
       new MemoryStore(conf, blockInfoManager, serializerManager, memManager, blockEvictionHandler)
     memManager.setMemoryStore(memoryStore)
-    blockEvictionHandler.memoryStore = memoryStore
     (memoryStore, blockInfoManager)
   }
 
@@ -421,8 +420,8 @@ class MemoryStoreSuite
       val blockInfoManager = new BlockInfoManager
       blockInfoManager.registerTask(tc.taskAttemptId)
       var droppedSoFar = 0
+      var memoryStore: MemoryStore = null
       val blockEvictionHandler = new BlockEvictionHandler {
-        var memoryStore: MemoryStore = _
 
         override private[storage] def dropFromMemory[T: ClassTag](
             blockId: BlockId,
@@ -442,7 +441,7 @@ class MemoryStoreSuite
           }
         }
       }
-      val memoryStore = new MemoryStore(conf, blockInfoManager, serializerManager, memManager,
+      memoryStore = new MemoryStore(conf, blockInfoManager, serializerManager, memManager,
           blockEvictionHandler) {
         override def afterDropAction(blockId: BlockId): Unit = {
           if (readLockAfterDrop) {
@@ -454,11 +453,10 @@ class MemoryStoreSuite
         }
       }
 
-      blockEvictionHandler.memoryStore = memoryStore
       memManager.setMemoryStore(memoryStore)
 
       // Put in some small blocks to fill up the memory store
-      val initialBlocks = (1 to numInitialBlocks).map { id =>
+      (1 to numInitialBlocks).foreach { id =>
         val blockId = BlockId(s"rdd_1_$id")
         val blockInfo = new BlockInfo(StorageLevel.MEMORY_ONLY, ct, tellMaster = false)
         val initialWriteLock = blockInfoManager.lockNewBlockForWriting(blockId, blockInfo)

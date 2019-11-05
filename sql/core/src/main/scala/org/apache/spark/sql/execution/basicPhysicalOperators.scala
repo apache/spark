@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.TimeUnit._
+
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
@@ -26,9 +29,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
@@ -78,6 +82,14 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Output    : ${projectList.mkString("[", ", ", "]")}
+       |Input     : ${child.output.mkString("[", ", ", "]")}
+     """.stripMargin
+  }
 }
 
 
@@ -160,6 +172,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // This is very perf sensitive.
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
+    val extraIsNotNullAttrs = mutable.Set[Attribute]()
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
         val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
@@ -167,6 +180,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           generatedIsNotNullChecks(idx) = true
           // Use the child's output. The nullability is what the child produced.
           genPredicate(notNullPreds(idx), input, child.output)
+        } else if (notNullAttributes.contains(r.exprId) && !extraIsNotNullAttrs.contains(r)) {
+          extraIsNotNullAttrs += r
+          genPredicate(IsNotNull(r), input, child.output)
         } else {
           ""
         }
@@ -224,6 +240,14 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Input     : ${child.output.mkString("[", ", ", "]")}
+       |Condition : ${condition}
+     """.stripMargin
+  }
 }
 
 /**
@@ -275,7 +299,9 @@ case class SampleExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def needCopyResult: Boolean = withReplacement
+  override def needCopyResult: Boolean = {
+    child.asInstanceOf[CodegenSupport].needCopyResult || withReplacement
+  }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
@@ -599,9 +625,20 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
  * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
 case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
-  override def output: Seq[Attribute] =
-    children.map(_.output).transpose.map(attrs =>
-      attrs.head.withNullability(attrs.exists(_.nullable)))
+  // updating nullability to make all the children consistent
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
@@ -658,19 +695,56 @@ object CoalesceExec {
 }
 
 /**
- * Physical plan for a subquery.
+ * Parent class for different types of subquery plans
  */
-case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
-
-  override lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"))
+abstract class BaseSubqueryExec extends SparkPlan {
+  def name: String
+  def child: SparkPlan
 
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def generateTreeString(
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      prefix: String = "",
+      addSuffix: Boolean = false,
+      maxFields: Int,
+      printNodeId: Boolean): Unit = {
+    /**
+     * In the new explain mode `EXPLAIN FORMATTED`, the subqueries are not shown in the
+     * main plan and are printed separately along with correlation information with
+     * its parent plan. The condition below makes sure that subquery plans are
+     * excluded from the main plan.
+     */
+    if (!printNodeId) {
+      super.generateTreeString(
+        depth,
+        lastChildren,
+        append,
+        verbose,
+        "",
+        false,
+        maxFields,
+        printNodeId)
+    }
+  }
+}
+
+/**
+ * Physical plan for a subquery.
+ */
+case class SubqueryExec(name: String, child: SparkPlan)
+  extends BaseSubqueryExec with UnaryExecNode {
+
+  override lazy val metrics = Map(
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"))
 
   @transient
   private lazy val relationFuture: Future[Array[InternalRow]] = {
@@ -684,7 +758,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val rows: Array[InternalRow] = child.executeCollect()
         val beforeBuild = System.nanoTime()
-        longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
+        longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
         longMetric("dataSize") += dataSize
 
@@ -692,6 +766,10 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
         rows
       }
     }(SubqueryExec.executionContext)
+  }
+
+  protected override def doCanonicalize(): SparkPlan = {
+    SubqueryExec("Subquery", child.canonicalized)
   }
 
   protected override def doPrepare(): Unit = {
@@ -705,9 +783,31 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
   override def executeCollect(): Array[InternalRow] = {
     ThreadUtils.awaitResult(relationFuture, Duration.Inf)
   }
+
+  override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[id=#$id]")
 }
 
 object SubqueryExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
+}
+
+/**
+ * A wrapper for reused [[BaseSubqueryExec]].
+ */
+case class ReusedSubqueryExec(child: BaseSubqueryExec)
+  extends BaseSubqueryExec with LeafExecNode {
+
+  override def name: String = child.name
+
+  override def output: Seq[Attribute] = child.output
+  override def doCanonicalize(): SparkPlan = child.canonicalized
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  protected override def doPrepare(): Unit = child.prepare()
+
+  protected override def doExecute(): RDD[InternalRow] = child.execute()
+
+  override def executeCollect(): Array[InternalRow] = child.executeCollect()
 }

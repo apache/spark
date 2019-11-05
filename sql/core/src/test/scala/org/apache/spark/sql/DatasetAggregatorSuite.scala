@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructType}
 
 
@@ -221,7 +221,7 @@ case class OptionBooleanIntAggregator(colName: String)
   def OptionalBoolIntEncoder: Encoder[Option[(Boolean, Int)]] = ExpressionEncoder()
 }
 
-class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
+class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private implicit val ordering = Ordering.by((c: AggData) => c.a -> c.b)
@@ -394,9 +394,9 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq(1, 3, 2, 5).toDS()
     assert(ds1.select(typed.sum((i: Int) => i)).schema.head.nullable === false)
     val ds2 = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
-    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
+    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable)
     val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
-    assert(ds3.select(NameAgg.toColumn).schema.head.nullable === true)
+    assert(ds3.select(NameAgg.toColumn).schema.head.nullable)
   }
 
   test("SPARK-18147: very complex aggregator result type") {

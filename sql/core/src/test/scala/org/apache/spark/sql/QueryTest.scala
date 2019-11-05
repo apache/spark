@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.storage.StorageLevel
 
 
 abstract class QueryTest extends PlanTest {
@@ -206,6 +207,22 @@ abstract class QueryTest extends PlanTest {
   }
 
   /**
+   * Asserts that a given [[Dataset]] will be executed using the cache with the given name and
+   * storage level.
+   */
+  def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
+    val planWithCaching = query.queryExecution.withCachedData
+    val matched = planWithCaching.collectFirst { case cached: InMemoryRelation =>
+      val cacheBuilder = cached.asInstanceOf[InMemoryRelation].cacheBuilder
+      cachedName == cacheBuilder.tableName.get &&
+        (storageLevel == cacheBuilder.storageLevel)
+    }.getOrElse(false)
+
+    assert(matched, s"Expected query plan to hit cache $cachedName with storage " +
+      s"level $storageLevel, but it doesn't.")
+  }
+
+  /**
    * Asserts that a given [[Dataset]] does not have missing inputs in all the analyzed plans.
    */
   def assertEmptyMissingInput(query: Dataset[_]): Unit = {
@@ -341,9 +358,9 @@ object QueryTest {
     case (a: Array[_], b: Array[_]) =>
       a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
     case (a: Map[_, _], b: Map[_, _]) =>
-      val entries1 = a.iterator.toSeq.sortBy(_.toString())
-      val entries2 = b.iterator.toSeq.sortBy(_.toString())
-      compare(entries1, entries2)
+      a.size == b.size && a.keys.forall { aKey =>
+        b.keys.find(bKey => compare(aKey, bKey)).exists(bKey => compare(a(aKey), b(bKey)))
+      }
     case (a: Iterable[_], b: Iterable[_]) =>
       a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
     case (a: Product, b: Product) =>
@@ -399,7 +416,7 @@ object QueryTest {
   }
 }
 
-class QueryTestSuite extends QueryTest with test.SharedSQLContext {
+class QueryTestSuite extends QueryTest with test.SharedSparkSession {
   test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)

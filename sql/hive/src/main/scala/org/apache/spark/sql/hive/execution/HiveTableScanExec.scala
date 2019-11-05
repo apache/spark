@@ -208,7 +208,7 @@ case class HiveTableScanExec(
   override def doCanonicalize(): HiveTableScanExec = {
     val input: AttributeSeq = relation.output
     HiveTableScanExec(
-      requestedAttributes.map(QueryPlan.normalizeExprId(_, input)),
+      requestedAttributes.map(QueryPlan.normalizeExpressions(_, input)),
       relation.canonicalized.asInstanceOf[HiveTableRelation],
       QueryPlan.normalizePredicates(partitionPruningPred, input))(sparkSession)
   }

@@ -155,10 +155,11 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
       // To avoid a race between TransportClientFactory.createClient() and this code which could
       // result in an inactive client being returned, this needs to run in a synchronized block.
       synchronized (this) {
+        boolean hasInFlightRequests = responseHandler.numOutstandingRequests() > 0;
         boolean isActuallyOverdue =
           System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
         if (e.state() == IdleState.ALL_IDLE && isActuallyOverdue) {
-          if (responseHandler.numOutstandingRequests() > 0) {
+          if (hasInFlightRequests) {
             String address = getRemoteAddress(ctx.channel());
             logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
               "requests. Assuming connection is dead; please adjust spark.network.timeout if " +

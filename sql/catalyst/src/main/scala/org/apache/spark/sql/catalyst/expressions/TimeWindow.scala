@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -104,25 +103,12 @@ object TimeWindow {
    *         precision.
    */
   private def getIntervalInMicroSeconds(interval: String): Long = {
-    if (StringUtils.isBlank(interval)) {
-      throw new IllegalArgumentException(
-        "The window duration, slide duration and start time cannot be null or blank.")
-    }
-    val intervalString = if (interval.startsWith("interval")) {
-      interval
-    } else {
-      "interval " + interval
-    }
-    val cal = CalendarInterval.fromString(intervalString)
-    if (cal == null) {
-      throw new IllegalArgumentException(
-        s"The provided interval ($interval) did not correspond to a valid interval string.")
-    }
-    if (cal.months > 0) {
+    val cal = IntervalUtils.fromString(interval)
+    if (cal.months != 0) {
       throw new IllegalArgumentException(
         s"Intervals greater than a month is not supported ($interval).")
     }
-    cal.microseconds
+    cal.days * CalendarInterval.MICROS_PER_DAY + cal.microseconds
   }
 
   /**

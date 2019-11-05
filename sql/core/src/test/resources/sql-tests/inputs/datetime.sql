@@ -29,3 +29,15 @@ select a, b from ttf2 order by a, current_date;
 select weekday('2007-02-03'), weekday('2009-07-30'), weekday('2017-05-27'), weekday(null), weekday('1582-10-15 13:10:15');
 
 select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01');
+
+select date '2001-09-28' + 7;
+select 7 + date '2001-09-28';
+select date '2001-10-01' - 7;
+select date '2001-10-01' - date '2001-09-28';
+select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678';
+select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
+
+-- interval operations
+select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15');
+select interval 4 month 2 weeks 3 microseconds * 1.5;
+select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5;

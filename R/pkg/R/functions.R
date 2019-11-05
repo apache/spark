@@ -736,6 +736,25 @@ setMethod("hash",
           })
 
 #' @details
+#' \code{xxhash64}: Calculates the hash code of given columns using the 64-bit
+#' variant of the xxHash algorithm, and returns the result as a long
+#' column.
+#'
+#' @rdname column_misc_functions
+#' @aliases xxhash64 xxhash64,Column-method
+#' @note xxhash64 since 3.0.0
+setMethod("xxhash64",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function(x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "xxhash64", jcols)
+            column(jc)
+          })
+
+#' @details
 #' \code{dayofmonth}: Extracts the day of the month as an integer from a
 #' given date/timestamp/string.
 #'
@@ -2440,6 +2459,7 @@ setMethod("schema_of_csv", signature(x = "characterOrColumn"),
 #' @note from_utc_timestamp since 1.5.0
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
+            .Deprecated(msg = "from_utc_timestamp is deprecated. See SPARK-25496.")
             jc <- callJStatic("org.apache.spark.sql.functions", "from_utc_timestamp", y@jc, x)
             column(jc)
           })
@@ -2498,6 +2518,7 @@ setMethod("next_day", signature(y = "Column", x = "character"),
 #' @note to_utc_timestamp since 1.5.0
 setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
+            .Deprecated(msg = "to_utc_timestamp is deprecated. See SPARK-25496.")
             jc <- callJStatic("org.apache.spark.sql.functions", "to_utc_timestamp", y@jc, x)
             column(jc)
           })
@@ -2720,7 +2741,7 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' head(tmp)}
 #' @note from_unixtime since 1.5.0
 setMethod("from_unixtime", signature(x = "Column"),
-          function(x, format = "yyyy-MM-dd HH:mm:ss") {
+          function(x, format = "uuuu-MM-dd HH:mm:ss") {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_unixtime",
                               x@jc, format)
@@ -3008,7 +3029,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "missing"),
 #' @aliases unix_timestamp,Column,character-method
 #' @note unix_timestamp(Column, character) since 1.5.0
 setMethod("unix_timestamp", signature(x = "Column", format = "character"),
-          function(x, format = "yyyy-MM-dd HH:mm:ss") {
+          function(x, format = "uuuu-MM-dd HH:mm:ss") {
             jc <- callJStatic("org.apache.spark.sql.functions", "unix_timestamp", x@jc, format)
             column(jc)
           })
@@ -3568,6 +3589,8 @@ setMethod("element_at",
 
 #' @details
 #' \code{explode}: Creates a new row for each element in the given array or map column.
+#' Uses the default column name \code{col} for elements in the array and
+#' \code{key} and \code{value} for elements in the map unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases explode explode,Column-method
@@ -3594,7 +3617,7 @@ setMethod("size",
 
 #' @details
 #' \code{slice}: Returns an array containing all the elements in x from the index start
-#' (or starting from the end if start is negative) with the specified length.
+#' (array indices start at 1, or from the end if start is negative) with the specified length.
 #'
 #' @rdname column_collection_functions
 #' @param start an index indicating the first element occurring in the result.
@@ -3628,7 +3651,9 @@ setMethod("sort_array",
 
 #' @details
 #' \code{posexplode}: Creates a new row for each element with position in the given array
-#' or map column.
+#' or map column. Uses the default column name \code{pos} for position, and \code{col}
+#' for elements in the array and \code{key} and \code{value} for elements in the map
+#' unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases posexplode posexplode,Column-method
@@ -3769,7 +3794,8 @@ setMethod("repeat_string",
 #' \code{explode}: Creates a new row for each element in the given array or map column.
 #' Unlike \code{explode}, if the array/map is \code{null} or empty
 #' then \code{null} is produced.
-#'
+#' Uses the default column name \code{col} for elements in the array and
+#' \code{key} and \code{value} for elements in the map unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases explode_outer explode_outer,Column-method
@@ -3794,6 +3820,9 @@ setMethod("explode_outer",
 #' \code{posexplode_outer}: Creates a new row for each element with position in the given
 #' array or map column. Unlike \code{posexplode}, if the array/map is \code{null} or empty
 #' then the row (\code{null}, \code{null}) is produced.
+#' Uses the default column name \code{pos} for position, and \code{col}
+#' for elements in the array and \code{key} and \code{value} for elements in the map
+#' unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases posexplode_outer posexplode_outer,Column-method

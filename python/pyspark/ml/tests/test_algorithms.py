@@ -83,10 +83,10 @@ class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
         result = model.transform(test).head()
         expected_prediction = 2.0
         expected_probability = [0.0, 0.0, 1.0]
-        expected_rawPrediction = [57.3955, -124.5462, 67.9943]
+        expected_rawPrediction = [-11.6081922998, -8.15827998691, 22.17757045]
         self.assertTrue(result.prediction, expected_prediction)
         self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
-        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1E-4))
+        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1))
 
 
 class OneVsRestTests(SparkSessionTestCase):
@@ -114,7 +114,7 @@ class OneVsRestTests(SparkSessionTestCase):
         ovr = OneVsRest(classifier=lr, parallelism=1)
         model = ovr.fit(df)
         output = model.transform(df)
-        self.assertEqual(output.columns, ["label", "features", "prediction"])
+        self.assertEqual(output.columns, ["label", "features", "rawPrediction", "prediction"])
 
     def test_parallelism_doesnt_change_output(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
@@ -334,7 +334,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

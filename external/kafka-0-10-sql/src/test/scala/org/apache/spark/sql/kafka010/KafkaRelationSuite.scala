@@ -17,32 +17,40 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{DataFrameReader, QueryTest}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest {
+abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession with KafkaTest {
 
   import testImplicits._
 
   private val topicId = new AtomicInteger(0)
 
-  private var testUtils: KafkaTestUtils = _
+  protected var testUtils: KafkaTestUtils = _
 
-  private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "kafka")
 
-  private def assignString(topic: String, partitions: Iterable[Int]): String = {
-    JsonUtils.partitions(partitions.map(p => new TopicPartition(topic, p)))
-  }
+  protected def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -61,10 +69,11 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     }
   }
 
-  private def createDF(
+  protected def createDF(
       topic: String,
       withOptions: Map[String, String] = Map.empty[String, String],
-      brokerAddress: Option[String] = None) = {
+      brokerAddress: Option[String] = None,
+      includeHeaders: Boolean = false) = {
     val df = spark
       .read
       .format("kafka")
@@ -74,9 +83,14 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     withOptions.foreach {
       case (key, value) => df.option(key, value)
     }
-    df.load().selectExpr("CAST(value AS STRING)")
+    if (includeHeaders) {
+      df.option("includeHeaders", "true")
+      df.load()
+        .selectExpr("CAST(value AS STRING)", "headers")
+    } else {
+      df.load().selectExpr("CAST(value AS STRING)")
+    }
   }
-
 
   test("explicit earliest to latest offsets") {
     val topic = newTopic()
@@ -142,6 +156,214 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     checkAnswer(df, (0 to 30).map(_.toString).toDF)
   }
 
+  test("default starting and ending offsets with headers") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessage(
+      new RecordBuilder(topic, "1").headers(Seq()).partition(0).build()
+    )
+    testUtils.sendMessage(
+      new RecordBuilder(topic, "2").headers(
+        Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))).partition(1).build()
+    )
+    testUtils.sendMessage(
+      new RecordBuilder(topic, "3").headers(
+        Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8)))).partition(2).build()
+    )
+
+    // Implicit offset values, should default to earliest and latest
+    val df = createDF(topic, includeHeaders = true)
+    // Test that we default to "earliest" and "latest"
+    checkAnswer(df, Seq(("1", null),
+      ("2", Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))),
+      ("3", Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8))))).toDF)
+  }
+
+  test("timestamp provided for starting and ending") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    // timestamp both presented: starting "first" ending "finalized"
+    verifyTimestampRelatedQueryResult({ df =>
+      val startPartitionTimestamps: Map[TopicPartition, Long] = Map(
+        (0 to 2).map(new TopicPartition(topic, _) -> timestamps(1)): _*)
+      val startingTimestamps = JsonUtils.partitionTimestamps(startPartitionTimestamps)
+
+      val endPartitionTimestamps = Map(
+        (0 to 2).map(new TopicPartition(topic, _) -> timestamps(2)): _*)
+      val endingTimestamps = JsonUtils.partitionTimestamps(endPartitionTimestamps)
+
+      df.option("startingOffsetsByTimestamp", startingTimestamps)
+        .option("endingOffsetsByTimestamp", endingTimestamps)
+    }, topic, 10 to 19)
+  }
+
+  test("timestamp provided for starting, offset provided for ending") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    // starting only presented as "first", and ending presented as endingOffsets
+    verifyTimestampRelatedQueryResult({ df =>
+      val startTopicTimestamps = Map(
+        (0 to 2).map(new TopicPartition(topic, _) -> timestamps.head): _*)
+      val startingTimestamps = JsonUtils.partitionTimestamps(startTopicTimestamps)
+
+      val endPartitionOffsets = Map(
+        new TopicPartition(topic, 0) -> -1L, // -1 => latest
+        new TopicPartition(topic, 1) -> -1L,
+        new TopicPartition(topic, 2) -> 1L  // explicit offset - take only first one
+      )
+      val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
+
+      // so we here expect full of records from partition 0 and 1, and only the first record
+      // from partition 2 which is "2"
+
+      df.option("startingOffsetsByTimestamp", startingTimestamps)
+        .option("endingOffsets", endingOffsets)
+    }, topic, (0 to 29).filterNot(_ % 3 == 2) ++ Seq(2))
+  }
+
+  test("timestamp provided for ending, offset provided for starting") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    // ending only presented as "third", and starting presented as startingOffsets
+    verifyTimestampRelatedQueryResult({ df =>
+      val startPartitionOffsets = Map(
+        new TopicPartition(topic, 0) -> -2L, // -2 => earliest
+        new TopicPartition(topic, 1) -> -2L,
+        new TopicPartition(topic, 2) -> 0L   // explicit earliest
+      )
+      val startingOffsets = JsonUtils.partitionOffsets(startPartitionOffsets)
+
+      val endTopicTimestamps = Map(
+        (0 to 2).map(new TopicPartition(topic, _) -> timestamps(2)): _*)
+      val endingTimestamps = JsonUtils.partitionTimestamps(endTopicTimestamps)
+
+      df.option("startingOffsets", startingOffsets)
+        .option("endingOffsetsByTimestamp", endingTimestamps)
+    }, topic, 0 to 19)
+  }
+
+  test("timestamp provided for starting, ending not provided") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    // starting only presented as "second", and ending not presented
+    verifyTimestampRelatedQueryResult({ df =>
+      val startTopicTimestamps = Map(
+        (0 to 2).map(new TopicPartition(topic, _) -> timestamps(1)): _*)
+      val startingTimestamps = JsonUtils.partitionTimestamps(startTopicTimestamps)
+
+      df.option("startingOffsetsByTimestamp", startingTimestamps)
+    }, topic, 10 to 29)
+  }
+
+  test("timestamp provided for ending, starting not provided") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    // ending only presented as "third", and starting not presented
+    verifyTimestampRelatedQueryResult({ df =>
+      val endTopicTimestamps = Map(
+        (0 to 2).map(new TopicPartition(topic, _) -> timestamps(2)): _*)
+      val endingTimestamps = JsonUtils.partitionTimestamps(endTopicTimestamps)
+
+      df.option("endingOffsetsByTimestamp", endingTimestamps)
+    }, topic, 0 to 19)
+  }
+
+  test("no matched offset for timestamp - startingOffsets") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    val e = intercept[SparkException] {
+      verifyTimestampRelatedQueryResult({ df =>
+        // partition 2 will make query fail
+        val startTopicTimestamps = Map(
+          (0 to 1).map(new TopicPartition(topic, _) -> timestamps(1)): _*) ++
+          Map(new TopicPartition(topic, 2) -> Long.MaxValue)
+
+        val startingTimestamps = JsonUtils.partitionTimestamps(startTopicTimestamps)
+
+        df.option("startingOffsetsByTimestamp", startingTimestamps)
+      }, topic, Seq.empty)
+    }
+
+    @tailrec
+    def assertionErrorInExceptionChain(e: Throwable): Boolean = {
+      if (e.isInstanceOf[AssertionError]) {
+        true
+      } else if (e.getCause == null) {
+        false
+      } else {
+        assertionErrorInExceptionChain(e.getCause)
+      }
+    }
+
+    assert(assertionErrorInExceptionChain(e),
+      "Cannot find expected AssertionError in chained exceptions")
+  }
+
+  test("no matched offset for timestamp - endingOffsets") {
+    val (topic, timestamps) = prepareTimestampRelatedUnitTest
+
+    // the query will run fine, since we allow no matching offset for timestamp
+    // if it's endingOffsets
+    // for partition 0 and 1, it only takes records between first and second timestamp
+    // for partition 2, it will take all records
+    verifyTimestampRelatedQueryResult({ df =>
+      val endTopicTimestamps = Map(
+        (0 to 1).map(new TopicPartition(topic, _) -> timestamps(1)): _*) ++
+        Map(new TopicPartition(topic, 2) -> Long.MaxValue)
+
+      val endingTimestamps = JsonUtils.partitionTimestamps(endTopicTimestamps)
+
+      df.option("endingOffsetsByTimestamp", endingTimestamps)
+    }, topic, (0 to 9) ++ (10 to 29).filter(_ % 3 == 2))
+  }
+
+  private def prepareTimestampRelatedUnitTest: (String, Seq[Long]) = {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+
+    def sendMessages(topic: String, msgs: Array[String], part: Int, ts: Long): Unit = {
+      val records = msgs.map { msg =>
+        new RecordBuilder(topic, msg).partition(part).timestamp(ts).build()
+      }
+      testUtils.sendMessages(records)
+    }
+
+    val firstTimestamp = System.currentTimeMillis() - 5000
+    (0 to 2).foreach { partNum =>
+      sendMessages(topic, (0 to 9).filter(_ % 3 == partNum)
+        .map(_.toString).toArray, partNum, firstTimestamp)
+    }
+
+    val secondTimestamp = firstTimestamp + 1000
+    (0 to 2).foreach { partNum =>
+      sendMessages(topic, (10 to 19).filter(_ % 3 == partNum)
+        .map(_.toString).toArray, partNum, secondTimestamp)
+    }
+
+    val thirdTimestamp = secondTimestamp + 1000
+    (0 to 2).foreach { partNum =>
+      sendMessages(topic, (20 to 29).filter(_ % 3 == partNum)
+        .map(_.toString).toArray, partNum, thirdTimestamp)
+    }
+
+    val finalizedTimestamp = thirdTimestamp + 1000
+
+    (topic, Seq(firstTimestamp, secondTimestamp, thirdTimestamp, finalizedTimestamp))
+  }
+
+  private def verifyTimestampRelatedQueryResult(
+      optionFn: DataFrameReader => DataFrameReader,
+      topic: String,
+      expectation: Seq[Int]): Unit = {
+    val df = spark.read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+
+    val df2 = optionFn(df).load().selectExpr("CAST(value AS STRING)")
+    checkAnswer(df2, expectation.map(_.toString).toDF)
+  }
+
   test("reuse same dataframe in query") {
     // This test ensures that we do not cache the Kafka Consumer in KafkaRelation
     val topic = newTopic()
@@ -199,7 +421,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
           .read
           .format("kafka")
         options.foreach { case (k, v) => reader.option(k, v) }
-        reader.load()
+        reader.load().collect()
       }
       expectedMsgs.foreach { m =>
         assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
@@ -242,7 +464,24 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
   }
 
-  test("allow group.id overriding") {
+  test("allow group.id prefix") {
+    testGroupId("groupIdPrefix", (expected, actual) => {
+      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
+        "Valid consumer groups don't contain the expected group id - " +
+        s"Valid consumer groups: $actual / expected group id: $expected")
+    })
+  }
+
+  test("allow group.id override") {
+    testGroupId("kafka.group.id", (expected, actual) => {
+      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
+        s"contain the expected group id - Valid consumer groups: $actual / " +
+        s"expected group id: $expected")
+    })
+  }
+
+  private def testGroupId(groupIdKey: String,
+      validateGroupId: (String, Iterable[String]) => Unit): Unit = {
     // Tests code path KafkaSourceProvider.createRelation(.)
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
@@ -251,15 +490,13 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
     testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
 
     val customGroupId = "id-" + Random.nextInt()
-    val df = createDF(topic, withOptions = Map("kafka.group.id" -> customGroupId))
+    val df = createDF(topic, withOptions = Map(groupIdKey -> customGroupId))
     checkAnswer(df, (1 to 30).map(_.toString).toDF())
 
     val consumerGroups = testUtils.listConsumerGroups()
     val validGroups = consumerGroups.valid().get()
     val validGroupsId = validGroups.asScala.map(_.groupId())
-    assert(validGroupsId.exists(_ === customGroupId), "Valid consumer groups don't " +
-      s"contain the expected group id - Valid consumer groups: $validGroupsId / " +
-      s"expected group id: $customGroupId")
+    validateGroupId(customGroupId, validGroupsId)
   }
 
   test("read Kafka transactional messages: read_committed") {
@@ -359,5 +596,35 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
       checkAnswer(df, (1 to 15).map(_.toString).toDF)
     }
+  }
+}
+
+class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "kafka")
+
+  test("V1 Source is used when set through SQLConf") {
+    val topic = newTopic()
+    val df = createDF(topic)
+    assert(df.logicalPlan.collect {
+      case LogicalRelation(_, _, _, _) => true
+    }.nonEmpty)
+  }
+}
+
+class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  test("V2 Source is used when set through SQLConf") {
+    val topic = newTopic()
+    val df = createDF(topic)
+    assert(df.logicalPlan.collect {
+      case DataSourceV2Relation(_, _, _) => true
+    }.nonEmpty)
   }
 }

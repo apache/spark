@@ -28,7 +28,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
     assert(volumeSpec.volumeName === "volumeName")
     assert(volumeSpec.mountPath === "/path")
-    assert(volumeSpec.mountReadOnly === true)
+    assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesHostPathVolumeConf] ===
       KubernetesHostPathVolumeConf("/hostPath"))
   }
@@ -54,7 +54,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
     assert(volumeSpec.volumeName === "volumeName")
     assert(volumeSpec.mountPath === "/path")
-    assert(volumeSpec.mountReadOnly === true)
+    assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesPVCVolumeConf] ===
       KubernetesPVCVolumeConf("claimeName"))
   }
@@ -69,7 +69,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
     assert(volumeSpec.volumeName === "volumeName")
     assert(volumeSpec.mountPath === "/path")
-    assert(volumeSpec.mountReadOnly === true)
+    assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesEmptyDirVolumeConf] ===
       KubernetesEmptyDirVolumeConf(Some("medium"), Some("5G")))
   }
@@ -82,7 +82,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
     assert(volumeSpec.volumeName === "volumeName")
     assert(volumeSpec.mountPath === "/path")
-    assert(volumeSpec.mountReadOnly === true)
+    assert(volumeSpec.mountReadOnly)
     assert(volumeSpec.volumeConf.asInstanceOf[KubernetesEmptyDirVolumeConf] ===
       KubernetesEmptyDirVolumeConf(None, None))
   }

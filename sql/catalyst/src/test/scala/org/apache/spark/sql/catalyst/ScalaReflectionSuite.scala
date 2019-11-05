@@ -81,6 +81,10 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
+class FooAnnotation extends scala.annotation.StaticAnnotation
+
+case class FooWithAnnotation(f1: String @FooAnnotation, f2: Option[String] @FooAnnotation)
+
 case class SpecialCharAsFieldData(`field.1`: String, `field 2`: String)
 
 object TestingUDT {
@@ -134,6 +138,14 @@ trait ScroogeLikeExample extends Product1[Int] with Serializable {
   override def hashCode: Int = x
 }
 
+/** Counter-examples to [[ScroogeLikeExample]] as a trait without a companion object constructor */
+trait TraitProductWithoutCompanion extends Product1[Int] {}
+
+/** Counter-examples to [[ScroogeLikeExample]] as a trait with no-constructor companion object */
+object TraitProductWithNoConstructorCompanion {}
+
+trait TraitProductWithNoConstructorCompanion extends Product1[Int] {}
+
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
 
@@ -144,6 +156,12 @@ class ScalaReflectionSuite extends SparkFunSuite {
   // A helper method used to test `ScalaReflection.deserializerForType`.
   private def deserializerFor[T: TypeTag]: Expression =
     deserializerForType(ScalaReflection.localTypeOf[T])
+
+  test("isSubtype") {
+    assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[_]]))
+    assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[Int]]))
+    assert(!isSubtype(localTypeOf[Option[_]], localTypeOf[Option[Int]]))
+  }
 
   test("SQLUserDefinedType annotation on Scala structure") {
     val schema = schemaFor[TestingUDT.NestedStruct]
@@ -392,5 +410,26 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(schema === Schema(
       StructType(Seq(
         StructField("x", IntegerType, nullable = false))), nullable = true))
+  }
+
+  test("SPARK-29026: schemaFor for trait without companion object throws exception ") {
+    val e = intercept[UnsupportedOperationException] {
+      schemaFor[TraitProductWithoutCompanion]
+    }
+    assert(e.getMessage.contains("Unable to find constructor"))
+  }
+
+  test("SPARK-29026: schemaFor for trait with no-constructor companion throws exception ") {
+    val e = intercept[UnsupportedOperationException] {
+      schemaFor[TraitProductWithNoConstructorCompanion]
+    }
+    assert(e.getMessage.contains("Unable to find constructor"))
+  }
+
+  test("SPARK-27625: annotated data types") {
+    assert(serializerFor[FooWithAnnotation].dataType == StructType(Seq(
+      StructField("f1", StringType),
+      StructField("f2", StringType))))
+    assert(deserializerFor[FooWithAnnotation].dataType == ObjectType(classOf[FooWithAnnotation]))
   }
 }

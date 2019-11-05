@@ -27,10 +27,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{ManualClock, SystemClock}
 
 class RateStreamMicroBatchStream(
@@ -38,7 +38,7 @@ class RateStreamMicroBatchStream(
     // The default values here are used in tests.
     rampUpTimeSeconds: Long = 0,
     numPartitions: Int = 1,
-    options: DataSourceOptions,
+    options: CaseInsensitiveStringMap,
     checkpointLocation: String)
   extends MicroBatchStream with Logging {
   import RateStreamProvider._
@@ -76,7 +76,7 @@ class RateStreamMicroBatchStream(
           if (content(0) == 'v') {
             val indexOfNewLine = content.indexOf("\n")
             if (indexOfNewLine > 0) {
-              parseVersion(content.substring(0, indexOfNewLine), VERSION)
+              validateVersion(content.substring(0, indexOfNewLine), VERSION)
               LongOffset(SerializedOffset(content.substring(indexOfNewLine + 1)))
             } else {
               throw new IllegalStateException(
@@ -155,7 +155,7 @@ class RateStreamMicroBatchStream(
 
   override def toString: String = s"RateStreamV2[rowsPerSecond=$rowsPerSecond, " +
     s"rampUpTimeSeconds=$rampUpTimeSeconds, " +
-    s"numPartitions=${options.get(NUM_PARTITIONS).orElse("default")}"
+    s"numPartitions=${options.getOrDefault(NUM_PARTITIONS, "default")}"
 }
 
 case class RateStreamMicroBatchInputPartition(

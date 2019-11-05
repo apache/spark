@@ -164,7 +164,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = {
-    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sc)
+    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sparkSession)
     saveImpl(path)
   }
 
@@ -673,8 +673,8 @@ private[ml] object MetaAlgorithmReadWrite {
 
 private[ml] class FileSystemOverwrite extends Logging {
 
-  def handleOverwrite(path: String, shouldOverwrite: Boolean, sc: SparkContext): Unit = {
-    val hadoopConf = sc.hadoopConfiguration
+  def handleOverwrite(path: String, shouldOverwrite: Boolean, session: SparkSession): Unit = {
+    val hadoopConf = session.sessionState.newHadoopConf()
     val outputPath = new Path(path)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)

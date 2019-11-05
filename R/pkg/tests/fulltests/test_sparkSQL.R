@@ -307,63 +307,6 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
-test_that("createDataFrame Arrow optimization", {
-  skip_if_not_installed("arrow")
-
-  conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
-
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
-  tryCatch({
-    expected <- collect(createDataFrame(mtcars))
-  },
-  finally = {
-    # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
-  })
-
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
-  tryCatch({
-    expect_equal(collect(createDataFrame(mtcars)), expected)
-  },
-  finally = {
-    # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
-  })
-})
-
-test_that("createDataFrame Arrow optimization - type specification", {
-  skip_if_not_installed("arrow")
-  rdf <- data.frame(list(list(a = 1,
-                              b = "a",
-                              c = TRUE,
-                              d = 1.1,
-                              e = 1L,
-                              f = as.Date("1990-02-24"),
-                              g = as.POSIXct("1990-02-24 12:34:56"))))
-
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
-  conf <- callJMethod(sparkSession, "conf")
-
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
-  tryCatch({
-    expected <- collect(createDataFrame(rdf))
-  },
-  finally = {
-    # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
-  })
-
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
-  tryCatch({
-    expect_equal(collect(createDataFrame(rdf)), expected)
-  },
-  finally = {
-    # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
-  })
-})
-
 test_that("read/write csv as DataFrame", {
   if (windows_with_hadoop()) {
     csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
@@ -1447,7 +1390,7 @@ test_that("column functions", {
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + degrees(c) + radians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
-  c12 <- variance(c) + ltrim(c, "a") + rtrim(c, "b") + trim(c, "c")
+  c12 <- variance(c) + xxhash64(c) + ltrim(c, "a") + rtrim(c, "b") + trim(c, "c")
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
   c14 <- cume_dist() + ntile(1) + corr(c, c1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
@@ -1843,9 +1786,9 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
   expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, rand(1)))[1, 1], 0.134, tolerance = 0.01)
+  expect_equal(collect(select(df, rand(1)))[1, 1], 0.636, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, randn(1)))[1, 1], -1.03, tolerance = 0.01)
+  expect_equal(collect(select(df, randn(1)))[1, 1], 1.68, tolerance = 0.01)
 })
 
 test_that("string operators", {
@@ -1962,10 +1905,20 @@ test_that("date functions on a DataFrame", {
   df2 <- createDataFrame(l2)
   expect_equal(collect(select(df2, minute(df2$b)))[, 1], c(34, 24))
   expect_equal(collect(select(df2, second(df2$b)))[, 1], c(0, 34))
-  expect_equal(collect(select(df2, from_utc_timestamp(df2$b, "JST")))[, 1],
-               c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
-  expect_equal(collect(select(df2, to_utc_timestamp(df2$b, "JST")))[, 1],
-               c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
+  conf <- callJMethod(sparkSession, "conf")
+  isUtcTimestampFuncEnabled <- callJMethod(conf, "get", "spark.sql.legacy.utcTimestampFunc.enabled")
+  callJMethod(conf, "set", "spark.sql.legacy.utcTimestampFunc.enabled", "true")
+  tryCatch({
+    # Both from_utc_timestamp and to_utc_timestamp are deprecated as of SPARK-25496
+    expect_equal(suppressWarnings(collect(select(df2, from_utc_timestamp(df2$b, "JST"))))[, 1],
+                 c(as.POSIXct("2012-12-13 21:34:00 UTC"), as.POSIXct("2014-12-15 10:24:34 UTC")))
+    expect_equal(suppressWarnings(collect(select(df2, to_utc_timestamp(df2$b, "JST"))))[, 1],
+                 c(as.POSIXct("2012-12-13 03:34:00 UTC"), as.POSIXct("2014-12-14 16:24:34 UTC")))
+  },
+  finally = {
+    # Reverting the conf back
+    callJMethod(conf, "set", "spark.sql.legacy.utcTimestampFunc.enabled", isUtcTimestampFuncEnabled)
+  })
   expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
   expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
@@ -2399,10 +2352,20 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
 
   # inner join, not cartesian join
   expect_equal(count(where(join(df, df2), df$name == df2$name)), 3)
-  # cartesian join
-  expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
-               paste0(".*(org.apache.spark.sql.AnalysisException: Detected implicit cartesian",
-                      " product for INNER join between logical plans).*"))
+
+  conf <- callJMethod(sparkSession, "conf")
+  crossJoinEnabled <- callJMethod(conf, "get", "spark.sql.crossJoin.enabled")
+  callJMethod(conf, "set", "spark.sql.crossJoin.enabled", "false")
+  tryCatch({
+    # cartesian join
+    expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
+                 paste0(".*(org.apache.spark.sql.AnalysisException: Detected implicit cartesian",
+                        " product for INNER join between logical plans).*"))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.crossJoin.enabled", crossJoinEnabled)
+  })
 
   joined <- crossJoin(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))
@@ -2413,39 +2376,94 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_equal(names(joined2), c("age", "name", "name", "test"))
   expect_equal(count(joined2), 3)
 
-  joined3 <- join(df, df2, df$name == df2$name, "rightouter")
+  joined3 <- join(df, df2, df$name == df2$name, "right")
   expect_equal(names(joined3), c("age", "name", "name", "test"))
   expect_equal(count(joined3), 4)
   expect_true(is.na(collect(orderBy(joined3, joined3$age))$age[2]))
 
-  joined4 <- select(join(df, df2, df$name == df2$name, "outer"),
-                    alias(df$age + 5, "newAge"), df$name, df2$test)
-  expect_equal(names(joined4), c("newAge", "name", "test"))
+  joined4 <- join(df, df2, df$name == df2$name, "right_outer")
+  expect_equal(names(joined4), c("age", "name", "name", "test"))
   expect_equal(count(joined4), 4)
-  expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
+  expect_true(is.na(collect(orderBy(joined4, joined4$age))$age[2]))
 
-  joined5 <- join(df, df2, df$name == df2$name, "leftouter")
+  joined5 <- join(df, df2, df$name == df2$name, "rightouter")
   expect_equal(names(joined5), c("age", "name", "name", "test"))
-  expect_equal(count(joined5), 3)
-  expect_true(is.na(collect(orderBy(joined5, joined5$age))$age[1]))
+  expect_equal(count(joined5), 4)
+  expect_true(is.na(collect(orderBy(joined5, joined5$age))$age[2]))
 
-  joined6 <- join(df, df2, df$name == df2$name, "inner")
-  expect_equal(names(joined6), c("age", "name", "name", "test"))
-  expect_equal(count(joined6), 3)
 
-  joined7 <- join(df, df2, df$name == df2$name, "leftsemi")
-  expect_equal(names(joined7), c("age", "name"))
-  expect_equal(count(joined7), 3)
+  joined6 <- select(join(df, df2, df$name == df2$name, "outer"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(joined6), c("newAge", "name", "test"))
+  expect_equal(count(joined6), 4)
+  expect_equal(collect(orderBy(joined6, joined6$name))$newAge[3], 24)
 
-  joined8 <- join(df, df2, df$name == df2$name, "left_outer")
-  expect_equal(names(joined8), c("age", "name", "name", "test"))
-  expect_equal(count(joined8), 3)
-  expect_true(is.na(collect(orderBy(joined8, joined8$age))$age[1]))
+  joined7 <- select(join(df, df2, df$name == df2$name, "full"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(joined7), c("newAge", "name", "test"))
+  expect_equal(count(joined7), 4)
+  expect_equal(collect(orderBy(joined7, joined7$name))$newAge[3], 24)
 
-  joined9 <- join(df, df2, df$name == df2$name, "right_outer")
-  expect_equal(names(joined9), c("age", "name", "name", "test"))
+  joined8 <- select(join(df, df2, df$name == df2$name, "fullouter"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(joined8), c("newAge", "name", "test"))
+  expect_equal(count(joined8), 4)
+  expect_equal(collect(orderBy(joined8, joined8$name))$newAge[3], 24)
+
+  joined9 <- select(join(df, df2, df$name == df2$name, "full_outer"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(joined9), c("newAge", "name", "test"))
   expect_equal(count(joined9), 4)
-  expect_true(is.na(collect(orderBy(joined9, joined9$age))$age[2]))
+  expect_equal(collect(orderBy(joined9, joined9$name))$newAge[3], 24)
+
+  joined10 <- join(df, df2, df$name == df2$name, "left")
+  expect_equal(names(joined10), c("age", "name", "name", "test"))
+  expect_equal(count(joined10), 3)
+  expect_true(is.na(collect(orderBy(joined10, joined10$age))$age[1]))
+
+  joined11 <- join(df, df2, df$name == df2$name, "leftouter")
+  expect_equal(names(joined11), c("age", "name", "name", "test"))
+  expect_equal(count(joined11), 3)
+  expect_true(is.na(collect(orderBy(joined11, joined11$age))$age[1]))
+
+  joined12 <- join(df, df2, df$name == df2$name, "left_outer")
+  expect_equal(names(joined12), c("age", "name", "name", "test"))
+  expect_equal(count(joined12), 3)
+  expect_true(is.na(collect(orderBy(joined12, joined12$age))$age[1]))
+
+  joined13 <- join(df, df2, df$name == df2$name, "inner")
+  expect_equal(names(joined13), c("age", "name", "name", "test"))
+  expect_equal(count(joined13), 3)
+
+  joined14 <- join(df, df2, df$name == df2$name, "semi")
+  expect_equal(names(joined14), c("age", "name"))
+  expect_equal(count(joined14), 3)
+
+  joined14 <- join(df, df2, df$name == df2$name, "leftsemi")
+  expect_equal(names(joined14), c("age", "name"))
+  expect_equal(count(joined14), 3)
+
+  joined15 <- join(df, df2, df$name == df2$name, "left_semi")
+  expect_equal(names(joined15), c("age", "name"))
+  expect_equal(count(joined15), 3)
+
+  joined16 <- join(df2, df, df2$name == df$name, "anti")
+  expect_equal(names(joined16), c("name", "test"))
+  expect_equal(count(joined16), 1)
+
+  joined17 <- join(df2, df, df2$name == df$name, "leftanti")
+  expect_equal(names(joined17), c("name", "test"))
+  expect_equal(count(joined17), 1)
+
+  joined18 <- join(df2, df, df2$name == df$name, "left_anti")
+  expect_equal(names(joined18), c("name", "test"))
+  expect_equal(count(joined18), 1)
+
+  error_msg <- paste("joinType must be one of the following types:",
+                 "'inner', 'cross', 'outer', 'full', 'fullouter', 'full_outer',",
+                 "'left', 'leftouter', 'left_outer', 'right', 'rightouter', 'right_outer',",
+                 "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti' or 'left_anti'.")
+  expect_error(join(df2, df, df2$name == df$name, "invalid"), error_msg)
 
   merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
   expect_equal(count(merged), 4)
@@ -3028,7 +3046,7 @@ test_that("sampleBy() on a DataFrame", {
   sample <- sampleBy(df, "key", fractions, 0)
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
   expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
-  expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 8))
 })
 
 test_that("approxQuantile() on a DataFrame", {
@@ -3526,116 +3544,6 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
   finally = {
     # Resetting the conf back to default value
     callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
-  })
-})
-
-test_that("gapply() Arrow optimization", {
-  skip_if_not_installed("arrow")
-  df <- createDataFrame(mtcars)
-
-  conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
-
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
-  tryCatch({
-    ret <- gapply(df,
-                 "gear",
-                 function(key, grouped) {
-                   if (length(key) > 0) {
-                     stopifnot(is.numeric(key[[1]]))
-                   }
-                   stopifnot(class(grouped) == "data.frame")
-                   grouped
-                 },
-                 schema(df))
-    expected <- collect(ret)
-  },
-  finally = {
-    # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
-  })
-
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
-  tryCatch({
-    ret <- gapply(df,
-                 "gear",
-                 function(key, grouped) {
-                   if (length(key) > 0) {
-                     stopifnot(is.numeric(key[[1]]))
-                   }
-                   stopifnot(class(grouped) == "data.frame")
-                   grouped
-                 },
-                 schema(df))
-    actual <- collect(ret)
-    expect_equal(actual, expected)
-  },
-  finally = {
-    # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
-  })
-})
-
-test_that("gapply() Arrow optimization - type specification", {
-  skip_if_not_installed("arrow")
-  # Note that regular gapply() seems not supporting date and timestamps
-  # whereas Arrow-optimized gapply() does.
-  rdf <- data.frame(list(list(a = 1,
-                              b = "a",
-                              c = TRUE,
-                              d = 1.1,
-                              e = 1L)))
-  df <- createDataFrame(rdf)
-
-  conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
-
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
-  tryCatch({
-    ret <- gapply(df,
-                 "a",
-                 function(key, grouped) { grouped }, schema(df))
-    expected <- collect(ret)
-  },
-  finally = {
-    # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
-  })
-
-
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
-  tryCatch({
-    ret <- gapply(df,
-                 "a",
-                 function(key, grouped) { grouped }, schema(df))
-    actual <- collect(ret)
-    expect_equal(actual, expected)
-  },
-  finally = {
-    # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
-  })
-})
-
-test_that("gapply() Arrow optimization - type specification (date and timestamp)", {
-  skip_if_not_installed("arrow")
-  rdf <- data.frame(list(list(a = as.Date("1990-02-24"),
-                              b = as.POSIXct("1990-02-24 12:34:56"))))
-  df <- createDataFrame(rdf)
-
-  conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
-
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
-  tryCatch({
-    ret <- gapply(df,
-                  "a",
-                  function(key, grouped) { grouped }, schema(df))
-    expect_equal(collect(ret), rdf)
-  },
-  finally = {
-    # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
   })
 })
 

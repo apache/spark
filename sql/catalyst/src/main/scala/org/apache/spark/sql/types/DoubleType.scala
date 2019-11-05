@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Fractional, Numeric, Ordering}
+import scala.math.{Fractional, Numeric}
 import scala.math.Numeric.DoubleAsIfIntegral
 import scala.reflect.runtime.universe.typeTag
 
@@ -38,10 +38,11 @@ class DoubleType private() extends FractionalType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
-  private[sql] val ordering = new Ordering[Double] {
-    override def compare(x: Double, y: Double): Int = Utils.nanSafeCompareDoubles(x, y)
-  }
+  private[sql] val ordering =
+    (x: Double, y: Double) => Utils.nanSafeCompareDoubles(x, y)
   private[sql] val asIntegral = DoubleAsIfIntegral
+
+  override private[sql] def exactNumeric = DoubleExactNumeric
 
   /**
    * The default size of a value of the DoubleType is 8 bytes.

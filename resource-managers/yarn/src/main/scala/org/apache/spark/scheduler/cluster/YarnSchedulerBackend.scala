@@ -31,14 +31,12 @@ import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.ui.JettyUtils
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
@@ -75,10 +73,6 @@ private[spark] abstract class YarnSchedulerBackend(
   /** Attempt ID. This is unset for client-mode schedulers */
   private var attemptId: Option[ApplicationAttemptId] = None
 
-  /** Scheduler extension services. */
-  private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
-
-
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
    *
@@ -92,8 +86,6 @@ private[spark] abstract class YarnSchedulerBackend(
 
   protected def startBindings(): Unit = {
     require(appId.isDefined, "application ID unset")
-    val binding = SchedulerExtensionServiceBinding(sc, appId.get, attemptId)
-    services.start(binding)
   }
 
   override def stop(): Unit = {
@@ -104,7 +96,6 @@ private[spark] abstract class YarnSchedulerBackend(
       super.stop()
     } finally {
       stopped.set(true)
-      services.stop()
     }
   }
 
@@ -189,19 +180,9 @@ private[spark] abstract class YarnSchedulerBackend(
           }
           conf.set(UI_FILTERS, allFilters)
 
-          ui.getHandlers.map(_.getServletHandler()).foreach { h =>
-            val holder = new FilterHolder()
-            holder.setName(filterName)
-            holder.setClassName(filterName)
-            filterParams.foreach { case (k, v) => holder.setInitParameter(k, v) }
-            h.addFilter(holder)
-
-            val mapping = new FilterMapping()
-            mapping.setFilterName(filterName)
-            mapping.setPathSpec("/*")
-            mapping.setDispatcherTypes(EnumSet.allOf(classOf[DispatcherType]))
-
-            h.prependFilterMapping(mapping)
+          ui.getDelegatingHandlers.foreach { h =>
+            h.addFilter(filterName, filterName, filterParams)
+            h.prependFilterMapping(filterName, "/*", EnumSet.allOf(classOf[DispatcherType]))
           }
         }
       }
@@ -223,7 +204,7 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
-    Some(new YARNHadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration, driverEndpoint))
+    Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
   /**

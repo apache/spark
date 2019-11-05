@@ -22,7 +22,6 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
-import scala.language.postfixOps
 
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, Matchers}
@@ -76,7 +75,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val store = new BlockManager(name, rpcEnv, master, serializerManager, conf,
-      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
     memManager.setMemoryStore(store.memoryStore)
     store.initialize("app-id")
     allStores += store
@@ -100,7 +99,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     sc = new SparkContext("local", "test", conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf))), conf, true)
+        new LiveListenerBus(conf), None)), conf, true)
     allStores.clear()
   }
 
@@ -236,7 +235,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val failableStore = new BlockManager("failable-store", rpcEnv, master, serializerManager, conf,
-      memManager, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, 0)
+      memManager, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, None)
     memManager.setMemoryStore(failableStore.memoryStore)
     failableStore.initialize("app-id")
     allStores += failableStore // so that this gets stopped after test
@@ -247,7 +246,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
     // Add another normal block manager and test that 2x replication works
     makeBlockManager(10000, "anotherStore")
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(replicateAndGetNumCopies("a2") === 2)
     }
   }
@@ -272,14 +271,14 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
     // Add another store, 3x replication should work now, 4x replication should only replicate 3x
     val newStore1 = makeBlockManager(storeSize, s"newstore1")
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(replicateAndGetNumCopies("a3", 3) === 3)
     }
     assert(replicateAndGetNumCopies("a4", 4) === 3)
 
     // Add another store, 4x replication should work now
     val newStore2 = makeBlockManager(storeSize, s"newstore2")
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(replicateAndGetNumCopies("a5", 4) === 4)
     }
 
@@ -295,7 +294,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val newStores = (3 to 5).map {
       i => makeBlockManager(storeSize, s"newstore$i")
     }
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(replicateAndGetNumCopies("a7", 3) === 3)
     }
   }
@@ -309,7 +308,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
    * is correct. Then it also drops the block from memory of each store (using LRU) and
    * again checks whether the master's knowledge gets updated.
    */
-  protected def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]) {
+  protected def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]): Unit = {
     import org.apache.spark.storage.StorageLevel._
 
     assert(maxReplication > 1,
@@ -417,12 +416,12 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
 class BlockManagerReplicationSuite extends BlockManagerReplicationBehavior {
   val conf = new SparkConf(false).set("spark.app.id", "test")
-  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
 }
 
 class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehavior {
   val conf = new SparkConf(false).set("spark.app.id", "test")
-  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
   conf.set(STORAGE_REPLICATION_PROACTIVE, true)
   conf.set(STORAGE_EXCEPTION_PIN_LEAK, true)
 
@@ -432,7 +431,7 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     }
   }
 
-  def testProactiveReplication(replicationFactor: Int) {
+  def testProactiveReplication(replicationFactor: Int): Unit = {
     val blockSize = 1000
     val storeSize = 10000
     val initialStores = (1 to 10).map { i => makeBlockManager(storeSize, s"store$i") }
@@ -454,13 +453,13 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
       master.removeExecutor(bm.blockManagerId.executorId)
       bm.stop()
       // giving enough time for replication to happen and new block be reported to master
-      eventually(timeout(5 seconds), interval(100 millis)) {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
         val newLocations = master.getLocations(blockId).toSet
         assert(newLocations.size === replicationFactor)
       }
     }
 
-    val newLocations = eventually(timeout(5 seconds), interval(100 millis)) {
+    val newLocations = eventually(timeout(5.seconds), interval(100.milliseconds)) {
       val _newLocations = master.getLocations(blockId).toSet
       assert(_newLocations.size === replicationFactor)
       _newLocations
@@ -472,7 +471,7 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
       "New locations contain stopped block managers.")
 
     // Make sure all locks have been released.
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1.second), interval(10.milliseconds)) {
       initialStores.filter(bm => newLocations.contains(bm.blockManagerId)).foreach { bm =>
         assert(bm.blockInfoManager.getTaskLockCount(BlockInfo.NON_TASK_WRITER) === 0)
       }
@@ -497,7 +496,7 @@ class DummyTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with Log
 
 class BlockManagerBasicStrategyReplicationSuite extends BlockManagerReplicationBehavior {
   val conf: SparkConf = new SparkConf(false).set("spark.app.id", "test")
-  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
   conf.set(
     STORAGE_REPLICATION_POLICY,
     classOf[BasicBlockReplicationPolicy].getName)

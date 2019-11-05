@@ -22,19 +22,19 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Evaluator for regression.
  *
- * @param predAndObsWithOptWeight an RDD of either (prediction, observation, weight)
+ * @param predictionAndObservations an RDD of either (prediction, observation, weight)
  *                                                    or (prediction, observation) pairs
  * @param throughOrigin True if the regression is through the origin. For example, in linear
  *                      regression, it will be true without fitting intercept.
  */
 @Since("1.2.0")
 class RegressionMetrics @Since("2.0.0") (
-    predAndObsWithOptWeight: RDD[_ <: Product], throughOrigin: Boolean)
+    predictionAndObservations: RDD[_ <: Product], throughOrigin: Boolean)
     extends Logging {
 
   @Since("1.2.0")
@@ -47,35 +47,36 @@ class RegressionMetrics @Since("2.0.0") (
    *                                  prediction and observation
    */
   private[mllib] def this(predictionAndObservations: DataFrame) =
-    this(predictionAndObservations.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(predictionAndObservations.rdd.map {
+      case Row(prediction: Double, label: Double, weight: Double) =>
+        (prediction, label, weight)
+      case Row(prediction: Double, label: Double) =>
+        (prediction, label, 1.0)
+      case other =>
+        throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
+    })
 
   /**
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
    */
   private lazy val summary: MultivariateStatisticalSummary = {
-    val summary: MultivariateStatisticalSummary = predAndObsWithOptWeight.map {
+    predictionAndObservations.map {
       case (prediction: Double, observation: Double, weight: Double) =>
-        (Vectors.dense(observation, observation - prediction), weight)
+        (Vectors.dense(observation, observation - prediction, prediction), weight)
       case (prediction: Double, observation: Double) =>
-        (Vectors.dense(observation, observation - prediction), 1.0)
+        (Vectors.dense(observation, observation - prediction, prediction), 1.0)
     }.treeAggregate(new MultivariateOnlineSummarizer())(
         (summary, sample) => summary.add(sample._1, sample._2),
         (sum1, sum2) => sum1.merge(sum2)
       )
-    summary
   }
 
   private lazy val SSy = math.pow(summary.normL2(0), 2)
   private lazy val SSerr = math.pow(summary.normL2(1), 2)
   private lazy val SStot = summary.variance(0) * (summary.weightSum - 1)
-  private lazy val SSreg = {
-    val yMean = summary.mean(0)
-    predAndObsWithOptWeight.map {
-      case (prediction: Double, _: Double, weight: Double) =>
-        math.pow(prediction - yMean, 2) * weight
-      case (prediction: Double, _: Double) => math.pow(prediction - yMean, 2)
-    }.sum()
-  }
+  private lazy val SSreg = math.pow(summary.normL2(2), 2) +
+    math.pow(summary.mean(0), 2) * summary.weightSum -
+    2 * summary.mean(0) * summary.mean(2) * summary.weightSum
 
   /**
    * Returns the variance explained by regression.

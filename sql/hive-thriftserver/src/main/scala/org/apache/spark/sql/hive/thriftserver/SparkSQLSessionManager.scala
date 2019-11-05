@@ -24,7 +24,6 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
-import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.sql.SQLContext
@@ -39,13 +38,13 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
 
-  override def init(hiveConf: HiveConf) {
+  override def init(hiveConf: HiveConf): Unit = {
     setSuperField(this, "operationManager", sparkSqlOperationManager)
     super.init(hiveConf)
   }
 
   override def openSession(
-      protocol: TProtocolVersion,
+      protocol: ThriftserverShimUtils.TProtocolVersion,
       username: String,
       passwd: String,
       ipAddress: String,
@@ -64,6 +63,9 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       sqlContext.newSession()
     }
     ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+    val hiveSessionState = session.getSessionState
+    setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
+    setConfMap(ctx, hiveSessionState.getHiveVariables)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
       ctx.sql(s"use ${sessionConf.get("use:database")}")
     }
@@ -71,10 +73,18 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     sessionHandle
   }
 
-  override def closeSession(sessionHandle: SessionHandle) {
+  override def closeSession(sessionHandle: SessionHandle): Unit = {
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
+  }
+
+  def setConfMap(conf: SQLContext, confMap: java.util.Map[String, String]): Unit = {
+    val iterator = confMap.entrySet().iterator()
+    while (iterator.hasNext) {
+      val kv = iterator.next()
+      conf.setConf(kv.getKey, kv.getValue)
+    }
   }
 }

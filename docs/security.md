@@ -2,6 +2,21 @@
 layout: global
 displayTitle: Spark Security
 title: Security
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -755,6 +770,11 @@ URIs for remote metastore services (`hive.metastore.uris` is not empty).
 If an application needs to interact with other secure Hadoop filesystems, their URIs need to be
 explicitly provided to Spark at launch time. This is done by listing them in the
 `spark.kerberos.access.hadoopFileSystems` property, described in the configuration section below.
+
+Spark also supports custom delegation token providers using the Java Services
+mechanism (see `java.util.ServiceLoader`). Implementations of
+`org.apache.spark.security.HadoopDelegationTokenProvider` can be made available to Spark
+by listing their names in the corresponding file in the jar's `META-INF/services` directory.
 
 Delegation token support is currently only supported in YARN and Mesos modes. Consult the
 deployment-specific page for more information.

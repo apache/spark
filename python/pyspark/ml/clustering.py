@@ -33,8 +33,6 @@ __all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
 
 class ClusteringSummary(JavaWrapper):
     """
-    .. note:: Experimental
-
     Clustering results for a given model.
 
     .. versionadded:: 2.1.0
@@ -97,12 +95,54 @@ class ClusteringSummary(JavaWrapper):
         return self._call_java("numIter")
 
 
-class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainingSummary):
+@inherit_doc
+class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
+                             HasProbabilityCol, HasTol):
+    """
+    Params for :py:class:`GaussianMixture` and :py:class:`GaussianMixtureModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    k = Param(Params._dummy(), "k", "Number of independent Gaussians in the mixture model. " +
+              "Must be > 1.", typeConverter=TypeConverters.toInt)
+
+    @since("2.0.0")
+    def getK(self):
+        """
+        Gets the value of `k`
+        """
+        return self.getOrDefault(self.k)
+
+
+class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, JavaMLReadable,
+                           HasTrainingSummary):
     """
     Model fitted by GaussianMixture.
 
     .. versionadded:: 2.0.0
     """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("3.0.0")
+    def setProbabilityCol(self, value):
+        """
+        Sets the value of :py:attr:`probabilityCol`.
+        """
+        return self._set(probabilityCol=value)
 
     @property
     @since("2.0.0")
@@ -137,10 +177,23 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainin
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
 
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        return self._call_java("predict", value)
+
+    @since("3.0.0")
+    def predictProbability(self, value):
+        """
+        Predict probability for the given features.
+        """
+        return self._call_java("predictProbability", value)
+
 
 @inherit_doc
-class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
-                      HasProbabilityCol, JavaMLWritable, JavaMLReadable):
+class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, JavaMLReadable):
     """
     GaussianMixture clustering.
     This class performs expectation maximization for multivariate Gaussian
@@ -168,9 +221,22 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     ...         (Vectors.dense([-0.83, -0.68]),),
     ...         (Vectors.dense([-0.91, -0.76]),)]
     >>> df = spark.createDataFrame(data, ["features"])
-    >>> gm = GaussianMixture(k=3, tol=0.0001,
-    ...                      maxIter=10, seed=10)
+    >>> gm = GaussianMixture(k=3, tol=0.0001, seed=10)
+    >>> gm.getMaxIter()
+    100
+    >>> gm.setMaxIter(10)
+    GaussianMixture...
+    >>> gm.getMaxIter()
+    10
     >>> model = gm.fit(df)
+    >>> model.getFeaturesCol()
+    'features'
+    >>> model.setPredictionCol("newPrediction")
+    GaussianMixture...
+    >>> model.predict(df.head().features)
+    2
+    >>> model.predictProbability(df.head().features)
+    DenseVector([0.0, 0.4736, 0.5264])
     >>> model.hasSummary
     True
     >>> summary = model.summary
@@ -187,11 +253,11 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     Row(mean=DenseVector([0.825, 0.8675]))
     >>> model.gaussiansDF.select("cov").head()
     Row(cov=DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], False))
-    >>> transformed = model.transform(df).select("features", "prediction")
+    >>> transformed = model.transform(df).select("features", "newPrediction")
     >>> rows = transformed.collect()
-    >>> rows[4].prediction == rows[5].prediction
+    >>> rows[4].newPrediction == rows[5].newPrediction
     True
-    >>> rows[2].prediction == rows[3].prediction
+    >>> rows[2].newPrediction == rows[3].newPrediction
     True
     >>> gmm_path = temp_path + "/gmm"
     >>> gm.save(gmm_path)
@@ -212,9 +278,6 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 
     .. versionadded:: 2.0.0
     """
-
-    k = Param(Params._dummy(), "k", "Number of independent Gaussians in the mixture model. " +
-              "Must be > 1.", typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -254,17 +317,50 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         return self._set(k=value)
 
     @since("2.0.0")
-    def getK(self):
+    def setMaxIter(self, value):
         """
-        Gets the value of `k`
+        Sets the value of :py:attr:`maxIter`.
         """
-        return self.getOrDefault(self.k)
+        return self._set(maxIter=value)
+
+    @since("2.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("2.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("2.0.0")
+    def setProbabilityCol(self, value):
+        """
+        Sets the value of :py:attr:`probabilityCol`.
+        """
+        return self._set(probabilityCol=value)
+
+    @since("2.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("2.0.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
 
 
 class GaussianMixtureSummary(ClusteringSummary):
     """
-    .. note:: Experimental
-
     Gaussian mixture clustering results for a given model.
 
     .. versionadded:: 2.1.0
@@ -297,8 +393,6 @@ class GaussianMixtureSummary(ClusteringSummary):
 
 class KMeansSummary(ClusteringSummary):
     """
-    .. note:: Experimental
-
     Summary of KMeans.
 
     .. versionadded:: 2.1.0
@@ -314,12 +408,68 @@ class KMeansSummary(ClusteringSummary):
         return self._call_java("trainingCost")
 
 
-class KMeansModel(JavaModel, GeneralJavaMLWritable, JavaMLReadable, HasTrainingSummary):
+@inherit_doc
+class _KMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol,
+                    HasDistanceMeasure):
+    """
+    Params for :py:class:`KMeans` and :py:class:`KMeansModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    k = Param(Params._dummy(), "k", "The number of clusters to create. Must be > 1.",
+              typeConverter=TypeConverters.toInt)
+    initMode = Param(Params._dummy(), "initMode",
+                     "The initialization algorithm. This can be either \"random\" to " +
+                     "choose random points as initial cluster centers, or \"k-means||\" " +
+                     "to use a parallel variant of k-means++",
+                     typeConverter=TypeConverters.toString)
+    initSteps = Param(Params._dummy(), "initSteps", "The number of steps for k-means|| " +
+                      "initialization mode. Must be > 0.", typeConverter=TypeConverters.toInt)
+
+    @since("1.5.0")
+    def getK(self):
+        """
+        Gets the value of `k`
+        """
+        return self.getOrDefault(self.k)
+
+    @since("1.5.0")
+    def getInitMode(self):
+        """
+        Gets the value of `initMode`
+        """
+        return self.getOrDefault(self.initMode)
+
+    @since("1.5.0")
+    def getInitSteps(self):
+        """
+        Gets the value of `initSteps`
+        """
+        return self.getOrDefault(self.initSteps)
+
+
+class KMeansModel(JavaModel, _KMeansParams, GeneralJavaMLWritable, JavaMLReadable,
+                  HasTrainingSummary):
     """
     Model fitted by KMeans.
 
     .. versionadded:: 1.5.0
     """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
 
     @since("1.5.0")
     def clusterCenters(self):
@@ -339,10 +489,16 @@ class KMeansModel(JavaModel, GeneralJavaMLWritable, JavaMLReadable, HasTrainingS
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
 
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        return self._call_java("predict", value)
+
 
 @inherit_doc
-class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol, HasMaxIter,
-             HasTol, HasSeed, JavaMLWritable, JavaMLReadable):
+class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     """
     K-means clustering with a k-means++ like initialization mode
     (the k-means|| algorithm by Bahmani et al).
@@ -351,16 +507,29 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
     ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
     >>> df = spark.createDataFrame(data, ["features"])
-    >>> kmeans = KMeans(k=2, seed=1)
+    >>> kmeans = KMeans(k=2)
+    >>> kmeans.setSeed(1)
+    KMeans...
+    >>> kmeans.setMaxIter(10)
+    KMeans...
+    >>> kmeans.getMaxIter()
+    10
+    >>> kmeans.clear(kmeans.maxIter)
     >>> model = kmeans.fit(df)
+    >>> model.getDistanceMeasure()
+    'euclidean'
+    >>> model.setPredictionCol("newPrediction")
+    KMeans...
+    >>> model.predict(df.head().features)
+    0
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
-    >>> transformed = model.transform(df).select("features", "prediction")
+    >>> transformed = model.transform(df).select("features", "newPrediction")
     >>> rows = transformed.collect()
-    >>> rows[0].prediction == rows[1].prediction
+    >>> rows[0].newPrediction == rows[1].newPrediction
     True
-    >>> rows[2].prediction == rows[3].prediction
+    >>> rows[2].newPrediction == rows[3].newPrediction
     True
     >>> model.hasSummary
     True
@@ -388,16 +557,6 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
 
     .. versionadded:: 1.5.0
     """
-
-    k = Param(Params._dummy(), "k", "The number of clusters to create. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
-    initMode = Param(Params._dummy(), "initMode",
-                     "The initialization algorithm. This can be either \"random\" to " +
-                     "choose random points as initial cluster centers, or \"k-means||\" " +
-                     "to use a parallel variant of k-means++",
-                     typeConverter=TypeConverters.toString)
-    initSteps = Param(Params._dummy(), "initSteps", "The number of steps for k-means|| " +
-                      "initialization mode. Must be > 0.", typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -441,25 +600,11 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
         return self._set(k=value)
 
     @since("1.5.0")
-    def getK(self):
-        """
-        Gets the value of `k`
-        """
-        return self.getOrDefault(self.k)
-
-    @since("1.5.0")
     def setInitMode(self, value):
         """
         Sets the value of :py:attr:`initMode`.
         """
         return self._set(initMode=value)
-
-    @since("1.5.0")
-    def getInitMode(self):
-        """
-        Gets the value of `initMode`
-        """
-        return self.getOrDefault(self.initMode)
 
     @since("1.5.0")
     def setInitSteps(self, value):
@@ -468,13 +613,6 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
         """
         return self._set(initSteps=value)
 
-    @since("1.5.0")
-    def getInitSteps(self):
-        """
-        Gets the value of `initSteps`
-        """
-        return self.getOrDefault(self.initSteps)
-
     @since("2.4.0")
     def setDistanceMeasure(self, value):
         """
@@ -482,20 +620,94 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
         """
         return self._set(distanceMeasure=value)
 
-    @since("2.4.0")
-    def getDistanceMeasure(self):
+    @since("1.5.0")
+    def setMaxIter(self, value):
         """
-        Gets the value of `distanceMeasure`
+        Sets the value of :py:attr:`maxIter`.
         """
-        return self.getOrDefault(self.distanceMeasure)
+        return self._set(maxIter=value)
+
+    @since("1.5.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("1.5.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("1.5.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("1.5.0")
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
 
 
-class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainingSummary):
+@inherit_doc
+class _BisectingKMeansParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
+                             HasDistanceMeasure):
+    """
+    Params for :py:class:`BisectingKMeans` and :py:class:`BisectingKMeansModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    k = Param(Params._dummy(), "k", "The desired number of leaf clusters. Must be > 1.",
+              typeConverter=TypeConverters.toInt)
+    minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
+                                    "The minimum number of points (if >= 1.0) or the minimum " +
+                                    "proportion of points (if < 1.0) of a divisible cluster.",
+                                    typeConverter=TypeConverters.toFloat)
+
+    @since("2.0.0")
+    def getK(self):
+        """
+        Gets the value of `k` or its default value.
+        """
+        return self.getOrDefault(self.k)
+
+    @since("2.0.0")
+    def getMinDivisibleClusterSize(self):
+        """
+        Gets the value of `minDivisibleClusterSize` or its default value.
+        """
+        return self.getOrDefault(self.minDivisibleClusterSize)
+
+
+class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, JavaMLReadable,
+                           HasTrainingSummary):
     """
     Model fitted by BisectingKMeans.
 
     .. versionadded:: 2.0.0
     """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
 
     @since("2.0.0")
     def clusterCenters(self):
@@ -530,10 +742,16 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable, HasTrainin
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
 
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        return self._call_java("predict", value)
+
 
 @inherit_doc
-class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol,
-                      HasMaxIter, HasSeed, JavaMLWritable, JavaMLReadable):
+class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, JavaMLReadable):
     """
     A bisecting k-means algorithm based on the paper "A comparison of document clustering
     techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
@@ -549,7 +767,23 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
     ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
     >>> df = spark.createDataFrame(data, ["features"])
     >>> bkm = BisectingKMeans(k=2, minDivisibleClusterSize=1.0)
+    >>> bkm.setMaxIter(10)
+    BisectingKMeans...
+    >>> bkm.getMaxIter()
+    10
+    >>> bkm.clear(bkm.maxIter)
+    >>> bkm.setSeed(1)
+    BisectingKMeans...
+    >>> bkm.getSeed()
+    1
+    >>> bkm.clear(bkm.seed)
     >>> model = bkm.fit(df)
+    >>> model.getMaxIter()
+    20
+    >>> model.setPredictionCol("newPrediction")
+    BisectingKMeans...
+    >>> model.predict(df.head().features)
+    0
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
@@ -564,11 +798,11 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
     [2, 2]
     >>> summary.trainingCost
     2.000...
-    >>> transformed = model.transform(df).select("features", "prediction")
+    >>> transformed = model.transform(df).select("features", "newPrediction")
     >>> rows = transformed.collect()
-    >>> rows[0].prediction == rows[1].prediction
+    >>> rows[0].newPrediction == rows[1].newPrediction
     True
-    >>> rows[2].prediction == rows[3].prediction
+    >>> rows[2].newPrediction == rows[3].newPrediction
     True
     >>> bkm_path = temp_path + "/bkm"
     >>> bkm.save(bkm_path)
@@ -589,13 +823,6 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
 
     .. versionadded:: 2.0.0
     """
-
-    k = Param(Params._dummy(), "k", "The desired number of leaf clusters. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
-    minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
-                                    "The minimum number of points (if >= 1.0) or the minimum " +
-                                    "proportion of points (if < 1.0) of a divisible cluster.",
-                                    typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20,
@@ -631,25 +858,11 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
         return self._set(k=value)
 
     @since("2.0.0")
-    def getK(self):
-        """
-        Gets the value of `k` or its default value.
-        """
-        return self.getOrDefault(self.k)
-
-    @since("2.0.0")
     def setMinDivisibleClusterSize(self, value):
         """
         Sets the value of :py:attr:`minDivisibleClusterSize`.
         """
         return self._set(minDivisibleClusterSize=value)
-
-    @since("2.0.0")
-    def getMinDivisibleClusterSize(self):
-        """
-        Gets the value of `minDivisibleClusterSize` or its default value.
-        """
-        return self.getOrDefault(self.minDivisibleClusterSize)
 
     @since("2.4.0")
     def setDistanceMeasure(self, value):
@@ -658,12 +871,33 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
         """
         return self._set(distanceMeasure=value)
 
-    @since("2.4.0")
-    def getDistanceMeasure(self):
+    @since("2.0.0")
+    def setMaxIter(self, value):
         """
-        Gets the value of `distanceMeasure` or its default value.
+        Sets the value of :py:attr:`maxIter`.
         """
-        return self.getOrDefault(self.distanceMeasure)
+        return self._set(maxIter=value)
+
+    @since("2.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("2.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @since("2.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
 
     def _create_model(self, java_model):
         return BisectingKMeansModel(java_model)
@@ -671,8 +905,6 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
 
 class BisectingKMeansSummary(ClusteringSummary):
     """
-    .. note:: Experimental
-
     Bisecting KMeans clustering results for a given model.
 
     .. versionadded:: 2.1.0
@@ -689,7 +921,126 @@ class BisectingKMeansSummary(ClusteringSummary):
 
 
 @inherit_doc
-class LDAModel(JavaModel):
+class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
+    """
+    Params for :py:class:`LDA` and :py:class:`LDAModel`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    k = Param(Params._dummy(), "k", "The number of topics (clusters) to infer. Must be > 1.",
+              typeConverter=TypeConverters.toInt)
+    optimizer = Param(Params._dummy(), "optimizer",
+                      "Optimizer or inference algorithm used to estimate the LDA model.  "
+                      "Supported: online, em", typeConverter=TypeConverters.toString)
+    learningOffset = Param(Params._dummy(), "learningOffset",
+                           "A (positive) learning parameter that downweights early iterations."
+                           " Larger values make early iterations count less",
+                           typeConverter=TypeConverters.toFloat)
+    learningDecay = Param(Params._dummy(), "learningDecay", "Learning rate, set as an"
+                          "exponential decay rate. This should be between (0.5, 1.0] to "
+                          "guarantee asymptotic convergence.", typeConverter=TypeConverters.toFloat)
+    subsamplingRate = Param(Params._dummy(), "subsamplingRate",
+                            "Fraction of the corpus to be sampled and used in each iteration "
+                            "of mini-batch gradient descent, in range (0, 1].",
+                            typeConverter=TypeConverters.toFloat)
+    optimizeDocConcentration = Param(Params._dummy(), "optimizeDocConcentration",
+                                     "Indicates whether the docConcentration (Dirichlet parameter "
+                                     "for document-topic distribution) will be optimized during "
+                                     "training.", typeConverter=TypeConverters.toBoolean)
+    docConcentration = Param(Params._dummy(), "docConcentration",
+                             "Concentration parameter (commonly named \"alpha\") for the "
+                             "prior placed on documents' distributions over topics (\"theta\").",
+                             typeConverter=TypeConverters.toListFloat)
+    topicConcentration = Param(Params._dummy(), "topicConcentration",
+                               "Concentration parameter (commonly named \"beta\" or \"eta\") for "
+                               "the prior placed on topic' distributions over terms.",
+                               typeConverter=TypeConverters.toFloat)
+    topicDistributionCol = Param(Params._dummy(), "topicDistributionCol",
+                                 "Output column with estimates of the topic mixture distribution "
+                                 "for each document (often called \"theta\" in the literature). "
+                                 "Returns a vector of zeros for an empty document.",
+                                 typeConverter=TypeConverters.toString)
+    keepLastCheckpoint = Param(Params._dummy(), "keepLastCheckpoint",
+                               "(For EM optimizer) If using checkpointing, this indicates whether"
+                               " to keep the last checkpoint. If false, then the checkpoint will be"
+                               " deleted. Deleting the checkpoint can cause failures if a data"
+                               " partition is lost, so set this bit with care.",
+                               TypeConverters.toBoolean)
+
+    @since("2.0.0")
+    def getK(self):
+        """
+        Gets the value of :py:attr:`k` or its default value.
+        """
+        return self.getOrDefault(self.k)
+
+    @since("2.0.0")
+    def getOptimizer(self):
+        """
+        Gets the value of :py:attr:`optimizer` or its default value.
+        """
+        return self.getOrDefault(self.optimizer)
+
+    @since("2.0.0")
+    def getLearningOffset(self):
+        """
+        Gets the value of :py:attr:`learningOffset` or its default value.
+        """
+        return self.getOrDefault(self.learningOffset)
+
+    @since("2.0.0")
+    def getLearningDecay(self):
+        """
+        Gets the value of :py:attr:`learningDecay` or its default value.
+        """
+        return self.getOrDefault(self.learningDecay)
+
+    @since("2.0.0")
+    def getSubsamplingRate(self):
+        """
+        Gets the value of :py:attr:`subsamplingRate` or its default value.
+        """
+        return self.getOrDefault(self.subsamplingRate)
+
+    @since("2.0.0")
+    def getOptimizeDocConcentration(self):
+        """
+        Gets the value of :py:attr:`optimizeDocConcentration` or its default value.
+        """
+        return self.getOrDefault(self.optimizeDocConcentration)
+
+    @since("2.0.0")
+    def getDocConcentration(self):
+        """
+        Gets the value of :py:attr:`docConcentration` or its default value.
+        """
+        return self.getOrDefault(self.docConcentration)
+
+    @since("2.0.0")
+    def getTopicConcentration(self):
+        """
+        Gets the value of :py:attr:`topicConcentration` or its default value.
+        """
+        return self.getOrDefault(self.topicConcentration)
+
+    @since("2.0.0")
+    def getTopicDistributionCol(self):
+        """
+        Gets the value of :py:attr:`topicDistributionCol` or its default value.
+        """
+        return self.getOrDefault(self.topicDistributionCol)
+
+    @since("2.0.0")
+    def getKeepLastCheckpoint(self):
+        """
+        Gets the value of :py:attr:`keepLastCheckpoint` or its default value.
+        """
+        return self.getOrDefault(self.keepLastCheckpoint)
+
+
+@inherit_doc
+class LDAModel(JavaModel, _LDAParams):
     """
     Latent Dirichlet Allocation (LDA) model.
     This abstraction permits for different underlying representations,
@@ -697,6 +1048,31 @@ class LDAModel(JavaModel):
 
     .. versionadded:: 2.0.0
     """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("3.0.0")
+    def setTopicDistributionCol(self, value):
+        """
+        Sets the value of :py:attr:`topicDistributionCol`.
+
+        >>> algo = LDA().setTopicDistributionCol("topicDistributionCol")
+        >>> algo.getTopicDistributionCol()
+        'topicDistributionCol'
+        """
+        return self._set(topicDistributionCol=value)
 
     @since("2.0.0")
     def isDistributed(self):
@@ -844,8 +1220,7 @@ class LocalLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInterval,
-          JavaMLReadable, JavaMLWritable):
+class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     """
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
 
@@ -871,7 +1246,14 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     >>> df = spark.createDataFrame([[1, Vectors.dense([0.0, 1.0])],
     ...      [2, SparseVector(2, {0: 1.0})],], ["id", "features"])
     >>> lda = LDA(k=2, seed=1, optimizer="em")
+    >>> lda.setMaxIter(10)
+    LDA...
+    >>> lda.getMaxIter()
+    10
+    >>> lda.clear(lda.maxIter)
     >>> model = lda.fit(df)
+    >>> model.getTopicDistributionCol()
+    'topicDistribution'
     >>> model.isDistributed()
     True
     >>> localModel = model.toLocal()
@@ -901,46 +1283,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
 
     .. versionadded:: 2.0.0
     """
-
-    k = Param(Params._dummy(), "k", "The number of topics (clusters) to infer. Must be > 1.",
-              typeConverter=TypeConverters.toInt)
-    optimizer = Param(Params._dummy(), "optimizer",
-                      "Optimizer or inference algorithm used to estimate the LDA model.  "
-                      "Supported: online, em", typeConverter=TypeConverters.toString)
-    learningOffset = Param(Params._dummy(), "learningOffset",
-                           "A (positive) learning parameter that downweights early iterations."
-                           " Larger values make early iterations count less",
-                           typeConverter=TypeConverters.toFloat)
-    learningDecay = Param(Params._dummy(), "learningDecay", "Learning rate, set as an"
-                          "exponential decay rate. This should be between (0.5, 1.0] to "
-                          "guarantee asymptotic convergence.", typeConverter=TypeConverters.toFloat)
-    subsamplingRate = Param(Params._dummy(), "subsamplingRate",
-                            "Fraction of the corpus to be sampled and used in each iteration "
-                            "of mini-batch gradient descent, in range (0, 1].",
-                            typeConverter=TypeConverters.toFloat)
-    optimizeDocConcentration = Param(Params._dummy(), "optimizeDocConcentration",
-                                     "Indicates whether the docConcentration (Dirichlet parameter "
-                                     "for document-topic distribution) will be optimized during "
-                                     "training.", typeConverter=TypeConverters.toBoolean)
-    docConcentration = Param(Params._dummy(), "docConcentration",
-                             "Concentration parameter (commonly named \"alpha\") for the "
-                             "prior placed on documents' distributions over topics (\"theta\").",
-                             typeConverter=TypeConverters.toListFloat)
-    topicConcentration = Param(Params._dummy(), "topicConcentration",
-                               "Concentration parameter (commonly named \"beta\" or \"eta\") for "
-                               "the prior placed on topic' distributions over terms.",
-                               typeConverter=TypeConverters.toFloat)
-    topicDistributionCol = Param(Params._dummy(), "topicDistributionCol",
-                                 "Output column with estimates of the topic mixture distribution "
-                                 "for each document (often called \"theta\" in the literature). "
-                                 "Returns a vector of zeros for an empty document.",
-                                 typeConverter=TypeConverters.toString)
-    keepLastCheckpoint = Param(Params._dummy(), "keepLastCheckpoint",
-                               "(For EM optimizer) If using checkpointing, this indicates whether"
-                               " to keep the last checkpoint. If false, then the checkpoint will be"
-                               " deleted. Deleting the checkpoint can cause failures if a data"
-                               " partition is lost, so set this bit with care.",
-                               TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,
@@ -990,6 +1332,20 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         return self._set(**kwargs)
 
     @since("2.0.0")
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
+    @since("2.0.0")
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    @since("2.0.0")
     def setK(self, value):
         """
         Sets the value of :py:attr:`k`.
@@ -999,13 +1355,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         10
         """
         return self._set(k=value)
-
-    @since("2.0.0")
-    def getK(self):
-        """
-        Gets the value of :py:attr:`k` or its default value.
-        """
-        return self.getOrDefault(self.k)
 
     @since("2.0.0")
     def setOptimizer(self, value):
@@ -1020,13 +1369,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         return self._set(optimizer=value)
 
     @since("2.0.0")
-    def getOptimizer(self):
-        """
-        Gets the value of :py:attr:`optimizer` or its default value.
-        """
-        return self.getOrDefault(self.optimizer)
-
-    @since("2.0.0")
     def setLearningOffset(self, value):
         """
         Sets the value of :py:attr:`learningOffset`.
@@ -1036,13 +1378,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         100.0
         """
         return self._set(learningOffset=value)
-
-    @since("2.0.0")
-    def getLearningOffset(self):
-        """
-        Gets the value of :py:attr:`learningOffset` or its default value.
-        """
-        return self.getOrDefault(self.learningOffset)
 
     @since("2.0.0")
     def setLearningDecay(self, value):
@@ -1056,13 +1391,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         return self._set(learningDecay=value)
 
     @since("2.0.0")
-    def getLearningDecay(self):
-        """
-        Gets the value of :py:attr:`learningDecay` or its default value.
-        """
-        return self.getOrDefault(self.learningDecay)
-
-    @since("2.0.0")
     def setSubsamplingRate(self, value):
         """
         Sets the value of :py:attr:`subsamplingRate`.
@@ -1072,13 +1400,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         0.1...
         """
         return self._set(subsamplingRate=value)
-
-    @since("2.0.0")
-    def getSubsamplingRate(self):
-        """
-        Gets the value of :py:attr:`subsamplingRate` or its default value.
-        """
-        return self.getOrDefault(self.subsamplingRate)
 
     @since("2.0.0")
     def setOptimizeDocConcentration(self, value):
@@ -1092,13 +1413,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         return self._set(optimizeDocConcentration=value)
 
     @since("2.0.0")
-    def getOptimizeDocConcentration(self):
-        """
-        Gets the value of :py:attr:`optimizeDocConcentration` or its default value.
-        """
-        return self.getOrDefault(self.optimizeDocConcentration)
-
-    @since("2.0.0")
     def setDocConcentration(self, value):
         """
         Sets the value of :py:attr:`docConcentration`.
@@ -1108,13 +1422,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         [0.1..., 0.2...]
         """
         return self._set(docConcentration=value)
-
-    @since("2.0.0")
-    def getDocConcentration(self):
-        """
-        Gets the value of :py:attr:`docConcentration` or its default value.
-        """
-        return self.getOrDefault(self.docConcentration)
 
     @since("2.0.0")
     def setTopicConcentration(self, value):
@@ -1128,13 +1435,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         return self._set(topicConcentration=value)
 
     @since("2.0.0")
-    def getTopicConcentration(self):
-        """
-        Gets the value of :py:attr:`topicConcentration` or its default value.
-        """
-        return self.getOrDefault(self.topicConcentration)
-
-    @since("2.0.0")
     def setTopicDistributionCol(self, value):
         """
         Sets the value of :py:attr:`topicDistributionCol`.
@@ -1144,13 +1444,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         'topicDistributionCol'
         """
         return self._set(topicDistributionCol=value)
-
-    @since("2.0.0")
-    def getTopicDistributionCol(self):
-        """
-        Gets the value of :py:attr:`topicDistributionCol` or its default value.
-        """
-        return self.getOrDefault(self.topicDistributionCol)
 
     @since("2.0.0")
     def setKeepLastCheckpoint(self, value):
@@ -1164,59 +1457,26 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         return self._set(keepLastCheckpoint=value)
 
     @since("2.0.0")
-    def getKeepLastCheckpoint(self):
+    def setMaxIter(self, value):
         """
-        Gets the value of :py:attr:`keepLastCheckpoint` or its default value.
+        Sets the value of :py:attr:`maxIter`.
         """
-        return self.getOrDefault(self.keepLastCheckpoint)
+        return self._set(maxIter=value)
+
+    @since("2.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
 
 
 @inherit_doc
-class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReadable,
-                               JavaMLWritable):
+class _PowerIterationClusteringParams(HasMaxIter, HasWeightCol):
     """
-    .. note:: Experimental
+    Params for :py:class:`PowerIterationClustering`.
 
-    Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
-    `Lin and Cohen <http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>`_. From the
-    abstract: PIC finds a very low-dimensional embedding of a dataset using truncated power
-    iteration on a normalized pair-wise similarity matrix of the data.
-
-    This class is not yet an Estimator/Transformer, use :py:func:`assignClusters` method
-    to run the PowerIterationClustering algorithm.
-
-    .. seealso:: `Wikipedia on Spectral clustering
-        <http://en.wikipedia.org/wiki/Spectral_clustering>`_
-
-    >>> data = [(1, 0, 0.5),
-    ...         (2, 0, 0.5), (2, 1, 0.7),
-    ...         (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9),
-    ...         (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1),
-    ...         (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
-    >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight")
-    >>> pic = PowerIterationClustering(k=2, maxIter=40, weightCol="weight")
-    >>> assignments = pic.assignClusters(df)
-    >>> assignments.sort(assignments.id).show(truncate=False)
-    +---+-------+
-    |id |cluster|
-    +---+-------+
-    |0  |1      |
-    |1  |1      |
-    |2  |1      |
-    |3  |1      |
-    |4  |1      |
-    |5  |0      |
-    +---+-------+
-    ...
-    >>> pic_path = temp_path + "/pic"
-    >>> pic.save(pic_path)
-    >>> pic2 = PowerIterationClustering.load(pic_path)
-    >>> pic2.getK()
-    2
-    >>> pic2.getMaxIter()
-    40
-
-    .. versionadded:: 2.4.0
+    .. versionadded:: 3.0.0
     """
 
     k = Param(Params._dummy(), "k",
@@ -1234,6 +1494,83 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
     dstCol = Param(Params._dummy(), "dstCol",
                    "Name of the input column for destination vertex IDs.",
                    typeConverter=TypeConverters.toString)
+
+    @since("2.4.0")
+    def getK(self):
+        """
+        Gets the value of :py:attr:`k` or its default value.
+        """
+        return self.getOrDefault(self.k)
+
+    @since("2.4.0")
+    def getInitMode(self):
+        """
+        Gets the value of :py:attr:`initMode` or its default value.
+        """
+        return self.getOrDefault(self.initMode)
+
+    @since("2.4.0")
+    def getSrcCol(self):
+        """
+        Gets the value of :py:attr:`srcCol` or its default value.
+        """
+        return self.getOrDefault(self.srcCol)
+
+    @since("2.4.0")
+    def getDstCol(self):
+        """
+        Gets the value of :py:attr:`dstCol` or its default value.
+        """
+        return self.getOrDefault(self.dstCol)
+
+
+@inherit_doc
+class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, JavaMLReadable,
+                               JavaMLWritable):
+    """
+    Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
+    `Lin and Cohen <http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>`_. From the
+    abstract: PIC finds a very low-dimensional embedding of a dataset using truncated power
+    iteration on a normalized pair-wise similarity matrix of the data.
+
+    This class is not yet an Estimator/Transformer, use :py:func:`assignClusters` method
+    to run the PowerIterationClustering algorithm.
+
+    .. seealso:: `Wikipedia on Spectral clustering
+        <http://en.wikipedia.org/wiki/Spectral_clustering>`_
+
+    >>> data = [(1, 0, 0.5),
+    ...         (2, 0, 0.5), (2, 1, 0.7),
+    ...         (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9),
+    ...         (4, 0, 0.5), (4, 1, 0.7), (4, 2, 0.9), (4, 3, 1.1),
+    ...         (5, 0, 0.5), (5, 1, 0.7), (5, 2, 0.9), (5, 3, 1.1), (5, 4, 1.3)]
+    >>> df = spark.createDataFrame(data).toDF("src", "dst", "weight").repartition(1)
+    >>> pic = PowerIterationClustering(k=2, weightCol="weight")
+    >>> pic.setMaxIter(40)
+    PowerIterationClustering...
+    >>> assignments = pic.assignClusters(df)
+    >>> assignments.sort(assignments.id).show(truncate=False)
+    +---+-------+
+    |id |cluster|
+    +---+-------+
+    |0  |0      |
+    |1  |0      |
+    |2  |0      |
+    |3  |0      |
+    |4  |0      |
+    |5  |1      |
+    +---+-------+
+    ...
+    >>> pic_path = temp_path + "/pic"
+    >>> pic.save(pic_path)
+    >>> pic2 = PowerIterationClustering.load(pic_path)
+    >>> pic2.getK()
+    2
+    >>> pic2.getMaxIter()
+    40
+
+    .. versionadded:: 2.4.0
+    """
 
     @keyword_only
     def __init__(self, k=2, maxIter=20, initMode="random", srcCol="src", dstCol="dst",
@@ -1269,25 +1606,11 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
         return self._set(k=value)
 
     @since("2.4.0")
-    def getK(self):
-        """
-        Gets the value of :py:attr:`k` or its default value.
-        """
-        return self.getOrDefault(self.k)
-
-    @since("2.4.0")
     def setInitMode(self, value):
         """
         Sets the value of :py:attr:`initMode`.
         """
         return self._set(initMode=value)
-
-    @since("2.4.0")
-    def getInitMode(self):
-        """
-        Gets the value of :py:attr:`initMode` or its default value.
-        """
-        return self.getOrDefault(self.initMode)
 
     @since("2.4.0")
     def setSrcCol(self, value):
@@ -1297,13 +1620,6 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
         return self._set(srcCol=value)
 
     @since("2.4.0")
-    def getSrcCol(self):
-        """
-        Gets the value of :py:attr:`srcCol` or its default value.
-        """
-        return self.getOrDefault(self.srcCol)
-
-    @since("2.4.0")
     def setDstCol(self, value):
         """
         Sets the value of :py:attr:`dstCol`.
@@ -1311,11 +1627,18 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
         return self._set(dstCol=value)
 
     @since("2.4.0")
-    def getDstCol(self):
+    def setMaxIter(self, value):
         """
-        Gets the value of :py:attr:`dstCol` or its default value.
+        Sets the value of :py:attr:`maxIter`.
         """
-        return self.getOrDefault(self.dstCol)
+        return self._set(maxIter=value)
+
+    @since("2.4.0")
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
 
     @since("2.4.0")
     def assignClusters(self, dataset):

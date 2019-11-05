@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.util.concurrent.TimeUnit._
+
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -53,7 +55,7 @@ case class ShuffledHashJoinExec(
     val start = System.nanoTime()
     val context = TaskContext.get()
     val relation = HashedRelation(iter, buildKeys, taskMemoryManager = context.taskMemoryManager())
-    buildTime += (System.nanoTime() - start) / 1000000
+    buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.
     context.addTaskCompletionListener[Unit](_ => relation.close())

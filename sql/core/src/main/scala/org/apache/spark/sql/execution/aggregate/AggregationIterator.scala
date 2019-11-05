@@ -74,13 +74,12 @@ abstract class AggregationIterator(
       startingInputBufferOffset: Int): Array[AggregateFunction] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = startingInputBufferOffset
-    val expressionsLength = expressions.length
-    val functions = new Array[AggregateFunction](expressionsLength)
+    val functions = new Array[AggregateFunction](expressions.length)
     var i = 0
     val inputAttributeSeq: AttributeSeq = inputAttributes
-    while (i < expressionsLength) {
-      val func = expressions(i).aggregateFunction
-      val funcWithBoundReferences: AggregateFunction = expressions(i).mode match {
+    for (expression <- expressions) {
+      val func = expression.aggregateFunction
+      val funcWithBoundReferences: AggregateFunction = expression.mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
           // We need to create BoundReferences if the function is not an
           // expression-based aggregate function (it does not support code-gen) and the mode of
@@ -158,9 +157,9 @@ abstract class AggregationIterator(
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
-      val mergeExpressions = functions.zipWithIndex.flatMap {
-        case (ae: DeclarativeAggregate, i) =>
-          expressions(i).mode match {
+      val mergeExpressions = functions.zip(expressions).flatMap {
+        case (ae: DeclarativeAggregate, expression) =>
+          expression.mode match {
             case Partial | Complete => ae.updateExpressions
             case PartialMerge | Final => ae.mergeExpressions
           }

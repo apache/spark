@@ -31,9 +31,10 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType}
  *                  null. Use boxed type or [[Option]] if you wanna do the null-handling yourself.
  * @param dataType  Return type of function.
  * @param children  The input expressions of this UDF.
- * @param inputsNullSafe Whether the inputs are of non-primitive types or not nullable. Null values
- *                       of Scala primitive types will be converted to the type's default value and
- *                       lead to wrong results, thus need special handling before calling the UDF.
+ * @param inputPrimitives The analyzer should be aware of Scala primitive types so as to make the
+ *                        UDF return null if there is any null input value of these types. On the
+ *                        other hand, Java UDFs can only have boxed types, thus this parameter will
+ *                        always be all false.
  * @param inputTypes  The expected input types of this UDF, used to perform type coercion. If we do
  *                    not want to perform coercion, simply use "Nil". Note that it would've been
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
@@ -47,7 +48,7 @@ case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
-    inputsNullSafe: Seq[Boolean],
+    inputPrimitives: Seq[Boolean],
     inputTypes: Seq[AbstractDataType] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,
@@ -56,8 +57,7 @@ case class ScalaUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  override def toString: String =
-    s"${udfName.map(name => s"UDF:$name").getOrElse("UDF")}(${children.mkString(", ")})"
+  override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
 
   // scalastyle:off line.size.limit
 
@@ -1002,22 +1002,38 @@ case class ScalaUDF(
     // such as IntegerType, its javaType is `int` and the returned type of user-defined
     // function is Object. Trying to convert an Object to `int` will cause casting exception.
     val evalCode = evals.map(_.code).mkString("\n")
-    val (funcArgs, initArgs) = evals.zipWithIndex.map { case (eval, i) =>
-      val argTerm = ctx.freshName("arg")
-      val convert = s"$convertersTerm[$i].apply(${eval.value})"
-      val initArg = s"Object $argTerm = ${eval.isNull} ? null : $convert;"
-      (argTerm, initArg)
+    val (funcArgs, initArgs) = evals.zipWithIndex.zip(children.map(_.dataType)).map {
+      case ((eval, i), dt) =>
+        val argTerm = ctx.freshName("arg")
+        val initArg = if (CatalystTypeConverters.isPrimitive(dt)) {
+          val convertedTerm = ctx.freshName("conv")
+          s"""
+             |${CodeGenerator.boxedType(dt)} $convertedTerm = ${eval.value};
+             |Object $argTerm = ${eval.isNull} ? null : $convertedTerm;
+           """.stripMargin
+        } else {
+          s"Object $argTerm = ${eval.isNull} ? null : $convertersTerm[$i].apply(${eval.value});"
+        }
+        (argTerm, initArg)
     }.unzip
 
     val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.length}")
     val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
     val resultConverter = s"$convertersTerm[${children.length}]"
     val boxedType = CodeGenerator.boxedType(dataType)
+
+    val funcInvokation = if (CatalystTypeConverters.isPrimitive(dataType)
+        // If the output is nullable, the returned value must be unwrapped from the Option
+        && !nullable) {
+      s"$resultTerm = ($boxedType)$getFuncResult"
+    } else {
+      s"$resultTerm = ($boxedType)$resultConverter.apply($getFuncResult)"
+    }
     val callFunc =
       s"""
          |$boxedType $resultTerm = null;
          |try {
-         |  $resultTerm = ($boxedType)$resultConverter.apply($getFuncResult);
+         |  $funcInvokation;
          |} catch (Exception e) {
          |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
          |}

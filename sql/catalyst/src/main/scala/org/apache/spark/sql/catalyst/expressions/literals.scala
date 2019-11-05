@@ -27,6 +27,7 @@ import java.lang.{Short => JavaShort}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate}
 import java.util
 import java.util.Objects
 import javax.xml.bind.DatatypeConverter
@@ -40,7 +41,9 @@ import org.json4s.JsonAST._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
@@ -64,7 +67,9 @@ object Literal {
     case d: JavaBigDecimal =>
       Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
+    case i: Instant => Literal(instantToMicros(i), TimestampType)
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
+    case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case a: collection.mutable.WrappedArray[_] => apply(a.array)
@@ -96,7 +101,9 @@ object Literal {
     case JavaBoolean.TYPE => BooleanType
 
     // java classes
+    case _ if clz == classOf[LocalDate] => DateType
     case _ if clz == classOf[Date] => DateType
+    case _ if clz == classOf[Instant] => TimestampType
     case _ if clz == classOf[Timestamp] => TimestampType
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
@@ -155,7 +162,7 @@ object Literal {
     case TimestampType => create(0L, TimestampType)
     case StringType => Literal("")
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
-    case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
+    case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
     case struct: StructType =>
@@ -217,11 +224,41 @@ object NonNullLiteral {
 }
 
 /**
+ * Extractor for retrieving Float literals.
+ */
+object FloatLiteral {
+  def unapply(a: Any): Option[Float] = a match {
+    case Literal(a: Float, FloatType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Double literals.
+ */
+object DoubleLiteral {
+  def unapply(a: Any): Option[Double] = a match {
+    case Literal(a: Double, DoubleType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
  * Extractor for retrieving Int literals.
  */
 object IntegerLiteral {
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving String literals.
+ */
+object StringLiteral {
+  def unapply(a: Any): Option[String] = a match {
+    case Literal(s: UTF8String, StringType) => Some(s.toString)
     case _ => None
   }
 }
@@ -353,7 +390,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ if v.isNaN => "'NaN'"
         case Float.PositiveInfinity => "'Infinity'"
         case Float.NegativeInfinity => "'-Infinity'"
-        case _ => v
+        case _ => s"'$v'"
       }
       s"CAST($castedValue AS ${FloatType.sql})"
     case (v: Double, DoubleType) =>
@@ -364,8 +401,13 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ => v + "D"
       }
     case (v: Decimal, t: DecimalType) => v + "BD"
-    case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
-    case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
+    case (v: Int, DateType) =>
+      val formatter = DateFormatter(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"DATE '${formatter.format(v)}'"
+    case (v: Long, TimestampType) =>
+      val formatter = TimestampFormatter.getFractionFormatter(
+        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"TIMESTAMP('${formatter.format(v)}')"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case _ => value.toString
   }

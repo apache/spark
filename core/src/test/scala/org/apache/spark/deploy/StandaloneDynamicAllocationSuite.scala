@@ -67,7 +67,7 @@ class StandaloneDynamicAllocationSuite
     master = makeMaster()
     workers = makeWorkers(10, 2048)
     // Wait until all workers register with master successfully
-    eventually(timeout(60.seconds), interval(10.millis)) {
+    eventually(timeout(1.minute), interval(10.milliseconds)) {
       assert(getMasterState.workers.size === numWorkers)
     }
   }
@@ -135,7 +135,7 @@ class StandaloneDynamicAllocationSuite
   }
 
   test("dynamic allocation with max cores <= cores per worker") {
-    sc = new SparkContext(appConf.set("spark.cores.max", "8"))
+    sc = new SparkContext(appConf.set(config.CORES_MAX, 8))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
@@ -190,7 +190,7 @@ class StandaloneDynamicAllocationSuite
   }
 
   test("dynamic allocation with max cores > cores per worker") {
-    sc = new SparkContext(appConf.set("spark.cores.max", "16"))
+    sc = new SparkContext(appConf.set(config.CORES_MAX, 16))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
@@ -297,7 +297,7 @@ class StandaloneDynamicAllocationSuite
   test("dynamic allocation with cores per executor AND max cores") {
     sc = new SparkContext(appConf
       .set(config.EXECUTOR_CORES, 2)
-      .set("spark.cores.max", "8"))
+      .set(config.CORES_MAX, 8))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
@@ -437,8 +437,8 @@ class StandaloneDynamicAllocationSuite
     assert(executors.size === 2)
 
     // simulate running a task on the executor
-    val getMap =
-      PrivateMethod[mutable.HashMap[String, mutable.HashSet[Long]]]('executorIdToRunningTaskIds)
+    val getMap = PrivateMethod[mutable.HashMap[String, mutable.HashSet[Long]]](
+      Symbol("executorIdToRunningTaskIds"))
     val taskScheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
     val executorIdToRunningTaskIds = taskScheduler invokePrivate getMap()
     executorIdToRunningTaskIds(executors.head) = mutable.HashSet(1L)
@@ -493,27 +493,36 @@ class StandaloneDynamicAllocationSuite
   }
 
   test("executor registration on a blacklisted host must fail") {
+    // The context isn't really used by the test, but it helps with creating a test scheduler,
+    // since CoarseGrainedSchedulerBackend makes a lot of calls to the context instance.
     sc = new SparkContext(appConf.set(config.BLACKLIST_ENABLED.key, "true"))
+
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
-    val message = RegisterExecutor("one", endpointRef, "blacklisted-host", 10, Map.empty, Map.empty)
+    val message = RegisterExecutor("one", endpointRef, "blacklisted-host", 10, Map.empty,
+      Map.empty, Map.empty)
 
-    // Get "localhost" on a blacklist.
     val taskScheduler = mock(classOf[TaskSchedulerImpl])
     when(taskScheduler.nodeBlacklist()).thenReturn(Set("blacklisted-host"))
+    when(taskScheduler.resourceOffers(any())).thenReturn(Nil)
+    when(taskScheduler.resourcesReqsPerTask).thenReturn(Seq.empty)
     when(taskScheduler.sc).thenReturn(sc)
-    sc.taskScheduler = taskScheduler
 
-    // Create a fresh scheduler backend to blacklist "localhost".
-    sc.schedulerBackend.stop()
-    val backend =
-      new StandaloneSchedulerBackend(taskScheduler, sc, Array(masterRpcEnv.address.toSparkURL))
-    backend.start()
-
-    backend.driverEndpoint.ask[Boolean](message)
-    eventually(timeout(10.seconds), interval(100.millis)) {
-      verify(endpointRef).send(RegisterExecutorFailed(any()))
+    val rpcEnv = RpcEnv.create("test-rpcenv", "localhost", 0, conf, securityManager)
+    try {
+      val scheduler = new CoarseGrainedSchedulerBackend(taskScheduler, rpcEnv)
+      try {
+        scheduler.start()
+        scheduler.driverEndpoint.ask[Boolean](message)
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          verify(endpointRef).send(RegisterExecutorFailed(any()))
+        }
+      } finally {
+        scheduler.stop()
+      }
+    } finally {
+      rpcEnv.shutdown()
     }
   }
 
@@ -621,7 +630,8 @@ class StandaloneDynamicAllocationSuite
       val endpointRef = mock(classOf[RpcEndpointRef])
       val mockAddress = mock(classOf[RpcAddress])
       when(endpointRef.address).thenReturn(mockAddress)
-      val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty, Map.empty)
+      val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty, Map.empty,
+        Map.empty)
       val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
       backend.driverEndpoint.askSync[Boolean](message)
     }

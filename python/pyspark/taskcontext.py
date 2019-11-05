@@ -24,11 +24,9 @@ from pyspark.serializers import write_int, UTF8Deserializer
 class TaskContext(object):
 
     """
-    .. note:: Experimental
-
     Contextual information about a task which can be read or mutated during
     execution. To access the TaskContext for a running task, use:
-    L{TaskContext.get()}.
+    :meth:`TaskContext.get`.
     """
 
     _taskContext = None
@@ -38,6 +36,7 @@ class TaskContext(object):
     _stageId = None
     _taskAttemptId = None
     _localProperties = None
+    _resources = None
 
     def __new__(cls):
         """Even if users construct TaskContext instead of using get, give them the singleton."""
@@ -53,6 +52,10 @@ class TaskContext(object):
         if cls._taskContext is None:
             cls._taskContext = TaskContext()
         return cls._taskContext
+
+    @classmethod
+    def _setTaskContext(cls, taskContext):
+        cls._taskContext = taskContext
 
     @classmethod
     def get(cls):
@@ -94,6 +97,13 @@ class TaskContext(object):
         Get a local property set upstream in the driver, or None if it is missing.
         """
         return self._localProperties.get(key, None)
+
+    def resources(self):
+        """
+        Resources allocated to the task. The key is the resource name and the value is information
+        about the resource.
+        """
+        return self._resources
 
 
 BARRIER_FUNCTION = 1
@@ -156,7 +166,10 @@ class BarrierTaskContext(TaskContext):
         running tasks.
 
         .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
+            An Exception will raise if it is not in a barrier stage.
         """
+        if not isinstance(cls._taskContext, BarrierTaskContext):
+            raise Exception('It is not in a barrier stage')
         return cls._taskContext
 
     @classmethod

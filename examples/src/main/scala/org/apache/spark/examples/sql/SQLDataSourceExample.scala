@@ -24,7 +24,7 @@ object SQLDataSourceExample {
 
   case class Person(name: String, age: Long)
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
       .appName("Spark SQL data sources example")
@@ -56,6 +56,11 @@ object SQLDataSourceExample {
       .option("header", "true")
       .load("examples/src/main/resources/people.csv")
     // $example off:manual_load_options_csv$
+    // $example on:load_with_path_glob_filter$
+    val partitionedUsersDF = spark.read.format("orc")
+      .option("pathGlobFilter", "*.orc")
+      .load("examples/src/main/resources/partitioned_users.orc")
+    // $example off:load_with_path_glob_filter$
     // $example on:manual_save_options_orc$
     usersDF.write.format("orc")
       .option("orc.bloom.filter.columns", "favorite_color")

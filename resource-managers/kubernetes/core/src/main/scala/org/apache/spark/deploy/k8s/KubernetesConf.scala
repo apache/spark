@@ -24,6 +24,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.util.Utils
 
@@ -73,8 +74,7 @@ private[spark] class KubernetesDriverConf(
     val appId: String,
     val mainAppResource: MainAppResource,
     val mainClass: String,
-    val appArgs: Array[String],
-    val pyFiles: Seq[String])
+    val appArgs: Array[String])
   extends KubernetesConf(sparkConf) {
 
   override val resourceNamePrefix: String = {
@@ -124,7 +124,7 @@ private[spark] class KubernetesExecutorConf(
     val appId: String,
     val executorId: String,
     val driverPod: Option[Pod])
-  extends KubernetesConf(sparkConf) {
+  extends KubernetesConf(sparkConf) with Logging {
 
   override val resourceNamePrefix: String = {
     get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX).getOrElse(
@@ -149,7 +149,8 @@ private[spark] class KubernetesExecutorConf(
     executorCustomLabels ++ presetLabels
   }
 
-  override def environment: Map[String, String] = sparkConf.getExecutorEnv.toMap
+  override def environment: Map[String, String] = sparkConf.getExecutorEnv.filter(
+    p => checkExecutorEnvKey(p._1)).toMap
 
   override def annotations: Map[String, String] = {
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
@@ -167,6 +168,20 @@ private[spark] class KubernetesExecutorConf(
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
   }
 
+  private def checkExecutorEnvKey(key: String): Boolean = {
+    // Pattern for matching an executorEnv key, which meets certain naming rules.
+    val executorEnvRegex = "[-._a-zA-Z][-._a-zA-Z0-9]*".r
+    if (executorEnvRegex.pattern.matcher(key).matches()) {
+      true
+    } else {
+      logWarning(s"Invalid key: $key: " +
+        "a valid environment variable name must consist of alphabetic characters, " +
+        "digits, '_', '-', or '.', and must not start with a digit." +
+        s"Regex used for validation is '$executorEnvRegex')")
+      false
+    }
+  }
+
 }
 
 private[spark] object KubernetesConf {
@@ -175,14 +190,11 @@ private[spark] object KubernetesConf {
       appId: String,
       mainAppResource: MainAppResource,
       mainClass: String,
-      appArgs: Array[String],
-      maybePyFiles: Option[String]): KubernetesDriverConf = {
+      appArgs: Array[String]): KubernetesDriverConf = {
     // Parse executor volumes in order to verify configuration before the driver pod is created.
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
 
-    val pyFiles = maybePyFiles.map(Utils.stringToSeq).getOrElse(Nil)
-    new KubernetesDriverConf(sparkConf.clone(), appId, mainAppResource, mainClass, appArgs,
-      pyFiles)
+    new KubernetesDriverConf(sparkConf.clone(), appId, mainAppResource, mainClass, appArgs)
   }
 
   def createExecutorConf(
@@ -194,13 +206,22 @@ private[spark] object KubernetesConf {
   }
 
   def getResourceNamePrefix(appName: String): String = {
-    val launchTime = System.currentTimeMillis()
-    s"$appName-$launchTime"
+    val id = KubernetesUtils.uniqueID()
+    s"$appName-$id"
       .trim
       .toLowerCase(Locale.ROOT)
       .replaceAll("\\s+", "-")
       .replaceAll("\\.", "-")
       .replaceAll("[^a-z0-9\\-]", "")
       .replaceAll("-+", "-")
+  }
+
+  /**
+   * Build a resources name based on the vendor device plugin naming
+   * convention of: vendor-domain/resource. For example, an NVIDIA GPU is
+   * advertised as nvidia.com/gpu.
+   */
+  def buildKubernetesResourceName(vendorDomain: String, resourceName: String): String = {
+    s"${vendorDomain}/${resourceName}"
   }
 }

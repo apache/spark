@@ -22,11 +22,11 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
 
 
-class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits {
+class DatasetCacheSuite extends QueryTest with SharedSparkSession with TimeLimits {
   import testImplicits._
 
   /**
@@ -136,7 +136,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     assertCached(df2)
 
     // udf has been evaluated during caching, and thus should not be re-evaluated here
-    failAfter(2 seconds) {
+    failAfter(2.seconds) {
       df2.collect()
     }
 
@@ -197,7 +197,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     val df4 = df1.groupBy('a).agg(sum('b)).agg(sum("sum(b)"))
     assertCached(df4)
     // reuse loaded cache
-    failAfter(3 seconds) {
+    failAfter(3.seconds) {
       checkDataset(df4, Row(10))
     }
 
@@ -245,5 +245,25 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     }
     assert(df2LimitInnerPlan.isDefined &&
       df2LimitInnerPlan.get.find(_.isInstanceOf[InMemoryTableScanExec]).isEmpty)
+  }
+
+  test("SPARK-27739 Save stats from optimized plan") {
+    withTable("a") {
+      spark.range(4)
+        .selectExpr("id", "id % 2 AS p")
+        .write
+        .partitionBy("p")
+        .saveAsTable("a")
+
+      val df = sql("SELECT * FROM a WHERE p = 0")
+      df.cache()
+      df.count()
+      df.queryExecution.withCachedData match {
+        case i: InMemoryRelation =>
+          // Optimized plan has non-default size in bytes
+          assert(i.statsOfPlanToCache.sizeInBytes !==
+            df.sparkSession.sessionState.conf.defaultSizeInBytes)
+      }
+    }
   }
 }

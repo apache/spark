@@ -1190,7 +1190,7 @@ _acceptable_types = {
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
-    BinaryType: (bytearray,),
+    BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
@@ -1211,6 +1211,10 @@ def _make_type_verifier(dataType, nullable=True, name=None):
     >>> _make_type_verifier(StructType([]))(None)
     >>> _make_type_verifier(StringType())("")
     >>> _make_type_verifier(LongType())(0)
+    >>> _make_type_verifier(LongType())(1 << 64) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     >>> _make_type_verifier(ArrayType(ShortType()))(list(range(3)))
     >>> _make_type_verifier(ArrayType(StringType()))(set()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
@@ -1319,6 +1323,16 @@ def _make_type_verifier(dataType, nullable=True, name=None):
 
         verify_value = verify_integer
 
+    elif isinstance(dataType, LongType):
+        def verify_long(obj):
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if obj < -9223372036854775808 or obj > 9223372036854775807:
+                raise ValueError(
+                    new_msg("object of LongType out of range, got: %s" % obj))
+
+        verify_value = verify_long
+
     elif isinstance(dataType, ArrayType):
         element_verifier = _make_type_verifier(
             dataType.elementType, dataType.containsNull, name="element in array %s" % name)
@@ -1405,7 +1419,7 @@ def _create_row(fields, values):
 class Row(tuple):
 
     """
-    A row in L{DataFrame}.
+    A row in :class:`DataFrame`.
     The fields in it can be accessed:
 
     * like attributes (``row.key``)
@@ -1435,13 +1449,24 @@ class Row(tuple):
 
     >>> Person = Row("name", "age")
     >>> Person
-    <Row(name, age)>
+    <Row('name', 'age')>
     >>> 'name' in Person
     True
     >>> 'wrong_key' in Person
     False
     >>> Person("Alice", 11)
     Row(name='Alice', age=11)
+
+    This form can also be used to create rows as tuple values, i.e. with unnamed
+    fields. Beware that such Row objects have different equality semantics:
+
+    >>> row1 = Row("Alice", 11)
+    >>> row2 = Row(name="Alice", age=11)
+    >>> row1 == row2
+    False
+    >>> row3 = Row(a="Alice", b=11)
+    >>> row1 == row3
+    True
     """
 
     def __new__(self, *args, **kwargs):
@@ -1549,7 +1574,7 @@ class Row(tuple):
             return "Row(%s)" % ", ".join("%s=%r" % (k, v)
                                          for k, v in zip(self.__fields__, tuple(self)))
         else:
-            return "<Row(%s)>" % ", ".join(self)
+            return "<Row(%s)>" % ", ".join("%r" % field for field in self)
 
 
 class DateConverter(object):
@@ -1581,7 +1606,6 @@ register_input_converter(DateConverter())
 def to_arrow_type(dt):
     """ Convert Spark data type to pyarrow type
     """
-    from distutils.version import LooseVersion
     import pyarrow as pa
     if type(dt) == BooleanType:
         arrow_type = pa.bool_()
@@ -1602,10 +1626,6 @@ def to_arrow_type(dt):
     elif type(dt) == StringType:
         arrow_type = pa.string()
     elif type(dt) == BinaryType:
-        # TODO: remove version check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt) +
-                            "\nPlease install pyarrow >= 0.10.0 for BinaryType support.")
         arrow_type = pa.binary()
     elif type(dt) == DateType:
         arrow_type = pa.date32()
@@ -1613,9 +1633,15 @@ def to_arrow_type(dt):
         # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp('us', tz='UTC')
     elif type(dt) == ArrayType:
-        if type(dt.elementType) == TimestampType:
+        if type(dt.elementType) in [StructType, TimestampType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
+    elif type(dt) == StructType:
+        if any(type(field.dataType) == StructType for field in dt):
+            raise TypeError("Nested StructType not supported in conversion to Arrow")
+        fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+                  for field in dt]
+        arrow_type = pa.struct(fields)
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
@@ -1633,8 +1659,6 @@ def to_arrow_schema(schema):
 def from_arrow_type(at):
     """ Convert pyarrow type to Spark data type.
     """
-    from distutils.version import LooseVersion
-    import pyarrow as pa
     import pyarrow.types as types
     if types.is_boolean(at):
         spark_type = BooleanType()
@@ -1655,10 +1679,6 @@ def from_arrow_type(at):
     elif types.is_string(at):
         spark_type = StringType()
     elif types.is_binary(at):
-        # TODO: remove version check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at) +
-                            "\nPlease install pyarrow >= 0.10.0 for BinaryType support.")
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
@@ -1668,6 +1688,12 @@ def from_arrow_type(at):
         if types.is_timestamp(at.value_type):
             raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
         spark_type = ArrayType(from_arrow_type(at.value_type))
+    elif types.is_struct(at):
+        if any(types.is_struct(field.type) for field in at):
+            raise TypeError("Nested StructType not supported in conversion from Arrow: " + str(at))
+        return StructType(
+            [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+             for field in at])
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type
@@ -1679,40 +1705,6 @@ def from_arrow_schema(arrow_schema):
     return StructType(
         [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
          for field in arrow_schema])
-
-
-def _check_series_convert_date(series, data_type):
-    """
-    Cast the series to datetime.date if it's a date type, otherwise returns the original series.
-
-    :param series: pandas.Series
-    :param data_type: a Spark data type for the series
-    """
-    import pyarrow
-    from distutils.version import LooseVersion
-    # As of Arrow 0.12.0, date_as_objects is True by default, see ARROW-3910
-    if LooseVersion(pyarrow.__version__) < LooseVersion("0.12.0") and type(data_type) == DateType:
-        return series.dt.date
-    else:
-        return series
-
-
-def _check_dataframe_convert_date(pdf, schema):
-    """ Correct date type value to use datetime.date.
-
-    Pandas DataFrame created from PyArrow uses datetime64[ns] for date type values, but we should
-    use datetime.date to match the behavior with when Arrow optimization is disabled.
-
-    :param pdf: pandas.DataFrame
-    :param schema: a Spark schema of the pandas.DataFrame
-    """
-    import pyarrow
-    from distutils.version import LooseVersion
-    # As of Arrow 0.12.0, date_as_objects is True by default, see ARROW-3910
-    if LooseVersion(pyarrow.__version__) < LooseVersion("0.12.0"):
-        for field in schema:
-            pdf[field.name] = _check_series_convert_date(pdf[field.name], field.dataType)
-    return pdf
 
 
 def _get_local_timezone():

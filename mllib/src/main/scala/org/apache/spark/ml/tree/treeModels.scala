@@ -36,8 +36,6 @@ import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Abstraction for Decision Tree models.
- *
- * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
  */
 private[spark] trait DecisionTreeModel {
 
@@ -78,13 +76,34 @@ private[spark] trait DecisionTreeModel {
 
   /** Convert to spark.mllib DecisionTreeModel (losing some information) */
   private[spark] def toOld: OldDecisionTreeModel
+
+  /**
+   * @return an iterator that traverses (DFS, left to right) the leaves
+   *         in the subtree of this node.
+   */
+  private def leafIterator(node: Node): Iterator[LeafNode] = {
+    node match {
+      case l: LeafNode => Iterator.single(l)
+      case n: InternalNode =>
+        leafIterator(n.leftChild) ++ leafIterator(n.rightChild)
+    }
+  }
+
+  @transient private lazy val leafIndices: Map[LeafNode, Int] = {
+    leafIterator(rootNode).zipWithIndex.toMap
+  }
+
+  /**
+   * @return The index of the leaf corresponding to the feature vector.
+   *         Leaves are indexed in pre-order from 0.
+   */
+  def predictLeaf(features: Vector): Double = {
+    leafIndices(rootNode.predictImpl(features)).toDouble
+  }
 }
 
 /**
  * Abstraction for models which are ensembles of decision trees
- *
- * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
- *
  * @tparam M  Type of tree model in this ensemble
  */
 private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
@@ -118,6 +137,15 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
   /** Total number of nodes, summed over all trees in the ensemble. */
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
+
+  /**
+   * @return The indices of the leaves corresponding to the feature vector.
+   *         Leaves are indexed in pre-order from 0.
+   */
+  def predictLeaf(features: Vector): Vector = {
+    val indices = trees.map(_.predictLeaf(features))
+    Vectors.dense(indices)
+  }
 }
 
 private[ml] object TreeEnsembleModel {
@@ -135,7 +163,7 @@ private[ml] object TreeEnsembleModel {
    *  - Average over trees:
    *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
    *       where gain is scaled by the number of instances passing through node
-   *     - Normalize importances for tree to sum to 1.
+   *     - Normalize importances for tree to sum to 1 (only if `perTreeNormalization` is `true`).
    *  - Normalize feature importance vector to sum to 1.
    *
    *  References:
@@ -145,9 +173,15 @@ private[ml] object TreeEnsembleModel {
    * @param numFeatures  Number of features in model (even if not all are explicitly used by
    *                     the model).
    *                     If -1, then numFeatures is set based on the max feature index in all trees.
+   * @param perTreeNormalization By default this is set to `true` and it means that the importances
+   *                             of each tree are normalized before being summed. If set to `false`,
+   *                             the normalization is skipped.
    * @return  Feature importance values, of length numFeatures.
    */
-  def featureImportances[M <: DecisionTreeModel](trees: Array[M], numFeatures: Int): Vector = {
+  def featureImportances[M <: DecisionTreeModel](
+      trees: Array[M],
+      numFeatures: Int,
+      perTreeNormalization: Boolean = true): Vector = {
     val totalImportances = new OpenHashMap[Int, Double]()
     trees.foreach { tree =>
       // Aggregate feature importance vector for this tree
@@ -155,10 +189,19 @@ private[ml] object TreeEnsembleModel {
       computeFeatureImportance(tree.rootNode, importances)
       // Normalize importance vector for this tree, and add it to total.
       // TODO: In the future, also support normalizing by tree.rootNode.impurityStats.count?
-      val treeNorm = importances.map(_._2).sum
+      val treeNorm = if (perTreeNormalization) {
+        importances.map(_._2).sum
+      } else {
+        // We won't use it
+        Double.NaN
+      }
       if (treeNorm != 0) {
         importances.foreach { case (idx, impt) =>
-          val normImpt = impt / treeNorm
+          val normImpt = if (perTreeNormalization) {
+            impt / treeNorm
+          } else {
+            impt
+          }
           totalImportances.changeValue(idx, normImpt, _ + normImpt)
         }
       }

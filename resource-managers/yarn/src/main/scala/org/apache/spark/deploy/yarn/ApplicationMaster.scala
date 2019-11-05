@@ -45,8 +45,9 @@ import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Streaming.STREAMING_DYN_ALLOCATION_MAX_EXECUTORS
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -100,7 +101,9 @@ private[spark] class ApplicationMaster(
 
   private val maxNumExecutorFailures = {
     val effectiveNumExecutors =
-      if (Utils.isDynamicAllocationEnabled(sparkConf)) {
+      if (Utils.isStreamingDynamicAllocationEnabled(sparkConf)) {
+        sparkConf.get(STREAMING_DYN_ALLOCATION_MAX_EXECUTORS)
+      } else if (Utils.isDynamicAllocationEnabled(sparkConf)) {
         sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS)
       } else {
         sparkConf.get(EXECUTOR_INSTANCES).getOrElse(0)
@@ -212,7 +215,7 @@ private[spark] class ApplicationMaster(
 
         // Set the master and deploy mode property to match the requested mode.
         System.setProperty("spark.master", "yarn")
-        System.setProperty("spark.submit.deployMode", "cluster")
+        System.setProperty(SUBMIT_DEPLOY_MODE.key, "cluster")
 
         // Set this internal configuration if it is running on cluster mode, this
         // configuration will be checked in SparkContext to avoid misuse of yarn cluster mode.
@@ -293,8 +296,8 @@ private[spark] class ApplicationMaster(
         Option(appAttemptId.getApplicationId.toString), None).setCurrentContext()
 
       val driverRef = clientRpcEnv.setupEndpointRef(
-        RpcAddress(sparkConf.get("spark.driver.host"),
-          sparkConf.get("spark.driver.port").toInt),
+        RpcAddress(sparkConf.get(DRIVER_HOST_ADDRESS),
+          sparkConf.get(DRIVER_PORT)),
         YarnSchedulerBackend.ENDPOINT_NAME)
       // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
       registerAM(Utils.localHostName, -1, sparkConf,
@@ -471,7 +474,8 @@ private[spark] class ApplicationMaster(
     rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
 
     allocator.allocateResources()
-    val ms = MetricsSystem.createMetricsSystem("applicationMaster", sparkConf, securityMgr)
+    val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATION_MASTER,
+      sparkConf, securityMgr)
     val prefix = _sparkConf.get(YARN_METRICS_NAMESPACE).getOrElse(appId)
     ms.registerSource(new ApplicationMasterSource(prefix, allocator))
     // do not register static sources in this case as per SPARK-25277
@@ -546,88 +550,98 @@ private[spark] class ApplicationMaster(
     reporterThread.join()
   }
 
-  private def launchReporterThread(): Thread = {
-    // The number of failures in a row until Reporter thread give up
+  private def allocationThreadImpl(): Unit = {
+    // The number of failures in a row until the allocation thread gives up.
     val reporterMaxFailures = sparkConf.get(MAX_REPORTER_THREAD_FAILURES)
+    var failureCount = 0
+    while (!finished) {
+      try {
+        if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
+          finish(FinalApplicationStatus.FAILED,
+            ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
+            s"Max number of executor failures ($maxNumExecutorFailures) reached")
+        } else if (allocator.isAllNodeBlacklisted) {
+          finish(FinalApplicationStatus.FAILED,
+            ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
+            "Due to executor failures all available nodes are blacklisted")
+        } else {
+          logDebug("Sending progress")
+          allocator.allocateResources()
+        }
+        failureCount = 0
+      } catch {
+        case i: InterruptedException => // do nothing
+        case e: ApplicationAttemptNotFoundException =>
+          failureCount += 1
+          logError("Exception from Reporter thread.", e)
+          finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
+            e.getMessage)
+        case e: Throwable =>
+          failureCount += 1
+          if (!NonFatal(e)) {
+            finish(FinalApplicationStatus.FAILED,
+              ApplicationMaster.EXIT_REPORTER_FAILURE,
+              "Fatal exception: " + StringUtils.stringifyException(e))
+          } else if (failureCount >= reporterMaxFailures) {
+            finish(FinalApplicationStatus.FAILED,
+              ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
+                s"$failureCount time(s) from Reporter thread.")
+          } else {
+            logWarning(s"Reporter thread fails $failureCount time(s) in a row.", e)
+          }
+      }
+      try {
+        val numPendingAllocate = allocator.getPendingAllocate.size
+        var sleepStartNs = 0L
+        var sleepInterval = 200L // ms
+        allocatorLock.synchronized {
+          sleepInterval =
+            if (numPendingAllocate > 0 || allocator.getNumPendingLossReasonRequests > 0) {
+              val currentAllocationInterval =
+                math.min(heartbeatInterval, nextAllocationInterval)
+              nextAllocationInterval = currentAllocationInterval * 2 // avoid overflow
+              currentAllocationInterval
+            } else {
+              nextAllocationInterval = initialAllocationInterval
+              heartbeatInterval
+            }
+          sleepStartNs = System.nanoTime()
+          allocatorLock.wait(sleepInterval)
+        }
+        val sleepDuration = System.nanoTime() - sleepStartNs
+        if (sleepDuration < TimeUnit.MILLISECONDS.toNanos(sleepInterval)) {
+          // log when sleep is interrupted
+          logDebug(s"Number of pending allocations is $numPendingAllocate. " +
+              s"Slept for $sleepDuration/$sleepInterval ms.")
+          // if sleep was less than the minimum interval, sleep for the rest of it
+          val toSleep = math.max(0, initialAllocationInterval - sleepDuration)
+          if (toSleep > 0) {
+            logDebug(s"Going back to sleep for $toSleep ms")
+            // use Thread.sleep instead of allocatorLock.wait. there is no need to be woken up
+            // by the methods that signal allocatorLock because this is just finishing the min
+            // sleep interval, which should happen even if this is signalled again.
+            Thread.sleep(toSleep)
+          }
+        } else {
+          logDebug(s"Number of pending allocations is $numPendingAllocate. " +
+              s"Slept for $sleepDuration/$sleepInterval.")
+        }
+      } catch {
+        case e: InterruptedException =>
+      }
+    }
+  }
 
+  private def launchReporterThread(): Thread = {
     val t = new Thread {
-      override def run() {
-        var failureCount = 0
-        while (!finished) {
-          try {
-            if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
-              finish(FinalApplicationStatus.FAILED,
-                ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
-                s"Max number of executor failures ($maxNumExecutorFailures) reached")
-            } else if (allocator.isAllNodeBlacklisted) {
-              finish(FinalApplicationStatus.FAILED,
-                ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
-                "Due to executor failures all available nodes are blacklisted")
-            } else {
-              logDebug("Sending progress")
-              allocator.allocateResources()
-            }
-            failureCount = 0
-          } catch {
-            case i: InterruptedException => // do nothing
-            case e: ApplicationAttemptNotFoundException =>
-              failureCount += 1
-              logError("Exception from Reporter thread.", e)
-              finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
-                e.getMessage)
-            case e: Throwable =>
-              failureCount += 1
-              if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
-                finish(FinalApplicationStatus.FAILED,
-                  ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
-                    s"$failureCount time(s) from Reporter thread.")
-              } else {
-                logWarning(s"Reporter thread fails $failureCount time(s) in a row.", e)
-              }
-          }
-          try {
-            val numPendingAllocate = allocator.getPendingAllocate.size
-            var sleepStart = 0L
-            var sleepInterval = 200L // ms
-            allocatorLock.synchronized {
-              sleepInterval =
-                if (numPendingAllocate > 0 || allocator.getNumPendingLossReasonRequests > 0) {
-                  val currentAllocationInterval =
-                    math.min(heartbeatInterval, nextAllocationInterval)
-                  nextAllocationInterval = currentAllocationInterval * 2 // avoid overflow
-                  currentAllocationInterval
-                } else {
-                  nextAllocationInterval = initialAllocationInterval
-                  heartbeatInterval
-                }
-              sleepStart = System.currentTimeMillis()
-              allocatorLock.wait(sleepInterval)
-            }
-            val sleepDuration = System.currentTimeMillis() - sleepStart
-            if (sleepDuration < sleepInterval) {
-              // log when sleep is interrupted
-              logDebug(s"Number of pending allocations is $numPendingAllocate. " +
-                  s"Slept for $sleepDuration/$sleepInterval ms.")
-              // if sleep was less than the minimum interval, sleep for the rest of it
-              val toSleep = math.max(0, initialAllocationInterval - sleepDuration)
-              if (toSleep > 0) {
-                logDebug(s"Going back to sleep for $toSleep ms")
-                // use Thread.sleep instead of allocatorLock.wait. there is no need to be woken up
-                // by the methods that signal allocatorLock because this is just finishing the min
-                // sleep interval, which should happen even if this is signalled again.
-                Thread.sleep(toSleep)
-              }
-            } else {
-              logDebug(s"Number of pending allocations is $numPendingAllocate. " +
-                  s"Slept for $sleepDuration/$sleepInterval.")
-            }
-          } catch {
-            case e: InterruptedException =>
-          }
+      override def run(): Unit = {
+        try {
+          allocationThreadImpl()
+        } finally {
+          allocator.stop()
         }
       }
     }
-    // setting to daemon status, though this is usually not a good idea.
     t.setDaemon(true)
     t.setName("Reporter")
     t.start()
@@ -693,7 +707,8 @@ private[spark] class ApplicationMaster(
       // of files to add to PYTHONPATH, which Client.scala already handles, so it's empty.
       userArgs = Seq(args.primaryPyFile, "") ++ userArgs
     }
-    if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
+    if (args.primaryRFile != null &&
+        (args.primaryRFile.endsWith(".R") || args.primaryRFile.endsWith(".r"))) {
       // TODO(davies): add R dependencies here
     }
 
@@ -701,7 +716,7 @@ private[spark] class ApplicationMaster(
       .getMethod("main", classOf[Array[String]])
 
     val userThread = new Thread {
-      override def run() {
+      override def run(): Unit = {
         try {
           if (!Modifier.isStatic(mainMethod.getModifiers)) {
             logError(s"Could not find static main method in object ${args.userClass}")
@@ -841,7 +856,9 @@ object ApplicationMaster extends Logging {
     master = new ApplicationMaster(amArgs, sparkConf, yarnConf)
 
     val ugi = sparkConf.get(PRINCIPAL) match {
-      case Some(principal) =>
+      // We only need to log in with the keytab in cluster mode. In client mode, the driver
+      // handles the user keytab.
+      case Some(principal) if amArgs.userClass != null =>
         val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()

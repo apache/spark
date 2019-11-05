@@ -148,19 +148,7 @@ getDefaultSqlSource <- function() {
 }
 
 writeToFileInArrow <- function(fileName, rdf, numPartitions) {
-  requireNamespace1 <- requireNamespace
-
-  # R API in Arrow is not yet released in CRAN. CRAN requires to add the
-  # package in requireNamespace at DESCRIPTION. Later, CRAN checks if the package is available
-  # or not. Therefore, it works around by avoiding direct requireNamespace.
-  # Currently, as of Arrow 0.12.0, it can be installed by install_github. See ARROW-3204.
-  if (requireNamespace1("arrow", quietly = TRUE)) {
-    record_batch <- get("record_batch", envir = asNamespace("arrow"), inherits = FALSE)
-    RecordBatchStreamWriter <- get(
-      "RecordBatchStreamWriter", envir = asNamespace("arrow"), inherits = FALSE)
-    FileOutputStream <- get(
-      "FileOutputStream", envir = asNamespace("arrow"), inherits = FALSE)
-
+  if (requireNamespace("arrow", quietly = TRUE)) {
     numPartitions <- if (!is.null(numPartitions)) {
       numToInt(numPartitions)
     } else {
@@ -176,11 +164,11 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
     stream_writer <- NULL
     tryCatch({
       for (rdf_slice in rdf_slices) {
-        batch <- record_batch(rdf_slice)
+        batch <- arrow::record_batch(rdf_slice)
         if (is.null(stream_writer)) {
-          stream <- FileOutputStream(fileName)
+          stream <- arrow::FileOutputStream(fileName)
           schema <- batch$schema
-          stream_writer <- RecordBatchStreamWriter(stream, schema)
+          stream_writer <- arrow::RecordBatchStreamWriter(stream, schema)
         }
 
         stream_writer$write_batch(batch)
@@ -197,17 +185,40 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
   }
 }
 
-checkTypeRequirementForArrow <- function(dataHead, schema) {
-  # Currenty Arrow optimization does not support raw for now.
-  # Also, it does not support explicit float type set by users. It leads to
-  # incorrect conversion. We will fall back to the path without Arrow optimization.
-  if (any(sapply(dataHead, is.raw))) {
-    stop("Arrow optimization with R DataFrame does not support raw type yet.")
-  }
-  if (inherits(schema, "structType")) {
-    if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
-      stop("Arrow optimization with R DataFrame does not support FloatType type yet.")
+getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
+  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
+    if (is.null(firstRow)) {
+      stopifnot(!is.null(rdd))
+      firstRow <- firstRDD(rdd)
     }
+    names <- if (is.null(schema)) {
+      names(firstRow)
+    } else {
+      as.list(schema)
+    }
+    if (is.null(names)) {
+      names <- lapply(1:length(firstRow), function(x) {
+        paste0("_", as.character(x))
+      })
+    }
+
+    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
+    # TODO(davies): remove this once SPARK-2775 is fixed
+    names <- lapply(names, function(n) {
+      nn <- gsub("[.]", "_", n)
+      if (nn != n) {
+        warning(paste("Use", nn, "instead of", n, "as column name"))
+      }
+      nn
+    })
+
+    types <- lapply(firstRow, infer_type)
+    fields <- lapply(1:length(firstRow), function(i) {
+      structField(names[[i]], types[[i]], TRUE)
+    })
+    schema <- do.call(structType, fields)
+  } else {
+    schema
   }
 }
 
@@ -236,7 +247,7 @@ checkTypeRequirementForArrow <- function(dataHead, schema) {
 createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                             numPartitions = NULL) {
   sparkSession <- getSparkSession()
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
   useArrow <- FALSE
   firstRow <- NULL
 
@@ -260,8 +271,9 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
     if (arrowEnabled) {
       useArrow <- tryCatch({
         stopifnot(length(data) > 0)
-        dataHead <- head(data, 1)
-        checkTypeRequirementForArrow(data, schema)
+        firstRow <- do.call(mapply, append(args, head(data, 1)))[[1]]
+        schema <- getSchema(schema, firstRow = firstRow)
+        checkSchemaInArrow(schema)
         fileName <- tempfile(pattern = "sparwriteToFileInArrowk-arrow", fileext = ".tmp")
         tryCatch({
           writeToFileInArrow(fileName, data, numPartitions)
@@ -274,13 +286,11 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
           # File might not be created.
           suppressWarnings(file.remove(fileName))
         })
-
-        firstRow <- do.call(mapply, append(args, dataHead))[[1]]
         TRUE
       },
       error = function(e) {
         warning(paste0("createDataFrame attempted Arrow optimization because ",
-                       "'spark.sql.execution.arrow.enabled' is set to true; however, ",
+                       "'spark.sql.execution.arrow.sparkr.enabled' is set to true; however, ",
                        "failed, attempting non-optimization. Reason: ",
                        e))
         FALSE
@@ -318,37 +328,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
     stop(paste("unexpected type:", class(data)))
   }
 
-  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
-    if (is.null(firstRow)) {
-      firstRow <- firstRDD(rdd)
-    }
-    names <- if (is.null(schema)) {
-      names(firstRow)
-    } else {
-      as.list(schema)
-    }
-    if (is.null(names)) {
-      names <- lapply(1:length(firstRow), function(x) {
-        paste("_", as.character(x), sep = "")
-      })
-    }
-
-    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
-    # TODO(davies): remove this once SPARK-2775 is fixed
-    names <- lapply(names, function(n) {
-      nn <- gsub("[.]", "_", n)
-      if (nn != n) {
-        warning(paste("Use", nn, "instead of", n, " as column name"))
-      }
-      nn
-    })
-
-    types <- lapply(firstRow, infer_type)
-    fields <- lapply(1:length(firstRow), function(i) {
-      structField(names[[i]], types[[i]], TRUE)
-    })
-    schema <- do.call(structType, fields)
-  }
+  schema <- getSchema(schema, firstRow, rdd)
 
   stopifnot(class(schema) == "structType")
 
@@ -469,7 +449,7 @@ read.parquet <- function(path, ...) {
 #'
 #' Loads text files and returns a SparkDataFrame whose schema starts with
 #' a string column named "value", and followed by partitioned columns if
-#' there are any.
+#' there are any. The text files must be encoded as UTF-8.
 #'
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
@@ -632,7 +612,8 @@ loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
 #'
 #' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}
 #' @param tableName the name of the table in the external database
-#' @param partitionColumn the name of a column of integral type that will be used for partitioning
+#' @param partitionColumn the name of a column of numeric, date, or timestamp type
+#'                        that will be used for partitioning.
 #' @param lowerBound the minimum value of \code{partitionColumn} used to decide partition stride
 #' @param upperBound the maximum value of \code{partitionColumn} used to decide partition stride
 #' @param numPartitions the number of partitions, This, along with \code{lowerBound} (inclusive),

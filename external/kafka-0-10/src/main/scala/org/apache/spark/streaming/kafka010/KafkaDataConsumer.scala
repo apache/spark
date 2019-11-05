@@ -19,11 +19,14 @@ package org.apache.spark.streaming.kafka010
 
 import java.{util => ju}
 
+import scala.collection.JavaConverters._
+
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer}
 import org.apache.kafka.common.{KafkaException, TopicPartition}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.kafka010.KafkaConfigUpdater
 
 private[kafka010] sealed trait KafkaDataConsumer[K, V] {
   /**
@@ -109,7 +112,10 @@ private[kafka010] class InternalKafkaConsumer[K, V](
 
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
   private def createConsumer: KafkaConsumer[K, V] = {
-    val c = new KafkaConsumer[K, V](kafkaParams)
+    val updatedKafkaParams = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
+      .setAuthenticationConfigIfNeeded()
+      .build()
+    val c = new KafkaConsumer[K, V](updatedKafkaParams)
     val topics = ju.Arrays.asList(topicPartition)
     c.assign(topics)
     c

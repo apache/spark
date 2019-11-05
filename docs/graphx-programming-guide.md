@@ -3,6 +3,21 @@ layout: global
 displayTitle: GraphX Programming Guide
 title: GraphX
 description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -168,11 +183,11 @@ code constructs a graph from a collection of RDDs:
 val sc: SparkContext
 // Create an RDD for the vertices
 val users: RDD[(VertexId, (String, String))] =
-  sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
+  sc.parallelize(Seq((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
                        (5L, ("franklin", "prof")), (2L, ("istoica", "prof"))))
 // Create an RDD for edges
 val relationships: RDD[Edge[String]] =
-  sc.parallelize(Array(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
+  sc.parallelize(Seq(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
                        Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi")))
 // Define a default user in case there are relationship with missing user
 val defaultUser = ("John Doe", "Missing")
@@ -317,7 +332,7 @@ class Graph[VD, ED] {
   // Iterative graph-parallel computation ==========================================================
   def pregel[A](initialMsg: A, maxIterations: Int, activeDirection: EdgeDirection)(
       vprog: (VertexId, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED]
   // Basic graph algorithms ========================================================================
@@ -405,12 +420,12 @@ interest or eliminate broken links. For example in the following code we remove 
 {% highlight scala %}
 // Create an RDD for the vertices
 val users: RDD[(VertexId, (String, String))] =
-  sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
+  sc.parallelize(Seq((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
                        (5L, ("franklin", "prof")), (2L, ("istoica", "prof")),
                        (4L, ("peter", "student"))))
 // Create an RDD for edges
 val relationships: RDD[Edge[String]] =
-  sc.parallelize(Array(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
+  sc.parallelize(Seq(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
                        Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi"),
                        Edge(4L, 0L, "student"),   Edge(5L, 0L, "colleague")))
 // Define a default user in case there are relationship with missing user

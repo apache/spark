@@ -18,6 +18,7 @@
 package org.apache.spark.ml.util
 
 import java.util.Random
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -121,5 +122,5 @@ private object StopwatchSuite extends SparkFunSuite {
   }
 
   /** The current time in milliseconds. */
-  private def now: Long = System.currentTimeMillis()
+  private def now: Long = TimeUnit.NANOSECONDS.toMillis(System.nanoTime())
 }

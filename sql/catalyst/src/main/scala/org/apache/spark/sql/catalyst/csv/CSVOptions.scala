@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.nio.charset.StandardCharsets
-import java.util.{Locale, TimeZone}
+import java.time.ZoneId
+import java.util.Locale
 
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 
@@ -94,7 +95,7 @@ class CSVOptions(
     }
   }
 
-  val delimiter = CSVExprUtils.toChar(
+  val delimiter = CSVExprUtils.toDelimiterStr(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
@@ -139,16 +140,16 @@ class CSVOptions(
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  val timeZone: TimeZone = DateTimeUtils.getTimeZone(
+  val zoneId: ZoneId = DateTimeUtils.getZoneId(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
-  val dateFormat: String = parameters.getOrElse("dateFormat", "yyyy-MM-dd")
+  val dateFormat: String = parameters.getOrElse("dateFormat", "uuuu-MM-dd")
 
   val timestampFormat: String =
-    parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+    parameters.getOrElse("timestampFormat", "uuuu-MM-dd'T'HH:mm:ss.SSSXXX")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
@@ -161,6 +162,11 @@ class CSVOptions(
   val quoteAll = getBool("quoteAll", false)
 
   val inputBufferSize = 128
+
+  /**
+   * The max error content length in CSV parser/writer exception message.
+   */
+  val maxErrorContentLength = 1000
 
   val isCommentSet = this.comment != '\u0000'
 
@@ -219,6 +225,7 @@ class CSVOptions(
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
+    writerSettings.setErrorContentLength(maxErrorContentLength)
     writerSettings
   }
 
@@ -245,6 +252,7 @@ class CSVOptions(
     lineSeparatorInRead.foreach { _ =>
       settings.setNormalizeLineEndingsWithinQuotes(!multiLine)
     }
+    settings.setErrorContentLength(maxErrorContentLength)
 
     settings
   }

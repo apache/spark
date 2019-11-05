@@ -2,6 +2,21 @@
 layout: global
 title: Hive Tables
 displayTitle: Hive Tables
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -73,17 +88,17 @@ creating table, you can create a table using storage handler at Hive side, and u
   <tr>
     <td><code>inputFormat, outputFormat</code></td>
     <td>
-      These 2 options specify the name of a corresponding `InputFormat` and `OutputFormat` class as a string literal,
-      e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in a pair, and you can not
-      specify them if you already specified the `fileFormat` option.
+      These 2 options specify the name of a corresponding <code>InputFormat</code> and <code>OutputFormat</code> class as a string literal,
+      e.g. <code>org.apache.hadoop.hive.ql.io.orc.OrcInputFormat</code>. These 2 options must be appeared in a pair, and you can not
+      specify them if you already specified the <code>fileFormat</code> option.
     </td>
   </tr>
 
   <tr>
     <td><code>serde</code></td>
     <td>
-      This option specifies the name of a serde class. When the `fileFormat` option is specified, do not specify this option
-      if the given `fileFormat` already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
+      This option specifies the name of a serde class. When the <code>fileFormat</code> option is specified, do not specify this option
+      if the given <code>fileFormat</code> already include the information of serde. Currently "sequencefile", "textfile" and "rcfile"
       don't include the serde information and you can use this option with these 3 fileFormats.
     </td>
   </tr>
@@ -115,7 +130,7 @@ The following options can be used to configure the version of Hive that is used 
     <td><code>1.2.1</code></td>
     <td>
       Version of the Hive metastore. Available
-      options are <code>0.12.0</code> through <code>2.3.4</code> and <code>3.1.0</code> through <code>3.1.1</code>.
+      options are <code>0.12.0</code> through <code>2.3.6</code> and <code>3.0.0</code> through <code>3.1.2</code>.
     </td>
   </tr>
   <tr>

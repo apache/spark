@@ -165,12 +165,12 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "distinct function",
     CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
-    "hex does not support the modifier DISTINCT" :: Nil)
+    "DISTINCT specified, but hex is not an aggregate function" :: Nil)
 
   errorTest(
     "distinct window function",
     CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) over () FROM TaBlE"),
-    "percent_rank does not support the modifier DISTINCT" :: Nil)
+    "DISTINCT specified, but percent_rank is not an aggregate function" :: Nil)
 
   errorTest(
     "nested aggregate functions",
@@ -216,11 +216,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
 
   errorTest(
-    "bad casts",
-    testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
-  "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
-
-  errorTest(
     "sorting by unsupported column types",
     mapRelation.orderBy('map.asc),
     "sort" :: "type" :: "map<int,int>" :: Nil)
@@ -228,7 +223,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "sorting by attributes are not from grouping expressions",
     testRelation2.groupBy('a, 'c)('a, 'c, count('a).as("a3")).orderBy('b.asc),
-    "cannot resolve" :: "'`b`'" :: "given input columns" :: "[a, c, a3]" :: Nil)
+    "cannot resolve" :: "'`b`'" :: "given input columns" :: "[a, a3, c]" :: Nil)
 
   errorTest(
     "non-boolean filters",
@@ -536,7 +531,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan = Project(
       Seq(a, Alias(InSubquery(Seq(a), ListQuery(LocalRelation(b))), "c")()),
       LocalRelation(a))
-    assertAnalysisError(plan, "Predicate sub-queries can only be used in a Filter" :: Nil)
+    assertAnalysisError(plan, "Predicate sub-queries can only be used" +
+        " in Filter" :: Nil)
   }
 
   test("PredicateSubQuery is used is a nested condition") {
@@ -603,5 +599,13 @@ class AnalysisErrorSuite extends AnalysisTest {
       LocalRelation(a))
     assertAnalysisError(plan5,
                         "Accessing outer query column is not allowed in" :: Nil)
+  }
+
+  test("Error on filter condition containing aggregate expressions") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val plan = Filter('a === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
+    assertAnalysisError(plan,
+      "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
   }
 }

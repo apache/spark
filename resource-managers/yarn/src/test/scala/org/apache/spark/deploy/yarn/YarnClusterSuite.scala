@@ -18,24 +18,21 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.io.Source
-import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.HadoopIllegalArgumentException
-import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
@@ -98,10 +95,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   test("run Spark in yarn-client mode with different configurations, ensuring redaction") {
     testBasicYarnApp(true,
       Map(
-        "spark.driver.memory" -> "512m",
-        "spark.executor.cores" -> "1",
-        "spark.executor.memory" -> "512m",
-        "spark.executor.instances" -> "2",
+        DRIVER_MEMORY.key -> "512m",
+        EXECUTOR_CORES.key -> "1",
+        EXECUTOR_MEMORY.key -> "512m",
+        EXECUTOR_INSTANCES.key -> "2",
         // Sending some sensitive information, which we'll make sure gets redacted
         "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
         "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
@@ -111,11 +108,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   test("run Spark in yarn-cluster mode with different configurations, ensuring redaction") {
     testBasicYarnApp(false,
       Map(
-        "spark.driver.memory" -> "512m",
-        "spark.driver.cores" -> "1",
-        "spark.executor.cores" -> "1",
-        "spark.executor.memory" -> "512m",
-        "spark.executor.instances" -> "2",
+        DRIVER_MEMORY.key -> "512m",
+        DRIVER_CORES.key -> "1",
+        EXECUTOR_CORES.key -> "1",
+        EXECUTOR_MEMORY.key -> "512m",
+        EXECUTOR_INSTANCES.key -> "2",
         // Sending some sensitive information, which we'll make sure gets redacted
         "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
         "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
@@ -209,7 +206,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       .startApplication()
 
     try {
-      eventually(timeout(30 seconds), interval(100 millis)) {
+      eventually(timeout(3.minutes), interval(100.milliseconds)) {
         handle.getState() should be (SparkAppHandle.State.RUNNING)
       }
 
@@ -217,7 +214,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       handle.getAppId() should startWith ("application_")
       handle.stop()
 
-      eventually(timeout(30 seconds), interval(100 millis)) {
+      eventually(timeout(3.minutes), interval(100.milliseconds)) {
         handle.getState() should be (SparkAppHandle.State.KILLED)
       }
     } finally {
@@ -273,7 +270,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // needed locations.
     val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.10.8.1-src.zip",
+        s"$sparkHome/python/lib/${PythonUtils.PY4J_ZIP_NAME}",
         s"$sparkHome/python")
     val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
@@ -336,7 +333,7 @@ private[spark] class SaveExecutorInfo extends SparkListener {
   var driverLogs: Option[collection.Map[String, String]] = None
   var driverAttributes: Option[collection.Map[String, String]] = None
 
-  override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
+  override def onExecutorAdded(executor: SparkListenerExecutorAdded): Unit = {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
   }
 
@@ -477,6 +474,9 @@ private object YarnClusterDriver extends Logging with Matchers {
         val driverAttributes = listener.driverAttributes.get
         val expectationAttributes = Map(
           "HTTP_SCHEME" -> YarnContainerInfoHelper.getYarnHttpScheme(yarnConf),
+          "NM_HOST" -> YarnContainerInfoHelper.getNodeManagerHost(container = None),
+          "NM_PORT" -> YarnContainerInfoHelper.getNodeManagerPort(container = None),
+          "NM_HTTP_PORT" -> YarnContainerInfoHelper.getNodeManagerHttpPort(container = None),
           "NM_HTTP_ADDRESS" -> YarnContainerInfoHelper.getNodeManagerHttpAddress(container = None),
           "CLUSTER_ID" -> YarnContainerInfoHelper.getClusterId(yarnConf).getOrElse(""),
           "CONTAINER_ID" -> ConverterUtils.toString(containerId),

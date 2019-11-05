@@ -25,6 +25,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
@@ -63,7 +66,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
-  override def validConstraints: Set[Expression] =
+  override lazy val validConstraints: Set[Expression] =
     getAllValidConstraints(projectList)
 }
 
@@ -131,7 +134,7 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def maxRows: Option[Long] = child.maxRows
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected lazy val validConstraints: Set[Expression] = {
     val predicates = splitConjunctivePredicates(condition)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
@@ -176,7 +179,7 @@ case class Intersect(
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
-  override protected def validConstraints: Set[Expression] =
+  override protected lazy val validConstraints: Set[Expression] =
     leftConstraints.union(rightConstraints)
 
   override def maxRows: Option[Long] = {
@@ -196,7 +199,7 @@ case class Except(
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
-  override protected def validConstraints: Set[Expression] = leftConstraints
+  override protected lazy val validConstraints: Set[Expression] = leftConstraints
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -229,10 +232,25 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     }
   }
 
+  def duplicateResolved: Boolean = {
+    children.map(_.outputSet.size).sum ==
+      AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
+  }
+
   // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] =
-    children.map(_.output).transpose.map(attrs =>
-      attrs.head.withNullability(attrs.exists(_.nullable)))
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
+  }
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
@@ -277,7 +295,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     common ++ others
   }
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected lazy val validConstraints: Set[Expression] = {
     children
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(merge(_, _))
@@ -309,7 +327,7 @@ case class Join(
     }
   }
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected lazy val validConstraints: Set[Expression] = {
     joinType match {
       case _: InnerLike if condition.isDefined =>
         left.constraints
@@ -365,74 +383,6 @@ case class Join(
 }
 
 /**
- * Append data to an existing table.
- */
-case class AppendData(
-    table: NamedRelation,
-    query: LogicalPlan,
-    isByName: Boolean) extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Seq(query)
-  override def output: Seq[Attribute] = Seq.empty
-
-  override lazy val resolved: Boolean = {
-    table.resolved && query.resolved && query.output.size == table.output.size &&
-        query.output.zip(table.output).forall {
-          case (inAttr, outAttr) =>
-            // names and types must match, nullability must be compatible
-            inAttr.name == outAttr.name &&
-                DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
-                (outAttr.nullable || !inAttr.nullable)
-        }
-  }
-}
-
-object AppendData {
-  def byName(table: NamedRelation, df: LogicalPlan): AppendData = {
-    new AppendData(table, df, true)
-  }
-
-  def byPosition(table: NamedRelation, query: LogicalPlan): AppendData = {
-    new AppendData(table, query, false)
-  }
-}
-
-/**
- * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
- * concrete implementations during analysis.
- *
- * @param table the logical plan representing the table. In the future this should be a
- *              [[org.apache.spark.sql.catalyst.catalog.CatalogTable]] once we converge Hive tables
- *              and data source tables.
- * @param partition a map from the partition key to the partition value (optional). If the partition
- *                  value is optional, dynamic partition insert will be performed.
- *                  As an example, `INSERT INTO tbl PARTITION (a=1, b=2) AS ...` would have
- *                  Map('a' -> Some('1'), 'b' -> Some('2')),
- *                  and `INSERT INTO tbl PARTITION (a=1, b) AS ...`
- *                  would have Map('a' -> Some('1'), 'b' -> None).
- * @param query the logical plan representing data to write to.
- * @param overwrite overwrite existing table or partitions.
- * @param ifPartitionNotExists If true, only write if the partition does not exist.
- *                             Only valid for static partitions.
- */
-case class InsertIntoTable(
-    table: LogicalPlan,
-    partition: Map[String, Option[String]],
-    query: LogicalPlan,
-    overwrite: Boolean,
-    ifPartitionNotExists: Boolean)
-  extends LogicalPlan {
-  // IF NOT EXISTS is only valid in INSERT OVERWRITE
-  assert(overwrite || !ifPartitionNotExists)
-  // IF NOT EXISTS is only valid in static partitions
-  assert(partition.values.forall(_.nonEmpty) || !ifPartitionNotExists)
-
-  // We don't want `table` in children as sometimes we don't want to transform it.
-  override def children: Seq[LogicalPlan] = query :: Nil
-  override def output: Seq[Attribute] = Seq.empty
-  override lazy val resolved: Boolean = false
-}
-
-/**
  * Insert query result into a directory.
  *
  * @param isLocal Indicates whether the specified directory is local directory
@@ -473,6 +423,8 @@ case class View(
     desc: CatalogTable,
     output: Seq[Attribute],
     child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
+
+  override def producedAttributes: AttributeSet = outputSet
 
   override lazy val resolved: Boolean = child.resolved
 
@@ -617,7 +569,7 @@ case class Aggregate(
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
-  override def validConstraints: Set[Expression] = {
+  override lazy val validConstraints: Set[Expression] = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
   }
@@ -716,12 +668,13 @@ case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-  override def references: AttributeSet =
+  @transient
+  override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
-  override protected def validConstraints: Set[Expression] = Set.empty[Expression]
+  override protected lazy val validConstraints: Set[Expression] = Set.empty[Expression]
 }
 
 /**
@@ -988,7 +941,11 @@ case class OneRowRelation() extends LeafNode {
   override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
 
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
-  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = OneRowRelation()
+  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = {
+    val newCopy = OneRowRelation()
+    newCopy.copyTagsFrom(this)
+    newCopy
+  }
 }
 
 /** A logical plan for `dropDuplicates`. */
@@ -998,3 +955,9 @@ case class Deduplicate(
 
   override def output: Seq[Attribute] = child.output
 }
+
+/**
+ * A trait to represent the commands that support subqueries.
+ * This is used to whitelist such commands in the subquery-related checks.
+ */
+trait SupportsSubquery extends LogicalPlan

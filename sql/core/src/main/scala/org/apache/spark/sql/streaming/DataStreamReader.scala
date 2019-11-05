@@ -24,13 +24,15 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
+import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
@@ -81,6 +83,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -118,6 +123,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -134,6 +142,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
    * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
+   * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
+   * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
+   * It does not change the behavior of partition discovery.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -173,22 +184,24 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     ds match {
       case provider: TableProvider =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          ds = provider, conf = sparkSession.sessionState.conf)
+          source = provider, conf = sparkSession.sessionState.conf)
         val options = sessionOptions ++ extraOptions
-        val dsOptions = new DataSourceOptions(options.asJava)
+        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
         val table = userSpecifiedSchema match {
           case Some(schema) => provider.getTable(dsOptions, schema)
           case _ => provider.getTable(dsOptions)
         }
+        import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
-          case _: SupportsMicroBatchRead | _: SupportsContinuousRead =>
+          case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
             Dataset.ofRows(
               sparkSession,
               StreamingRelationV2(
-                provider, source, table, options, table.schema.toAttributes, v1Relation)(
+                provider, source, table, dsOptions, table.schema.toAttributes, v1Relation)(
                 sparkSession))
 
           // fallback to v1
+          // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
           case _ => Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
         }
 
@@ -250,10 +263,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * <li>`dateFormat` (default `uuuu-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `uuuu-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
@@ -311,10 +324,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * value.</li>
    * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
    * value.</li>
-   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * <li>`dateFormat` (default `uuuu-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `uuuu-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
@@ -387,6 +400,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
+   * The text files must be encoded as UTF-8.
    *
    * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
@@ -414,6 +428,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Loads text file(s) and returns a `Dataset` of String. The underlying schema of the Dataset
    * contains a single string column named "value".
+   * The text files must be encoded as UTF-8.
    *
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.

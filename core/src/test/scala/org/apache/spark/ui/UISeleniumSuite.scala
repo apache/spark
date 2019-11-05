@@ -31,8 +31,8 @@ import org.openqa.selenium.{By, WebDriver}
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.selenium.WebBrowser
 import org.w3c.css.sac.CSSParseException
 
 import org.apache.spark._
@@ -100,14 +100,18 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
    * Create a test SparkContext with the SparkUI enabled.
    * It is safe to `get` the SparkUI directly from the SparkContext returned here.
    */
-  private def newSparkContext(killEnabled: Boolean = true): SparkContext = {
+  private def newSparkContext(
+      killEnabled: Boolean = true,
+      master: String = "local",
+      additionalConfs: Map[String, String] = Map.empty): SparkContext = {
     val conf = new SparkConf()
-      .setMaster("local")
+      .setMaster(master)
       .setAppName("test")
       .set(UI_ENABLED, true)
       .set(UI_PORT, 0)
       .set(UI_KILL_ENABLED, killEnabled)
       .set(MEMORY_OFFHEAP_SIZE.key, "64m")
+    additionalConfs.foreach { case (k, v) => conf.set(k, v) }
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
@@ -119,12 +123,12 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       val ui = sc.ui.get
       val rdd = sc.parallelize(Seq(1, 2, 3))
       rdd.persist(StorageLevels.DISK_ONLY).count()
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(ui, "/storage")
         val tableRowText = findAll(cssSelector("#storage-by-rdd-table td")).map(_.text).toSeq
         tableRowText should contain (StorageLevels.DISK_ONLY.description)
       }
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(ui, "/storage/rdd/?id=0")
         val tableRowText = findAll(cssSelector("#rdd-storage-by-block-table td")).map(_.text).toSeq
         tableRowText should contain (StorageLevels.DISK_ONLY.description)
@@ -139,12 +143,12 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
       rdd.unpersist(blocking = true)
       rdd.persist(StorageLevels.MEMORY_ONLY).count()
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(ui, "/storage")
         val tableRowText = findAll(cssSelector("#storage-by-rdd-table td")).map(_.text).toSeq
         tableRowText should contain (StorageLevels.MEMORY_ONLY.description)
       }
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(ui, "/storage/rdd/?id=0")
         val tableRowText = findAll(cssSelector("#rdd-storage-by-block-table td")).map(_.text).toSeq
         tableRowText should contain (StorageLevels.MEMORY_ONLY.description)
@@ -199,7 +203,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       intercept[SparkException] {
         sc.parallelize(1 to 10).map { x => throw new Exception()}.collect()
       }
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/stages")
         find(id("active")) should be(None)  // Since we hide empty tables
         find(id("failed")).get.text should be("Failed Stages (1)")
@@ -214,7 +218,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       intercept[SparkException] {
         sc.parallelize(1 to 10).map { x => unserializableObject}.collect()
       }
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/stages")
         find(id("active")) should be(None)  // Since we hide empty tables
         // The failure occurs before the stage becomes active, hence we should still show only one
@@ -229,13 +233,13 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
   test("spark.ui.killEnabled should properly control kill button display") {
     def hasKillLink: Boolean = find(className("kill-link")).isDefined
-    def runSlowJob(sc: SparkContext) {
+    def runSlowJob(sc: SparkContext): Unit = {
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
     }
 
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       runSlowJob(sc)
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         assert(hasKillLink)
       }
@@ -243,7 +247,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
     withSpark(newSparkContext(killEnabled = false)) { sc =>
       runSlowJob(sc)
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         assert(!hasKillLink)
       }
@@ -251,7 +255,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       runSlowJob(sc)
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/stages")
         assert(hasKillLink)
       }
@@ -259,7 +263,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
     withSpark(newSparkContext(killEnabled = false)) { sc =>
       runSlowJob(sc)
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/stages")
         assert(!hasKillLink)
       }
@@ -270,7 +274,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     withSpark(newSparkContext()) { sc =>
       // If no job has been run in a job group, then "(Job Group)" should not appear in the header
       sc.parallelize(Seq(1, 2, 3)).count()
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
         tableHeaders(0) should not startWith "Job Id (Job Group)"
@@ -278,7 +282,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       // Once at least one job has been run in a job group, then we should display the group name:
       sc.setJobGroup("my-job-group", "my-job-group-description")
       sc.parallelize(Seq(1, 2, 3)).count()
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
         // Can suffix up/down arrow in the header
@@ -312,16 +316,18 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
           val env = SparkEnv.get
           val bmAddress = env.blockManager.blockManagerId
           val shuffleId = shuffleHandle.shuffleId
-          val mapId = 0
+          val mapId = 0L
+          val mapIndex = 0
           val reduceId = taskContext.partitionId()
           val message = "Simulated fetch failure"
-          throw new FetchFailedException(bmAddress, shuffleId, mapId, reduceId, message)
+          throw new FetchFailedException(
+            bmAddress, shuffleId, mapId, mapIndex, reduceId, message)
         } else {
           x
         }
       }
       mappedData.count()
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         find(cssSelector(".stage-progress-cell")).get.text should be ("2/2 (1 failed)")
         find(cssSelector(".progress-cell .progress")).get.text should be ("2/2 (1 failed)")
@@ -369,7 +375,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       }.groupBy(identity).map(identity).groupBy(identity).map(identity)
       // Start the job:
       rdd.countAsync()
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs/job/?id=0")
         find(id("active")).get.text should be ("Active Stages (1)")
         find(id("pending")).get.text should be ("Pending Stages (2)")
@@ -395,7 +401,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       // mentioned in its job start event but which were never actually executed:
       rdd.count()
       rdd.count()
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         // The completed jobs table should have two rows. The first row will be the most recent job:
         val firstRow = find(cssSelector("tbody tr")).get.underlying
@@ -422,7 +428,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       // mentioned in its job start event but which were never actually executed:
       rdd.count()
       rdd.count()
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs/job/?id=1")
         find(id("pending")) should be (None)
         find(id("active")) should be (None)
@@ -450,7 +456,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       // mentioned in its job start event but which were never actually executed:
       rdd.count()
       rdd.count()
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         findAll(cssSelector("tbody tr a")).foreach { link =>
           link.text.toLowerCase(Locale.ROOT) should include ("count")
@@ -472,7 +478,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         })
       }
       sparkUI.attachTab(newTab)
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "")
         find(cssSelector("""ul li a[href*="jobs"]""")) should not be(None)
         find(cssSelector("""ul li a[href*="stages"]""")) should not be(None)
@@ -480,13 +486,13 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         find(cssSelector("""ul li a[href*="environment"]""")) should not be(None)
         find(cssSelector("""ul li a[href*="foo"]""")) should not be(None)
       }
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         // check whether new page exists
         goToUi(sc, "/foo")
         find(cssSelector("b")).get.text should include ("html magic")
       }
       sparkUI.detachTab(newTab)
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "")
         find(cssSelector("""ul li a[href*="jobs"]""")) should not be(None)
         find(cssSelector("""ul li a[href*="stages"]""")) should not be(None)
@@ -494,7 +500,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         find(cssSelector("""ul li a[href*="environment"]""")) should not be(None)
         find(cssSelector("""ul li a[href*="foo"]""")) should be(None)
       }
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         // check new page not exist
         goToUi(sc, "/foo")
         find(cssSelector("b")) should be(None)
@@ -505,7 +511,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   test("kill stage POST/GET response is correct") {
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         val url = new URL(
           sc.ui.get.webUrl.stripSuffix("/") + "/stages/stage/kill/?id=0")
         // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
@@ -518,7 +524,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   test("kill job POST/GET response is correct") {
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         val url = new URL(
           sc.ui.get.webUrl.stripSuffix("/") + "/jobs/job/kill/?id=0")
         // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
@@ -556,7 +562,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         ("8", "count")
       )
 
-      eventually(timeout(1 second), interval(50 milliseconds)) {
+      eventually(timeout(1.second), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         // The completed jobs table should have two rows. The first row will be the most recent job:
         find("completed-summary").get.text should be ("Completed Jobs: 10, only showing 2")
@@ -602,7 +608,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         ("17", "groupBy")
       )
 
-      eventually(timeout(1 second), interval(50 milliseconds)) {
+      eventually(timeout(1.second), interval(50.milliseconds)) {
         goToUi(sc, "/stages")
         find("completed-summary").get.text should be ("Completed Stages: 20, only showing 3")
         find("completed").get.text should be ("Completed Stages (20, only showing 3)")
@@ -675,7 +681,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity).map(identity).groupBy(identity)
       rdd.count()
 
-      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
         val stage0 = Source.fromURL(sc.ui.get.webUrl +
           "/stages/stage/?id=0&attempt=0&expandDagViz=true").mkString
         assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
@@ -714,7 +720,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       rdd.count()
       rdd.count()
 
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/stages")
         find(id("skipped")).get.text should be("Skipped Stages (1)")
       }
@@ -722,6 +728,31 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       stagesJson.children.size should be (4)
       val stagesStatus = stagesJson.children.map(_ \ "status")
       stagesStatus.count(_ == JString(StageStatus.SKIPPED.name())) should be (1)
+    }
+  }
+
+  test("Staleness of Spark UI should not last minutes or hours") {
+    withSpark(newSparkContext(
+      master = "local[2]",
+      // Set a small heart beat interval to make the test fast
+      additionalConfs = Map(
+        EXECUTOR_HEARTBEAT_INTERVAL.key -> "10ms",
+        LIVE_ENTITY_UPDATE_MIN_FLUSH_PERIOD.key -> "10ms"))) { sc =>
+      sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
+      val f = sc.parallelize(1 to 1000, 1000).foreachAsync { _ =>
+        // Make the task never finish so there won't be any task start/end events after the first 2
+        // tasks start.
+        Thread.sleep(300000)
+      }
+      try {
+        eventually(timeout(10.seconds)) {
+          val jobsJson = getJson(sc.ui.get, "jobs")
+          jobsJson.children.length should be (1)
+          (jobsJson.children.head \ "numActiveTasks").extract[Int] should be (2)
+        }
+      } finally {
+        f.cancel()
+      }
     }
   }
 

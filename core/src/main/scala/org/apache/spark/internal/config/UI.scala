@@ -81,6 +81,13 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
+  val UI_PROMETHEUS_ENABLED = ConfigBuilder("spark.ui.prometheus.enabled")
+    .internal()
+    .doc("Expose executor metrics at /metrics/executors/prometheus. " +
+      "For master/worker/driver metrics, you need to configure `conf/metrics.properties`.")
+    .booleanConf
+    .createWithDefault(false)
+
   val UI_X_XSS_PROTECTION = ConfigBuilder("spark.ui.xXssProtection")
     .doc("Value for HTTP X-XSS-Protection response header")
     .stringConf
@@ -142,4 +149,15 @@ private[spark] object UI {
   val USER_GROUPS_MAPPING = ConfigBuilder("spark.user.groups.mapping")
     .stringConf
     .createWithDefault("org.apache.spark.security.ShellBasedGroupsMappingProvider")
+
+  val CUSTOM_EXECUTOR_LOG_URL = ConfigBuilder("spark.ui.custom.executor.log.url")
+    .doc("Specifies custom spark executor log url for supporting external log service instead of " +
+      "using cluster managers' application log urls in the Spark UI. Spark will support " +
+      "some path variables via patterns which can vary on cluster manager. Please check the " +
+      "documentation for your cluster manager to see which patterns are supported, if any. " +
+      "This configuration replaces original log urls in event log, which will be also effective " +
+      "when accessing the application on history server. The new log urls must be permanent, " +
+      "otherwise you might have dead link for executor log urls.")
+    .stringConf
+    .createOptional
 }

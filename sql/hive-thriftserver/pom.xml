@@ -48,6 +48,20 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-hive_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
     </dependency>
@@ -121,18 +135,6 @@
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
-            <id>add-default-sources</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>v${hive.version.short}/src/main/scala</source>
-              </sources>
-            </configuration>
-          </execution>
-          <execution>
             <id>add-source</id>
             <phase>generate-sources</phase>
             <goals>
@@ -140,7 +142,9 @@
             </goals>
             <configuration>
               <sources>
-                <source>src/gen/</source>
+                <source>v${hive.version.short}/src/gen/java</source>
+                <source>v${hive.version.short}/src/main/java</source>
+                <source>v${hive.version.short}/src/main/scala</source>
               </sources>
             </configuration>
           </execution>

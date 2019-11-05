@@ -134,10 +134,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
 
     try {
       sc.makeRDD(1 to 5, 2).mapPartitions { x =>
-        val loader = Thread.currentThread().getContextClassLoader
-        // scalastyle:off classforname
-        Class.forName(className, true, loader).getConstructor().newInstance()
-        // scalastyle:on classforname
+        Utils.classForName[AnyRef](className, noSparkClassLoader = true).
+          getConstructor().newInstance()
         Seq().iterator
       }.count()
     }

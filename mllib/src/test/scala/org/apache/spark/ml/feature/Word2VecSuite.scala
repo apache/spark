@@ -65,7 +65,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
 
     // These expectations are just magic values, characterizing the current
     // behavior.  The test needs to be updated to be more general, see SPARK-11502
-    val magicExp = Vectors.dense(0.30153007534417237, -0.6833061711354689, 0.5116530778733167)
+    val magicExp = Vectors.dense(-0.11654884266582402, 0.3115301721475341, -0.6879349987615239)
     testTransformer[(Seq[String], Vector)](docDF, model, "result", "expected") {
       case Row(vector1: Vector, vector2: Vector) =>
         assert(vector1 ~== magicExp absTol 1E-5, "Transformed vector is different with expected.")
@@ -98,9 +98,9 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
     // These expectations are just magic values, characterizing the current
     // behavior.  The test needs to be updated to be more general, see SPARK-11502
     val magicExpected = Seq(
-      Vectors.dense(0.3326166272163391, -0.5603077411651611, -0.2309209555387497),
-      Vectors.dense(0.32463887333869934, -0.9306551218032837, 1.393115520477295),
-      Vectors.dense(-0.27150997519493103, 0.4372006058692932, -0.13465698063373566)
+      Vectors.dense(0.12662248313426971, 0.6108677387237549, -0.006755620241165161),
+      Vectors.dense(-0.3870747685432434, 0.023309476673603058, -1.567158818244934),
+      Vectors.dense(-0.08617416769266129, -0.09897610545158386, 0.6113300323486328)
     )
 
     realVectors.zip(magicExpected).foreach {
@@ -122,7 +122,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
       .setSeed(42L)
       .fit(docDF)
 
-    val expected = Map(("b", 0.2608488929093532), ("c", -0.8271274846926078))
+    val expected = Map(("b", -0.024012837558984756), ("c", -0.19355152547359467))
     val findSynonymsResult = model.findSynonyms("a", 2).rdd.map {
       case Row(w: String, sim: Double) => (w, sim)
     }.collectAsMap()
@@ -130,14 +130,14 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
     expected.foreach {
       case (expectedSynonym, expectedSimilarity) =>
         assert(findSynonymsResult.contains(expectedSynonym))
-        assert(expectedSimilarity ~== findSynonymsResult.get(expectedSynonym).get absTol 1E-5)
+        assert(expectedSimilarity ~== findSynonymsResult(expectedSynonym) absTol 1E-5)
     }
 
     val findSynonymsArrayResult = model.findSynonymsArray("a", 2).toMap
     findSynonymsResult.foreach {
       case (expectedSynonym, expectedSimilarity) =>
         assert(findSynonymsArrayResult.contains(expectedSynonym))
-        assert(expectedSimilarity ~== findSynonymsArrayResult.get(expectedSynonym).get absTol 1E-5)
+        assert(expectedSimilarity ~== findSynonymsArrayResult(expectedSynonym) absTol 1E-5)
     }
   }
 

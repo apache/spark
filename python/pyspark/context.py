@@ -37,6 +37,7 @@ from pyspark.java_gateway import launch_gateway, local_connect_and_auth
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
     PairDeserializer, AutoBatchedSerializer, NoOpSerializer, ChunkedStream
 from pyspark.storagelevel import StorageLevel
+from pyspark.resourceinformation import ResourceInformation
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
@@ -61,7 +62,7 @@ class SparkContext(object):
 
     """
     Main entry point for Spark functionality. A SparkContext represents the
-    connection to a Spark cluster, and can be used to create L{RDD} and
+    connection to a Spark cluster, and can be used to create :class:`RDD` and
     broadcast variables on that cluster.
 
     .. note:: Only one :class:`SparkContext` should be active per JVM. You must `stop()`
@@ -86,7 +87,7 @@ class SparkContext(object):
                  gateway=None, jsc=None, profiler_cls=BasicProfiler):
         """
         Create a new SparkContext. At least the master and app name should be set,
-        either through the named parameters here or through C{conf}.
+        either through the named parameters here or through `conf`.
 
         :param master: Cluster URL to connect to
                (e.g. mesos://host:port, spark://host:port, local[4]).
@@ -102,7 +103,7 @@ class SparkContext(object):
                the batch size based on object sizes, or -1 to use an unlimited
                batch size
         :param serializer: The serializer for RDDs.
-        :param conf: A L{SparkConf} object setting Spark properties.
+        :param conf: A :class:`SparkConf` object setting Spark properties.
         :param gateway: Use an existing gateway and JVM, otherwise a new JVM
                will be instantiated.
         :param jsc: The JavaSparkContext instance (optional).
@@ -204,10 +205,19 @@ class SparkContext(object):
         # If encryption is enabled, we need to setup a server in the jvm to read broadcast
         # data via a socket.
         # scala's mangled names w/ $ in them require special treatment.
-        self._encryption_enabled = self._jvm.PythonUtils.getEncryptionEnabled(self._jsc)
+        self._encryption_enabled = self._jvm.PythonUtils.isEncryptionEnabled(self._jsc)
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
+
+        if sys.version_info < (3, 6):
+            with warnings.catch_warnings():
+                warnings.simplefilter("once")
+                warnings.warn(
+                    "Support for Python 2 and Python 3 prior to version 3.6 is deprecated as "
+                    "of Spark 3.0. See also the plan for dropping Python 2 support at "
+                    "https://spark.apache.org/news/plan-for-dropping-python-2-support.html.",
+                    DeprecationWarning)
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -567,7 +577,7 @@ class SparkContext(object):
 
     def pickleFile(self, name, minPartitions=None):
         """
-        Load an RDD previously saved using L{RDD.saveAsPickleFile} method.
+        Load an RDD previously saved using :meth:`RDD.saveAsPickleFile` method.
 
         >>> tmpFile = NamedTemporaryFile(delete=True)
         >>> tmpFile.close()
@@ -584,6 +594,7 @@ class SparkContext(object):
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
         RDD of Strings.
+        The text files must be encoded as UTF-8.
 
         If use_unicode is False, the strings will be kept as `str` (encoding
         as `utf-8`), which is faster and smaller than unicode. (Added in
@@ -608,25 +619,30 @@ class SparkContext(object):
         URI. Each file is read as a single record and returned in a
         key-value pair, where the key is the path of each file, the
         value is the content of each file.
+        The text files must be encoded as UTF-8.
 
         If use_unicode is False, the strings will be kept as `str` (encoding
         as `utf-8`), which is faster and smaller than unicode. (Added in
         Spark 1.2)
 
-        For example, if you have the following files::
+        For example, if you have the following files:
 
-          hdfs://a-hdfs-path/part-00000
-          hdfs://a-hdfs-path/part-00001
-          ...
-          hdfs://a-hdfs-path/part-nnnnn
+        .. code-block:: text
 
-        Do C{rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")},
-        then C{rdd} contains::
+            hdfs://a-hdfs-path/part-00000
+            hdfs://a-hdfs-path/part-00001
+            ...
+            hdfs://a-hdfs-path/part-nnnnn
 
-          (a-hdfs-path/part-00000, its content)
-          (a-hdfs-path/part-00001, its content)
-          ...
-          (a-hdfs-path/part-nnnnn, its content)
+        Do ``rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")``,
+        then ``rdd`` contains:
+
+        .. code-block:: text
+
+            (a-hdfs-path/part-00000, its content)
+            (a-hdfs-path/part-00001, its content)
+            ...
+            (a-hdfs-path/part-nnnnn, its content)
 
         .. note:: Small files are preferred, as each file will be loaded
             fully in memory.
@@ -647,8 +663,6 @@ class SparkContext(object):
 
     def binaryFiles(self, path, minPartitions=None):
         """
-        .. note:: Experimental
-
         Read a directory of binary files from HDFS, a local file system
         (available on all nodes), or any Hadoop-supported file system URI
         as a byte array. Each file is read as a single record and returned
@@ -664,8 +678,6 @@ class SparkContext(object):
 
     def binaryRecords(self, path, recordLength):
         """
-        .. note:: Experimental
-
         Load data from a flat binary file, assuming each record is a set of numbers
         with the specified numerical format (see ByteBuffer), and the number of
         bytes per record is constant.
@@ -694,7 +706,7 @@ class SparkContext(object):
                and value Writable classes
             2. Serialization is attempted via Pyrolite pickling
             3. If this fails, the fallback is to call 'toString' on each key and value
-            4. C{PickleSerializer} is used to deserialize pickled objects on the Python side
+            4. :class:`PickleSerializer` is used to deserialize pickled objects on the Python side
 
         :param path: path to sequncefile
         :param keyClass: fully qualified classname of key Writable class
@@ -861,8 +873,7 @@ class SparkContext(object):
 
     def broadcast(self, value):
         """
-        Broadcast a read-only variable to the cluster, returning a
-        L{Broadcast<pyspark.broadcast.Broadcast>}
+        Broadcast a read-only variable to the cluster, returning a :class:`Broadcast`
         object for reading it in distributed functions. The variable will
         be sent to each cluster only once.
         """
@@ -870,8 +881,8 @@ class SparkContext(object):
 
     def accumulator(self, value, accum_param=None):
         """
-        Create an L{Accumulator} with the given initial value, using a given
-        L{AccumulatorParam} helper object to define how to add values of the
+        Create an :class:`Accumulator` with the given initial value, using a given
+        :class:`AccumulatorParam` helper object to define how to add values of the
         data type if provided. Default AccumulatorParams are used for integers
         and floating-point numbers if you do not provide one. For other types,
         a custom AccumulatorParam can be used.
@@ -891,12 +902,11 @@ class SparkContext(object):
     def addFile(self, path, recursive=False):
         """
         Add a file to be downloaded with this Spark job on every node.
-        The C{path} passed can be either a local file, a file in HDFS
+        The `path` passed can be either a local file, a file in HDFS
         (or other Hadoop-supported filesystems), or an HTTP, HTTPS or
         FTP URI.
 
-        To access the file in Spark jobs, use
-        L{SparkFiles.get(fileName)<pyspark.files.SparkFiles.get>} with the
+        To access the file in Spark jobs, use :meth:`SparkFiles.get` with the
         filename to find its download location.
 
         A directory can be given if the recursive option is set to True.
@@ -921,7 +931,7 @@ class SparkContext(object):
     def addPyFile(self, path):
         """
         Add a .py or .zip dependency for all tasks to be executed on this
-        SparkContext in the future.  The C{path} passed can be either a local
+        SparkContext in the future.  The `path` passed can be either a local
         file, a file in HDFS (or other Hadoop-supported filesystems), or an
         HTTP, HTTPS or FTP URI.
 
@@ -940,7 +950,7 @@ class SparkContext(object):
     def setCheckpointDir(self, dirName):
         """
         Set the directory under which RDDs are going to be checkpointed. The
-        directory must be a HDFS path if running on a cluster.
+        directory must be an HDFS path if running on a cluster.
         """
         self._jsc.sc().setCheckpointDir(dirName)
 
@@ -967,7 +977,7 @@ class SparkContext(object):
         Application programmers can use this method to group all those jobs together and give a
         group description. Once set, the Spark web UI will associate such jobs with this group.
 
-        The application can use L{SparkContext.cancelJobGroup} to cancel all
+        The application can use :meth:`SparkContext.cancelJobGroup` to cancel all
         running jobs in this group.
 
         >>> import threading
@@ -1012,7 +1022,7 @@ class SparkContext(object):
     def getLocalProperty(self, key):
         """
         Get a local property set in this thread, or null if it is missing. See
-        L{setLocalProperty}
+        :meth:`setLocalProperty`.
         """
         return self._jsc.getLocalProperty(key)
 
@@ -1030,7 +1040,7 @@ class SparkContext(object):
 
     def cancelJobGroup(self, groupId):
         """
-        Cancel active jobs for the specified group. See L{SparkContext.setJobGroup}
+        Cancel active jobs for the specified group. See :meth:`SparkContext.setJobGroup`.
         for more information.
         """
         self._jsc.sc().cancelJobGroup(groupId)
@@ -1093,6 +1103,17 @@ class SparkContext(object):
         conf = SparkConf()
         conf.setAll(self._conf.getAll())
         return conf
+
+    @property
+    def resources(self):
+        resources = {}
+        jresources = self._jsc.resources()
+        for x in jresources:
+            name = jresources[x].name()
+            jaddresses = jresources[x].addresses()
+            addrs = [addr for addr in jaddresses]
+            resources[name] = ResourceInformation(name, addrs)
+        return resources
 
 
 def _test():

@@ -106,6 +106,9 @@
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
     <module>external/avro</module>
+    <module>graph/api</module>
+    <module>graph/cypher</module>
+    <module>graph/graph</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -115,36 +118,40 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.6.0</maven.version>
+    <maven.version>3.6.2</maven.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>2.7.4</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <zookeeper.version>3.4.6</zookeeper.version>
+    <zookeeper.version>3.4.14</zookeeper.version>
     <curator.version>2.7.1</curator.version>
+    <okapi.version>0.4.2</okapi.version>
     <hive.group>org.spark-project.hive</hive.group>
+    <hive.classifier></hive.classifier>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>1.2.1.spark2</hive.version>
+    <hive23.version>2.3.6</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.1.0</kafka.version>
+    <kafka.version>2.3.1</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.4</orc.version>
+    <orc.version>1.5.7</orc.version>
     <orc.classifier>nohive</orc.classifier>
+    <hive.parquet.group>com.twitter</hive.parquet.group>
     <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jetty.version>9.4.12.v20180830</jetty.version>
+    <jetty.version>9.4.18.v20190429</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.9.3</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
-    <codahale.metrics.version>3.1.5</codahale.metrics.version>
+    <codahale.metrics.version>4.1.1</codahale.metrics.version>
     <avro.version>1.8.2</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-    <aws.kinesis.client.version>1.8.10</aws.kinesis.client.version>
+    <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.271</aws.java.sdk.version>
     <!-- the producer is used in tests -->
@@ -157,32 +164,34 @@
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.12.8</scala.version>
+    <scala.version>2.12.10</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalafmt.parameters>--diff --test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.9.6</fasterxml.jackson.version>
-    <snappy.version>1.1.7.1</snappy.version>
+    <fasterxml.jackson.version>2.10.0</fasterxml.jackson.version>
+    <snappy.version>1.1.7.3</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <calcite.version>1.2.0-incubating</calcite.version>
     <commons-codec.version>1.10</commons-codec.version>
     <commons-io.version>2.4</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.8.1</commons-lang3.version>
+    <!-- org.apache.commons/commons-pool2/-->
+    <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
-    <janino.version>3.0.11</janino.version>
-    <jersey.version>2.22.2</jersey.version>
-    <joda.version>2.9.3</joda.version>
+    <janino.version>3.0.15</janino.version>
+    <jersey.version>2.29</jersey.version>
+    <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
-    <libthrift.version>0.9.3</libthrift.version>
+    <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.7.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
+    <htmlunit.version>2.22</htmlunit.version>
     <!--
     Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
     -->
@@ -200,7 +209,7 @@
     <test.include.tags></test.include.tags>
 
     <!-- Package to use when relocating shaded classes. -->
-    <spark.shade.packageName>org.spark_project</spark.shade.packageName>
+    <spark.shade.packageName>org.sparkproject</spark.shade.packageName>
 
     <!-- Modules that copy jars to the build directory should do so under this location. -->
     <jars.target.dir>${project.build.directory}/scala-${scala.binary.version}/jars</jars.target.dir>
@@ -219,6 +228,7 @@
     -->
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
+    <hive.parquet.scope>${hive.deps.scope}</hive.parquet.scope>
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
@@ -229,7 +239,7 @@
     -->
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
 
-    <CodeCacheSize>512m</CodeCacheSize>
+    <CodeCacheSize>1g</CodeCacheSize>
   </properties>
   <repositories>
     <repository>
@@ -323,7 +333,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm7-shaded</artifactId>
-        <version>4.12</version>
+        <version>4.15</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -398,7 +408,7 @@
       <dependency>
         <groupId>org.jpmml</groupId>
         <artifactId>pmml-model</artifactId>
-        <version>1.2.15</version>
+        <version>1.4.8</version>
         <scope>provided</scope>
         <exclusions>
           <exclusion>
@@ -408,6 +418,37 @@
         </exclusions>
       </dependency>
       <!-- End of shaded deps -->
+
+      <!-- Provide a JAXB impl; no longer auto available in Java 9+ in the JDK -->
+      <dependency>
+        <groupId>org.glassfish.jaxb</groupId>
+        <artifactId>jaxb-runtime</artifactId>
+        <version>2.3.2</version>
+        <scope>compile</scope>
+        <exclusions>
+          <!-- for now, we only write XML in PMML export, and these can be excluded -->
+          <exclusion>
+            <groupId>com.sun.xml.fastinfoset</groupId>
+            <artifactId>FastInfoset</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>txw2</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.jvnet.staxex</groupId>
+            <artifactId>stax-ex</artifactId>
+          </exclusion>
+          <!--
+            SPARK-27611: Exclude redundant javax.activation implementation, which
+            conflicts with the existing javax.activation:activation:1.1.1 dependency.
+            -->
+          <exclusion>
+            <groupId>jakarta.activation</groupId>
+            <artifactId>jakarta.activation-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
@@ -442,6 +483,17 @@
         <groupId>commons-collections</groupId>
         <artifactId>commons-collections</artifactId>
         <version>${commons.collections.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-beanutils</groupId>
+        <artifactId>commons-beanutils</artifactId>
+        <version>1.9.4</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <!-- Hive uses commons-logging 1.1.3 from 0.13 to 1.2 -->
+        <version>1.1.3</version>
       </dependency>
       <dependency>
         <groupId>org.apache.ivy</groupId>
@@ -500,6 +552,19 @@
         <version>${selenium.version}</version>
         <scope>test</scope>
       </dependency>
+      <!-- Update htmlunit dependency that selenium uses for better JS support -->
+      <dependency>
+        <groupId>net.sourceforge.htmlunit</groupId>
+        <artifactId>htmlunit</artifactId>
+        <version>${htmlunit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.sourceforge.htmlunit</groupId>
+        <artifactId>htmlunit-core-js</artifactId>
+        <version>${htmlunit.version}</version>
+        <scope>test</scope>
+      </dependency>
       <!-- Added for selenium only, and should match its dependent version: -->
       <dependency>
         <groupId>xml-apis</groupId>
@@ -549,17 +614,17 @@
       <dependency>
         <groupId>org.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.5.0</version>
+        <version>1.6.0</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.3.2-2</version>
+        <version>1.4.3-1</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
-        <version>2.7.0</version>
+        <version>2.9.6</version>
         <exclusions>
           <!-- Only HyperLogLogPlus is used, which doesn't depend on fastutil -->
           <exclusion>
@@ -582,7 +647,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.5.11</version>
+        <version>0.7.45</version>
       </dependency>
       <dependency>
         <groupId>commons-net</groupId>
@@ -592,12 +657,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.30.Final</version>
-      </dependency>
-      <dependency>
-        <groupId>io.netty</groupId>
-        <artifactId>netty</artifactId>
-        <version>3.9.9.Final</version>
+        <version>4.1.42.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -621,12 +681,12 @@
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
-        <artifactId>metrics-ganglia</artifactId>
+        <artifactId>metrics-graphite</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
-        <artifactId>metrics-graphite</artifactId>
+        <artifactId>metrics-jmx</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
@@ -666,11 +726,25 @@
         <groupId>org.glassfish.jersey.core</groupId>
         <artifactId>jersey-server</artifactId>
         <version>${jersey.version}</version>
+        <!-- SPARK-28765 Unused JDK11-specific dependency -->
+        <exclusions>
+          <exclusion>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
         <artifactId>jersey-common</artifactId>
         <version>${jersey.version}</version>
+        <!-- SPARK-28765 Unused JDK11-specific dependency -->
+        <exclusions>
+          <exclusion>
+            <groupId>com.sun.activation</groupId>
+            <artifactId>jakarta.activation</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
@@ -688,6 +762,17 @@
         <version>${jersey.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.glassfish.jersey.inject</groupId>
+        <artifactId>jersey-hk2</artifactId>
+        <version>${jersey.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey.test-framework.providers</groupId>
+        <artifactId>jersey-test-framework-provider-simple</artifactId>
+        <version>${jersey.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
         <groupId>org.glassfish.jersey</groupId>
         <artifactId>jersey-client</artifactId>
         <version>${jersey.version}</version>
@@ -700,14 +785,8 @@
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>0.13.2</version>
+        <version>1.0</version>
         <exclusions>
-          <!-- This is included as a compile-scoped dependency by jtransforms, which is
-               a dependency of breeze. -->
-          <exclusion>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
@@ -717,13 +796,18 @@
       <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-        <version>3.5.3</version>
+        <version>3.6.6</version>
         <exclusions>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang.modules</groupId>
+        <artifactId>scala-xml_${scala.binary.version}</artifactId>
+        <version>1.2.0</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -748,9 +832,8 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
-        <version>1.1.0</version>
+        <version>1.1.2</version>
       </dependency>
-      <!-- SPARK-16770 affecting Scala 2.11.x -->
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
@@ -759,13 +842,13 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.0.3</version>
+        <version>3.0.8</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>2.23.4</version>
+        <version>2.28.2</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -777,7 +860,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.13.5</version>
+        <version>1.14.2</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -829,7 +912,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>9.4.1207.jre7</version>
+        <version>42.2.6</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -887,6 +970,15 @@
             <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <!-- BeanUtils >= 1.9.0 no longer splits out -core; exclude it -->
+            <groupId>commons-beanutils</groupId>
+            <artifactId>commons-beanutils-core</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
@@ -922,19 +1014,34 @@
             <groupId>net.java.dev.jets3t</groupId>
             <artifactId>jets3t</artifactId>
           </exclusion>
+          <!-- Hadoop-3.2 -->
+          <exclusion>
+            <groupId>javax.ws.rs</groupId>
+            <artifactId>jsr311-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-minikdc</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.directory.api</groupId>
+            <artifactId>api-ldap-schema-data</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-ipc</artifactId>
         <version>${avro.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -1164,6 +1271,11 @@
             <groupId>com.sun.jersey.contribs</groupId>
             <artifactId>*</artifactId>
           </exclusion>
+          <!-- Hadoop-3.2 -->
+          <exclusion>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP-java7</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1219,6 +1331,14 @@
           <exclusion>
             <groupId>jline</groupId>
             <artifactId>jline</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-annotations</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1386,15 +1506,44 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <!-- Begin of Hive 2.3 exclusion -->
+          <!--
+            ORC is needed, but the version should be consistent with the `sql/core` ORC data source.
+            Looks like this is safe, please see the major changes from ORC 1.3.3 to 1.5.4:
+            HIVE-17631 and HIVE-19465
+          -->
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
+          </exclusion>
+          <!-- jetty-all conflict with jetty 9.4.12.v20180830 -->
+          <exclusion>
+            <groupId>org.eclipse.jetty.aggregate</groupId>
+            <artifactId>jetty-all</artifactId>
+          </exclusion>
+          <!-- org.apache.logging.log4j:* conflict with log4j 1.2.17 -->
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <!-- Hive includes javax.servlet to fix the Hive on Spark test failure; see HIVE-12783 -->
+          <exclusion>
+            <groupId>org.eclipse.jetty.orbit</groupId>
+            <artifactId>javax.servlet</artifactId>
+          </exclusion>
+          <!-- hive-storage-api is needed and must be explicitly included later -->
+          <exclusion>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-storage-api</artifactId>
+          </exclusion>
+          <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
 
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-exec</artifactId>
-<!--
-        <classifier>core</classifier>
--->
+        <classifier>${hive.classifier}</classifier>
         <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
@@ -1444,10 +1593,14 @@
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
           </exclusion>
-          <!--  this is needed and must be explicitly included later-->
+          <!--  Do not need Calcite because we disabled hive.cbo.enable -->
           <exclusion>
             <groupId>org.apache.calcite</groupId>
             <artifactId>calcite-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.calcite</groupId>
+            <artifactId>calcite-avatica</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.curator</groupId>
@@ -1502,6 +1655,27 @@
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
           </exclusion>
+          <!-- Begin of Hive 2.3 exclusion -->
+          <!-- Do not need Tez -->
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-llap-tez</artifactId>
+          </exclusion>
+          <!-- Do not need Calcite, see SPARK-27054 -->
+          <exclusion>
+            <groupId>org.apache.calcite</groupId>
+            <artifactId>calcite-druid</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.calcite.avatica</groupId>
+            <artifactId>avatica</artifactId>
+          </exclusion>
+          <!-- org.apache.logging.log4j:* conflict with log4j 1.2.17 -->
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
       <dependency>
@@ -1509,10 +1683,6 @@
         <artifactId>hive-jdbc</artifactId>
         <version>${hive.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-common</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-common</artifactId>
@@ -1610,6 +1780,17 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
+          <!-- Begin of Hive 2.3 exclusion -->
+          <!-- Hive removes the HBase Metastore; see HIVE-17234 -->
+          <exclusion>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-client</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>co.cask.tephra</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
 
@@ -1667,6 +1848,22 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <!-- Begin of Hive 2.3 exclusion -->
+          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.10.1 -->
+          <exclusion>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-hadoop-bundle</artifactId>
+          </exclusion>
+          <!-- Do not need Jasper, see HIVE-19799 -->
+          <exclusion>
+            <groupId>tomcat</groupId>
+            <artifactId>jasper-compiler</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>tomcat</groupId>
+            <artifactId>jasper-runtime</artifactId>
+          </exclusion>
+          <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
 
@@ -1732,8 +1929,76 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <!-- Begin of Hive 2.3 exclusion -->
+          <!-- Exclude log4j-slf4j-impl, otherwise throw NCDFE when starting spark-shell -->
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+          </exclusion>
+          <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
+
+      <!-- hive-llap-common is needed when registering UDFs in Hive 2.3.
+         We add it here, otherwise -Phive-provided won't work. -->
+      <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-llap-common</artifactId>
+        <version>${hive23.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-serde</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!-- hive-llap-client is needed when run MapReduce test in Hive 2.3. -->
+      <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-llap-client</artifactId>
+        <version>${hive23.version}</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-serde</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-llap-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-framework</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>apache-curator</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
       <dependency>
         <groupId>org.apache.orc</groupId>
         <artifactId>orc-core</artifactId>
@@ -1813,75 +2078,10 @@
         <scope>${parquet.test.deps.scope}</scope>
       </dependency>
       <dependency>
-        <groupId>com.twitter</groupId>
+        <groupId>${hive.parquet.group}</groupId>
         <artifactId>parquet-hadoop-bundle</artifactId>
         <version>${hive.parquet.version}</version>
-        <scope>compile</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-core</artifactId>
-        <version>${calcite.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-annotations</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.code.findbugs</groupId>
-            <artifactId>jsr305</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.janino</groupId>
-            <artifactId>janino</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.janino</groupId>
-            <artifactId>commons-compiler</artifactId>
-          </exclusion>
-          <!-- hsqldb interferes with the use of derby as the default db
-            in hive's use of datanucleus.
-          -->
-          <exclusion>
-            <groupId>org.hsqldb</groupId>
-            <artifactId>hsqldb</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.pentaho</groupId>
-            <artifactId>pentaho-aggdesigner-algorithm</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-avatica</artifactId>
-        <version>${calcite.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-annotations</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-          </exclusion>
-        </exclusions>
+        <scope>${hive.parquet.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.codehaus.janino</groupId>
@@ -1922,7 +2122,7 @@
       <dependency>
         <groupId>org.apache.thrift</groupId>
         <artifactId>libfb303</artifactId>
-        <version>${libthrift.version}</version>
+        <version>0.9.3</version>
         <exclusions>
           <exclusion>
             <groupId>org.slf4j</groupId>
@@ -1979,6 +2179,11 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <dependency>
+        <groupId>com.univocity</groupId>
+        <artifactId>univocity-parsers</artifactId>
+        <version>2.8.3</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -2005,13 +2210,6 @@
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>
-                      <!--
-                        Akka depends on io.netty:netty, which puts classes under the org.jboss.netty
-                        package. This conflicts with the classes in org.jboss.netty:netty
-                        artifact, so we have to ban that artifact here. In Netty 4.x, the classes
-                        are under the io.netty package, so it's fine for us to depend on both
-                        io.netty:netty and io.netty:netty-all.
-                      -->
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
                       <exclude>*:*_2.11</exclude>
@@ -2019,6 +2217,17 @@
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
+                </rules>
+              </configuration>
+            </execution>
+            <execution>
+              <id>enforce-no-duplicate-dependencies</id>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <configuration>
+                <rules>
+                  <banDuplicatePomDependencyVersions/>
                 </rules>
               </configuration>
             </execution>
@@ -2032,7 +2241,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>3.4.4</version>
+          <version>4.2.0</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2071,7 +2280,7 @@
               <arg>-deprecation</arg>
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
-              <arg>-Yno-adapted-args</arg>
+              <arg>-target:jvm-1.8</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
@@ -2090,7 +2299,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.8.0</version>
+          <version>3.8.1</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -2107,7 +2316,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M2</version>
+          <version>3.0.0-M3</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2208,7 +2417,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.1.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2218,7 +2427,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-source-plugin</artifactId>
-          <version>3.0.1</version>
+          <version>3.1.0</version>
           <configuration>
             <attach>true</attach>
           </configuration>
@@ -2253,7 +2462,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.0.1</version>
+          <version>3.1.1</version>
           <configuration>
             <additionalJOptions>
               <additionalJOption>-Xdoclint:all</additionalJOption>
@@ -2314,12 +2523,12 @@
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>7.0</version>
+              <version>7.2</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>7.0</version>
+              <version>7.2</version>
             </dependency>
           </dependencies>
         </plugin>
@@ -2377,7 +2586,7 @@
                   <pluginExecutionFilter>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
-                    <versionRange>3.1.0</versionRange>
+                    <versionRange>3.1.2</versionRange>
                     <goals>
                       <goal>test-jar</goal>
                     </goals>
@@ -2534,16 +2743,20 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.0.0</version>
+        <version>3.1.0</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
           <sourceDirectories>
             <directory>${basedir}/src/main/java</directory>
             <directory>${basedir}/src/main/scala</directory>
+            <directory>${basedir}/v${hive.version.short}/src/main/java</directory>
+            <directory>${basedir}/v${hive.version.short}/src/main/scala</directory>
           </sourceDirectories>
           <testSourceDirectories>
             <directory>${basedir}/src/test/java</directory>
+            <directory>${basedir}/v${hive.version.short}/src/test/java</directory>
+            <directory>${basedir}/v${hive.version.short}/src/test/scala</directory>
           </testSourceDirectories>
           <configLocation>dev/checkstyle.xml</configLocation>
           <outputFile>${basedir}/target/checkstyle-output.xml</outputFile>
@@ -2554,7 +2767,7 @@
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.14</version>
+            <version>8.25</version>
           </dependency>
         </dependencies>
         <executions>
@@ -2631,6 +2844,18 @@
           </execution>
         </executions>
       </plugin>
+      <!--
+        Couple of dependencies are coming in bundle format (bundle is just a normal jar which
+        contains OSGi metadata in the manifest). If one don't use OSGi, then a bundle will work as
+        any other jar. Since maven doesn't have native bundle support it needs an external plugin
+        handle it. If the plugin is not added then the build can't resolve bundle dependencies.
+      -->
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <version>4.2.0</version>
+        <extensions>true</extensions>
+      </plugin>
     </plugins>
   </build>
 
@@ -2692,12 +2917,28 @@
     </profile>
 
     <profile>
-      <id>hadoop-3.1</id>
+      <id>hadoop-3.2</id>
       <properties>
-        <hadoop.version>3.1.0</hadoop.version>
-        <curator.version>2.12.0</curator.version>
-        <zookeeper.version>3.4.9</zookeeper.version>
+        <hadoop.version>3.2.0</hadoop.version>
+        <curator.version>2.13.0</curator.version>
+        <hive.group>org.apache.hive</hive.group>
+        <hive.classifier>core</hive.classifier>
+        <hive.version>${hive23.version}</hive.version>
+        <hive.version.short>2.3.5</hive.version.short>
+        <!-- Do not need parquet-hadoop-bundle because we already have
+          parquet-common, parquet-column and parquet-hadoop -->
+        <hive.parquet.scope>provided</hive.parquet.scope>
+        <orc.classifier></orc.classifier>
+        <datanucleus-core.version>4.1.17</datanucleus-core.version>
       </properties>
+      <dependencies>
+        <!-- Both Hive and ORC need hive-storage-api, but it is excluded by orc-mapreduce -->
+        <dependency>
+          <groupId>org.apache.hive</groupId>
+          <artifactId>hive-storage-api</artifactId>
+          <version>2.6.0</version>
+        </dependency>
+      </dependencies>
     </profile>
 
     <profile>
@@ -2758,40 +2999,18 @@
     <profile>
       <id>scala-2.12</id>
     </profile>
-
+    
     <profile>
-      <id>scala-2.11</id>
-      <properties>
-        <scala.version>2.11.12</scala.version>
-        <scala.binary.version>2.11</scala.binary.version>
-      </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-enforcer-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>enforce-versions</id>
-                <goals>
-                  <goal>enforce</goal>
-                </goals>
-                <configuration>
-                  <rules>
-                    <bannedDependencies>
-                      <excludes combine.self="override">
-                        <exclude>org.jboss.netty</exclude>
-                        <exclude>org.codehaus.groovy</exclude>
-                        <exclude>*:*_2.10</exclude>
-                      </excludes>
-                    </bannedDependencies>
-                  </rules>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
+      <id>scala-2.13</id>
+      <dependencyManagement>
+        <dependencies>
+          <dependency>
+            <groupId>org.scala-lang.modules</groupId>
+            <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+            <version>0.2.0</version>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
     </profile>
 
     <!--

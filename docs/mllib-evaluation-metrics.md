@@ -2,6 +2,21 @@
 layout: global
 title: Evaluation Metrics - RDD-based API
 displayTitle: Evaluation Metrics - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -562,31 +577,3 @@ variable from a number of independent variables.
     </tr>
   </tbody>
 </table>
-
-**Examples**
-
-<div class="codetabs">
-The following code snippets illustrate how to load a sample dataset, train a linear regression algorithm on the data,
-and evaluate the performance of the algorithm by several regression metrics.
-
-<div data-lang="scala" markdown="1">
-Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) for details on the API.
-
-{% include_example scala/org/apache/spark/examples/mllib/RegressionMetricsExample.scala %}
-
-</div>
-
-<div data-lang="java" markdown="1">
-Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) for details on the API.
-
-{% include_example java/org/apache/spark/examples/mllib/JavaRegressionMetricsExample.java %}
-
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) for more details on the API.
-
-{% include_example python/mllib/regression_metrics_example.py %}
-
-</div>
-</div>

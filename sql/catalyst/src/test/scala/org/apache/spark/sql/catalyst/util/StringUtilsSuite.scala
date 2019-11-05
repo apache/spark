@@ -46,14 +46,35 @@ class StringUtilsSuite extends SparkFunSuite {
 
   test("string concatenation") {
     def concat(seq: String*): String = {
-      seq.foldLeft(new StringConcat())((acc, s) => {acc.append(s); acc}).toString
+      seq.foldLeft(new StringConcat()) { (acc, s) => acc.append(s); acc }.toString
     }
 
     assert(new StringConcat().toString == "")
-    assert(concat("") == "")
-    assert(concat(null) == "")
-    assert(concat("a") == "a")
-    assert(concat("1", "2") == "12")
-    assert(concat("abc", "\n", "123") == "abc\n123")
+    assert(concat("") === "")
+    assert(concat(null) === "")
+    assert(concat("a") === "a")
+    assert(concat("1", "2") === "12")
+    assert(concat("abc", "\n", "123") === "abc\n123")
+  }
+
+  test("string concatenation with limit") {
+    def concat(seq: String*): String = {
+      seq.foldLeft(new StringConcat(7)) { (acc, s) => acc.append(s); acc }.toString
+    }
+    assert(concat("under") === "under")
+    assert(concat("under", "over", "extra") === "underov")
+    assert(concat("underover") === "underov")
+    assert(concat("under", "ov") === "underov")
+  }
+
+  test("string concatenation return value") {
+    def checkLimit(s: String): Boolean = {
+      val sc = new StringConcat(7)
+      sc.append(s)
+      sc.atLimit
+    }
+    assert(!checkLimit("under"))
+    assert(checkLimit("1234567"))
+    assert(checkLimit("1234567890"))
   }
 }

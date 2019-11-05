@@ -79,9 +79,12 @@ private[sql] class JacksonGenerator(
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
-    options.timeZone,
+    options.zoneId,
     options.locale)
-  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
+  private val dateFormatter = DateFormatter(
+    options.dateFormat,
+    options.zoneId,
+    options.locale)
 
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>
@@ -181,6 +184,9 @@ private[sql] class JacksonGenerator(
       if (!row.isNullAt(i)) {
         gen.writeFieldName(field.name)
         fieldWriters(i).apply(row, i)
+      } else if (!options.ignoreNullFields) {
+        gen.writeFieldName(field.name)
+        gen.writeNull()
       }
       i += 1
     }

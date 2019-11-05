@@ -29,7 +29,7 @@ getMinPartitions <- function(sc, minPartitions) {
 #'
 #' This function reads a text file from HDFS, a local file system (available on all
 #' nodes), or any Hadoop-supported file system URI, and creates an
-#' RDD of strings from it.
+#' RDD of strings from it. The text files must be encoded as UTF-8.
 #'
 #' @param sc SparkContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
@@ -175,13 +175,15 @@ parallelize <- function(sc, coll, numSlices = 1) {
   if (objectSize < sizeLimit) {
     jrdd <- callJStatic("org.apache.spark.api.r.RRDD", "createRDDFromArray", sc, serializedSlices)
   } else {
-    if (callJStatic("org.apache.spark.api.r.RUtils", "getEncryptionEnabled", sc)) {
+    if (callJStatic("org.apache.spark.api.r.RUtils", "isEncryptionEnabled", sc)) {
+      connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
       # the length of slices here is the parallelism to use in the jvm's sc.parallelize()
       parallelism <- as.integer(numSlices)
       jserver <- newJObject("org.apache.spark.api.r.RParallelizeServer", sc, parallelism)
       authSecret <- callJMethod(jserver, "secret")
       port <- callJMethod(jserver, "port")
-      conn <- socketConnection(port = port, blocking = TRUE, open = "wb", timeout = 1500)
+      conn <- socketConnection(
+        port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
       doServerAuth(conn, authSecret)
       writeToConnection(serializedSlices, conn)
       jrdd <- callJMethod(jserver, "getResult")
@@ -299,7 +301,7 @@ broadcastRDD <- function(sc, object) {
 #' Set the checkpoint directory
 #'
 #' Set the directory under which RDDs are going to be checkpointed. The
-#' directory must be a HDFS path if running on a cluster.
+#' directory must be an HDFS path if running on a cluster.
 #'
 #' @param sc Spark Context to use
 #' @param dirName Directory path
@@ -323,7 +325,8 @@ setCheckpointDirSC <- function(sc, dirName) {
 #'
 #' A directory can be given if the recursive option is set to true.
 #' Currently directories are only supported for Hadoop-supported filesystems.
-#' Refer Hadoop-supported filesystems at \url{https://wiki.apache.org/hadoop/HCFS}.
+#' Refer Hadoop-supported filesystems at
+#' \url{https://cwiki.apache.org/confluence/display/HADOOP2/HCFS}.
 #'
 #' Note: A path can be added only once. Subsequent additions of the same path are ignored.
 #'
@@ -443,7 +446,7 @@ setLogLevel <- function(level) {
 #' Set checkpoint directory
 #'
 #' Set the directory under which SparkDataFrame are going to be checkpointed. The directory must be
-#' a HDFS path if running on a cluster.
+#' an HDFS path if running on a cluster.
 #'
 #' @rdname setCheckpointDir
 #' @param directory Directory path to checkpoint to

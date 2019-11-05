@@ -16,13 +16,15 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, SupportsBatchRead, TableProvider}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 /**
  * A base interface for data source v2 implementations of the built-in file-based data sources.
@@ -35,20 +37,26 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
    *    source via SQL configuration and fall back to FileFormat.
    * 2. Catalog support is required, which is still under development for data source V2.
    */
-  def fallBackFileFormat: Class[_ <: FileFormat]
+  def fallbackFileFormat: Class[_ <: FileFormat]
 
   lazy val sparkSession = SparkSession.active
 
-  def getFileIndex(
-      options: DataSourceOptions,
-      userSpecifiedSchema: Option[StructType]): PartitioningAwareFileIndex = {
-    val filePaths = options.paths()
-    val hadoopConf =
-      sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
-    val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(filePaths, hadoopConf,
-      checkEmptyGlobPath = true, checkFilesExist = options.checkFilesExist())
-    val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
-    new InMemoryFileIndex(sparkSession, rootPathsSpecified,
-      options.asMap().asScala.toMap, userSpecifiedSchema, fileStatusCache)
+  protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
+    val objectMapper = new ObjectMapper()
+    val paths = Option(map.get("paths")).map { pathStr =>
+      objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
+    }.getOrElse(Seq.empty)
+    paths ++ Option(map.get("path")).toSeq
+  }
+
+  protected def getTableName(paths: Seq[String]): String = {
+    val name = shortName() + " " + paths.map(qualifiedPathName).mkString(",")
+    Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, name)
+  }
+
+  private def qualifiedPathName(path: String): String = {
+    val hdfsPath = new Path(path)
+    val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
   }
 }

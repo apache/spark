@@ -172,7 +172,7 @@ abstract class HiveComparisonTest
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
       case _: ExplainCommand => answer
-      case _: DescribeTableCommand | ShowColumnsCommand(_, _) =>
+      case _: DescribeCommandBase | ShowColumnsCommand(_, _) =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -228,7 +228,7 @@ abstract class HiveComparisonTest
       sql: String,
       reset: Boolean = true,
       tryWithoutResettingFirst: Boolean = false,
-      skip: Boolean = false) {
+      skip: Boolean = false): Unit = {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -375,7 +375,9 @@ abstract class HiveComparisonTest
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
                 (!hiveQuery.logical.isInstanceOf[ShowFunctionsCommand]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeFunctionCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeTableCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeTableStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeColumnStatement]) &&
                 preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive

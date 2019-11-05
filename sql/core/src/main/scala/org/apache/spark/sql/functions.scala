@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
@@ -55,6 +55,10 @@ import org.apache.spark.util.Utils
  * `regr_count` is an example of a function that is built-in but not defined here, because it is
  * less commonly used. To invoke it, use `expr("regr_count(yCol, xCol)")`.
  *
+ * This function APIs usually have methods with `Column` signature only because it can support not
+ * only `Column` but also other types such as a native string. The other variants currently exist
+ * for historical reasons.
+ *
  * @groupname udf_funcs UDF functions
  * @groupname agg_funcs Aggregate functions
  * @groupname datetime_funcs Date time functions
@@ -65,6 +69,7 @@ import org.apache.spark.util.Utils
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
  * @groupname collection_funcs Collection functions
+ * @groupname partition_transforms Partition transform functions
  * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */
@@ -358,9 +363,10 @@ object functions {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def countDistinct(expr: Column, exprs: Column*): Column = {
-    withAggregateFunction(Count.apply((expr +: exprs).map(_.expr)), isDistinct = true)
-  }
+  def countDistinct(expr: Column, exprs: Column*): Column =
+    // For usage like countDistinct("*"), we should let analyzer expand star and
+    // resolve function.
+    Column(UnresolvedFunction("count", (expr +: exprs).map(_.expr), isDistinct = true))
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -1045,7 +1051,7 @@ object functions {
    */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
     Dataset[T](df.sparkSession,
-      ResolvedHint(df.logicalPlan, HintInfo(broadcast = true)))(df.exprEnc)
+      ResolvedHint(df.logicalPlan, HintInfo(strategy = Some(BROADCAST))))(df.exprEnc)
   }
 
   /**
@@ -2167,6 +2173,19 @@ object functions {
     new Murmur3Hash(cols.map(_.expr))
   }
 
+  /**
+   * Calculates the hash code of given columns using the 64-bit
+   * variant of the xxHash algorithm, and returns the result as a long
+   * column.
+   *
+   * @group misc_funcs
+   * @since 3.0.0
+   */
+  @scala.annotation.varargs
+  def xxhash64(cols: Column*): Column = withExpr {
+    new XxHash64(cols.map(_.expr))
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2503,6 +2522,28 @@ object functions {
   }
 
   /**
+   * Overlay the specified portion of `src` with `replace`,
+   *  starting from byte position `pos` of `src` and proceeding for `len` bytes.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def overlay(src: Column, replace: Column, pos: Column, len: Column): Column = withExpr {
+    Overlay(src.expr, replace.expr, pos.expr, len.expr)
+  }
+
+  /**
+   * Overlay the specified portion of `src` with `replace`,
+   *  starting from byte position `pos` of `src`.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def overlay(src: Column, replace: Column, pos: Column): Column = withExpr {
+    new Overlay(src.expr, replace.expr, pos.expr)
+  }
+
+  /**
    * Translate any character in the src by a character in replaceString.
    * The characters in replaceString correspond to the characters in matchingString.
    * The translate will happen when any character in the string matches the character
@@ -2554,8 +2595,21 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def add_months(startDate: Column, numMonths: Int): Column = withExpr {
-    AddMonths(startDate.expr, Literal(numMonths))
+  def add_months(startDate: Column, numMonths: Int): Column = add_months(startDate, lit(numMonths))
+
+  /**
+   * Returns the date that is `numMonths` after `startDate`.
+   *
+   * @param startDate A date, timestamp or string. If a string, the data must be in a format that
+   *                  can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param numMonths A column of the number of months to add to `startDate`, can be negative to
+   *                  subtract months
+   * @return A date, or null if `startDate` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.0.0
+   */
+  def add_months(startDate: Column, numMonths: Column): Column = withExpr {
+    AddMonths(startDate.expr, numMonths.expr)
   }
 
   /**
@@ -2581,8 +2635,8 @@ object functions {
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
-   *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
+   *                 can be cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
+   * @param format A pattern `dd.MM.uuuu` would return a string like `18.03.1993`
    * @return A string, or null if `dateExpr` was a string that could not be cast to a timestamp
    * @note Use specialized functions like [[year]] whenever possible as they benefit from a
    * specialized implementation.
@@ -2604,7 +2658,19 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def date_add(start: Column, days: Int): Column = withExpr { DateAdd(start.expr, Literal(days)) }
+  def date_add(start: Column, days: Int): Column = date_add(start, lit(days))
+
+  /**
+   * Returns the date that is `days` days after `start`
+   *
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days  A column of the number of days to add to `start`, can be negative to subtract days
+   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.0.0
+   */
+  def date_add(start: Column, days: Column): Column = withExpr { DateAdd(start.expr, days.expr) }
 
   /**
    * Returns the date that is `days` days before `start`
@@ -2616,7 +2682,20 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def date_sub(start: Column, days: Int): Column = withExpr { DateSub(start.expr, Literal(days)) }
+  def date_sub(start: Column, days: Int): Column = date_sub(start, lit(days))
+
+  /**
+   * Returns the date that is `days` days before `start`
+   *
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days  A column of the number of days to subtract from `start`, can be negative to add
+   *              days
+   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.0.0
+   */
+  def date_sub(start: Column, days: Column): Column = withExpr { DateSub(start.expr, days.expr) }
 
   /**
    * Returns the number of days from `start` to `end`.
@@ -2794,7 +2873,7 @@ object functions {
   /**
    * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
    * representing the timestamp of that moment in the current system time zone in the
-   * yyyy-MM-dd HH:mm:ss format.
+   * uuuu-MM-dd HH:mm:ss format.
    *
    * @param ut A number of a type that is castable to a long, such as string or integer. Can be
    *           negative for timestamps before the unix epoch
@@ -2803,7 +2882,7 @@ object functions {
    * @since 1.5.0
    */
   def from_unixtime(ut: Column): Column = withExpr {
-    FromUnixTime(ut.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+    FromUnixTime(ut.expr, Literal("uuuu-MM-dd HH:mm:ss"))
   }
 
   /**
@@ -2835,21 +2914,21 @@ object functions {
    * @since 1.5.0
    */
   def unix_timestamp(): Column = withExpr {
-    UnixTimestamp(CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss"))
+    UnixTimestamp(CurrentTimestamp(), Literal("uuuu-MM-dd HH:mm:ss"))
   }
 
   /**
-   * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
+   * Converts time string in format uuuu-MM-dd HH:mm:ss to Unix timestamp (in seconds),
    * using the default timezone and the default locale.
    *
    * @param s A date, timestamp or string. If a string, the data must be in the
-   *          `yyyy-MM-dd HH:mm:ss` format
+   *          `uuuu-MM-dd HH:mm:ss` format
    * @return A long, or null if the input was a string not of the correct format
    * @group datetime_funcs
    * @since 1.5.0
    */
   def unix_timestamp(s: Column): Column = withExpr {
-    UnixTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+    UnixTimestamp(s.expr, Literal("uuuu-MM-dd HH:mm:ss"))
   }
 
   /**
@@ -2858,7 +2937,7 @@ object functions {
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *          cast to a date, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
    * @param p A date time pattern detailing the format of `s` when `s` is a string
    * @return A long, or null if `s` was a string that could not be cast to a date or `p` was
    *         an invalid format
@@ -2871,7 +2950,7 @@ object functions {
    * Converts to a timestamp by casting rules to `TimestampType`.
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *          cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
    * @return A timestamp, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
    * @since 2.2.0
@@ -2886,7 +2965,7 @@ object functions {
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param s   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *            cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
    * @param fmt A date time pattern detailing the format of `s` when `s` is a string
    * @return A timestamp, or null if `s` was a string that could not be cast to a timestamp or
    *         `fmt` was an invalid format
@@ -2911,7 +2990,7 @@ object functions {
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param e   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *            cast to a date, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
    * @param fmt A date time pattern detailing the format of `e` when `e`is a string
    * @return A date, or null if `e` was a string that could not be cast to a date or `fmt` was an
    *         invalid format
@@ -2929,8 +3008,8 @@ object functions {
    *
    * @param date A date, timestamp or string. If a string, the data must be in a format that can be
    *             cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
-   *               or 'month', 'mon', 'mm' for truncate by month
+   * @param format: 'year', 'yyyy', 'yy' to truncate by year,
+   *               or 'month', 'mon', 'mm' to truncate by month
    *
    * @return A date, or null if `date` was a string that could not be cast to a date or `format`
    *         was an invalid value
@@ -2944,11 +3023,11 @@ object functions {
   /**
    * Returns timestamp truncated to the unit specified by the format.
    *
-   * For example, `date_tunc("2018-11-19 12:01:19", "year")` returns 2018-01-01 00:00:00
+   * For example, `date_trunc("year", "2018-11-19 12:01:19")` returns 2018-01-01 00:00:00
    *
-   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
-   *                'month', 'mon', 'mm' for truncate by month,
-   *                'day', 'dd' for truncate by day,
+   * @param format: 'year', 'yyyy', 'yy' to truncate by year,
+   *                'month', 'mon', 'mm' to truncate by month,
+   *                'day', 'dd' to truncate by day,
    *                Other options are: 'second', 'minute', 'hour', 'week', 'month', 'quarter'
    * @param timestamp A date, timestamp or string. If a string, the data must be in a format that
    *                  can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -2975,6 +3054,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     FromUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -2986,6 +3066,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     FromUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3004,6 +3085,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3015,6 +3097,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     ToUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3303,8 +3386,181 @@ object functions {
     ArrayExcept(col1.expr, col2.expr)
   }
 
+  private def createLambda(f: Column => Column) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val function = f(Column(x)).expr
+    LambdaFunction(function, Seq(x))
+  }
+
+  private def createLambda(f: (Column, Column) => Column) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val function = f(Column(x), Column(y)).expr
+    LambdaFunction(function, Seq(x, y))
+  }
+
+  private def createLambda(f: (Column, Column, Column) => Column) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val z = UnresolvedNamedLambdaVariable(Seq("z"))
+    val function = f(Column(x), Column(y), Column(z)).expr
+    LambdaFunction(function, Seq(x, y, z))
+  }
+
+  /**
+   * Returns an array of elements after applying a tranformation to each element
+   * in the input array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def transform(column: Column, f: Column => Column): Column = withExpr {
+    ArrayTransform(column.expr, createLambda(f))
+  }
+
+  /**
+   * Returns an array of elements after applying a tranformation to each element
+   * in the input array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def transform(column: Column, f: (Column, Column) => Column): Column = withExpr {
+    ArrayTransform(column.expr, createLambda(f))
+  }
+
+  /**
+   * Returns whether a predicate holds for one or more elements in the array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def exists(column: Column, f: Column => Column): Column = withExpr {
+    ArrayExists(column.expr, createLambda(f))
+  }
+
+  /**
+   * Returns whether a predicate holds for every element in the array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def forall(column: Column, f: Column => Column): Column = withExpr {
+    ArrayForAll(column.expr, createLambda(f))
+  }
+
+  /**
+   * Returns an array of elements for which a predicate holds in a given array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def filter(column: Column, f: Column => Column): Column = withExpr {
+    ArrayFilter(column.expr, createLambda(f))
+  }
+
+  /**
+   * Returns an array of elements for which a predicate holds in a given array.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def filter(column: Column, f: (Column, Column) => Column): Column = withExpr {
+    ArrayFilter(column.expr, createLambda(f))
+  }
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state. The final state is converted into the final result
+   * by applying a finish function.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def aggregate(
+      expr: Column,
+      zero: Column,
+      merge: (Column, Column) => Column,
+      finish: Column => Column): Column = withExpr {
+    ArrayAggregate(
+      expr.expr,
+      zero.expr,
+      createLambda(merge),
+      createLambda(finish)
+    )
+  }
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column): Column =
+    aggregate(expr, zero, merge, c => c)
+
+  /**
+   * Merge two given arrays, element-wise, into a signle array using a function.
+   * If one array is shorter, nulls are appended at the end to match the length of the longer
+   * array, before applying the function.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def zip_with(left: Column, right: Column, f: (Column, Column) => Column): Column = withExpr {
+    ZipWith(left.expr, right.expr, createLambda(f))
+  }
+
+  /**
+   * Applies a function to every key-value pair in a map and returns
+   * a map with the results of those applications as the new keys for the pairs.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def transform_keys(expr: Column, f: (Column, Column) => Column): Column = withExpr {
+    TransformKeys(expr.expr, createLambda(f))
+  }
+
+  /**
+   * Applies a function to every key-value pair in a map and returns
+   * a map with the results of those applications as the new values for the pairs.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def transform_values(expr: Column, f: (Column, Column) => Column): Column = withExpr {
+    TransformValues(expr.expr, createLambda(f))
+  }
+
+  /**
+   * Returns a map whose key-value pairs satisfy a predicate.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def map_filter(expr: Column, f: (Column, Column) => Column): Column = withExpr {
+    MapFilter(expr.expr, createLambda(f))
+  }
+
+  /**
+   * Merge two given maps, key-wise into a single map using a function.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def map_zip_with(
+      left: Column,
+      right: Column,
+      f: (Column, Column, Column) => Column): Column = withExpr {
+    MapZipWith(left.expr, right.expr, createLambda(f))
+  }
+
   /**
    * Creates a new row for each element in the given array or map column.
+   * Uses the default column name `col` for elements in the array and
+   * `key` and `value` for elements in the map unless specified otherwise.
    *
    * @group collection_funcs
    * @since 1.3.0
@@ -3313,6 +3569,8 @@ object functions {
 
   /**
    * Creates a new row for each element in the given array or map column.
+   * Uses the default column name `col` for elements in the array and
+   * `key` and `value` for elements in the map unless specified otherwise.
    * Unlike explode, if the array/map is null or empty then null is produced.
    *
    * @group collection_funcs
@@ -3322,6 +3580,8 @@ object functions {
 
   /**
    * Creates a new row for each element with position in the given array or map column.
+   * Uses the default column name `pos` for position, and `col` for elements in the array
+   * and `key` and `value` for elements in the map unless specified otherwise.
    *
    * @group collection_funcs
    * @since 2.1.0
@@ -3330,6 +3590,8 @@ object functions {
 
   /**
    * Creates a new row for each element with position in the given array or map column.
+   * Uses the default column name `pos` for position, and `col` for elements in the array
+   * and `key` and `value` for elements in the map unless specified otherwise.
    * Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
    *
    * @group collection_funcs
@@ -3852,6 +4114,63 @@ object functions {
    */
   def to_csv(e: Column): Column = to_csv(e, Map.empty[String, String].asJava)
 
+  /**
+   * A transform for timestamps and dates to partition data into years.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def years(e: Column): Column = withExpr { Years(e.expr) }
+
+  /**
+   * A transform for timestamps and dates to partition data into months.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def months(e: Column): Column = withExpr { Months(e.expr) }
+
+  /**
+   * A transform for timestamps and dates to partition data into days.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def days(e: Column): Column = withExpr { Days(e.expr) }
+
+  /**
+   * A transform for timestamps to partition data into hours.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+  /**
+   * A transform for any type that partitions by a hash of the input column.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def bucket(numBuckets: Column, e: Column): Column = withExpr {
+    numBuckets.expr match {
+      case lit @ Literal(_, IntegerType) =>
+        Bucket(lit, e.expr)
+      case _ =>
+        throw new AnalysisException(s"Invalid number of buckets: bucket($numBuckets, $e)")
+    }
+  }
+
+  /**
+   * A transform for any type that partitions by a hash of the input column.
+   *
+   * @group partition_transforms
+   * @since 3.0.0
+   */
+  def bucket(numBuckets: Int, e: Column): Column = withExpr {
+    Bucket(Literal(numBuckets), e.expr)
+  }
+
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number
 
@@ -3884,7 +4203,7 @@ object functions {
     val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")
     val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs]]"
     val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
-    val funcCall = if (i == 0) "() => func" else "func"
+    val funcCall = if (i == 0) s"() => f$anyCast.call($anyParams)" else s"f$anyCast.call($anyParams)"
     println(s"""
       |/**
       | * Defines a Java UDF$i instance as user-defined function (UDF).
@@ -3896,8 +4215,8 @@ object functions {
       | * @since 2.3.0
       | */
       |def udf(f: UDF$i[$extTypeArgs], returnType: DataType): UserDefinedFunction = {
-      |  val func = f$anyCast.call($anyParams)
-      |  SparkUserDefinedFunction($funcCall, returnType, inputSchemas = Seq.fill($i)(None))
+      |  val func = $funcCall
+      |  SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill($i)(None))
       |}""".stripMargin)
   }
 
@@ -4097,8 +4416,8 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF0[Any]].call()
-    SparkUserDefinedFunction(() => func, returnType, inputSchemas = Seq.fill(0)(None))
+    val func = () => f.asInstanceOf[UDF0[Any]].call()
+    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(0)(None))
   }
 
   /**

@@ -21,9 +21,9 @@ import java.io.File
 
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.streaming.OffsetSuite
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class KafkaSourceOffsetSuite extends OffsetSuite with SharedSQLContext {
+class KafkaSourceOffsetSuite extends OffsetSuite with SharedSparkSession {
 
   compare(
     one = KafkaSourceOffset(("t", 0, 1L)),

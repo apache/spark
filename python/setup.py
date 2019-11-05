@@ -69,10 +69,12 @@ elif len(JARS_PATH) == 0 and not os.path.exists(TEMP_PATH):
 
 EXAMPLES_PATH = os.path.join(SPARK_HOME, "examples/src/main/python")
 SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
+USER_SCRIPTS_PATH = os.path.join(SPARK_HOME, "sbin")
 DATA_PATH = os.path.join(SPARK_HOME, "data")
 LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
 
 SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
+USER_SCRIPTS_TARGET = os.path.join(TEMP_PATH, "sbin")
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
 DATA_TARGET = os.path.join(TEMP_PATH, "data")
@@ -100,10 +102,11 @@ if (in_spark):
               file=sys.stderr)
         sys.exit(-1)
 
-# If you are changing the versions here, please also change ./python/pyspark/sql/utils.py and
-# ./python/run-tests.py. In case of Arrow, you should also check ./pom.xml.
-_minimum_pandas_version = "0.19.2"
-_minimum_pyarrow_version = "0.8.0"
+# If you are changing the versions here, please also change ./python/pyspark/sql/utils.py
+# For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
+# binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
+_minimum_pandas_version = "0.23.2"
+_minimum_pyarrow_version = "0.12.1"
 
 try:
     # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
@@ -122,6 +125,7 @@ try:
         if _supports_symlinks():
             os.symlink(JARS_PATH, JARS_TARGET)
             os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
+            os.symlink(USER_SCRIPTS_PATH, USER_SCRIPTS_TARGET)
             os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
             os.symlink(DATA_PATH, DATA_TARGET)
             os.symlink(LICENSES_PATH, LICENSES_TARGET)
@@ -129,6 +133,7 @@ try:
             # For windows fall back to the slower copytree
             copytree(JARS_PATH, JARS_TARGET)
             copytree(SCRIPTS_PATH, SCRIPTS_TARGET)
+            copytree(USER_SCRIPTS_PATH, USER_SCRIPTS_TARGET)
             copytree(EXAMPLES_PATH, EXAMPLES_TARGET)
             copytree(DATA_PATH, DATA_TARGET)
             copytree(LICENSES_PATH, LICENSES_TARGET)
@@ -177,6 +182,7 @@ try:
                   'pyspark.sql',
                   'pyspark.streaming',
                   'pyspark.bin',
+                  'pyspark.sbin',
                   'pyspark.jars',
                   'pyspark.python.pyspark',
                   'pyspark.python.lib',
@@ -187,6 +193,7 @@ try:
         package_dir={
             'pyspark.jars': 'deps/jars',
             'pyspark.bin': 'deps/bin',
+            'pyspark.sbin': 'deps/sbin',
             'pyspark.python.lib': 'lib',
             'pyspark.data': 'deps/data',
             'pyspark.licenses': 'deps/licenses',
@@ -195,6 +202,9 @@ try:
         package_data={
             'pyspark.jars': ['*.jar'],
             'pyspark.bin': ['*'],
+            'pyspark.sbin': ['spark-config.sh', 'spark-daemon.sh',
+                             'start-history-server.sh',
+                             'stop-history-server.sh', ],
             'pyspark.python.lib': ['*.zip'],
             'pyspark.data': ['*.txt', '*.data'],
             'pyspark.licenses': ['*.txt'],
@@ -220,6 +230,7 @@ try:
             'Programming Language :: Python :: 3.5',
             'Programming Language :: Python :: 3.6',
             'Programming Language :: Python :: 3.7',
+            'Programming Language :: Python :: 3.8',
             'Programming Language :: Python :: Implementation :: CPython',
             'Programming Language :: Python :: Implementation :: PyPy']
     )
@@ -231,12 +242,14 @@ finally:
         if _supports_symlinks():
             os.remove(os.path.join(TEMP_PATH, "jars"))
             os.remove(os.path.join(TEMP_PATH, "bin"))
+            os.remove(os.path.join(TEMP_PATH, "sbin"))
             os.remove(os.path.join(TEMP_PATH, "examples"))
             os.remove(os.path.join(TEMP_PATH, "data"))
             os.remove(os.path.join(TEMP_PATH, "licenses"))
         else:
             rmtree(os.path.join(TEMP_PATH, "jars"))
             rmtree(os.path.join(TEMP_PATH, "bin"))
+            rmtree(os.path.join(TEMP_PATH, "sbin"))
             rmtree(os.path.join(TEMP_PATH, "examples"))
             rmtree(os.path.join(TEMP_PATH, "data"))
             rmtree(os.path.join(TEMP_PATH, "licenses"))

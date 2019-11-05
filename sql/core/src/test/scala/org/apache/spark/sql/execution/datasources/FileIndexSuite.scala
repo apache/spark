@@ -17,23 +17,34 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.net.URI
 
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem}
 
+import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
+import org.apache.spark.util.KnownSizeEstimation
 
-class FileIndexSuite extends SharedSQLContext {
+class FileIndexSuite extends SharedSparkSession {
+
+  private class TestInMemoryFileIndex(
+      spark: SparkSession,
+      path: Path,
+      fileStatusCache: FileStatusCache = NoopCache)
+      extends InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache) {
+    def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
+    def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
+    def leafFileStatuses: Iterable[FileStatus] = leafFiles.values
+  }
 
   test("InMemoryFileIndex: leaf files are qualified paths") {
     withTempDir { dir =>
@@ -41,10 +52,7 @@ class FileIndexSuite extends SharedSQLContext {
       stringToFile(file, "text")
 
       val path = new Path(file.getCanonicalPath)
-      val catalog = new InMemoryFileIndex(spark, Seq(path), Map.empty, None) {
-        def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
-        def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
-      }
+      val catalog = new TestInMemoryFileIndex(spark, path)
       assert(catalog.leafFilePaths.forall(p => p.toString.startsWith("file:/")))
       assert(catalog.leafDirPaths.forall(p => p.toString.startsWith("file:/")))
     }
@@ -62,6 +70,21 @@ class FileIndexSuite extends SharedSQLContext {
       val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
       assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
         partitionValues(0).getString(0) == "4d")
+    }
+  }
+
+  test("SPARK-26990: use user specified field names if possible") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val schema = StructType(Seq(StructField("A", StringType, false)))
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+        assert(fileIndex.partitionSchema.length == 1 && fileIndex.partitionSchema.head.name == "A")
+      }
     }
   }
 
@@ -145,7 +168,7 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
-  test("InMemoryFileIndex: folders that don't exist don't throw exceptions") {
+  test("InMemoryFileIndex: root folders that don't exist don't throw exceptions") {
     withTempDir { dir =>
       val deletedFolder = new File(dir, "deleted")
       assert(!deletedFolder.exists())
@@ -153,6 +176,67 @@ class FileIndexSuite extends SharedSQLContext {
         spark, Seq(new Path(deletedFolder.getCanonicalPath)), Map.empty, None)
       // doesn't throw an exception
       assert(catalog1.listLeafFiles(catalog1.rootPaths).isEmpty)
+    }
+  }
+
+  test("SPARK-27676: InMemoryFileIndex respects ignoreMissingFiles config for non-root paths") {
+    import DeletionRaceFileSystem._
+    for (
+      raceCondition <- Seq(
+        classOf[SubdirectoryDeletionRaceFileSystem],
+        classOf[FileDeletionRaceFileSystem]
+      );
+      ignoreMissingFiles <- Seq(true, false);
+      parDiscoveryThreshold <- Seq(0, 100)
+    ) {
+      withClue(s"raceCondition=$raceCondition, ignoreMissingFiles=$ignoreMissingFiles, " +
+        s"parDiscoveryThreshold=$parDiscoveryThreshold"
+      ) {
+        withSQLConf(
+          SQLConf.IGNORE_MISSING_FILES.key -> ignoreMissingFiles.toString,
+          SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> parDiscoveryThreshold.toString,
+          "fs.mockFs.impl" -> raceCondition.getName,
+          "fs.mockFs.impl.disable.cache" -> "true"
+        ) {
+          def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
+            spark, Seq(rootDirPath), Map.empty, None)
+          if (ignoreMissingFiles) {
+            // We're ignoring missing files, so catalog construction should succeed
+            val catalog = makeCatalog()
+            val leafFiles = catalog.listLeafFiles(catalog.rootPaths)
+            if (raceCondition == classOf[SubdirectoryDeletionRaceFileSystem]) {
+              // The only subdirectory was missing, so there should be no leaf files:
+              assert(leafFiles.isEmpty)
+            } else {
+              assert(raceCondition == classOf[FileDeletionRaceFileSystem])
+              // One of the two leaf files was missing, but we should still list the other:
+              assert(leafFiles.size == 1)
+              assert(leafFiles.head.getPath == nonDeletedLeafFilePath)
+            }
+          } else {
+            // We're NOT ignoring missing files, so catalog construction should fail
+            val e = intercept[Exception] {
+              makeCatalog()
+            }
+            // The exact exception depends on whether we're using parallel listing
+            if (parDiscoveryThreshold == 0) {
+              // The FileNotFoundException occurs in a Spark executor (as part of a job)
+              assert(e.isInstanceOf[SparkException])
+              assert(e.getMessage.contains("FileNotFoundException"))
+            } else {
+              // The FileNotFoundException occurs directly on the driver
+              assert(e.isInstanceOf[FileNotFoundException])
+              // Test that the FileNotFoundException is triggered for the expected reason:
+              if (raceCondition == classOf[SubdirectoryDeletionRaceFileSystem]) {
+                assert(e.getMessage.contains(subDirPath.toString))
+              } else {
+                assert(raceCondition == classOf[FileDeletionRaceFileSystem])
+                assert(e.getMessage.contains(leafFilePath.toString))
+              }
+            }
+          }
+        }
+      }
     }
   }
 
@@ -273,11 +357,7 @@ class FileIndexSuite extends SharedSQLContext {
       val fileStatusCache = FileStatusCache.getOrCreate(spark)
       val dirPath = new Path(dir.getAbsolutePath)
       val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
-      val catalog =
-        new InMemoryFileIndex(spark, Seq(dirPath), Map.empty, None, fileStatusCache) {
-          def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
-          def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
-        }
+      val catalog = new TestInMemoryFileIndex(spark, dirPath, fileStatusCache)
 
       val file = new File(dir, "text.txt")
       stringToFile(file, "text")
@@ -327,10 +407,7 @@ class FileIndexSuite extends SharedSQLContext {
         val file = new File(dir, "text.txt")
         stringToFile(file, "text")
 
-        val inMemoryFileIndex = new InMemoryFileIndex(
-          spark, Seq(new Path(file.getCanonicalPath)), Map.empty, None) {
-          def leafFileStatuses = leafFiles.values
-        }
+        val inMemoryFileIndex = new TestInMemoryFileIndex(spark, new Path(file.getCanonicalPath))
         val blockLocations = inMemoryFileIndex.leafFileStatuses.flatMap(
           _.asInstanceOf[LocatedFileStatus].getBlockLocations)
 
@@ -339,6 +416,95 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
+  test("Add an option to ignore block locations when listing file") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      for (i <- 1 to 8) {
+        val file = new File(partitionDirectory, i + ".txt")
+        stringToFile(file, "text")
+      }
+      val path = new Path(dir.getCanonicalPath)
+      val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+      withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
+         "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+        val withBlockLocations = fileIndex.
+          listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+
+        withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "true") {
+          val withoutBlockLocations = fileIndex.
+            listLeafFiles(Seq(new Path(partitionDirectory.getPath)))
+
+          assert(withBlockLocations.size == withoutBlockLocations.size)
+          assert(withBlockLocations.forall(b => b.isInstanceOf[LocatedFileStatus] &&
+            b.asInstanceOf[LocatedFileStatus].getBlockLocations.nonEmpty))
+          assert(withoutBlockLocations.forall(b => b.isInstanceOf[FileStatus] &&
+            !b.isInstanceOf[LocatedFileStatus]))
+          assert(withoutBlockLocations.forall(withBlockLocations.contains))
+        }
+      }
+    }
+  }
+}
+
+object DeletionRaceFileSystem {
+  val rootDirPath: Path = new Path("mockFs:///rootDir/")
+  val subDirPath: Path = new Path(rootDirPath, "subDir")
+  val leafFilePath: Path = new Path(subDirPath, "leafFile")
+  val nonDeletedLeafFilePath: Path = new Path(subDirPath, "nonDeletedLeafFile")
+  val rootListing: Array[FileStatus] =
+    Array(new FileStatus(0, true, 0, 0, 0, subDirPath))
+  val subFolderListing: Array[FileStatus] =
+    Array(
+      new FileStatus(0, false, 0, 100, 0, leafFilePath),
+      new FileStatus(0, false, 0, 100, 0, nonDeletedLeafFilePath))
+}
+
+// Used in SPARK-27676 test to simulate a race where a subdirectory is deleted
+// between back-to-back listing calls.
+class SubdirectoryDeletionRaceFileSystem extends RawLocalFileSystem {
+  import DeletionRaceFileSystem._
+
+  override def getScheme: String = "mockFs"
+
+  override def listStatus(path: Path): Array[FileStatus] = {
+    if (path == rootDirPath) {
+      rootListing
+    } else if (path == subDirPath) {
+      throw new FileNotFoundException(subDirPath.toString)
+    } else {
+      throw new IllegalArgumentException()
+    }
+  }
+}
+
+// Used in SPARK-27676 test to simulate a race where a file is deleted between
+// being listed and having its size / file status checked.
+class FileDeletionRaceFileSystem extends RawLocalFileSystem {
+  import DeletionRaceFileSystem._
+
+  override def getScheme: String = "mockFs"
+
+  override def listStatus(path: Path): Array[FileStatus] = {
+    if (path == rootDirPath) {
+      rootListing
+    } else if (path == subDirPath) {
+      subFolderListing
+    } else {
+      throw new IllegalArgumentException()
+    }
+  }
+
+  override def getFileBlockLocations(
+      file: FileStatus,
+      start: Long,
+      len: Long): Array[BlockLocation] = {
+    if (file.getPath == leafFilePath) {
+      throw new FileNotFoundException(leafFilePath.toString)
+    } else {
+      Array.empty
+    }
+  }
 }
 
 class FakeParentPathFileSystem extends RawLocalFileSystem {

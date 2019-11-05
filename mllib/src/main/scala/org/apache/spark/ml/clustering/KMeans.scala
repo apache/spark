@@ -21,8 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
@@ -32,8 +31,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -139,7 +137,8 @@ class KMeansModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
+  @Since("3.0.0")
+  def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
@@ -360,7 +359,6 @@ object KMeans extends DefaultParamsReadable[KMeans] {
 }
 
 /**
- * :: Experimental ::
  * Summary of KMeans.
  *
  * @param predictions  `DataFrame` produced by `KMeansModel.transform()`.
@@ -372,7 +370,6 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  *                     points in the training dataset). This is equivalent to sklearn's inertia.
  */
 @Since("2.0.0")
-@Experimental
 class KMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,

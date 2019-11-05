@@ -23,14 +23,12 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.write.{DataWriter, DataWriterFactory}
 import org.apache.spark.sql.execution.datasources.{DynamicPartitionDataWriter, SingleDirectoryDataWriter, WriteJobDescription}
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory}
-import org.apache.spark.util.SerializableConfiguration
 
 case class FileWriterFactory (
     description: WriteJobDescription,
-    committer: FileCommitProtocol,
-    conf: SerializableConfiguration) extends DataWriterFactory {
+    committer: FileCommitProtocol) extends DataWriterFactory {
   override def createWriter(partitionId: Int, realTaskId: Long): DataWriter[InternalRow] = {
     val taskAttemptContext = createTaskAttemptContext(partitionId)
     committer.setupTask(taskAttemptContext)
@@ -46,7 +44,7 @@ case class FileWriterFactory (
     val taskId = new TaskID(jobId, TaskType.MAP, partitionId)
     val taskAttemptId = new TaskAttemptID(taskId, 0)
     // Set up the configuration object
-    val hadoopConf = conf.value
+    val hadoopConf = description.serializableHadoopConf.value
     hadoopConf.set("mapreduce.job.id", jobId.toString)
     hadoopConf.set("mapreduce.task.id", taskId.toString)
     hadoopConf.set("mapreduce.task.attempt.id", taskAttemptId.toString)

@@ -17,10 +17,10 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream, OutputStreamWriter}
+import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
-import java.nio.charset.StandardCharsets
 import java.util.Arrays
+import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -84,7 +84,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   @GuardedBy("self")
   private val idleWorkers = new mutable.Queue[Socket]()
   @GuardedBy("self")
-  private var lastActivity = 0L
+  private var lastActivityNs = 0L
   new MonitorThread().start()
 
   @GuardedBy("self")
@@ -189,7 +189,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     null
   }
 
-  private def startDaemon() {
+  private def startDaemon(): Unit = {
     self.synchronized {
       // Is it already running?
       if (daemon != null) {
@@ -271,7 +271,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   /**
    * Redirect the given streams to our stderr in separate threads.
    */
-  private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream) {
+  private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream): Unit = {
     try {
       new RedirectThread(stdout, System.err, "stdout reader for " + pythonExec).start()
       new RedirectThread(stderr, System.err, "stderr reader for " + pythonExec).start()
@@ -288,12 +288,12 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
     setDaemon(true)
 
-    override def run() {
+    override def run(): Unit = {
       while (true) {
         self.synchronized {
-          if (lastActivity + IDLE_WORKER_TIMEOUT_MS < System.currentTimeMillis()) {
+          if (IDLE_WORKER_TIMEOUT_NS < System.nanoTime() - lastActivityNs) {
             cleanupIdleWorkers()
-            lastActivity = System.currentTimeMillis()
+            lastActivityNs = System.nanoTime()
           }
         }
         Thread.sleep(10000)
@@ -301,7 +301,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  private def cleanupIdleWorkers() {
+  private def cleanupIdleWorkers(): Unit = {
     while (idleWorkers.nonEmpty) {
       val worker = idleWorkers.dequeue()
       try {
@@ -314,7 +314,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  private def stopDaemon() {
+  private def stopDaemon(): Unit = {
     self.synchronized {
       if (useDaemon) {
         cleanupIdleWorkers()
@@ -332,11 +332,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  def stop() {
+  def stop(): Unit = {
     stopDaemon()
   }
 
-  def stopWorker(worker: Socket) {
+  def stopWorker(worker: Socket): Unit = {
     self.synchronized {
       if (useDaemon) {
         if (daemon != null) {
@@ -355,10 +355,10 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     worker.close()
   }
 
-  def releaseWorker(worker: Socket) {
+  def releaseWorker(worker: Socket): Unit = {
     if (useDaemon) {
       self.synchronized {
-        lastActivity = System.currentTimeMillis()
+        lastActivityNs = System.nanoTime()
         idleWorkers.enqueue(worker)
       }
     } else {
@@ -375,5 +375,5 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
 private object PythonWorkerFactory {
   val PROCESS_WAIT_TIMEOUT_MS = 10000
-  val IDLE_WORKER_TIMEOUT_MS = 60000  // kill idle workers after 1 minute
+  val IDLE_WORKER_TIMEOUT_NS = TimeUnit.MINUTES.toNanos(1)  // kill idle workers after 1 minute
 }

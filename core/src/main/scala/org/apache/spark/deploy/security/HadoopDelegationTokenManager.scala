@@ -26,7 +26,6 @@ import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
@@ -35,6 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
+import org.apache.spark.security.HadoopDelegationTokenProvider
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -136,13 +136,35 @@ private[spark] class HadoopDelegationTokenManager(
 
   /**
    * Fetch new delegation tokens for configured services, storing them in the given credentials.
-   * Tokens are fetched for the current logged in user.
    *
    * @param creds Credentials object where to store the delegation tokens.
-   * @return The time by which the tokens must be renewed.
    */
-  def obtainDelegationTokens(creds: Credentials): Long = {
-    delegationTokenProviders.values.flatMap { provider =>
+  def obtainDelegationTokens(creds: Credentials): Unit = {
+    val currentUser = UserGroupInformation.getCurrentUser()
+    val hasKerberosCreds = principal != null ||
+      Option(currentUser.getRealUser()).getOrElse(currentUser).hasKerberosCredentials()
+
+    // Delegation tokens can only be obtained if the real user has Kerberos credentials, so
+    // skip creation when those are not available.
+    if (hasKerberosCreds) {
+      val freshUGI = doLogin()
+      freshUGI.doAs(new PrivilegedExceptionAction[Unit]() {
+        override def run(): Unit = {
+          val (newTokens, _) = obtainDelegationTokens()
+          creds.addAll(newTokens)
+        }
+      })
+    }
+  }
+
+  /**
+   * Fetch new delegation tokens for configured services.
+   *
+   * @return 2-tuple (credentials with new tokens, time by which the tokens must be renewed)
+   */
+  private def obtainDelegationTokens(): (Credentials, Long) = {
+    val creds = new Credentials()
+    val nextRenewal = delegationTokenProviders.values.flatMap { provider =>
       if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
         provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
       } else {
@@ -151,6 +173,7 @@ private[spark] class HadoopDelegationTokenManager(
         None
       }
     }.foldLeft(Long.MaxValue)(math.min)
+    (creds, nextRenewal)
   }
 
   // Visible for testing.
@@ -228,8 +251,7 @@ private[spark] class HadoopDelegationTokenManager(
   private def obtainTokensAndScheduleRenewal(ugi: UserGroupInformation): Credentials = {
     ugi.doAs(new PrivilegedExceptionAction[Credentials]() {
       override def run(): Credentials = {
-        val creds = new Credentials()
-        val nextRenewal = obtainDelegationTokens(creds)
+        val (creds, nextRenewal) = obtainDelegationTokens()
 
         // Calculate the time when new credentials should be created, based on the configured
         // ratio.
@@ -249,12 +271,14 @@ private[spark] class HadoopDelegationTokenManager(
       val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
       logInfo("Successfully logged into KDC.")
       ugi
-    } else {
+    } else if (!SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser())) {
       logInfo(s"Attempting to load user's ticket cache.")
       val ccache = sparkConf.getenv("KRB5CCNAME")
       val user = Option(sparkConf.getenv("KRB5PRINCIPAL")).getOrElse(
         UserGroupInformation.getCurrentUser().getUserName())
       UserGroupInformation.getUGIFromTicketCache(ccache, user)
+    } else {
+      UserGroupInformation.getCurrentUser()
     }
   }
 

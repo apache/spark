@@ -77,7 +77,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("simple groupByKey") {
     sc = new SparkContext(clusterUrl, "test")
-    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 5)
+    val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)), 5)
     val groups = pairs.groupByKey(5).collect()
     assert(groups.size === 2)
     val valuesFor1 = groups.find(_._1 == 1).get._2
@@ -322,9 +322,9 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val data = sc.parallelize(Seq(true, false, false, false), 4)
     data.persist(StorageLevel.MEMORY_ONLY_2)
     data.count
-    assert(sc.persistentRdds.isEmpty === false)
+    assert(sc.persistentRdds.nonEmpty)
     data.unpersist(blocking = true)
-    assert(sc.persistentRdds.isEmpty === true)
+    assert(sc.persistentRdds.isEmpty)
 
     failAfter(Span(3000, Millis)) {
       try {
@@ -337,6 +337,21 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
           // is racing this thread to remove entries from the driver.
       }
     }
+  }
+
+  test("reference partitions inside a task") {
+    // Run a simple job which just makes sure there is no failure if we touch rdd.partitions
+    // inside a task.  This requires the stateLock to be serializable.  This is very convoluted
+    // use case, it's just a check for backwards-compatibility after the fix for SPARK-28917.
+    sc = new SparkContext("local-cluster[1,1,1024]", "test")
+    val rdd1 = sc.parallelize(1 to 10, 1)
+    val rdd2 = rdd1.map { x => x + 1}
+    // ensure we can force computation of rdd2.dependencies inside a task.  Just touching
+    // it will force computation and touching the stateLock.  The check for null is to just
+    // to make sure that we've setup our test correctly, and haven't precomputed dependencies
+    // in the driver
+    val dependencyComputeCount = rdd1.map { x => if (rdd2.dependencies == null) 1 else 0}.sum()
+    assert(dependencyComputeCount > 0)
   }
 
 }

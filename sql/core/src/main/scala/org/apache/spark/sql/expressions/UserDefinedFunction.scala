@@ -100,14 +100,16 @@ private[sql] case class SparkUserDefinedFunction(
 
   private[sql] def createScalaUDF(exprs: Seq[Expression]): ScalaUDF = {
     // It's possible that some of the inputs don't have a specific type(e.g. `Any`),  skip type
-    // check and null check for them.
+    // check.
     val inputTypes = inputSchemas.map(_.map(_.dataType).getOrElse(AnyDataType))
-    val inputsNullSafe = inputSchemas.map(_.map(_.nullable).getOrElse(true))
+    // `ScalaReflection.Schema.nullable` is false iff the type is primitive. Also `Any` is not
+    // primitive.
+    val inputsPrimitive = inputSchemas.map(_.map(!_.nullable).getOrElse(false))
     ScalaUDF(
       f,
       dataType,
       exprs,
-      inputsNullSafe,
+      inputsPrimitive,
       inputTypes,
       udfName = name,
       nullable = nullable,

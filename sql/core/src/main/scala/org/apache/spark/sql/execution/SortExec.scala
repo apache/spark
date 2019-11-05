@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.TimeUnit._
+
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
@@ -24,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -59,6 +62,14 @@ case class SortExec(
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
+  private[sql] var rowSorter: UnsafeExternalRowSorter = _
+
+  /**
+   * This method gets invoked only once for each SortExec instance to initialize an
+   * UnsafeExternalRowSorter, both `plan.execute` and code generation are using it.
+   * In the code generation code path, we need to call this function outside the class so we
+   * should make it public.
+   */
   def createSorter(): UnsafeExternalRowSorter = {
     val ordering = newOrdering(sortOrder, output)
 
@@ -84,13 +95,13 @@ case class SortExec(
     }
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
-    val sorter = UnsafeExternalRowSorter.create(
+    rowSorter = UnsafeExternalRowSorter.create(
       schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
 
     if (testSpillFrequency > 0) {
-      sorter.setTestSpillFrequency(testSpillFrequency)
+      rowSorter.setTestSpillFrequency(testSpillFrequency)
     }
-    sorter
+    rowSorter
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -106,7 +117,7 @@ case class SortExec(
       // figure out how many bytes we spilled for this operator.
       val spillSizeBefore = metrics.memoryBytesSpilled
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
-      sortTime += sorter.getSortTimeNanos / 1000000
+      sortTime += NANOSECONDS.toMillis(sorter.getSortTimeNanos)
       peakMemory += sorter.getPeakMemoryUsage
       spillSize += metrics.memoryBytesSpilled - spillSizeBefore
       metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
@@ -157,7 +168,7 @@ case class SortExec(
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
        |   $addToSorterFuncName();
        |   $sortedIterator = $sorterVariable.sort();
-       |   $sortTime.add($sorterVariable.getSortTimeNanos() / 1000000);
+       |   $sortTime.add($sorterVariable.getSortTimeNanos() / $NANOS_PER_MILLIS);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
@@ -177,5 +188,18 @@ case class SortExec(
        |${row.code}
        |$sorterVariable.insertRow((UnsafeRow)${row.value});
      """.stripMargin
+  }
+
+  /**
+   * In SortExec, we overwrites cleanupResources to close UnsafeExternalRowSorter.
+   */
+  override protected[sql] def cleanupResources(): Unit = {
+    if (rowSorter != null) {
+      // There's possible for rowSorter is null here, for example, in the scenario of empty
+      // iterator in the current task, the downstream physical node(like SortMergeJoinExec) will
+      // trigger cleanupResources before rowSorter initialized in createSorter.
+      rowSorter.cleanupResources()
+    }
+    super.cleanupResources()
   }
 }

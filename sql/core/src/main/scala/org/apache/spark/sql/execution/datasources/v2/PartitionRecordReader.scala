@@ -19,23 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.hadoop.mapreduce.RecordReader
 
-import org.apache.spark.sql.sources.v2.reader.PartitionReader
+import org.apache.spark.sql.connector.read.PartitionReader
 
 class PartitionRecordReader[T](
     private[this] var rowReader: RecordReader[_, T]) extends PartitionReader[T] {
   override def next(): Boolean = rowReader.nextKeyValue()
 
   override def get(): T = rowReader.getCurrentValue
-
-  override def close(): Unit = rowReader.close()
-}
-
-class PartitionRecordReaderWithProject[X, T](
-    private[this] var rowReader: RecordReader[_, X],
-    project: X => T) extends PartitionReader[T] {
-  override def next(): Boolean = rowReader.nextKeyValue()
-
-  override def get(): T = project(rowReader.getCurrentValue)
 
   override def close(): Unit = rowReader.close()
 }

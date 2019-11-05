@@ -240,7 +240,7 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(result, correctAnswer)
   }
 
-  test("SPARK-26366: ReplaceExceptWithFilter should not transform non-detrministic") {
+  test("SPARK-26366: ReplaceExceptWithFilter should not transform non-deterministic") {
     val basePlan = LocalRelation(Seq('a.int, 'b.int))
     val otherPlan = basePlan.where('a > rand(1L))
     val except = Except(basePlan, otherPlan, false)

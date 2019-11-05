@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import org.apache.log4j.{Appender, AppenderSkeleton, Logger}
+import org.apache.log4j.AppenderSkeleton
 import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.SparkFunSuite
@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -189,36 +190,42 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-17702: split wide constructor into blocks due to JVM code size limit") {
-    val length = 5000
-    val expressions = Seq.fill(length) {
-      ToUTCTimestamp(
-        Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
-        Literal.create("PST", StringType))
-    }
-    val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
-    val expected = Seq.fill(length)(
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      val length = 5000
+      val expressions = Seq.fill(length) {
+        ToUTCTimestamp(
+          Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
+          Literal.create("PST", StringType))
+      }
+      val plan = GenerateMutableProjection.generate(expressions)
+      val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+      val expected = Seq.fill(length)(
+        DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
 
-    if (actual != expected) {
-      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+      if (actual != expected) {
+        fail(
+          s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+      }
     }
   }
 
   test("SPARK-22226: group splitted expressions into one method per nested class") {
-    val length = 10000
-    val expressions = Seq.fill(length) {
-      ToUTCTimestamp(
-        Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
-        Literal.create("PST", StringType))
-    }
-    val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
-    val expected = Seq.fill(length)(
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2017-10-10 07:00:00")))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      val length = 10000
+      val expressions = Seq.fill(length) {
+        ToUTCTimestamp(
+          Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
+          Literal.create("PST", StringType))
+      }
+      val plan = GenerateMutableProjection.generate(expressions)
+      val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+      val expected = Seq.fill(length)(
+        DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2017-10-10 07:00:00")))
 
-    if (actual != expected) {
-      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+      if (actual != expected) {
+        fail(
+          s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+      }
     }
   }
 
@@ -338,7 +345,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("should not apply common subexpression elimination on conditional expressions") {
     val row = InternalRow(null)
     val bound = BoundReference(0, IntegerType, true)
-    val assertNotNull = AssertNotNull(bound, Nil)
+    val assertNotNull = AssertNotNull(bound)
     val expr = If(IsNull(bound), Literal(1), Add(assertNotNull, assertNotNull))
     val projection = GenerateUnsafeProjection.generate(
       Seq(expr), subexpressionEliminationEnabled = true)
@@ -424,7 +431,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx1.inlinedMutableStates.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
     // When the number of primitive type mutable states is over the threshold, others are
     // allocated into an array
-    assert(ctx1.arrayCompactedMutableStates.get(CodeGenerator.JAVA_INT).get.arrayNames.size == 1)
+    assert(ctx1.arrayCompactedMutableStates(CodeGenerator.JAVA_INT).arrayNames.size == 1)
     assert(ctx1.mutableStateInitCode.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10)
 
     val ctx2 = new CodegenContext
@@ -434,7 +441,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     // When the number of non-primitive type mutable states is over the threshold, others are
     // allocated into a new array
     assert(ctx2.inlinedMutableStates.isEmpty)
-    assert(ctx2.arrayCompactedMutableStates.get("InternalRow[]").get.arrayNames.size == 2)
+    assert(ctx2.arrayCompactedMutableStates("InternalRow[]").arrayNames.size == 2)
     assert(ctx2.arrayCompactedMutableStates("InternalRow[]").getCurrentIndex == 10)
     assert(ctx2.mutableStateInitCode.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
   }
@@ -529,7 +536,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     val appender = new MockAppender()
-    withLogAppender(appender) {
+    withLogAppender(appender, loggerName = Some(classOf[CodeGenerator[_, _]].getName)) {
       val x = 42
       val expr = HugeCodeIntExpression(x)
       val proj = GenerateUnsafeProjection.generate(Seq(expr))
@@ -539,13 +546,16 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(appender.seenMessage)
   }
 
-  private def withLogAppender(appender: Appender)(f: => Unit): Unit = {
-    val logger =
-      Logger.getLogger(classOf[CodeGenerator[_, _]].getName)
-    logger.addAppender(appender)
-    try f finally {
-      logger.removeAppender(appender)
-    }
+  test("SPARK-28916: subexrepssion elimination can cause 64kb code limit on UnsafeProjection") {
+    val numOfExprs = 10000
+    val exprs = (0 to numOfExprs).flatMap(colIndex =>
+      Seq(Add(BoundReference(colIndex, DoubleType, true),
+        BoundReference(numOfExprs + colIndex, DoubleType, true)),
+        Add(BoundReference(colIndex, DoubleType, true),
+          BoundReference(numOfExprs + colIndex, DoubleType, true))))
+    // these should not fail to compile due to 64K limit
+    GenerateUnsafeProjection.generate(exprs, true)
+    GenerateMutableProjection.generate(exprs, true)
   }
 }
 

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -65,7 +65,7 @@ abstract class StringRegexExpression extends BinaryExpression
   override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
-
+// scalastyle:off line.contains.tab
 /**
  * Simple RegEx pattern matching function
  */
@@ -96,12 +96,20 @@ abstract class StringRegexExpression extends BinaryExpression
   """,
   examples = """
     Examples:
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
+      > SET spark.sql.parser.escapedStringLiterals=true;
+      spark.sql.parser.escapedStringLiterals	true
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%';
+      true
+      > SET spark.sql.parser.escapedStringLiterals=false;
+      spark.sql.parser.escapedStringLiterals	false
+      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '\%SystemDrive\%\\\\Users%';
       true
   """,
   note = """
     Use RLIKE to match with standard regular expressions.
-  """)
+  """,
+  since = "1.0.0")
+// scalastyle:on line.contains.tab
 case class Like(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
@@ -152,6 +160,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   }
 }
 
+// scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.",
   arguments = """
@@ -169,17 +178,20 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
   """,
   examples = """
     Examples:
-      When spark.sql.parser.escapedStringLiterals is disabled (default).
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'
+      > SET spark.sql.parser.escapedStringLiterals=true;
+      spark.sql.parser.escapedStringLiterals	true
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*';
       true
-
-      When spark.sql.parser.escapedStringLiterals is enabled.
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\Users.*'
+      > SET spark.sql.parser.escapedStringLiterals=false;
+      spark.sql.parser.escapedStringLiterals	false
+      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '%SystemDrive%\\\\Users.*';
       true
   """,
   note = """
     Use LIKE to match with simple string pattern.
-  """)
+  """,
+  since = "1.0.0")
+// scalastyle:on line.contains.tab
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v
@@ -254,7 +266,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
        ["one","two","three",""]
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', 2);
        ["one","twoBthreeC"]
-  """)
+  """,
+  since = "1.5.0")
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -294,7 +307,8 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)', 'num');
        num-num
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -393,7 +407,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     Examples:
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
        100
-  """)
+  """,
+  since = "1.5.0")
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))

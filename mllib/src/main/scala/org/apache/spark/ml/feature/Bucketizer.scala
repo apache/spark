@@ -19,10 +19,6 @@ package org.apache.spark.ml.feature
 
 import java.{util => ju}
 
-import org.json4s.JsonDSL._
-import org.json4s.JValue
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Model
@@ -198,7 +194,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     if (isSet(inputCols)) {
       require(getInputCols.length == getOutputCols.length &&
         getInputCols.length == getSplitsArray.length, s"Bucketizer $this has mismatched Params " +
-        s"for multi-column transform.  Params (inputCols, outputCols, splitsArray) should have " +
+        s"for multi-column transform. Params (inputCols, outputCols, splitsArray) should have " +
         s"equal lengths, but they have different lengths: " +
         s"(${getInputCols.length}, ${getOutputCols.length}, ${getSplitsArray.length}).")
 
@@ -287,7 +283,7 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
         val insertPos = -idx - 1
         if (insertPos == 0 || insertPos == splits.length) {
           throw new SparkException(s"Feature value $feature out of Bucketizer bounds" +
-            s" [${splits.head}, ${splits.last}].  Check your features, or loosen " +
+            s" [${splits.head}, ${splits.last}]. Check your features, or loosen " +
             s"the lower/upper bound constraints.")
         } else {
           insertPos - 1

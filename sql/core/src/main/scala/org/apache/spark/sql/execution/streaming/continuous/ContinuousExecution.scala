@@ -19,22 +19,21 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import java.util.function.UnaryOperator
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, Offset => OffsetV2, PartitionOffset}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
-import org.apache.spark.sql.sources.v2
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamingWriteSupportProvider, SupportsContinuousRead}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
-import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.util.Clock
 
 class ContinuousExecution(
@@ -42,7 +41,7 @@ class ContinuousExecution(
     name: String,
     checkpointRoot: String,
     analyzedPlan: LogicalPlan,
-    sink: StreamingWriteSupportProvider,
+    sink: SupportsWrite,
     trigger: Trigger,
     triggerClock: Clock,
     outputMode: OutputMode,
@@ -57,26 +56,29 @@ class ContinuousExecution(
   // For use only in test harnesses.
   private[sql] var currentEpochCoordinatorId: String = _
 
-  override val logicalPlan: LogicalPlan = {
+  // Throwable that caused the execution to fail
+  private val failure: AtomicReference[Throwable] = new AtomicReference[Throwable](null)
+
+  override val logicalPlan: WriteToContinuousDataSource = {
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
     var nextSourceId = 0
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
-      case s @ StreamingRelationV2(
-          ds, dsName, table: SupportsContinuousRead, options, output, _) =>
+      case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output, _) =>
+        if (!table.supports(TableCapability.CONTINUOUS_READ)) {
+          throw new UnsupportedOperationException(
+            s"Data source $sourceName does not support continuous processing.")
+        }
+
         v2ToRelationMap.getOrElseUpdate(s, {
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           nextSourceId += 1
-          logInfo(s"Reading table [$table] from DataSourceV2 named '$dsName' [$ds]")
-          val dsOptions = new DataSourceOptions(options.asJava)
+          logInfo(s"Reading table [$table] from DataSourceV2 named '$sourceName' [$ds]")
           // TODO: operator pushdown.
-          val scan = table.newScanBuilder(dsOptions).build()
+          val scan = table.newScanBuilder(options).build()
           val stream = scan.toContinuousStream(metadataPath)
           StreamingDataSourceV2Relation(output, scan, stream)
         })
-
-      case StreamingRelationV2(_, sourceName, _, _, _, _) =>
-        throw new UnsupportedOperationException(
-          s"Data source $sourceName does not support continuous processing.")
     }
 
     sources = _logicalPlan.collect {
@@ -84,11 +86,13 @@ class ContinuousExecution(
     }
     uniqueSources = sources.distinct
 
-    _logicalPlan
+    // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
+    WriteToContinuousDataSource(
+      createStreamingWrite(sink, extraOptions, _logicalPlan), _logicalPlan)
   }
 
   private val triggerExecutor = trigger match {
-    case ContinuousTrigger(t) => ProcessingTimeExecutor(ProcessingTime(t), triggerClock)
+    case ContinuousTrigger(t) => ProcessingTimeExecutor(ProcessingTimeTrigger(t), triggerClock)
     case _ => throw new IllegalStateException(s"Unsupported type of trigger: $trigger")
   }
 
@@ -174,17 +178,10 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    val writer = sink.createStreamingWriteSupport(
-      s"$runId",
-      withNewSources.schema,
-      outputMode,
-      new DataSourceOptions(extraOptions.asJava))
-    val planWithSink = WriteToContinuousDataSource(writer, withNewSources)
-
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
         sparkSessionForQuery,
-        planWithSink,
+        withNewSources,
         outputMode,
         checkpointFile("state"),
         id,
@@ -194,7 +191,7 @@ class ContinuousExecution(
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
-    val stream = planWithSink.collect {
+    val stream = withNewSources.collect {
       case relation: StreamingDataSourceV2Relation =>
         relation.stream.asInstanceOf[ContinuousStream]
     }.head
@@ -214,9 +211,14 @@ class ContinuousExecution(
       trigger.asInstanceOf[ContinuousTrigger].intervalMs.toString)
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
-    val epochEndpoint =
-      EpochCoordinatorRef.create(
-        writer, stream, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
+    val epochEndpoint = EpochCoordinatorRef.create(
+      logicalPlan.write,
+      stream,
+      this,
+      epochCoordinatorId,
+      currentBatchId,
+      sparkSession,
+      SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {
@@ -250,13 +252,14 @@ class ContinuousExecution(
 
       updateStatusMessage("Running")
       reportTimeTaken("runContinuous") {
-        SQLExecution.withNewExecutionId(
-          sparkSessionForQuery, lastExecution) {
-          // Materialize `executedPlan` so that accessing it when `toRdd` is running doesn't need to
-          // wait for a lock
-          lastExecution.executedPlan
-          lastExecution.toRdd
+        SQLExecution.withNewExecutionId(sparkSessionForQuery, lastExecution) {
+          lastExecution.executedPlan.execute()
         }
+      }
+
+      val f = failure.get()
+      if (f != null) {
+        throw f
       }
     } catch {
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
@@ -264,13 +267,29 @@ class ContinuousExecution(
         logInfo(s"Query $id ignoring exception from reconfiguring: $t")
         // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
-      epochEndpoint.askSync[Unit](StopContinuousExecutionWrites)
-      SparkEnv.get.rpcEnv.stop(epochEndpoint)
-
-      epochUpdateThread.interrupt()
-      epochUpdateThread.join()
-
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+      // The above execution may finish before getting interrupted, for example, a Spark job having
+      // 0 partitions will complete immediately. Then the interrupted status will sneak here.
+      //
+      // To handle this case, we do the two things here:
+      //
+      // 1. Clean up the resources in `queryExecutionThread.runUninterruptibly`. This may increase
+      //    the waiting time of `stop` but should be minor because the operations here are very fast
+      //    (just sending an RPC message in the same process and stopping a very simple thread).
+      // 2. Clear the interrupted status at the end so that it won't impact the `runContinuous`
+      //    call. We may clear the interrupted status set by `stop`, but it doesn't affect the query
+      //    termination because `runActivatedStream` will check `state` and exit accordingly.
+      queryExecutionThread.runUninterruptibly {
+        try {
+          epochEndpoint.askSync[Unit](StopContinuousExecutionWrites)
+        } finally {
+          SparkEnv.get.rpcEnv.stop(epochEndpoint)
+          epochUpdateThread.interrupt()
+          epochUpdateThread.join()
+          // The following line must be the last line because it may fail if SparkContext is stopped
+          sparkSession.sparkContext.cancelJobGroup(runId.toString)
+        }
+      }
+      Thread.interrupted()
     }
   }
 
@@ -320,7 +339,7 @@ class ContinuousExecution(
         val offset =
           sources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
         committedOffsets ++= Seq(sources(0) -> offset)
-        sources(0).commit(offset.asInstanceOf[v2.reader.streaming.Offset])
+        sources(0).commit(offset.asInstanceOf[OffsetV2])
       } else {
         return
       }
@@ -332,8 +351,7 @@ class ContinuousExecution(
     // number of batches that must be retained and made recoverable, so we should keep the
     // specified number of metadata that have been committed.
     if (minLogEntriesToMaintain <= epoch) {
-      offsetLog.purge(epoch + 1 - minLogEntriesToMaintain)
-      commitLog.purge(epoch + 1 - minLogEntriesToMaintain)
+      purge(epoch + 1 - minLogEntriesToMaintain)
     }
 
     awaitProgressLock.lock()
@@ -368,6 +386,35 @@ class ContinuousExecution(
         awaitProgressLock.unlock()
       }
     }
+  }
+
+  /**
+   * Stores error and stops the query execution thread to terminate the query in new thread.
+   */
+  def stopInNewThread(error: Throwable): Unit = {
+    if (failure.compareAndSet(null, error)) {
+      logError(s"Query $prettyIdString received exception $error")
+      stopInNewThread()
+    }
+  }
+
+  /**
+   * Stops the query execution thread to terminate the query in new thread.
+   */
+  private def stopInNewThread(): Unit = {
+    new Thread("stop-continuous-execution") {
+      setDaemon(true)
+
+      override def run(): Unit = {
+        try {
+          ContinuousExecution.this.stop()
+        } catch {
+          case e: Throwable =>
+            logError(e.getMessage, e)
+            throw e
+        }
+      }
+    }.start()
   }
 
   /**

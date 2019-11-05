@@ -22,12 +22,21 @@ import time
 import unittest
 import warnings
 
-from pyspark.sql import Row
+from pyspark import SparkContext, SparkConf
+from pyspark.sql import Row, SparkSession
+from pyspark.sql.functions import udf
 from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
 from pyspark.util import _exception_message
+
+if have_pandas:
+    import pandas as pd
+    from pandas.util.testing import assert_frame_equal
+
+if have_pyarrow:
+    import pyarrow as pa
 
 
 @unittest.skipIf(
@@ -39,8 +48,6 @@ class ArrowTests(ReusedSQLTestCase):
     def setUpClass(cls):
         from datetime import date, datetime
         from decimal import Decimal
-        from distutils.version import LooseVersion
-        import pyarrow as pa
         super(ArrowTests, cls).setUpClass()
         cls.warnings_lock = threading.Lock()
 
@@ -51,9 +58,23 @@ class ArrowTests(ReusedSQLTestCase):
         time.tzset()
 
         cls.spark.conf.set("spark.sql.session.timeZone", tz)
+
+        # Test fallback
+        cls.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
+        assert cls.spark.conf.get("spark.sql.execution.arrow.pyspark.enabled") == "false"
         cls.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
-        # Disable fallback by default to easily detect the failures.
+        assert cls.spark.conf.get("spark.sql.execution.arrow.pyspark.enabled") == "true"
+
+        cls.spark.conf.set("spark.sql.execution.arrow.fallback.enabled", "true")
+        assert cls.spark.conf.get("spark.sql.execution.arrow.pyspark.fallback.enabled") == "true"
         cls.spark.conf.set("spark.sql.execution.arrow.fallback.enabled", "false")
+        assert cls.spark.conf.get("spark.sql.execution.arrow.pyspark.fallback.enabled") == "false"
+
+        # Enable Arrow optimization in this tests.
+        cls.spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+        # Disable fallback by default to easily detect the failures.
+        cls.spark.conf.set("spark.sql.execution.arrow.pyspark.fallback.enabled", "false")
+
         cls.schema = StructType([
             StructField("1_str_t", StringType(), True),
             StructField("2_int_t", IntegerType(), True),
@@ -62,20 +83,16 @@ class ArrowTests(ReusedSQLTestCase):
             StructField("5_double_t", DoubleType(), True),
             StructField("6_decimal_t", DecimalType(38, 18), True),
             StructField("7_date_t", DateType(), True),
-            StructField("8_timestamp_t", TimestampType(), True)])
+            StructField("8_timestamp_t", TimestampType(), True),
+            StructField("9_binary_t", BinaryType(), True)])
         cls.data = [(u"a", 1, 10, 0.2, 2.0, Decimal("2.0"),
-                     date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+                     date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1), bytearray(b"a")),
                     (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
-                     date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                     date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2), bytearray(b"bb")),
                     (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
-                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
-
-        # TODO: remove version check once minimum pyarrow version is 0.10.0
-        if LooseVersion("0.10.0") <= LooseVersion(pa.__version__):
-            cls.schema.add(StructField("9_binary_t", BinaryType(), True))
-            cls.data[0] = cls.data[0] + (bytearray(b"a"),)
-            cls.data[1] = cls.data[1] + (bytearray(b"bb"),)
-            cls.data[2] = cls.data[2] + (bytearray(b"ccc"),)
+                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3), bytearray(b"ccc")),
+                    (u"d", 4, 40, 1.0, 8.0, Decimal("8.0"),
+                     date(2262, 4, 12), datetime(2262, 3, 3, 3, 3, 3), bytearray(b"dddd"))]
 
     @classmethod
     def tearDownClass(cls):
@@ -86,7 +103,6 @@ class ArrowTests(ReusedSQLTestCase):
         super(ArrowTests, cls).tearDownClass()
 
     def create_pandas_data_frame(self):
-        import pandas as pd
         import numpy as np
         data_dict = {}
         for j, name in enumerate(self.schema.names):
@@ -97,9 +113,7 @@ class ArrowTests(ReusedSQLTestCase):
         return pd.DataFrame(data=data_dict)
 
     def test_toPandas_fallback_enabled(self):
-        import pandas as pd
-
-        with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": True}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
             schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
             df = self.spark.createDataFrame([({u'a': 1},)], schema=schema)
             with QuietTest(self.sc):
@@ -114,25 +128,14 @@ class ArrowTests(ReusedSQLTestCase):
                         self.assertTrue(len(user_warns) > 0)
                         self.assertTrue(
                             "Attempting non-optimization" in _exception_message(user_warns[-1]))
-                        self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
+                        assert_frame_equal(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
-        from distutils.version import LooseVersion
-        import pyarrow as pa
-
         schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
                 with self.assertRaisesRegexp(Exception, 'Unsupported type'):
-                    df.toPandas()
-
-        # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            schema = StructType([StructField("binary", BinaryType(), True)])
-            df = self.spark.createDataFrame([(None,)], schema=schema)
-            with QuietTest(self.sc):
-                with self.assertRaisesRegexp(Exception, 'Unsupported type.*BinaryType'):
                     df.toPandas()
 
     def test_null_conversion(self):
@@ -143,7 +146,7 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertTrue(all([c == 1 for c in null_counts]))
 
     def _toPandas_arrow_toggle(self, df):
-        with self.sql_conf({"spark.sql.execution.arrow.enabled": False}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             pdf = df.toPandas()
 
         pdf_arrow = df.toPandas()
@@ -154,8 +157,8 @@ class ArrowTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
         expected = self.create_pandas_data_frame()
-        self.assertPandasEqual(expected, pdf)
-        self.assertPandasEqual(expected, pdf_arrow)
+        assert_frame_equal(expected, pdf)
+        assert_frame_equal(expected, pdf_arrow)
 
     def test_toPandas_respect_session_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
@@ -165,13 +168,13 @@ class ArrowTests(ReusedSQLTestCase):
                 "spark.sql.execution.pandas.respectSessionTimeZone": False,
                 "spark.sql.session.timeZone": timezone}):
             pdf_la, pdf_arrow_la = self._toPandas_arrow_toggle(df)
-            self.assertPandasEqual(pdf_arrow_la, pdf_la)
+            assert_frame_equal(pdf_arrow_la, pdf_la)
 
         with self.sql_conf({
                 "spark.sql.execution.pandas.respectSessionTimeZone": True,
                 "spark.sql.session.timeZone": timezone}):
             pdf_ny, pdf_arrow_ny = self._toPandas_arrow_toggle(df)
-            self.assertPandasEqual(pdf_arrow_ny, pdf_ny)
+            assert_frame_equal(pdf_arrow_ny, pdf_ny)
 
             self.assertFalse(pdf_ny.equals(pdf_la))
 
@@ -181,13 +184,13 @@ class ArrowTests(ReusedSQLTestCase):
                 if isinstance(field.dataType, TimestampType):
                     pdf_la_corrected[field.name] = _check_series_convert_timestamps_local_tz(
                         pdf_la_corrected[field.name], timezone)
-            self.assertPandasEqual(pdf_ny, pdf_la_corrected)
+            assert_frame_equal(pdf_ny, pdf_la_corrected)
 
     def test_pandas_round_trip(self):
         pdf = self.create_pandas_data_frame()
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf_arrow = df.toPandas()
-        self.assertPandasEqual(pdf_arrow, pdf)
+        assert_frame_equal(pdf_arrow, pdf)
 
     def test_filtered_frame(self):
         df = self.spark.range(3).toDF("i")
@@ -196,8 +199,27 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf.columns[0], "i")
         self.assertTrue(pdf.empty)
 
+    def test_no_partition_frame(self):
+        schema = StructType([StructField("field1", StringType(), True)])
+        df = self.spark.createDataFrame(self.sc.emptyRDD(), schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf.columns), 1)
+        self.assertEqual(pdf.columns[0], "field1")
+        self.assertTrue(pdf.empty)
+
+    def test_propagates_spark_exception(self):
+        df = self.spark.range(3).toDF("i")
+
+        def raise_exception():
+            raise Exception("My error")
+        exception_udf = udf(raise_exception, IntegerType())
+        df = df.withColumn("error", exception_udf())
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, 'My error'):
+                df.toPandas()
+
     def _createDataFrame_toggle(self, pdf, schema=None):
-        with self.sql_conf({"spark.sql.execution.arrow.enabled": False}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             df_no_arrow = self.spark.createDataFrame(pdf, schema=schema)
 
         df_arrow = self.spark.createDataFrame(pdf, schema=schema)
@@ -242,15 +264,15 @@ class ArrowTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(pdf, schema=self.schema)
         self.assertEquals(self.schema, df.schema)
         pdf_arrow = df.toPandas()
-        self.assertPandasEqual(pdf_arrow, pdf)
+        assert_frame_equal(pdf_arrow, pdf)
 
     def test_createDataFrame_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
         fields = list(self.schema)
-        fields[0], fields[7] = fields[7], fields[0]  # swap str with timestamp
+        fields[0], fields[1] = fields[1], fields[0]  # swap str with int
         wrong_schema = StructType(fields)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, ".*cast.*[s|S]tring.*timestamp.*"):
+            with self.assertRaisesRegexp(Exception, "integer.*required"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
@@ -264,7 +286,6 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEquals(df.schema.fieldNames(), new_names)
 
     def test_createDataFrame_column_name_encoding(self):
-        import pandas as pd
         pdf = pd.DataFrame({u'a': [1]})
         columns = self.spark.createDataFrame(pdf).columns
         self.assertTrue(isinstance(columns[0], str))
@@ -274,13 +295,11 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEquals(columns[0], 'b')
 
     def test_createDataFrame_with_single_data_type(self):
-        import pandas as pd
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(ValueError, ".*IntegerType.*not supported.*"):
                 self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
 
     def test_createDataFrame_does_not_modify_input(self):
-        import pandas as pd
         # Some series get converted for Spark to consume, this makes sure input is unchanged
         pdf = self.create_pandas_data_frame()
         # Use a nanosecond value to make sure it is not truncated
@@ -298,7 +317,6 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEquals(self.schema, schema_rt)
 
     def test_createDataFrame_with_array_type(self):
-        import pandas as pd
         pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [[u"x", u"y"], [u"y", u"z"]]})
         df, df_arrow = self._createDataFrame_toggle(pdf)
         result = df.collect()
@@ -324,7 +342,6 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_with_int_col_names(self):
         import numpy as np
-        import pandas as pd
         pdf = pd.DataFrame(np.random.rand(4, 2))
         df, df_arrow = self._createDataFrame_toggle(pdf)
         pdf_col_names = [str(c) for c in pdf.columns]
@@ -332,10 +349,8 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf_col_names, df_arrow.columns)
 
     def test_createDataFrame_fallback_enabled(self):
-        import pandas as pd
-
         with QuietTest(self.sc):
-            with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": True}):
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
                 with warnings.catch_warnings(record=True) as warns:
                     # we want the warnings to appear even if this test is run from a subclass
                     warnings.simplefilter("always")
@@ -350,25 +365,13 @@ class ArrowTests(ReusedSQLTestCase):
                     self.assertEqual(df.collect(), [Row(a={u'a': 1})])
 
     def test_createDataFrame_fallback_disabled(self):
-        from distutils.version import LooseVersion
-        import pandas as pd
-        import pyarrow as pa
-
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
                     pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
 
-        # TODO: remove BinaryType check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            with QuietTest(self.sc):
-                with self.assertRaisesRegexp(TypeError, 'Unsupported type.*BinaryType'):
-                    self.spark.createDataFrame(
-                        pd.DataFrame([[{'a': b'aaa'}]]), "a: binary")
-
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
-        import pandas as pd
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
         dt = [datetime.datetime(2015, 11, 1, 0, 30),
               datetime.datetime(2015, 11, 1, 1, 30),
@@ -378,8 +381,17 @@ class ArrowTests(ReusedSQLTestCase):
         df_from_python = self.spark.createDataFrame(dt, 'timestamp').toDF('time')
         df_from_pandas = self.spark.createDataFrame(pdf)
 
-        self.assertPandasEqual(pdf, df_from_python.toPandas())
-        self.assertPandasEqual(pdf, df_from_pandas.toPandas())
+        assert_frame_equal(pdf, df_from_python.toPandas())
+        assert_frame_equal(pdf, df_from_pandas.toPandas())
+
+    # Regression test for SPARK-28003
+    def test_timestamp_nat(self):
+        dt = [pd.NaT, pd.Timestamp('2019-06-11'), None] * 100
+        pdf = pd.DataFrame({'time': dt})
+        df_no_arrow, df_arrow = self._createDataFrame_toggle(pdf)
+
+        assert_frame_equal(pdf, df_no_arrow.toPandas())
+        assert_frame_equal(pdf, df_arrow.toPandas())
 
     def test_toPandas_batch_order(self):
 
@@ -395,7 +407,7 @@ class ArrowTests(ReusedSQLTestCase):
                 df = df.rdd.mapPartitionsWithIndex(delay_first_part).toDF()
             with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": max_records}):
                 pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
-                self.assertPandasEqual(pdf, pdf_arrow)
+                assert_frame_equal(pdf, pdf_arrow)
 
         cases = [
             (1024, 512, 2),    # Use large num partitions for more likely collecting out of order
@@ -410,6 +422,32 @@ class ArrowTests(ReusedSQLTestCase):
             run_test(*case)
 
 
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message)
+class MaxResultArrowTests(unittest.TestCase):
+    # These tests are separate as 'spark.driver.maxResultSize' configuration
+    # is a static configuration to Spark context.
+
+    @classmethod
+    def setUpClass(cls):
+        cls.spark = SparkSession(SparkContext(
+            'local[4]', cls.__name__, conf=SparkConf().set("spark.driver.maxResultSize", "10k")))
+
+        # Explicitly enable Arrow and disable fallback.
+        cls.spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+        cls.spark.conf.set("spark.sql.execution.arrow.pyspark.fallback.enabled", "false")
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "spark"):
+            cls.spark.stop()
+
+    def test_exception_by_max_results(self):
+        with self.assertRaisesRegexp(Exception, "is bigger than"):
+            self.spark.range(0, 10000, 1, 100).toPandas()
+
+
 class EncryptionArrowTests(ArrowTests):
 
     @classmethod
@@ -422,7 +460,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

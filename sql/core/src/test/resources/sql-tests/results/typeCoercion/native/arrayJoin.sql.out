@@ -77,7 +77,7 @@ struct<array_join(array(DATE '2016-03-14', DATE '2016-03-13'), , ):string>
 -- !query 9
 SELECT array_join(array(timestamp '2016-11-15 20:54:00.000', timestamp '2016-11-12 20:54:00.000'), ', ')
 -- !query 9 schema
-struct<array_join(array(TIMESTAMP('2016-11-15 20:54:00.0'), TIMESTAMP('2016-11-12 20:54:00.0')), , ):string>
+struct<array_join(array(TIMESTAMP('2016-11-15 20:54:00'), TIMESTAMP('2016-11-12 20:54:00')), , ):string>
 -- !query 9 output
 2016-11-15 20:54:00, 2016-11-12 20:54:00
 

@@ -209,13 +209,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
           val updatedTable = inferIfNeeded(relation, options, fileFormat, Option(fileIndex))
 
+          // Spark SQL's data source table now support static and dynamic partition insert. Source
+          // table converted from Hive table should always use dynamic.
+          val enableDynamicPartition = options.updated("partitionOverwriteMode", "dynamic")
           val fsRelation = HadoopFsRelation(
             location = fileIndex,
             partitionSchema = partitionSchema,
             dataSchema = updatedTable.dataSchema,
             bucketSpec = None,
             fileFormat = fileFormat,
-            options = options)(sparkSession = sparkSession)
+            options = enableDynamicPartition)(sparkSession = sparkSession)
           val created = LogicalRelation(fsRelation, updatedTable)
           catalogProxy.cacheTable(tableIdentifier, created)
           created
@@ -326,8 +329,8 @@ private[hive] object HiveMetastoreCatalog {
     // Merge missing nullable fields to inferred schema and build a case-insensitive field map.
     val inferredFields = StructType(inferredSchema ++ missingNullables)
       .map(f => f.name.toLowerCase -> f).toMap
+    StructType(metastoreSchema.map(f => f.copy(name = inferredFields(f.name.toLowerCase).name)))
     // scalastyle:on caselocale
-    StructType(metastoreSchema.map(f => f.copy(name = inferredFields(f.name).name)))
   } catch {
     case NonFatal(_) =>
       val msg = s"""Detected conflicting schemas when merging the schema obtained from the Hive

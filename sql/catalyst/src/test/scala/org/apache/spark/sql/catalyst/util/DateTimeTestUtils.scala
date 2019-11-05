@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{LocalDate, LocalDateTime, LocalTime}
+import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
@@ -40,6 +40,7 @@ object DateTimeTestUtils {
     "Asia/Hong_Kong",
     "Europe/Amsterdam")
   val outstandingTimezones: Seq[TimeZone] = outstandingTimezonesIds.map(TimeZone.getTimeZone)
+  val outstandingZoneIds: Seq[ZoneId] = outstandingTimezonesIds.map(DateTimeUtils.getZoneId)
 
   def withDefaultTimeZone[T](newDefaultTimeZone: TimeZone)(block: => T): T = {
     val originalDefaultTimeZone = TimeZone.getDefault

@@ -2,6 +2,21 @@
 layout: global
 title: ORC Files
 displayTitle: ORC Files
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Since Spark 2.3, Spark supports a vectorized ORC reader with a new ORC file format for ORC files.
@@ -16,7 +31,7 @@ the vectorized reader is used when `spark.sql.hive.convertMetastoreOrc` is also 
   <tr>
     <td><code>spark.sql.orc.impl</code></td>
     <td><code>native</code></td>
-    <td>The name of ORC implementation. It can be one of <code>native</code> and <code>hive</code>. <code>native</code> means the native ORC support that is built on Apache ORC 1.4. `hive` means the ORC library in Hive 1.2.1.</td>
+    <td>The name of ORC implementation. It can be one of <code>native</code> and <code>hive</code>. <code>native</code> means the native ORC support. <code>hive</code> means the ORC library in Hive.</td>
   </tr>
   <tr>
     <td><code>spark.sql.orc.enableVectorizedReader</code></td>

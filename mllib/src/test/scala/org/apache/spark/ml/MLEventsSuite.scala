@@ -19,14 +19,13 @@ package org.apache.spark.ml
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar.mock
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamMap
@@ -142,7 +141,7 @@ class MLEventsSuite
 
     val expected = Seq(
       event0, event1, event2, event3, event4, event5, event6, event7, event8, event9)
-    eventually(timeout(10 seconds), interval(1 second)) {
+    eventually(timeout(10.seconds), interval(1.second)) {
       assert(events === expected)
     }
     // Test if they can be ser/de via JSON protocol.
@@ -200,7 +199,7 @@ class MLEventsSuite
     event7.output = output
 
     val expected = Seq(event0, event1, event2, event3, event4, event5, event6, event7)
-    eventually(timeout(10 seconds), interval(1 second)) {
+    eventually(timeout(10.seconds), interval(1.second)) {
       assert(events === expected)
     }
     // Test if they can be ser/de via JSON protocol.
@@ -221,7 +220,7 @@ class MLEventsSuite
       val pipelineWriter = newPipeline.write
       assert(events.isEmpty)
       pipelineWriter.save(path)
-      eventually(timeout(10 seconds), interval(1 second)) {
+      eventually(timeout(10.seconds), interval(1.second)) {
         events.foreach {
           case e: SaveInstanceStart if e.writer.isInstanceOf[DefaultParamsWriter] =>
             assert(e.path.endsWith("writableStage"))
@@ -239,23 +238,24 @@ class MLEventsSuite
       events.map(JsonProtocol.sparkEventToJson).foreach { event =>
         assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
       }
+      sc.listenerBus.waitUntilEmpty(timeoutMillis = 10000)
 
       events.clear()
       val pipelineReader = Pipeline.read
       assert(events.isEmpty)
       pipelineReader.load(path)
-      eventually(timeout(10 seconds), interval(1 second)) {
+      eventually(timeout(10.seconds), interval(1.second)) {
         events.foreach {
-          case e: LoadInstanceStart[PipelineStage]
-              if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+          case e: LoadInstanceStart[_]
+              if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.path.endsWith("writableStage"))
-          case e: LoadInstanceEnd[PipelineStage]
-              if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+          case e: LoadInstanceEnd[_]
+              if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.instance.isInstanceOf[PipelineStage])
-          case e: LoadInstanceStart[Pipeline] =>
+          case e: LoadInstanceStart[_] =>
             assert(e.reader === pipelineReader)
-          case e: LoadInstanceEnd[Pipeline] =>
-            assert(e.instance.uid === newPipeline.uid)
+          case e: LoadInstanceEnd[_] =>
+            assert(e.instance.asInstanceOf[Pipeline].uid === newPipeline.uid)
           case e => fail(s"Unexpected event thrown: $e")
         }
       }
@@ -279,7 +279,7 @@ class MLEventsSuite
       val pipelineWriter = pipelineModel.write
       assert(events.isEmpty)
       pipelineWriter.save(path)
-      eventually(timeout(10 seconds), interval(1 second)) {
+      eventually(timeout(10.seconds), interval(1.second)) {
         events.foreach {
           case e: SaveInstanceStart if e.writer.isInstanceOf[DefaultParamsWriter] =>
             assert(e.path.endsWith("writableStage"))
@@ -297,23 +297,24 @@ class MLEventsSuite
       events.map(JsonProtocol.sparkEventToJson).foreach { event =>
         assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
       }
+      sc.listenerBus.waitUntilEmpty(timeoutMillis = 10000)
 
       events.clear()
       val pipelineModelReader = PipelineModel.read
       assert(events.isEmpty)
       pipelineModelReader.load(path)
-      eventually(timeout(10 seconds), interval(1 second)) {
+      eventually(timeout(10.seconds), interval(1.second)) {
         events.foreach {
-          case e: LoadInstanceStart[PipelineStage]
-            if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+          case e: LoadInstanceStart[_]
+            if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.path.endsWith("writableStage"))
-          case e: LoadInstanceEnd[PipelineStage]
-            if e.reader.isInstanceOf[DefaultParamsReader[PipelineStage]] =>
+          case e: LoadInstanceEnd[_]
+            if e.reader.isInstanceOf[DefaultParamsReader[_]] =>
             assert(e.instance.isInstanceOf[PipelineStage])
-          case e: LoadInstanceStart[PipelineModel] =>
+          case e: LoadInstanceStart[_] =>
             assert(e.reader === pipelineModelReader)
-          case e: LoadInstanceEnd[PipelineModel] =>
-            assert(e.instance.uid === pipelineModel.uid)
+          case e: LoadInstanceEnd[_] =>
+            assert(e.instance.asInstanceOf[PipelineModel].uid === pipelineModel.uid)
           case e => fail(s"Unexpected event thrown: $e")
         }
       }

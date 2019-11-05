@@ -22,7 +22,6 @@ import java.io.File
 import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -30,10 +29,10 @@ import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeSt
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
 
-class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with SharedSQLContext {
+class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   import testImplicits._
 
   /**
@@ -277,9 +276,9 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
   }
 
   test("ShuffledHashJoin metrics") {
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "40",
-        "spark.sql.shuffle.partitions" -> "2",
-        "spark.sql.join.preferSortMergeJoin" -> "false") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key", "value")
       // Assume the execution plan is
@@ -345,10 +344,10 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
     // Assume the execution plan is
-    // ... -> BroadcastHashJoin(nodeId = 0)
+    // ... -> BroadcastHashJoin(nodeId = 1)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> (("BroadcastHashJoin", Map(
+      1L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 2L))))
     )
   }
@@ -389,7 +388,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
       data.write.format("json").save(file.getAbsolutePath)
-      sparkContext.listenerBus.waitUntilEmpty(10000)
+      sparkContext.listenerBus.waitUntilEmpty()
       val executionIds = currentExecutionIds().diff(previousExecutionIds)
       assert(executionIds.size === 1)
       val executionId = executionIds.head
@@ -437,28 +436,31 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     )
     assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
 
-    withTempDir { tempDir =>
-      val dir = new File(tempDir, "pqS").getCanonicalPath
+    // TODO: test file source V2 as well when its statistics is correctly computed.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempDir { tempDir =>
+        val dir = new File(tempDir, "pqS").getCanonicalPath
 
-      spark.range(10).write.parquet(dir)
-      spark.read.parquet(dir).createOrReplaceTempView("pqS")
+        spark.range(10).write.parquet(dir)
+        spark.read.parquet(dir).createOrReplaceTempView("pqS")
 
-      // The executed plan looks like:
-      // Exchange RoundRobinPartitioning(2)
-      // +- BroadcastNestedLoopJoin BuildLeft, Cross
-      //   :- BroadcastExchange IdentityBroadcastMode
-      //   :  +- Exchange RoundRobinPartitioning(3)
-      //   :     +- *Range (0, 30, step=1, splits=2)
-      //   +- *FileScan parquet [id#465L] Batched: true, Format: Parquet, Location: ...(ignored)
-      val res3 = InputOutputMetricsHelper.run(
-        spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
-      )
-      // The query above is executed in the following stages:
-      //   1. range(30)                   => (30, 0, 30)
-      //   2. sql("select * from pqS")    => (0, 30, 0)
-      //   3. crossJoin(...) of 1. and 2. => (10, 0, 300)
-      //   4. shuffle & return results    => (0, 300, 0)
-      assert(res3 === (30L, 0L, 30L) :: (0L, 30L, 0L) :: (10L, 0L, 300L) :: (0L, 300L, 0L) :: Nil)
+        // The executed plan looks like:
+        // Exchange RoundRobinPartitioning(2)
+        // +- BroadcastNestedLoopJoin BuildLeft, Cross
+        //   :- BroadcastExchange IdentityBroadcastMode
+        //   :  +- Exchange RoundRobinPartitioning(3)
+        //   :     +- *Range (0, 30, step=1, splits=2)
+        //   +- *FileScan parquet [id#465L] Batched: true, Format: Parquet, Location: ...(ignored)
+        val res3 = InputOutputMetricsHelper.run(
+          spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
+        )
+        // The query above is executed in the following stages:
+        //   1. range(30)                   => (30, 0, 30)
+        //   2. sql("select * from pqS")    => (0, 30, 0)
+        //   3. crossJoin(...) of 1. and 2. => (10, 0, 300)
+        //   4. shuffle & return results    => (0, 300, 0)
+        assert(res3 === (30L, 0L, 30L) :: (0L, 30L, 0L) :: (10L, 0L, 300L) :: (0L, 300L, 0L) :: Nil)
+      }
     }
   }
 
@@ -573,5 +575,27 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
           "number of files read" -> 2L))))
       )
     }
+  }
+
+  test("InMemoryTableScan shows the table name on UI if possible") {
+    // Show table name on UI
+    withView("inMemoryTable", "```a``b```") {
+      sql("CREATE TEMPORARY VIEW inMemoryTable AS SELECT 1 AS c1")
+      sql("CACHE TABLE inMemoryTable")
+      testSparkPlanMetrics(spark.table("inMemoryTable"), 1,
+        Map(1L -> (("Scan In-memory table `inMemoryTable`", Map.empty)))
+      )
+
+      sql("CREATE TEMPORARY VIEW ```a``b``` AS SELECT 2 AS c1")
+      sql("CACHE TABLE ```a``b```")
+      testSparkPlanMetrics(spark.table("```a``b```"), 1,
+        Map(1L -> (("Scan In-memory table ```a``b```", Map.empty)))
+      )
+    }
+
+    // Show InMemoryTableScan on UI
+    testSparkPlanMetrics(spark.range(1).cache().select("id"), 1,
+      Map(1L -> (("InMemoryTableScan", Map.empty)))
+    )
   }
 }

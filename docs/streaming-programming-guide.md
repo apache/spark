@@ -3,6 +3,21 @@ layout: global
 displayTitle: Spark Streaming Programming Guide
 title: Spark Streaming
 description: Spark Streaming programming guide and tutorial for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -385,11 +400,12 @@ Similar to Spark, Spark Streaming is available through Maven Central. To write y
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-streaming_{{site.SCALA_BINARY_VERSION}}</artifactId>
         <version>{{site.SPARK_VERSION}}</version>
+        <scope>provided</scope>
     </dependency>
 </div>
 <div data-lang="SBT" markdown="1">
 
-	libraryDependencies += "org.apache.spark" % "spark-streaming_{{site.SCALA_BINARY_VERSION}}" % "{{site.SPARK_VERSION}}"
+	libraryDependencies += "org.apache.spark" % "spark-streaming_{{site.SCALA_BINARY_VERSION}}" % "{{site.SPARK_VERSION}}" % "provided"
 </div>
 </div>
 
@@ -430,7 +446,7 @@ val ssc = new StreamingContext(conf, Seconds(1))
 {% endhighlight %}
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark, Mesos, Kubernetes or YARN cluster URL](submitting-applications.html#master-urls),
 or a special __"local[\*]"__ string to run in local mode. In practice, when running on a cluster,
 you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and
@@ -2472,13 +2488,13 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and
   [DStream](api/scala/index.html#org.apache.spark.streaming.dstream.DStream)
     * [KafkaUtils](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$),
-    [KinesisUtils](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisUtils$),
+    [KinesisUtils](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisInputDStream),
   - Java docs
     * [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html),
     [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html) and
     [JavaPairDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairDStream.html)
     * [KafkaUtils](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html),
-    [KinesisUtils](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html)
+    [KinesisUtils](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisInputDStream.html)
   - Python docs
     * [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) and [DStream](api/python/pyspark.streaming.html#pyspark.streaming.DStream)
     * [KafkaUtils](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)

@@ -23,9 +23,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.sources.v2.{DataSourceV2, Table}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
@@ -62,7 +64,7 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  */
 case class StreamingExecutionRelation(
-    source: BaseStreamingSource,
+    source: SparkDataStream,
     output: Seq[Attribute])(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
@@ -86,16 +88,16 @@ case class StreamingExecutionRelation(
 // know at read time whether the query is continuous or not, so we need to be able to
 // swap a V1 relation back in.
 /**
- * Used to link a [[DataSourceV2]] into a streaming
+ * Used to link a [[TableProvider]] into a streaming
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]]. This is only used for creating
  * a streaming [[org.apache.spark.sql.DataFrame]] from [[org.apache.spark.sql.DataFrameReader]],
  * and should be converted before passing to [[StreamExecution]].
  */
 case class StreamingRelationV2(
-    dataSource: DataSourceV2,
+    source: TableProvider,
     sourceName: String,
     table: Table,
-    extraOptions: Map[String, String],
+    extraOptions: CaseInsensitiveStringMap,
     output: Seq[Attribute],
     v1Relation: Option[StreamingRelation])(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.util
 
+import java.io.{PrintWriter, StringWriter}
 import java.util.UUID
 
 import scala.util.{Failure, Success, Try}
@@ -161,8 +162,9 @@ private[spark] class Instrumentation private () extends Logging with MLEvents {
    * Logs an exception raised during a training session.
    */
   def logFailure(e: Throwable): Unit = {
-    val msg = e.getStackTrace.mkString("\n")
-    super.logError(msg)
+    val msg = new StringWriter()
+    e.printStackTrace(new PrintWriter(msg))
+    super.logError(msg.toString)
   }
 }
 
@@ -203,21 +205,21 @@ private[spark] class OptionalInstrumentation private(
 
   protected override def logName: String = className
 
-  override def logInfo(msg: => String) {
+  override def logInfo(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logInfo(msg)
       case None => super.logInfo(msg)
     }
   }
 
-  override def logWarning(msg: => String) {
+  override def logWarning(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logWarning(msg)
       case None => super.logWarning(msg)
     }
   }
 
-  override def logError(msg: => String) {
+  override def logError(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logError(msg)
       case None => super.logError(msg)

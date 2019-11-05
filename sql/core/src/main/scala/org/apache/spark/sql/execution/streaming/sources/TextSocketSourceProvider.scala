@@ -18,33 +18,35 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import java.text.SimpleDateFormat
+import java.util
 import java.util.Locale
 
+import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousStream
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TextSocketSourceProvider extends DataSourceV2
-  with TableProvider with DataSourceRegister with Logging {
+class TextSocketSourceProvider extends TableProvider with DataSourceRegister with Logging {
 
-  private def checkParameters(params: DataSourceOptions): Unit = {
+  private def checkParameters(params: CaseInsensitiveStringMap): Unit = {
     logWarning("The socket source should not be used for production applications! " +
       "It does not support recovery.")
-    if (!params.get("host").isPresent) {
+    if (!params.containsKey("host")) {
       throw new AnalysisException("Set a host to read from with option(\"host\", ...).")
     }
-    if (!params.get("port").isPresent) {
+    if (!params.containsKey("port")) {
       throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
     }
     Try {
-      params.get("includeTimestamp").orElse("false").toBoolean
+      params.getBoolean("includeTimestamp", false)
     } match {
       case Success(_) =>
       case Failure(_) =>
@@ -52,10 +54,10 @@ class TextSocketSourceProvider extends DataSourceV2
     }
   }
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     checkParameters(options)
     new TextSocketTable(
-      options.get("host").get,
+      options.get("host"),
       options.getInt("port", -1),
       options.getInt("numPartitions", SparkSession.active.sparkContext.defaultParallelism),
       options.getBoolean("includeTimestamp", false))
@@ -66,7 +68,7 @@ class TextSocketSourceProvider extends DataSourceV2
 }
 
 class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimestamp: Boolean)
-  extends Table with SupportsMicroBatchRead with SupportsContinuousRead {
+  extends Table with SupportsRead {
 
   override def name(): String = s"Socket[$host:$port]"
 
@@ -78,17 +80,19 @@ class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimest
     }
   }
 
-  override def newScanBuilder(options: DataSourceOptions): ScanBuilder = new ScanBuilder {
-    override def build(): Scan = new Scan {
-      override def readSchema(): StructType = schema()
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
+  }
 
-      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-        new TextSocketMicroBatchStream(host, port, numPartitions, options)
-      }
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
+    override def readSchema(): StructType = schema()
 
-      override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-        new TextSocketContinuousStream(host, port, numPartitions, options)
-      }
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+      new TextSocketMicroBatchStream(host, port, numPartitions)
+    }
+
+    override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
+      new TextSocketContinuousStream(host, port, numPartitions, options)
     }
   }
 }

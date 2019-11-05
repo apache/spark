@@ -25,9 +25,14 @@ import pyspark.ml.linalg as newlinalg
 from pyspark.serializers import PickleSerializer
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector, \
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
+from pyspark.mllib.linalg.distributed import RowMatrix, IndexedRowMatrix
 from pyspark.mllib.regression import LabeledPoint
+from pyspark.sql import Row
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.testing.utils import have_scipy
+
+if sys.version >= '3':
+    long = int
 
 
 class VectorTests(MLlibTestCase):
@@ -115,11 +120,17 @@ class VectorTests(MLlibTestCase):
         v4 = SparseVector(6, [(1, 1.0), (3, 5.5)])
         v5 = DenseVector([0.0, 1.0, 0.0, 2.5])
         v6 = SparseVector(4, [(1, 1.0), (3, 2.5)])
+        dm1 = DenseMatrix(2, 2, [2, 0, 0, 0])
+        sm1 = SparseMatrix(2, 2, [0, 2, 3], [0], [2])
         self.assertEqual(v1, v2)
         self.assertEqual(v1, v3)
         self.assertFalse(v2 == v4)
         self.assertFalse(v1 == v5)
         self.assertFalse(v1 == v6)
+        # this is done as Dense and Sparse matrices can be semantically
+        # equal while still implementing a different __eq__ method
+        self.assertEqual(dm1, sm1)
+        self.assertEqual(sm1, dm1)
 
     def test_equals(self):
         indices = [1, 2, 4]
@@ -425,6 +436,24 @@ class VectorUDTTests(MLlibTestCase):
             else:
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
+    def test_row_matrix_from_dataframe(self):
+        from pyspark.sql.utils import IllegalArgumentException
+        df = self.spark.createDataFrame([Row(Vectors.dense(1))])
+        row_matrix = RowMatrix(df)
+        self.assertEqual(row_matrix.numRows(), 1)
+        self.assertEqual(row_matrix.numCols(), 1)
+        with self.assertRaises(IllegalArgumentException):
+            RowMatrix(df.selectExpr("'monkey'"))
+
+    def test_indexed_row_matrix_from_dataframe(self):
+        from pyspark.sql.utils import IllegalArgumentException
+        df = self.spark.createDataFrame([Row(long(0), Vectors.dense(1))])
+        matrix = IndexedRowMatrix(df)
+        self.assertEqual(matrix.numRows(), 1)
+        self.assertEqual(matrix.numCols(), 1)
+        with self.assertRaises(IllegalArgumentException):
+            IndexedRowMatrix(df.drop("_1"))
+
 
 class MatrixUDTTests(MLlibTestCase):
 
@@ -617,7 +646,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -236,7 +236,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           collect(left, negate) ++ collect(right, !negate)
         case UnaryMinus(child) =>
           collect(child, !negate)
-        case CheckOverflow(child, _) =>
+        case CheckOverflow(child, _, _) =>
           collect(child, negate)
         case PromotePrecision(child) =>
           collect(child, negate)
@@ -256,7 +256,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           val castedLit = lit.dataType match {
             case CalendarIntervalType =>
               val calendarInterval = lit.value.asInstanceOf[CalendarInterval]
-              if (calendarInterval.months > 0) {
+              if (calendarInterval.months != 0) {
                 invalid = true
                 logWarning(
                   s"Failed to extract state value watermark from condition $exprToCollectFrom " +
@@ -264,7 +264,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
                     s"watermark calculation. Use interval in terms of day instead.")
                 Literal(0.0)
               } else {
-                Literal(calendarInterval.microseconds.toDouble)
+                Literal(calendarInterval.days * CalendarInterval.MICROS_PER_DAY.toDouble +
+                  calendarInterval.microseconds.toDouble)
               }
             case DoubleType =>
               Multiply(lit, Literal(1000000.0))

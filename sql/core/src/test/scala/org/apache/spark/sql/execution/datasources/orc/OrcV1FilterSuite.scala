@@ -18,20 +18,21 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import scala.collection.JavaConverters._
 
-import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.orc.OrcShimUtils.{Operator, SearchArgument}
 import org.apache.spark.sql.internal.SQLConf
 
 class OrcV1FilterSuite extends OrcFilterSuite {
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 
   override def checkFilterPredicate(
       df: DataFrame,
@@ -60,7 +61,7 @@ class OrcV1FilterSuite extends OrcFilterSuite {
   }
 
   override def checkFilterPredicate
-      (predicate: Predicate, filterOperator: PredicateLeaf.Operator)
+      (predicate: Predicate, filterOperator: Operator)
       (implicit df: DataFrame): Unit = {
     def checkComparisonOperator(filter: SearchArgument) = {
       val operator = filter.getLeaves.asScala

@@ -20,9 +20,8 @@ package org.apache.spark.scheduler
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{never, verify, when}
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.config
@@ -438,7 +437,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   }
 
   test("check blacklist configuration invariants") {
-    val conf = new SparkConf().setMaster("yarn-cluster")
+    val conf = new SparkConf().setMaster("yarn").set(config.SUBMIT_DEPLOY_MODE, "cluster")
     Seq(
       (2, 2),
       (2, 3)
@@ -480,17 +479,16 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   test("blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
     when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
-    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
+    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer { (_: InvocationOnMock) =>
       // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
       // is updated before we ask the executor allocation client to kill all the executors
       // on a particular host.
-      override def answer(invocation: InvocationOnMock): Boolean = {
-        if (blacklist.nodeBlacklist.contains("hostA") == false) {
-          throw new IllegalStateException("hostA should be on the blacklist")
-        }
+      if (blacklist.nodeBlacklist.contains("hostA")) {
         true
+      } else {
+        throw new IllegalStateException("hostA should be on the blacklist")
       }
-    })
+    }
     blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
 
     // Disable auto-kill. Blacklist an executor and make sure killExecutors is not called.
@@ -552,17 +550,16 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   test("fetch failure blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
     when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
-    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
+    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer { (_: InvocationOnMock) =>
       // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
       // is updated before we ask the executor allocation client to kill all the executors
       // on a particular host.
-      override def answer(invocation: InvocationOnMock): Boolean = {
-        if (blacklist.nodeBlacklist.contains("hostA") == false) {
-          throw new IllegalStateException("hostA should be on the blacklist")
-        }
+      if (blacklist.nodeBlacklist.contains("hostA")) {
         true
+      } else {
+        throw new IllegalStateException("hostA should be on the blacklist")
       }
-    })
+    }
 
     conf.set(config.BLACKLIST_FETCH_FAILURE_ENABLED, true)
     blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
