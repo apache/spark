@@ -149,7 +149,7 @@ statement
     | ALTER (TABLE | VIEW) multipartIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE multipartIdentifier
-        (ALTER | CHANGE) COLUMN? qualifiedName
+        (ALTER | CHANGE) COLUMN? multipartIdentifier
         (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
     | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
