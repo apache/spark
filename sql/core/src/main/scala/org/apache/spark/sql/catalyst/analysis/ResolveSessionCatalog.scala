@@ -412,6 +412,15 @@ class ResolveSessionCatalog(
         ifExists,
         purge,
         retainData)
+
+    case AlterTableSerDePropertiesStatement(
+      tableName, serdeClassName, serdeProperties, partitionSpec) =>
+      val v1TableName = parseV1Table(tableName, "ALTER TABLE SerDe Properties")
+      AlterTableSerDePropertiesCommand(
+        v1TableName.asTableIdentifier,
+        serdeClassName,
+        serdeProperties,
+        partitionSpec)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
