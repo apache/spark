@@ -100,9 +100,11 @@ object IntervalUtils {
   def divide(interval: CalendarInterval, divisor: Decimal): CalendarInterval = {
     if (divisor == Decimal.ZERO || divisor == null) return null
     val months = Decimal(interval.months) / divisor
-    val milliseconds = (Decimal(interval.microseconds) / divisor +
-      months.remainder(Decimal.ONE) * Decimal(MICROS_PER_MONTH)).toLong
-    new CalendarInterval(months.toInt, milliseconds.toLong)
+    val days = months.remainder(Decimal.ONE) * Decimal(DAYS_PER_MONTH) +
+      Decimal(interval.days) / divisor
+    val milliseconds = days.remainder(Decimal.ONE) * Decimal(DateTimeUtils.MICROS_PER_DAY) +
+      Decimal(interval.microseconds) / divisor
+    new CalendarInterval(months.toInt, days.toInt, milliseconds.toLong)
   }
 
   /**
