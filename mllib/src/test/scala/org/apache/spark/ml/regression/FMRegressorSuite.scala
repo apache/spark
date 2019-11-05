@@ -38,7 +38,8 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    crossDataset = generateFactorizationCrossInput(spark, 2, 10, 1000, seed)
+    val (crossDatasetTmp, _) = generateFactorInteractionInput(spark, 2, 10, 1000, seed)
+    crossDataset = crossDatasetTmp
   }
 
   test("params") {
@@ -49,26 +50,49 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("factorization machines squaredError") {
+    val numFeatures = 10
+    val numFactors = 4
+    val (data, coefficients) = generateFactorInteractionInput(
+      spark, numFactors, numFeatures, 1000, seed)
+    val (b, w, v) = splitCoefficients(new DenseVector(coefficients),
+      numFeatures, numFactors, true, true)
+
     val fm = new FMRegressor()
       .setSolver("adamW")
       .setFeaturesCol("features")
       .setLabelCol("label")
-      .setNumFactors(2)
+      .setNumFactors(numFactors)
       .setInitStd(0.01)
       .setMaxIter(1000)
       .setMiniBatchFraction(1.0)
       .setStepSize(1.0)
       .setRegParam(0.0)
       .setTol(1E-6)
-    val fmModel = fm.fit(crossDataset)
-    val res = fmModel.transform(crossDataset)
+    val fmModel = fm.fit(data)
+    val res = fmModel.transform(data)
 
+    // check mse value
     val mse = res.select((col("prediction") - col("label")).as("error"))
       .select((col("error") * col("error")).as("error_square"))
       .agg(avg("error_square"))
       .collect()(0).getAs[Double](0)
-
     assert(mse ~== 0.0 absTol 1E-6)
+
+    // check coefficients
+    assert(b ~== fmModel.bias absTol 1E-4)
+    assert(w ~== fmModel.linearVector absTol 1E-4)
+    (0 until numFeatures).foreach { i =>
+      ((i + 1) until numFeatures).foreach { j =>
+        // assert <v_i, v_j> is same
+        var innerProd1 = 0.0
+        var innerProd2 = 0.0
+        (0 until numFactors).foreach { k =>
+          innerProd1 += v(i, k) * v(j, k)
+          innerProd2 += fmModel.factorMatrix(i, k) * fmModel.factorMatrix(j, k)
+        }
+        assert(innerProd1 ~== innerProd2 absTol 1E-4)
+      }
+    }
   }
 
   test("read/write") {
@@ -113,13 +137,13 @@ object FMRegressorSuite {
     "solver" -> "gd"
   )
 
-  def generateFactorizationCrossInput(
+  def generateFactorInteractionInput(
     spark: SparkSession,
     numFactors: Int,
     numFeatures: Int,
     numSamples: Int,
     seed: Int
-  ): DataFrame = {
+  ): (DataFrame, Array[Double]) = {
     import spark.implicits._
     val sc = spark.sparkContext
 
@@ -142,6 +166,6 @@ object FMRegressorSuite {
     val data = fmModel.transform(X)
       .withColumn("label", col("prediction"))
       .select("features", "label")
-    data
+    (data, coefficients)
   }
 }
