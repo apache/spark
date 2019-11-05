@@ -924,7 +924,7 @@ This is the component with the largest amount of instrumented metrics
 
 - namespace=HiveExternalCatalog
   - **note:**: these metrics are conditional to a configuration parameter:
-    `spark.metrics.register.static.sources.enabled` (default is true) 
+    `spark.metrics.static.sources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
   - hiveClientCalls.count
@@ -933,7 +933,7 @@ This is the component with the largest amount of instrumented metrics
 
 - namespace=CodeGenerator
   - **note:**: these metrics are conditional to a configuration parameter:
-    `spark.metrics.register.static.sources.enabled` (default is true) 
+    `spark.metrics.static.sources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
@@ -1051,6 +1051,8 @@ when running in local mode.
   - shuffle-server.usedHeapMemory
 
 - namespace=HiveExternalCatalog
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.static.sources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
   - hiveClientCalls.count
@@ -1058,6 +1060,8 @@ when running in local mode.
   - partitionsFetched.count
 
 - namespace=CodeGenerator
+  - **note:**: these metrics are conditional to a configuration parameter:
+    `spark.metrics.static.sources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
