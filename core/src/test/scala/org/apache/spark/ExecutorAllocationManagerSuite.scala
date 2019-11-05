@@ -871,7 +871,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val stageInfo1 = createStageInfo(1, 5, localityPreferences1)
     post(SparkListenerStageSubmitted(stageInfo1))
 
-    assert(localityAwareTasks(manager) === 3)
+    assert(localityAwareTasksForDefaultProfile(manager) === 3)
     // private var hostToLocalTaskCount: Map[(String, ResourceProfile), Int] = Map.empty
 
     val hostToLocal = hostToLocalTaskCount(manager)
@@ -890,7 +890,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val stageInfo2 = createStageInfo(2, 3, localityPreferences2)
     post(SparkListenerStageSubmitted(stageInfo2))
 
-    assert(localityAwareTasks(manager) === 5)
+    assert(localityAwareTasksForDefaultProfile(manager) === 5)
     resultsLocal = Map("host1" -> 2, "host2" -> 4, "host3" -> 4, "host4" -> 3, "host5" -> 2)
     hostToLocalTaskCount(manager).foreach { case (k, count) =>
       assert(resultsLocal.contains(k._1))
@@ -899,7 +899,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     }
 
     post(SparkListenerStageCompleted(stageInfo1))
-    assert(localityAwareTasks(manager) === 2)
+    assert(localityAwareTasksForDefaultProfile(manager) === 2)
     resultsLocal = Map("host2" -> 1, "host3" -> 2, "host4" -> 1, "host5" -> 2)
 
     hostToLocalTaskCount(manager).foreach { case (k, count) =>
@@ -1193,7 +1193,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _removeExecutors = PrivateMethod[Seq[String]](Symbol("removeExecutors"))
   private val _onSchedulerBacklogged = PrivateMethod[Unit](Symbol("onSchedulerBacklogged"))
   private val _onSchedulerQueueEmpty = PrivateMethod[Unit](Symbol("onSchedulerQueueEmpty"))
-  private val _localityAwareTasks = PrivateMethod[Int](Symbol("localityAwareTasks"))
+  private val _localityAwareTasksPerResourceProfileId =
+    PrivateMethod[mutable.HashMap[Int, Int]](Symbol("numLocalityAwareTasksPerResourceProfileId"))
   private val _hostToLocalTaskCount =
     PrivateMethod[Map[(String, ResourceProfile), Int]](Symbol("hostToLocalTaskCount"))
   private val _onSpeculativeTaskSubmitted =
@@ -1268,8 +1269,9 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _onSpeculativeTaskSubmitted(id)
   }
 
-  private def localityAwareTasks(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _localityAwareTasks()
+  private def localityAwareTasksForDefaultProfile(manager: ExecutorAllocationManager): Int = {
+    val localMap = manager invokePrivate _localityAwareTasksPerResourceProfileId()
+    localMap(defaultProfile.id)
   }
 
   private def totalRunningTasksPerResourceProfile(manager: ExecutorAllocationManager): Int = {

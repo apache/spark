@@ -175,7 +175,6 @@ private[spark] class ExecutorAllocationManager(
   @volatile private var initializing: Boolean = true
 
   // Number of locality aware tasks for each ResourceProfile, used for executor placement.
-  private var localityAwareTasks = 0
   private var numLocalityAwareTasksPerResourceProfileId = new mutable.HashMap[Int, Int]
   numLocalityAwareTasksPerResourceProfileId(defaultProfile.id) = 0
 
@@ -875,13 +874,11 @@ private[spark] class ExecutorAllocationManager(
      * granularity within stages.
      */
     def updateExecutorPlacementHints(): Unit = {
-      var localityAwareTasks = 0
       var localityAwareTasksPerResourceProfileId = new mutable.HashMap[Int, Int]
       val localityToCount = new mutable.HashMap[(String, ResourceProfile), Int]()
       val hostToRProfile = new mutable.HashMap[String, (Option[ResourceProfile], Int)]()
       stageAttemptToExecutorPlacementHints.values.foreach {
         case (numTasksPending, localities, rp) =>
-          localityAwareTasks += numTasksPending
           val rpNumPending =
             localityAwareTasksPerResourceProfileId.getOrElse(rp.id, 0)
           localityAwareTasksPerResourceProfileId(rp.id) = rpNumPending + numTasksPending
@@ -890,7 +887,6 @@ private[spark] class ExecutorAllocationManager(
             localityToCount((hostname, rp)) = updatedCount
           }
       }
-      allocationManager.localityAwareTasks = localityAwareTasks
       allocationManager.numLocalityAwareTasksPerResourceProfileId =
         localityAwareTasksPerResourceProfileId
       allocationManager.hostToLocalTaskCount = localityToCount.toMap
