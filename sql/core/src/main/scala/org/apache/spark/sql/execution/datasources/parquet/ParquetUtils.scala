@@ -16,10 +16,17 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.OptionalLong
+
+import scala.collection.JavaConverters._
+
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.parquet.hadoop.ParquetFileWriter
+import org.apache.parquet.hadoop.{ParquetFileReader, ParquetFileWriter}
+import org.apache.parquet.hadoop.util.HadoopInputFile
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.read.Statistics
 import org.apache.spark.sql.types.StructType
 
 object ParquetUtils {
@@ -105,6 +112,29 @@ object ParquetUtils {
           .toSeq
       }
     ParquetFileFormat.mergeSchemasInParallel(filesToTouch, sparkSession)
+  }
+
+  def getStatistics(files: Array[String], configuration: Configuration): Statistics = {
+    var bytes = 0L
+    var rows = 0L
+    files.foreach { file =>
+      val reader =
+        ParquetFileReader.open(HadoopInputFile.fromPath(new Path(file), configuration))
+      try {
+        reader.getRowGroups.asScala.foreach{ metadata =>
+          bytes += metadata.getTotalByteSize
+          rows += metadata.getRowCount
+        }
+      } finally {
+        reader.close()
+      }
+    }
+
+    new Statistics {
+      override def sizeInBytes(): OptionalLong = OptionalLong.of(bytes)
+
+      override def numRows(): OptionalLong = OptionalLong.of(rows)
+    }
   }
 
   case class FileTypes(

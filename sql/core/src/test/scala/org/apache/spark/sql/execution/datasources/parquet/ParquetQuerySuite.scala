@@ -972,6 +972,24 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
       }
     }
   }
+
+  test("test parquet scan statistics") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(1024).toDF("c")
+      df.write.mode(SaveMode.Overwrite).parquet(path)
+
+      val df2 = spark.read.parquet(path)
+      val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
+      val parquetScan2 = fileScan2.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
+      val statistics = parquetScan2.estimateStatistics()
+
+      val fs = new Path(path).getFileSystem(spark.sessionState.newHadoopConf())
+      val hdfsSize = fs.getFileStatus(new Path(path)).getLen
+      assert(statistics.numRows().getAsLong == 1024L)
+      assert(statistics.sizeInBytes().getAsLong != hdfsSize)
+    }
+  }
 }
 
 object TestingUDT {

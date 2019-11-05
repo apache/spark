@@ -21,9 +21,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetInputFormat
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.PartitionReaderFactory
+import org.apache.spark.sql.connector.read.{PartitionReaderFactory, Statistics}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetReadSupport, ParquetWriteSupport}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetReadSupport, ParquetUtils, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -76,6 +76,15 @@ case class ParquetScan(
       new SerializableConfiguration(hadoopConf))
     ParquetPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, pushedFilters)
+  }
+
+  override def estimateStatistics(): Statistics = {
+    try {
+      // Use the parquet api to get Statistics.
+      ParquetUtils.getStatistics(fileIndex.inputFiles, hadoopConf)
+    } catch {
+      case _ => super.estimateStatistics()
+    }
   }
 
   override def equals(obj: Any): Boolean = obj match {
