@@ -193,41 +193,37 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("multiply") {
-    def multiply(interval: String, num: Double): Expression = {
-      MultiplyInterval(Literal(fromString(interval)), Literal(num))
+    def check(interval: String, num: Double, expected: String): Unit = {
+      checkEvaluation(
+        MultiplyInterval(Literal(fromString(interval)), Literal(num)),
+        if (expected == null) null else fromString(expected))
     }
-    checkEvaluation(multiply("0 seconds", 10), fromString("0 seconds"))
-    checkEvaluation(multiply("10 hours", 0), fromString("0 hours"))
-    checkEvaluation(multiply("12 months 1 microseconds", 2), fromString("2 years 2 microseconds"))
-    checkEvaluation(multiply("-5 year 3 seconds", 3), fromString("-15 years 9 seconds"))
-    checkEvaluation(multiply("1 year 1 second", 0.5), fromString("6 months 500 milliseconds"))
-    checkEvaluation(
-      multiply("-100 years -1 millisecond", 0.5),
-      fromString("-50 years -500 microseconds"))
-    checkEvaluation(multiply("2 months 4 seconds", -0.5), fromString("-1 months -2 seconds"))
-    checkEvaluation(
-      multiply("1 month 2 microseconds", 1.5),
-      fromString("1 months 15 days 3 microseconds"))
-    checkEvaluation(multiply("2 months", Int.MaxValue), null)
+
+    check("0 seconds", 10, "0 seconds")
+    check("10 hours", 0, "0 hours")
+    check("12 months 1 microseconds", 2, "2 years 2 microseconds")
+    check("-5 year 3 seconds", 3, "-15 years 9 seconds")
+    check("1 year 1 second", 0.5, "6 months 500 milliseconds")
+    check("-100 years -1 millisecond", 0.5, "-50 years -500 microseconds")
+    check("2 months 4 seconds", -0.5, "-1 months -2 seconds")
+    check("1 month 2 microseconds", 1.5, "1 months 15 days 3 microseconds")
+    check("2 months", Int.MaxValue, null)
   }
 
   test("divide") {
-    def divide(interval: String, num: Double): Expression = {
-      DivideInterval(Literal(fromString(interval)), Literal(num))
+    def check(interval: String, num: Double, expected: String): Unit = {
+      checkEvaluation(
+        DivideInterval(Literal(fromString(interval)), Literal(num)),
+        if (expected == null) null else fromString(expected))
     }
 
-    checkEvaluation(divide("0 seconds", 10), fromString("0 seconds"))
-    checkEvaluation(
-      divide("12 months 3 milliseconds", 2),
-      fromString("6 months 1 milliseconds 500 microseconds"))
-    checkEvaluation(divide("-5 year 3 seconds", 3), fromString("-1 years -8 months 1 seconds"))
-    checkEvaluation(
-      divide("6 years -7 seconds", 3),
-      fromString("2 years -2 seconds -333 milliseconds -333 microseconds"))
-    checkEvaluation(divide("2 years -8 seconds", 0.5), fromString("4 years -16 seconds"))
-    checkEvaluation(divide("-1 month 2 microseconds", -0.25),
-      fromString("4 months -8 microseconds"))
-    checkEvaluation(divide("1 month 3 microsecond", 1.5), fromString("20 days 2 microseconds"))
-    checkEvaluation(divide("2 months", 0), null)
+    check("0 seconds", 10, "0 seconds")
+    check("12 months 3 milliseconds", 2, "6 months 0.0015 seconds")
+    check("-5 year 3 seconds", 3, "-1 years -8 months 1 seconds")
+    check("6 years -7 seconds", 3, "2 years -2.333333 seconds")
+    check("2 years -8 seconds", 0.5, "4 years -16 seconds")
+    check("-1 month 2 microseconds", -0.25, "4 months -8 microseconds")
+    check("1 month 3 microsecond", 1.5, "20 days 2 microseconds")
+    check("2 months", 0, null)
   }
 }
