@@ -1441,6 +1441,17 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("ALTER TABLE SerDe properties") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
+      }
+      assert(e.message.contains("ALTER TABLE SerDe Properties is only supported with v1 tables"))
+    }
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
