@@ -1202,6 +1202,42 @@ class DDLParserSuite extends AnalysisTest {
       AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
   }
 
+  test("alter table: add partition") {
+    val sql1 =
+      """
+        |ALTER TABLE a.b.c ADD IF NOT EXISTS PARTITION
+        |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
+        |(dt='2009-09-09', country='uk')
+      """.stripMargin
+    val sql2 = "ALTER TABLE a.b.c ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
+
+    val parsed1 = parsePlan(sql1)
+    val parsed2 = parsePlan(sql2)
+
+    val expected1 = AlterTableAddPartitionStatement(
+      Seq("a", "b", "c"),
+      Seq(
+        (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
+        (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
+      ifNotExists = true)
+    val expected2 = AlterTableAddPartitionStatement(
+      Seq("a", "b", "c"),
+      Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
+      ifNotExists = false)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("alter view: add partition (not supported)") {
+    assertUnsupported(
+      """
+        |ALTER VIEW a.b.c ADD IF NOT EXISTS PARTITION
+        |(dt='2008-08-08', country='us') PARTITION
+        |(dt='2009-09-09', country='uk')
+      """.stripMargin)
+  }
+
   test("alter table: rename partition") {
     val sql1 =
       """
@@ -1276,6 +1312,12 @@ class DDLParserSuite extends AnalysisTest {
 
     val parsed3_table = parsePlan(sql3_table)
     comparePlans(parsed3_table, expected3_table)
+  }
+
+  test("show current namespace") {
+    comparePlans(
+      parsePlan("SHOW CURRENT NAMESPACE"),
+      ShowCurrentNamespaceStatement())
   }
 
   private case class TableSpec(

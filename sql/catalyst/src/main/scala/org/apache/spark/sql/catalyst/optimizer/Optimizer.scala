@@ -97,7 +97,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
         PruneFilters,
-        EliminateSorts,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
         RewriteCorrelatedScalarSubquery,
@@ -178,8 +177,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder) :+
-    Batch("Remove Redundant Sorts", Once,
-      RemoveRedundantSorts) :+
+    Batch("Eliminate Sorts", Once,
+      EliminateSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
@@ -965,39 +964,61 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Removes no-op SortOrder from Sort
+ * Removes Sort operation. This can happen:
+ * 1) if the sort order is empty or the sort order does not have any reference
+ * 2) if the child is already sorted
+ * 3) if there is another Sort operator separated by 0...n Project/Filter operators
+ * 4) if the Sort operator is within Join separated by 0...n Project/Filter operators only,
+ *    and the Join conditions is deterministic
+ * 5) if the Sort operator is within GroupBy separated by 0...n Project/Filter operators only,
+ *    and the aggregate function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) child else s.copy(order = newOrders)
-  }
-}
-
-/**
- * Removes redundant Sort operation. This can happen:
- * 1) if the child is already sorted
- * 2) if there is another Sort operator separated by 0...n Project/Filter operators
- */
-object RemoveRedundantSorts extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case Sort(orders, true, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
       child
     case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
+    case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
+      j.copy(left = recursiveRemoveSort(originLeft), right = recursiveRemoveSort(originRight))
+    case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
+      g.copy(child = recursiveRemoveSort(originChild))
   }
 
-  def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = plan match {
+  private def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = plan match {
     case Sort(_, _, child) => recursiveRemoveSort(child)
     case other if canEliminateSort(other) =>
       other.withNewChildren(other.children.map(recursiveRemoveSort))
     case _ => plan
   }
 
-  def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
+  private def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
     case _ => false
+  }
+
+  private def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
+    def isOrderIrrelevantAggFunction(func: AggregateFunction): Boolean = func match {
+      case _: Sum => true
+      case _: Min => true
+      case _: Max => true
+      case _: Count => true
+      case _: Average => true
+      case _: CentralMomentAgg => true
+      case _ => false
+    }
+
+    def checkValidAggregateExpression(expr: Expression): Boolean = expr match {
+      case _: AttributeReference => true
+      case ae: AggregateExpression => isOrderIrrelevantAggFunction(ae.aggregateFunction)
+      case _: UserDefinedExpression => false
+      case e => e.children.forall(checkValidAggregateExpression)
+    }
+
+    aggs.forall(checkValidAggregateExpression)
   }
 }
 

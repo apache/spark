@@ -189,6 +189,14 @@ case class AlterTableRecoverPartitionsStatement(
     tableName: Seq[String]) extends ParsedStatement
 
 /**
+ * ALTER TABLE ... ADD PARTITION command, as parsed from SQL
+ */
+case class AlterTableAddPartitionStatement(
+    tableName: Seq[String],
+    partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
+    ifNotExists: Boolean) extends ParsedStatement
+
+/**
  * ALTER TABLE ... RENAME PARTITION command, as parsed from SQL.
  */
 case class AlterTableRenamePartitionStatement(
@@ -419,3 +427,8 @@ case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
 case class ShowColumnsStatement(
     table: Seq[String],
     namespace: Option[Seq[String]]) extends ParsedStatement
+
+/**
+ * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
+ */
+case class ShowCurrentNamespaceStatement() extends ParsedStatement

@@ -243,10 +243,10 @@ com.vlkan:flatbuffers
 com.ning:compress-lzf
 io.airlift:aircompressor
 io.dropwizard.metrics:metrics-core
-io.dropwizard.metrics:metrics-ganglia
 io.dropwizard.metrics:metrics-graphite
 io.dropwizard.metrics:metrics-json
 io.dropwizard.metrics:metrics-jvm
+io.dropwizard.metrics:metrics-jmx
 org.iq80.snappy:snappy
 com.clearspring.analytics:stream
 com.jamesmurty.utils:java-xmlbuilder
