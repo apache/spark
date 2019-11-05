@@ -59,7 +59,7 @@ trait DataSourceScanExec extends LeafExecNode {
     val metadataEntries = metadata.toSeq.sorted.map {
       case (key, value) =>
         key + ": " + StringUtils.abbreviate(redact(value),
-          conf.maxDataSourceScanMetadataStringLength)
+          conf.maxMetadataValueStringLength)
     }
     val metadataStr = truncatedString(metadataEntries, " ", ", ", "", maxFields)
     redact(

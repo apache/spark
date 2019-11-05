@@ -1961,11 +1961,12 @@ object SQLConf {
     .intConf
     .createWithDefault(25)
 
-  val MAX_DATA_SOURCE_SCAN_METADATA_STRING_LENGTH =
-    buildConf("spark.sql.maxDataSourceScanMetadataStringLength")
-      .doc("Maximum string length for one metadata of `DataSourceScanExec`. This is used in " +
-        "`DataSourceScanExec.simpleString` to limit the length of each metadata string. " +
-        "If the metadata is longer than this value, it will be truncated and ended by '...'.")
+  val MAX_METADATA_VALUE_STRING_LENGTH =
+    buildConf("spark.sql.maxMetadataValueStringLength")
+      .doc("Maximum string length of one single metadata value. This can be used in " +
+        "the `simpleString` method of `TreeNode` and its sub classes to limit the " +
+        "string length of each metadata value. If a single metadata value string is longer " +
+        "than this value, it should be truncated and ended by '...'.")
       .intConf
       .createWithDefault(100)
 
@@ -2547,8 +2548,8 @@ class SQLConf extends Serializable with Logging {
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
-  def maxDataSourceScanMetadataStringLength: Int =
-    getConf(SQLConf.MAX_DATA_SOURCE_SCAN_METADATA_STRING_LENGTH)
+  def maxMetadataValueStringLength: Int =
+    getConf(SQLConf.MAX_METADATA_VALUE_STRING_LENGTH)
 
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 
