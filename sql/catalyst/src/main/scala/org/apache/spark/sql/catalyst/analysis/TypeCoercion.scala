@@ -831,6 +831,8 @@ object TypeCoercion {
    * 2. Turns Add/Subtract of TimestampType/DateType/IntegerType
    *    and TimestampType/IntegerType/DateType to DateAdd/DateSub/SubtractDates and
    *    to SubtractTimestamps.
+   * 3. Turns Multiply/Divide of CalendarIntervalType and NumericType
+   *    to MultiplyInterval/DivideInterval
    */
   object DateTimeOperations extends Rule[LogicalPlan] {
 
@@ -846,6 +848,12 @@ object TypeCoercion {
         Cast(TimeAdd(l, r), l.dataType)
       case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
         Cast(TimeSub(l, r), l.dataType)
+      case Multiply(l @ CalendarIntervalType(), r @ NumericType()) =>
+        MultiplyInterval(l, r)
+      case Multiply(l @ NumericType(), r @ CalendarIntervalType()) =>
+        MultiplyInterval(r, l)
+      case Divide(l @ CalendarIntervalType(), r @ NumericType()) =>
+        DivideInterval(l, r)
 
       case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
       case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
