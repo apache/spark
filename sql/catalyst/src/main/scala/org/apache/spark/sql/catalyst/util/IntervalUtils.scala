@@ -375,8 +375,7 @@ object IntervalUtils {
       daysWithFraction: Double,
       microsWithFraction: Double): CalendarInterval = {
     val truncatedMonths = Math.toIntExact(monthsWithFraction.toLong)
-    // Using 30 days per month as PostgreSQL does.
-    val days = daysWithFraction + 30 * (monthsWithFraction - truncatedMonths)
+    val days = daysWithFraction + DAYS_PER_MONTH * (monthsWithFraction - truncatedMonths)
     val truncatedDays = Math.toIntExact(days.toLong)
     val micros = microsWithFraction + DateTimeUtils.MICROS_PER_DAY * (days - truncatedDays)
     new CalendarInterval(truncatedMonths, truncatedDays, micros.round)
