@@ -177,7 +177,6 @@ DESC TABLE EXTENDED v8;
 -- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW v6_temp AS SELECT * FROM base_table WHERE id IN (SELECT id FROM temp_table);
 CREATE VIEW v7_temp AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM temp_table) t2;
--- [SPARK-29630] Not allowed to create a permanent view by referencing a temporary view in EXISTS
 CREATE VIEW v8_temp AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM temp_table);
 CREATE VIEW v9_temp AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM temp_table);
 
@@ -232,6 +231,7 @@ CREATE VIEW nontemp4 AS SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2
 DESC TABLE EXTENDED nontemp4;
 -- [SPARK-29628] Forcibly create a temporary view in CREATE VIEW if referencing a temporary view
 CREATE VIEW temporal4 AS SELECT * FROM t1 LEFT JOIN tt ON t1.num = tt.num2 AND tt.value = 'xxx';
+CREATE VIEW temporal5 AS SELECT * FROM t1 WHERE num IN (SELECT num FROM t1 WHERE EXISTS (SELECT 1 FROM tt));
 
 -- Skip the tests below because of PostgreSQL specific cases
 -- SELECT relname FROM pg_class
@@ -247,10 +247,10 @@ CREATE TABLE tbl1 ( a int, b int) using parquet;
 CREATE TABLE tbl2 (c int, d int) using parquet;
 CREATE TABLE tbl3 (e int, f int) using parquet;
 CREATE TABLE tbl4 (g int, h int) using parquet;
--- Since Spark doesn't support CREATE TEMPORARY TABLE, we used CREATE TEMPORARY VIEW instead
+-- Since Spark doesn't support CREATE TEMPORARY TABLE, we used CREATE TABLE instead
 -- CREATE TEMP TABLE tmptbl (i int, j int);
-CREATE TEMP VIEW tmptbl AS SELECT * FROM VALUES
-  (1, 1) AS temptbl(i, j);
+CREATE TABLE tmptbl (i int, j int) using parquet;
+INSERT INTO tmptbl VALUES (1, 1);
 
 --Should be in testviewschm2
 CREATE   VIEW  pubview AS SELECT * FROM tbl1 WHERE tbl1.a
