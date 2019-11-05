@@ -149,15 +149,7 @@ abstract class IntervalNumOperation(
 }
 
 case class MultiplyInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(
-    interval,
-    num,
-    (i: CalendarInterval, n: Double) => multiply(i, n),
-    "multiply")
+  extends IntervalNumOperation(interval, num, multiply, "multiply")
 
 case class DivideInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(
-    interval,
-    num,
-    (i: CalendarInterval, n: Double) => divide(i, n),
-    "divide")
+  extends IntervalNumOperation(interval, num, divide, "divide")
