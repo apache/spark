@@ -21,11 +21,10 @@ import java.time.LocalDateTime
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{FloatType, TimestampType}
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.types.TimestampType
+import org.apache.spark.unsafe.types.{CalendarInterval, IntervalConstants}
 
 class ExpressionSQLBuilderSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.parser.CatalystSqlParser._
@@ -165,7 +164,7 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
   }
 
   test("interval arithmetic") {
-    val interval = Literal(new CalendarInterval(0, 0, CalendarInterval.MICROS_PER_HOUR))
+    val interval = Literal(new CalendarInterval(0, 0, IntervalConstants.MICROS_PER_HOUR))
 
     checkSQL(
       TimeAdd('a, interval),

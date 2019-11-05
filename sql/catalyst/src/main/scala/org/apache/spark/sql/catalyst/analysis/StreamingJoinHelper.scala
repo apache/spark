@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, IntervalConstants}
 
 
 /**
@@ -264,7 +264,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
                     s"watermark calculation. Use interval in terms of day instead.")
                 Literal(0.0)
               } else {
-                Literal(calendarInterval.days * CalendarInterval.MICROS_PER_DAY.toDouble +
+                Literal(calendarInterval.days * IntervalConstants.MICROS_PER_DAY.toDouble +
                   calendarInterval.microseconds.toDouble)
               }
             case DoubleType =>

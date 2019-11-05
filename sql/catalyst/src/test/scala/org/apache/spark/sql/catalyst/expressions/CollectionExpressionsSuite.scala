@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, IntervalConstants}
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -914,7 +914,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Literal(Date.valueOf("1970-02-01")),
           Literal(IntervalUtils.fromString("interval 1 month").negate())),
         EmptyRow,
-        s"sequence boundaries: 0 to 2678400000000 by -${28 * CalendarInterval.MICROS_PER_DAY}")
+        s"sequence boundaries: 0 to 2678400000000 by -${28 * IntervalConstants.MICROS_PER_DAY}")
     }
   }
 

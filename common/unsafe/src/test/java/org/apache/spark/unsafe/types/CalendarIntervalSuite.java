@@ -23,7 +23,7 @@ import java.time.Duration;
 import java.time.Period;
 
 import static org.junit.Assert.*;
-import static org.apache.spark.unsafe.types.CalendarInterval.*;
+import static org.apache.spark.unsafe.types.IntervalConstants.*;
 
 public class CalendarIntervalSuite {
 

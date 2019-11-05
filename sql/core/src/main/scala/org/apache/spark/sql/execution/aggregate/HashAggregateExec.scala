@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.unsafe.types.IntervalConstants._
 import org.apache.spark.util.Utils
 
 /**

@@ -24,21 +24,9 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.IntervalConstants._
 
 object IntervalUtils {
-  final val MONTHS_PER_YEAR: Int = 12
-  final val MONTHS_PER_QUARTER: Byte = 3
-  final val YEARS_PER_MILLENNIUM: Int = 1000
-  final val YEARS_PER_CENTURY: Int = 100
-  final val YEARS_PER_DECADE: Int = 10
-  final val MICROS_PER_HOUR: Long =
-    DateTimeUtils.MILLIS_PER_HOUR * DateTimeUtils.MICROS_PER_MILLIS
-  final val MICROS_PER_MINUTE: Long =
-    DateTimeUtils.MILLIS_PER_MINUTE * DateTimeUtils.MICROS_PER_MILLIS
-  final val DAYS_PER_MONTH: Byte = 30
-  final val MICROS_PER_MONTH: Long = DAYS_PER_MONTH * DateTimeUtils.MICROS_PER_DAY
-  /* 365.25 days per year assumes leap year every four years */
-  final val MICROS_PER_YEAR: Long = (36525L * DateTimeUtils.MICROS_PER_DAY) / 100
 
   def getYears(interval: CalendarInterval): Int = {
     interval.months / MONTHS_PER_YEAR
@@ -91,7 +79,7 @@ object IntervalUtils {
   // Returns total number of seconds with microseconds fractional part in the given interval.
   def getEpoch(interval: CalendarInterval): Decimal = {
     var result = interval.microseconds
-    result += DateTimeUtils.MICROS_PER_DAY * interval.days
+    result += MICROS_PER_DAY * interval.days
     result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
     result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
     Decimal(result, 18, 6)
@@ -237,7 +225,7 @@ object IntervalUtils {
       var micros = secondsFraction
       micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
       micros = Math.addExact(micros, Math.multiplyExact(minutes, MICROS_PER_MINUTE))
-      micros = Math.addExact(micros, Math.multiplyExact(seconds, DateTimeUtils.MICROS_PER_SECOND))
+      micros = Math.addExact(micros, Math.multiplyExact(seconds, MICROS_PER_SECOND))
       new CalendarInterval(0, sign * days, sign * micros)
     } catch {
       case e: Exception =>
@@ -272,7 +260,7 @@ object IntervalUtils {
           case "second" =>
             microseconds = Math.addExact(microseconds, parseSecondNano(values(i)))
           case "millisecond" =>
-            val millisUs = Math.multiplyExact(values(i).toLong, DateTimeUtils.MICROS_PER_MILLIS)
+            val millisUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MILLI)
             microseconds = Math.addExact(microseconds, millisUs)
           case "microsecond" =>
             microseconds = Math.addExact(microseconds, values(i).toLong)
@@ -294,7 +282,7 @@ object IntervalUtils {
         (nanosStr + "000000000").substring(0, maxNanosLen)
       } else nanosStr
       val nanos = toLongWithRange("nanosecond", alignedStr, 0L, 999999999L)
-      val micros = nanos / DateTimeUtils.NANOS_PER_MICROS
+      val micros = nanos / NANOS_PER_MICRO
       if (isNegative) -micros else micros
     } else {
       0L
@@ -309,8 +297,8 @@ object IntervalUtils {
       toLongWithRange(
         "second",
         secondsStr,
-        Long.MinValue / DateTimeUtils.MICROS_PER_SECOND,
-        Long.MaxValue / DateTimeUtils.MICROS_PER_SECOND) * DateTimeUtils.MICROS_PER_SECOND
+        Long.MinValue / MICROS_PER_SECOND,
+        Long.MaxValue / MICROS_PER_SECOND) * MICROS_PER_SECOND
     }
 
     secondNano.split("\\.") match {
@@ -342,10 +330,10 @@ object IntervalUtils {
       targetUnit: TimeUnit,
       daysPerMonth: Int = 31): Long = {
     val monthsDuration = Math.multiplyExact(
-      daysPerMonth * DateTimeUtils.MICROS_PER_DAY,
+      daysPerMonth * MICROS_PER_DAY,
       interval.months)
     val daysDuration = Math.multiplyExact(
-      DateTimeUtils.MICROS_PER_DAY,
+      MICROS_PER_DAY,
       interval.days)
     val result = Math.addExact(interval.microseconds, Math.addExact(daysDuration, monthsDuration))
     targetUnit.convert(result, TimeUnit.MICROSECONDS)

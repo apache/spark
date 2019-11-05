@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, IntervalConstants}
 
 /**
  * Test basic expression parsing.
@@ -633,13 +633,15 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(new CalendarInterval(
         0,
         0,
-        -13 * DateTimeUtils.MICROS_PER_SECOND - 123 * DateTimeUtils.MICROS_PER_MILLIS - 456)))
+        -13 * IntervalConstants.MICROS_PER_SECOND - 123 *
+          IntervalConstants.MICROS_PER_MILLI - 456)))
     checkIntervals(
       "13.123456 second",
       Literal(new CalendarInterval(
         0,
         0,
-        13 * DateTimeUtils.MICROS_PER_SECOND + 123 * DateTimeUtils.MICROS_PER_MILLIS + 456)))
+        13 * IntervalConstants.MICROS_PER_SECOND + 123 *
+          IntervalConstants.MICROS_PER_MILLI + 456)))
     checkIntervals("1.001 second", Literal(IntervalUtils.fromString("1 second 1 millisecond")))
 
     // Non Existing unit

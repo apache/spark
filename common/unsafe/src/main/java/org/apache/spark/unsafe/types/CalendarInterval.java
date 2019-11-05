@@ -24,17 +24,13 @@ import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
+
+import static org.apache.spark.unsafe.types.IntervalConstants.*;
+
 /**
  * The internal representation of interval type.
  */
 public final class CalendarInterval implements Serializable {
-  public static final long MICROS_PER_MILLI = 1000L;
-  public static final long MICROS_PER_SECOND = MICROS_PER_MILLI * 1000;
-  public static final long MICROS_PER_MINUTE = MICROS_PER_SECOND * 60;
-  public static final long MICROS_PER_HOUR = MICROS_PER_MINUTE * 60;
-  public static final long MICROS_PER_DAY = MICROS_PER_HOUR * 24;
-  public static final long MICROS_PER_WEEK = MICROS_PER_DAY * 7;
-
   public final int months;
   public final int days;
   public final long microseconds;

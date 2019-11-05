@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, IntervalConstants}
 
 case class TimeWindow(
     timeColumn: Expression,
@@ -108,7 +108,7 @@ object TimeWindow {
       throw new IllegalArgumentException(
         s"Intervals greater than a month is not supported ($interval).")
     }
-    cal.days * CalendarInterval.MICROS_PER_DAY + cal.microseconds
+    cal.days * IntervalConstants.MICROS_PER_DAY + cal.microseconds
   }
 
   /**

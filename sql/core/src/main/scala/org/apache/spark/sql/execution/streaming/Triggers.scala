@@ -23,7 +23,7 @@ import scala.concurrent.duration.Duration
 
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, IntervalConstants}
 
 private object Triggers {
   def validate(intervalMs: Long): Unit = {
@@ -35,7 +35,7 @@ private object Triggers {
     if (cal.months != 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }
-    TimeUnit.MICROSECONDS.toMillis(cal.microseconds + cal.days * CalendarInterval.MICROS_PER_DAY)
+    TimeUnit.MICROSECONDS.toMillis(cal.microseconds + cal.days * IntervalConstants.MICROS_PER_DAY)
   }
 
   def convert(interval: Duration): Long = interval.toMillis

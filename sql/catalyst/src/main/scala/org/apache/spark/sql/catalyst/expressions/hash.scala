@@ -31,11 +31,12 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, IntervalConstants, UTF8String}
+import org.apache.spark.unsafe.types.IntervalConstants._
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the expressions for hashing.
@@ -873,7 +874,7 @@ object HiveHashFunction extends InterpretedHashFunction {
    */
   def hashTimestamp(timestamp: Long): Long = {
     val timestampInSeconds = MICROSECONDS.toSeconds(timestamp)
-    val nanoSecondsPortion = (timestamp % MICROS_PER_SECOND) * NANOS_PER_MICROS
+    val nanoSecondsPortion = (timestamp % MICROS_PER_SECOND) * NANOS_PER_MICRO
 
     var result = timestampInSeconds
     result <<= 30 // the nanosecond part fits in 30 bits
@@ -903,13 +904,13 @@ object HiveHashFunction extends InterpretedHashFunction {
    */
   def hashCalendarInterval(calendarInterval: CalendarInterval): Long = {
     val totalMicroSeconds =
-      calendarInterval.days * CalendarInterval.MICROS_PER_DAY + calendarInterval.microseconds
-    val totalSeconds = totalMicroSeconds / CalendarInterval.MICROS_PER_SECOND.toInt
+      calendarInterval.days * IntervalConstants.MICROS_PER_DAY + calendarInterval.microseconds
+    val totalSeconds = totalMicroSeconds / IntervalConstants.MICROS_PER_SECOND.toInt
     val result: Int = (17 * 37) + (totalSeconds ^ totalSeconds >> 32).toInt
 
     val nanoSeconds =
       (totalMicroSeconds -
-        (totalSeconds * CalendarInterval.MICROS_PER_SECOND.toInt)).toInt * 1000
+        (totalSeconds * IntervalConstants.MICROS_PER_SECOND.toInt)).toInt * 1000
      (result * 37) + nanoSeconds
   }
 

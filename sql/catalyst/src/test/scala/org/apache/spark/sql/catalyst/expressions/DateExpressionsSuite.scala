@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, IntervalConstants, UTF8String}
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -1053,11 +1053,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nanos = 123456000
     val timestamp = Epoch(MakeTimestamp(
       Literal(2019), Literal(8), Literal(9), Literal(0), Literal(0),
-      Literal(Decimal(nanos / DateTimeUtils.NANOS_PER_SECOND.toDouble, 8, 6)),
+      Literal(Decimal(nanos / IntervalConstants.NANOS_PER_SECOND.toDouble, 8, 6)),
       Some(Literal(zoneId.getId))))
     val instant = LocalDateTime.of(2019, 8, 9, 0, 0, 0, nanos)
       .atZone(zoneId).toInstant
-    val expected = Decimal(BigDecimal(nanos) / DateTimeUtils.NANOS_PER_SECOND +
+    val expected = Decimal(BigDecimal(nanos) / IntervalConstants.NANOS_PER_SECOND +
       instant.getEpochSecond +
       zoneId.getRules.getOffset(instant).getTotalSeconds)
     checkEvaluation(timestamp, expected)
