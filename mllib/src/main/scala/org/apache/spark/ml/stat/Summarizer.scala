@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, TypedImperativeAggregate}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
@@ -65,7 +65,7 @@ sealed abstract class SummaryBuilder {
  *   val dataframe = ... // Some dataframe containing a feature column and a weight column
  *   val multiStatsDF = dataframe.select(
  *       Summarizer.metrics("min", "max", "count").summary($"features", $"weight")
- *   val Row(Row(minVec, maxVec, count)) = multiStatsDF.first()
+ *   val Row(minVec, maxVec, count) = multiStatsDF.first()
  * }}}
  *
  * If one wants to get a single metric, shortcuts are also available:

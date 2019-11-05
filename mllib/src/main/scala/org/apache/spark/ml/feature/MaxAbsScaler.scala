@@ -68,15 +68,13 @@ class MaxAbsScaler @Since("2.0.0") (@Since("2.0.0") override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): MaxAbsScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val Row(max: Vector, min: Vector) = dataset.select(
-      Summarizer.metrics("max", "min")
-        .summary(col($(inputCol)), lit(1.0)).as("summary"))
-      .select("summary.max", "summary.min").first()
 
-    val minVals = min.toArray
-    val maxVals = max.toArray
-    val n = minVals.length
-    val maxAbs = Array.tabulate(n) { i => math.max(math.abs(minVals(i)), math.abs(maxVals(i))) }
+    val Row(max: Vector, min: Vector) = dataset
+      .select(Summarizer.metrics("max", "min").summary(col($(inputCol))).as("summary"))
+      .select("summary.max", "summary.min")
+      .first()
+
+    val maxAbs = Array.tabulate(max.size) { i => math.max(math.abs(min(i)), math.abs(max(i))) }
 
     copyValues(new MaxAbsScalerModel(uid, Vectors.dense(maxAbs).compressed).setParent(this))
   }
