@@ -419,6 +419,25 @@ trait HasTol extends Params {
 }
 
 /**
+ * Trait for shared param relativeError (default: 0.001). This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasRelativeError extends Params {
+
+  /**
+   * Param for the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1].
+   * @group expertParam
+   */
+  final val relativeError: DoubleParam = new DoubleParam(this, "relativeError", "the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1]", ParamValidators.inRange(0, 1))
+
+  setDefault(relativeError, 0.001)
+
+  /** @group expertGetParam */
+  final def getRelativeError: Double = $(relativeError)
+}
+
+/**
  * Trait for shared param stepSize. This trait may be changed or
  * removed between minor versions.
  */

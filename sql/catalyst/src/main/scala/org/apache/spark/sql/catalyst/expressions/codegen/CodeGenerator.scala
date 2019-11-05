@@ -1050,7 +1050,10 @@ class CodegenContext extends Logging {
     }
 
     val codes = if (commonExprVals.map(_.code.length).sum > SQLConf.get.methodSplitThreshold) {
-      if (commonExprs.map(calculateParamLength).forall(isValidParamLength)) {
+      val inputVarsForAllFuncs = commonExprs.map { expr =>
+        getLocalInputVariableValues(this, expr.head).toSeq
+      }
+      if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
         commonExprs.zipWithIndex.map { case (exprs, i) =>
           val expr = exprs.head
           val eval = commonExprVals(i)
@@ -1068,7 +1071,7 @@ class CodegenContext extends Logging {
 
           // Generate the code for this expression tree and wrap it in a function.
           val fnName = freshName("subExpr")
-          val inputVars = getLocalInputVariableValues(this, expr).toSeq
+          val inputVars = inputVarsForAllFuncs(i)
           val argList = inputVars.map(v => s"${v.javaType.getName} ${v.variableName}")
           val returnType = javaType(expr.dataType)
           val fn =

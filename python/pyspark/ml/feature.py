@@ -1464,7 +1464,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable, JavaMLWritable):
         return self._call_java("numDocs")
 
 
-class _ImputerParams(HasInputCols, HasOutputCols):
+class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, HasRelativeError):
     """
     Params for :py:class:`Imputer` and :py:class:`ImputerModel`.
 
@@ -1516,6 +1516,8 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     Imputer...
     >>> imputer.setOutputCols(["out_a", "out_b"])
     Imputer...
+    >>> imputer.getRelativeError()
+    0.001
     >>> model = imputer.fit(df)
     >>> model.getStrategy()
     'mean'
@@ -1540,6 +1542,55 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     +---+---+-----+-----+
     |1.0|NaN|  4.0|  NaN|
     ...
+    >>> df1 = spark.createDataFrame([(1.0,), (2.0,), (float("nan"),), (4.0,), (5.0,)], ["a"])
+    >>> imputer1 = Imputer(inputCol="a", outputCol="out_a")
+    >>> model1 = imputer1.fit(df1)
+    >>> model1.surrogateDF.show()
+    +---+
+    |  a|
+    +---+
+    |3.0|
+    +---+
+    ...
+    >>> model1.transform(df1).show()
+    +---+-----+
+    |  a|out_a|
+    +---+-----+
+    |1.0|  1.0|
+    |2.0|  2.0|
+    |NaN|  3.0|
+    ...
+    >>> imputer1.setStrategy("median").setMissingValue(1.0).fit(df1).transform(df1).show()
+    +---+-----+
+    |  a|out_a|
+    +---+-----+
+    |1.0|  4.0|
+    ...
+    >>> df2 = spark.createDataFrame([(float("nan"),), (float("nan"),), (3.0,), (4.0,), (5.0,)],
+    ...                             ["b"])
+    >>> imputer2 = Imputer(inputCol="b", outputCol="out_b")
+    >>> model2 = imputer2.fit(df2)
+    >>> model2.surrogateDF.show()
+    +---+
+    |  b|
+    +---+
+    |4.0|
+    +---+
+    ...
+    >>> model2.transform(df2).show()
+    +---+-----+
+    |  b|out_b|
+    +---+-----+
+    |NaN|  4.0|
+    |NaN|  4.0|
+    |3.0|  3.0|
+    ...
+    >>> imputer2.setStrategy("median").setMissingValue(1.0).fit(df2).transform(df2).show()
+    +---+-----+
+    |  b|out_b|
+    +---+-----+
+    |NaN|  NaN|
+    ...
     >>> imputerPath = temp_path + "/imputer"
     >>> imputer.save(imputerPath)
     >>> loadedImputer = Imputer.load(imputerPath)
@@ -1558,24 +1609,24 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
 
     @keyword_only
     def __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None,
-                 outputCols=None):
+                 outputCols=None, inputCol=None, outputCol=None, relativeError=0.001):
         """
         __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
-                 outputCols=None):
+                 outputCols=None, inputCol=None, outputCol=None, relativeError=0.001):
         """
         super(Imputer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Imputer", self.uid)
-        self._setDefault(strategy="mean", missingValue=float("nan"))
+        self._setDefault(strategy="mean", missingValue=float("nan"), relativeError=0.001)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.2.0")
     def setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None,
-                  outputCols=None):
+                  outputCols=None, inputCol=None, outputCol=None, relativeError=0.001):
         """
         setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
-                  outputCols=None)
+                  outputCols=None, inputCol=None, outputCol=None, relativeError=0.001)
         Sets params for this Imputer.
         """
         kwargs = self._input_kwargs
@@ -1608,6 +1659,27 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
         Sets the value of :py:attr:`outputCols`.
         """
         return self._set(outputCols=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setRelativeError(self, value):
+        """
+        Sets the value of :py:attr:`relativeError`.
+        """
+        return self._set(relativeError=value)
 
     def _create_model(self, java_model):
         return ImputerModel(java_model)
@@ -2291,7 +2363,8 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return self._set(outputCol=value)
 
 
-class _OneHotEncoderParams(HasInputCols, HasOutputCols, HasHandleInvalid):
+class _OneHotEncoderParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols,
+                           HasHandleInvalid):
     """
     Params for :py:class:`OneHotEncoder` and :py:class:`OneHotEncoderModel`.
 
@@ -2352,6 +2425,10 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
     'error'
     >>> model.transform(df).head().output
     SparseVector(2, {0: 1.0})
+    >>> single_col_ohe = OneHotEncoder(inputCol="input", outputCol="output")
+    >>> single_col_model = single_col_ohe.fit(df)
+    >>> single_col_model.transform(df).head().output
+    SparseVector(2, {0: 1.0})
     >>> ohePath = temp_path + "/ohe"
     >>> ohe.save(ohePath)
     >>> loadedOHE = OneHotEncoder.load(ohePath)
@@ -2367,9 +2444,11 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
     """
 
     @keyword_only
-    def __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
+    def __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True,
+                 inputCol=None, outputCol=None):
         """
-        __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
+        __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
+                 inputCol=None, outputCol=None)
         """
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -2380,9 +2459,11 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
 
     @keyword_only
     @since("2.3.0")
-    def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
+    def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True,
+                  inputCol=None, outputCol=None):
         """
-        setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
+        setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
+                  inputCol=None, outputCol=None)
         Sets params for this OneHotEncoder.
         """
         kwargs = self._input_kwargs
@@ -2415,6 +2496,20 @@ class OneHotEncoder(JavaEstimator, _OneHotEncoderParams, JavaMLReadable, JavaMLW
         Sets the value of :py:attr:`handleInvalid`.
         """
         return self._set(handleInvalid=value)
+
+    @since("3.0.0")
+    def setInputCol(self, value):
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("3.0.0")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
 
     def _create_model(self, java_model):
         return OneHotEncoderModel(java_model)
@@ -2549,7 +2644,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 
 @inherit_doc
 class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
-                          HasHandleInvalid, JavaMLReadable, JavaMLWritable):
+                          HasHandleInvalid, HasRelativeError, JavaMLReadable, JavaMLWritable):
     """
     :py:class:`QuantileDiscretizer` takes a column with continuous features and outputs a column
     with binned categorical features. The number of bins can be set using the :py:attr:`numBuckets`
@@ -2644,11 +2739,6 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
                        "categories) into which data points are grouped. Must be >= 2.",
                        typeConverter=TypeConverters.toInt)
 
-    relativeError = Param(Params._dummy(), "relativeError", "The relative target precision for " +
-                          "the approximate quantile algorithm used to generate buckets. " +
-                          "Must be in the range [0, 1].",
-                          typeConverter=TypeConverters.toFloat)
-
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
                           "Options are skip (filter out rows with invalid values), " +
                           "error (throw an error), or keep (keep invalid values in a special " +
@@ -2727,13 +2817,6 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
         """
         return self._set(relativeError=value)
 
-    @since("2.0.0")
-    def getRelativeError(self):
-        """
-        Gets the value of relativeError or its default value.
-        """
-        return self.getOrDefault(self.relativeError)
-
     def setInputCol(self, value):
         """
         Sets the value of :py:attr:`inputCol`.
@@ -2783,7 +2866,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
                               handleInvalid=self.getHandleInvalid())
 
 
-class _RobustScalerParams(HasInputCol, HasOutputCol):
+class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError):
     """
     Params for :py:class:`RobustScaler` and :py:class:`RobustScalerModel`.
 
@@ -2879,24 +2962,25 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
 
     @keyword_only
     def __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
-                 inputCol=None, outputCol=None):
+                 inputCol=None, outputCol=None, relativeError=0.001):
         """
         __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
-                 inputCol=None, outputCol=None)
+                 inputCol=None, outputCol=None, relativeError=0.001)
         """
         super(RobustScaler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RobustScaler", self.uid)
-        self._setDefault(lower=0.25, upper=0.75, withCentering=False, withScaling=True)
+        self._setDefault(lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+                         relativeError=0.001)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("3.0.0")
     def setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
-                  inputCol=None, outputCol=None):
+                  inputCol=None, outputCol=None, relativeError=0.001):
         """
         setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
-                  inputCol=None, outputCol=None)
+                  inputCol=None, outputCol=None, relativeError=0.001)
         Sets params for this RobustScaler.
         """
         kwargs = self._input_kwargs
@@ -2943,6 +3027,13 @@ class RobustScaler(JavaEstimator, _RobustScalerParams, JavaMLReadable, JavaMLWri
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
+
+    @since("3.0.0")
+    def setRelativeError(self, value):
+        """
+        Sets the value of :py:attr:`relativeError`.
+        """
+        return self._set(relativeError=value)
 
     def _create_model(self, java_model):
         return RobustScalerModel(java_model)
