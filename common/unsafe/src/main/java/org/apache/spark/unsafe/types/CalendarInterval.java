@@ -24,7 +24,6 @@ import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
-
 import static org.apache.spark.unsafe.types.IntervalConstants.*;
 
 /**

@@ -36,7 +36,6 @@ import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.unsafe.types.IntervalConstants._
 import org.apache.spark.util.Clock
 
-
 /**
  * Responsible for continually reporting statistics about the amount of data processed as well
  * as latency for a streaming query.  This trait is designed to be mixed into the
