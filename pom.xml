@@ -184,7 +184,6 @@
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <janino.version>3.0.15</janino.version>
     <jersey.version>2.29</jersey.version>
-    <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -2092,11 +2091,6 @@
         <groupId>org.codehaus.janino</groupId>
         <artifactId>commons-compiler</artifactId>
         <version>${janino.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>joda-time</groupId>
-        <artifactId>joda-time</artifactId>
-        <version>${joda.version}</version>
       </dependency>
       <dependency>
         <groupId>org.jodd</groupId>

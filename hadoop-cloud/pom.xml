@@ -131,16 +131,6 @@
         </exclusion>
       </exclusions>
     </dependency>
-
-    <!--
-    Add joda time to ensure that anything downstream which doesn't pull in spark-hive
-    gets the correct joda time artifact, so doesn't have auth failures on later Java 8 JVMs
-    -->
-    <dependency>
-      <groupId>joda-time</groupId>
-      <artifactId>joda-time</artifactId>
-      <scope>${hadoop.deps.scope}</scope>
-    </dependency>
     <!-- explicitly declare the jackson artifacts desired -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>

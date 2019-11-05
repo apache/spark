@@ -215,7 +215,6 @@ com.twitter:chill-java
 com.twitter:chill_2.12
 com.univocity:univocity-parsers
 javax.jdo:jdo-api
-joda-time:joda-time
 net.sf.opencsv:opencsv
 org.apache.derby:derby
 org.ehcache:ehcache
