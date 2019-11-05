@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -56,10 +56,6 @@ SKIPPED_TESTS = Manager().dict()
 LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
-
-PYTHON_MAJOR_VERSION = 3
-PYTHON_MINOR_VERSION = 6
-PYTHON_MICRO_VERSION = 0
 
 # Find out where the assembly jars are located.
 # TODO: revisit for Scala 2.13
@@ -168,27 +164,7 @@ def get_default_python_executables():
 
     if "python3.6" not in python_execs:
         p = which("python3")
-
-        if p:
-            py_out = subprocess.run([p, "--version"], stderr=subprocess.PIPE)
-            py_out = py_out.stderr.decode("utf-8")
-            python_version = tuple([int(i) for i in re.findall(r"\d", py_out)])
-
-            if python_version < (PYTHON_MAJOR_VERSION, PYTHON_MINOR_VERSION, PYTHON_MICRO_VERSION):
-                LOGGER.error("Python version %s.%s.%s is lower than minimum "
-                             "required: %s.%s.%s" % (python_version[0],
-                                                     python_version[1],
-                                                     python_version[2],
-                                                     PYTHON_MAJOR_VERSION,
-                                                     PYTHON_MINOR_VERSION,
-                                                     PYTHON_MICRO_VERSION))
-                LOGGER.error("Exiting!")
-                os._exit(1)
-            else:
-                LOGGER.warning("Not testing against `python3.6` because it could not be found; "
-                               "falling back to %s instead" % p)
-                python_execs.insert(0, p)
-        else:
+        if not p:
             LOGGER.error("No python3 executable found.  Exiting!")
             os._exit(1)
     return python_execs
