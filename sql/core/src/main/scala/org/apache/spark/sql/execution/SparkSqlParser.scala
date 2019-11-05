@@ -427,41 +427,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AlterTableAddPartitionCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
-   *   ALTER VIEW view ADD [IF NOT EXISTS] PARTITION spec
-   * }}}
-   *
-   * ALTER VIEW ... ADD PARTITION ... is not supported because the concept of partitioning
-   * is associated with physical tables
-   */
-  override def visitAddTablePartition(
-      ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.VIEW != null) {
-      operationNotAllowed("ALTER VIEW ... ADD PARTITION", ctx)
-    }
-    // Create partition spec to location mapping.
-    val specsAndLocs = if (ctx.partitionSpec.isEmpty) {
-      ctx.partitionSpecLocation.asScala.map {
-        splCtx =>
-          val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
-          val location = Option(splCtx.locationSpec).map(visitLocationSpec)
-          spec -> location
-      }
-    } else {
-      // Alter View: the location clauses are not allowed.
-      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec(_) -> None)
-    }
-    AlterTableAddPartitionCommand(
-      visitTableIdentifier(ctx.tableIdentifier),
-      specsAndLocs,
-      ctx.EXISTS != null)
-  }
-
-  /**
    * Convert a nested constants list into a sequence of string sequences.
    */
   override def visitNestedConstantList(

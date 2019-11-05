@@ -6,6 +6,10 @@ DESC test_change;
 ALTER TABLE test_change CHANGE a;
 DESC test_change;
 
+-- Change column name (not supported on v1 table)
+ALTER TABLE test_change RENAME COLUMN a TO a1;
+DESC test_change;
+
 -- Change column dataType (not supported yet)
 ALTER TABLE test_change CHANGE a TYPE STRING;
 DESC test_change;
