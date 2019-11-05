@@ -204,9 +204,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       multiply("-100 years -1 millisecond", 0.5),
       fromString("-50 years -500 microseconds"))
-    checkEvaluation(
-      multiply("2 months 4 seconds", -0.5),
-      fromString("-1 months -2 seconds"))
+    checkEvaluation(multiply("2 months 4 seconds", -0.5), fromString("-1 months -2 seconds"))
     checkEvaluation(
       multiply("1 month 2 microseconds", 1.5),
       fromString("1 months 15 days 3 microseconds"))
@@ -222,21 +220,14 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       divide("12 months 3 milliseconds", 2),
       fromString("6 months 1 milliseconds 500 microseconds"))
-    checkEvaluation(
-      divide("-5 year 3 seconds", 3),
-      fromString("-1 years -8 months 1 seconds"))
+    checkEvaluation(divide("-5 year 3 seconds", 3), fromString("-1 years -8 months 1 seconds"))
     checkEvaluation(
       divide("6 years -7 seconds", 3),
       fromString("2 years -2 seconds -333 milliseconds -333 microseconds"))
-    checkEvaluation(
-      divide("2 years -8 seconds", 0.5),
-      fromString("4 years -16 seconds"))
-    checkEvaluation(
-      divide("-1 month 2 microseconds", -0.25),
+    checkEvaluation(divide("2 years -8 seconds", 0.5), fromString("4 years -16 seconds"))
+    checkEvaluation(divide("-1 month 2 microseconds", -0.25),
       fromString("4 months -8 microseconds"))
-    checkEvaluation(
-      divide("1 month 3 microsecond", 1.5),
-      fromString("20 days 2 microseconds"))
+    checkEvaluation(divide("1 month 3 microsecond", 1.5), fromString("20 days 2 microseconds"))
     checkEvaluation(divide("2 months", 0), null)
   }
 }
