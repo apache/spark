@@ -2799,7 +2799,10 @@ object SparkContext extends Logging {
             s" = ${taskReq.amount}")
         }
         // Compare and update the max slots each executor can provide.
-        val resourceNumSlots = execAmount / taskReq.amount
+        // If the configured amount per task was < 1.0, a task is subdividing
+        // executor resources. If the amount per task was > 1.0, the task wants
+        // multiple executor resources.
+        val resourceNumSlots = Math.floor(execAmount * taskReq.numParts / taskReq.amount).toInt
         if (resourceNumSlots < numSlots) {
           numSlots = resourceNumSlots
           limitingResourceName = taskReq.resourceName
@@ -2809,11 +2812,19 @@ object SparkContext extends Logging {
       // large enough if any task resources were specified.
       taskResourceRequirements.foreach { taskReq =>
         val execAmount = executorResourcesAndAmounts(taskReq.resourceName)
-        if (taskReq.amount * numSlots < execAmount) {
+        if ((numSlots * taskReq.amount / taskReq.numParts) < execAmount) {
+          val taskReqStr = if (taskReq.numParts > 1) {
+            s"${taskReq.amount}/${taskReq.numParts}"
+          } else {
+            s"${taskReq.amount}"
+          }
+          val resourceNumSlots = Math.floor(execAmount * taskReq.numParts/taskReq.amount).toInt
           val message = s"The configuration of resource: ${taskReq.resourceName} " +
-            s"(exec = ${execAmount}, task = ${taskReq.amount}) will result in wasted " +
-            s"resources due to resource ${limitingResourceName} limiting the number of " +
-            s"runnable tasks per executor to: ${numSlots}. Please adjust your configuration."
+            s"(exec = ${execAmount}, task = ${taskReqStr}, " +
+            s"runnable tasks = ${resourceNumSlots}) will " +
+            s"result in wasted resources due to resource ${limitingResourceName} limiting the " +
+            s"number of runnable tasks per executor to: ${numSlots}. Please adjust " +
+            s"your configuration."
           if (Utils.isTesting) {
             throw new SparkException(message)
           } else {
