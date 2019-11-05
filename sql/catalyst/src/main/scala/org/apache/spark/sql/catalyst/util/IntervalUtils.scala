@@ -365,4 +365,28 @@ object IntervalUtils {
   def isNegative(interval: CalendarInterval, daysPerMonth: Int = 31): Boolean = {
     getDuration(interval, TimeUnit.MICROSECONDS, daysPerMonth) < 0
   }
+
+  /**
+   * Makes an interval from months, days and micros with the fractional part by
+   * adding the month fraction to days and the days fraction to micros.
+   */
+  private def fromDoubles(
+      monthsWithFraction: Double,
+      daysWithFraction: Double,
+      microsWithFraction: Double): CalendarInterval = {
+    val truncatedMonths = Math.toIntExact(monthsWithFraction.toLong)
+    // Using 30 days per month as PostgreSQL does.
+    val days = daysWithFraction + 30 * (monthsWithFraction - truncatedMonths)
+    val truncatedDays = Math.toIntExact(days.toLong)
+    val micros = microsWithFraction + DateTimeUtils.MICROS_PER_DAY * (days - truncatedDays)
+    new CalendarInterval(truncatedMonths, truncatedDays, micros.round)
+  }
+
+  def multiply(interval: CalendarInterval, num: Double): CalendarInterval = {
+    fromDoubles(num * interval.months, num * interval.days, num * interval.microseconds)
+  }
+
+  def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
+    fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
+  }
 }

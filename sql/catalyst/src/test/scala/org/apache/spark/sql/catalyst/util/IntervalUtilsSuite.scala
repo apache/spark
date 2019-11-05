@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.util
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromString, fromYearMonthString}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{MICROS_PER_MILLIS, MICROS_PER_SECOND}
+import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.unsafe.types.CalendarInterval._
 
 class IntervalUtilsSuite extends SparkFunSuite {
 
@@ -34,7 +34,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     testSingleUnit("HouR", 3, 0, 0, 3 * MICROS_PER_HOUR)
     testSingleUnit("MiNuTe", 3, 0, 0, 3 * MICROS_PER_MINUTE)
     testSingleUnit("Second", 3, 0, 0, 3 * MICROS_PER_SECOND)
-    testSingleUnit("MilliSecond", 3, 0, 0, 3 * MICROS_PER_MILLI)
+    testSingleUnit("MilliSecond", 3, 0, 0, 3 * MICROS_PER_MILLIS)
     testSingleUnit("MicroSecond", 3, 0, 0, 3)
 
     for (input <- Seq(null, "", " ")) {
@@ -125,7 +125,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
       new CalendarInterval(
         0,
         10,
-        12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLI))
+        12 * MICROS_PER_MINUTE + 888 * MICROS_PER_MILLIS))
     assert(fromDayTimeString("-3 0:0:0") === new CalendarInterval(0, -3, 0L))
 
     try {
@@ -185,5 +185,44 @@ class IntervalUtilsSuite extends SparkFunSuite {
     assert(!isNegative("0 months", 28))
     assert(!isNegative("1 year -360 days", 31))
     assert(!isNegative("-1 year 380 days", 31))
+  }
+
+  test("multiply by num") {
+    var interval = new CalendarInterval(0, 0, 0)
+    assert(interval === multiply(interval, 0))
+    interval = new CalendarInterval(123, 456, 789)
+    assert(new CalendarInterval(123 * 42, 456 * 42, 789 * 42) === multiply(interval, 42))
+    interval = new CalendarInterval(-123, -456, -789)
+    assert(new CalendarInterval(-123 * 42, -456 * 42, -789 * 42) === multiply(interval, 42))
+    assert(new CalendarInterval(1, 22, 12 * MICROS_PER_HOUR) ===
+      multiply(new CalendarInterval(1, 5, 0), 1.5))
+    assert(new CalendarInterval(2, 14, 12 * MICROS_PER_HOUR) ===
+      multiply(new CalendarInterval(2, 2, 2 * MICROS_PER_HOUR), 1.2))
+    try {
+      multiply(new CalendarInterval(2, 0, 0), Integer.MAX_VALUE)
+      fail("Expected to throw an exception on months overflow")
+    } catch {
+      case e: ArithmeticException =>
+        assert(e.getMessage.contains("overflow"))
+    }
+  }
+
+  test("divide by num") {
+    var interval = new CalendarInterval(0, 0, 0)
+    assert(interval === divide(interval, 10))
+    interval = new CalendarInterval(1, 3, 30 * MICROS_PER_SECOND)
+    assert(new CalendarInterval(0, 16, 12 * MICROS_PER_HOUR + 15 * MICROS_PER_SECOND) ===
+      divide(interval, 2))
+    assert(new CalendarInterval(2, 6, MICROS_PER_MINUTE) === divide(interval, 0.5))
+    interval = new CalendarInterval(-1, 0, -30 * MICROS_PER_SECOND)
+    assert(new CalendarInterval(0, -15, -15 * MICROS_PER_SECOND) === divide(interval, 2))
+    assert(new CalendarInterval(-2, 0, -1 * MICROS_PER_MINUTE) === divide(interval, 0.5))
+    try {
+      divide(new CalendarInterval(123, 456, 789), 0)
+      fail("Expected to throw an exception on divide by zero")
+    } catch {
+      case e: ArithmeticException =>
+        assert(e.getMessage.contains("overflow"))
+    }
   }
 }

@@ -134,9 +134,10 @@ abstract class IntervalNumOperation(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (interval, num) => {
+      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
       s"""
         try {
-          ${ev.value} = $interval.$operationName($num);
+          ${ev.value} = $iu.$operationName($interval, $num);
         } catch (java.lang.ArithmeticException e) {
           ${ev.isNull} = true;
         }
@@ -151,12 +152,12 @@ case class MultiplyInterval(interval: Expression, num: Expression)
   extends IntervalNumOperation(
     interval,
     num,
-    (i: CalendarInterval, n: Double) => i.multiply(n),
+    (i: CalendarInterval, n: Double) => multiply(i, n),
     "multiply")
 
 case class DivideInterval(interval: Expression, num: Expression)
   extends IntervalNumOperation(
     interval,
     num,
-    (i: CalendarInterval, n: Double) => i.divide(n),
+    (i: CalendarInterval, n: Double) => divide(i, n),
     "divide")

@@ -60,27 +60,6 @@ public final class CalendarInterval implements Serializable {
     return new CalendarInterval(months, days, microseconds);
   }
 
-  private static CalendarInterval fromDoubles(
-      double monthsWithFraction,
-      double daysWithFraction,
-      double microsWithFraction) {
-    int truncatedMonths = Math.toIntExact((long)(monthsWithFraction));
-    // Using 30 days per month as PostgreSQL does.
-    double days = daysWithFraction + 30 * (monthsWithFraction - truncatedMonths);
-    int truncatedDays = Math.toIntExact((long)days);
-    double micros = microsWithFraction + MICROS_PER_DAY * (days - truncatedDays);
-    long truncatedMicros = Math.round(micros);
-    return new CalendarInterval(truncatedMonths, truncatedDays, truncatedMicros);
-  }
-
-  public CalendarInterval multiply(double num) {
-    return fromDoubles(num * this.months, num * this.days, num * this.microseconds);
-  }
-
-  public CalendarInterval divide(double num) {
-    return fromDoubles(this.months / num, this.days / num, this.microseconds / num);
-  }
-
   public CalendarInterval negate() {
     return new CalendarInterval(-this.months, -this.days, -this.microseconds);
   }
