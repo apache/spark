@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
@@ -103,25 +103,11 @@ case class LocalShuffleReaderExec(child: QueryStageExec) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
-  override def doCanonicalize(): SparkPlan = child.canonicalized
-
-  override def outputPartitioning: Partitioning = {
-
-    def tryReserveChildPartitioning(stage: ShuffleQueryStageExec): Partitioning = {
-      val initialPartitioning = stage.plan.child.outputPartitioning
-      if (initialPartitioning.isInstanceOf[UnknownPartitioning]) {
-        UnknownPartitioning(stage.plan.shuffleDependency.rdd.partitions.length)
-      } else {
-        initialPartitioning
-      }
-    }
-
-    child match {
-      case stage: ShuffleQueryStageExec =>
-        tryReserveChildPartitioning(stage)
-      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-        tryReserveChildPartitioning(stage)
-    }
+  override def outputPartitioning: Partitioning = child match {
+    case stage: ShuffleQueryStageExec =>
+      stage.plan.child.outputPartitioning
+    case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+      stage.plan.child.outputPartitioning
   }
 
   private var cachedShuffleRDD: RDD[InternalRow] = null

@@ -187,8 +187,6 @@ case class CoalescedShuffleReaderExec(
 
   override def output: Seq[Attribute] = child.output
 
-  override def doCanonicalize(): SparkPlan = child.canonicalized
-
   override def outputPartitioning: Partitioning = {
     UnknownPartitioning(partitionStartIndices.length)
   }
