@@ -56,15 +56,16 @@ class ThriftServerPageSuite extends SparkFunSuite {
     val html = page.render(request).toString().toLowerCase(Locale.ROOT)
 
     // session statistics and sql statistics tables should load successfully
-    assert(html.contains("session statistics (1)") && html.contains("sql statistics (1)"))
-    assert(html.contains("dummy query") && html.contains("dummy plan"))
+    assert(html.contains("session statistics (1)"))
+    assert(html.contains("sql statistics (1)"))
+    assert(html.contains("dummy query"))
+    assert(html.contains("dummy plan"))
 
     // Pagination support
-    assert(html.contains("name=\"sessionstat.pagesize\" value=\"100\" class=\"span1\"/>\n" +
-      "          <label>items in a page.</label>"))
+    assert(html.contains("<label>1 pages. jump to</label>"))
 
-      // Hiding table support
-     assert(html.contains("class=\"collapse-aggregated-sessionstat" +
+    // Hiding table support
+    assert(html.contains("class=\"collapse-aggregated-sessionstat" +
        " collapse-table\" onclick=\"collapsetable"))
   }
 
@@ -80,14 +81,14 @@ class ThriftServerPageSuite extends SparkFunSuite {
 
     // session sql statistics table should load successfully
     assert(html.contains("sql statistics"))
-    assert(html.contains("user") && html.contains("groupid"))
+    assert(html.contains("user"))
+    assert(html.contains("groupid"))
 
     // Pagination support
-    assert(html.contains("name=\"sqlsessionstat.pagesize\" value=\"100\" class=\"span1\"/>\n" +
-      "          <label>items in a page.</label>"))
+    assert(html.contains("<label>1 pages. jump to</label>"))
 
     // Hiding table support
-        assert(html.contains("collapse-aggregated-sqlsessionstat collapse-table\"" +
+    assert(html.contains("collapse-aggregated-sqlsessionstat collapse-table\"" +
           " onclick=\"collapsetable"))
   }
 }
