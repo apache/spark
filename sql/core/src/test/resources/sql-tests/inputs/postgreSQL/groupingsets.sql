@@ -391,8 +391,8 @@ select unsortable_col, count(*)
   order by string(unsortable_col);
 
 -- mixed hashable/sortable cases
+-- [SPARK-29698] Support grouping function with multiple arguments
 select unhashable_col, unsortable_col,
-       -- [SPARK-29698] Support grouping function with multiple arguments
        -- grouping(unhashable_col, unsortable_col),
        grouping(unhashable_col), grouping(unsortable_col),
        count(*), sum(v)
@@ -405,8 +405,8 @@ select unhashable_col, unsortable_col,
 --     from gstest4 group by grouping sets ((unhashable_col),(unsortable_col))
 --    order by 3,5;
 
+-- [SPARK-29698] Support grouping function with multiple arguments
 select unhashable_col, unsortable_col,
-       -- [SPARK-29698] Support grouping function with multiple arguments
        -- grouping(unhashable_col, unsortable_col),
        grouping(unhashable_col), grouping(unsortable_col),
        count(*), sum(v)
