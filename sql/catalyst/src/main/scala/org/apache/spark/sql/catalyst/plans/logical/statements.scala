@@ -427,3 +427,8 @@ case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
 case class ShowColumnsStatement(
     table: Seq[String],
     namespace: Option[Seq[String]]) extends ParsedStatement
+
+/**
+ * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
+ */
+case class ShowCurrentNamespaceStatement() extends ParsedStatement
