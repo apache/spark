@@ -53,18 +53,6 @@ class CatalogManager(
     }
   }
 
-  private def defaultCatalog: Option[CatalogPlugin] = {
-    conf.defaultV2Catalog.flatMap { catalogName =>
-      try {
-        Some(catalog(catalogName))
-      } catch {
-        case NonFatal(e) =>
-          logError(s"Cannot load default v2 catalog: $catalogName", e)
-          None
-      }
-    }
-  }
-
   private def loadV2SessionCatalog(): CatalogPlugin = {
     Catalogs.load(SESSION_CATALOG_NAME, conf) match {
       case extension: CatalogExtension =>
@@ -127,9 +115,7 @@ class CatalogManager(
   private var _currentCatalogName: Option[String] = None
 
   def currentCatalog: CatalogPlugin = synchronized {
-    _currentCatalogName.map(catalogName => catalog(catalogName))
-      .orElse(defaultCatalog)
-      .getOrElse(v2SessionCatalog)
+    catalog(_currentCatalogName.getOrElse(conf.getConf(SQLConf.DEFAULT_CATALOG)))
   }
 
   def setCurrentCatalog(catalogName: String): Unit = synchronized {
