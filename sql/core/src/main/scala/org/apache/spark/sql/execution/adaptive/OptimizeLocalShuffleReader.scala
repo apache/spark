@@ -106,8 +106,8 @@ case class LocalShuffleReaderExec(child: QueryStageExec) extends UnaryExecNode {
   override def outputPartitioning: Partitioning = child match {
     case stage: ShuffleQueryStageExec =>
       stage.plan.child.outputPartitioning
-    case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-      stage.plan.child.outputPartitioning
+    case r @ ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+      r.updatePartitioning(stage.plan.child.outputPartitioning)
   }
 
   private var cachedShuffleRDD: RDD[InternalRow] = null
