@@ -171,7 +171,7 @@ private[spark] class ExecutorMonitor(
   }
 
   def pendingRemovalCountPerResourceProfileId(id: Int): Int = {
-    executors.asScala.filter { case (k, v) => v.rProfId == id }.size
+    executors.asScala.filter { case (k, v) => v.rProfId == id && v.tracker.pendingRemoval }.size
   }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
