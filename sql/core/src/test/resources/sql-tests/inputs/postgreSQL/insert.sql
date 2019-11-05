@@ -41,7 +41,7 @@ select * from inserttest;
 --
 -- [SPARK-29119] DEFAULT option is not supported in Spark
 -- [SPARK-29715] Support SELECT statements in VALUES of INSERT INTO
--- insert into inserttest values(10, 20, '40'), (-1, 2, 'testing' /* DEFAULT */),
+-- insert into inserttest values(10, 20, '40'), (-1, 2, DEFAULT),
 --     ((select 2), (select i from (values(3)) as foo (i)), 'values are fun!');
 
 -- select * from inserttest;
@@ -162,6 +162,7 @@ drop table inserttest;
 -- create table part_ee_ff2 partition of part_ee_ff for values from (10) to (20);
 
 -- test default partition
+-- [SPARK-29718] Support PARTITION BY [RANGE|LIST|HASH] and PARTITION OF in CREATE TABLE
 -- create table part_default partition of list_parted default;
 -- Negative test: a row, which would fit in other partition, does not fit
 -- default partition, even when inserted directly
