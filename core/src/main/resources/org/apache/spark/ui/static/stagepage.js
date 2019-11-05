@@ -759,7 +759,11 @@ $(document).ready(function () {
                             data : function (row, type) {
                                 if (accumulatorTable.length > 0 && row.accumulatorUpdates.length > 0) {
                                     var accIndex = row.accumulatorUpdates.length - 1;
-                                    return row.accumulatorUpdates[accIndex].name + ' : ' + row.accumulatorUpdates[accIndex].update;
+                                    var allAccums = "";
+                                    row.accumulatorUpdates.forEach(function(accumulator) {
+                                        allAccums += accumulator.name + ': ' + accumulator.update + "<BR>";
+                                    })
+                                    return allAccums;
                                 } else {
                                     return "";
                                 }
