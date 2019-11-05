@@ -52,6 +52,8 @@ private[sql] class SharedState(
     initialConfigs: scala.collection.Map[String, String])
   extends Logging {
 
+  SharedState.setFsUrlStreamHandlerFactoryIfNeeded(sparkContext.conf)
+
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
   val warehousePath: String = {
@@ -191,11 +193,24 @@ private[sql] class SharedState(
 }
 
 object SharedState extends Logging {
-  try {
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
-  } catch {
-    case e: Error =>
-      logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+  private var initialized = false
+  private def setFsUrlStreamHandlerFactoryIfNeeded(conf: SparkConf): Unit = {
+    synchronized {
+      if (!initialized) {
+        try {
+          if (conf.getBoolean("spark.fsUrlStreamHandlerFactory.enabled", true)) {
+            URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+          }
+        } catch {
+          case e: Error =>
+            logWarning("URL.setURLStreamHandlerFactory failed to set " +
+              "FsUrlStreamHandlerFactory", e)
+        } finally {
+          // don't retry on failure
+          initialized = true
+        }
+      }
+    }
   }
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
