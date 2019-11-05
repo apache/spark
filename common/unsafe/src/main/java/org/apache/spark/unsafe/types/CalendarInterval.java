@@ -36,7 +36,6 @@ public final class CalendarInterval implements Serializable, Ordered<CalendarInt
   public static final long MICROS_PER_HOUR = MICROS_PER_MINUTE * 60;
   public static final long MICROS_PER_DAY = MICROS_PER_HOUR * 24;
   public static final long MICROS_PER_WEEK = MICROS_PER_DAY * 7;
-  public static final long MICROS_PER_MONTH = MICROS_PER_DAY * 30;
 
   public final int months;
   public final int days;
