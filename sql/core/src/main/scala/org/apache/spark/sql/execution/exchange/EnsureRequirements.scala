@@ -83,7 +83,24 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         numPartitionsSet.headOption
       }
 
-      val targetNumPartitions = requiredNumPartitions.getOrElse(childrenNumPartitions.max)
+      // maxNumPostShufflePartitions is usually larger than numShufflePartitions,
+      // which causes some bucket map join lose efficacy after enabling adaptive execution.
+      // Please see SPARK-29655 for more details.
+      val selectedChildrenNumPartitions = if (conf.adaptiveExecutionEnabled) {
+        val withoutShuffleChildrenNumPartitions =
+          childrenIndexes.filterNot(children(_).isInstanceOf[ShuffleExchangeExec])
+            .map(children(_).outputPartitioning.numPartitions).toSet
+        if (withoutShuffleChildrenNumPartitions.nonEmpty) {
+          math.min(math.max(withoutShuffleChildrenNumPartitions.max, conf.numShufflePartitions),
+            conf.maxNumPostShufflePartitions)
+        } else {
+          childrenNumPartitions.max
+        }
+      } else {
+        childrenNumPartitions.max
+      }
+
+      val targetNumPartitions = requiredNumPartitions.getOrElse(selectedChildrenNumPartitions)
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, distribution), index) if childrenIndexes.contains(index) =>
