@@ -1202,6 +1202,42 @@ class DDLParserSuite extends AnalysisTest {
       AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
   }
 
+  test("alter table: add partition") {
+    val sql1 =
+      """
+        |ALTER TABLE a.b.c ADD IF NOT EXISTS PARTITION
+        |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
+        |(dt='2009-09-09', country='uk')
+      """.stripMargin
+    val sql2 = "ALTER TABLE a.b.c ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
+
+    val parsed1 = parsePlan(sql1)
+    val parsed2 = parsePlan(sql2)
+
+    val expected1 = AlterTableAddPartitionStatement(
+      Seq("a", "b", "c"),
+      Seq(
+        (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
+        (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
+      ifNotExists = true)
+    val expected2 = AlterTableAddPartitionStatement(
+      Seq("a", "b", "c"),
+      Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
+      ifNotExists = false)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("alter view: add partition (not supported)") {
+    assertUnsupported(
+      """
+        |ALTER VIEW a.b.c ADD IF NOT EXISTS PARTITION
+        |(dt='2008-08-08', country='us') PARTITION
+        |(dt='2009-09-09', country='uk')
+      """.stripMargin)
+  }
+
   test("alter table: rename partition") {
     val sql1 =
       """
@@ -1276,6 +1312,96 @@ class DDLParserSuite extends AnalysisTest {
 
     val parsed3_table = parsePlan(sql3_table)
     comparePlans(parsed3_table, expected3_table)
+  }
+
+  test("show current namespace") {
+    comparePlans(
+      parsePlan("SHOW CURRENT NAMESPACE"),
+      ShowCurrentNamespaceStatement())
+  }
+
+  test("alter table: SerDe properties") {
+    val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
+    val parsed1 = parsePlan(sql1)
+    val expected1 = AlterTableSerDePropertiesStatement(
+      Seq("table_name"), Some("org.apache.class"), None, None)
+    comparePlans(parsed1, expected1)
+
+    val sql2 =
+      """
+        |ALTER TABLE table_name SET SERDE 'org.apache.class'
+        |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
+      """.stripMargin
+    val parsed2 = parsePlan(sql2)
+    val expected2 = AlterTableSerDePropertiesStatement(
+      Seq("table_name"),
+      Some("org.apache.class"),
+      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
+      None)
+    comparePlans(parsed2, expected2)
+
+    val sql3 =
+      """
+        |ALTER TABLE table_name
+        |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
+      """.stripMargin
+    val parsed3 = parsePlan(sql3)
+    val expected3 = AlterTableSerDePropertiesStatement(
+      Seq("table_name"), None, Some(Map("columns" -> "foo,bar", "field.delim" -> ",")), None)
+    comparePlans(parsed3, expected3)
+
+    val sql4 =
+      """
+        |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08', country='us')
+        |SET SERDE 'org.apache.class'
+        |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
+      """.stripMargin
+    val parsed4 = parsePlan(sql4)
+    val expected4 = AlterTableSerDePropertiesStatement(
+      Seq("table_name"),
+      Some("org.apache.class"),
+      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
+      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
+    comparePlans(parsed4, expected4)
+
+    val sql5 =
+      """
+        |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08', country='us')
+        |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
+      """.stripMargin
+    val parsed5 = parsePlan(sql5)
+    val expected5 = AlterTableSerDePropertiesStatement(
+      Seq("table_name"),
+      None,
+      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
+      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
+    comparePlans(parsed5, expected5)
+
+    val sql6 =
+      """
+        |ALTER TABLE a.b.c SET SERDE 'org.apache.class'
+        |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
+      """.stripMargin
+    val parsed6 = parsePlan(sql6)
+    val expected6 = AlterTableSerDePropertiesStatement(
+      Seq("a", "b", "c"),
+      Some("org.apache.class"),
+      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
+      None)
+    comparePlans(parsed6, expected6)
+
+    val sql7 =
+      """
+        |ALTER TABLE a.b.c PARTITION (test=1, dt='2008-08-08', country='us')
+        |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
+      """.stripMargin
+    val parsed7 = parsePlan(sql7)
+    val expected7 = AlterTableSerDePropertiesStatement(
+      Seq("a", "b", "c"),
+      None,
+      Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
+      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
+    comparePlans(parsed7, expected7)
   }
 
   private case class TableSpec(

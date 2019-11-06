@@ -1597,6 +1597,27 @@ class TypeCoercionSuite extends AnalysisTest {
       Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
         Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)))
   }
+
+  test("rule for interval operations") {
+    val dateTimeOperations = TypeCoercion.DateTimeOperations
+    val interval = Literal(new CalendarInterval(0, 0, 0))
+
+    Seq(
+      Literal(10.toByte, ByteType),
+      Literal(10.toShort, ShortType),
+      Literal(10, IntegerType),
+      Literal(10L, LongType),
+      Literal(Decimal(10), DecimalType.SYSTEM_DEFAULT),
+      Literal(10.5.toFloat, FloatType),
+      Literal(10.5, DoubleType)).foreach { num =>
+      ruleTest(dateTimeOperations, Multiply(interval, num),
+        MultiplyInterval(interval, num))
+      ruleTest(dateTimeOperations, Multiply(num, interval),
+        MultiplyInterval(interval, num))
+      ruleTest(dateTimeOperations, Divide(interval, num),
+        DivideInterval(interval, num))
+    }
+  }
 }
 
 

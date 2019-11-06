@@ -62,8 +62,28 @@ class ResolveSessionCatalog(
          nameParts @ SessionCatalog(catalog, tableName), colName, dataType, comment) =>
       loadTable(catalog, tableName.asIdentifier).collect {
         case v1Table: V1Table =>
-          // TODO(SPARK-29353): we should fallback to the v1 `AlterTableChangeColumnCommand`.
-          throw new AnalysisException("ALTER COLUMN is only supported with v2 tables.")
+          if (colName.length > 1) {
+            throw new AnalysisException(
+              "ALTER COLUMN with qualified column is only supported with v2 tables.")
+          }
+          if (dataType.isEmpty) {
+            throw new AnalysisException(
+              "ALTER COLUMN with v1 tables must specify new data type.")
+          }
+          val builder = new MetadataBuilder
+          // Add comment to metadata
+          comment.map(c => builder.putString("comment", c))
+          // Add Hive type string to metadata.
+          val cleanedDataType = HiveStringType.replaceCharType(dataType.get)
+          if (dataType.get != cleanedDataType) {
+            builder.putString(HIVE_TYPE_STRING, dataType.get.catalogString)
+          }
+          val newColumn = StructField(
+            colName(0),
+            cleanedDataType,
+            nullable = true,
+            builder.build())
+          AlterTableChangeColumnCommand(tableName.asTableIdentifier, colName(0), newColumn)
       }.getOrElse {
         val typeChange = dataType.map { newDataType =>
           TableChange.updateColumnType(colName.toArray, newDataType, true)
@@ -370,6 +390,13 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
+    case AlterTableAddPartitionStatement(tableName, partitionSpecsAndLocs, ifNotExists) =>
+      val v1TableName = parseV1Table(tableName, "ALTER TABLE ADD PARTITION")
+      AlterTableAddPartitionCommand(
+        v1TableName.asTableIdentifier,
+        partitionSpecsAndLocs,
+        ifNotExists)
+
     case AlterTableRenamePartitionStatement(tableName, from, to) =>
       val v1TableName = parseV1Table(tableName, "ALTER TABLE RENAME PARTITION")
       AlterTableRenamePartitionCommand(
@@ -385,6 +412,15 @@ class ResolveSessionCatalog(
         ifExists,
         purge,
         retainData)
+
+    case AlterTableSerDePropertiesStatement(
+      tableName, serdeClassName, serdeProperties, partitionSpec) =>
+      val v1TableName = parseV1Table(tableName, "ALTER TABLE SerDe Properties")
+      AlterTableSerDePropertiesCommand(
+        v1TableName.asTableIdentifier,
+        serdeClassName,
+        serdeProperties,
+        partitionSpec)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {

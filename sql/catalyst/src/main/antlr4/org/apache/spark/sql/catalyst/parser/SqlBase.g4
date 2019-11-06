@@ -80,7 +80,7 @@ singleTableSchema
     ;
 
 singleInterval
-    : INTERVAL? (intervalValue intervalUnit)+ EOF
+    : INTERVAL? multiUnitsInterval EOF
     ;
 
 statement
@@ -149,19 +149,14 @@ statement
     | ALTER (TABLE | VIEW) multipartIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE multipartIdentifier
-        (ALTER | CHANGE) COLUMN? qualifiedName
+        (ALTER | CHANGE) COLUMN? multipartIdentifier
         (TYPE dataType)? (COMMENT comment=STRING)? colPosition?        #alterTableColumn
-    | ALTER TABLE tableIdentifier partitionSpec?
-        CHANGE COLUMN?
-        colName=errorCapturingIdentifier colType colPosition?          #changeColumn
-    | ALTER TABLE tableIdentifier (partitionSpec)?
+    | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
-    | ALTER TABLE tableIdentifier (partitionSpec)?
+    | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDEPROPERTIES tablePropertyList                          #setTableSerDe
-    | ALTER TABLE tableIdentifier ADD (IF NOT EXISTS)?
+    | ALTER (TABLE | VIEW) multipartIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
-    | ALTER VIEW tableIdentifier ADD (IF NOT EXISTS)?
-        partitionSpec+                                                 #addTablePartition
     | ALTER TABLE multipartIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER (TABLE | VIEW) multipartIdentifier
@@ -200,6 +195,7 @@ statement
     | SHOW identifier? FUNCTIONS
         (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE multipartIdentifier                            #showCreateTable
+    | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
@@ -718,8 +714,8 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | IDENTIFIER '->' expression                                                               #lambda
-    | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
+    | identifier '->' expression                                                               #lambda
+    | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -759,12 +755,24 @@ booleanValue
     ;
 
 interval
-    : {ansi}? INTERVAL? intervalField+
-    | {!ansi}? INTERVAL intervalField*
+    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
+    | {ansi}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
-intervalField
-    : value=intervalValue unit=intervalUnit (TO to=intervalUnit)?
+errorCapturingMultiUnitsInterval
+    : multiUnitsInterval unitToUnitInterval?
+    ;
+
+multiUnitsInterval
+    : (intervalValue intervalUnit)+
+    ;
+
+errorCapturingUnitToUnitInterval
+    : body=unitToUnitInterval (error1=multiUnitsInterval | error2=unitToUnitInterval)?
+    ;
+
+unitToUnitInterval
+    : value=intervalValue from=intervalUnit TO to=intervalUnit
     ;
 
 intervalValue
