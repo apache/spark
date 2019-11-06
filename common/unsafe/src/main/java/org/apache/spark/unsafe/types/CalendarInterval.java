@@ -84,27 +84,29 @@ public final class CalendarInterval implements Serializable {
 
   @Override
   public String toString() {
+    if (months == 0 && days == 0 && microseconds == 0) {
+      return "0 seconds";
+    }
+
     StringBuilder sb = new StringBuilder();
 
     if (months != 0) {
-      appendUnit(sb, months / 12, "year");
-      appendUnit(sb, months % 12, "month");
+      appendUnit(sb, months / 12, "years");
+      appendUnit(sb, months % 12, "months");
     }
 
-    appendUnit(sb, days, "day");
+    appendUnit(sb, days, "days");
 
     if (microseconds != 0) {
       long rest = microseconds;
-      appendUnit(sb, rest / MICROS_PER_HOUR, "hour");
+      appendUnit(sb, rest / MICROS_PER_HOUR, "hours");
       rest %= MICROS_PER_HOUR;
-      appendUnit(sb, rest / MICROS_PER_MINUTE, "minute");
+      appendUnit(sb, rest / MICROS_PER_MINUTE, "minutes");
       rest %= MICROS_PER_MINUTE;
       if (rest != 0) {
         String s = BigDecimal.valueOf(rest, 6).stripTrailingZeros().toPlainString();
         sb.append(s).append(" seconds ");
       }
-    } else if (months == 0 && days == 0) {
-      sb.append("0 microseconds ");
     }
 
     sb.setLength(sb.length() - 1);
@@ -113,7 +115,7 @@ public final class CalendarInterval implements Serializable {
 
   private void appendUnit(StringBuilder sb, long value, String unit) {
     if (value != 0) {
-      sb.append(value).append(' ').append(unit).append('s').append(' ');
+      sb.append(value).append(' ').append(unit).append(' ');
     }
   }
 
