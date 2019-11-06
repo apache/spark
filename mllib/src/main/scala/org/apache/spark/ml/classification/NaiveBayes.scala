@@ -18,6 +18,8 @@
 package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
@@ -30,6 +32,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.col
+import org.apache.spark.util.VersionUtils
 
 /**
  * Params for Naive Bayes Classifiers.
@@ -130,6 +133,9 @@ class NaiveBayes @Since("1.5.0") (
       positiveLabel: Boolean): NaiveBayesModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
+    instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
+      probabilityCol, modelType, smoothing, thresholds)
+
     if (positiveLabel && isDefined(thresholds)) {
       val numClasses = getNumClasses(dataset)
       instr.logNumClasses(numClasses)
@@ -138,18 +144,26 @@ class NaiveBayes @Since("1.5.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
+    $(modelType) match {
+      case Bernoulli | Multinomial =>
+        trainBernoulliMultinomialImpl(dataset, instr)
+      case Gaussian =>
+        trainGaussianImpl(dataset, instr)
+      case _ =>
+        // This should never happen.
+        throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
+    }
+  }
+
+  private def trainBernoulliMultinomialImpl(
+      dataset: Dataset[_],
+      instr: Instrumentation): NaiveBayesModel = {
     val validateInstance = $(modelType) match {
       case Multinomial =>
         (instance: Instance) => requireNonnegativeValues(instance.features)
       case Bernoulli =>
         (instance: Instance) => requireZeroOneBernoulliValues(instance.features)
-      case _ =>
-        // This should never happen.
-        throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
     }
-
-    instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
-      probabilityCol, modelType, smoothing, thresholds)
 
     val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
     instr.logNumFeatures(numFeatures)
@@ -161,14 +175,14 @@ class NaiveBayes @Since("1.5.0") (
       (instance.label, (instance.weight, instance.features))
     }.aggregateByKey[(Double, DenseVector, Long)]((0.0, Vectors.zeros(numFeatures).toDense, 0L))(
       seqOp = {
-         case ((weightSum, featureSum, count), (weight, features)) =>
-           BLAS.axpy(weight, features, featureSum)
-           (weightSum + weight, featureSum, count + 1)
+        case ((weightSum, featureSum, count), (weight, features)) =>
+          BLAS.axpy(weight, features, featureSum)
+          (weightSum + weight, featureSum, count + 1)
       },
       combOp = {
-         case ((weightSum1, featureSum1, count1), (weightSum2, featureSum2, count2)) =>
-           BLAS.axpy(1.0, featureSum2, featureSum1)
-           (weightSum1 + weightSum2, featureSum1, count1 + count2)
+        case ((weightSum1, featureSum1, count1), (weightSum2, featureSum2, count2)) =>
+          BLAS.axpy(1.0, featureSum2, featureSum1)
+          (weightSum1 + weightSum2, featureSum1, count1 + count2)
       }).collect().sortBy(_._1)
 
     val numSamples = aggregated.map(_._2._3).sum
@@ -190,9 +204,6 @@ class NaiveBayes @Since("1.5.0") (
       val thetaLogDenom = $(modelType) match {
         case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
         case Bernoulli => math.log(n + 2.0 * lambda)
-        case _ =>
-          // This should never happen.
-          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
       }
       var j = 0
       while (j < numFeatures) {
@@ -204,7 +215,13 @@ class NaiveBayes @Since("1.5.0") (
 
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
-    new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
+    new NaiveBayesModel(uid, pi, theta, null).setOldLabels(labelArray)
+  }
+
+  private def trainGaussianImpl(
+      dataset: Dataset[_],
+      instr: Instrumentation): NaiveBayesModel = {
+    null
   }
 
   @Since("1.5.0")
@@ -219,8 +236,11 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
   /** String name for Bernoulli model type. */
   private[classification] val Bernoulli: String = "bernoulli"
 
+  /** String name for Gaussian model type. */
+  private[classification] val Gaussian: String = "gaussian"
+
   /* Set of modelTypes that NaiveBayes supports */
-  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
+  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli, Gaussian)
 
   private[NaiveBayes] def requireNonnegativeValues(v: Vector): Unit = {
     val values = v match {
@@ -248,19 +268,24 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
 
 /**
  * Model produced by [[NaiveBayes]]
- * @param pi log of class priors, whose dimension is C (number of classes)
+ *
+ * @param pi    log of class priors, whose dimension is C (number of classes)
  * @param theta log of class conditional probabilities, whose dimension is C (number of classes)
  *              by D (number of features)
+ * @param sigma variance of each feature, whose dimension is C (number of classes)
+ *              by D (number of features). This matrix is only available when modelType
+ *              is set Gaussian.
  */
 @Since("1.5.0")
 class NaiveBayesModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("2.0.0") val pi: Vector,
-    @Since("2.0.0") val theta: Matrix)
+    @Since("2.0.0") val theta: Matrix,
+    @Since("3.0.0") val sigma: Matrix)
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
-  import NaiveBayes.{Bernoulli, Multinomial}
+  import NaiveBayes.{Bernoulli, Multinomial, Gaussian}
 
   /**
    * mllib NaiveBayes is a wrapper of ml implementation currently.
@@ -280,8 +305,7 @@ class NaiveBayesModel private[ml] (
    * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
    * application of this condition (in predict function).
    */
-  private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
-    case Multinomial => (None, None)
+  @transient private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
     case Bernoulli =>
       val negTheta = theta.map(value => math.log1p(-math.exp(value)))
       val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
@@ -289,6 +313,28 @@ class NaiveBayesModel private[ml] (
         value - math.log1p(-math.exp(value))
       }
       (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
+    case Multinomial => (None, None)
+    case Gaussian => (None, None)
+    case _ =>
+      // This should never happen.
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
+  }
+
+  /**
+   * Gaussian scoring requires sum of log(Variance).
+   * This precomputes sum of log(Variance) which are used for the linear algebra
+   * application of this condition (in predict function).
+   */
+  @transient private lazy val logVarSum = $(modelType) match {
+    case Gaussian =>
+      val logVarSum = (0 until numClasses).map { i =>
+        (0 until numFeatures).map { j =>
+          math.log(sigma(i, j))
+        }.sum
+      }.toArray
+      Some(Vectors.dense(logVarSum))
+    case Multinomial => None
+    case Bernoulli => None
     case _ =>
       // This should never happen.
       throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
@@ -317,12 +363,26 @@ class NaiveBayesModel private[ml] (
     prob
   }
 
+  private def gaussianCalculation(features: Vector) = {
+    val probArray = (0 until numClasses).map { i =>
+      // sum of (value_j - mean_j) ^2^ / variance_j
+      val s = (0 until numFeatures).map { j =>
+        val d = features(j) - theta(i, j)
+        d * d / sigma(i, j)
+      }.sum
+      pi(i) - (s + logVarSum.get(i)) / 2
+    }.toArray
+    Vectors.dense(probArray)
+  }
+
   override protected def predictRaw(features: Vector): Vector = {
     $(modelType) match {
       case Multinomial =>
         multinomialCalculation(features)
       case Bernoulli =>
         bernoulliCalculation(features)
+      case Gaussian =>
+        gaussianCalculation(features)
       case _ =>
         // This should never happen.
         throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
@@ -354,7 +414,7 @@ class NaiveBayesModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayesModel = {
-    copyValues(new NaiveBayesModel(uid, pi, theta).setParent(this.parent), extra)
+    copyValues(new NaiveBayesModel(uid, pi, theta, sigma).setParent(this.parent), extra)
   }
 
   @Since("1.5.0")
@@ -379,14 +439,24 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   private[NaiveBayesModel] class NaiveBayesModelWriter(instance: NaiveBayesModel) extends MLWriter {
 
     private case class Data(pi: Vector, theta: Matrix)
+    private case class GaussianData(pi: Vector, theta: Matrix, sigma: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: pi, theta
-      val data = Data(instance.pi, instance.theta)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+
+      if (instance.getModelType != NaiveBayes.Gaussian) {
+        // Save model data: pi, theta
+        require(instance.sigma == null)
+        val data = Data(instance.pi, instance.theta)
+        sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      } else {
+        // Save model data: pi, theta, sigma
+        require(instance.sigma != null)
+        val data = GaussianData(instance.pi, instance.theta, instance.sigma)
+        sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      }
     }
   }
 
@@ -396,15 +466,29 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     private val className = classOf[NaiveBayesModel].getName
 
     override def load(path: String): NaiveBayesModel = {
+      implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
+      val modelTypeJson = metadata.getParamValue("modelType")
+      val modelType = Param.jsonDecode[String](compact(render(modelTypeJson)))
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
       val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
-      val Row(pi: Vector, theta: Matrix) = MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
-        .select("pi", "theta")
-        .head()
-      val model = new NaiveBayesModel(metadata.uid, pi, theta)
+
+      val model = if (major.toInt < 3 || modelType != NaiveBayes.Gaussian) {
+        val Row(pi: Vector, theta: Matrix) =
+          MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
+            .select("pi", "theta")
+            .head()
+        new NaiveBayesModel(metadata.uid, pi, theta, null)
+      } else {
+        val Row(pi: Vector, theta: Matrix, sigma: Matrix) =
+          MLUtils.convertMatrixColumnsToML(vecConverted, "theta", "sigma")
+            .select("pi", "theta", "sigma")
+            .head()
+        new NaiveBayesModel(metadata.uid, pi, theta, sigma)
+      }
 
       metadata.getAndSetParams(model)
       model
