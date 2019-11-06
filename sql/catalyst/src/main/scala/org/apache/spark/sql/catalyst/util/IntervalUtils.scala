@@ -487,7 +487,7 @@ object IntervalUtils {
         case FRACTIONAL_PART =>
           b match {
             case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
-              fraction = Math.addExact(fraction, Math.multiplyExact(fractionScale, (b - '0')))
+              fraction += (b - '0') * fractionScale
               fractionScale /= 10
             case ' ' =>
               fraction /= DateTimeUtils.NANOS_PER_MICROS.toInt

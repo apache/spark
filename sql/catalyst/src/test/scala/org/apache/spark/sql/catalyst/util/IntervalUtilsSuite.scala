@@ -103,7 +103,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromString("1 minute 1.001001 seconds", new CalendarInterval(0, 0, 61001001))
     checkFromString("-1.5 seconds", new CalendarInterval(0, 0, -1500000))
     // truncate nanoseconds to microseconds
-    checkFromString("0.123456789 seconds", new CalendarInterval(0, 0, 123456))
+    checkFromString("0.999999999 seconds", new CalendarInterval(0, 0, 999999))
     checkFromInvalidString("0.123456789123 seconds", "Error parsing interval string")
   }
 
