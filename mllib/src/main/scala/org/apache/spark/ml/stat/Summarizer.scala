@@ -230,6 +230,11 @@ private[ml] object SummaryBuilderImpl extends Logging {
     StructType(fields)
   }
 
+  private[ml] def createSummarizerBuffer(requested: String*): SummarizerBuffer = {
+    val (metrics, computeMetrics) = getRelevantMetrics(requested)
+    new SummarizerBuffer(metrics, computeMetrics)
+  }
+
   private val vectorUDT = new VectorUDT
 
   /**
@@ -277,7 +282,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
   private[stat] case object ComputeMax extends ComputeMetric
   private[stat] case object ComputeMin extends ComputeMetric
 
-  private[stat] class SummarizerBuffer(
+  private[ml] class SummarizerBuffer(
       requestedMetrics: Seq[Metric],
       requestedCompMetrics: Seq[ComputeMetric]
   ) extends Serializable {
