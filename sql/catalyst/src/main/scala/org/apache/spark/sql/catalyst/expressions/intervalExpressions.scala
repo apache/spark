@@ -138,9 +138,6 @@ abstract class IntervalNumOperation(
       s"""
         try {
           ${ev.value} = $iu.$operationName($interval, $num);
-          if (${ev.value} == null) {
-            ${ev.isNull} = true;
-          }
         } catch (java.lang.ArithmeticException e) {
           ${ev.isNull} = true;
         }

@@ -386,7 +386,7 @@ object IntervalUtils {
   }
 
   def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
-    if (num == 0) return null
+    if (num == 0) throw new java.lang.ArithmeticException("divide by zero")
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 }

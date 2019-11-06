@@ -43,13 +43,7 @@ select interval 4 month 2 weeks 3 microseconds * 1.5;
 select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5;
 
 -- interval operation with null and zero case
--- zero division
 select interval '2 seconds' / 0;
-select cast(k as interval) / v from VALUES ('2 seconds', 0) t(k, v);
-
--- null division
 select interval '2 seconds' / null;
-
--- null multiplication
 select interval '2 seconds' * null;
 select null * interval '2 seconds';
