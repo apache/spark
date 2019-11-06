@@ -395,6 +395,7 @@ object IntervalUtils {
         PARSE_SIGN,
         POSITIVE_VALUE_TO_LONG,
         NEGATIVE_VALUE_TO_LONG,
+        FRACTIONAL_PART,
         BEGIN_UNIT_NAME,
         UNIT_NAME_SUFFIX,
         END_UNIT_NAME = Value
@@ -429,6 +430,8 @@ object IntervalUtils {
     var months: Int = 0
     var days: Int = 0
     var microseconds: Long = 0
+    var fractionScale: Int = 0
+    var fraction: Int = 0
 
     while (i < bytes.length) {
       val b = bytes(i)
@@ -460,19 +463,34 @@ object IntervalUtils {
             case _ => return null
           }
           currentValue = 0
+          fraction = 0
         case POSITIVE_VALUE_TO_LONG | NEGATIVE_VALUE_TO_LONG =>
-          if ('0' <= b && b <= '9') {
-            try {
-              currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
-            } catch {
-              case _: ArithmeticException => return null
-            }
-          } else if (b == ' ') {
-            if (state == NEGATIVE_VALUE_TO_LONG) {
-              currentValue = -currentValue
-            }
-            state = BEGIN_UNIT_NAME
-          } else return null
+          b match {
+            case _ if '0' <= b && b <= '9' =>
+              try {
+                currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
+              } catch {
+                case _: ArithmeticException => return null
+              }
+            case ' ' =>
+              if (state == NEGATIVE_VALUE_TO_LONG) currentValue = -currentValue
+              state = BEGIN_UNIT_NAME
+            case '.' =>
+              if (state == NEGATIVE_VALUE_TO_LONG) currentValue = -currentValue
+              fractionScale = 100000
+              state = FRACTIONAL_PART
+            case _ => return null
+          }
+          i += 1
+        case FRACTIONAL_PART =>
+          b match {
+            case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
+              fraction = Math.addExact(fraction, Math.multiplyExact(fractionScale, (b - '0')))
+              fractionScale /= 10
+            case ' ' =>
+              state = BEGIN_UNIT_NAME
+            case _ => return null
+          }
           i += 1
         case BEGIN_UNIT_NAME =>
           if (b == ' ') {
@@ -497,7 +515,7 @@ object IntervalUtils {
                   i += hourStr.numBytes()
                 case 's' if s.matchAt(secondStr, i) =>
                   val secondsUs = Math.multiplyExact(currentValue, DateTimeUtils.MICROS_PER_SECOND)
-                  microseconds = Math.addExact(microseconds, secondsUs)
+                  microseconds = Math.addExact(Math.addExact(microseconds, secondsUs), fraction)
                   i += secondStr.numBytes()
                 case 'm' =>
                   if (s.matchAt(monthStr, i)) {
