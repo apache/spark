@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.connector
 
-import java.net.URI
-
 import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
