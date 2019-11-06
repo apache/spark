@@ -24,7 +24,7 @@ import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
-import static org.apache.spark.unsafe.types.IntervalConstants.*;
+import static org.apache.spark.unsafe.types.DateTimeConstants.*;
 
 /**
  * The internal representation of interval type.
@@ -35,7 +35,7 @@ public final class CalendarInterval implements Serializable {
   public final long microseconds;
 
   public long milliseconds() {
-    return this.microseconds / MICROS_PER_MILLI;
+    return this.microseconds / MICROS_PER_MILLIS;
   }
 
   public CalendarInterval(int months, int days, long microseconds) {

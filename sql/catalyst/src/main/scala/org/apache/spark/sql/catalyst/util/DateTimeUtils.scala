@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.unsafe.types.IntervalConstants._
+import org.apache.spark.unsafe.types.DateTimeConstants._
 
 /**
  * Helper functions for converting between internal and external date and time representations.
@@ -150,7 +150,7 @@ object DateTimeUtils {
     // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
-    Math.floorDiv(us, MICROS_PER_MILLI)
+    Math.floorDiv(us, MICROS_PER_MILLIS)
   }
 
   /*
@@ -338,7 +338,7 @@ object DateTimeUtils {
   def microsToInstant(us: Long): Instant = {
     val secs = Math.floorDiv(us, MICROS_PER_SECOND)
     val mos = Math.floorMod(us, MICROS_PER_SECOND)
-    Instant.ofEpochSecond(secs, mos * NANOS_PER_MICRO)
+    Instant.ofEpochSecond(secs, mos * NANOS_PER_MICROS)
   }
 
   def instantToDays(instant: Instant): Int = {
@@ -452,7 +452,7 @@ object DateTimeUtils {
    * Returns the seconds part and its fractional part with microseconds.
    */
   def getSecondsWithFraction(microsec: SQLTimestamp, timeZone: TimeZone): Decimal = {
-    val secFrac = localTimestamp(microsec, timeZone) % (MILLIS_PER_MINUTE * MICROS_PER_MILLI)
+    val secFrac = localTimestamp(microsec, timeZone) % (MILLIS_PER_MINUTE * MICROS_PER_MILLIS)
     Decimal(secFrac, 8, 6)
   }
 
@@ -738,7 +738,7 @@ object DateTimeUtils {
         val dDays = millisToDays(millis, timeZone)
         daysToMillis(truncDate(dDays, level), timeZone)
     }
-    truncated * MICROS_PER_MILLI
+    truncated * MICROS_PER_MILLIS
   }
 
   /**

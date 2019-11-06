@@ -44,7 +44,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-import org.apache.spark.unsafe.types.IntervalConstants._
+import org.apache.spark.unsafe.types.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.util.{ParentClassLoader, Utils}
 
 /**

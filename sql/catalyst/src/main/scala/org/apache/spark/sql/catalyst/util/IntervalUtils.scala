@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.unsafe.types.IntervalConstants._
+import org.apache.spark.unsafe.types.DateTimeConstants._
 
 object IntervalUtils {
 
@@ -260,7 +260,7 @@ object IntervalUtils {
           case "second" =>
             microseconds = Math.addExact(microseconds, parseSecondNano(values(i)))
           case "millisecond" =>
-            val millisUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MILLI)
+            val millisUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MILLIS)
             microseconds = Math.addExact(microseconds, millisUs)
           case "microsecond" =>
             microseconds = Math.addExact(microseconds, values(i).toLong)
@@ -282,7 +282,7 @@ object IntervalUtils {
         (nanosStr + "000000000").substring(0, maxNanosLen)
       } else nanosStr
       val nanos = toLongWithRange("nanosecond", alignedStr, 0L, 999999999L)
-      val micros = nanos / NANOS_PER_MICRO
+      val micros = nanos / NANOS_PER_MICROS
       if (isNegative) -micros else micros
     } else {
       0L
@@ -365,7 +365,7 @@ object IntervalUtils {
     val truncatedMonths = Math.toIntExact(monthsWithFraction.toLong)
     val days = daysWithFraction + DAYS_PER_MONTH * (monthsWithFraction - truncatedMonths)
     val truncatedDays = Math.toIntExact(days.toLong)
-    val micros = microsWithFraction + DateTimeUtils.MICROS_PER_DAY * (days - truncatedDays)
+    val micros = microsWithFraction + MICROS_PER_DAY * (days - truncatedDays)
     new CalendarInterval(truncatedMonths, truncatedDays, micros.round)
   }
 

@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
-import org.apache.spark.unsafe.types.IntervalConstants._
+import org.apache.spark.unsafe.types.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.util.Clock
 
 /**

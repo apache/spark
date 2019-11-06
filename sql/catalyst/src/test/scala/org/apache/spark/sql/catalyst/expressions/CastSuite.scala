@@ -33,8 +33,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{IntervalConstants, UTF8String}
-import org.apache.spark.unsafe.types.IntervalConstants._
+import org.apache.spark.unsafe.types.DateTimeConstants._
+import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -666,9 +666,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(Cast(Literal(""), CalendarIntervalType), null)
     checkEvaluation(Cast(Literal("interval -3 month 1 day 7 hours"), CalendarIntervalType),
-      new CalendarInterval(-3, 1, 7 * IntervalConstants.MICROS_PER_HOUR))
+      new CalendarInterval(-3, 1, 7 * MICROS_PER_HOUR))
     checkEvaluation(Cast(Literal.create(
-      new CalendarInterval(15, 9, -3 * IntervalConstants.MICROS_PER_HOUR), CalendarIntervalType),
+      new CalendarInterval(15, 9, -3 * MICROS_PER_HOUR), CalendarIntervalType),
       StringType),
       "interval 1 years 3 months 9 days -3 hours")
     checkEvaluation(Cast(Literal("INTERVAL 1 Second 1 microsecond"), CalendarIntervalType),

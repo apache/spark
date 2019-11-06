@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import com.google.common.util.concurrent.AtomicLongMap
 
-import org.apache.spark.unsafe.types.IntervalConstants.NANOS_PER_SECOND
+import org.apache.spark.unsafe.types.DateTimeConstants.NANOS_PER_SECOND
 
 case class QueryExecutionMetering() {
   private val timeMap = AtomicLongMap.create[String]()

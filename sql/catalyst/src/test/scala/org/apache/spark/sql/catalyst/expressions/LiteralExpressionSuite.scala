@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, IntervalConstants}
-
+import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.DateTimeConstants._
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -187,7 +187,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkArrayLiteral(Array(1, 2, 3))
     checkArrayLiteral(Array("a", "b", "c"))
     checkArrayLiteral(Array(1.0, 4.0))
-    checkArrayLiteral(Array(IntervalConstants.MICROS_PER_DAY, IntervalConstants.MICROS_PER_HOUR))
+    checkArrayLiteral(Array(MICROS_PER_DAY, MICROS_PER_HOUR))
     val arr = collection.mutable.WrappedArray.make(Array(1.0, 4.0))
     checkEvaluation(Literal(arr), toCatalyst(arr))
   }
@@ -199,7 +199,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkSeqLiteral(Seq(1, 2, 3), IntegerType)
     checkSeqLiteral(Seq("a", "b", "c"), StringType)
     checkSeqLiteral(Seq(1.0, 4.0), DoubleType)
-    checkSeqLiteral(Seq(IntervalConstants.MICROS_PER_DAY, IntervalConstants.MICROS_PER_HOUR),
+    checkSeqLiteral(Seq(MICROS_PER_DAY, MICROS_PER_HOUR),
       CalendarIntervalType)
   }
 

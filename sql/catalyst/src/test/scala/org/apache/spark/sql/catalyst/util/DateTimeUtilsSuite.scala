@@ -29,8 +29,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.unsafe.types.{IntervalConstants, UTF8String}
-import org.apache.spark.unsafe.types.IntervalConstants._
+import org.apache.spark.unsafe.types.DateTimeConstants._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
@@ -398,15 +398,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
     // transit from Pacific Standard Time to Pacific Daylight Time
     assert(timestampAddInterval(
-      ts1, 0, 0, 23 * IntervalConstants.MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts2)
+      ts1, 0, 0, 23 * MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts2)
     assert(timestampAddInterval(ts1, 0, 1, 0, TimeZonePST.toZoneId) === ts2)
     // just a normal day
     assert(timestampAddInterval(
-      ts3, 0, 0, 24 * IntervalConstants.MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts4)
+      ts3, 0, 0, 24 * MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts4)
     assert(timestampAddInterval(ts3, 0, 1, 0, TimeZonePST.toZoneId) === ts4)
     // transit from Pacific Daylight Time to Pacific Standard Time
     assert(timestampAddInterval(
-      ts5, 0, 0, 25 * IntervalConstants.MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts6)
+      ts5, 0, 0, 25 * MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts6)
     assert(timestampAddInterval(ts5, 0, 1, 0, TimeZonePST.toZoneId) === ts6)
   }
 
