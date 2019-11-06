@@ -85,16 +85,13 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
   }
 
-  test("string to interval: random order field") {
-    val input = "1 day 1 year"
-    val result = new CalendarInterval(12, 1, 0)
-    checkFromString(input, result)
-  }
-
-  test("string to interval: duplicated fields") {
-    val input = "1 day 1 day"
-    val result = new CalendarInterval(0, 2, 0)
-    checkFromString(input, result)
+  test("string to interval: special cases") {
+    // random order field
+    checkFromString("1 day 1 year", new CalendarInterval(12, 1, 0))
+    // duplicated fields
+    checkFromString("1 day 1 day", new CalendarInterval(0, 2, 0))
+    // value with fractions belongs to not seconds
+    checkFromInvalidString("1.5 days", "Error parsing interval string")
   }
 
   test("string to interval: seconds with fractional part") {

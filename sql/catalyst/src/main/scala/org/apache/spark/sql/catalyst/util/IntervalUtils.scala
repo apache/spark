@@ -495,6 +495,10 @@ object IntervalUtils {
           if (b == ' ') {
             i += 1
           } else {
+            // Checks that only seconds can have the fractional part
+            if (b != 's' && fraction != 0) {
+              return null
+            }
             if (isNegative) {
               currentValue = -currentValue
               fraction = -fraction
