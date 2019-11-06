@@ -856,14 +856,19 @@ object TypeCoercion {
         DivideInterval(l, r)
 
       case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
+      case Add(l @ DateType(), r @ NullType()) => DateAdd(l, Cast(r, IntegerType))
       case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
+      case Add(l @ NullType(), r @ DateType()) => DateAdd(r, Cast(l, IntegerType))
       case Subtract(l @ DateType(), r @ IntegerType()) => DateSub(l, r)
+      case Subtract(l @ DateType(), r @ NullType()) => DateSub(l, Cast(r, IntegerType))
       case Subtract(l @ DateType(), r @ DateType()) =>
         if (SQLConf.get.usePostgreSQLDialect) DateDiff(l, r) else SubtractDates(l, r)
       case Subtract(l @ TimestampType(), r @ TimestampType()) =>
         SubtractTimestamps(l, r)
       case Subtract(l @ TimestampType(), r @ DateType()) =>
         SubtractTimestamps(l, Cast(r, TimestampType))
+      case Subtract(l @ TimestampType(), r @ NullType()) =>
+        SubtractTimestamps(l, Cast(r, NullType))
       case Subtract(l @ DateType(), r @ TimestampType()) =>
         SubtractTimestamps(Cast(l, TimestampType), r)
     }

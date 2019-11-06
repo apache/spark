@@ -36,6 +36,10 @@ select date '2001-10-01' - 7;
 select date '2001-10-01' - date '2001-09-28';
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678';
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
+select date '2001-09-28' + null;
+select date '2001-09-28' - null;
+select null + date '2001-09-28';
+select timestamp'2019-10-06 10:11:12.345678' - null;
 
 -- interval operations
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15');
