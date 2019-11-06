@@ -64,25 +64,22 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite
     val statusStore = createStatusStore()
     val listener = statusStore.listener.get
 
-    listener.processEventSessionCreated(SparkListenerSessionCreated("localhost", "sessionId",
-      "user", System.currentTimeMillis()))
-    listener.processEventStatementStart(SparkListenerStatementStart("id", "sessionId",
-      "dummy query", "groupId", System.currentTimeMillis(), "user"))
-    listener.processEventStatementParsed(SparkListenerStatementParsed("id", "dummy plan"))
+    listener.onOtherEvent(SparkListenerSessionCreated("localhost", "sessionId", "user",
+      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerStatementStart("id", "sessionId", "dummy query",
+      "groupId", System.currentTimeMillis(), "user"))
+    listener.onOtherEvent(SparkListenerStatementParsed("id", "dummy plan"))
     listener.onJobStart(SparkListenerJobStart(
       0,
       System.currentTimeMillis(),
       Nil,
       createProperties))
-    listener.processEventStatementFinish(SparkListenerStatementFinish("id",
-      System.currentTimeMillis()))
-    listener.processEventOperationClosed(SparkListenerOperationClosed("id",
-      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerStatementFinish("id", System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerOperationClosed("id", System.currentTimeMillis()))
 
     assert(statusStore.getOnlineSessionNum == 1)
 
-    listener.processEventSessionClosed(SparkListenerSessionClosed("sessionId",
-      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerSessionClosed("sessionId", System.currentTimeMillis()))
 
     assert(statusStore.getOnlineSessionNum == 0)
     assert(statusStore.getExecutionList.size == 1)

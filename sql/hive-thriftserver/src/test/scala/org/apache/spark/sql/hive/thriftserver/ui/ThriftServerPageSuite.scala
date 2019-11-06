@@ -58,18 +58,15 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
     val listener = new HiveThriftServer2Listener(kvstore, Some(server), Some(sqlContext), Some(sc))
     val statusStore = new HiveThriftServer2AppStatusStore(kvstore, Some(listener))
 
-    listener.processEventSessionCreated(SparkListenerSessionCreated("localhost", "sessionid",
-      "user", System.currentTimeMillis()))
-    listener.processEventStatementStart(SparkListenerStatementStart("id", "sessionid",
+    listener.onOtherEvent(SparkListenerSessionCreated("localhost", "sessionid", "user",
+      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerStatementStart("id", "sessionid",
       "dummy query", "groupid", System.currentTimeMillis(), "user"))
-    listener.processEventStatementParsed(SparkListenerStatementParsed("id", "dummy plan"))
-    listener.onJobStart(SparkListenerJobStart(0, System.currentTimeMillis(), Seq()))
-    listener.processEventStatementFinish(SparkListenerStatementFinish("id",
-      System.currentTimeMillis()))
-    listener.processEventOperationClosed(SparkListenerOperationClosed("id",
-      System.currentTimeMillis()))
-    listener.processEventSessionClosed(SparkListenerSessionClosed("sessionid",
-      System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerStatementParsed("id", "dummy plan"))
+    listener.onOtherEvent(SparkListenerJobStart(0, System.currentTimeMillis(), Seq()))
+    listener.onOtherEvent(SparkListenerStatementFinish("id", System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerOperationClosed("id", System.currentTimeMillis()))
+    listener.onOtherEvent(SparkListenerSessionClosed("sessionid", System.currentTimeMillis()))
 
     statusStore
   }

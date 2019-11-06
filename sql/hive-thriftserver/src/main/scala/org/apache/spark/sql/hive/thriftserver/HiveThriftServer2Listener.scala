@@ -119,13 +119,13 @@ private[thriftserver] class HiveThriftServer2Listener(
     }
   }
 
-  def processEventSessionCreated(e: SparkListenerSessionCreated): Unit = {
+  private def processEventSessionCreated(e: SparkListenerSessionCreated): Unit = {
     val session = getOrCreateSession(e.sessionId, e.startTime, e.ip, e.userName)
     sessionList.put(e.sessionId, session)
     updateLiveStore(session)
   }
 
-  def processEventSessionClosed(e: SparkListenerSessionClosed): Unit = {
+  private def processEventSessionClosed(e: SparkListenerSessionClosed): Unit = {
     val session = sessionList.get(e.sessionId)
     session.finishTimestamp = e.finishTime
     updateLiveStore(session)
@@ -134,7 +134,7 @@ private[thriftserver] class HiveThriftServer2Listener(
     }
   }
 
-  def processEventStatementStart(e: SparkListenerStatementStart): Unit = {
+  private def processEventStatementStart(e: SparkListenerStatementStart): Unit = {
     val info = getOrCreateExecution(
       e.id,
       e.statement,
@@ -150,32 +150,32 @@ private[thriftserver] class HiveThriftServer2Listener(
     updateLiveStore(sessionList.get(e.sessionId))
   }
 
-  def processEventStatementParsed(e: SparkListenerStatementParsed): Unit = {
+  private def processEventStatementParsed(e: SparkListenerStatementParsed): Unit = {
     executionList.get(e.id).executePlan = e.executionPlan
     executionList.get(e.id).state = ExecutionState.COMPILED
     updateLiveStore(executionList.get(e.id))
   }
 
-  def processEventStatementCanceled(e: SparkListenerStatementCanceled): Unit = {
+  private def processEventStatementCanceled(e: SparkListenerStatementCanceled): Unit = {
     executionList.get(e.id).finishTimestamp = e.finishTime
     executionList.get(e.id).state = ExecutionState.CANCELED
     updateLiveStore(executionList.get(e.id))
   }
 
-  def processEventStatementError(e: SparkListenerStatementError): Unit = {
+  private def processEventStatementError(e: SparkListenerStatementError): Unit = {
     executionList.get(e.id).finishTimestamp = e.finishTime
     executionList.get(e.id).detail = e.errorMsg
     executionList.get(e.id).state = ExecutionState.FAILED
     updateLiveStore(executionList.get(e.id))
   }
 
-  def processEventStatementFinish(e: SparkListenerStatementFinish): Unit = {
+  private def processEventStatementFinish(e: SparkListenerStatementFinish): Unit = {
     executionList.get(e.id).finishTimestamp = e.finishTime
     executionList.get(e.id).state = ExecutionState.FINISHED
     updateLiveStore(executionList.get(e.id))
   }
 
-  def processEventOperationClosed(e: SparkListenerOperationClosed): Unit = {
+  private def processEventOperationClosed(e: SparkListenerOperationClosed): Unit = {
     executionList.get(e.id).closeTimestamp = e.closeTime
     executionList.get(e.id).state = ExecutionState.CLOSED
     updateLiveStore(executionList.get(e.id))
