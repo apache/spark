@@ -1328,10 +1328,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     if (expected.isEmpty) {
       assert(opt.isEmpty)
     } else {
-      // The issue happens only the value in Option is being unboxed. Simple comparison sometimes
-      // doesn't go though unboxing the value, hence ClassCastException is not occurred.
-      // Here we ensure unboxing to Long succeeds. Please refer SPARK-29755 for more details.
-      assert(BoxesRunTime.unboxToLong(opt.get) === expected.get)
+      // The issue happens only the value in Option is being unboxed. Here we ensure unboxing
+      // to Long succeeds: even though IDE suggests `.toLong` is redundant, direct comparison
+      // doesn't trigger unboxing and passes even without SPARK-29755, so don't remove
+      // `.toLong` below. Please refer SPARK-29755 for more details.
+      assert(opt.get.toLong === expected.get.toLong)
     }
   }
 
