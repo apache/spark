@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.connector
 
-import scala.collection.JavaConverters._
+import java.net.URI
 
+import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -775,6 +777,16 @@ class DataSourceV2SQLSuite
     testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
     testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
 
+    withNamespace("testcat.test") {
+      withTempDir { tmpDir =>
+        val path = tmpDir.getCanonicalPath
+        sql(s"CREATE NAMESPACE testcat.test LOCATION '$path'")
+        val metadata =
+          catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("test")).asScala
+        val catalogPath = metadata(V2SessionCatalog.LOCATION_TABLE_PROP)
+        assert(catalogPath.equals(catalogPath))
+      }
+    }
     // TODO: Add tests for validating namespace metadata when DESCRIBE NAMESPACE is available.
   }
 
