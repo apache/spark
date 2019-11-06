@@ -554,20 +554,18 @@ object IntervalUtils {
             state = UNIT_NAME_SUFFIX
           }
         case UNIT_NAME_SUFFIX =>
-          if (b == 's') {
-            state = END_UNIT_NAME
-          } else if (b == ' ') {
-            state = BEGIN_VALUE
-          } else {
-            return null
+          b match {
+            case 's' => state = END_UNIT_NAME
+            case ' ' => state = BEGIN_VALUE
+            case _ => return null
           }
           i += 1
         case END_UNIT_NAME =>
-          if (b == ' ') {
-            i += 1
-            state = BEGIN_VALUE
-          } else {
-            return null
+          b match {
+            case ' ' =>
+              i += 1
+              state = BEGIN_VALUE
+            case _ => return null
           }
       }
     }
