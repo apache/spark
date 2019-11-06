@@ -188,7 +188,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeExecutor(executorId, reason)
 
       case ExecutorConstructed(executorId) =>
-        executorDataMap.get(executorId).foreach(_.isReady = true)
+        executorDataMap.get(executorId).foreach { data =>
+          data.freeCores = data.totalCores
+        }
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -220,7 +222,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val resourcesInfo = resources.map{ case (k, v) =>
             (v.name, new ExecutorResourceInfo(v.name, v.addresses))}
           val data = new ExecutorData(executorRef, executorAddress, hostname,
-            cores, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
+            0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
             resourcesInfo)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
@@ -277,8 +279,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               Some(executorData.executorAddress.hostPort),
               executorData.resourcesInfo.map { case (rName, rInfo) =>
                 (rName, rInfo.availableAddrs.toBuffer)
-              },
-              executorData.isReady)
+              })
         }.toIndexedSeq
         scheduler.resourceOffers(workOffers)
       }
