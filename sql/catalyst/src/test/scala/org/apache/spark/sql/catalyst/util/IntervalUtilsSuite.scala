@@ -26,7 +26,35 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite {
 
-  test("fromString: basic") {
+  private def checkFromString(input: String, expected: CalendarInterval): Unit = {
+    assert(fromString(input) === expected)
+    assert(stringToInterval(UTF8String.fromString(input)).get === expected)
+  }
+
+  private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
+    try {
+      fromString(input)
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        val msg = e.getMessage
+        assert(msg.contains(errorMsg))
+    }
+    assert(stringToInterval(UTF8String.fromString(input)) === None)
+  }
+
+  private def testSingleUnit(
+    unit: String, number: Int, months: Int, days: Int, microseconds: Long): Unit = {
+    for (prefix <- Seq("interval ", "")) {
+      val input1 = prefix + number + " " + unit
+      val input2 = prefix + number + " " + unit + "s"
+      val result = new CalendarInterval(months, days, microseconds)
+      checkFromString(input1, result)
+      checkFromString(input2, result)
+    }
+  }
+
+  test("string to interval: basic") {
     testSingleUnit("YEAR", 3, 36, 0, 0)
     testSingleUnit("Month", 3, 3, 0, 0)
     testSingleUnit("Week", 3, 0, 21, 0)
@@ -51,44 +79,41 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
 
     for (input <- Seq("interval", "interval1 day", "foo", "foo 1 day")) {
-      try {
-        fromString(input)
-        fail("Expected to throw an exception for the invalid input")
-      } catch {
-        case e: IllegalArgumentException =>
-          val msg = e.getMessage
-          assert(msg.contains("Invalid interval string"))
-      }
+      checkFromInvalidString(input, "Invalid interval string")
     }
   }
 
-  test("fromString: random order field") {
+
+  test("string to interval: multiple units") {
+    Seq(
+      "1 day",
+      " 123 MONTHS",
+      "interval -1 day +3 Microseconds",
+      "  interval  8  years -11 months 123  weeks   -1 day " +
+        "23 hours -22 minutes 1 second  -123  millisecond    567 microseconds ").foreach { s =>
+      val utf8String = UTF8String.fromString(s)
+      val interval = stringToInterval(utf8String)
+      val expectedInterval = fromString(s)
+      assert(interval === Some(expectedInterval))
+    }
+  }
+
+  test("string to interval: random order field") {
     val input = "1 day 1 year"
     val result = new CalendarInterval(12, 1, 0)
-    assert(fromString(input) == result)
+    checkFromString(input, result)
   }
 
-  test("fromString: duplicated fields") {
+  test("string to interval: duplicated fields") {
     val input = "1 day 1 day"
     val result = new CalendarInterval(0, 2, 0)
-    assert(fromString(input) == result)
+    checkFromString(input, result)
   }
 
-  test("fromString: value with +/-") {
+  test("string to interval: value with +/-") {
     val input = "+1 year -1 day"
     val result = new CalendarInterval(12, -1, 0)
-    assert(fromString(input) == result)
-  }
-
-  private def testSingleUnit(
-      unit: String, number: Int, months: Int, days: Int, microseconds: Long): Unit = {
-    for (prefix <- Seq("interval ", "")) {
-      val input1 = prefix + number + " " + unit
-      val input2 = prefix + number + " " + unit + "s"
-      val result = new CalendarInterval(months, days, microseconds)
-      assert(fromString(input1) == result)
-      assert(fromString(input2) == result)
-    }
+    checkFromString(input, result)
   }
 
   test("from year-month string") {
@@ -223,20 +248,6 @@ class IntervalUtilsSuite extends SparkFunSuite {
     } catch {
       case e: ArithmeticException =>
         assert(e.getMessage.contains("overflow"))
-    }
-  }
-
-  test("string to interval") {
-    Seq(
-      "1 day",
-      " 123 MONTHS",
-      "interval -1 day +3 Microseconds",
-      "  interval  8  years -11 months 123  weeks   -1 day " +
-        "23 hours -22 minutes 1 second  -123  millisecond    567 microseconds ").foreach { s =>
-      val utf8String = UTF8String.fromString(s)
-      val interval = stringToInterval(utf8String)
-      val expectedInterval = fromString(s)
-      assert(interval === Some(expectedInterval))
     }
   }
 }
