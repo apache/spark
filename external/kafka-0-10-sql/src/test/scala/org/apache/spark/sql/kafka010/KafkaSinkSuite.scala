@@ -82,10 +82,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
 
   protected val streamingTimeout = 30.seconds
 
-  // TODO: this is set to "Int" since ContinuousMemoryStream cannot deal with String
-  //  (it doesn't convert String to UTFString). Change it to "String" when we fix it, and we can
-  //  get rid of bunch of "CAST(value AS STRING)" in below queries.
-  protected def createMemoryStream(): MemoryStreamBase[Int]
+  protected def createMemoryStream(): MemoryStreamBase[String]
   protected def verifyResult(writer: StreamingQuery)(verifyFn: => Unit): Unit
   protected def defaultTrigger: Option[Trigger]
 
@@ -98,7 +95,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
       input.toDF(),
       withTopic = None,
       withOutputMode = Some(OutputMode.Append))(
-      withSelectExpr = s"'$topic' as topic", "CAST(value as STRING) value")
+      withSelectExpr = s"'$topic' as topic", "value")
 
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
@@ -106,14 +103,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
       .as[(Option[Int], Int)]
       .map(_._2)
 
-    try {
-      input.addData(1, 2, 3, 4, 5)
-      verifyResult(writer)(checkDatasetUnorderly(reader, 1, 2, 3, 4, 5))
-      input.addData(6, 7, 8, 9, 10)
-      verifyResult(writer)(checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
-    } finally {
-      writer.stop()
-    }
+    runAndVerifyValues(input, writer, reader)
   }
 
   test("streaming - write w/o topic field, with topic option") {
@@ -124,8 +114,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
     val writer = createKafkaWriter(
       input.toDF(),
       withTopic = Some(topic),
-      withOutputMode = Some(OutputMode.Append()))(
-      withSelectExpr = "CAST(value as STRING) value")
+      withOutputMode = Some(OutputMode.Append()))()
 
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key as STRING) key", "CAST(value as STRING) value")
@@ -133,14 +122,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
       .as[(Option[Int], Int)]
       .map(_._2)
 
-    try {
-      input.addData(1, 2, 3, 4, 5)
-      verifyResult(writer)(checkDatasetUnorderly(reader, 1, 2, 3, 4, 5))
-      input.addData(6, 7, 8, 9, 10)
-      verifyResult(writer)(checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
-    } finally {
-      writer.stop()
-    }
+    runAndVerifyValues(input, writer, reader)
   }
 
   test("streaming - topic field and topic option") {
@@ -159,7 +141,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
       input.toDF(),
       withTopic = Some(topic),
       withOutputMode = Some(OutputMode.Append()))(
-      withSelectExpr = "'foo' as topic", "CAST(value as STRING) value")
+      withSelectExpr = "'foo' as topic", "value")
 
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -167,14 +149,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
       .as[(Option[Int], Int)]
       .map(_._2)
 
-    try {
-      input.addData(1, 2, 3, 4, 5)
-      verifyResult(writer)(checkDatasetUnorderly(reader, 1, 2, 3, 4, 5))
-      input.addData(6, 7, 8, 9, 10)
-      verifyResult(writer)(checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
-    } finally {
-      writer.stop()
-    }
+    runAndVerifyValues(input, writer, reader)
   }
 
   test("streaming - write data with bad schema") {
@@ -182,9 +157,9 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    assertWrongSchema(input, Seq("CAST(value AS STRING) as key", "CAST(value AS STRING)"),
+    assertWrongSchema(input, Seq("value as key", "value"),
       "topic option required when no 'topic' attribute is present")
-    assertWrongSchema(input, Seq(s"'$topic' as topic", "CAST(value AS STRING) as key"),
+    assertWrongSchema(input, Seq(s"'$topic' as topic", "value as key"),
       "required attribute 'value' not found")
   }
 
@@ -193,15 +168,13 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    assertWrongSchema(input, Seq("CAST('1' as INT) as topic", "CAST(value as STRING) as value"),
+    assertWrongSchema(input, Seq("CAST('1' as INT) as topic", "value"),
       "topic must be a(n) string")
     assertWrongSchema(input, Seq(s"'$topic' as topic", "CAST(value as INT) as value"),
       "value must be a(n) string or binary")
-    assertWrongSchema(input, Seq(s"'$topic' as topic", "CAST(value as INT) as key",
-      "CAST(value as STRING) as value"),
+    assertWrongSchema(input, Seq(s"'$topic' as topic", "CAST(value as INT) as key", "value"),
       "key must be a(n) string or binary")
-    assertWrongSchema(input, Seq(s"'$topic' as topic", "CAST(value as STRING) as value",
-      "CAST(value as STRING) as partition"),
+    assertWrongSchema(input, Seq(s"'$topic' as topic", "value", "value as partition"),
       "partition must be a(n) int")
   }
 
@@ -209,8 +182,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
     val input = createMemoryStream()
 
     runAndVerifyException[StreamingQueryException](input, "job aborted") {
-      createKafkaWriter(input.toDF(), withTopic = Some(newTopic()))(
-        withSelectExpr = "CAST(value as STRING) as value")
+      createKafkaWriter(input.toDF(), withTopic = Some(newTopic()))()
     }
   }
 
@@ -249,18 +221,33 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
     stream.start()
   }
 
+  private def runAndVerifyValues(
+      input: MemoryStreamBase[String],
+      writer: StreamingQuery,
+      reader: Dataset[Int]): Unit = {
+    try {
+      input.addData("1", "2", "3", "4", "5")
+      verifyResult(writer)(checkDatasetUnorderly(reader, 1, 2, 3, 4, 5))
+      input.addData("6", "7", "8", "9", "10")
+      verifyResult(writer)(checkDatasetUnorderly(reader, 1, 2, 3, 4, 5, 6,
+        7, 8, 9, 10))
+    } finally {
+      writer.stop()
+    }
+  }
+
   private def runAndVerifyException[T <: Exception : ClassTag](
-      input: MemoryStreamBase[Int],
+      input: MemoryStreamBase[String],
       expectErrorMsg: String)(
       writerFn: => StreamingQuery): Unit = {
     var writer: StreamingQuery = null
     val ex: Exception = try {
       intercept[T] {
         writer = writerFn
-        input.addData(1, 2, 3, 4, 5)
+        input.addData("1", "2", "3", "4", "5")
         input match {
-          case _: MemoryStream[Int] => writer.processAllAvailable()
-          case _: ContinuousMemoryStream[Int] =>
+          case _: MemoryStream[String] => writer.processAllAvailable()
+          case _: ContinuousMemoryStream[String] =>
             eventually(timeout(streamingTimeout)) {
               assert(writer.exception.isDefined)
             }
@@ -275,7 +262,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
   }
 
   private def assertWrongSchema(
-      input: MemoryStreamBase[Int],
+      input: MemoryStreamBase[String],
       selectExpr: Seq[String],
       expectErrorMsg: String): Unit = {
     // just pick common exception of both micro-batch and continuous cases
@@ -286,7 +273,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
   }
 
   private def assertWrongOption(
-      input: MemoryStreamBase[Int],
+      input: MemoryStreamBase[String],
       options: Map[String, String],
       expectErrorMsg: String): Unit = {
     // just pick common exception of both micro-batch and continuous cases
@@ -301,7 +288,7 @@ class KafkaSinkMicroBatchStreamingSuite extends KafkaSinkStreamingSuiteBase {
 
   override val streamingTimeout = 30.seconds
 
-  override protected def createMemoryStream(): MemoryStreamBase[Int] = MemoryStream[Int]
+  override protected def createMemoryStream(): MemoryStreamBase[String] = MemoryStream[String]
 
   override protected def verifyResult(writer: StreamingQuery)(verifyFn: => Unit): Unit = {
     failAfter(streamingTimeout) {
@@ -344,8 +331,8 @@ class KafkaContinuousSinkSuite extends KafkaSinkStreamingSuiteBase {
       "continuous-stream-test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
 
-  override protected def createMemoryStream(): MemoryStreamBase[Int] = {
-    ContinuousMemoryStream.singlePartition[Int]
+  override protected def createMemoryStream(): MemoryStreamBase[String] = {
+    ContinuousMemoryStream.singlePartition[String]
   }
 
   override protected def verifyResult(writer: StreamingQuery)(verifyFn: => Unit): Unit = {
