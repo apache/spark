@@ -97,10 +97,12 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromString(input, result)
   }
 
-  test("string to interval: value with +/-") {
-    val input = "+1 year -1 day"
-    val result = new CalendarInterval(12, -1, 0)
-    checkFromString(input, result)
+  test("string to interval: seconds with fractional part") {
+    checkFromString("0.1 seconds", new CalendarInterval(0, 0, 100000))
+    checkFromString("123.001 seconds", new CalendarInterval(0, 0, 123001000))
+    checkFromString("1.001001 seconds", new CalendarInterval(0, 0, 1001001))
+    checkFromString("1 minute 1.001001 seconds", new CalendarInterval(0, 0, 61001001))
+    checkFromString("-1.5 seconds", new CalendarInterval(0, 0, -1500000))
   }
 
   test("from year-month string") {

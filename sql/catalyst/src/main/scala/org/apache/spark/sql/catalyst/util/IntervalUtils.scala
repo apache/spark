@@ -393,8 +393,7 @@ object IntervalUtils {
     val PREFIX,
         BEGIN_VALUE,
         PARSE_SIGN,
-        POSITIVE_VALUE_TO_LONG,
-        NEGATIVE_VALUE_TO_LONG,
+        PARSE_UNIT_VALUE,
         FRACTIONAL_PART,
         BEGIN_UNIT_NAME,
         UNIT_NAME_SUFFIX,
@@ -427,6 +426,7 @@ object IntervalUtils {
     var state = PREFIX
     var i = 0
     var currentValue: Long = 0
+    var isNegative: Boolean = false
     var months: Int = 0
     var days: Int = 0
     var microseconds: Long = 0
@@ -453,18 +453,19 @@ object IntervalUtils {
         case PARSE_SIGN =>
           b match {
             case '-' =>
-              state = NEGATIVE_VALUE_TO_LONG
+              isNegative = true
               i += 1
             case '+' =>
-              state = POSITIVE_VALUE_TO_LONG
+              isNegative = false
               i += 1
             case _ if '0' <= b && b <= '9' =>
-              state = POSITIVE_VALUE_TO_LONG
+              isNegative = false
             case _ => return null
           }
+          state = PARSE_UNIT_VALUE
           currentValue = 0
           fraction = 0
-        case POSITIVE_VALUE_TO_LONG | NEGATIVE_VALUE_TO_LONG =>
+        case PARSE_UNIT_VALUE =>
           b match {
             case _ if '0' <= b && b <= '9' =>
               try {
@@ -473,10 +474,8 @@ object IntervalUtils {
                 case _: ArithmeticException => return null
               }
             case ' ' =>
-              if (state == NEGATIVE_VALUE_TO_LONG) currentValue = -currentValue
               state = BEGIN_UNIT_NAME
             case '.' =>
-              if (state == NEGATIVE_VALUE_TO_LONG) currentValue = -currentValue
               fractionScale = 100000
               state = FRACTIONAL_PART
             case _ => return null
@@ -496,6 +495,10 @@ object IntervalUtils {
           if (b == ' ') {
             i += 1
           } else {
+            if (isNegative) {
+              currentValue = -currentValue
+              fraction = -fraction
+            }
             try {
               b match {
                 case 'y' if s.matchAt(yearStr, i) =>
