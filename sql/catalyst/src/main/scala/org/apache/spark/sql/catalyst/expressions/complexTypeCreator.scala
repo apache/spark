@@ -47,7 +47,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def dataType: ArrayType = {
     ArrayType(
       TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
-        .getOrElse(StringType),
+        .getOrElse(NullType),
       containsNull = children.exists(_.nullable))
   }
 
