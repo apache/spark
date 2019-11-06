@@ -128,12 +128,6 @@ class CachedKafkaProducerSuite extends SharedSparkSession with PrivateMethodTest
           val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, 0, null, d.getBytes)
           producer.send(record, callback)
         }
-      } catch {
-        case e: Throwable =>
-          if (error == null) {
-            error = e
-          }
-          throw e
       } finally {
         CachedKafkaProducer.release(producer)
       }

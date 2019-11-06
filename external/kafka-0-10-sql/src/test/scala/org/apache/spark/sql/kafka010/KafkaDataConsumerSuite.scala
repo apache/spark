@@ -233,7 +233,7 @@ class KafkaDataConsumerSuite
 
     val threadpool = Executors.newFixedThreadPool(numThreads)
     try {
-      val futures = (1 to numConsumerUsages).map { i =>
+      val futures = (1 to numConsumerUsages).map { _ =>
         threadpool.submit(new Runnable {
           override def run(): Unit = { consume() }
         })
