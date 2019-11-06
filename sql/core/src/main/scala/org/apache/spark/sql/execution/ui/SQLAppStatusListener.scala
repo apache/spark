@@ -323,11 +323,11 @@ class SQLAppStatusListener(
       exec.completionTime = Some(new Date(time))
       update(exec)
 
-      // Aggregating metrics can be expensive for large queries, so do it asynchronously.
-      // The end event count is also only updated asynchronously, to ensure that the metrics
-      // are not cleaned up by the update() call above.
+      // Aggregating metrics can be expensive for large queries, so do it asynchronously. The end
+      // event count is updated after the "update()" call above, to ensure that the metrics are not
+      // cleaned up.
+      exec.endEvents += 1
       kvstore.doAsync {
-        exec.endEvents += 1
         exec.metricsValues = aggregateMetrics(exec)
         removeStaleMetricsData(exec)
         update(exec, force = true)
