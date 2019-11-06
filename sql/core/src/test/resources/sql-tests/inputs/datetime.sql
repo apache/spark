@@ -41,3 +41,20 @@ select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15');
 select interval 4 month 2 weeks 3 microseconds * 1.5;
 select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5;
+
+select interval '1 year 2 month' / null;
+select interval '1 year 2 month' / 0;
+select interval '4 months 2 weeks 6 days' * null;
+select null * interval '4 months 2 weeks 6 days';
+
+select
+  k,
+  v,
+  cast(k as interval) / v,
+  cast(k as interval) * v
+from VALUES
+  ('1 seconds', 1),
+  ('2 seconds', 0),
+  ('3 seconds', null),
+  (null, null),
+  (null, 0) t(k, v)

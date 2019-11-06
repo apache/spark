@@ -137,7 +137,11 @@ abstract class IntervalNumOperation(
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
       s"""
         try {
-          ${ev.value} = $iu.$operationName($interval, $num);
+          if ($num != 0) {
+            ${ev.value} = $iu.$operationName($interval, $num);
+          } else {
+            ${ev.isNull} = true;
+          }
         } catch (java.lang.ArithmeticException e) {
           ${ev.isNull} = true;
         }
