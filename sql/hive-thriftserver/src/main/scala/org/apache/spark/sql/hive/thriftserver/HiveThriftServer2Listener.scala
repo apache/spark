@@ -107,25 +107,25 @@ private[thriftserver] class HiveThriftServer2Listener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
-      case e: SparkListenerSessionCreated => onSessionCreated(e)
-      case e: SparkListenerSessionClosed => onSessionClosed(e)
-      case e: SparkListenerStatementStart => onStatementStart(e)
-      case e: SparkListenerStatementParsed => onStatementParsed(e)
-      case e: SparkListenerStatementCanceled => onStatementCanceled(e)
-      case e: SparkListenerStatementError => onStatementError(e)
-      case e: SparkListenerStatementFinish => onStatementFinish(e)
-      case e: SparkListenerOperationClosed => onOperationClosed(e)
+      case e: SparkListenerSessionCreated => processEventSessionCreated(e)
+      case e: SparkListenerSessionClosed => processEventSessionClosed(e)
+      case e: SparkListenerStatementStart => processEventStatementStart(e)
+      case e: SparkListenerStatementParsed => processEventStatementParsed(e)
+      case e: SparkListenerStatementCanceled => processEventStatementCanceled(e)
+      case e: SparkListenerStatementError => processEventStatementError(e)
+      case e: SparkListenerStatementFinish => processEventStatementFinish(e)
+      case e: SparkListenerOperationClosed => processEventOperationClosed(e)
       case _ => // Ignore
     }
   }
 
-  def onSessionCreated(e: SparkListenerSessionCreated): Unit = {
+  def processEventSessionCreated(e: SparkListenerSessionCreated): Unit = {
     val session = getOrCreateSession(e.sessionId, e.startTime, e.ip, e.userName)
     sessionList.put(e.sessionId, session)
     updateLiveStore(session)
   }
 
-  def onSessionClosed(e: SparkListenerSessionClosed): Unit = {
+  def processEventSessionClosed(e: SparkListenerSessionClosed): Unit = {
     val session = sessionList.get(e.sessionId)
     session.finishTimestamp = e.finishTime
     updateLiveStore(session)
@@ -134,14 +134,13 @@ private[thriftserver] class HiveThriftServer2Listener(
     }
   }
 
-  def onStatementStart( e: SparkListenerStatementStart): Unit = {
-    val info =
-      getOrCreateExecution(
-        e.id,
-        e.statement,
-        e.sessionId,
-        e.startTime,
-        e.userName)
+  def processEventStatementStart(e: SparkListenerStatementStart): Unit = {
+    val info = getOrCreateExecution(
+      e.id,
+      e.statement,
+      e.sessionId,
+      e.startTime,
+      e.userName)
 
     info.state = ExecutionState.STARTED
     executionList.put(e.id, info)
@@ -151,32 +150,32 @@ private[thriftserver] class HiveThriftServer2Listener(
     updateLiveStore(sessionList.get(e.sessionId))
   }
 
-  def onStatementParsed(e: SparkListenerStatementParsed): Unit = {
+  def processEventStatementParsed(e: SparkListenerStatementParsed): Unit = {
     executionList.get(e.id).executePlan = e.executionPlan
     executionList.get(e.id).state = ExecutionState.COMPILED
     updateLiveStore(executionList.get(e.id))
   }
 
-  def onStatementCanceled(e: SparkListenerStatementCanceled): Unit = {
+  def processEventStatementCanceled(e: SparkListenerStatementCanceled): Unit = {
     executionList.get(e.id).finishTimestamp = e.finishTime
     executionList.get(e.id).state = ExecutionState.CANCELED
     updateLiveStore(executionList.get(e.id))
   }
 
-  def onStatementError(e: SparkListenerStatementError): Unit = {
+  def processEventStatementError(e: SparkListenerStatementError): Unit = {
     executionList.get(e.id).finishTimestamp = e.finishTime
     executionList.get(e.id).detail = e.errorMsg
     executionList.get(e.id).state = ExecutionState.FAILED
     updateLiveStore(executionList.get(e.id))
   }
 
-  def onStatementFinish(e: SparkListenerStatementFinish): Unit = {
+  def processEventStatementFinish(e: SparkListenerStatementFinish): Unit = {
     executionList.get(e.id).finishTimestamp = e.finishTime
     executionList.get(e.id).state = ExecutionState.FINISHED
     updateLiveStore(executionList.get(e.id))
   }
 
-  def onOperationClosed(e: SparkListenerOperationClosed): Unit = {
+  def processEventOperationClosed(e: SparkListenerOperationClosed): Unit = {
     executionList.get(e.id).closeTimestamp = e.closeTime
     executionList.get(e.id).state = ExecutionState.CLOSED
     updateLiveStore(executionList.get(e.id))
@@ -184,6 +183,49 @@ private[thriftserver] class HiveThriftServer2Listener(
       executionList.remove(e.id)
     }
   }
+
+
+  def onSessionCreated(ip: String, sessionId: String, userName: String = "UNKNOWN"): Unit = {
+    postLiveListenerBus(SparkListenerSessionCreated(ip, sessionId,
+      userName, System.currentTimeMillis()))
+  }
+
+  def onSessionClosed(sessionId: String): Unit = {
+    postLiveListenerBus(SparkListenerSessionClosed(sessionId, System.currentTimeMillis()))
+  }
+
+  def onStatementStart(
+    id: String,
+    sessionId: String,
+    statement: String,
+    groupId: String,
+    userName: String = "UNKNOWN"): Unit = {
+    postLiveListenerBus(SparkListenerStatementStart(id, sessionId, statement, groupId,
+      System.currentTimeMillis(), userName))
+  }
+
+  def onStatementParsed(id: String, executionPlan: String): Unit = {
+    postLiveListenerBus(SparkListenerStatementParsed(id, executionPlan))
+  }
+
+  def onStatementCanceled(id: String): Unit = {
+    postLiveListenerBus(SparkListenerStatementCanceled(id, System.currentTimeMillis()))
+  }
+
+  def onStatementError(id: String, errorMsg: String, errorTrace: String): Unit = {
+    postLiveListenerBus(SparkListenerStatementError(id, errorMsg, errorTrace,
+      System.currentTimeMillis()))
+  }
+
+  def onStatementFinish(id: String): Unit = {
+    postLiveListenerBus(SparkListenerStatementFinish(id, System.currentTimeMillis()))
+
+  }
+
+  def onOperationClosed(id: String): Unit = {
+    postLiveListenerBus(SparkListenerOperationClosed(id, System.currentTimeMillis()))
+  }
+
 
   /** Go through all `LiveEntity`s and use `entityFlushFunc(entity)` to flush them. */
   private def flush(entityFlushFunc: LiveEntity => Unit): Unit = {

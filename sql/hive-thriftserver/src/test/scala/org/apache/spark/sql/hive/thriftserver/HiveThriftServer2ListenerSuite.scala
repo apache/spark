@@ -64,22 +64,21 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite
     val statusStore = createStatusStore()
     val listener = statusStore.listener.get
 
-    listener.onSessionCreated(SparkListenerSessionCreated("localhost", "sessionId", "user",
-      System.currentTimeMillis()))
-    listener.onStatementStart(SparkListenerStatementStart("id", "sessionId", "dummy query",
-      "groupId", System.currentTimeMillis(), "user"))
-    listener.onStatementParsed(SparkListenerStatementParsed("id", "dummy plan"))
+    listener.onSessionCreated("localhost", "sessionId", "user")
+    listener.onStatementStart("id", "sessionId", "dummy query",
+      "groupId", "user")
+    listener.onStatementParsed("id", "dummy plan")
     listener.onJobStart(SparkListenerJobStart(
       0,
       System.currentTimeMillis(),
       Nil,
       createProperties))
-    listener.onStatementFinish(SparkListenerStatementFinish("id", System.currentTimeMillis()))
-    listener.onOperationClosed(SparkListenerOperationClosed("id", System.currentTimeMillis()))
+    listener.onStatementFinish("id")
+    listener.onOperationClosed("id")
 
     assert(statusStore.getOnlineSessionNum == 1)
 
-    listener.onSessionClosed(SparkListenerSessionClosed("sessionId", System.currentTimeMillis()))
+    listener.onSessionClosed("sessionId")
 
     assert(statusStore.getOnlineSessionNum == 0)
     assert(statusStore.getExecutionList.size == 1)

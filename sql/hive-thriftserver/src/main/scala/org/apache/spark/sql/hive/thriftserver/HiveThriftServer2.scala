@@ -107,8 +107,8 @@ object HiveThriftServer2 extends Logging {
       server.init(executionHive.conf)
       server.start()
       logInfo("HiveThriftServer2 started")
-      val kvStore = SparkSQLEnv.sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
       val sc = SparkSQLEnv.sparkContext
+      val kvStore = sc.statusStore.store.asInstanceOf[ElementTrackingStore]
       listener = new HiveThriftServer2Listener(kvStore, Some(server),
         Some(SparkSQLEnv.sqlContext), Some(sc))
       sc.addSparkListener(listener)
