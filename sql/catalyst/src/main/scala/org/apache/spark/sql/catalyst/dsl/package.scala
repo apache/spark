@@ -73,7 +73,6 @@ package object dsl {
     def * (other: Expression): Expression = Multiply(expr, other)
     def / (other: Expression): Expression = Divide(expr, other)
     def div (other: Expression): Expression = IntegralDivide(expr, other)
-    def intervalDiv (other: Expression): Expression = IntervalDivide(expr, other)
     def % (other: Expression): Expression = Remainder(expr, other)
     def & (other: Expression): Expression = BitwiseAnd(expr, other)
     def | (other: Expression): Expression = BitwiseOr(expr, other)

@@ -97,16 +97,6 @@ object IntervalUtils {
     Decimal(result, 18, 6)
   }
 
-  def divide(interval: CalendarInterval, divisor: Decimal): CalendarInterval = {
-    if (divisor == Decimal.ZERO || divisor == null) return null
-    val months = Decimal(interval.months) / divisor
-    val days = months.remainder(Decimal.ONE) * Decimal(DAYS_PER_MONTH) +
-      Decimal(interval.days) / divisor
-    val milliseconds = days.remainder(Decimal.ONE) * Decimal(DateTimeUtils.MICROS_PER_DAY) +
-      Decimal(interval.microseconds) / divisor
-    new CalendarInterval(months.toInt, days.toInt, milliseconds.toLong)
-  }
-
   /**
    * Converts a string to [[CalendarInterval]] case-insensitively.
    *

@@ -81,7 +81,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
     case CalendarIntervalType =>
-      sum.cast(resultType).intervalDiv(count.cast(DecimalType.LongDecimal))
+      DivideInterval(sum.cast(resultType), count.cast(DoubleType))
     case _ =>
       sum.cast(resultType) / count.cast(resultType)
   }

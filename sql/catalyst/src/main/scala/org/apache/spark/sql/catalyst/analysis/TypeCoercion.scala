@@ -866,8 +866,6 @@ object TypeCoercion {
         SubtractTimestamps(l, Cast(r, TimestampType))
       case Subtract(l @ DateType(), r @ TimestampType()) =>
         SubtractTimestamps(Cast(l, TimestampType), r)
-
-      case Divide(l @ CalendarIntervalType(), r) => IntervalDivide(l, Cast(r, DecimalType(29, 9)))
     }
   }
 

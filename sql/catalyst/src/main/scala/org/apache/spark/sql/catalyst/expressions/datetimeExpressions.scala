@@ -2163,33 +2163,3 @@ case class SubtractDates(left: Expression, right: Expression)
     })
   }
 }
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Divide interval value `expr1` by `expr2`. It returns NULL if `expr2` is 0 or NULL.",
-  examples = """
-    Examples:
-      > SELECT interval '1 year 2 month' / 3.0;
-       interval 4 months 20 days
-  """,
-  since = "3.0.0")
-// scalastyle:on line.size.limit
-case class IntervalDivide(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
-
-  override def dataType: DataType = CalendarIntervalType
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType, DecimalType)
-
-  override def nullSafeEval(interval: Any, divisor: Any): Any = {
-    IntervalUtils.divide(interval.asInstanceOf[CalendarInterval],
-      divisor.asInstanceOf[Decimal])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (interval, divisor) => {
-      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"$iu.divide($interval, $divisor)"
-    })
-  }
-}
