@@ -399,7 +399,7 @@ object IntervalUtils {
         UNIT_NAME_SUFFIX,
         END_UNIT_NAME = Value
   }
-  private final val intervalStr = UTF8String.fromString("interval")
+  private final val intervalStr = UTF8String.fromString("interval ")
   private final val yearStr = UTF8String.fromString("year")
   private final val monthStr = UTF8String.fromString("month")
   private final val weekStr = UTF8String.fromString("week")
