@@ -320,16 +320,6 @@ private[ui] class SqlStatsPagedTable(
       }
     }
 
-    def statement(infoData: ExecutionInfo): Seq[Node] = {
-      if (infoData.statement != null && infoData.statement.nonEmpty) {
-        <span class="description-input">
-          {infoData.statement}
-        </span>
-      } else {
-        Nil
-      }
-    }
-
     <tr>
       <td>
         {info.userName}
@@ -356,8 +346,10 @@ private[ui] class SqlStatsPagedTable(
       <td >
         {formatDurationVerbose(duration)}
       </td>
-      <td >
-        {statement(info)}
+      <td>
+        <span class="description-input">
+          {info.statement}
+        </span>
       </td>
       <td>
         {info.state}
