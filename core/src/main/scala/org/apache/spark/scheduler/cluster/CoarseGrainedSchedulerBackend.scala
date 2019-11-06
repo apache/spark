@@ -95,6 +95,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // A map to store hostname and ResourceProfile with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   protected var hostToLocalTaskCount: Map[(String, ResourceProfile), Int] = Map.empty
+  protected var rpHostToLocalTaskCount: Map[Int, Map[String, Int]] = Map.empty
+
 
   // The number of pending tasks which is locality required
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
@@ -614,7 +616,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   final override def requestTotalExecutors(
       numExecutors: Int,
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
-      hostToLocalTaskCount: Map[(String, ResourceProfile), Int],
+      hostToLocalTaskCount: Map[Int, Map[String, Int]],
       resources: Option[Map[ResourceProfile, Int]]
     ): Boolean = {
     if (numExecutors < 0) {
@@ -627,7 +629,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       this.requestedTotalExecutors = numExecutors
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
       this.localityAwareTasks = localityAwareTasks
-      this.hostToLocalTaskCount = hostToLocalTaskCount
+      // this.hostToLocalTaskCount = hostToLocalTaskCount
+      this.rpHostToLocalTaskCount = hostToLocalTaskCount
 
       numPendingExecutors =
         math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size, 0)

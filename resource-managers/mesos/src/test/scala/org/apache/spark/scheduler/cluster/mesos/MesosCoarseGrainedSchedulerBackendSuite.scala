@@ -636,9 +636,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(backend.getExecutorIds().isEmpty)
 
     val defaultProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    backend.requestTotalExecutors(2,
-      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2), Map(("hosts10", defaultProf) -> 1,
-        ("hosts11", defaultProf) -> 1))
+    backend.requestTotalExecutors(2, Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2),
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> Map("hosts10" -> 1, "hosts11" -> 1)))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(1, false)
@@ -654,9 +653,9 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     offerResourcesAndVerify(1, true)
 
     // Update total executors
-    backend.requestTotalExecutors(3, Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 3),
-      Map(("hosts10", defaultProf) -> 1, ("hosts11", defaultProf) -> 1,
-        ("hosts12", defaultProf) -> 1))
+    backend.requestTotalExecutors(2, Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 3),
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+        Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1)))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)
@@ -666,8 +665,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     // Update total executors
     backend.requestTotalExecutors(4, Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
-      Map(("hosts10", defaultProf) -> 1, ("hosts11", defaultProf) -> 1,
-        ("hosts12", defaultProf) -> 1, ("hosts13", defaultProf) -> 1))
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+        Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1, "hosts13" -> 1)))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)

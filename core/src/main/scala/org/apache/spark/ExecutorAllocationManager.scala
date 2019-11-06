@@ -178,10 +178,8 @@ private[spark] class ExecutorAllocationManager(
   private var numLocalityAwareTasksPerResourceProfileId = new mutable.HashMap[Int, Int]
   numLocalityAwareTasksPerResourceProfileId(defaultProfile.id) = 0
 
-  // Host and ResourceProfile to possible task running on it, used for executor placement.
-  // private var hostToLocalTaskCount: Map[String, Int] = Map.empty
-  // TODO - create case class for (host, resourceprofile)?
-  private var hostToLocalTaskCount: Map[(String, ResourceProfile), Int] = Map.empty
+  // ResourceProfile id to Host to possible task running on it, used for executor placement.
+  private var rpIdToHostToLocalTaskCount: Map[Int, Map[String, Int]] = Map.empty
 
   /**
    * Verify that the settings specified through the config are valid.
@@ -246,7 +244,7 @@ private[spark] class ExecutorAllocationManager(
     executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
 
     client.requestTotalExecutors(0, numLocalityAwareTasksPerResourceProfileId.toMap,
-      hostToLocalTaskCount, Some(numExecutorsTargetPerResourceProfile.toMap))
+      rpIdToHostToLocalTaskCount, Some(numExecutorsTargetPerResourceProfile.toMap))
   }
 
   /**
@@ -401,7 +399,7 @@ private[spark] class ExecutorAllocationManager(
         logInfo("requesting updates: " + updates)
         testing ||
           client.requestTotalExecutors(0,
-            numLocalityAwareTasksPerResourceProfileId.toMap, hostToLocalTaskCount,
+            numLocalityAwareTasksPerResourceProfileId.toMap, rpIdToHostToLocalTaskCount,
             Some(numExecutorsTargetPerResourceProfile.toMap))
       } catch {
         case NonFatal(e) =>
@@ -581,7 +579,7 @@ private[spark] class ExecutorAllocationManager(
     // [SPARK-21834] killExecutors api reduces the target number of executors.
     // So we need to update the target with desired value.
     client.requestTotalExecutors(0, numLocalityAwareTasksPerResourceProfileId.toMap,
-        hostToLocalTaskCount, Some(numExecutorsTargetPerResourceProfile.toMap))
+      rpIdToHostToLocalTaskCount, Some(numExecutorsTargetPerResourceProfile.toMap))
 
     // reset the newExecutorTotal to the existing number of executors
     if (testing || executorsRemoved.nonEmpty) {
@@ -658,7 +656,7 @@ private[spark] class ExecutorAllocationManager(
     // maintain the executor placement hints for each stageAttempt used by resource framework
     // to better place the executors.
     private val stageAttemptToExecutorPlacementHints =
-      new mutable.HashMap[StageAttempt, (Int, Map[String, Int], ResourceProfile)]
+      new mutable.HashMap[StageAttempt, (Int, Map[String, Int], Int)]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false
@@ -695,9 +693,10 @@ private[spark] class ExecutorAllocationManager(
             }
           }
         }
+
         stageAttemptToExecutorPlacementHints.put(stageAttempt,
           (numTasksPending, hostToLocalTaskCountPerStage.toMap,
-            stageSubmitted.stageInfo.resourceProfile.getOrElse(defaultProfile)))
+            stageSubmitted.stageInfo.resourceProfile.getOrElse(defaultProfile).id))
 
         // Update the executor placement hints
         updateExecutorPlacementHints()
@@ -875,21 +874,27 @@ private[spark] class ExecutorAllocationManager(
      */
     def updateExecutorPlacementHints(): Unit = {
       var localityAwareTasksPerResourceProfileId = new mutable.HashMap[Int, Int]
-      val localityToCount = new mutable.HashMap[(String, ResourceProfile), Int]()
-      val hostToRProfile = new mutable.HashMap[String, (Option[ResourceProfile], Int)]()
+
+      // ResourceProfile id => map[host, count]
+      val rplocalityToCount = new mutable.HashMap[Int, mutable.HashMap[String, Int]]()
+
       stageAttemptToExecutorPlacementHints.values.foreach {
-        case (numTasksPending, localities, rp) =>
+        case (numTasksPending, localities, rpId) =>
           val rpNumPending =
-            localityAwareTasksPerResourceProfileId.getOrElse(rp.id, 0)
-          localityAwareTasksPerResourceProfileId(rp.id) = rpNumPending + numTasksPending
+            localityAwareTasksPerResourceProfileId.getOrElse(rpId, 0)
+          localityAwareTasksPerResourceProfileId(rpId) = rpNumPending + numTasksPending
           localities.foreach { case (hostname, count) =>
-            val updatedCount = localityToCount.getOrElse((hostname, rp), 0) + count
-            localityToCount((hostname, rp)) = updatedCount
+            val rpBasedHostToCount =
+              rplocalityToCount.getOrElseUpdate(rpId, new mutable.HashMap[String, Int])
+            val newUpdated = rpBasedHostToCount.getOrElse(hostname, 0) + count
+            rpBasedHostToCount(hostname) = newUpdated
           }
       }
+
       allocationManager.numLocalityAwareTasksPerResourceProfileId =
         localityAwareTasksPerResourceProfileId
-      allocationManager.hostToLocalTaskCount = localityToCount.toMap
+      allocationManager.rpIdToHostToLocalTaskCount =
+        rplocalityToCount.map { case (k, v) => (k, v.toMap)}.toMap
     }
   }
 

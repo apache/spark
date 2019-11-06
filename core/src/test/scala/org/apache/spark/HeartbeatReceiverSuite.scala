@@ -282,7 +282,7 @@ private class FakeSchedulerBackend(
       resources: Option[Map[ResourceProfile, Int]]): Future[Boolean] = {
     clusterManagerEndpoint.ask[Boolean](
       RequestExecutors(requestedTotal, numLocalityAwareTasksPerResourceProfileId,
-      hostToLocalTaskCount, Set.empty))
+        rpHostToLocalTaskCount, Set.empty))
   }
 
   protected override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = {
@@ -302,6 +302,7 @@ private class FakeClusterManager(override val rpcEnv: RpcEnv) extends RpcEndpoin
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RequestExecutors(requestedTotal, _, _, _, _) =>
+      // TODO - update
       targetNumExecutors = requestedTotal
       context.reply(true)
     case KillExecutors(executorIds) =>

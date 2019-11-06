@@ -872,15 +872,17 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageSubmitted(stageInfo1))
 
     assert(localityAwareTasksForDefaultProfile(manager) === 3)
-    // private var hostToLocalTaskCount: Map[(String, ResourceProfile), Int] = Map.empty
-
     val hostToLocal = hostToLocalTaskCount(manager)
+    assert(hostToLocalTaskCount(manager) ===
+      Map("host1" -> 2, "host2" -> 3, "host3" -> 2, "host4" -> 2))
+/*
     var resultsLocal = Map("host1" -> 2, "host2" -> 3, "host3" -> 2, "host4" -> 2)
     hostToLocalTaskCount(manager).foreach { case (k, count) =>
       assert(resultsLocal.contains(k._1))
       assert(resultsLocal(k._1) == count)
       assert(k._2 == defaultProfile)
     }
+    */
 
     val localityPreferences2 = Seq(
       Seq(TaskLocation("host2"), TaskLocation("host3"), TaskLocation("host5")),
@@ -891,15 +893,24 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerStageSubmitted(stageInfo2))
 
     assert(localityAwareTasksForDefaultProfile(manager) === 5)
+    assert(hostToLocalTaskCount(manager) ===
+      Map("host1" -> 2, "host2" -> 4, "host3" -> 4, "host4" -> 3, "host5" -> 2))
+
+    /*
     resultsLocal = Map("host1" -> 2, "host2" -> 4, "host3" -> 4, "host4" -> 3, "host5" -> 2)
     hostToLocalTaskCount(manager).foreach { case (k, count) =>
       assert(resultsLocal.contains(k._1))
       assert(resultsLocal(k._1) == count)
       assert(k._2 == defaultProfile)
-    }
+    } */
 
     post(SparkListenerStageCompleted(stageInfo1))
     assert(localityAwareTasksForDefaultProfile(manager) === 2)
+
+    assert(hostToLocalTaskCount(manager) ===
+      Map("host2" -> 1, "host3" -> 2, "host4" -> 1, "host5" -> 2))
+
+/*
     resultsLocal = Map("host2" -> 1, "host3" -> 2, "host4" -> 1, "host5" -> 2)
 
     hostToLocalTaskCount(manager).foreach { case (k, count) =>
@@ -907,6 +918,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       assert(resultsLocal(k._1) == count)
       assert(k._2 == defaultProfile)
     }
+    */
   }
 
   test("SPARK-8366: maxNumExecutorsNeededPerResourceProfile should properly handle failed tasks") {
@@ -1195,8 +1207,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _onSchedulerQueueEmpty = PrivateMethod[Unit](Symbol("onSchedulerQueueEmpty"))
   private val _localityAwareTasksPerResourceProfileId =
     PrivateMethod[mutable.HashMap[Int, Int]](Symbol("numLocalityAwareTasksPerResourceProfileId"))
-  private val _hostToLocalTaskCount =
-    PrivateMethod[Map[(String, ResourceProfile), Int]](Symbol("hostToLocalTaskCount"))
+  private val _rpIdToHostToLocalTaskCount =
+    PrivateMethod[Map[Int, Map[String, Int]]](Symbol("rpIdToHostToLocalTaskCount"))
   private val _onSpeculativeTaskSubmitted =
     PrivateMethod[Unit](Symbol("onSpeculativeTaskSubmitted"))
   private val _totalRunningTasksPerResourceProfile =
@@ -1279,8 +1291,9 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   }
 
   private def hostToLocalTaskCount(
-      manager: ExecutorAllocationManager): Map[(String, ResourceProfile), Int] = {
-    manager invokePrivate _hostToLocalTaskCount()
+      manager: ExecutorAllocationManager): Map[String, Int] = {
+    val rpIdToHostLocal = manager invokePrivate _rpIdToHostToLocalTaskCount()
+    rpIdToHostLocal(defaultProfile.id)
   }
 
   private def getResourceProfileIdOfExecutor(manager: ExecutorAllocationManager): Int = {

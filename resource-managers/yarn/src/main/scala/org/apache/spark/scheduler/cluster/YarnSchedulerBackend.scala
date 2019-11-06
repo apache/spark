@@ -129,8 +129,15 @@ private[spark] abstract class YarnSchedulerBackend(
     // For locality preferences, ignore preferences for nodes that are blacklisted
     val filteredHostToLocalTaskCount =
     hostToLocalTaskCount.filter { case (k, v) => !nodeBlacklist.contains(k._1) }
+
+    // TODO - need to test
+    val filteredRPHostToLocalTaskCount = rpHostToLocalTaskCount.map { case (rpid, v) =>
+      (rpid, v.filter { case (host, count) => !nodeBlacklist.contains(host) })
+    }
+      // rpHostToLocalTaskCount.filter { case (k, v) => !nodeBlacklist.contains(k._1) }
+
     RequestExecutors(requestedTotal, numLocalityAwareTasksPerResourceProfileId,
-      filteredHostToLocalTaskCount, nodeBlacklist, resources)
+      filteredRPHostToLocalTaskCount, nodeBlacklist, resources)
   }
 
   /**

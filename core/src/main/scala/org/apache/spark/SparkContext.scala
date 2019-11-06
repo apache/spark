@@ -1617,9 +1617,8 @@ class SparkContext(config: SparkConf) extends Logging {
       case b: ExecutorAllocationClient =>
         // assume this is using the default resource profile, would need to add api to support
         // others
-        val hostToLocalTaskCountWithResourceProfileId = hostToLocalTaskCount.map {
-          case (host, count) => ((host, ResourceProfile.getOrCreateDefaultProfile(conf)), count)
-        }
+        val hostToLocalTaskCountWithResourceProfileId =
+          Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> hostToLocalTaskCount).toMap
         val localityAwareTasksWithResourceProfileId =
           Map[Int, Int](localityAwareTasks -> ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
         b.requestTotalExecutors(numExecutors, localityAwareTasksWithResourceProfileId.toMap,

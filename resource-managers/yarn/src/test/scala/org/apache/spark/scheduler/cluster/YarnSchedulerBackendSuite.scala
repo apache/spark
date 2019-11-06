@@ -77,7 +77,8 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       val req = yarnSchedulerBackendExtended.prepareRequestExecutors(numRequested)
       assert(req.requestedTotal === numRequested)
       assert(req.nodeBlacklist === blacklist)
-      val hosts = req.hostToLocalTaskCount.keySet.map(_._1)
+      val hosts =
+        req.hostToLocalTaskCount(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID).keySet
       assert(hosts.intersect(blacklist).isEmpty)
       // Serialize to make sure serialization doesn't throw an error
       ser.serialize(req)

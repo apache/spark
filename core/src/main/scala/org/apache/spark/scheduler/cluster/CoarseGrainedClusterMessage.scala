@@ -121,7 +121,7 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RequestExecutors(
       requestedTotal: Int,
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
-      hostToLocalTaskCount: Map[(String, ResourceProfile), Int],
+      hostToLocalTaskCount: Map[Int, Map[String, Int]],
       nodeBlacklist: Set[String],
       resources: Option[Map[ResourceProfile, Int]] = None)
     extends CoarseGrainedClusterMessage
