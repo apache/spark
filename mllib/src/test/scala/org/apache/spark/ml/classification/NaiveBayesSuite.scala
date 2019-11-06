@@ -23,7 +23,7 @@ import breeze.linalg.{DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial, RandBasis => BrzRandBasis}
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.classification.NaiveBayes.{Bernoulli, Gaussian, Multinomial}
+import org.apache.spark.ml.classification.NaiveBayes._
 import org.apache.spark.ml.classification.NaiveBayesSuite._
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg._
@@ -39,6 +39,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
   @transient var dataset: Dataset[_] = _
   @transient var bernoulliDataset: Dataset[_] = _
   @transient var gaussianDataset: Dataset[_] = _
+  @transient var gaussianDataset2: Dataset[_] = _
 
   private val seed = 42
 
@@ -69,6 +70,8 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       Array(0.10, 0.10, 0.10, 0.50)  // label 2: variance
     )
     gaussianDataset = generateGaussianNaiveBayesInput(pi, theta2, sigma, 1000, seed).toDF()
+    gaussianDataset2 = spark.read.format("libsvm")
+      .load("../data/mllib/sample_multiclass_classification_data.txt")
   }
 
   def validatePrediction(predictionAndLabels: Seq[Row]): Unit = {
@@ -390,6 +393,54 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val featureAndProbabilities = model.transform(validationDataset)
       .select("features", "probability")
     validateProbabilities(featureAndProbabilities.collect(), model, "gaussian")
+  }
+
+  test("Naive Bayes Gaussian - Model Coefficients") {
+    /*
+     Using the following Python code to verify the correctness.
+
+     import numpy as np
+     from sklearn.naive_bayes import GaussianNB
+     from sklearn.datasets import load_svmlight_file
+
+     path = "./data/mllib/sample_multiclass_classification_data.txt"
+     X, y = load_svmlight_file(path)
+     X = X.toarray()
+     clf = GaussianNB()
+     clf.fit(X, y)
+
+     >>> clf.class_prior_
+     array([0.33333333, 0.33333333, 0.33333333])
+     >>> clf.theta_
+     array([[ 0.27111101, -0.18833335,  0.54305072,  0.60500005],
+            [-0.60777778,  0.18166667, -0.84271174, -0.88000014],
+            [-0.09111114, -0.35833336,  0.10508474,  0.0216667 ]])
+     >>> clf.sigma_
+     array([[0.12230125, 0.07078052, 0.03430001, 0.05133607],
+            [0.03758145, 0.0988028 , 0.0033903 , 0.00782224],
+            [0.08058764, 0.06701387, 0.02486641, 0.02661392]])
+    */
+
+    val gnb = new NaiveBayes().setModelType(Gaussian)
+    val model = gnb.fit(gaussianDataset2)
+    assert(Vectors.dense(model.pi.toArray.map(math.exp)) ~=
+      Vectors.dense(0.33333333, 0.33333333, 0.33333333) relTol 1E-5)
+
+    val thetaRows = model.theta.rowIter.toArray
+    assert(thetaRows(0) ~=
+      Vectors.dense(0.27111101, -0.18833335, 0.54305072, 0.60500005)relTol 1E-5)
+    assert(thetaRows(1) ~=
+      Vectors.dense(-0.60777778, 0.18166667, -0.84271174, -0.88000014)relTol 1E-5)
+    assert(thetaRows(2) ~=
+      Vectors.dense(-0.09111114, -0.35833336, 0.10508474, 0.0216667)relTol 1E-5)
+
+    val sigmaRows = model.sigma.rowIter.toArray
+    assert(sigmaRows(0) ~=
+      Vectors.dense(0.12230125, 0.07078052, 0.03430001, 0.05133607)relTol 1E-5)
+    assert(sigmaRows(1) ~=
+      Vectors.dense(0.03758145, 0.0988028, 0.0033903, 0.00782224)relTol 1E-5)
+    assert(sigmaRows(2) ~=
+      Vectors.dense(0.08058764, 0.06701387, 0.02486641, 0.02661392)relTol 1E-5)
   }
 
   test("read/write") {
