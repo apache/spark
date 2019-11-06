@@ -99,8 +99,14 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
   }
 }
 
-// `child` is usually `ShuffleQueryStageExec` or `ReusedQueryStageExec`, but can be the shuffle
-// exchange node during canonicalization.
+/**
+ * A wrapper of shuffle query stage, which submits one reduce task per mapper to read the shuffle
+ * files written by one mapper. By doing this, it's very likely to read the shuffle files locally,
+ * as the shuffle files that a reduce task needs to read are in one node.
+ *
+ * @param child It's usually `ShuffleQueryStageExec` or `ReusedQueryStageExec`, but can be the
+ *              shuffle exchange node during canonicalization.
+ */
 case class LocalShuffleReaderExec(child: SparkPlan) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
