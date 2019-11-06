@@ -981,8 +981,7 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("MERGE INTO TABLE") {
-    Seq(("v1Table", "v1Table1"),
-      ("v2Table", "v2Table1"),
+    Seq(("v2Table", "v2Table1"),
       ("testcat.tab", "testcat.tab1")).foreach { pair =>
 
       val target = pair._1
@@ -1140,8 +1139,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
 
     // no aliases
-    Seq(("v1Table", "v1Table1"),
-      ("v2Table", "v2Table1"),
+    Seq(("v2Table", "v2Table1"),
       ("testcat.tab", "testcat.tab1")).foreach { pair =>
 
       val target = pair._1
@@ -1207,6 +1205,22 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(u.sourceTable.isInstanceOf[UnresolvedV2Relation])
       case _ => fail("Expect MergeIntoTable, but got:\n" + parsed.treeString)
     }
+
+    // v1 is not supported.
+    val exc = intercept[AnalysisException] {
+      val sql =
+        s"""
+           |MERGE INTO v1Table
+           |USING v1Table1
+           |ON target.i = source.i
+           |WHEN MATCHED THEN DELETE
+           |WHEN MATCHED THEN UPDATE SET *
+           |WHEN NOT MATCHED THEN INSERT *
+       """.stripMargin
+      val parsed = parseAndResolve(sql)
+    }
+
+    assert(exc.getMessage.contains("MERGE INTO is only supported with v2 tables."))
   }
 
   // TODO: add tests for more commands.

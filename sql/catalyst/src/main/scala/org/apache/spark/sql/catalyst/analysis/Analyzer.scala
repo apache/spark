@@ -1179,7 +1179,7 @@ class Analyzer(
         o
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
-        if (!m.resolved && targetTable.resolved && sourceTable.resolved) =>
+        if !m.resolved && targetTable.resolved && sourceTable.resolved =>
         val newMatchedActions = m.matchedActions.map {
           case DeleteAction(deleteCondition) =>
             val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))

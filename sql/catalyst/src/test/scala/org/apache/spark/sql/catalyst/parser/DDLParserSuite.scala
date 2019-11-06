@@ -847,21 +847,18 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN NOT MATCHED AND (target.col2='insert')
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
       """.stripMargin,
-      MergeIntoStatement(
-        Seq("testcat1", "ns1", "ns2", "tbl"),
-        Some("target"),
-        Some(Seq("testcat2", "ns1", "ns2", "tbl")),
-        None,
-        Some("source"),
+      MergeIntoTable(
+        SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+        SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
         EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
         Seq(
-          DeleteClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
-          UpdateClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
-            Seq(Seq("target", "col2")),
+          DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
+            Seq(UnresolvedAttribute("target.col2")),
             Seq(UnresolvedAttribute("source.col2")))),
         Seq(
-          InsertClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
-            Seq(Seq("target", "col1"), Seq("target", "col2")),
+          InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
+            Seq(UnresolvedAttribute("target.col1"), UnresolvedAttribute("target.col2")),
             Seq(UnresolvedAttribute("source.col1"), UnresolvedAttribute("source.col2"))))))
   }
 
@@ -876,22 +873,19 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN NOT MATCHED AND (target.col2='insert')
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
       """.stripMargin,
-      MergeIntoStatement(
-        Seq("testcat1", "ns1", "ns2", "tbl"),
-        Some("target"),
-        None,
-        Some(Project(Seq(UnresolvedStar(None)),
+      MergeIntoTable(
+        SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+        SubqueryAlias("source", Project(Seq(UnresolvedStar(None)),
           UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl")))),
-        Some("source"),
         EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
         Seq(
-          DeleteClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
-          UpdateClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
-            Seq(Seq("target", "col2")),
+          DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
+            Seq(UnresolvedAttribute("target.col2")),
             Seq(UnresolvedAttribute("source.col2")))),
         Seq(
-          InsertClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
-            Seq(Seq("target", "col1"), Seq("target", "col2")),
+          InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
+            Seq(UnresolvedAttribute("target.col1"), UnresolvedAttribute("target.col2")),
             Seq(UnresolvedAttribute("source.col1"), UnresolvedAttribute("source.col2"))))))
   }
 
@@ -906,24 +900,21 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN NOT MATCHED AND (target.col2='insert')
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
       """.stripMargin,
-      MergeIntoStatement(
-        Seq("testcat1", "ns1", "ns2", "tbl"),
-        Some("target"),
-        None,
-        Some(With(Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("s"))),
-          Seq("s" -> SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
-            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))))))),
-        Some("source"),
-        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-        Seq(
-          DeleteClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
-          UpdateClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
-            Seq(Seq("target", "col2")),
-            Seq(UnresolvedAttribute("source.col2")))),
-        Seq(
-          InsertClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
-            Seq(Seq("target", "col1"), Seq("target", "col2")),
-            Seq(UnresolvedAttribute("source.col1"), UnresolvedAttribute("source.col2"))))))
+    MergeIntoTable(
+      SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+      SubqueryAlias("source", With(Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("s"))),
+        Seq("s" -> SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
+          UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))))))),
+      EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+      Seq(
+        DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+        UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
+          Seq(UnresolvedAttribute("target.col2")),
+          Seq(UnresolvedAttribute("source.col2")))),
+      Seq(
+        InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
+          Seq(UnresolvedAttribute("target.col1"), UnresolvedAttribute("target.col2")),
+          Seq(UnresolvedAttribute("source.col1"), UnresolvedAttribute("source.col2"))))))
   }
 
   test("merge into table: no additional condition") {
@@ -936,21 +927,18 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN NOT MATCHED
         |THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
       """.stripMargin,
-      MergeIntoStatement(
-        Seq("testcat1", "ns1", "ns2", "tbl"),
-        Some("target"),
-        Some(Seq("testcat2", "ns1", "ns2", "tbl")),
-        None,
-        Some("source"),
-        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-        Seq(
-          UpdateClause(None,
-            Seq(Seq("target", "col2")),
-            Seq(UnresolvedAttribute("source.col2")))),
-        Seq(
-          InsertClause(None,
-            Seq(Seq("target", "col1"), Seq("target", "col2")),
-            Seq(UnresolvedAttribute("source.col1"), UnresolvedAttribute("source.col2"))))))
+    MergeIntoTable(
+      SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+      SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+      EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+      Seq(
+        UpdateAction(None,
+          Seq(UnresolvedAttribute("target.col2")),
+          Seq(UnresolvedAttribute("source.col2")))),
+      Seq(
+        InsertAction(None,
+          Seq(UnresolvedAttribute("target.col1"), UnresolvedAttribute("target.col2")),
+          Seq(UnresolvedAttribute("source.col1"), UnresolvedAttribute("source.col2"))))))
   }
 
   test("merge into table: star") {
@@ -964,22 +952,19 @@ class DDLParserSuite extends AnalysisTest {
         |WHEN NOT MATCHED AND (target.col2='insert')
         |THEN INSERT *
       """.stripMargin,
-      MergeIntoStatement(
-        Seq("testcat1", "ns1", "ns2", "tbl"),
-        Some("target"),
-        Some(Seq("testcat2", "ns1", "ns2", "tbl")),
-        None,
-        Some("source"),
-        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-        Seq(
-          DeleteClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
-          UpdateClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
-            Seq(Seq("*")),
-            Seq(UnresolvedStar(None)))),
-        Seq(
-          InsertClause(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
-            Seq(Seq("*")),
-            Seq(UnresolvedStar(None))))))
+    MergeIntoTable(
+      SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+      SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+      EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+      Seq(
+        DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+        UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
+          Seq(UnresolvedStar(None)),
+          Seq(UnresolvedStar(None)))),
+      Seq(
+        InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
+          Seq(UnresolvedStar(None)),
+          Seq(UnresolvedStar(None))))))
   }
 
   test("merge into table: columns aliases is not allowed - target table") {

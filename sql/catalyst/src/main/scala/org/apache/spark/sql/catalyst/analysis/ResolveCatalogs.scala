@@ -106,54 +106,30 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val columns = u.columns.map(UnresolvedAttribute(_))
       UpdateTable(aliased, columns, u.values, u.condition)
 
-    case m @ MergeIntoStatement(
-        targetNameParts @ CatalogAndIdentifierParts(targetCatalog, targetTableName), _,
-        maybeSourceNameParts, maybeSourceQuery, _, _, _, _) =>
-      val target = UnresolvedV2Relation(targetNameParts,
-        targetCatalog.asTableCatalog, targetTableName.asIdentifier)
-      val aliasedTarget = m.targetTableAlias.map(SubqueryAlias(_, target)).getOrElse(target)
-      val source = maybeSourceNameParts match {
-        case Some(sourceNameParts @ CatalogAndIdentifierParts(sourceCatalog, sourceTableName)) =>
-          UnresolvedV2Relation(sourceNameParts,
-            sourceCatalog.asTableCatalog, sourceTableName.asIdentifier)
-        case None =>
-          maybeSourceQuery.getOrElse(throw new AnalysisException("Cannot resolve the source plan."))
+    case m @ MergeIntoTable(target, source, _, _, _) =>
+      val (catalogResolvedTarget, targetCatalogResoved) = EliminateSubqueryAliases(target) match {
+        case UnresolvedRelation(nameParts @ NonSessionCatalog(catalog, tableName)) =>
+          (UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier), true)
+        case o => (o, false)
       }
-      val aliasedSource = m.sourceTableAlias.map(SubqueryAlias(_, source)).getOrElse(source)
-      val matchedActions = m.matchedClauses.map {
-        case DeleteClause(deleteCondition) =>
-          DeleteAction(deleteCondition)
-        case UpdateClause(updateCondition, columns, values) =>
-          val colAttrs = columns.map {
-            case Seq("*") => UnresolvedStar(None)
-            case o => UnresolvedAttribute(o)
-          }
-          UpdateAction(
-            updateCondition,
-            colAttrs,
-            values)
-        case _ =>
-          throw new AnalysisException("There should not be InsertAction in matched clause.")
+      val (catalogResolvedSource, sourceCatalogResolved) = EliminateSubqueryAliases(source) match {
+        case UnresolvedRelation(nameParts @ NonSessionCatalog(catalog, tableName)) =>
+          (UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier), true)
+        case o => (o, false)
       }
-      val notMatchedActions = m.notMatchedClauses.map {
-        case InsertClause(insertCondition, columns, values) =>
-          val colAttrs = columns.map {
-            case Seq("*") => UnresolvedStar(None)
-            case o => UnresolvedAttribute(o)
-          }
-          InsertAction(
-            insertCondition,
-            colAttrs,
-            values)
-        case _ =>
-          throw new AnalysisException(
-            "There should not be DeleteAction/UpdateAction in matched clause.")
+      if (!targetCatalogResoved && !sourceCatalogResolved) {
+        m
+      } else {
+        val newTarget = target match {
+          case s: SubqueryAlias => s.copy(child = catalogResolvedTarget)
+          case _ => catalogResolvedTarget
+        }
+        val newSource = source match {
+          case s: SubqueryAlias => s.copy(child = catalogResolvedSource)
+          case _ => catalogResolvedSource
+        }
+        m.copy(targetTable = newTarget, sourceTable = newSource)
       }
-      MergeIntoTable(aliasedTarget,
-        aliasedSource,
-        m.mergeCondition,
-        matchedActions,
-        notMatchedActions)
 
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>

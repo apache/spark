@@ -396,17 +396,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   private def withAssignments(
-      assignCtx: SqlBaseParser.AssignmentListContext): (Seq[Seq[String]], Seq[Expression]) =
+      assignCtx: SqlBaseParser.AssignmentListContext): (Seq[Expression], Seq[Expression]) =
     withOrigin(assignCtx) {
       assignCtx.assignment().asScala.map { assign =>
-        (visitQualifiedName(assign.key), expression(assign.value))
-      }.foldLeft(Seq[Seq[String]](), Seq[Expression]()) {
+        (UnresolvedAttribute(visitQualifiedName(assign.key)), expression(assign.value))
+      }.foldLeft(Seq[Expression](), Seq[Expression]()) {
         case (a, b) => (a._1 :+ b._1, a._2 :+ b._2)
       }
     }
 
   override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
-    val targetTableId = visitMultipartIdentifier(ctx.target)
+    val targetTable = UnresolvedRelation(visitMultipartIdentifier(ctx.target))
     val targetTableAlias = if (ctx.targetAlias != null) {
       val ident = ctx.targetAlias.strictIdentifier()
       // We do not allow columns aliases after table alias.
@@ -418,15 +418,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     } else {
       None
     }
-    val sourceTableId = if (ctx.source != null) {
-      Some(visitMultipartIdentifier(ctx.source))
+    val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
+
+    val sourceTableOrQuery = if (ctx.source != null) {
+      UnresolvedRelation(visitMultipartIdentifier(ctx.source))
+    } else if (ctx.sourceQuery != null) {
+      visitQuery(ctx.sourceQuery)
     } else {
-      None
-    }
-    val sourceQuery = if (ctx.sourceQuery != null) {
-      Some(visitQuery(ctx.sourceQuery))
-    } else {
-      None
+      throw new ParseException("Empty source for merge: you should specify a source" +
+          " table/subquery in merge.", ctx.source)
     }
     val sourceTableAlias = if (ctx.sourceAlias != null) {
       val ident = ctx.sourceAlias.strictIdentifier()
@@ -439,6 +439,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     } else {
       None
     }
+    val aliasedSource =
+      sourceTableAlias.map(SubqueryAlias(_, sourceTableOrQuery)).getOrElse(sourceTableOrQuery)
+
     val mergeCondition = expression(ctx.mergeCondition)
 
     val matchedClauses = ctx.matchedClause()
@@ -446,19 +449,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       throw new ParseException("There should be at most 2 'WHEN MATCHED' clauses.",
         matchedClauses.get(2))
     }
-    val matched = matchedClauses.asScala.map {
+    val matchedActions = matchedClauses.asScala.map {
       clause => {
         if (clause.matchedAction().DELETE() != null) {
-          DeleteClause(
+          DeleteAction(
             if (clause.matchedCond != null) Some(expression(clause.matchedCond)) else None)
         } else if (clause.matchedAction().UPDATE() != null) {
-          val (setColumns, setValues): (Seq[Seq[String]], Seq[Expression]) =
+          val (setColumns, setValues): (Seq[Expression], Seq[Expression]) =
             if (clause.matchedAction().ASTERISK() != null) {
-              (Seq(Seq(clause.matchedAction().ASTERISK().getText)), Seq(UnresolvedStar(None)))
+              (Seq(UnresolvedStar(None)), Seq(UnresolvedStar(None)))
             } else {
               withAssignments(clause.matchedAction().assignmentList())
             }
-          UpdateClause(
+          UpdateAction(
             if (clause.matchedCond != null) Some(expression(clause.matchedCond)) else None,
             setColumns,
             setValues)
@@ -475,17 +478,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       throw new ParseException("There should be at most 1 'WHEN NOT MATCHED' clause.",
         notMatchedClauses.get(1))
     }
-    val notMatched = notMatchedClauses.asScala.map {
+    val notMatchedActions = notMatchedClauses.asScala.map {
       clause => {
         if (clause.notMatchedAction().INSERT() != null) {
-          val (setColumns, setValues): (Seq[Seq[String]], Seq[Expression]) =
+          val (setColumns, setValues): (Seq[Expression], Seq[Expression]) =
             if (clause.notMatchedAction().ASTERISK() != null) {
-              (Seq(Seq(clause.notMatchedAction().ASTERISK().getText)), Seq(UnresolvedStar(None)))
+              (Seq(UnresolvedStar(None)), Seq(UnresolvedStar(None)))
             } else {
-              (clause.notMatchedAction().columns.qualifiedName().asScala.map(visitQualifiedName),
+              (clause.notMatchedAction().columns.qualifiedName()
+                  .asScala.map(attr => UnresolvedAttribute(visitQualifiedName(attr))),
                   clause.notMatchedAction().values.expression().asScala.map(expression))
             }
-          InsertClause(
+          InsertAction(
             if (clause.notMatchedCond != null) Some(expression(clause.notMatchedCond)) else None,
             setColumns,
             setValues)
@@ -498,15 +502,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       }
     }
 
-    MergeIntoStatement(
-      targetTableId,
-      targetTableAlias,
-      sourceTableId,
-      sourceQuery,
-      sourceTableAlias,
+    MergeIntoTable(
+      aliasedTarget,
+      aliasedSource,
       mergeCondition,
-      matched,
-      notMatched)
+      matchedActions,
+      notMatchedActions)
   }
 
   /**
