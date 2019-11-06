@@ -1881,7 +1881,8 @@ class _NaiveBayesParams(_JavaPredictorParams, HasWeightCol):
     smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
                       "default is 1.0", typeConverter=TypeConverters.toFloat)
     modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
-                      "(case-sensitive). Supported options: multinomial (default) and bernoulli.",
+                      "(case-sensitive). Supported options: multinomial (default), bernoulli " +
+                      "and gaussian.",
                       typeConverter=TypeConverters.toString)
 
     @since("1.5.0")
@@ -1910,7 +1911,10 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     TF-IDF vectors, it can be used for document classification. By making every vector a
     binary (0/1) data, it can also be used as `Bernoulli NB
     <http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html>`_.
-    The input feature values must be nonnegative.
+    The input feature values for Multinomial NB and Bernoulli NB must be nonnegative.
+    Since 3.0.0, it also supports Gaussian NB
+    <https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes>`_.
+    which can handle continuous data.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
