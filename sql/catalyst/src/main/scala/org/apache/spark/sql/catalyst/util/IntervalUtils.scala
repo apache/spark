@@ -39,6 +39,7 @@ object IntervalUtils {
   final val MICROS_PER_MONTH: Long = DAYS_PER_MONTH * DateTimeUtils.MICROS_PER_DAY
   /* 365.25 days per year assumes leap year every four years */
   final val MICROS_PER_YEAR: Long = (36525L * DateTimeUtils.MICROS_PER_DAY) / 100
+  final val DAYS_PER_WEEK: Byte = 7
 
   def getYears(interval: CalendarInterval): Int = {
     interval.months / MONTHS_PER_YEAR
@@ -510,12 +511,12 @@ object IntervalUtils {
             try {
               b match {
                 case 'y' if s.matchAt(yearStr, i) =>
-                  val monthsInYears = Math.multiplyExact(12, Math.toIntExact(currentValue))
-                  months = Math.addExact(months, monthsInYears)
+                  val monthsInYears = Math.multiplyExact(MONTHS_PER_YEAR, currentValue)
+                  months = Math.toIntExact(Math.addExact(months, monthsInYears))
                   i += yearStr.numBytes()
                 case 'w' if s.matchAt(weekStr, i) =>
-                  val daysInWeeks = Math.multiplyExact(7, Math.toIntExact(currentValue))
-                  days = Math.addExact(days, daysInWeeks)
+                  val daysInWeeks = Math.multiplyExact(DAYS_PER_WEEK, currentValue)
+                  days = Math.toIntExact(Math.addExact(days, daysInWeeks))
                   i += weekStr.numBytes()
                 case 'd' if s.matchAt(dayStr, i) =>
                   days = Math.addExact(days, Math.toIntExact(currentValue))
