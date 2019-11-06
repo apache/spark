@@ -188,7 +188,7 @@ NULL
 
 
 -- !query 22
-SELECT interval '4 months 2 weeks 6 days' * null
+select interval '4 months 2 weeks 6 days' * null
 -- !query 22 schema
 struct<multiply_interval(interval 4 months 20 days, CAST(NULL AS DOUBLE)):interval>
 -- !query 22 output
@@ -196,7 +196,7 @@ NULL
 
 
 -- !query 23
-SELECT null * interval '4 months 2 weeks 6 days'
+select null * interval '4 months 2 weeks 6 days'
 -- !query 23 schema
 struct<multiply_interval(interval 4 months 20 days, CAST(NULL AS DOUBLE)):interval>
 -- !query 23 output
@@ -204,7 +204,17 @@ NULL
 
 
 -- !query 24
-select k, v, cast(k as interval) / v, cast(k as interval) * v from VALUES ('1 seconds', 1),('2 seconds', 0),('3 seconds', null),(null, null),(null, 0) t(k, v)
+select
+  k,
+  v,
+  cast(k as interval) / v,
+  cast(k as interval) * v
+from VALUES
+  ('1 seconds', 1),
+  ('2 seconds', 0),
+  ('3 seconds', null),
+  (null, null),
+  (null, 0) t(k, v)
 -- !query 24 schema
 struct<k:string,v:int,divide_interval(CAST(k AS INTERVAL), CAST(v AS DOUBLE)):interval,multiply_interval(CAST(k AS INTERVAL), CAST(v AS DOUBLE)):interval>
 -- !query 24 output

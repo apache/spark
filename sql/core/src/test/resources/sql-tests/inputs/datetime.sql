@@ -58,4 +58,4 @@ from VALUES
   ('2 seconds', 0),
   ('3 seconds', null),
   (null, null),
-  (null, 0) t(k, v)
+  (null, 0) t(k, v);

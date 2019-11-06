@@ -879,6 +879,7 @@ object TypeCoercion {
       case e if !e.childrenResolved => e
 
       // If DecimalType operands are involved, DecimalPrecision will handle it
+      // If CalendarIntervalType operands are involved, DateTimeOperations will handle it
       case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
           !right.dataType.isInstanceOf[DecimalType] &&
           !left.dataType.isInstanceOf[CalendarIntervalType] &&
