@@ -22,15 +22,15 @@ import scala.util.Random
 import breeze.linalg.{DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial, RandBasis => BrzRandBasis}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ml.classification.NaiveBayes.{Bernoulli, Multinomial}
+import org.apache.spark.SparkException
+import org.apache.spark.ml.classification.NaiveBayes.{Bernoulli, Gaussian, Multinomial}
 import org.apache.spark.ml.classification.NaiveBayesSuite._
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Dataset, Row}
 
 class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
 
@@ -38,6 +38,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
 
   @transient var dataset: Dataset[_] = _
   @transient var bernoulliDataset: Dataset[_] = _
+  @transient var gaussianDataset: Dataset[_] = _
 
   private val seed = 42
 
@@ -53,6 +54,21 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
 
     dataset = generateNaiveBayesInput(pi, theta, 100, seed).toDF()
     bernoulliDataset = generateNaiveBayesInput(pi, theta, 100, seed, "bernoulli").toDF()
+
+    // theta for gaussian nb
+    val theta2 = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0: mean
+      Array(0.10, 0.70, 0.10, 0.10), // label 1: mean
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2: mean
+    )
+
+    // sigma for gaussian nb
+    val sigma = Array(
+      Array(0.10, 0.10, 0.50, 0.10), // label 0: variance
+      Array(0.50, 0.10, 0.10, 0.10), // label 1: variance
+      Array(0.10, 0.10, 0.10, 0.50)  // label 2: variance
+    )
+    gaussianDataset = generateGaussianNaiveBayesInput(pi, theta2, sigma, 1000, seed).toDF()
   }
 
   def validatePrediction(predictionAndLabels: Seq[Row]): Unit = {
@@ -67,10 +83,17 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
   def validateModelFit(
       piData: Vector,
       thetaData: Matrix,
+      sigmaData: Matrix,
       model: NaiveBayesModel): Unit = {
     assert(Vectors.dense(model.pi.toArray.map(math.exp)) ~==
       Vectors.dense(piData.toArray.map(math.exp)) absTol 0.05, "pi mismatch")
     assert(model.theta.map(math.exp) ~== thetaData.map(math.exp) absTol 0.05, "theta mismatch")
+    if (sigmaData == null) {
+      assert(model.sigma == null, "sigma mismatch")
+    } else {
+      assert(model.sigma.map(math.exp) ~== sigmaData.map(math.exp) absTol 0.05,
+        "sigma mismatch")
+    }
   }
 
   def expectedMultinomialProbabilities(model: NaiveBayesModel, feature: Vector): Vector = {
@@ -90,6 +113,19 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     Vectors.dense(classProbs.map(_ / classProbsSum))
   }
 
+  def expectedGaussianProbabilities(model: NaiveBayesModel, feature: Vector): Vector = {
+    val pi = model.pi.toArray.map(math.exp)
+    val classProbs = pi.indices.map { i =>
+      feature.toArray.zipWithIndex.map { case (v, j) =>
+        val mean = model.theta(i, j)
+        val variance = model.sigma(i, j)
+        math.exp(- (v - mean) * (v - mean) / variance / 2) / math.sqrt(variance * math.Pi * 2)
+      }.product * pi(i)
+    }.toArray
+    val classProbsSum = classProbs.sum
+    Vectors.dense(classProbs.map(_ / classProbsSum))
+  }
+
   def validateProbabilities(
       featureAndProbabilities: Seq[Row],
       model: NaiveBayesModel,
@@ -102,6 +138,8 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
             expectedMultinomialProbabilities(model, features)
           case Bernoulli =>
             expectedBernoulliProbabilities(model, features)
+          case Gaussian =>
+            expectedGaussianProbabilities(model, features)
           case _ =>
             throw new IllegalArgumentException(s"Invalid modelType: $modelType.")
         }
@@ -112,12 +150,14 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
   test("model types") {
     assert(Multinomial === "multinomial")
     assert(Bernoulli === "bernoulli")
+    assert(Gaussian === "gaussian")
   }
 
   test("params") {
     ParamsSuite.checkParams(new NaiveBayes)
     val model = new NaiveBayesModel("nb", pi = Vectors.dense(Array(0.2, 0.8)),
-      theta = new DenseMatrix(2, 3, Array(0.1, 0.2, 0.3, 0.4, 0.6, 0.4)))
+      theta = new DenseMatrix(2, 3, Array(0.1, 0.2, 0.3, 0.4, 0.6, 0.4)),
+      sigma = null)
     ParamsSuite.checkParams(model)
   }
 
@@ -146,7 +186,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
     val model = nb.fit(testDataset)
 
-    validateModelFit(pi, theta, model)
+    validateModelFit(pi, theta, null, model)
     assert(model.hasParent)
     MLTestingUtils.checkCopyAndUids(nb, model)
 
@@ -192,12 +232,17 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
   test("Naive Bayes with weighted samples") {
     val numClasses = 3
     def modelEquals(m1: NaiveBayesModel, m2: NaiveBayesModel): Unit = {
+      assert(m1.getModelType === m2.getModelType)
       assert(m1.pi ~== m2.pi relTol 0.01)
       assert(m1.theta ~== m2.theta relTol 0.01)
+      if (m1.getModelType == Gaussian) {
+        assert(m1.sigma ~== m2.sigma relTol 0.01)
+      }
     }
     val testParams = Seq[(String, Dataset[_])](
       ("bernoulli", bernoulliDataset),
-      ("multinomial", dataset)
+      ("multinomial", dataset),
+      ("gaussian", gaussianDataset)
     )
     testParams.foreach { case (family, dataset) =>
       // NaiveBayes is sensitive to constant scaling of the weights unless smoothing is set to 0
@@ -228,7 +273,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("bernoulli")
     val model = nb.fit(testDataset)
 
-    validateModelFit(pi, theta, model)
+    validateModelFit(pi, theta, null, model)
     assert(model.hasParent)
 
     val validationDataset =
@@ -308,14 +353,64 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("Naive Bayes Gaussian") {
+    val piArray = Array(0.5, 0.1, 0.4).map(math.log)
+
+    val thetaArray = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0: mean
+      Array(0.10, 0.70, 0.10, 0.10), // label 1: mean
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2: mean
+    )
+
+    val sigmaArray = Array(
+      Array(0.10, 0.10, 0.50, 0.10), // label 0: variance
+      Array(0.50, 0.10, 0.10, 0.10), // label 1: variance
+      Array(0.10, 0.10, 0.10, 0.50)  // label 2: variance
+    )
+
+    val pi = Vectors.dense(piArray)
+    val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
+    val sigma = new DenseMatrix(3, 4, sigmaArray.flatten, true)
+
+    val nPoints = 10000
+    val testDataset =
+      generateGaussianNaiveBayesInput(piArray, thetaArray, sigmaArray, nPoints, 42).toDF()
+    val gnb = new NaiveBayes().setModelType("gaussian")
+    val model = gnb.fit(testDataset)
+
+    validateModelFit(pi, theta, sigma, model)
+    assert(model.hasParent)
+
+    val validationDataset =
+      generateGaussianNaiveBayesInput(piArray, thetaArray, sigmaArray, nPoints, 17).toDF()
+
+    val predictionAndLabels = model.transform(validationDataset).select("prediction", "label")
+    validatePrediction(predictionAndLabels.collect())
+
+    val featureAndProbabilities = model.transform(validationDataset)
+      .select("features", "probability")
+    validateProbabilities(featureAndProbabilities.collect(), model, "gaussian")
+  }
+
   test("read/write") {
     def checkModelData(model: NaiveBayesModel, model2: NaiveBayesModel): Unit = {
+      assert(model.getModelType === model2.getModelType)
       assert(model.pi === model2.pi)
       assert(model.theta === model2.theta)
+      if (model.getModelType == "gaussian") {
+        assert(model.sigma === model2.sigma)
+      } else {
+        assert(model.sigma === null && model2.sigma === null)
+      }
     }
     val nb = new NaiveBayes()
     testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings,
       NaiveBayesSuite.allParamSettings, checkModelData)
+
+    val gnb = new NaiveBayes().setModelType("gaussian")
+    testEstimatorAndModelReadWrite(gnb, gaussianDataset,
+      NaiveBayesSuite.allParamSettingsForGaussian,
+      NaiveBayesSuite.allParamSettingsForGaussian, checkModelData)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {
@@ -324,6 +419,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       nb, spark) { (expected, actual) =>
         assert(expected.pi === actual.pi)
         assert(expected.theta === actual.theta)
+        assert(expected.sigma === null && actual.sigma === null)
       }
   }
 }
@@ -338,6 +434,16 @@ object NaiveBayesSuite {
   val allParamSettings: Map[String, Any] = Map(
     "predictionCol" -> "myPrediction",
     "smoothing" -> 0.1
+  )
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettingsForGaussian: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "modelType" -> "gaussian"
   )
 
   private def calcLabel(p: Double, pi: Array[Double]): Int = {
@@ -381,6 +487,28 @@ object NaiveBayesSuite {
           throw new IllegalArgumentException(s"Invalid modelType: $modelType.")
       }
 
+      LabeledPoint(y, Vectors.dense(xi))
+    }
+  }
+
+  // Generate input
+  def generateGaussianNaiveBayesInput(
+    pi: Array[Double],            // 1XC
+    theta: Array[Array[Double]],  // CXD
+    sigma: Array[Array[Double]],  // CXD
+    nPoints: Int,
+    seed: Int): Seq[LabeledPoint] = {
+    val D = theta(0).length
+    val rnd = new Random(seed)
+    val _pi = pi.map(math.exp)
+
+    for (i <- 0 until nPoints) yield {
+      val y = calcLabel(rnd.nextDouble(), _pi)
+      val xi = Array.tabulate[Double] (D) { j =>
+        val mean = theta(y)(j)
+        val variance = sigma(y)(j)
+        mean + rnd.nextGaussian() * math.sqrt(variance)
+      }
       LabeledPoint(y, Vectors.dense(xi))
     }
   }
