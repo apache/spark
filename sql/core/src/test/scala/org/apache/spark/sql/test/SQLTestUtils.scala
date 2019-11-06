@@ -364,8 +364,8 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
-    * Drops namespace `namespace` after calling `f`.
-    */
+   * Drops namespace `namespace` after calling `f`.
+   */
   protected def withNamespace(namespaces: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
       namespaces.foreach { name =>
