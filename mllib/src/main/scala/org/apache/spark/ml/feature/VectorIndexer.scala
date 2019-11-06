@@ -151,7 +151,7 @@ class VectorIndexer @Since("1.4.0") (
       val localCatStats = new VectorIndexer.CategoryStats(numFeatures, maxCats)
       iter.foreach(localCatStats.addVector)
       Iterator(localCatStats)
-    }.reduce((stats1, stats2) => stats1.merge(stats2))
+    }.treeReduce((stats1, stats2) => stats1.merge(stats2))
     val model = new VectorIndexerModel(uid, numFeatures, categoryStats.getCategoryMaps)
       .setParent(this)
     copyValues(model)
