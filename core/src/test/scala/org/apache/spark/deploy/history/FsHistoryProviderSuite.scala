@@ -25,6 +25,7 @@ import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.runtime.BoxesRunTime
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.FileUtils
@@ -51,6 +52,7 @@ import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.logging.DriverLogger
+
 
 class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
@@ -1281,6 +1283,56 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     // but the value will be corrected once checkForLogs is called.
     assert(deserializedOldObj.lastIndex === None)
     assert(deserializedOldObj.isComplete === false)
+  }
+
+  test("SPARK-29755 LogInfo should be serialized/deserialized by jackson properly") {
+    def assertSerDe(serializer: KVStoreScalaSerializer, info: LogInfo): Unit = {
+      val infoAfterSerDe = serializer.deserialize(
+        serializer.serialize(info), classOf[LogInfo])
+      assert(infoAfterSerDe === info)
+      assertOptionAfterSerde(infoAfterSerDe.lastIndex, info.lastIndex)
+    }
+
+    val serializer = new KVStoreScalaSerializer()
+    val logInfoWithIndexAsNone = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100, None, false)
+    assertSerDe(serializer, logInfoWithIndexAsNone)
+
+    val logInfoWithIndex = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100, Some(3), false)
+    assertSerDe(serializer, logInfoWithIndex)
+  }
+
+  test("SPARK-29755 AttemptInfoWrapper should be serialized/deserialized by jackson properly") {
+    def assertSerDe(serializer: KVStoreScalaSerializer, attempt: AttemptInfoWrapper): Unit = {
+      val attemptAfterSerDe = serializer.deserialize(serializer.serialize(attempt),
+        classOf[AttemptInfoWrapper])
+      assert(attemptAfterSerDe.info === attempt.info)
+      // skip comparing some fields, as they've not triggered SPARK-29755
+      assertOptionAfterSerde(attemptAfterSerDe.lastIndex, attempt.lastIndex)
+    }
+
+    val serializer = new KVStoreScalaSerializer()
+    val appInfo = new ApplicationAttemptInfo(None, new Date(1), new Date(1), new Date(1),
+      10, "spark", false, "dummy")
+    val attemptInfoWithIndexAsNone = new AttemptInfoWrapper(appInfo, "dummyPath", 10, None,
+      None, None, None, None)
+    assertSerDe(serializer, attemptInfoWithIndexAsNone)
+
+    val attemptInfoWithIndex = new AttemptInfoWrapper(appInfo, "dummyPath", 10, Some(1),
+      None, None, None, None)
+    assertSerDe(serializer, attemptInfoWithIndex)
+  }
+
+  private def assertOptionAfterSerde(opt: Option[Long], expected: Option[Long]): Unit = {
+    if (expected.isEmpty) {
+      assert(opt.isEmpty)
+    } else {
+      // The issue happens only the value in Option is being unboxed. Simple comparison sometimes
+      // doesn't go though unboxing the value, hence ClassCastException is not occurred.
+      // Here we ensure unboxing to Long succeeds. Please refer SPARK-29755 for more details.
+      assert(BoxesRunTime.unboxToLong(opt.get) === expected.get)
+    }
   }
 
   /**
