@@ -1932,6 +1932,8 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     DenseVector([-0.81..., -0.58...])
     >>> model.theta
     DenseMatrix(2, 2, [-0.91..., -0.51..., -0.40..., -1.09...], 1)
+    >>> model.sigma == None
+    True
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
     >>> model.predict(test0.head().features)
     1.0
@@ -1962,6 +1964,12 @@ class NaiveBayes(JavaProbabilisticClassifier, _NaiveBayesParams, HasThresholds, 
     >>> result = model3.transform(test0).head()
     >>> result.prediction
     0.0
+    >>> nb3 = NaiveBayes().setModelType("gaussian")
+    >>> model4 = nb3.fit(df)
+    >>> model4.getModelType()
+    'gaussian'
+    >>> model4.sigma
+    DenseMatrix(2, 2, [0.0, 0.25, 0.0, 0.0], 1)
 
     .. versionadded:: 1.5.0
     """
@@ -2043,6 +2051,14 @@ class NaiveBayesModel(JavaProbabilisticClassificationModel, _NaiveBayesParams, J
         log of class conditional probabilities.
         """
         return self._call_java("theta")
+
+    @property
+    @since("3.0.0")
+    def sigma(self):
+        """
+        variance of each feature.
+        """
+        return self._call_java("sigma")
 
 
 class _MultilayerPerceptronParams(_JavaProbabilisticClassifierParams, HasSeed, HasMaxIter,
