@@ -194,11 +194,12 @@ private[spark] class StandaloneSchedulerBackend(
    *
    * @return whether the request is acknowledged.
    */
-  protected override def doRequestTotalExecutors(requestedTotal: Int,
-      resources: Option[Map[ResourceProfile, Int]]): Future[Boolean] = {
+  protected override def doRequestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
     // resources profiles not supported
     Option(client) match {
-      case Some(c) => c.requestTotalExecutors(requestedTotal)
+      case Some(c) => c.requestTotalExecutors(resourceProfileToTotalExecs(
+        ResourceProfile.getOrCreateDefaultProfile(sc.conf)))
       case None =>
         logWarning("Attempted to request executors before driver fully initialized.")
         Future.successful(false)

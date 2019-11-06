@@ -123,12 +123,10 @@ private[spark] abstract class YarnSchedulerBackend(
     }
   }
 
-  private[cluster] def prepareRequestExecutors(requestedTotal: Int,
-      resources: Option[Map[ResourceProfile, Int]] = None): RequestExecutors = {
+  private[cluster] def prepareRequestExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): RequestExecutors = {
     val nodeBlacklist: Set[String] = scheduler.nodeBlacklist()
     // For locality preferences, ignore preferences for nodes that are blacklisted
-    val filteredHostToLocalTaskCount =
-    hostToLocalTaskCount.filter { case (k, v) => !nodeBlacklist.contains(k._1) }
 
     // TODO - need to test
     val filteredRPHostToLocalTaskCount = rpHostToLocalTaskCount.map { case (rpid, v) =>
@@ -136,17 +134,17 @@ private[spark] abstract class YarnSchedulerBackend(
     }
       // rpHostToLocalTaskCount.filter { case (k, v) => !nodeBlacklist.contains(k._1) }
 
-    RequestExecutors(requestedTotal, numLocalityAwareTasksPerResourceProfileId,
-      filteredRPHostToLocalTaskCount, nodeBlacklist, resources)
+    RequestExecutors(numLocalityAwareTasksPerResourceProfileId,
+      filteredRPHostToLocalTaskCount, nodeBlacklist, resourceProfileToTotalExecs)
   }
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
    * This includes executors already pending or running.
    */
-  override def doRequestTotalExecutors(requestedTotal: Int,
-      resources: Option[Map[ResourceProfile, Int]]): Future[Boolean] = {
-    yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(requestedTotal, resources))
+  override def doRequestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
+    yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(resourceProfileToTotalExecs))
   }
 
   /**

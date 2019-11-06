@@ -781,10 +781,9 @@ private[spark] class ApplicationMaster(
         logWarning("in Request Executors: " + r)
         Option(allocator) match {
           case Some(a) =>
-            // TODO - remove option from resources?
             // temporary until we implement YARN allocator pieces, pass default
             // profile number requested to allocator
-            val numRequest = r.resources.getOrElse(Map.empty).getOrElse(defaultProfile, 0)
+            val numRequest = r.resourceProfileToTotalExecs.getOrElse(defaultProfile, 0)
             val numAware = r.numLocalityAwareTasksPerResourceProfileId.
                 getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, 0)
             if (a.requestTotalExecutorsWithPreferredLocalities(numRequest,

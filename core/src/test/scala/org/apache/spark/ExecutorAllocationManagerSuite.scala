@@ -1041,7 +1041,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       createConf(1, 2, 1).set(config.DYN_ALLOCATION_TESTING, false),
       clock = clock)
 
-    when(client.requestTotalExecutors(meq(0), any(), any(), any())).thenReturn(true)
+    when(client.requestTotalExecutors(any(), any(), any())).thenReturn(true)
     // test setup -- job with 2 tasks, scale up to two executors
     assert(numExecutorsTargetForDefaultProfile(manager) === 1)
     post(SparkListenerExecutorAdded(

@@ -243,8 +243,8 @@ private[spark] class ExecutorAllocationManager(
     }
     executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
 
-    client.requestTotalExecutors(0, numLocalityAwareTasksPerResourceProfileId.toMap,
-      rpIdToHostToLocalTaskCount, Some(numExecutorsTargetPerResourceProfile.toMap))
+    client.requestTotalExecutors(numLocalityAwareTasksPerResourceProfileId.toMap,
+      rpIdToHostToLocalTaskCount, numExecutorsTargetPerResourceProfile.toMap)
   }
 
   /**
@@ -398,9 +398,8 @@ private[spark] class ExecutorAllocationManager(
       val requestAcknowledged = try {
         logInfo("requesting updates: " + updates)
         testing ||
-          client.requestTotalExecutors(0,
-            numLocalityAwareTasksPerResourceProfileId.toMap, rpIdToHostToLocalTaskCount,
-            Some(numExecutorsTargetPerResourceProfile.toMap))
+          client.requestTotalExecutors(numLocalityAwareTasksPerResourceProfileId.toMap,
+            rpIdToHostToLocalTaskCount, numExecutorsTargetPerResourceProfile.toMap)
       } catch {
         case NonFatal(e) =>
           // Use INFO level so the error it doesn't show up by default in shells.
@@ -576,10 +575,13 @@ private[spark] class ExecutorAllocationManager(
         countFailures = false, force = false)
     }
 
+    // TODO - I think this call to requestTotalExecutors can actually be removed because
+    // SPARK-23365 change the killExecutors call to not adjust the target number.
+    // Perhaps write test to validate.
     // [SPARK-21834] killExecutors api reduces the target number of executors.
     // So we need to update the target with desired value.
-    client.requestTotalExecutors(0, numLocalityAwareTasksPerResourceProfileId.toMap,
-      rpIdToHostToLocalTaskCount, Some(numExecutorsTargetPerResourceProfile.toMap))
+    client.requestTotalExecutors(numLocalityAwareTasksPerResourceProfileId.toMap,
+      rpIdToHostToLocalTaskCount, numExecutorsTargetPerResourceProfile.toMap)
 
     // reset the newExecutorTotal to the existing number of executors
     if (testing || executorsRemoved.nonEmpty) {

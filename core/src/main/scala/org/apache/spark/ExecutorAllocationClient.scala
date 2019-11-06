@@ -43,23 +43,21 @@ private[spark] trait ExecutorAllocationClient {
    *                     shouldn't kill any running executor to reach this number, but,
    *                     if all existing executors were to die, this is the number of executors
    *                     we'd want to be allocated.
-   * @param resources ResourceProfile to number of executors for that profile
+   * @param resourceProfileToNumExecutors ResourceProfile to number of executors for that profile
    * TODO - update
    * @return whether the request is acknowledged by the cluster manager.
    */
   private[spark] def requestTotalExecutors(
-      numExecutors: Int,  // TODO - do we need anymore if resources below has it???
       numLocalityAwareTasksPerResourceProfileId: Map[Int, Int],
       hostToLocalTaskCount: Map[Int, Map[String, Int]],
-      resources: Option[Map[ResourceProfile, Int]] = None): Boolean
+      resourceProfileToNumExecutors: Map[ResourceProfile, Int]): Boolean
 
   /**
-   * Request an additional number of executors from the cluster manager.
-   * TODO - update
+   * Request an additional number of executors from the cluster manager for the default
+   * ResourceProfile.
    * @return whether the request is acknowledged by the cluster manager.
    */
-  def requestExecutors(numAdditionalExecutors: Int, // TODO - shoudln't be needed anymore
-      resources: Option[Map[ResourceProfile, Int]] = None): Boolean
+  def requestExecutors(numAdditionalExecutors: Int): Boolean
 
   /**
    * Request that the cluster manager kill the specified executors.
