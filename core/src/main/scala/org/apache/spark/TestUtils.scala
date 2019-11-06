@@ -216,8 +216,11 @@ private[spark] object TestUtils {
    */
   def assertExceptionMsg(exception: Throwable, msg: String, ignoreCase: Boolean = false): Unit = {
     def contain(msg1: String, msg2: String): Boolean = {
-      if (ignoreCase) msg1.toLowerCase(Locale.ROOT).contains(msg2.toLowerCase(Locale.ROOT))
-      else msg1.contains(msg2)
+      if (ignoreCase) {
+        msg1.toLowerCase(Locale.ROOT).contains(msg2.toLowerCase(Locale.ROOT))
+      } else {
+        msg1.contains(msg2)
+      }
     }
 
     var e = exception
