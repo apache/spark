@@ -480,7 +480,7 @@ object IntervalUtils {
             case ' ' =>
               state = BEGIN_UNIT_NAME
             case '.' =>
-              fractionScale = 100000000
+              fractionScale = (DateTimeUtils.NANOS_PER_SECOND / 10).toInt
               state = FRACTIONAL_PART
             case _ => return null
           }
