@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.IntervalUtils.appendUnit
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -375,5 +377,32 @@ object IntervalUtils {
 
   def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
+  }
+
+  def toIntervalString(interval: CalendarInterval): String = {
+    val sb = new StringBuilder("interval")
+    if (interval.months != 0) {
+      appendUnit(sb, interval.months / 12, "year")
+      appendUnit(sb, interval.months % 12, "month")
+    }
+    appendUnit(sb, interval.days, "day")
+    if (interval.microseconds != 0) {
+      var rest = interval.microseconds
+      appendUnit(sb, rest / MICROS_PER_HOUR, "hour")
+      rest %= MICROS_PER_HOUR
+      appendUnit(sb, rest / MICROS_PER_MINUTE, "minute")
+      rest %= MICROS_PER_MINUTE
+      if (rest != 0) {
+        val s = BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString
+        sb.append(' ').append(s).append(" seconds")
+      }
+    } else if (interval.months == 0 && interval.days == 0) {
+      sb.append(" 0 microseconds")
+    }
+    sb.toString
+  }
+
+  private def appendUnit(sb: StringBuilder, value: Long, unit: String): Unit = {
+    if (value != 0) sb.append(' ').append(value).append(' ').append(unit).append('s')
   }
 }

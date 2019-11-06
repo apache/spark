@@ -18,13 +18,10 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
-
-import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
 /**
  * The internal representation of interval type.
@@ -71,40 +68,6 @@ public final class CalendarInterval implements Serializable {
   @Override
   public int hashCode() {
     return Objects.hash(months, days, microseconds);
-  }
-
-  @Override
-  public String toString() {
-    StringBuilder sb = new StringBuilder("interval");
-
-    if (months != 0) {
-      appendUnit(sb, months / 12, "year");
-      appendUnit(sb, months % 12, "month");
-    }
-
-    appendUnit(sb, days, "day");
-
-    if (microseconds != 0) {
-      long rest = microseconds;
-      appendUnit(sb, rest / MICROS_PER_HOUR, "hour");
-      rest %= MICROS_PER_HOUR;
-      appendUnit(sb, rest / MICROS_PER_MINUTE, "minute");
-      rest %= MICROS_PER_MINUTE;
-      if (rest != 0) {
-        String s = BigDecimal.valueOf(rest, 6).stripTrailingZeros().toPlainString();
-        sb.append(' ').append(s).append(" seconds");
-      }
-    } else if (months == 0 && days == 0) {
-      sb.append(" 0 microseconds");
-    }
-
-    return sb.toString();
-  }
-
-  private void appendUnit(StringBuilder sb, long value, String unit) {
-    if (value != 0) {
-      sb.append(' ').append(value).append(' ').append(unit).append('s');
-    }
   }
 
   /**
