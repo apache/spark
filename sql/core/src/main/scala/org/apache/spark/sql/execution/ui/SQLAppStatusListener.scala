@@ -320,12 +320,18 @@ class SQLAppStatusListener(
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
     val SparkListenerSQLExecutionEnd(executionId, time) = event
     Option(liveExecutions.get(executionId)).foreach { exec =>
-      exec.metricsValues = aggregateMetrics(exec)
       exec.completionTime = Some(new Date(time))
-      exec.endEvents += 1
       update(exec)
 
-      removeStaleMetricsData(exec)
+      // Aggregating metrics can be expensive for large queries, so do it asynchronously.
+      // The end event count is also only updated asynchronously, to ensure that the metrics
+      // are not cleaned up by the update() call above.
+      kvstore.doAsync {
+        exec.endEvents += 1
+        exec.metricsValues = aggregateMetrics(exec)
+        removeStaleMetricsData(exec)
+        update(exec, force = true)
+      }
     }
   }
 
