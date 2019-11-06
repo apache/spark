@@ -462,9 +462,12 @@ object IntervalUtils {
               isNegative = false
             case _ => return null
           }
-          state = PARSE_UNIT_VALUE
           currentValue = 0
           fraction = 0
+          // Sets the scale to an invalid value to track fraction presence
+          // in the BEGIN_UNIT_NAME state
+          fractionScale = -1
+          state = PARSE_UNIT_VALUE
         case PARSE_UNIT_VALUE =>
           b match {
             case _ if '0' <= b && b <= '9' =>
@@ -476,7 +479,7 @@ object IntervalUtils {
             case ' ' =>
               state = BEGIN_UNIT_NAME
             case '.' =>
-              fractionScale = 100000
+              fractionScale = 100000000
               state = FRACTIONAL_PART
             case _ => return null
           }
@@ -487,6 +490,7 @@ object IntervalUtils {
               fraction = Math.addExact(fraction, Math.multiplyExact(fractionScale, (b - '0')))
               fractionScale /= 10
             case ' ' =>
+              fraction /= DateTimeUtils.NANOS_PER_MICROS.toInt
               state = BEGIN_UNIT_NAME
             case _ => return null
           }
@@ -496,7 +500,7 @@ object IntervalUtils {
             i += 1
           } else {
             // Checks that only seconds can have the fractional part
-            if (b != 's' && fraction != 0) {
+            if (b != 's' && fractionScale >= 0) {
               return null
             }
             if (isNegative) {

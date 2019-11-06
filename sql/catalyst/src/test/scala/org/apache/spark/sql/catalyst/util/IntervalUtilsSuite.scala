@@ -90,16 +90,21 @@ class IntervalUtilsSuite extends SparkFunSuite {
     checkFromString("1 day 1 year", new CalendarInterval(12, 1, 0))
     // duplicated fields
     checkFromString("1 day 1 day", new CalendarInterval(0, 2, 0))
-    // value with fractions belongs to not seconds
+    // non seconds units cannot have the fractional part
     checkFromInvalidString("1.5 days", "Error parsing interval string")
+    checkFromInvalidString("1. hour", "Error parsing interval string")
   }
 
   test("string to interval: seconds with fractional part") {
     checkFromString("0.1 seconds", new CalendarInterval(0, 0, 100000))
+    checkFromString("1. seconds", new CalendarInterval(0, 0, 1000000))
     checkFromString("123.001 seconds", new CalendarInterval(0, 0, 123001000))
     checkFromString("1.001001 seconds", new CalendarInterval(0, 0, 1001001))
     checkFromString("1 minute 1.001001 seconds", new CalendarInterval(0, 0, 61001001))
     checkFromString("-1.5 seconds", new CalendarInterval(0, 0, -1500000))
+    // truncate to nanoseconds to microseconds
+    checkFromString("0.123456789 seconds", new CalendarInterval(0, 0, 123456))
+    checkFromInvalidString("0.123456789123 seconds", "Error parsing interval string")
   }
 
   test("from year-month string") {
