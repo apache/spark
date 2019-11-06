@@ -80,13 +80,13 @@ private[thriftserver] class HiveThriftServer2Listener(
 
   def postLiveListenerBus(event: SparkListenerEvent): Unit = {
     if (live) {
-      sc.get.listenerBus.post(event)
+      sc.foreach(_.listenerBus.post(event))
     }
   }
 
   override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-    if (live && server.isDefined) {
-      server.get.stop()
+    if (live) {
+      server.foreach(_.stop())
     }
   }
 

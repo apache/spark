@@ -17,39 +17,70 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
-import java.util.Locale
+import java.util.{Calendar, Locale}
 import javax.servlet.http.HttpServletRequest
 
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
+import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.SparkListenerJobStart
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.HiveThriftServer2Listener
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.thriftserver._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.util.kvstore.InMemoryStore
 
-class ThriftServerPageSuite extends SparkFunSuite {
+
+class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
+
+  private var kvstore: ElementTrackingStore = _
+
+  after {
+    if (kvstore != null) {
+      kvstore.close()
+      kvstore = null
+    }
+  }
 
   /**
-   * Run a dummy session and return the listener
+   * Run a dummy session and return the store
    */
-  private def getListener: HiveThriftServer2Listener = {
-    val listener = new HiveThriftServer2Listener(mock(classOf[HiveThriftServer2]), new SQLConf)
+  private def getStatusStore: HiveThriftServer2AppStatusStore = {
+    kvstore = new ElementTrackingStore(new InMemoryStore, new SparkConf())
+    val server = mock(classOf[HiveThriftServer2], RETURNS_SMART_NULLS)
+    val sqlContext = mock(classOf[SQLContext])
+    val sc = mock(classOf[SparkContext])
+    val sqlConf = new SQLConf
+    when(sqlContext.conf).thenReturn(sqlConf)
+    when(sqlContext.sparkContext).thenReturn(sc)
 
-    listener.onSessionCreated("localhost", "sessionid", "user")
-    listener.onStatementStart("id", "sessionid", "dummy query", "groupid", "user")
-    listener.onStatementParsed("id", "dummy plan")
+    val listener = new HiveThriftServer2Listener(kvstore, Some(server), Some(sqlContext), Some(sc))
+    val statusStore = new HiveThriftServer2AppStatusStore(kvstore, Some(listener))
+
+    listener.processEventSessionCreated(SparkListenerSessionCreated("localhost", "sessionid",
+      "user", System.currentTimeMillis()))
+    listener.processEventStatementStart(SparkListenerStatementStart("id", "sessionid",
+      "dummy query", "groupid", System.currentTimeMillis(),"user"))
+    listener.processEventStatementParsed(SparkListenerStatementParsed("id", "dummy plan"))
     listener.onJobStart(SparkListenerJobStart(0, System.currentTimeMillis(), Seq()))
-    listener.onStatementFinish("id")
-    listener.onOperationClosed("id")
-    listener.onSessionClosed("sessionid")
-    listener
+    listener.processEventStatementFinish(SparkListenerStatementFinish("id",
+      System.currentTimeMillis()))
+    listener.processEventOperationClosed(SparkListenerOperationClosed("id",
+      System.currentTimeMillis()))
+    listener.processEventSessionClosed(SparkListenerSessionClosed("sessionid",
+      System.currentTimeMillis()))
+
+    statusStore
   }
 
   test("thriftserver page should load successfully") {
+    val store = getStatusStore
+
     val request = mock(classOf[HttpServletRequest])
     val tab = mock(classOf[ThriftServerTab], RETURNS_SMART_NULLS)
-    when(tab.listener).thenReturn(getListener)
+    when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
+    when(tab.store).thenReturn(store)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
     val page = new ThriftServerPage(tab)
@@ -70,10 +101,13 @@ class ThriftServerPageSuite extends SparkFunSuite {
   }
 
   test("thriftserver session page should load successfully") {
+    val store = getStatusStore
+
     val request = mock(classOf[HttpServletRequest])
     when(request.getParameter("id")).thenReturn("sessionid")
     val tab = mock(classOf[ThriftServerTab], RETURNS_SMART_NULLS)
-    when(tab.listener).thenReturn(getListener)
+    when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
+    when(tab.store).thenReturn(store)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
     val page = new ThriftServerSessionPage(tab)
