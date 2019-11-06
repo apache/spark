@@ -2820,4 +2820,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("test namespace") {
+    withNamespace("testcat") {
+      sql("CREATE NAMESPACE testcat")
+    }
+    assert(
+      !sql("SHOW NAMESPACES").collect().mkString("").contains("testcat")
+    )
+  }
 }

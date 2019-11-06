@@ -364,6 +364,18 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
+    * Drops namespace `namespace` after calling `f`.
+    */
+  protected def withNamespace(namespaces: String*)(f: => Unit): Unit = {
+    Utils.tryWithSafeFinally(f) {
+      namespaces.foreach { name =>
+        spark.sql(s"DROP NAMESPACE IF EXISTS $name CASCADE")
+      }
+      spark.sql(s"USE default")
+    }
+  }
+
+  /**
    * Enables Locale `language` before executing `f`, then switches back to the default locale of JVM
    * after `f` returns.
    */
