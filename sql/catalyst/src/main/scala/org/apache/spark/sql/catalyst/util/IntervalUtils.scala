@@ -410,18 +410,18 @@ object IntervalUtils {
   private final val millisStr = UTF8String.fromString("millisecond")
   private final val microsStr = UTF8String.fromString("microsecond")
 
-  def stringToInterval(input: UTF8String): Option[CalendarInterval] = {
+  def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._
 
     if (input == null) {
-      return None
+      return null
     }
     // scalastyle:off caselocale .toLowerCase
     val s = input.trim.toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
     if (bytes.length == 0) {
-      return None
+      return null
     }
     var state = PREFIX
     var i = 0
@@ -436,7 +436,7 @@ object IntervalUtils {
         case PREFIX =>
           if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
-              return None
+              return null
             } else {
               i += intervalStr.numBytes()
             }
@@ -457,7 +457,7 @@ object IntervalUtils {
               i += 1
             case _ if '0' <= b && b <= '9' =>
               state = POSITIVE_VALUE_TO_LONG
-            case _ => return None
+            case _ => return null
           }
           currentValue = 0
         case POSITIVE_VALUE_TO_LONG | NEGATIVE_VALUE_TO_LONG =>
@@ -465,14 +465,14 @@ object IntervalUtils {
             try {
               currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
             } catch {
-              case _: ArithmeticException => return None
+              case _: ArithmeticException => return null
             }
           } else if (b == ' ') {
             if (state == NEGATIVE_VALUE_TO_LONG) {
               currentValue = -currentValue
             }
             state = BEGIN_UNIT_NAME
-          } else return None
+          } else return null
           i += 1
         case BEGIN_UNIT_NAME =>
           if (b == ' ') {
@@ -516,11 +516,11 @@ object IntervalUtils {
                   } else if (s.matchAt(microsStr, i)) {
                     microseconds = Math.addExact(microseconds, currentValue)
                     i += microsStr.numBytes()
-                  } else return None
-                case _ => return None
+                  } else return null
+                case _ => return null
               }
             } catch {
-              case _: ArithmeticException => return None
+              case _: ArithmeticException => return null
             }
             state = UNIT_NAME_SUFFIX
           }
@@ -530,7 +530,7 @@ object IntervalUtils {
           } else if (b == ' ') {
             state = BEGIN_VALUE
           } else {
-            return None
+            return null
           }
           i += 1
         case END_UNIT_NAME =>
@@ -538,15 +538,15 @@ object IntervalUtils {
             i += 1
             state = BEGIN_VALUE
           } else {
-            return None
+            return null
           }
       }
     }
 
     val result = state match {
       case UNIT_NAME_SUFFIX | END_UNIT_NAME | BEGIN_VALUE =>
-        Some(new CalendarInterval(months, days, microseconds))
-      case _ => None
+        new CalendarInterval(months, days, microseconds)
+      case _ => null
     }
 
     result

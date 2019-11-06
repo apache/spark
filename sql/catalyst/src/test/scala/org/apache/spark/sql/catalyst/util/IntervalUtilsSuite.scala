@@ -28,7 +28,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   private def checkFromString(input: String, expected: CalendarInterval): Unit = {
     assert(fromString(input) === expected)
-    assert(stringToInterval(UTF8String.fromString(input)).get === expected)
+    assert(stringToInterval(UTF8String.fromString(input)) === expected)
   }
 
   private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
@@ -40,7 +40,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
         val msg = e.getMessage
         assert(msg.contains(errorMsg))
     }
-    assert(stringToInterval(UTF8String.fromString(input)) === None)
+    assert(stringToInterval(UTF8String.fromString(input)) === null)
   }
 
   private def testSingleUnit(
