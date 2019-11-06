@@ -26,9 +26,9 @@ import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.unsafe.types.DateTimeConstants._
 
 /**
  * Helper functions for converting between internal and external date and time representations.

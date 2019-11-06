@@ -21,9 +21,9 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.Duration
 
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.unsafe.types.DateTimeConstants.MICROS_PER_DAY
 
 private object Triggers {
   def validate(intervalMs: Long): Unit = {

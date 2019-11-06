@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.types;
+package org.apache.spark.sql.catalyst.util;
 
 public class DateTimeConstants {
 

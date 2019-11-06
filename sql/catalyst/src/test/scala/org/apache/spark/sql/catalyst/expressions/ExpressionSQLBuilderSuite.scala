@@ -21,11 +21,11 @@ import java.time.LocalDateTime
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_HOUR
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.unsafe.types.DateTimeConstants.MICROS_PER_HOUR
 
 class ExpressionSQLBuilderSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.parser.CatalystSqlParser._

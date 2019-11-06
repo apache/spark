@@ -23,7 +23,7 @@ import java.time.Duration;
 import java.time.Period;
 
 import static org.junit.Assert.*;
-import static org.apache.spark.unsafe.types.DateTimeConstants.*;
+import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
 public class CalendarIntervalSuite {
 

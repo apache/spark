@@ -24,7 +24,7 @@ import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
-import static org.apache.spark.unsafe.types.DateTimeConstants.*;
+import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
 /**
  * The internal representation of interval type.

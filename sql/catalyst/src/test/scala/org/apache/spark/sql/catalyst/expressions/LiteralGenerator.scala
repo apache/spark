@@ -23,9 +23,9 @@ import java.util.concurrent.TimeUnit
 
 import org.scalacheck.{Arbitrary, Gen}
 
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.unsafe.types.DateTimeConstants.MILLIS_PER_DAY
 
 /**
  * Property is a high-level specification of behavior that should hold for a range of data points.
