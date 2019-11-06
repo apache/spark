@@ -113,11 +113,9 @@ object ExtractIntervalPart {
 abstract class IntervalNumOperation(
     interval: Expression,
     num: Expression,
+    operation: (CalendarInterval, Double) => CalendarInterval,
     operationName: String)
   extends BinaryExpression with ImplicitCastInputTypes with Serializable {
-
-  protected val operation: (CalendarInterval, Double) => CalendarInterval
-
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -139,9 +137,8 @@ abstract class IntervalNumOperation(
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
       s"""
         try {
-          if ($num != 0) {
-            ${ev.value} = $iu.$operationName($interval, $num);
-          } else {
+          ${ev.value} = $iu.$operationName($interval, $num);
+          if (${ev.value} == null) {
             ${ev.isNull} = true;
           }
         } catch (java.lang.ArithmeticException e) {
@@ -155,13 +152,7 @@ abstract class IntervalNumOperation(
 }
 
 case class MultiplyInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, "multiply") {
-  override protected val operation: (CalendarInterval, Double) => CalendarInterval = multiply
-}
+  extends IntervalNumOperation(interval, num, multiply, "multiply")
 
 case class DivideInterval(interval: Expression, num: Expression)
-  extends IntervalNumOperation(interval, num, "divide") {
-  override protected val operation: (CalendarInterval, Double) => CalendarInterval = {
-    (interval, number) => if (number == 0) null else divide(interval, number)
-  }
-}
+  extends IntervalNumOperation(interval, num, divide, "divide")

@@ -386,6 +386,7 @@ object IntervalUtils {
   }
 
   def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
+    if (num == 0) return null
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 }

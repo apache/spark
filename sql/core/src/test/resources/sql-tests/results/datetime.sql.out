@@ -172,54 +172,40 @@ interval 16 hours
 
 
 -- !query 20
-select interval '1 year 2 month' / null
+select interval '2 seconds' / 0
 -- !query 20 schema
-struct<divide_interval(interval 1 years 2 months, CAST(NULL AS DOUBLE)):interval>
+struct<divide_interval(interval 2 seconds, CAST(0 AS DOUBLE)):interval>
 -- !query 20 output
 NULL
 
 
 -- !query 21
-select interval '1 year 2 month' / 0
+select cast(k as interval) / v from VALUES ('2 seconds', 0) t(k, v)
 -- !query 21 schema
-struct<divide_interval(interval 1 years 2 months, CAST(0 AS DOUBLE)):interval>
+struct<divide_interval(CAST(k AS INTERVAL), CAST(v AS DOUBLE)):interval>
 -- !query 21 output
 NULL
 
 
 -- !query 22
-select interval '4 months 2 weeks 6 days' * null
+select interval '2 seconds' / null
 -- !query 22 schema
-struct<multiply_interval(interval 4 months 20 days, CAST(NULL AS DOUBLE)):interval>
+struct<divide_interval(interval 2 seconds, CAST(NULL AS DOUBLE)):interval>
 -- !query 22 output
 NULL
 
 
 -- !query 23
-select null * interval '4 months 2 weeks 6 days'
+select interval '2 seconds' * null
 -- !query 23 schema
-struct<multiply_interval(interval 4 months 20 days, CAST(NULL AS DOUBLE)):interval>
+struct<multiply_interval(interval 2 seconds, CAST(NULL AS DOUBLE)):interval>
 -- !query 23 output
 NULL
 
 
 -- !query 24
-select
-  k,
-  v,
-  cast(k as interval) / v,
-  cast(k as interval) * v
-from VALUES
-  ('1 seconds', 1),
-  ('2 seconds', 0),
-  ('3 seconds', null),
-  (null, null),
-  (null, 0) t(k, v)
+select null * interval '2 seconds'
 -- !query 24 schema
-struct<k:string,v:int,divide_interval(CAST(k AS INTERVAL), CAST(v AS DOUBLE)):interval,multiply_interval(CAST(k AS INTERVAL), CAST(v AS DOUBLE)):interval>
+struct<multiply_interval(interval 2 seconds, CAST(NULL AS DOUBLE)):interval>
 -- !query 24 output
-1 seconds	1	interval 1 seconds	interval 1 seconds
-2 seconds	0	NULL	NULL
-3 seconds	NULL	NULL	NULL
-NULL	0	NULL	NULL
-NULL	NULL	NULL	NULL
+NULL
