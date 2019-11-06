@@ -271,7 +271,7 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
     } finally {
       if (writer != null) writer.stop()
     }
-    TestUtils.assertExceptionLowercaseMsg(ex, expectErrorMsg)
+    TestUtils.assertExceptionMsg(ex, expectErrorMsg, ignoreCase = true)
   }
 
   private def assertWrongSchema(

@@ -214,32 +214,19 @@ private[spark] object TestUtils {
    * Asserts that exception message contains the message. Please note this checks all
    * exceptions in the tree.
    */
-  def assertExceptionMsg(exception: Throwable, msg: String): Unit = {
-    assertExceptionMsgInternal(exception, msg)(_.contains(_))
-  }
-
-  /**
-   * Asserts that "lower-cased" exception message contains the message. Please note this checks all
-   * exceptions in the tree.
-   */
-  def assertExceptionLowercaseMsg(exception: Throwable, msg: String): Unit = {
-    assertExceptionMsgInternal(exception, msg) { case (exMsg, m) =>
-      exMsg.toLowerCase(Locale.ROOT).contains(m)
+  def assertExceptionMsg(exception: Throwable, msg: String, ignoreCase: Boolean = false): Unit = {
+    def contain(msg1: String, msg2: String): Boolean = {
+      if (ignoreCase) msg1.toLowerCase(Locale.ROOT).contains(msg2.toLowerCase(Locale.ROOT))
+      else msg1.contains(msg2)
     }
-  }
 
-  private def assertExceptionMsgInternal(
-      exception: Throwable,
-      msg: String)(
-      fnPredicate: (String, String) => Boolean): Unit = {
     var e = exception
-    var contains = fnPredicate(e.getMessage, msg)
+    var contains = contain(e.getMessage, msg)
     while (e.getCause != null && !contains) {
       e = e.getCause
-      contains = fnPredicate(e.getMessage, msg)
+      contains = contain(e.getMessage, msg)
     }
-    assert(contains, s"Exception tree doesn't contain the expected message: $msg / " +
-      s"actual exception was: $exception")
+    assert(contains, s"Exception tree doesn't contain the expected message: $msg")
   }
 
   /**
