@@ -120,15 +120,18 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     } else {
       None
     }
-
     val content =
-      <h5 id="sqlstat">SQL Statistics ({numStatement})</h5> ++
-        <div>
-          <ul class="unstyled">
-            {table.getOrElse("No statistics have been generated yet.")}
-          </ul>
+      <span id="sqlstat" class="collapse-aggregated-sqlstat collapse-table"
+            onClick="collapseTable('collapse-aggregated-sqlstat',
+                'aggregated-sqlstat')">
+        <h4>
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>SQL Statistics ({numStatement})</a>
+        </h4>
+      </span> ++
+        <div class="aggregated-sqlstat collapsible-table">
+          {table.getOrElse("No statistics have been generated yet.")}
         </div>
-
     content
   }
 
@@ -187,11 +190,16 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     }
 
     val content =
-      <h5 id="sessionstat">Session Statistics ({numSessions})</h5> ++
-      <div>
-        <ul class="unstyled">
-          {table.getOrElse("No statistics have been generated yet.")}
-        </ul>
+    <span id="sessionstat" class="collapse-aggregated-sessionstat collapse-table"
+          onClick="collapseTable('collapse-aggregated-sessionstat',
+                'aggregated-sessionstat')">
+      <h4>
+        <span class="collapse-table-arrow arrow-open"></span>
+        <a>Session Statistics ({numSessions})</a>
+      </h4>
+    </span> ++
+      <div class="aggregated-sessionstat collapsible-table">
+        {table.getOrElse("No statistics have been generated yet.")}
       </div>
 
     content

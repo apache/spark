@@ -18,6 +18,10 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Period;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 /**
@@ -87,10 +91,7 @@ public final class CalendarInterval implements Serializable {
       appendUnit(sb, months % 12, "month");
     }
 
-    if (days != 0) {
-      appendUnit(sb, days / 7, "week");
-      appendUnit(sb, days % 7, "day");
-    }
+    appendUnit(sb, days, "day");
 
     if (microseconds != 0) {
       long rest = microseconds;
@@ -98,11 +99,10 @@ public final class CalendarInterval implements Serializable {
       rest %= MICROS_PER_HOUR;
       appendUnit(sb, rest / MICROS_PER_MINUTE, "minute");
       rest %= MICROS_PER_MINUTE;
-      appendUnit(sb, rest / MICROS_PER_SECOND, "second");
-      rest %= MICROS_PER_SECOND;
-      appendUnit(sb, rest / MICROS_PER_MILLI, "millisecond");
-      rest %= MICROS_PER_MILLI;
-      appendUnit(sb, rest, "microsecond");
+      if (rest != 0) {
+        String s = BigDecimal.valueOf(rest, 6).stripTrailingZeros().toPlainString();
+        sb.append(' ').append(s).append(" seconds");
+      }
     } else if (months == 0 && days == 0) {
       sb.append(" 0 microseconds");
     }
@@ -115,4 +115,19 @@ public final class CalendarInterval implements Serializable {
       sb.append(' ').append(value).append(' ').append(unit).append('s');
     }
   }
+
+  /**
+   * Extracts the date part of the interval.
+   * @return an instance of {@code java.time.Period} based on the months and days fields
+   *         of the given interval, not null.
+   */
+  public Period extractAsPeriod() { return Period.of(0, months, days); }
+
+  /**
+   * Extracts the time part of the interval.
+   * @return an instance of {@code java.time.Duration} based on the microseconds field
+   *         of the given interval, not null.
+   * @throws ArithmeticException if a numeric overflow occurs
+   */
+  public Duration extractAsDuration() { return Duration.of(microseconds, ChronoUnit.MICROS); }
 }
