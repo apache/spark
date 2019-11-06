@@ -198,12 +198,8 @@ private[ui] class StagePagedTable(
 
     val headerRow: Seq[Node] = {
       stageHeadersAndCssClasses.map { case (header, tooltip, sortable) =>
-        val headerSpan = tooltip.map { case (title, left) =>
-          if (left) {
-            /* Place the shuffle write tooltip on the auto (rather than the default position
-            of on top) because the shuffle write column is the last column on the right side and
-            the tooltip is wider than the column, so it doesn't fit on top. */
-            <span data-toggle="tooltip" data-placement="auto" title={title}>
+        val headerSpan = if (null != tooltip && !tooltip.isEmpty) {
+            <span data-toggle="tooltip" data-placement="top" title={tooltip}>
               {header}
             </span>
         } else {
