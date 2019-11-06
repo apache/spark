@@ -65,20 +65,9 @@ class IntervalUtilsSuite extends SparkFunSuite {
     testSingleUnit("MilliSecond", 3, 0, 0, 3 * MICROS_PER_MILLIS)
     testSingleUnit("MicroSecond", 3, 0, 0, 3)
 
-    for (input <- Seq(null, "", " ")) {
-      try {
-        fromString(input)
-        fail("Expected to throw an exception for the invalid input")
-      } catch {
-        case e: IllegalArgumentException =>
-          val msg = e.getMessage
-          if (input == null) {
-            assert(msg.contains("cannot be null"))
-          }
-      }
-    }
+    checkFromInvalidString(null, "cannot be null")
 
-    for (input <- Seq("interval", "interval1 day", "foo", "foo 1 day")) {
+    for (input <- Seq("", " ", "interval", "interval1 day", "foo", "foo 1 day")) {
       checkFromInvalidString(input, "Invalid interval string")
     }
   }
