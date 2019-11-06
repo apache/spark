@@ -308,10 +308,8 @@ private[spark] class Client(
     }
     appContext.setUnmanagedAM(isClientUnmanagedAMEnabled)
 
-    sparkConf.get(APPLICATION_PRIORITY) match {
-      case Some(v) => appContext.setPriority(Priority.newInstance(v))
-      case None => logDebug(s"${APPLICATION_PRIORITY.key} is not set. " +
-        "Cluster's default value will be used.")
+    sparkConf.get(APPLICATION_PRIORITY).foreach { appPriority =>
+      appContext.setPriority(Priority.newInstance(appPriority))
     }
     appContext
   }

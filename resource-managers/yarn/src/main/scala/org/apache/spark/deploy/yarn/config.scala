@@ -33,10 +33,10 @@ package object config {
     .toSequence
     .createOptional
 
-  private[spark] val APPLICATION_PRIORITY = ConfigBuilder("spark.yarn.app.priority")
+  private[spark] val APPLICATION_PRIORITY = ConfigBuilder("spark.yarn.priority")
     .doc("Application priority for YARN to define pending applications ordering policy, those" +
-      " with higher value have a better opportunity to be activated. Currently application" +
-      " priority is supported only for FIFO ordering policy.")
+      " with higher value have a better opportunity to be activated. Currently, YARN only" +
+      " supports application priority when using FIFO ordering policy.")
     .intConf
     .createOptional
 

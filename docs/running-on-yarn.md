@@ -420,12 +420,12 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.app.priority</code></td>
+  <td><code>spark.yarn.priority</code></td>
   <td>(none)</td>
   <td>
   Application priority for YARN to define pending applications ordering policy, those with higher
-  integer value have a better opportunity to be activated. Currently Application priority is supported
-  only for FIFO ordering policy.
+  integer value have a better opportunity to be activated. Currently, YARN only supports application
+  priority when using FIFO ordering policy.
   </td>
 </tr>
 <tr>
