@@ -75,15 +75,13 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   test("string to interval: multiple units") {
     Seq(
-      "1 day",
-      " 123 MONTHS",
-      "interval -1 day +3 Microseconds",
+      "1 day" -> new CalendarInterval(0, 1, 0),
+      " 123 MONTHS" -> new CalendarInterval(123, 0, 0),
+      "interval -1 day +3 Microseconds" -> new CalendarInterval(0, -1, 3),
       "  interval  8  years -11 months 123  weeks   -1 day " +
-        "23 hours -22 minutes 1 second  -123  millisecond    567 microseconds ").foreach { s =>
-      val utf8String = UTF8String.fromString(s)
-      val interval = stringToInterval(utf8String)
-      val expectedInterval = fromString(s)
-      assert(interval === Some(expectedInterval))
+        "23 hours -22 minutes 1 second  -123  millisecond    567 microseconds " ->
+        new CalendarInterval(85, 860, 81480877567L)).foreach { case (input, expected) =>
+      checkFromString(input, expected)
     }
   }
 
