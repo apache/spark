@@ -5,7 +5,7 @@
 -- !query 0
 select interval '1 day' > interval '23 hour'
 -- !query 0 schema
-struct<(interval 1 days > interval 23 hours):boolean>
+struct<(1 days > 23 hours):boolean>
 -- !query 0 output
 true
 
@@ -13,7 +13,7 @@ true
 -- !query 1
 select interval '-1 day' >= interval '-23 hour'
 -- !query 1 schema
-struct<(interval -1 days >= interval -23 hours):boolean>
+struct<(-1 days >= -23 hours):boolean>
 -- !query 1 output
 false
 
@@ -21,7 +21,7 @@ false
 -- !query 2
 select interval '-1 day' > null
 -- !query 2 schema
-struct<(interval -1 days > CAST(NULL AS INTERVAL)):boolean>
+struct<(-1 days > CAST(NULL AS INTERVAL)):boolean>
 -- !query 2 output
 NULL
 
@@ -29,7 +29,7 @@ NULL
 -- !query 3
 select null > interval '-1 day'
 -- !query 3 schema
-struct<(CAST(NULL AS INTERVAL) > interval -1 days):boolean>
+struct<(CAST(NULL AS INTERVAL) > -1 days):boolean>
 -- !query 3 output
 NULL
 
@@ -37,7 +37,7 @@ NULL
 -- !query 4
 select interval '1 minutes' < interval '1 hour'
 -- !query 4 schema
-struct<(interval 1 minutes < interval 1 hours):boolean>
+struct<(1 minutes < 1 hours):boolean>
 -- !query 4 output
 true
 
@@ -45,7 +45,7 @@ true
 -- !query 5
 select interval '-1 day' >= interval '-23 hour'
 -- !query 5 schema
-struct<(interval -1 days >= interval -23 hours):boolean>
+struct<(-1 days >= -23 hours):boolean>
 -- !query 5 output
 false
 
@@ -53,7 +53,7 @@ false
 -- !query 6
 select interval '1 year' = interval '360 days'
 -- !query 6 schema
-struct<(interval 1 years = interval 360 days):boolean>
+struct<(1 years = 360 days):boolean>
 -- !query 6 output
 true
 
@@ -61,7 +61,7 @@ true
 -- !query 7
 select interval '1 year 2 month' = interval '420 days'
 -- !query 7 schema
-struct<(interval 1 years 2 months = interval 420 days):boolean>
+struct<(1 years 2 months = 420 days):boolean>
 -- !query 7 output
 true
 
@@ -69,7 +69,7 @@ true
 -- !query 8
 select interval '1 year' = interval '365 days'
 -- !query 8 schema
-struct<(interval 1 years = interval 365 days):boolean>
+struct<(1 years = 365 days):boolean>
 -- !query 8 output
 false
 
@@ -77,7 +77,7 @@ false
 -- !query 9
 select interval '1 month' = interval '30 days'
 -- !query 9 schema
-struct<(interval 1 months = interval 30 days):boolean>
+struct<(1 months = 30 days):boolean>
 -- !query 9 output
 true
 
@@ -85,7 +85,7 @@ true
 -- !query 10
 select interval '1 minutes' = interval '1 hour'
 -- !query 10 schema
-struct<(interval 1 minutes = interval 1 hours):boolean>
+struct<(1 minutes = 1 hours):boolean>
 -- !query 10 output
 false
 
@@ -93,7 +93,7 @@ false
 -- !query 11
 select interval '1 minutes' = null
 -- !query 11 schema
-struct<(interval 1 minutes = CAST(NULL AS INTERVAL)):boolean>
+struct<(1 minutes = CAST(NULL AS INTERVAL)):boolean>
 -- !query 11 output
 NULL
 
@@ -101,7 +101,7 @@ NULL
 -- !query 12
 select null = interval '-1 day'
 -- !query 12 schema
-struct<(CAST(NULL AS INTERVAL) = interval -1 days):boolean>
+struct<(CAST(NULL AS INTERVAL) = -1 days):boolean>
 -- !query 12 output
 NULL
 
@@ -109,7 +109,7 @@ NULL
 -- !query 13
 select interval '1 minutes' <=> null
 -- !query 13 schema
-struct<(interval 1 minutes <=> CAST(NULL AS INTERVAL)):boolean>
+struct<(1 minutes <=> CAST(NULL AS INTERVAL)):boolean>
 -- !query 13 output
 false
 
@@ -117,7 +117,7 @@ false
 -- !query 14
 select null <=> interval '1 minutes'
 -- !query 14 schema
-struct<(CAST(NULL AS INTERVAL) <=> interval 1 minutes):boolean>
+struct<(CAST(NULL AS INTERVAL) <=> 1 minutes):boolean>
 -- !query 14 output
 false
 
@@ -125,7 +125,7 @@ false
 -- !query 15
 select INTERVAL '9 years 1 months -1 weeks -4 days -10 hours -46 minutes' > interval '1 minutes'
 -- !query 15 schema
-struct<(interval 9 years 1 months -11 days -10 hours -46 minutes > interval 1 minutes):boolean>
+struct<(9 years 1 months -11 days -10 hours -46 minutes > 1 minutes):boolean>
 -- !query 15 output
 true
 
@@ -135,15 +135,15 @@ select cast(v as interval) i from VALUES ('1 seconds'), ('4 seconds'), ('3 secon
 -- !query 16 schema
 struct<i:interval>
 -- !query 16 output
-interval 1 seconds
-interval 3 seconds
-interval 4 seconds
+1 seconds
+3 seconds
+4 seconds
 
 
 -- !query 17
 select interval '1 month 120 days' > interval '2 month'
 -- !query 17 schema
-struct<(interval 1 months 120 days > interval 2 months):boolean>
+struct<(1 months 120 days > 2 months):boolean>
 -- !query 17 output
 true
 
@@ -151,7 +151,7 @@ true
 -- !query 18
 select interval '1 month 30 days' = interval '2 month'
 -- !query 18 schema
-struct<(interval 1 months 30 days = interval 2 months):boolean>
+struct<(1 months 30 days = 2 months):boolean>
 -- !query 18 output
 true
 
@@ -159,7 +159,7 @@ true
 -- !query 19
 select interval '1 month 29 days 40 hours' > interval '2 month'
 -- !query 19 schema
-struct<(interval 1 months 29 days 40 hours > interval 2 months):boolean>
+struct<(1 months 29 days 40 hours > 2 months):boolean>
 -- !query 19 output
 true
 
@@ -169,7 +169,7 @@ select max(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 se
 -- !query 20 schema
 struct<max(CAST(v AS INTERVAL)):interval>
 -- !query 20 output
-interval 4 seconds
+4 seconds
 
 
 -- !query 21
@@ -177,4 +177,4 @@ select min(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 se
 -- !query 21 schema
 struct<min(CAST(v AS INTERVAL)):interval>
 -- !query 21 output
-interval 1 seconds
+1 seconds

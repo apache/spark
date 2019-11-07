@@ -31,7 +31,7 @@ import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 /**
  * The internal representation of interval type.
  */
-public final class CalendarInterval implements Serializable {
+public final class CalendarInterval implements Serializable, Ordered<CalendarInterval> {
   public final int months;
   public final int days;
   public final long microseconds;

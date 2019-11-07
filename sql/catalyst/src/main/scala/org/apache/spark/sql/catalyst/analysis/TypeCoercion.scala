@@ -866,6 +866,11 @@ object TypeCoercion {
         SubtractTimestamps(l, Cast(r, TimestampType))
       case Subtract(l @ DateType(), r @ TimestampType()) =>
         SubtractTimestamps(Cast(l, TimestampType), r)
+
+      case b @ BinaryOperator(l @ CalendarIntervalType(), r @ NullType()) =>
+        b.withNewChildren(Seq(l, Cast(r, CalendarIntervalType)))
+      case b @ BinaryOperator(l @ NullType(), r @ CalendarIntervalType()) =>
+        b.withNewChildren(Seq(Cast(l, CalendarIntervalType), r))
     }
   }
 
