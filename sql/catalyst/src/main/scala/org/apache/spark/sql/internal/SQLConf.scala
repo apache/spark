@@ -747,6 +747,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val THRIFTSERVER_IGNORE_DEFAULT_DATABASE =
+    buildConf("spark.sql.thriftServer.ignoreDefaultDatabase")
+    .internal()
+    .doc("When true, it will ignore default database submitted in session configurations." +
+      "Otherwise, a free executor is needed to open a new session of ThriftServer.")
+    .booleanConf
+    .createWithDefault(false)
+
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     buildConf("spark.sql.thriftserver.ui.retainedStatements")
       .doc("The number of SQL statements kept in the JDBC/ODBC web UI history.")
