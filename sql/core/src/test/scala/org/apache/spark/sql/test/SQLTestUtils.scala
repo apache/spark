@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -365,13 +366,23 @@ private[sql] trait SQLTestUtilsBase
 
   /**
    * Drops namespace `namespace` after calling `f`.
+   * Note that, do not switch current catalog in `f`. It may remove the wrong namespace.
    */
   protected def withNamespace(namespaces: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
       namespaces.foreach { name =>
         spark.sql(s"DROP NAMESPACE IF EXISTS $name CASCADE")
       }
-      spark.sql(s"USE default")
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      spark.sessionState.catalogManager.currentCatalog match {
+        case supportNamespace: SupportsNamespaces =>
+          supportNamespace.asNamespaceCatalog.defaultNamespace() match {
+            case Array(name) => spark.sql(s"USE $name")
+            case Array(name, _*) => spark.sql(s"USE $name")
+            case _ => spark.sql("USE default")
+          }
+        case _ => spark.sql(s"USE $DEFAULT_DATABASE")
+      }
     }
   }
 
