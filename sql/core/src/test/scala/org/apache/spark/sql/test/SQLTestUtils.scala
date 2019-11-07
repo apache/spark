@@ -365,7 +365,8 @@ private[sql] trait SQLTestUtilsBase
 
   /**
    * Drops namespace `namespace` after calling `f`.
-   * Note that, do not switch current catalog in `f`. It may remove the wrong namespace.
+   *
+   * Note that, if you switch current catalog/namespace in `f`, you should switch it back manually.
    */
   protected def withNamespace(namespaces: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
