@@ -162,7 +162,7 @@ object IntervalUtils {
     assert(input.length == input.trim.length)
     input match {
       case yearMonthPattern("-", yearStr, monthStr) =>
-        toInterval(yearStr, monthStr).negate()
+        negate(toInterval(yearStr, monthStr))
       case yearMonthPattern(_, yearStr, monthStr) =>
         toInterval(yearStr, monthStr)
       case _ =>
@@ -380,6 +380,36 @@ object IntervalUtils {
     val truncatedDays = Math.toIntExact(days.toLong)
     val micros = microsWithFraction + DateTimeUtils.MICROS_PER_DAY * (days - truncatedDays)
     new CalendarInterval(truncatedMonths, truncatedDays, micros.round)
+  }
+
+  /**
+   * Unary minus, return the negated the calendar interval value.
+   *
+   * @param interval the interval to be negated
+   * @return a new calendar interval instance with all it parameters negated from the origin one.
+   */
+  def negate(interval: CalendarInterval): CalendarInterval = {
+    new CalendarInterval(-interval.months, -interval.days, -interval.microseconds)
+  }
+
+  /**
+   * Return a new calendar interval instance of the sum of two intervals.
+   */
+  def add(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
+    val months = left.months + right.months
+    val days = left.days + right.days
+    val microseconds = left.microseconds + right.microseconds
+    new CalendarInterval(months, days, microseconds)
+  }
+
+  /**
+   * Return a new calendar interval instance of the left intervals minus the right one.
+   */
+  def subtract(left: CalendarInterval, right: CalendarInterval): CalendarInterval = {
+    val months = left.months - right.months
+    val days = left.days - right.days
+    val microseconds = left.microseconds - right.microseconds
+    new CalendarInterval(months, days, microseconds)
   }
 
   def multiply(interval: CalendarInterval, num: Double): CalendarInterval = {
