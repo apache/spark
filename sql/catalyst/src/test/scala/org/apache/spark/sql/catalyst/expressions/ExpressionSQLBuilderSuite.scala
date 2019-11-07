@@ -169,12 +169,12 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
 
     checkSQL(
       TimeAdd('a, interval),
-      "`a` + interval 1 hours"
+      "`a` + 1 hours"
     )
 
     checkSQL(
       TimeSub('a, interval),
-      "`a` - interval 1 hours"
+      "`a` - 1 hours"
     )
   }
 }
