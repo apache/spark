@@ -62,7 +62,7 @@ import org.apache.spark.sql.util.SchemaUtils
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name [locationSpec] [USING provider]
+ *   LIKE [other_db_name.]existing_table_name [USING provider] [locationSpec]
  * }}}
  */
 case class CreateTableLikeCommand(
