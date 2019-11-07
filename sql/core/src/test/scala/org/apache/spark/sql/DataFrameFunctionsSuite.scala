@@ -314,13 +314,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("array_sort with lambda functions") {
 
-    spark.udf.register("fAsc", (x: Int, y: Int) => {
+    spark.udf.register("fDesc", (x: Int, y: Int) => {
       if (x < y) -1
       else if (x == y) 0
       else 1
     })
 
-    spark.udf.register("fDesc", (x: Int, y: Int) => {
+    spark.udf.register("fAsc", (x: Int, y: Int) => {
       if (x < y) 1
       else if (x == y) 0
       else -1
@@ -328,20 +328,20 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     spark.udf.register("fString", (x: String, y: String) => {
       if (x == null && y == null) 0
-      else if (x == null) -1
-      else if (y == null) 1
-      else if (x < y) -1
+      else if (x == null) 1
+      else if (y == null) -1
+      else if (x < y) 1
       else if (x == y) 0
-      else 1
+      else -1
     })
 
     spark.udf.register("fStringLength", (x: String, y: String) => {
       if (x == null && y == null) 0
-      else if (x == null) -1
-      else if (y == null) 1
-      else if (x.length < y.length) 1
+      else if (x == null) 1
+      else if (y == null) -1
+      else if (x.length < y.length) -1
       else if (x.length == y.length) 0
-      else -1
+      else 1
 
     })
 
