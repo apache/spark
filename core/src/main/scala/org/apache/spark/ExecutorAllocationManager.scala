@@ -126,7 +126,6 @@ private[spark] class ExecutorAllocationManager(
   private val tasksPerExecutorForFullParallelism =
     conf.get(EXECUTOR_CORES) / conf.get(CPUS_PER_TASK)
 
-  // TODO - make this configurable by ResourceProfile in the future
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
@@ -546,8 +545,6 @@ private[spark] class ExecutorAllocationManager(
       val rp = listener.resourceProfileIdToResourceProfile(rpId)
       logWarning(s"new executor total : $newExecutorTotal")
 
-
-      // TODO - ideally min num per stage (or ResourceProfile), otherwise min * num stages executors
       if (newExecutorTotal - 1 < minNumExecutors) {
         logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
           s"$newExecutorTotal executor(s) left (minimum number of executor limit $minNumExecutors)")
@@ -643,8 +640,8 @@ private[spark] class ExecutorAllocationManager(
     private val stageAttemptToSpeculativeTaskIndices =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
 
-    private val stageAttemptToResourceProfile =
-      new mutable.HashMap[StageAttempt, ResourceProfile]
+    // private val stageAttemptToResourceProfile =
+      // new mutable.HashMap[StageAttempt, ResourceProfile]
     val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
     val resourceProfileIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
@@ -672,7 +669,7 @@ private[spark] class ExecutorAllocationManager(
         // need to keep stage task requirements to ask for the right containers
         val stageResourceProf = stageSubmitted.stageInfo.resourceProfile.getOrElse(defaultProfile)
         logInfo("stage reosurce profile is: " + stageResourceProf)
-        stageAttemptToResourceProfile(stageAttempt) = stageResourceProf
+        // stageAttemptToResourceProfile(stageAttempt) = stageResourceProf
         val profId = stageResourceProf.id
         resourceProfileIdToStageAttempt.getOrElseUpdate(
           profId, new mutable.HashSet[StageAttempt]) += stageAttempt
@@ -752,7 +749,7 @@ private[spark] class ExecutorAllocationManager(
           stageAttemptToTaskIndices.getOrElseUpdate(stageAttempt,
             new mutable.HashSet[Int]) += taskIndex
         }
-        if (totalPendingTasks() == 0) {
+        if (!hasPendingTasks) {
           allocationManager.onSchedulerQueueEmpty()
         }
       }
@@ -777,7 +774,7 @@ private[spark] class ExecutorAllocationManager(
         // enough resources to run the resubmitted task, we need to mark the scheduler
         // as backlogged again if it's not already marked as such (SPARK-8366)
         if (taskEnd.reason != Success) {
-          if (totalPendingTasks() == 0) {
+          if (!hasPendingTasks) {
             allocationManager.onSchedulerBacklogged()
           }
           if (taskEnd.taskInfo.speculative) {
@@ -807,14 +804,8 @@ private[spark] class ExecutorAllocationManager(
      *
      * Note: This is not thread-safe without the caller owning the `allocationManager` lock.
      */
-    def pendingTasks(): Int = {
-      stageAttemptToNumTasks.map { case (stageAttempt, numTasks) =>
-        numTasks - stageAttemptToTaskIndices.get(stageAttempt).map(_.size).getOrElse(0)
-      }.sum
-    }
-
-    def pendingTasksPerResourceProfile(rp: Int): Int = {
-      val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
+    def pendingTasksPerResourceProfile(rpId: Int): Int = {
+      val attempts = resourceProfileIdToStageAttempt.getOrElse(rpId, Set.empty).toSeq
       attempts.map { attempt =>
         val numTotalTasks = stageAttemptToNumTasks.getOrElse(attempt, 0)
         val numRunning = stageAttemptToTaskIndices.get(attempt).map(_.size).getOrElse(0)
@@ -822,10 +813,14 @@ private[spark] class ExecutorAllocationManager(
       }.sum
     }
 
-    def pendingSpeculativeTasks(): Int = {
-      stageAttemptToNumSpeculativeTasks.map { case (stageAttempt, numTasks) =>
-        numTasks - stageAttemptToSpeculativeTaskIndices.get(stageAttempt).map(_.size).getOrElse(0)
+    def hasPendingRegularTasks: Boolean = {
+      val attempts = resourceProfileIdToStageAttempt.values.flatten
+      val pending = attempts.map { attempt =>
+        val numTotalTasks = stageAttemptToNumTasks.getOrElse(attempt, 0)
+        val numRunning = stageAttemptToTaskIndices.get(attempt).map(_.size).getOrElse(0)
+        numTotalTasks - numRunning
       }.sum
+      (pending > 0)
     }
 
     def pendingSpeculativeTasksPerResourceProfile(rp: Int): Int = {
@@ -837,16 +832,23 @@ private[spark] class ExecutorAllocationManager(
       }.sum
     }
 
+    def hasPendingSpeculativeTasks: Boolean = {
+      val attempts = resourceProfileIdToStageAttempt.values.flatten
+      val pending = attempts.map { attempt =>
+        val numTotalTasks = stageAttemptToNumSpeculativeTasks.getOrElse(attempt, 0)
+        val numRunning = stageAttemptToSpeculativeTaskIndices.get(attempt).map(_.size).getOrElse(0)
+        numTotalTasks - numRunning
+      }.sum
+      (pending > 0)
+    }
 
-
-    def totalPendingTasks(): Int = {
-      pendingTasks + pendingSpeculativeTasks
+    def hasPendingTasks(): Boolean = {
+      hasPendingSpeculativeTasks || hasPendingRegularTasks
     }
 
     def totalPendingTasksPerResourceProfile(rp: Int): Int = {
       pendingTasksPerResourceProfile(rp) + pendingSpeculativeTasksPerResourceProfile(rp)
     }
-
 
     /**
      * The number of tasks currently running across all stages.

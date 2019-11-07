@@ -1594,7 +1594,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
-   * to help it make decisions.
+   * to help it make decisions. This applies to the default ResourceProfile.
    * @param numExecutors The total number of executors we'd like to have. The cluster manager
    *                     shouldn't kill any running executor to reach this number, but,
    *                     if all existing executors were to die, this is the number of executors
@@ -1613,7 +1613,7 @@ class SparkContext(config: SparkConf) extends Logging {
       hostToLocalTaskCount: scala.collection.immutable.Map[String, Int]): Boolean = {
     schedulerBackend match {
       case b: ExecutorAllocationClient =>
-        // assume this is using the default resource profile, would need to add api to support
+        // this is being applied to the default resource profile, would need to add api to support
         // others
         val hostToLocalTaskCountWithResourceProfileId =
           Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> hostToLocalTaskCount).toMap
