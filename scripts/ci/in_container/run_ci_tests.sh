@@ -32,10 +32,9 @@ in_container_script_start
 # any argument received is overriding the default nose execution arguments:
 NOSE_ARGS=( "$@" )
 
-KUBERNETES_MODE=${KUBERNETES_MODE:="git_mode"}
-START_KUBERNETES_CLUSTER=${START_KUBERNETES_CLUSTER:="false"}
+KUBERNETES_VERSION=${KUBERNETES_VERSION:=""}
 
-if [[ "${START_KUBERNETES_CLUSTER}" == "false" ]]; then
+if [[ "${KUBERNETES_VERSION}" == "" ]]; then
     echo "Initializing the DB"
     yes | airflow db init || true
     airflow db reset -y

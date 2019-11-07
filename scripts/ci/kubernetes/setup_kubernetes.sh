@@ -16,34 +16,22 @@
 # specific language governing permissions and limitations
 # under the License.
 
-#
-# Fixes ownership for files created inside container (files owned by root will be owned by host user)
-#
-
 set -euo pipefail
-MY_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+DIRNAME=$(cd "$(dirname "$0")" && pwd)
 
-# shellcheck source=scripts/ci/_utils.sh
-. "${MY_DIR}/_utils.sh"
+# start kubernetes
+kind delete cluster || true
+kind create cluster --config "${DIRNAME}/kind-cluster-conf.yaml"
+mv "$(kind get kubeconfig-path)" ~/.kube/config
+kubectl config set clusters.kind.server https://docker:19090
+kubectl cluster-info
 
-basic_sanity_checks
+kubectl get nodes
+echo "Showing storageClass"
+kubectl get storageclass
+echo "Showing kube-system pods"
+kubectl get -n kube-system pods
 
-script_start
+"${DIRNAME}/docker/build.sh"
 
-export PYTHON_VERSION=${PYTHON_VERSION:="3.6"}
-
-export AIRFLOW_CONTAINER_DOCKER_IMAGE=\
-${DOCKERHUB_USER}/${DOCKERHUB_REPO}:${AIRFLOW_CONTAINER_BRANCH_NAME}-python${PYTHON_VERSION}-ci
-
-HOST_USER_ID="$(id -ur)"
-export HOST_USER_ID
-
-HOST_GROUP_ID="$(id -gr)"
-export HOST_GROUP_ID
-
-docker-compose \
-    -f "${MY_DIR}/docker-compose.yml" \
-    -f "${MY_DIR}/docker-compose-local.yml" \
-    run --no-deps airflow-testing /opt/airflow/scripts/ci/in_container/run_fix_ownership.sh
-
-script_end
+echo "Airflow environment on kubernetes is good to go!"
