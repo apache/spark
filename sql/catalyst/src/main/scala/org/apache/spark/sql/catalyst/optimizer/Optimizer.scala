@@ -1296,6 +1296,35 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
   }
 
+  private def split(condition: Seq[Expression],
+                    joinType: JoinType,
+                    left: LogicalPlan,
+                    right: LogicalPlan) = {
+    val (pushDownCandidates, nonDeterministic) = condition.partition(_.deterministic)
+
+    joinType match {
+      case _: InnerLike | LeftSemi | RightOuter =>
+        val (leftEvaluateCondition, rest) =
+          pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
+        val (rightEvaluateCondition, commonCondition) =
+          rest.partition(expr => expr.references.subsetOf(right.outputSet))
+        (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
+      case LeftOuter | LeftAnti | ExistenceJoin(_) =>
+        val (rightEvaluateCondition, rest) =
+          pushDownCandidates.partition(_.references.subsetOf(right.outputSet))
+        val (leftEvaluateCondition, commonCondition) =
+          rest.partition(expr => expr.references.subsetOf(left.outputSet))
+        (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
+      case FullOuter =>
+        val (bothEvaluateCondition, commonCondition) =
+          pushDownCandidates.partition(cond =>
+            cond.references.subsetOf(left.outputSet) && cond.references.subsetOf(right.outputSet))
+        (bothEvaluateCondition, bothEvaluateCondition, commonCondition)
+      case NaturalJoin(_) => (null, null, null)
+      case UsingJoin(_, _) => (null, null, null)
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
@@ -1348,7 +1377,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     // push down the join filter into sub query scanning if applicable
     case j @ Join(left, right, joinType, joinCondition, hint) =>
       val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
-        split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
+        split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), joinType, left, right)
 
       joinType match {
         case _: InnerLike | LeftSemi =>
@@ -1376,7 +1405,13 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoinCond = (leftJoinConditions ++ commonJoinCondition).reduceLeftOption(And)
 
           Join(newLeft, newRight, joinType, newJoinCond, hint)
-        case FullOuter => j
+        case FullOuter =>
+          val newLeft = leftJoinConditions.
+            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
+          val newRight = rightJoinConditions.
+            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          val newJoinCond = commonJoinCondition.reduceLeftOption(And)
+          Join(newLeft, newRight, FullOuter, newJoinCond, hint)
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
         case UsingJoin(_, _) => sys.error("Untransformed Using join node")
       }
