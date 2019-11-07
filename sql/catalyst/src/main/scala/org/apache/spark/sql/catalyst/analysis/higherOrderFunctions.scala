@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.DataType
 case class ResolveHigherOrderFunctions(catalog: SessionCatalog) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
-    case u @ UnresolvedFunction(fn, children, false)
+    case u @ UnresolvedFunction(fn, children, false, _)
         if hasLambdaAndResolvedArguments(children) =>
       withPosition(u) {
         catalog.lookupFunction(fn, children) match {

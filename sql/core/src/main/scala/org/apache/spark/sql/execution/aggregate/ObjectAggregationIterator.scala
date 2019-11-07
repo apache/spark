@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{BaseOrdering, GenerateOrdering}
+import org.apache.spark.sql.catalyst.expressions.codegen.{BaseOrdering, GenerateOrdering, Predicate => GenPredicate}
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
@@ -42,7 +44,8 @@ class ObjectAggregationIterator(
     originalInputAttributes: Seq[Attribute],
     inputRows: Iterator[InternalRow],
     fallbackCountThreshold: Int,
-    numOutputRows: SQLMetric)
+    numOutputRows: SQLMetric,
+    predicates: HashMap[Int, GenPredicate])
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -51,6 +54,7 @@ class ObjectAggregationIterator(
     aggregateAttributes,
     initialInputBufferOffset,
     resultExpressions,
+    predicates,
     newMutableProjection) with Logging {
 
   // Indicates whether we have fallen back to sort-based aggregation or not.
@@ -61,9 +65,9 @@ class ObjectAggregationIterator(
   // Hacking the aggregation mode to call AggregateFunction.merge to merge two aggregation buffers
   private val mergeAggregationBuffers: (InternalRow, InternalRow) => Unit = {
     val newExpressions = aggregateExpressions.map {
-      case agg @ AggregateExpression(_, Partial, _, _) =>
+      case agg @ AggregateExpression(_, Partial, _, _, _) =>
         agg.copy(mode = PartialMerge)
-      case agg @ AggregateExpression(_, Complete, _, _) =>
+      case agg @ AggregateExpression(_, Complete, _, _, _) =>
         agg.copy(mode = Final)
       case other => other
     }

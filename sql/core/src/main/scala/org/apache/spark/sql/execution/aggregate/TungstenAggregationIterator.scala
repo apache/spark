@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeRowJoiner, Predicate => GenPredicate}
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
@@ -93,7 +95,8 @@ class TungstenAggregationIterator(
     numOutputRows: SQLMetric,
     peakMemory: SQLMetric,
     spillSize: SQLMetric,
-    avgHashProbe: SQLMetric)
+    avgHashProbe: SQLMetric,
+    predicates: HashMap[Int, GenPredicate])
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -102,6 +105,7 @@ class TungstenAggregationIterator(
     aggregateAttributes,
     initialInputBufferOffset,
     resultExpressions,
+    predicates,
     newMutableProjection) with Logging {
 
   ///////////////////////////////////////////////////////////////////////////
@@ -249,9 +253,9 @@ class TungstenAggregationIterator(
     // Basically the value of the KVIterator returned by externalSorter
     // will be just aggregation buffer, so we rewrite the aggregateExpressions to reflect it.
     val newExpressions = aggregateExpressions.map {
-      case agg @ AggregateExpression(_, Partial, _, _) =>
+      case agg @ AggregateExpression(_, Partial, _, _, _) =>
         agg.copy(mode = PartialMerge)
-      case agg @ AggregateExpression(_, Complete, _, _) =>
+      case agg @ AggregateExpression(_, Complete, _, _, _) =>
         agg.copy(mode = Final)
       case other => other
     }

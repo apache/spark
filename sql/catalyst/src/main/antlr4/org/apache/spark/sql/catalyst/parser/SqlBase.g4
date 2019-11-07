@@ -713,7 +713,7 @@ primaryExpression
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
-       (OVER windowSpec)?                                                                      #functionCall
+       (FILTER '(' WHERE where=booleanExpression ')')? (OVER windowSpec)?                      #functionCall
     | identifier '->' expression                                                               #lambda
     | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
@@ -1222,6 +1222,7 @@ nonReserved
     | EXTRACT
     | FALSE
     | FETCH
+    | FILTER
     | FIELDS
     | FILEFORMAT
     | FIRST
@@ -1482,6 +1483,7 @@ EXTRACT: 'EXTRACT';
 FALSE: 'FALSE';
 FETCH: 'FETCH';
 FIELDS: 'FIELDS';
+FILTER: 'FILTER';
 FILEFORMAT: 'FILEFORMAT';
 FIRST: 'FIRST';
 FIRST_VALUE: 'FIRST_VALUE';

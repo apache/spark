@@ -174,7 +174,7 @@ object AggUtils {
       // Children of an AggregateFunction with DISTINCT keyword has already
       // been evaluated. At here, we need to replace original children
       // to AttributeReferences.
-      case agg @ AggregateExpression(aggregateFunction, mode, true, _) =>
+      case agg @ AggregateExpression(aggregateFunction, mode, true, _, _) =>
         aggregateFunction.transformDown(distinctColumnAttributeLookup)
           .asInstanceOf[AggregateFunction]
       case agg =>

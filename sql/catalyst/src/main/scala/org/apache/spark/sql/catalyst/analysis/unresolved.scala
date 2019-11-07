@@ -244,7 +244,8 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
 case class UnresolvedFunction(
     name: FunctionIdentifier,
     children: Seq[Expression],
-    isDistinct: Boolean)
+    isDistinct: Boolean,
+    filter: Option[Expression] = None)
   extends Expression with Unevaluable {
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")

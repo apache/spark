@@ -71,23 +71,27 @@ object AggregateExpression {
   def apply(
       aggregateFunction: AggregateFunction,
       mode: AggregateMode,
-      isDistinct: Boolean): AggregateExpression = {
+      isDistinct: Boolean,
+      filter: Option[Expression] = None): AggregateExpression = {
     AggregateExpression(
       aggregateFunction,
       mode,
       isDistinct,
+      filter,
       NamedExpression.newExprId)
   }
 }
 
 /**
  * A container for an [[AggregateFunction]] with its [[AggregateMode]] and a field
- * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.
+ * (`isDistinct`) indicating if DISTINCT keyword is specified for this function and
+ * a field (`filter`) indicating if filter clause is specified for this function.
  */
 case class AggregateExpression(
     aggregateFunction: AggregateFunction,
     mode: AggregateMode,
     isDistinct: Boolean,
+    filter: Option[Expression],
     resultId: ExprId)
   extends Expression
   with Unevaluable {
@@ -119,6 +123,7 @@ case class AggregateExpression(
       normalizedAggFunc.canonicalized.asInstanceOf[AggregateFunction],
       mode,
       isDistinct,
+      filter,
       ExprId(0))
   }
 
@@ -130,7 +135,8 @@ case class AggregateExpression(
   @transient
   override lazy val references: AttributeSet = {
     mode match {
-      case Partial | Complete => aggregateFunction.references
+      case Partial | Complete if filter == None => aggregateFunction.references
+      case Partial | Complete => aggregateFunction.references ++ filter.map(_.references).get
       case PartialMerge | Final => AttributeSet(aggregateFunction.aggBufferAttributes)
     }
   }

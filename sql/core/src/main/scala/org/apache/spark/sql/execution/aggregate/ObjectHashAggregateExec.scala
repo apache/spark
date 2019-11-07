@@ -19,10 +19,13 @@ package org.apache.spark.sql.execution.aggregate
 
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -112,6 +115,21 @@ case class ObjectHashAggregateExec(
         // so return an empty kvIterator.
         Iterator.empty
       } else {
+        val filterPredicates = new HashMap[Int, GenPredicate]
+        aggregateExpressions.zipWithIndex.foreach{
+          case (ae: AggregateExpression, i) =>
+            ae.mode match {
+              case Partial | Complete =>
+                ae.filter.foreach { filterExpr =>
+                  val filterAttrs = filterExpr.references.toSeq
+                  val predicate = newPredicate(filterExpr, child.output ++ filterAttrs)
+                  predicate.initialize(partIndex)
+                  filterPredicates(i) = predicate
+                }
+              case _ =>
+            }
+          case _ =>
+        }
         val aggregationIterator =
           new ObjectAggregationIterator(
             partIndex,
@@ -126,7 +144,8 @@ case class ObjectHashAggregateExec(
             child.output,
             iter,
             fallbackCountThreshold,
-            numOutputRows)
+            numOutputRows,
+            filterPredicates)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())

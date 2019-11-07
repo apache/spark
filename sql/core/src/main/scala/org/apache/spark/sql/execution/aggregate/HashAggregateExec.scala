@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -117,6 +117,21 @@ case class HashAggregateExec(
         // so return an empty iterator.
         Iterator.empty
       } else {
+        val filterPredicates = new mutable.HashMap[Int, GenPredicate]
+        aggregateExpressions.zipWithIndex.foreach{
+          case (ae: AggregateExpression, i) =>
+            ae.mode match {
+              case Partial | Complete =>
+                ae.filter.foreach { filterExpr =>
+                  val filterAttrs = filterExpr.references.toSeq
+                  val predicate = newPredicate(filterExpr, child.output ++ filterAttrs)
+                  predicate.initialize(partIndex)
+                  filterPredicates(i) = predicate
+                }
+              case _ =>
+            }
+          case _ =>
+        }
         val aggregationIterator =
           new TungstenAggregationIterator(
             partIndex,
@@ -133,7 +148,8 @@ case class HashAggregateExec(
             numOutputRows,
             peakMemory,
             spillSize,
-            avgHashProbe)
+            avgHashProbe,
+            filterPredicates)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -152,8 +168,9 @@ case class HashAggregateExec(
   override def usedInputs: AttributeSet = inputSet
 
   override def supportCodegen: Boolean = {
-    // ImperativeAggregate is not supported right now
-    !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
+    // ImperativeAggregate and filter predicate are not supported right now
+    !(aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate]) ||
+        aggregateExpressions.exists(_.filter.isDefined))
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
