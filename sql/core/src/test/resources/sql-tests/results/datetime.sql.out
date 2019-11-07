@@ -128,7 +128,7 @@ select date '2001-10-01' - date '2001-09-28'
 -- !query 14 schema
 struct<subtractdates(DATE '2001-10-01', DATE '2001-09-28'):interval>
 -- !query 14 output
-interval 3 days
+3 days
 
 
 -- !query 15
@@ -136,7 +136,7 @@ select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678'
 -- !query 15 schema
 struct<subtracttimestamps(CAST(DATE '2020-01-01' AS TIMESTAMP), TIMESTAMP('2019-10-06 10:11:12.345678')):interval>
 -- !query 15 output
-interval 2078 hours 48 minutes 47.654322 seconds
+2078 hours 48 minutes 47.654322 seconds
 
 
 -- !query 16
@@ -144,7 +144,7 @@ select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01'
 -- !query 16 schema
 struct<subtracttimestamps(TIMESTAMP('2019-10-06 10:11:12.345678'), CAST(DATE '2020-01-01' AS TIMESTAMP)):interval>
 -- !query 16 output
-interval -2078 hours -48 minutes -47.654322 seconds
+-2078 hours -48 minutes -47.654322 seconds
 
 
 -- !query 17
@@ -152,15 +152,15 @@ select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15')
 -- !query 17 schema
 struct<multiply_interval(subtracttimestamps(TIMESTAMP('2019-10-15 10:11:12.001002'), CAST(DATE '2019-10-15' AS TIMESTAMP)), CAST(3 AS DOUBLE)):interval>
 -- !query 17 output
-interval 30 hours 33 minutes 36.003006 seconds
+30 hours 33 minutes 36.003006 seconds
 
 
 -- !query 18
 select interval 4 month 2 weeks 3 microseconds * 1.5
 -- !query 18 schema
-struct<multiply_interval(interval 4 months 14 days 0.000003 seconds, CAST(1.5 AS DOUBLE)):interval>
+struct<multiply_interval(4 months 14 days 0.000003 seconds, CAST(1.5 AS DOUBLE)):interval>
 -- !query 18 output
-interval 6 months 21 days 0.000005 seconds
+6 months 21 days 0.000005 seconds
 
 
 -- !query 19
@@ -168,13 +168,13 @@ select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5
 -- !query 19 schema
 struct<divide_interval(subtracttimestamps(TIMESTAMP('2019-10-15 00:00:00'), TIMESTAMP('2019-10-14 00:00:00')), CAST(1.5 AS DOUBLE)):interval>
 -- !query 19 output
-interval 16 hours
+16 hours
 
 
 -- !query 20
 select interval '2 seconds' / 0
 -- !query 20 schema
-struct<divide_interval(interval 2 seconds, CAST(0 AS DOUBLE)):interval>
+struct<divide_interval(2 seconds, CAST(0 AS DOUBLE)):interval>
 -- !query 20 output
 NULL
 
@@ -182,7 +182,7 @@ NULL
 -- !query 21
 select interval '2 seconds' / null
 -- !query 21 schema
-struct<divide_interval(interval 2 seconds, CAST(NULL AS DOUBLE)):interval>
+struct<divide_interval(2 seconds, CAST(NULL AS DOUBLE)):interval>
 -- !query 21 output
 NULL
 
@@ -190,7 +190,7 @@ NULL
 -- !query 22
 select interval '2 seconds' * null
 -- !query 22 schema
-struct<multiply_interval(interval 2 seconds, CAST(NULL AS DOUBLE)):interval>
+struct<multiply_interval(2 seconds, CAST(NULL AS DOUBLE)):interval>
 -- !query 22 output
 NULL
 
@@ -198,6 +198,6 @@ NULL
 -- !query 23
 select null * interval '2 seconds'
 -- !query 23 schema
-struct<multiply_interval(interval 2 seconds, CAST(NULL AS DOUBLE)):interval>
+struct<multiply_interval(2 seconds, CAST(NULL AS DOUBLE)):interval>
 -- !query 23 output
 NULL
