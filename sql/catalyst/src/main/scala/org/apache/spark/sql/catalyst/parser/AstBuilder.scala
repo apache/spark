@@ -2651,8 +2651,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitRenameTableColumn(
       ctx: RenameTableColumnContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRenameColumnStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      ctx.from.identifier.asScala.map(_.getText),
+      visitMultipartIdentifier(ctx.table),
+      ctx.from.parts.asScala.map(_.getText),
       ctx.to.getText)
   }
 
@@ -2677,12 +2677,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed(s"ALTER TABLE table $verb COLUMN requires a TYPE or a COMMENT", ctx)
     }
 
-    val tableIdentifier = ctx.multipartIdentifier(0)
-    val qualifiedColumn = ctx.multipartIdentifier(1)
-
     AlterTableAlterColumnStatement(
-      visitMultipartIdentifier(tableIdentifier),
-      typedVisit[Seq[String]](qualifiedColumn),
+      visitMultipartIdentifier(ctx.table),
+      typedVisit[Seq[String]](ctx.column),
       Option(ctx.dataType).map(typedVisit[DataType]),
       Option(ctx.comment).map(string))
   }
@@ -2698,7 +2695,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitDropTableColumns(
       ctx: DropTableColumnsContext): LogicalPlan = withOrigin(ctx) {
-    val columnsToDrop = ctx.columns.qualifiedName.asScala.map(typedVisit[Seq[String]])
+    val columnsToDrop = ctx.columns.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
     AlterTableDropColumnsStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
       columnsToDrop)
