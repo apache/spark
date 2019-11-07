@@ -118,6 +118,9 @@ object MimaExcludes {
     // [SPARK-26632][Core] Separate Thread Configurations of Driver and Executor
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.SparkTransportConf.fromSparkConf"),
 
+    // [SPARK-16872][ML][PYSPARK] Impl Gaussian Naive Bayes Classifier
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.NaiveBayesModel.this"),
+
     // [SPARK-25765][ML] Add training cost to BisectingKMeans summary
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.BisectingKMeansModel.this"),
 

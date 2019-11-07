@@ -23,7 +23,6 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
@@ -153,7 +152,7 @@ class NaiveBayes @Since("1.5.0") (
 
     $(modelType) match {
       case Bernoulli | Multinomial =>
-        trainBernoulliMultinomialImpl(dataset, instr)
+        trainDiscreteImpl(dataset, instr)
       case Gaussian =>
         trainGaussianImpl(dataset, instr)
       case _ =>
@@ -162,41 +161,44 @@ class NaiveBayes @Since("1.5.0") (
     }
   }
 
-  private def trainBernoulliMultinomialImpl(
+  private def trainDiscreteImpl(
       dataset: Dataset[_],
       instr: Instrumentation): NaiveBayesModel = {
-    val validateInstance = $(modelType) match {
+    val spark = dataset.sparkSession
+    import spark.implicits._
+
+    val validateUDF = $(modelType) match {
       case Multinomial =>
-        (instance: Instance) => requireNonnegativeValues(instance.features)
+        udf { vector: Vector => requireNonnegativeValues(vector); vector }
       case Bernoulli =>
-        (instance: Instance) => requireZeroOneBernoulliValues(instance.features)
+        udf { vector: Vector => requireZeroOneBernoulliValues(vector); vector }
     }
 
-    val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
-    instr.logNumFeatures(numFeatures)
+    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
+      col($(weightCol)).cast(DoubleType)
+    } else {
+      lit(1.0)
+    }
 
     // Aggregates term frequencies per label.
-    // TODO: Calling aggregateByKey and collect creates two stages, we can implement something
-    // TODO: similar to reduceByKeyLocally to save one stage.
-    val aggregated = extractInstances(dataset, validateInstance).map { instance =>
-      (instance.label, (instance.weight, instance.features))
-    }.aggregateByKey[(Double, DenseVector, Long)]((0.0, Vectors.zeros(numFeatures).toDense, 0L))(
-      seqOp = {
-        case ((weightSum, featureSum, count), (weight, features)) =>
-          BLAS.axpy(weight, features, featureSum)
-          (weightSum + weight, featureSum, count + 1)
-      },
-      combOp = {
-        case ((weightSum1, featureSum1, count1), (weightSum2, featureSum2, count2)) =>
-          BLAS.axpy(1.0, featureSum2, featureSum1)
-          (weightSum1 + weightSum2, featureSum1, count1 + count2)
-      }).collect().sortBy(_._1)
+    // TODO: Summarizer directly returns sum vector.
+    val aggregated = dataset.groupBy(col($(labelCol)))
+      .agg(sum(w).as("weightSum"), Summarizer.metrics("mean", "count")
+        .summary(validateUDF(col($(featuresCol))), w).as("summary"))
+      .select($(labelCol), "weightSum", "summary.mean", "summary.count")
+      .as[(Double, Double, Vector, Long)]
+      .map { case (label, weightSum, mean, count) =>
+        BLAS.scal(weightSum, mean)
+        (label, weightSum, mean, count)
+      }.collect().sortBy(_._1)
 
-    val numSamples = aggregated.map(_._2._3).sum
+    val numFeatures = aggregated.head._3.size
+    instr.logNumFeatures(numFeatures)
+    val numSamples = aggregated.map(_._4).sum
     instr.logNumExamples(numSamples)
     val numLabels = aggregated.length
     instr.logNumClasses(numLabels)
-    val numDocuments = aggregated.map(_._2._1).sum
+    val numDocuments = aggregated.map(_._2).sum
 
     val labelArray = new Array[Double](numLabels)
     val piArray = new Array[Double](numLabels)
@@ -205,11 +207,11 @@ class NaiveBayes @Since("1.5.0") (
     val lambda = $(smoothing)
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
     var i = 0
-    aggregated.foreach { case (label, (n, sumTermFreqs, _)) =>
+    aggregated.foreach { case (label, n, sumTermFreqs, _) =>
       labelArray(i) = label
       piArray(i) = math.log(n + lambda) - piLogDenom
       val thetaLogDenom = $(modelType) match {
-        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
+        case Multinomial => math.log(sumTermFreqs.toArray.sum + numFeatures * lambda)
         case Bernoulli => math.log(n + 2.0 * lambda)
       }
       var j = 0
@@ -222,7 +224,8 @@ class NaiveBayes @Since("1.5.0") (
 
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
-    new NaiveBayesModel(uid, pi, theta.compressed, null).setOldLabels(labelArray)
+    new NaiveBayesModel(uid, pi.compressed, theta.compressed, null)
+      .setOldLabels(labelArray)
   }
 
   private def trainGaussianImpl(
@@ -279,7 +282,7 @@ class NaiveBayes @Since("1.5.0") (
     val sigmaArray = new Array[Double](numLabels * numFeatures)
 
     var i = 0
-    aggregated.foreach { case (label, n, mean, squareSum) =>
+    aggregated.foreach { case (_, n, mean, squareSum) =>
       piArray(i) = math.log(n / numInstances)
       var j = 0
       while (j < numFeatures) {
@@ -294,7 +297,7 @@ class NaiveBayes @Since("1.5.0") (
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
     val sigma = new DenseMatrix(numLabels, numFeatures, sigmaArray, true)
-    new NaiveBayesModel(uid, pi, theta.compressed, sigma.compressed)
+    new NaiveBayesModel(uid, pi.compressed, theta.compressed, sigma.compressed)
   }
 
   @Since("1.5.0")
@@ -385,9 +388,9 @@ class NaiveBayesModel private[ml] (
       val thetaMinusNegTheta = theta.map { value =>
         value - math.log1p(-math.exp(value))
       }
-      (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
-    case Multinomial => (None, None)
-    case Gaussian => (None, None)
+      (thetaMinusNegTheta, negTheta.multiply(ones))
+    case Multinomial => (null, null)
+    case Gaussian => (null, null)
     case _ =>
       // This should never happen.
       throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
@@ -400,14 +403,13 @@ class NaiveBayesModel private[ml] (
    */
   @transient private lazy val logVarSum = $(modelType) match {
     case Gaussian =>
-      val logVarSum = (0 until numClasses).map { i =>
-        (0 until numFeatures).map { j =>
+      Array.tabulate(numClasses) { i =>
+        Iterator.range(0, numFeatures).map { j =>
           math.log(sigma(i, j))
         }.sum
-      }.toArray
-      Some(Vectors.dense(logVarSum))
-    case Multinomial => None
-    case Bernoulli => None
+      }
+    case Multinomial => null
+    case Bernoulli => null
     case _ =>
       // This should never happen.
       throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
@@ -430,37 +432,41 @@ class NaiveBayesModel private[ml] (
       require(value == 0.0 || value == 1.0,
         s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features.")
     )
-    val prob = thetaMinusNegTheta.get.multiply(features)
+    val prob = thetaMinusNegTheta.multiply(features)
     BLAS.axpy(1.0, pi, prob)
-    BLAS.axpy(1.0, negThetaSum.get, prob)
+    BLAS.axpy(1.0, negThetaSum, prob)
     prob
   }
 
   private def gaussianCalculation(features: Vector) = {
-    val probArray = (0 until numClasses).map { i =>
-      // sum of (value_j - mean_j) ^2^ / variance_j
-      val s = (0 until numFeatures).map { j =>
+    val prob = Array.ofDim[Double](numClasses)
+    var i = 0
+    while (i < numClasses) {
+      var s = 0.0
+      var j = 0
+      while (j < numFeatures) {
         val d = features(j) - theta(i, j)
-        d * d / sigma(i, j)
-      }.sum
-      pi(i) - (s + logVarSum.get(i)) / 2
-    }.toArray
-    Vectors.dense(probArray)
+        s += d * d / sigma(i, j)
+        j += 1
+      }
+      prob(i) = pi(i) - (s + logVarSum(i)) / 2
+      i += 1
+    }
+    Vectors.dense(prob)
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @transient private lazy val predictRawFunc = {
     $(modelType) match {
       case Multinomial =>
-        multinomialCalculation(features)
+        features: Vector => multinomialCalculation(features)
       case Bernoulli =>
-        bernoulliCalculation(features)
+        features: Vector => bernoulliCalculation(features)
       case Gaussian =>
-        gaussianCalculation(features)
-      case _ =>
-        // This should never happen.
-        throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
+        features: Vector => gaussianCalculation(features)
     }
   }
+
+  override protected def predictRaw(features: Vector): Vector = predictRawFunc(features)
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
