@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.UUID
+import java.util.{ConcurrentModificationException, UUID}
 import java.util.concurrent.TimeUnit
-import javax.annotation.concurrent.GuardedBy
 
+import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
  * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
@@ -53,7 +53,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   @GuardedBy("activeQueriesLock")
   private val activeQueries = new mutable.HashMap[UUID, StreamingQuery]
-  private val activeQueriesLock = new Object
+  private val activeQueriesLock = sparkSession.sharedState.activeQueriesLock
   private val awaitTerminationLock = new Object
 
   @GuardedBy("awaitTerminationLock")
@@ -343,7 +343,9 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       trigger,
       triggerClock)
 
-    activeQueriesLock.synchronized {
+    // The following code block checks if a stream with the same name or id is running. Then it
+    // returns a function to stop an active stream outside of the lock to avoid a deadlock.
+    val stopActiveDuplicateQuery = activeQueriesLock.synchronized {
       // Make sure no other query with same name is active
       userSpecifiedName.foreach { name =>
         if (activeQueries.values.exists(_.name == name)) {
@@ -354,7 +356,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
       // Make sure no other query with same id is active across all sessions
       val activeOption =
-        Option(sparkSession.sharedState.activeStreamingQueries.putIfAbsent(query.id, this))
+        Option(sparkSession.sharedState.activeStreamingQueries.get(query.id))
 
       val streamAlreadyActive =
         activeOption.isDefined || activeQueries.values.exists(_.id == query.id)
@@ -362,19 +364,37 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         sparkSession.sessionState.conf.getConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM)
       if (streamAlreadyActive && turnOffOldStream) {
         val queryManager = activeOption.getOrElse(this)
-        logInfo(s"Stopping existing streaming query [id=${query.id}], as a new run is being " +
-          "started.")
-        queryManager.get(query.id).stop()
+        val oldQuery = queryManager.get(query.id)
+        logWarning(s"Stopping existing streaming query [id=${query.id}, runId=${oldQuery.runId}]," +
+          " as a new run is being started.")
+        () => oldQuery.stop()
       } else if (streamAlreadyActive) {
         throw new IllegalStateException(
           s"Cannot start query with id ${query.id} as another query with same id is " +
             s"already active. Perhaps you are attempting to restart a query from checkpoint " +
             s"that is already active. You may stop the old query by setting the SQL " +
-            s"configuration: spark.conf.set(\"${SQLConf.STOP_RUNNING_DUPLICATE_STREAM}\", true).")
+            s"""configuration: spark.conf.set("${SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key}", """ +
+            "true) and retry.")
+      } else {
+        // nothing to stop so, no-op
+        () => ()
       }
+    }
 
+    stopActiveDuplicateQuery()
+
+    activeQueriesLock.synchronized {
+      // We still can have a race condition when two concurrent instances try to start the same
+      // stream, while a third one was already active. In this case, we throw a
+      // ConcurrentModificationException.
+      val oldActiveQuery = sparkSession.sharedState.activeStreamingQueries.put(query.id, this)
+      if (oldActiveQuery != null) {
+        throw new ConcurrentModificationException(
+          "Another instance of this query was just started by a concurrent session.")
+      }
       activeQueries.put(query.id, query)
     }
+
     try {
       // When starting a query, it will call `StreamingQueryListener.onQueryStarted` synchronously.
       // As it's provided by the user and can run arbitrary codes, we must not hold any lock here.

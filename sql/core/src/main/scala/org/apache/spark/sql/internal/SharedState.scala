@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal
 import java.net.URL
 import java.util.{Locale, UUID}
 import java.util.concurrent.ConcurrentHashMap
+import javax.annotation.concurrent.GuardedBy
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -112,10 +113,14 @@ private[sql] class SharedState(
    */
   val cacheManager: CacheManager = new CacheManager
 
+  /** A global lock for all streaming query lifecycle tracking and management. */
+  private[sql] val activeQueriesLock = new Object
+
   /**
    * A map of active streaming queries to the session specific StreamingQueryManager that manages
    * the lifecycle of that stream.
    */
+  @GuardedBy("activeQueriesLock")
   private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamingQueryManager]()
 
   /**

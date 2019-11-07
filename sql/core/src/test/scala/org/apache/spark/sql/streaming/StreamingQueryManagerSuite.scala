@@ -299,22 +299,32 @@ class StreamingQueryManagerSuite extends StreamTest {
   }
 
   testQuietly("new instance of the same streaming query stops old query in the same session") {
-    withSQLConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key -> "true") {
-      withTempDir { dir =>
-        val (ms1, ds1) = makeDataset
-        val (ms2, ds2) = makeDataset
-        val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
-        val dataLocation = new File(dir, "data").getCanonicalPath
+    failAfter(90 seconds) {
+      withSQLConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key -> "true") {
+        withTempDir { dir =>
+          val (ms1, ds1) = makeDataset
+          val (ms2, ds2) = makeDataset
+          val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
+          val dataLocation = new File(dir, "data").getCanonicalPath
 
-        val query1 = ds1.writeStream.format("parquet")
-          .option("checkpointLocation", chkLocation).start(dataLocation)
-        ms1.addData(1, 2, 3)
-        val query2 = ds2.writeStream.format("parquet")
-              .option("checkpointLocation", chkLocation).start(dataLocation)
-        ms2.addData(1, 2, 3)
-        query2.processAllAvailable()
+          val query1 = ds1.writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
+          ms1.addData(1, 2, 3)
+          val query2 = ds2.writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
+          try {
+            ms2.addData(1, 2, 3)
+            query2.processAllAvailable()
+            assert(spark.sharedState.activeStreamingQueries.get(query2.id) ===
+              spark.sessionState.streamingQueryManager,
+              "The correct streaming query manager is not being tracked in global state")
 
-        assert(!query1.isActive, "First query should have stopped before starting the second query")
+            assert(!query1.isActive,
+              "First query should have stopped before starting the second query")
+          } finally {
+            query2.stop()
+          }
+        }
       }
     }
   }
@@ -348,28 +358,33 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   testQuietly(
     "new instance of the same streaming query stops old query in a different session") {
-    withSQLConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key -> "true") {
-      withTempDir { dir =>
-        val session2 = spark.cloneSession()
+    failAfter(90 seconds) {
+      withSQLConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key -> "true") {
+        withTempDir { dir =>
+          val session2 = spark.cloneSession()
 
-        val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
-        val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
-        val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
-        val dataLocation = new File(dir, "data").getCanonicalPath
+          val ms1 = MemoryStream(Encoders.INT, spark.sqlContext)
+          val ds2 = MemoryStream(Encoders.INT, session2.sqlContext).toDS()
+          val chkLocation = new File(dir, "_checkpoint").getCanonicalPath
+          val dataLocation = new File(dir, "data").getCanonicalPath
 
-        val query1 = ms1.toDS().writeStream.format("parquet")
-          .option("checkpointLocation", chkLocation).start(dataLocation)
-        ms1.addData(1, 2, 3)
-        val query2 = ds2.writeStream.format("parquet")
-          .option("checkpointLocation", chkLocation).start(dataLocation)
-        try {
+          val query1 = ms1.toDS().writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
           ms1.addData(1, 2, 3)
-          query2.processAllAvailable()
+          val query2 = ds2.writeStream.format("parquet")
+            .option("checkpointLocation", chkLocation).start(dataLocation)
+          try {
+            ms1.addData(1, 2, 3)
+            query2.processAllAvailable()
+            assert(spark.sharedState.activeStreamingQueries.get(query2.id) ===
+              session2.sessionState.streamingQueryManager,
+              "The correct streaming query manager is not being tracked in global state")
 
-          assert(!query1.isActive,
-            "First query should have stopped before starting the second query")
-        } finally {
-          query2.stop()
+            assert(!query1.isActive,
+              "First query should have stopped before starting the second query")
+          } finally {
+            query2.stop()
+          }
         }
       }
     }
