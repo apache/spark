@@ -1180,38 +1180,20 @@ class Analyzer(
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
-        val newMatchedActions = m.matchedActions.collect {
+        val newMatchedActions = m.matchedActions.map {
           case DeleteAction(deleteCondition) =>
             val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
             DeleteAction(resolvedDeleteCondition)
-          case UpdateAction(updateCondition, columns, values) =>
+          case UpdateAction(updateCondition, assignments) =>
             val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
-            val resolvedColumns = columns.flatMap {
-              case s: Star => s.expand(targetTable, resolver)
-              case c if !c.resolved => resolveExpressionTopDown(c, m) :: Nil
-              case o => o :: Nil
-            }
-            val resolvedValues = values.flatMap {
-              case s: Star => s.expand(sourceTable, resolver)
-              case c if !c.resolved => resolveExpressionTopDown(c, m) :: Nil
-              case o => o :: Nil
-            }
-            UpdateAction(resolvedUpdateCondition, resolvedColumns, resolvedValues)
+            UpdateAction(resolvedUpdateCondition, resolveAssignments(assignments, m))
+          case o => o
         }
-        val newNotMatchedActions = m.notMatchedActions.collect {
-          case InsertAction(insertCondition, columns, values) =>
+        val newNotMatchedActions = m.notMatchedActions.map {
+          case InsertAction(insertCondition, assignments) =>
             val resolvedInsertCondition = insertCondition.map(resolveExpressionTopDown(_, m))
-            val resolvedColumns = columns.flatMap {
-              case s: Star => s.expand(targetTable, resolver)
-              case c if !c.resolved => resolveExpressionTopDown(c, m) :: Nil
-              case o => o :: Nil
-            }
-            val resolvedValues = values.flatMap {
-              case s: Star => s.expand(sourceTable, resolver)
-              case c if !c.resolved => resolveExpressionTopDown(c, m) :: Nil
-              case o => o :: Nil
-            }
-            InsertAction(resolvedInsertCondition, resolvedColumns, resolvedValues)
+            InsertAction(resolvedInsertCondition, resolveAssignments(assignments, m))
+          case o => o
         }
         val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
         m.copy(mergeCondition = resolvedMergeCondition,
@@ -1221,6 +1203,29 @@ class Analyzer(
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
         q.mapExpressions(resolveExpressionTopDown(_, q))
+    }
+
+    def resolveAssignments(
+        assignments: Seq[Assignment],
+        mergeInto: MergeIntoTable): Seq[Assignment] = {
+      if (assignments.isEmpty) {
+        val expandedColumns = mergeInto.targetTable.output
+        val expandedValues = mergeInto.sourceTable.output
+        expandedColumns.zip(expandedValues).map(kv => Assignment(kv._1, kv._2))
+      } else {
+        assignments.map { assign =>
+          val resolvedKey = assign.key match {
+            case c if !c.resolved => resolveExpressionTopDown(c, mergeInto.targetTable)
+            case o => o
+          }
+          val resolvedValue = assign.value match {
+            // The update values may contain target and/or source references.
+            case c if !c.resolved => resolveExpressionTopDown(c, mergeInto)
+            case o => o
+          }
+          Assignment(resolvedKey, resolvedValue)
+        }
+      }
     }
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {

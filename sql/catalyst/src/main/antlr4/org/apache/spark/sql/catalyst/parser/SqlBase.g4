@@ -221,8 +221,8 @@ statement
         USING (source=multipartIdentifier |
           '(' sourceQuery=query')') sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
-        (matchedClause)*
-        (notMatchedClause)*                                           #mergeIntoTable
+        matchedClause*
+        notMatchedClause*                                              #mergeIntoTable
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -501,7 +501,8 @@ matchedAction
 
 notMatchedAction
     : INSERT ASTERISK
-    | INSERT '(' columns=qualifiedNameList ')' VALUES values=valueList
+    | INSERT '(' columns=multipartIdentifierList ')'
+        VALUES '(' expression (',' expression)* ')'
     ;
 
 assignmentList
@@ -509,7 +510,7 @@ assignmentList
     ;
 
 assignment
-    : key=qualifiedName EQ value=expression
+    : key=multipartIdentifier EQ value=expression
     ;
 
 whereClause
@@ -612,10 +613,6 @@ identifierSeq
     : ident+=errorCapturingIdentifier (',' ident+=errorCapturingIdentifier)*
     ;
 
-valueList
-    : '(' expression (',' expression)* ')'
-    ;
-
 orderedIdentifierList
     : '(' orderedIdentifier (',' orderedIdentifier)* ')'
     ;
@@ -660,6 +657,10 @@ rowFormat
       (MAP KEYS TERMINATED BY keysTerminatedBy=STRING)?
       (LINES TERMINATED BY linesSeparatedBy=STRING)?
       (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
+    ;
+
+multipartIdentifierList
+    : multipartIdentifier (',' multipartIdentifier)*
     ;
 
 multipartIdentifier

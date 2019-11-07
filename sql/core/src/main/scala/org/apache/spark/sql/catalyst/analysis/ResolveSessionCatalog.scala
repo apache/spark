@@ -169,18 +169,6 @@ class ResolveSessionCatalog(
         DeleteFromTable(aliased, condition)
       }
 
-    // A check for v1 target.
-    case m @ MergeIntoTable(target, source, _, _, _) =>
-      EliminateSubqueryAliases(target) match {
-        case UnresolvedRelation(nameParts @ SessionCatalog(catalog, tableName)) =>
-          loadTable(catalog, tableName.asIdentifier).collect {
-            case v1Table: V1Table =>
-              throw new AnalysisException("The target table of MERGE INTO should be v2 table.")
-          }
-        case _ =>
-      }
-      m
-
     case DescribeTableStatement(
          nameParts @ SessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       loadTable(catalog, tableName.asIdentifier).collect {
