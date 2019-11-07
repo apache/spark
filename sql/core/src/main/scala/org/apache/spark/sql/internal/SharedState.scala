@@ -33,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
+import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.streaming.StreamingQuery
@@ -121,7 +122,7 @@ private[sql] class SharedState(
    * the lifecycle of that stream.
    */
   @GuardedBy("activeQueriesLock")
-  private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamingQuery]()
+  private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamExecution]()
 
   /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
