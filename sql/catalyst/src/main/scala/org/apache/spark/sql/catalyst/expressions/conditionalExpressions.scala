@@ -185,6 +185,101 @@ case class CaseWhen(
     "CASE" + cases + elseCase + " END"
   }
 
+  def multiBranchesCodegen(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // This variable holds the state of the result:
+    // -1 means the condition is not met yet and the result is unknown.
+    val NOT_MATCHED = -1
+    // 0 means the condition is met and result is not null.
+    val HAS_NONNULL = 0
+    // 1 means the condition is met and result is null.
+    val HAS_NULL = 1
+    // It is initialized to `NOT_MATCHED`, and if it's set to `HAS_NULL` or `HAS_NONNULL`,
+    // We won't go on anymore on the computation.
+    val resultState = ctx.freshName("caseWhenResultState")
+    ev.value = JavaCode.global(
+      ctx.addMutableState(CodeGenerator.javaType(dataType), ev.value),
+      dataType)
+
+    // these blocks are meant to be inside a
+    // do {
+    //   ...
+    // } while (false);
+    // loop
+    val cases = branches.map { case (condExpr, valueExpr) =>
+      val cond = condExpr.genCode(ctx)
+      val res = valueExpr.genCode(ctx)
+      s"""
+        |${cond.code}
+        |if (!${cond.isNull} && ${cond.value}) {
+        |  ${res.code}
+        |  $resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
+        |  ${ev.value} = ${res.value};
+        |  continue;
+        |}
+      """.stripMargin
+    }
+
+    val elseCode = elseValue.map { elseExpr =>
+      val res = elseExpr.genCode(ctx)
+      s"""
+        |${res.code}
+        |$resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
+        |${ev.value} = ${res.value};
+      """.stripMargin
+    }
+
+    val allConditions = cases ++ elseCode
+
+    // This generates code like:
+    //   caseWhenResultState = caseWhen_1(i);
+    //   if(caseWhenResultState != -1) {
+    //     continue;
+    //   }
+    //   caseWhenResultState = caseWhen_2(i);
+    //   if(caseWhenResultState != -1) {
+    //     continue;
+    //   }
+    //   ...
+    // and the declared methods are:
+    //   private byte caseWhen_1234() {
+    //     byte caseWhenResultState = -1;
+    //     do {
+    //       // here the evaluation of the conditions
+    //     } while (false);
+    //     return caseWhenResultState;
+    //   }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = allConditions,
+      funcName = "caseWhen",
+      returnType = CodeGenerator.JAVA_BYTE,
+      makeSplitFunction = func =>
+        s"""
+          |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
+          |do {
+          |  $func
+          |} while (false);
+          |return $resultState;
+        """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+          |$resultState = $funcCall;
+          |if ($resultState != $NOT_MATCHED) {
+          |  continue;
+          |}
+        """.stripMargin
+      }.mkString)
+
+    ev.copy(code =
+      code"""
+        |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
+        |do {
+        |  $codes
+        |} while (false);
+        |// TRUE if any condition is met and the result is null, or no any condition is met.
+        |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
+      """.stripMargin)
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (branches.length == 1) {
       // If we have only single branch we can use If expression and its codeGen
@@ -193,98 +288,7 @@ case class CaseWhen(
         branches(0)._2,
         elseValue.getOrElse(Literal.create(null, branches(0)._2.dataType))).doGenCode(ctx, ev)
     } else {
-      // This variable holds the state of the result:
-      // -1 means the condition is not met yet and the result is unknown.
-      val NOT_MATCHED = -1
-      // 0 means the condition is met and result is not null.
-      val HAS_NONNULL = 0
-      // 1 means the condition is met and result is null.
-      val HAS_NULL = 1
-      // It is initialized to `NOT_MATCHED`, and if it's set to `HAS_NULL` or `HAS_NONNULL`,
-      // We won't go on anymore on the computation.
-      val resultState = ctx.freshName("caseWhenResultState")
-      ev.value = JavaCode.global(
-        ctx.addMutableState(CodeGenerator.javaType(dataType), ev.value),
-        dataType)
-
-      // these blocks are meant to be inside a
-      // do {
-      //   ...
-      // } while (false);
-      // loop
-      val cases = branches.map { case (condExpr, valueExpr) =>
-        val cond = condExpr.genCode(ctx)
-        val res = valueExpr.genCode(ctx)
-        s"""
-          |${cond.code}
-          |if (!${cond.isNull} && ${cond.value}) {
-          |  ${res.code}
-          |  $resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
-          |  ${ev.value} = ${res.value};
-          |  continue;
-          |}
-        """.stripMargin
-      }
-
-      val elseCode = elseValue.map { elseExpr =>
-        val res = elseExpr.genCode(ctx)
-        s"""
-          |${res.code}
-          |$resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
-          |${ev.value} = ${res.value};
-        """.stripMargin
-      }
-
-      val allConditions = cases ++ elseCode
-
-      // This generates code like:
-      //   caseWhenResultState = caseWhen_1(i);
-      //   if(caseWhenResultState != -1) {
-      //     continue;
-      //   }
-      //   caseWhenResultState = caseWhen_2(i);
-      //   if(caseWhenResultState != -1) {
-      //     continue;
-      //   }
-      //   ...
-      // and the declared methods are:
-      //   private byte caseWhen_1234() {
-      //     byte caseWhenResultState = -1;
-      //     do {
-      //       // here the evaluation of the conditions
-      //     } while (false);
-      //     return caseWhenResultState;
-      //   }
-      val codes = ctx.splitExpressionsWithCurrentInputs(
-        expressions = allConditions,
-        funcName = "caseWhen",
-        returnType = CodeGenerator.JAVA_BYTE,
-        makeSplitFunction = func =>
-          s"""
-            |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
-            |do {
-            |  $func
-            |} while (false);
-            |return $resultState;
-          """.stripMargin,
-        foldFunctions = _.map { funcCall =>
-          s"""
-            |$resultState = $funcCall;
-            |if ($resultState != $NOT_MATCHED) {
-            |  continue;
-            |}
-          """.stripMargin
-        }.mkString)
-
-      ev.copy(code =
-        code"""
-          |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
-          |do {
-          |  $codes
-          |} while (false);
-          |// TRUE if any condition is met and the result is null, or no any condition is met.
-          |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
-        """.stripMargin)
+      multiBranchesCodegen(ctx, ev)
     }
   }
 }
