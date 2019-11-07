@@ -222,7 +222,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
       fail("Expected to throw an exception on divide by zero")
     } catch {
       case e: ArithmeticException =>
-        assert(e.getMessage.contains("overflow"))
+        assert(e.getMessage.contains("divide by zero"))
     }
   }
 }

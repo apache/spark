@@ -879,8 +879,12 @@ object TypeCoercion {
       case e if !e.childrenResolved => e
 
       // If DecimalType operands are involved, DecimalPrecision will handle it
+      // If CalendarIntervalType operands are involved, DateTimeOperations will handle it
       case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
-          !right.dataType.isInstanceOf[DecimalType] && left.dataType != right.dataType =>
+          !right.dataType.isInstanceOf[DecimalType] &&
+          !left.dataType.isInstanceOf[CalendarIntervalType] &&
+          !right.dataType.isInstanceOf[CalendarIntervalType] &&
+          left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.
