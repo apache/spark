@@ -1246,7 +1246,7 @@ class HiveDDLSuite
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
         val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $locationClause $providerClause")
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $providerClause $locationClause")
 
         val sourceTable = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
           TableIdentifier(sourceViewName))
@@ -1280,7 +1280,7 @@ class HiveDDLSuite
 
       val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
       val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
-      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause $providerClause")
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $providerClause $locationClause")
 
       val sourceTable =
         spark.sessionState.catalog.getTableMetadata(
@@ -1321,7 +1321,7 @@ class HiveDDLSuite
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
         val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause $providerClause")
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $providerClause $locationClause")
 
         // The source table should be an external data source table
         val sourceTable = spark.sessionState.catalog.getTableMetadata(
@@ -1359,7 +1359,7 @@ class HiveDDLSuite
 
       val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
       val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
-      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause $providerClause")
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $providerClause $locationClause")
 
       val sourceTable = catalog.getTableMetadata(
         TableIdentifier(sourceTabName, Some("default")))
@@ -1411,7 +1411,7 @@ class HiveDDLSuite
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
         val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause $providerClause")
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $providerClause $locationClause")
 
         val sourceTable = catalog.getTableMetadata(
           TableIdentifier(sourceTabName, Some("default")))
@@ -1450,7 +1450,7 @@ class HiveDDLSuite
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
         val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $locationClause $providerClause")
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $providerClause $locationClause")
 
         val sourceView = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(sourceViewName, Some("default")))
