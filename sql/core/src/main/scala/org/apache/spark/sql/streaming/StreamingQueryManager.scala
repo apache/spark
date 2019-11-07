@@ -355,20 +355,17 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       }
 
       // Make sure no other query with same id is active across all sessions
-      val activeOption =
-        Option(sparkSession.sharedState.activeStreamingQueries.get(query.id))
+      val activeOption = Option(sparkSession.sharedState.activeStreamingQueries.get(query.id))
+        .orElse(activeQueries.get(query.id))
 
-      val streamAlreadyActive =
-        activeOption.isDefined || activeQueries.values.exists(_.id == query.id)
       val turnOffOldStream =
         sparkSession.sessionState.conf.getConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM)
-      if (streamAlreadyActive && turnOffOldStream) {
-        val queryManager = activeOption.getOrElse(this)
-        val oldQuery = queryManager.get(query.id)
+      if (activeOption.isDefined && turnOffOldStream) {
+        val oldQuery = activeOption.get
         logWarning(s"Stopping existing streaming query [id=${query.id}, runId=${oldQuery.runId}]," +
           " as a new run is being started.")
         () => oldQuery.stop()
-      } else if (streamAlreadyActive) {
+      } else if (activeOption.isDefined) {
         throw new IllegalStateException(
           s"Cannot start query with id ${query.id} as another query with same id is " +
             s"already active. Perhaps you are attempting to restart a query from checkpoint " +
@@ -387,7 +384,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       // We still can have a race condition when two concurrent instances try to start the same
       // stream, while a third one was already active. In this case, we throw a
       // ConcurrentModificationException.
-      val oldActiveQuery = sparkSession.sharedState.activeStreamingQueries.put(query.id, this)
+      val oldActiveQuery = sparkSession.sharedState.activeStreamingQueries.put(query.id, query)
       if (oldActiveQuery != null) {
         throw new ConcurrentModificationException(
           "Another instance of this query was just started by a concurrent session.")
