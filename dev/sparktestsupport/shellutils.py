@@ -22,6 +22,7 @@ import sys
 
 subprocess_check_output = subprocess.check_output
 
+
 def exit_from_command_with_retcode(cmd, retcode):
     if retcode < 0:
         print("[error] running", ' '.join(cmd), "; process was terminated by signal", -retcode)
