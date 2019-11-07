@@ -224,6 +224,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("2 years -8 seconds", 0.5, "4 years -16 seconds")
     check("-1 month 2 microseconds", -0.25, "4 months -8 microseconds")
     check("1 month 3 microsecond", 1.5, "20 days 2 microseconds")
-    check("2 months", 0, null)
+    check("1 second", 0, null)
   }
 }
