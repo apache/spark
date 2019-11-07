@@ -19,18 +19,19 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
+import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
+class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   val TimeZonePST = TimeZone.getTimeZone("PST")
   private def defaultZoneId = ZoneId.systemDefault()
@@ -373,13 +374,39 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
   test("timestamp add months") {
     val ts1 = date(1997, 2, 28, 10, 30, 0)
     val ts2 = date(2000, 2, 28, 10, 30, 0, 123000)
-    assert(timestampAddInterval(ts1, 36, 123000, defaultZoneId) === ts2)
+    assert(timestampAddInterval(ts1, 36, 0, 123000, defaultZoneId) === ts2)
 
     val ts3 = date(1997, 2, 27, 16, 0, 0, 0, TimeZonePST)
     val ts4 = date(2000, 2, 27, 16, 0, 0, 123000, TimeZonePST)
     val ts5 = date(2000, 2, 28, 0, 0, 0, 123000, TimeZoneGMT)
-    assert(timestampAddInterval(ts3, 36, 123000, TimeZonePST.toZoneId) === ts4)
-    assert(timestampAddInterval(ts3, 36, 123000, TimeZoneGMT.toZoneId) === ts5)
+    assert(timestampAddInterval(ts3, 36, 0, 123000, TimeZonePST.toZoneId) === ts4)
+    assert(timestampAddInterval(ts3, 36, 0, 123000, TimeZoneGMT.toZoneId) === ts5)
+  }
+
+  test("timestamp add days") {
+    // 2019-3-9 is the end of Pacific Standard Time
+    val ts1 = date(2019, 3, 9, 12, 0, 0, 123000, TimeZonePST)
+    // 2019-3-10 is the start of Pacific Daylight Time
+    val ts2 = date(2019, 3, 10, 12, 0, 0, 123000, TimeZonePST)
+    val ts3 = date(2019, 5, 9, 12, 0, 0, 123000, TimeZonePST)
+    val ts4 = date(2019, 5, 10, 12, 0, 0, 123000, TimeZonePST)
+    // 2019-11-2 is the end of Pacific Daylight Time
+    val ts5 = date(2019, 11, 2, 12, 0, 0, 123000, TimeZonePST)
+    // 2019-11-3 is the start of Pacific Standard Time
+    val ts6 = date(2019, 11, 3, 12, 0, 0, 123000, TimeZonePST)
+
+    // transit from Pacific Standard Time to Pacific Daylight Time
+    assert(timestampAddInterval(
+      ts1, 0, 0, 23 * CalendarInterval.MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts2)
+    assert(timestampAddInterval(ts1, 0, 1, 0, TimeZonePST.toZoneId) === ts2)
+    // just a normal day
+    assert(timestampAddInterval(
+      ts3, 0, 0, 24 * CalendarInterval.MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts4)
+    assert(timestampAddInterval(ts3, 0, 1, 0, TimeZonePST.toZoneId) === ts4)
+    // transit from Pacific Daylight Time to Pacific Standard Time
+    assert(timestampAddInterval(
+      ts5, 0, 0, 25 * CalendarInterval.MICROS_PER_HOUR, TimeZonePST.toZoneId) === ts6)
+    assert(timestampAddInterval(ts5, 0, 1, 0, TimeZonePST.toZoneId) === ts6)
   }
 
   test("monthsBetween") {
@@ -555,12 +582,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
-      "Kwajalein" -> Set(8632, 8633),
+      "Kwajalein" -> Set(8632, 8633, 8634),
       "Pacific/Apia" -> Set(15338),
       "Pacific/Enderbury" -> Set(9130, 9131),
       "Pacific/Fakaofo" -> Set(15338),
       "Pacific/Kiritimati" -> Set(9130, 9131),
-      "Pacific/Kwajalein" -> Set(8632, 8633),
+      "Pacific/Kwajalein" -> Set(8632, 8633, 8634),
       "MIT" -> Set(15338))
     for (tz <- ALL_TIMEZONES) {
       val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
@@ -579,24 +606,27 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
   }
 
   test("special timestamp values") {
-    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+    testSpecialDatetimeValues { zoneId =>
       val tolerance = TimeUnit.SECONDS.toMicros(30)
 
       assert(toTimestamp("Epoch", zoneId).get === 0)
-      val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
-      toTimestamp("NOW", zoneId).get should be (now +- tolerance)
+      val now = instantToMicros(Instant.now())
+      toTimestamp("NOW", zoneId).get should be(now +- tolerance)
       assert(toTimestamp("now UTC", zoneId) === None)
-      val today = instantToMicros(LocalDateTime.now(zoneId)
+      val localToday = LocalDateTime.now(zoneId)
         .`with`(LocalTime.MIDNIGHT)
-        .atZone(zoneId).toInstant)
-      toTimestamp(" Yesterday", zoneId).get should be (today - MICROS_PER_DAY +- tolerance)
-      toTimestamp("Today ", zoneId).get should be (today +- tolerance)
-      toTimestamp(" tomorrow CET ", zoneId).get should be (today + MICROS_PER_DAY +- tolerance)
+        .atZone(zoneId)
+      val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
+      toTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
+      val today = instantToMicros(localToday.toInstant)
+      toTimestamp("Today ", zoneId).get should be(today +- tolerance)
+      val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
+      toTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
     }
   }
 
   test("special date values") {
-    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+    testSpecialDatetimeValues { zoneId =>
       assert(toDate("epoch", zoneId).get === 0)
       val today = localDateToDays(LocalDate.now(zoneId))
       assert(toDate("YESTERDAY", zoneId).get === today - 1)

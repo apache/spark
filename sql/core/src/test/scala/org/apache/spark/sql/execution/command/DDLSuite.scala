@@ -1725,7 +1725,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       column.map(_.metadata).getOrElse(Metadata.empty)
     }
     // Ensure that change column will preserve other metadata fields.
-    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 TYPE INT COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
     assert(getMetadata("col1").getString("comment") == "this is col1")
   }
@@ -2089,7 +2089,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           val message = intercept[AnalysisException] {
             sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
           }.getMessage
-          assert(message.contains("SHOW COLUMNS with conflicting databases"))
+          assert(message.contains(
+            s"SHOW COLUMNS with conflicting databases: " +
+              s"'${db.toUpperCase(Locale.ROOT)}' != '$db'"))
         }
       }
     }

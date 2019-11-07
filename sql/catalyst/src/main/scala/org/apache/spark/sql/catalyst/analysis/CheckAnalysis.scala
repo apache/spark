@@ -104,6 +104,20 @@ trait CheckAnalysis extends PredicateHelper {
       case u: UnresolvedV2Relation =>
         u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
+      case AlterTable(_, _, u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
+        u.failAnalysis(
+          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
+
+      case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
+        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
+
+      case DescribeTable(u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
+        u.failAnalysis(
+          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
+
+      case DescribeTable(u: UnresolvedV2Relation, _) =>
+        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
+
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
         // If the arguments of the higher-order functions are resolved but the type check fails,
@@ -601,10 +615,10 @@ trait CheckAnalysis extends PredicateHelper {
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter | _: SupportsSubquery => // Ok
+          case _: Filter | _: SupportsSubquery | _: Join => // Ok
           case _ =>
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
-                s" Filter and a few commands: $plan")
+                s" Filter/Join and a few commands: $plan")
         }
     }
 

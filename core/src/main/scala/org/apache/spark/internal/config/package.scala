@@ -804,7 +804,7 @@ package object config {
       .doc("Expire time in minutes for caching preferred locations of checkpointed RDD." +
         "Caching preferred locations can relieve query loading to DFS and save the query " +
         "time. The drawback is that the cached locations can be possibly outdated and " +
-        "lose data locality. If this config is not specified or is 0, it will not cache.")
+        "lose data locality. If this config is not specified, it will not cache.")
       .timeConf(TimeUnit.MINUTES)
       .checkValue(_ > 0, "The expire time for caching preferred locations cannot be non-positive.")
       .createOptional
@@ -1158,6 +1158,17 @@ package object config {
       .checkValue(v => 1024 * 1024 <= v && v <= MAX_BUFFER_SIZE_BYTES,
         s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
       .createWithDefault(1024 * 1024)
+
+  private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
+
+  private[spark] val PLUGINS =
+    ConfigBuilder("spark.plugins")
+      .withPrepended(DEFAULT_PLUGINS_LIST, separator = ",")
+      .doc("Comma-separated list of class names implementing " +
+        "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   private[spark] val EXECUTOR_PLUGINS =
     ConfigBuilder("spark.executor.plugins")

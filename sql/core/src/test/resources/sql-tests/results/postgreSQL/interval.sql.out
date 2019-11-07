@@ -21,17 +21,17 @@ interval 16 hours 39 minutes
 -- !query 2
 SELECT interval '999' hour
 -- !query 2 schema
-struct<interval 5 weeks 6 days 15 hours:interval>
+struct<interval 999 hours:interval>
 -- !query 2 output
-interval 5 weeks 6 days 15 hours
+interval 999 hours
 
 
 -- !query 3
 SELECT interval '999' day
 -- !query 3 schema
-struct<interval 142 weeks 5 days:interval>
+struct<interval 999 days:interval>
 -- !query 3 output
-interval 142 weeks 5 days
+interval 999 days
 
 
 -- !query 4

@@ -25,9 +25,9 @@ import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecor
 import org.apache.kafka.common.header.Header
 import org.apache.kafka.common.header.internals.RecordHeader
 
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
-import org.apache.spark.sql.types.{BinaryType, StringType}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, UnsafeProjection}
+import org.apache.spark.sql.types.BinaryType
 
 /**
  * Writes out data in a single Spark task, without any concerns about how
@@ -92,8 +92,10 @@ private[kafka010] abstract class KafkaRowWriter(
       throw new NullPointerException(s"null topic present in the data. Use the " +
         s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
     }
+    val partition: Integer =
+      if (projectedRow.isNullAt(4)) null else projectedRow.getInt(4)
     val record = if (projectedRow.isNullAt(3)) {
-      new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, null, key, value)
+      new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, partition, key, value)
     } else {
       val headerArray = projectedRow.getArray(3)
       val headers = (0 until headerArray.numElements()).map { i =>
@@ -101,7 +103,8 @@ private[kafka010] abstract class KafkaRowWriter(
         new RecordHeader(struct.getUTF8String(0).toString, struct.getBinary(1))
           .asInstanceOf[Header]
       }
-      new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, null, key, value, headers.asJava)
+      new ProducerRecord[Array[Byte], Array[Byte]](
+        topic.toString, partition, key, value, headers.asJava)
     }
     producer.send(record, callback)
   }
@@ -113,55 +116,13 @@ private[kafka010] abstract class KafkaRowWriter(
   }
 
   private def createProjection = {
-    val topicExpression = topic.map(Literal(_)).orElse {
-      inputSchema.find(_.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME)
-    }.getOrElse {
-      throw new IllegalStateException(s"topic option required when no " +
-        s"'${KafkaWriter.TOPIC_ATTRIBUTE_NAME}' attribute is present")
-    }
-    topicExpression.dataType match {
-      case StringType => // good
-      case t =>
-        throw new IllegalStateException(s"${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type $t. ${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
-          s"must be a ${StringType.catalogString}")
-    }
-    val keyExpression = inputSchema.find(_.name == KafkaWriter.KEY_ATTRIBUTE_NAME)
-      .getOrElse(Literal(null, BinaryType))
-    keyExpression.dataType match {
-      case StringType | BinaryType => // good
-      case t =>
-        throw new IllegalStateException(s"${KafkaWriter.KEY_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type ${t.catalogString}")
-    }
-    val valueExpression = inputSchema
-      .find(_.name == KafkaWriter.VALUE_ATTRIBUTE_NAME).getOrElse(
-      throw new IllegalStateException("Required attribute " +
-        s"'${KafkaWriter.VALUE_ATTRIBUTE_NAME}' not found")
-    )
-    valueExpression.dataType match {
-      case StringType | BinaryType => // good
-      case t =>
-        throw new IllegalStateException(s"${KafkaWriter.VALUE_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type ${t.catalogString}")
-    }
-    val headersExpression = inputSchema
-      .find(_.name == KafkaWriter.HEADERS_ATTRIBUTE_NAME).getOrElse(
-      Literal(CatalystTypeConverters.convertToCatalyst(null),
-        KafkaRecordToRowConverter.headersType)
-    )
-    headersExpression.dataType match {
-      case KafkaRecordToRowConverter.headersType => // good
-      case t =>
-        throw new IllegalStateException(s"${KafkaWriter.HEADERS_ATTRIBUTE_NAME} " +
-          s"attribute unsupported type ${t.catalogString}")
-    }
     UnsafeProjection.create(
       Seq(
-        topicExpression,
-        Cast(keyExpression, BinaryType),
-        Cast(valueExpression, BinaryType),
-        headersExpression
+        KafkaWriter.topicExpression(inputSchema, topic),
+        Cast(KafkaWriter.keyExpression(inputSchema), BinaryType),
+        Cast(KafkaWriter.valueExpression(inputSchema), BinaryType),
+        KafkaWriter.headersExpression(inputSchema),
+        KafkaWriter.partitionExpression(inputSchema)
       ),
       inputSchema
     )

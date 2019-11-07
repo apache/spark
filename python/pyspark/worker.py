@@ -503,6 +503,9 @@ def main(infile, outfile):
         if isBarrier:
             taskContext = BarrierTaskContext._getOrCreate()
             BarrierTaskContext._initialize(boundPort, secret)
+            # Set the task context instance here, so we can get it by TaskContext.get for
+            # both TaskContext and BarrierTaskContext
+            TaskContext._setTaskContext(taskContext)
         else:
             taskContext = TaskContext._getOrCreate()
         # read inputs for TaskContext info
@@ -596,6 +599,11 @@ def main(infile, outfile):
             profiler.profile(process)
         else:
             process()
+
+        # Reset task context to None. This is a guard code to avoid residual context when worker
+        # reuse.
+        TaskContext._setTaskContext(None)
+        BarrierTaskContext._setTaskContext(None)
     except Exception:
         try:
             exc_info = traceback.format_exc()
