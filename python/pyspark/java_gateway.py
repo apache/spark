@@ -30,7 +30,7 @@ from subprocess import Popen, PIPE
 if sys.version >= '3':
     xrange = range
 
-from py4j.java_gateway import java_import, JavaObject, JavaGateway, GatewayParameters
+from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
 from py4j.clientserver import ClientServer, JavaParameters, PythonParameters
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int, write_with_length, UTF8Deserializer

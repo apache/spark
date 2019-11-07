@@ -303,5 +303,5 @@ However, currently it cannot inherit the local properties from the parent thread
 each thread with its own local properties. To work around this, you should manually copy and set the
 local properties from the parent thread to the child thread when you create another thread in PVM.
 
-Note that `PYSPARK_PIN_THREAD` is currently experiemtnal and not recommended for use in production. 
+Note that `PYSPARK_PIN_THREAD` is currently experimental and not recommended for use in production.
 
