@@ -206,7 +206,6 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   test("negate") {
     assert(negate(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
-
   }
 
   test("subtract one interval by another") {
