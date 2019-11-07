@@ -43,20 +43,22 @@ private[sql] object LogicalExpressions {
   def reference(name: String): NamedReference =
     FieldReference(parser.parseMultipartIdentifier(name))
 
+  def reference(nameParts: Seq[String]): NamedReference = FieldReference(nameParts)
+
   def apply(name: String, arguments: Expression*): Transform = ApplyTransform(name, arguments)
 
-  def bucket(numBuckets: Int, columns: String*): BucketTransform =
-    BucketTransform(literal(numBuckets, IntegerType), columns.map(reference))
+  def bucket(numBuckets: Int, references: Array[NamedReference]): BucketTransform =
+    BucketTransform(literal(numBuckets, IntegerType), references)
 
-  def identity(column: String): IdentityTransform = IdentityTransform(reference(column))
+  def identity(reference: NamedReference): IdentityTransform = IdentityTransform(reference)
 
-  def years(column: String): YearsTransform = YearsTransform(reference(column))
+  def years(reference: NamedReference): YearsTransform = YearsTransform(reference)
 
-  def months(column: String): MonthsTransform = MonthsTransform(reference(column))
+  def months(reference: NamedReference): MonthsTransform = MonthsTransform(reference)
 
-  def days(column: String): DaysTransform = DaysTransform(reference(column))
+  def days(reference: NamedReference): DaysTransform = DaysTransform(reference)
 
-  def hours(column: String): HoursTransform = HoursTransform(reference(column))
+  def hours(reference: NamedReference): HoursTransform = HoursTransform(reference)
 }
 
 /**
