@@ -38,7 +38,7 @@ private[kafka010] class InternalKafkaProducerPool(
     this(new ProducerObjectFactory, new ProducerPoolConfig(conf))
   }
 
-  protected def createKey(producer: CachedKafkaProducer): CacheKey = {
+  override protected def createKey(producer: CachedKafkaProducer): CacheKey = {
     InternalKafkaProducerPool.toCacheKey(producer.kafkaParams)
   }
 }
@@ -52,7 +52,7 @@ private class ProducerPoolConfig(conf: SparkConf) extends PoolConfig[CachedKafka
 }
 
 private class ProducerObjectFactory extends ObjectFactory[CacheKey, CachedKafkaProducer] {
-  protected def createValue(
+  override protected def createValue(
       key: CacheKey,
       kafkaParams: ju.Map[String, Object]): CachedKafkaProducer = {
     new CachedKafkaProducer(kafkaParams)

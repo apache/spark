@@ -41,7 +41,7 @@ private[kafka010] class InternalKafkaConsumerPool(
     this(new ConsumerObjectFactory, new ConsumerPoolConfig(conf))
   }
 
-  protected def createKey(consumer: InternalKafkaConsumer): CacheKey = {
+  override protected def createKey(consumer: InternalKafkaConsumer): CacheKey = {
     new CacheKey(consumer.topicPartition, consumer.kafkaParams)
   }
 }
@@ -55,7 +55,7 @@ private class ConsumerPoolConfig(conf: SparkConf) extends PoolConfig[InternalKaf
 }
 
 private class ConsumerObjectFactory extends ObjectFactory[CacheKey, InternalKafkaConsumer] {
-  protected def createValue(
+  override protected def createValue(
       key: CacheKey,
       kafkaParams: ju.Map[String, Object]): InternalKafkaConsumer = {
     new InternalKafkaConsumer(key.topicPartition, kafkaParams)
