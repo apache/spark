@@ -79,15 +79,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Number of executors for the default ResourceProfile requested by the
   // cluster manager, [[ExecutorAllocationManager]]
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
-  private var requestedTotalExecutors = 0
   private var requestedTotalExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
 
 
   // Number of executors for the default ResourceProfile requested from the cluster manager that
   // have not registered yet
-  @GuardedBy("CoarseGrainedSchedulerBackend.this")
-  private var numPendingExecutors = 0
-  private var numPendingExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
+  // TODO - this seems to be purely for logging - remove it as it complicates things and
+  // would require pending to remove to be per resource profile as well
+  // @GuardedBy("CoarseGrainedSchedulerBackend.this")
+  // private var numPendingExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
 
 
   private val listenerBus = scheduler.sc.listenerBus
@@ -96,7 +96,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // the executor ID to whether it was explicitly killed by the driver (and thus shouldn't
   // be considered an app-related failure).
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
-  // TODO - need to track per resourceprofile
   private val executorsPendingToRemove = new HashMap[String, Boolean]
 
   // A map to store hostname and ResourceProfile with its possible task number running on it
@@ -236,15 +235,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             if (currentExecutorIdCounter < executorId.toInt) {
               currentExecutorIdCounter = executorId.toInt
             }
-            // TODO - need to store these or have generic way
+            /*
+            // TODO - need to store these or have generic way rpid -> rp
             val idToResourceProfile =
               requestedTotalExecutorsPerResourceProfile.map { case (rp, _) => (rp.id, rp) }
-            if (numPendingExecutorsPerResourceProfile(idToResourceProfile(resourceProfileId)) > 0) {
-              numPendingExecutorsPerResourceProfile(idToResourceProfile(resourceProfileId)) -= 1
-              logDebug("Decremented number of pending executors for " +
-                s"$resourceProfileId ($numPendingExecutors left)")
+            val rp = idToResourceProfile(resourceProfileId)
+            if (numPendingExecutorsPerResourceProfile(rp) > 0) {
+              numPendingExecutorsPerResourceProfile(rp) -= 1
+              logDebug(s"Decremented number of pending executors for $resourceProfileId " +
+                s"(${numPendingExecutorsPerResourceProfile(rp)} left)")
 
             }
+            */
           }
           executorRef.send(RegisteredExecutor)
           // Note: some tests expect the reply to come after we put the executor in the map
@@ -492,9 +494,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * */
   protected def reset(): Unit = {
     val executors: Set[String] = synchronized {
-      requestedTotalExecutors = 0
       requestedTotalExecutorsPerResourceProfile.clear()
-      numPendingExecutorsPerResourceProfile.clear()
+      // numPendingExecutorsPerResourceProfile.clear()
       executorsPendingToRemove.clear()
       executorDataMap.keys.toSet
     }
@@ -600,11 +601,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     logInfo(s"Requesting $numAdditionalExecutors additional executor(s) from the cluster manager")
 
     val response = synchronized {
-      requestedTotalExecutors += numAdditionalExecutors
       val defaultProf = ResourceProfile.getOrCreateDefaultProfile(conf)
-      numPendingExecutorsPerResourceProfile(defaultProf) += numAdditionalExecutors
+      requestedTotalExecutorsPerResourceProfile(defaultProf) += numAdditionalExecutors
+      /* numPendingExecutorsPerResourceProfile(defaultProf) += numAdditionalExecutors
       logDebug("Number of pending executors is now " +
-        s"${numPendingExecutorsPerResourceProfile(defaultProf)}")
+        s"${numPendingExecutorsPerResourceProfile(defaultProf)}") */
       // TODO - do we want to replace this debug statement?
       /*
       if (requestedTotalExecutors !=
@@ -620,8 +621,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       // Account for executors pending to be added or removed
 
-      doRequestTotalExecutors(
-        Map(ResourceProfile.getOrCreateDefaultProfile(conf) -> requestedTotalExecutors))
+      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
 
     defaultAskTimeout.awaitResult(response)
@@ -650,22 +650,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     val response = synchronized {
-      val numExecutorsDefaultProfile =
-        resourceProfileToNumExecutors(ResourceProfile.getOrCreateDefaultProfile(conf))
-      this.requestedTotalExecutors = numExecutorsDefaultProfile
       this.requestedTotalExecutorsPerResourceProfile =
         new HashMap[ResourceProfile, Int] ++= resourceProfileToNumExecutors
 
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
       this.rpHostToLocalTaskCount = hostToLocalTaskCount
 
-      numPendingExecutors = math.max(this.requestedTotalExecutors -
-        numExistingExecutors + executorsPendingToRemove.size, 0)
-      this.requestedTotalExecutorsPerResourceProfile.map { case (rp, total) =>
-        // TODO this is not right - need numExisting and pending per rp
+     /* this.requestedTotalExecutorsPerResourceProfile.map { case (rp, total) =>
+        // TODO this is not right - need  pending per rp
         this.numPendingExecutorsPerResourceProfile(rp) =
           math.max(total - numExistingExecutorsForRpId(rp.id) + executorsPendingToRemove.size, 0)
-      }
+      } */
 
       doRequestTotalExecutors(resourceProfileToNumExecutors)
     }
@@ -735,13 +730,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (adjustTargetNumExecutors) {
           val updatesNeeded = new HashMap[ResourceProfile, Int]
           executorsToKillWithRpId.foreach { case (exec, rpId) =>
-            // TODO - need a resource profile with the executorsToKill
             val rp =
               idToResourceProfile.getOrElse(rpId, ResourceProfile.getOrCreateDefaultProfile(conf))
             val requestedTotalForRp = requestedTotalExecutorsPerResourceProfile(rp)
             requestedTotalExecutorsPerResourceProfile(rp) = math.max(requestedTotalForRp - 1, 0)
 
-            // requestedTotalExecutors = math.max(requestedTotalExecutors - executorsToKill.size, 0)
             updatesNeeded(rp) = requestedTotalExecutorsPerResourceProfile(rp)
           }
           // TODO - do we need to replace this?  More logic with resourceprofiles
@@ -758,13 +751,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           } */
           doRequestTotalExecutors(updatesNeeded.toMap)
         } else {
+          /*
           executorsToKillWithRpId.foreach { case (exec, rpId) =>
             val rp =
               idToResourceProfile.getOrElse(rpId, ResourceProfile.getOrCreateDefaultProfile(conf))
-            val pending = numPendingExecutorsPerResourceProfile(rp)
             numPendingExecutorsPerResourceProfile(rp) += 1
-            // numPendingExecutors += executorsToKill.size
           }
+          */
           Future.successful(true)
         }
 
