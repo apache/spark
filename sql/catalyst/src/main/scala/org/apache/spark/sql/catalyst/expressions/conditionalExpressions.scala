@@ -209,23 +209,23 @@ case class CaseWhen(
       val cond = condExpr.genCode(ctx)
       val res = valueExpr.genCode(ctx)
       s"""
-        |${cond.code}
-        |if (!${cond.isNull} && ${cond.value}) {
-        |  ${res.code}
-        |  $resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
-        |  ${ev.value} = ${res.value};
-        |  continue;
-        |}
-      """.stripMargin
+         |${cond.code}
+         |if (!${cond.isNull} && ${cond.value}) {
+         |  ${res.code}
+         |  $resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
+         |  ${ev.value} = ${res.value};
+         |  continue;
+         |}
+       """.stripMargin
     }
 
     val elseCode = elseValue.map { elseExpr =>
       val res = elseExpr.genCode(ctx)
       s"""
-        |${res.code}
-        |$resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
-        |${ev.value} = ${res.value};
-      """.stripMargin
+         |${res.code}
+         |$resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
+         |${ev.value} = ${res.value};
+       """.stripMargin
     }
 
     val allConditions = cases ++ elseCode
@@ -254,30 +254,30 @@ case class CaseWhen(
       returnType = CodeGenerator.JAVA_BYTE,
       makeSplitFunction = func =>
         s"""
-          |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
-          |do {
-          |  $func
-          |} while (false);
-          |return $resultState;
-        """.stripMargin,
+           |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
+           |do {
+           |  $func
+           |} while (false);
+           |return $resultState;
+         """.stripMargin,
       foldFunctions = _.map { funcCall =>
         s"""
-          |$resultState = $funcCall;
-          |if ($resultState != $NOT_MATCHED) {
-          |  continue;
-          |}
-        """.stripMargin
+           |$resultState = $funcCall;
+           |if ($resultState != $NOT_MATCHED) {
+           |  continue;
+           |}
+         """.stripMargin
       }.mkString)
 
     ev.copy(code =
       code"""
-        |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
-        |do {
-        |  $codes
-        |} while (false);
-        |// TRUE if any condition is met and the result is null, or no any condition is met.
-        |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
-      """.stripMargin)
+         |${CodeGenerator.JAVA_BYTE} $resultState = $NOT_MATCHED;
+         |do {
+         |  $codes
+         |} while (false);
+         |// TRUE if any condition is met and the result is null, or no any condition is met.
+         |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
+       """.stripMargin)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
