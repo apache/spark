@@ -28,7 +28,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.hive.common.{FileUtils, StatsSetupConst}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{IMetaStoreClient, TableType => HiveTableType}
@@ -616,6 +616,18 @@ private[hive] class HiveClientImpl(
     shim.createPartitions(client, db, table, parts, ignoreIfExists)
   }
 
+  @throws[Exception]
+  private def isEmptyPath(dirPath: Path): Boolean = {
+    val inpFs = dirPath.getFileSystem(conf)
+    if (inpFs.exists(dirPath)) {
+      val fStats = inpFs.listStatus(dirPath, FileUtils.HIDDEN_FILES_PATH_FILTER)
+      if (fStats.nonEmpty) {
+        return false
+      }
+    }
+    true
+  }
+
   override def dropPartitions(
       db: String,
       table: String,
@@ -633,6 +645,15 @@ private[hive] class HiveClientImpl(
         // whose specs are supersets of this partial spec. E.g. If a table has partitions
         // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
         val parts = client.getPartitions(hiveTable, s.asJava).asScala
+        parts.foreach { partition =>
+          val partPath = partition.getDataLocation
+          if (isEmptyPath(partPath)) {
+            val fs = partPath.getFileSystem(conf)
+            fs.mkdirs(partPath)
+            fs.deleteOnExit(partPath)
+          }
+          partition
+        }
         if (parts.isEmpty && !ignoreIfNotExists) {
           throw new AnalysisException(
             s"No partition is dropped. One partition spec '$s' does not exist in table '$table' " +
