@@ -95,7 +95,7 @@ class ErrorParserSuite extends AnalysisTest {
       """
         |ALTER TABLE t
         |CHANGE COLUMN
-        |test-col BIGINT
+        |test-col TYPE BIGINT
       """.stripMargin, 4, 4, 5, msg + " test-col")
     intercept("CREATE TABLE test (attri-bute INT)", 1, 24, 25, msg + " attri-bute")
     intercept(
