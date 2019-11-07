@@ -400,7 +400,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       query.streamingQuery.start()
     } catch {
       case e: Throwable =>
-        unregisterTerminatedStream(query.id)
+        unregisterTerminatedStream(query)
         throw e
     }
     query
@@ -408,7 +408,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   /** Notify (by the StreamingQuery) that the query has been terminated */
   private[sql] def notifyQueryTermination(terminatedQuery: StreamingQuery): Unit = {
-    unregisterTerminatedStream(terminatedQuery.id)
+    unregisterTerminatedStream(terminatedQuery)
     awaitTerminationLock.synchronized {
       if (lastTerminatedQuery == null || terminatedQuery.exception.nonEmpty) {
         lastTerminatedQuery = terminatedQuery
@@ -418,11 +418,11 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     stateStoreCoordinator.deactivateInstances(terminatedQuery.runId)
   }
 
-  private def unregisterTerminatedStream(terminatedQueryId: UUID): Unit = {
+  private def unregisterTerminatedStream(terminatedQuery: StreamingQuery): Unit = {
     activeQueriesLock.synchronized {
       // remove from shared state only if the streaming query manager also matches
-      sparkSession.sharedState.activeStreamingQueries.remove(terminatedQueryId, this)
-      activeQueries -= terminatedQueryId
+      sparkSession.sharedState.activeStreamingQueries.remove(terminatedQuery.id, terminatedQuery)
+      activeQueries -= terminatedQuery.id
     }
   }
 }
