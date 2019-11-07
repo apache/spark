@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -1774,6 +1773,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  object IntervalStyle extends Enumeration {
+    val SQL_STANDARD, MULTI_UNITS = Value
+  }
+
+  val INTERVAL_STYLE = buildConf("spark.sql.IntervalOutputStyle")
+    .doc("Display format for interval values. The value SQL_STANDARD will produce output" +
+      " matching SQL standard interval literals. The value MULTI_UNITS (which is the default)" +
+      " will produce output in form of value unit pairs, i.e. '3 year 2 months 10 days'")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(IntervalStyle.values.map(_.toString))
+    .createWithDefault(IntervalStyle.MULTI_UNITS.toString)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -2501,6 +2513,8 @@ class SQLConf extends Serializable with Logging {
 
   def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
+
+  def intervalOutputStyle: IntervalStyle.Value = IntervalStyle.withName(getConf(INTERVAL_STYLE))
 
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
