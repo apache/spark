@@ -28,6 +28,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -665,9 +666,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(Cast(Literal(""), CalendarIntervalType), null)
     checkEvaluation(Cast(Literal("interval -3 month 1 day 7 hours"), CalendarIntervalType),
-      new CalendarInterval(-3, 1, 7 * CalendarInterval.MICROS_PER_HOUR))
+      new CalendarInterval(-3, 1, 7 * MICROS_PER_HOUR))
     checkEvaluation(Cast(Literal.create(
-      new CalendarInterval(15, 9, -3 * CalendarInterval.MICROS_PER_HOUR), CalendarIntervalType),
+      new CalendarInterval(15, 9, -3 * MICROS_PER_HOUR), CalendarIntervalType),
       StringType),
       "1 years 3 months 9 days -3 hours")
     checkEvaluation(Cast(Literal("INTERVAL 1 Second 1 microsecond"), CalendarIntervalType),
