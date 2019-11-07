@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -387,5 +388,42 @@ object IntervalUtils {
 
   def divide(interval: CalendarInterval, num: Double): CalendarInterval = {
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
+  }
+
+  def toSqlStandardString(interval: CalendarInterval): String = {
+    val yearMonthPart = if (interval.months != 0) {
+      interval.months / 12 + "-" + math.abs(interval.months) % 12
+    } else {
+      ""
+    }
+
+    val dayPart = if (interval.days!= 0) interval.days.toString else ""
+
+    val timePart = if (interval.microseconds != 0) {
+      val sb = new StringBuilder()
+      var rest = interval.microseconds
+      sb.append(rest / MICROS_PER_HOUR)
+      sb.append(':')
+      rest = math.abs(rest % MICROS_PER_HOUR)
+      val minutes = rest / MICROS_PER_MINUTE;
+      if (minutes < 10) {
+        sb.append(0)
+      }
+      sb.append(minutes)
+      sb.append(':')
+      rest %= MICROS_PER_MINUTE
+      val db = BigDecimal.valueOf(rest, 6)
+      if (db.compareTo(new BigDecimal(10)) < 0) {
+        sb.append(0)
+      }
+      val s = db.stripTrailingZeros().toPlainString
+      sb.append(s)
+      sb.toString()
+    } else {
+      ""
+    }
+
+    val intervalList = Seq(yearMonthPart, dayPart, timePart).filter(_.nonEmpty)
+    if (intervalList.nonEmpty) intervalList.mkString(" ") else "0"
   }
 }

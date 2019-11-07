@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.util
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{MICROS_PER_MILLIS, MICROS_PER_SECOND}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.CalendarInterval.{MICROS_PER_HOUR, MICROS_PER_MINUTE}
 
 class IntervalUtilsSuite extends SparkFunSuite {
 
@@ -224,5 +225,28 @@ class IntervalUtilsSuite extends SparkFunSuite {
       case e: ArithmeticException =>
         assert(e.getMessage.contains("overflow"))
     }
+  }
+
+  test("to ansi sql standard string") {
+    val i1 = new CalendarInterval(0, 0, 0)
+    assert(IntervalUtils.toSqlStandardString(i1) === "0")
+    val i2 = new CalendarInterval(34, 0, 0)
+    assert(IntervalUtils.toSqlStandardString(i2) === "2-10")
+    val i3 = new CalendarInterval(-34, 0, 0)
+    assert(IntervalUtils.toSqlStandardString(i3) === "-2-10")
+    val i4 = new CalendarInterval(0, 31, 0)
+    assert(IntervalUtils.toSqlStandardString(i4) === "31")
+    val i5 = new CalendarInterval(0, -31, 0)
+    assert(IntervalUtils.toSqlStandardString(i5) === "-31")
+    val i6 = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123)
+    assert(IntervalUtils.toSqlStandardString(i6) === "3:13:00.000123")
+    val i7 = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123)
+    assert(IntervalUtils.toSqlStandardString(i7) === "-3:13:00.000123")
+    val i8 = new CalendarInterval(-34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123)
+    assert(IntervalUtils.toSqlStandardString(i8) === "-2-10 31 3:13:00.000123")
+    val i9 = new CalendarInterval(0, 0, -3000 * MICROS_PER_HOUR)
+    assert(IntervalUtils.toSqlStandardString(i9) === "-3000:00:00")
+
+
   }
 }
