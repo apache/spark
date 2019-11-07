@@ -1087,7 +1087,7 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
-  val STOP_RUNNING_DUPLICATE_STREAM = buildConf("spark.sql.streaming.stopExistingDuplicateStream")
+  val STOP_RUNNING_DUPLICATE_STREAM = buildConf("spark.sql.streaming.stopExistingDuplicatedStream")
     .doc("Running two streams using the same checkpoint location concurrently is not supported. " +
       "In the case where multiple streams are started on different SparkSessions, access to the " +
       "older stream's SparkSession may not be possible, and the stream may have turned into a " +
