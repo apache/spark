@@ -278,12 +278,12 @@ SELECT CAST('interval 3 month 1 hour' AS interval)
 -- !query 33 schema
 struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
 -- !query 33 output
-interval 3 months 1 hours
+3 months 1 hours
 
 
 -- !query 34
 SELECT CAST(interval 3 month 1 hour AS string)
 -- !query 34 schema
-struct<CAST(interval 3 months 1 hours AS STRING):string>
+struct<CAST(3 months 1 hours AS STRING):string>
 -- !query 34 output
-interval 3 months 1 hours
+3 months 1 hours
