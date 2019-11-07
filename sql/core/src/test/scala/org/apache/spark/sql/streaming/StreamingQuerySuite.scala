@@ -123,9 +123,11 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       assert(q3.runId !== q4.runId)
 
       // Only one query with same id can be active
-      val q5 = startQuery(restart = false)
-      val e = intercept[IllegalStateException] {
-        startQuery(restart = true)
+      withSQLConf(SQLConf.STOP_RUNNING_DUPLICATE_STREAM.key -> "false") {
+        val q5 = startQuery(restart = false)
+        val e = intercept[IllegalStateException] {
+          startQuery(restart = true)
+        }
       }
     }
   }
