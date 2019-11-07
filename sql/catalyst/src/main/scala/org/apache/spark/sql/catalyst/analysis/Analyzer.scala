@@ -1178,6 +1178,46 @@ class Analyzer(
         // table by ResolveOutputRelation. that rule will alias the attributes to the table's names.
         o
 
+      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
+        if !m.resolved && targetTable.resolved && sourceTable.resolved =>
+        val newMatchedActions = m.matchedActions.collect {
+          case DeleteAction(deleteCondition) =>
+            val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
+            DeleteAction(resolvedDeleteCondition)
+          case UpdateAction(updateCondition, columns, values) =>
+            val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
+            val resolvedColumns = columns.flatMap {
+              case s: Star => s.expand(targetTable, resolver)
+              case c if !c.resolved => resolveExpressionTopDown(c, m) :: Nil
+              case o => o :: Nil
+            }
+            val resolvedValues = values.flatMap {
+              case s: Star => s.expand(sourceTable, resolver)
+              case c if !c.resolved => resolveExpressionTopDown(c, m) :: Nil
+              case o => o :: Nil
+            }
+            UpdateAction(resolvedUpdateCondition, resolvedColumns, resolvedValues)
+        }
+        val newNotMatchedActions = m.notMatchedActions.collect {
+          case InsertAction(insertCondition, columns, values) =>
+            val resolvedInsertCondition = insertCondition.map(resolveExpressionTopDown(_, m))
+            val resolvedColumns = columns.flatMap {
+              case s: Star => s.expand(targetTable, resolver)
+              case c if !c.resolved => resolveExpressionTopDown(c, m) :: Nil
+              case o => o :: Nil
+            }
+            val resolvedValues = values.flatMap {
+              case s: Star => s.expand(sourceTable, resolver)
+              case c if !c.resolved => resolveExpressionTopDown(c, m) :: Nil
+              case o => o :: Nil
+            }
+            InsertAction(resolvedInsertCondition, resolvedColumns, resolvedValues)
+        }
+        val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
+        m.copy(mergeCondition = resolvedMergeCondition,
+          matchedActions = newMatchedActions,
+          notMatchedActions = newNotMatchedActions)
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
         q.mapExpressions(resolveExpressionTopDown(_, q))

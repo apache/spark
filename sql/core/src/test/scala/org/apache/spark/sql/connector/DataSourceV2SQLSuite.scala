@@ -1313,7 +1313,7 @@ class DataSourceV2SQLSuite
              |WHEN NOT MATCHED AND (target.col2='insert')
              |THEN INSERT *
            """.stripMargin,
-          "Table not found")
+          "Table or view not found")
 
         // USING non-existing table
         assertAnalysisError(
@@ -1326,7 +1326,7 @@ class DataSourceV2SQLSuite
              |WHEN NOT MATCHED AND (target.col2='insert')
              |THEN INSERT *
            """.stripMargin,
-          "Table not found")
+          "Table or view not found")
 
         // UPDATE non-existing column
         assertAnalysisError(
