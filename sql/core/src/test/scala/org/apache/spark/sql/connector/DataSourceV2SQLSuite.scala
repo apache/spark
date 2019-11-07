@@ -768,13 +768,17 @@ class DataSourceV2SQLSuite
 
   test("CreateNameSpace: basic tests") {
     // Session catalog is used.
-    sql("CREATE NAMESPACE ns")
-    testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
+    withNamespace("ns") {
+      sql("CREATE NAMESPACE ns")
+      testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
+    }
 
     // V2 non-session catalog is used.
-    sql("CREATE NAMESPACE testcat.ns1.ns2")
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
+    withNamespace("testcat.ns1.ns2") {
+      sql("CREATE NAMESPACE testcat.ns1.ns2")
+      testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
+      testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
+    }
 
     withNamespace("testcat.test") {
       withTempDir { tmpDir =>
@@ -790,16 +794,18 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateNameSpace: test handling of 'IF NOT EXIST'") {
-    sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
+    withNamespace("testcat.ns1") {
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
 
-    // The 'ns1' namespace already exists, so this should fail.
-    val exception = intercept[NamespaceAlreadyExistsException] {
-      sql("CREATE NAMESPACE testcat.ns1")
+      // The 'ns1' namespace already exists, so this should fail.
+      val exception = intercept[NamespaceAlreadyExistsException] {
+        sql("CREATE NAMESPACE testcat.ns1")
+      }
+      assert(exception.getMessage.contains("Namespace 'ns1' already exists"))
+
+      // The following will be no-op since the namespace already exists.
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
     }
-    assert(exception.getMessage.contains("Namespace 'ns1' already exists"))
-
-    // The following will be no-op since the namespace already exists.
-    sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
   }
 
   test("DropNamespace: basic tests") {
