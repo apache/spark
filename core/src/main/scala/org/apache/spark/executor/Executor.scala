@@ -65,10 +65,10 @@ private[spark] class Executor(
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
-  private var executorShutdown = false
+  @volatile private var executorShutdown = false
   ShutdownHookManager.addShutdownHook(
     () => if (!executorShutdown) {
-      pluginShutdown
+      pluginShutdown()
     }
   )
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -300,21 +300,23 @@ private[spark] class Executor(
     threadPool.shutdown()
 
     // Notify plugins that executor is shutting down so they can terminate cleanly
-    pluginShutdown
+    pluginShutdown()
     if (!isLocal) {
       env.stop()
     }
   }
 
-  private def pluginShutdown: Unit = {
-    Utils.withContextClassLoader(replClassLoader) {
-      executorPlugins.foreach { plugin =>
-        try {
-          executorShutdown = true
-          plugin.shutdown()
-        } catch {
-          case e: Exception =>
-            logWarning("Plugin " + plugin.getClass().getCanonicalName() + " shutdown failed", e)
+  private def pluginShutdown(): Unit = {
+    if (!executorShutdown) {
+      executorShutdown = true
+      Utils.withContextClassLoader(replClassLoader) {
+        executorPlugins.foreach { plugin =>
+          try {
+            plugin.shutdown()
+          } catch {
+            case e: Exception =>
+              logWarning("Plugin " + plugin.getClass().getCanonicalName() + " shutdown failed", e)
+          }
         }
       }
       plugins.foreach(_.shutdown())
