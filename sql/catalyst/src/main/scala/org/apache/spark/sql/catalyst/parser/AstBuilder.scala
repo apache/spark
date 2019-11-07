@@ -1520,7 +1520,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         expressions
     }
     val filter = Option(ctx.where).map(expression(_))
-    val function = UnresolvedFunction(visitFunctionName(ctx.qualifiedName), arguments, isDistinct, filter)
+    val function =
+      UnresolvedFunction(visitFunctionName(ctx.qualifiedName), arguments, isDistinct, filter)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {

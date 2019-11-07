@@ -1085,8 +1085,8 @@ class Analyzer(
         case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
           ExtractValue(child, fieldExpr, resolver)
         case f @ UnresolvedFunction(_, children, _, filter) if filter.isDefined =>
-          val newChildren = children.map(resolve(_, q))
-          val newFilter = filter.map{ expr => expr.mapChildren(resolve(_, q))}
+          val newChildren = children.map(resolveExpressionTopDown(_, q))
+          val newFilter = filter.map{ expr => expr.mapChildren(resolveExpressionTopDown(_, q))}
           val newFun = f.copy(children = newChildren, filter = newFilter)
           newFun
         case _ => e.mapChildren(resolveExpressionTopDown(_, q))
@@ -1593,7 +1593,8 @@ class Analyzer(
                     wf
                   }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct, filter)
+                case agg: AggregateFunction =>
+                  AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
                 case other =>
                   if (isDistinct) {

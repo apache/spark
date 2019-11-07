@@ -22,8 +22,8 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate}
 
 /**
  * The base class of [[SortBasedAggregationIterator]] and [[TungstenAggregationIterator]].
@@ -179,15 +179,15 @@ abstract class AggregationIterator(
               (buffer: InternalRow, row: InternalRow) =>
                 if (predicates(i).eval(row)) { ae.update(buffer, row) }
             case Partial | Complete if filterExpressions(i).isEmpty =>
-              (buffer: InternalRow, row: InternalRow)  => ae.update(buffer, row)
+              (buffer: InternalRow, row: InternalRow) => ae.update(buffer, row)
             case PartialMerge | Final =>
               (buffer: InternalRow, row: InternalRow) => ae.merge(buffer, row)
           }
       }.toArray
       // This projection is used to merge buffer values for all expression-based aggregates.
       val aggregationBufferSchema = functions.flatMap(_.aggBufferAttributes)
-      val updateProjection =
-        newMutableProjection(mergeExpressions.flatMap(_.seq), aggregationBufferSchema ++ inputAttributes)
+      val updateProjection = newMutableProjection(
+        mergeExpressions.flatMap(_.seq), aggregationBufferSchema ++ inputAttributes)
 
       (currentBuffer: InternalRow, row: InternalRow) => {
         // Process all expression-based aggregate functions.
@@ -209,8 +209,8 @@ abstract class AggregationIterator(
             }
           }
           if (!dynamicMergeExpressions.isEmpty) {
-            val dynamicUpdateProjection =
-              newMutableProjection(dynamicMergeExpressions, aggregationBufferSchema ++ inputAttributes)
+            val dynamicUpdateProjection = newMutableProjection(
+              dynamicMergeExpressions, aggregationBufferSchema ++ inputAttributes)
             dynamicUpdateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
           }
         }
