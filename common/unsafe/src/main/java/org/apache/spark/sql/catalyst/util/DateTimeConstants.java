@@ -23,9 +23,10 @@ public class DateTimeConstants {
   public static final int YEARS_PER_CENTURY = 100;
   public static final int YEARS_PER_MILLENNIUM = 1000;
 
-  public static final int MONTHS_PER_YEAR = 12;
   public static final Byte MONTHS_PER_QUARTER = 3;
+  public static final int MONTHS_PER_YEAR = 12;
 
+  public static final Byte DAYS_PER_WEEK = 7;
   public static final long DAYS_PER_MONTH = 30L;
 
   public static final long HOURS_PER_DAY = 24L;

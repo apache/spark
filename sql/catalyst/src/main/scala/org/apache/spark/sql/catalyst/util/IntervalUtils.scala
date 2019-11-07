@@ -468,7 +468,7 @@ object IntervalUtils {
             case ' ' =>
               state = BEGIN_UNIT_NAME
             case '.' =>
-              fractionScale = (DateTimeUtils.NANOS_PER_SECOND / 10).toInt
+              fractionScale = (NANOS_PER_SECOND / 10).toInt
               state = FRACTIONAL_PART
             case _ => return null
           }
@@ -479,7 +479,7 @@ object IntervalUtils {
               fraction += (b - '0') * fractionScale
               fractionScale /= 10
             case ' ' =>
-              fraction /= DateTimeUtils.NANOS_PER_MICROS.toInt
+              fraction /= NANOS_PER_MICROS.toInt
               state = BEGIN_UNIT_NAME
             case _ => return null
           }
@@ -514,7 +514,7 @@ object IntervalUtils {
                   microseconds = Math.addExact(microseconds, hoursUs)
                   i += hourStr.numBytes()
                 case 's' if s.matchAt(secondStr, i) =>
-                  val secondsUs = Math.multiplyExact(currentValue, DateTimeUtils.MICROS_PER_SECOND)
+                  val secondsUs = Math.multiplyExact(currentValue, MICROS_PER_SECOND)
                   microseconds = Math.addExact(Math.addExact(microseconds, secondsUs), fraction)
                   i += secondStr.numBytes()
                 case 'm' =>
@@ -528,7 +528,7 @@ object IntervalUtils {
                   } else if (s.matchAt(millisStr, i)) {
                     val millisUs = Math.multiplyExact(
                       currentValue,
-                      DateTimeUtils.MICROS_PER_MILLIS)
+                      MICROS_PER_MILLIS)
                     microseconds = Math.addExact(microseconds, millisUs)
                     i += millisStr.numBytes()
                   } else if (s.matchAt(microsStr, i)) {
