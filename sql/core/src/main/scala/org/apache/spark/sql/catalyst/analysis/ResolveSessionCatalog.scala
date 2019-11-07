@@ -169,40 +169,17 @@ class ResolveSessionCatalog(
         DeleteFromTable(aliased, condition)
       }
 
+    // A check for v1 target.
     case m @ MergeIntoTable(target, source, _, _, _) =>
-      val (catalogResolvedTarget, targetCatalogResoved) = EliminateSubqueryAliases(target) match {
+      EliminateSubqueryAliases(target) match {
         case UnresolvedRelation(nameParts @ SessionCatalog(catalog, tableName)) =>
           loadTable(catalog, tableName.asIdentifier).collect {
             case v1Table: V1Table =>
-              throw new AnalysisException("MERGE INTO is only supported with v2 tables.")
-          }.getOrElse {
-            (UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier), true)
+              throw new AnalysisException("The target table of MERGE INTO should be v2 table.")
           }
-        case o => (o, false)
+        case _ =>
       }
-      val (catalogResolvedSource, sourceCatalogResolved) = EliminateSubqueryAliases(source) match {
-        case UnresolvedRelation(nameParts @ SessionCatalog(catalog, tableName)) =>
-          loadTable(catalog, tableName.asIdentifier).collect {
-            case v1Table: V1Table =>
-              throw new AnalysisException("MERGE INTO is only supported with v2 tables.")
-          }.getOrElse {
-            (UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier), true)
-          }
-        case o => (o, false)
-      }
-      if (!targetCatalogResoved && !sourceCatalogResolved) {
-        m
-      } else {
-        val newTarget = target match {
-          case s: SubqueryAlias => s.copy(child = catalogResolvedTarget)
-          case _ => catalogResolvedTarget
-        }
-        val newSource = source match {
-          case s: SubqueryAlias => s.copy(child = catalogResolvedSource)
-          case _ => catalogResolvedSource
-        }
-        m.copy(targetTable = newTarget, sourceTable = newSource)
-      }
+      m
 
     case DescribeTableStatement(
          nameParts @ SessionCatalog(catalog, tableName), partitionSpec, isExtended) =>

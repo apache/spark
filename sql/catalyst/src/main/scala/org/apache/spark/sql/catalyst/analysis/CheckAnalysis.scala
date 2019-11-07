@@ -432,33 +432,6 @@ trait CheckAnalysis extends PredicateHelper {
               // no validation needed for set and remove property
             }
 
-          case merge: MergeIntoTable if merge.childrenResolved =>
-            (merge.matchedActions ++ merge.notMatchedActions).flatMap {
-              case DeleteAction(deleteCondition) =>
-                deleteCondition match {
-                  case Some(expr) => Seq(expr)
-                  case None => Seq()
-                }
-              case UpdateAction(updateCondition, columns, values) =>
-                updateCondition match {
-                  case Some(expr) => Seq(expr) ++ columns ++ values
-                  case None => columns ++ values
-                }
-              case InsertAction(insertCondition, columns, values) =>
-                insertCondition match {
-                  case Some(expr) => Seq(expr) ++ columns ++ values
-                  case None => columns ++ values
-                }
-            }.map {
-              _.transformUp {
-                case a: Attribute if !a.resolved =>
-                  val from = merge.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
-                  failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
-                case o if !o.resolved =>
-                  failAnalysis(s"cannot resolve '${o.sql}'")
-              }
-            }
-
           case _ => // Fallbacks to the following checks
         }
 

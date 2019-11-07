@@ -26,7 +26,7 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedStar, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, IntegerLiteral, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -1201,8 +1201,8 @@ class PlanResolutionSuite extends AnalysisTest {
     val parsed = parseAndResolve(sql)
     parsed match {
       case u: MergeIntoTable =>
-        assert(u.targetTable.isInstanceOf[UnresolvedV2Relation])
-        assert(u.sourceTable.isInstanceOf[UnresolvedV2Relation])
+        assert(u.targetTable.isInstanceOf[UnresolvedRelation])
+        assert(u.sourceTable.isInstanceOf[UnresolvedRelation])
       case _ => fail("Expect MergeIntoTable, but got:\n" + parsed.treeString)
     }
 
@@ -1220,7 +1220,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed = parseAndResolve(sql)
     }
 
-    assert(exc.getMessage.contains("MERGE INTO is only supported with v2 tables."))
+    assert(exc.getMessage.contains("The target table of MERGE INTO should be v2 table."))
   }
 
   // TODO: add tests for more commands.

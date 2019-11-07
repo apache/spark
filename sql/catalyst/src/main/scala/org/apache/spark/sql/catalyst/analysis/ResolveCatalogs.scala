@@ -106,31 +106,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val columns = u.columns.map(UnresolvedAttribute(_))
       UpdateTable(aliased, columns, u.values, u.condition)
 
-    case m @ MergeIntoTable(target, source, _, _, _) =>
-      val (catalogResolvedTarget, targetCatalogResoved) = EliminateSubqueryAliases(target) match {
-        case UnresolvedRelation(nameParts @ NonSessionCatalog(catalog, tableName)) =>
-          (UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier), true)
-        case o => (o, false)
-      }
-      val (catalogResolvedSource, sourceCatalogResolved) = EliminateSubqueryAliases(source) match {
-        case UnresolvedRelation(nameParts @ NonSessionCatalog(catalog, tableName)) =>
-          (UnresolvedV2Relation(nameParts, catalog.asTableCatalog, tableName.asIdentifier), true)
-        case o => (o, false)
-      }
-      if (!targetCatalogResoved && !sourceCatalogResolved) {
-        m
-      } else {
-        val newTarget = target match {
-          case s: SubqueryAlias => s.copy(child = catalogResolvedTarget)
-          case _ => catalogResolvedTarget
-        }
-        val newSource = source match {
-          case s: SubqueryAlias => s.copy(child = catalogResolvedSource)
-          case _ => catalogResolvedSource
-        }
-        m.copy(targetTable = newTarget, sourceTable = newSource)
-      }
-
     case DescribeTableStatement(
          nameParts @ NonSessionCatalog(catalog, tableName), partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
