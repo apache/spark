@@ -127,7 +127,7 @@ private[spark] class RRunner[IN, OUT](
           }
         } catch {
           case eof: EOFException =>
-            throw new SparkException("R worker exited unexpectedly (cranshed)", eof)
+            throw new SparkException("R worker exited unexpectedly", eof)
         }
       }
     }
