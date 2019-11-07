@@ -55,7 +55,7 @@ def run_cmd(cmd, return_output=False):
         if return_output:
             return subprocess_check_output(cmd).decode(sys.getdefaultencoding())
         else:
-            return subprocess.run(cmd, encoding=sys.getdefaultencoding()).returncode
+            return subprocess.run(cmd, check=True, encoding=sys.getdefaultencoding()).returncode
     except subprocess.CalledProcessError as e:
         exit_from_command_with_retcode(e.cmd, e.returncode)
 
