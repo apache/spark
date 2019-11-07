@@ -92,7 +92,7 @@ private[spark] abstract class YarnSchedulerBackend(
     try {
       // SPARK-12009: To prevent Yarn allocator from requesting backup for the executors which
       // was Stopped by SchedulerBackend.
-      requestTotalExecutors(0, Map.empty, Map.empty)
+      requestTotalExecutors(Map.empty, Map.empty, Map.empty)
       super.stop()
     } finally {
       stopped.set(true)

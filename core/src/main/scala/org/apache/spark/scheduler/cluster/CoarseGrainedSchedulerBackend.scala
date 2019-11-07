@@ -642,11 +642,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       hostToLocalTaskCount: Map[Int, Map[String, Int]],
       resourceProfileToNumExecutors: Map[ResourceProfile, Int]
     ): Boolean = {
-    // TODO  - do we want to make sure all values > 0?
-    if (resourceProfileToNumExecutors.isEmpty) {
+    val totalExecs = resourceProfileToNumExecutors.values.sum
+    if (totalExecs < 0) {
       throw new IllegalArgumentException(
         "Attempted to request a negative number of executor(s) " +
-          s"from the cluster manager. Please specify a positive number!")
+          s"$totalExecs from the cluster manager. Please specify a positive number!")
     }
 
     val response = synchronized {
@@ -662,7 +662,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           math.max(total - numExistingExecutorsForRpId(rp.id) + executorsPendingToRemove.size, 0)
       } */
 
-      doRequestTotalExecutors(resourceProfileToNumExecutors)
+      doRequestTotalExecutors(requestedTotalExecutorsPerResourceProfile.toMap)
     }
 
     defaultAskTimeout.awaitResult(response)
