@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, Star}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
@@ -313,9 +313,11 @@ case class MergeIntoTable(
 }
 
 sealed abstract class MergeAction(
-    condition: Option[Expression]) {
-  def children: Seq[Expression] = condition.toSeq
-  lazy val resolved: Boolean = children.isEmpty || children.forall(_.resolved)
+    condition: Option[Expression]) extends Expression with Unevaluable {
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+  override def dataType: DataType = null
+  override def children: Seq[Expression] = condition.toSeq
 }
 
 case class DeleteAction(deleteCondition: Option[Expression]) extends MergeAction(deleteCondition)
