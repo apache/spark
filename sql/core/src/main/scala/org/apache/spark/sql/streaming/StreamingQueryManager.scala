@@ -19,8 +19,8 @@ package org.apache.spark.sql.streaming
 
 import java.util.{ConcurrentModificationException, UUID}
 import java.util.concurrent.TimeUnit
-
 import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
