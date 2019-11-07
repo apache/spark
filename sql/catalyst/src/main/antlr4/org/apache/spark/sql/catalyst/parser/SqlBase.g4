@@ -138,7 +138,7 @@ statement
         '(' columns=qualifiedColTypeWithPositionList ')'               #addTableColumns
     | ALTER TABLE table=multipartIdentifier
         RENAME COLUMN
-        from=multipartIdentifier TO to=multipartIdentifier             #renameTableColumn
+        from=multipartIdentifier TO to=errorCapturingIdentifier        #renameTableColumn
     | ALTER TABLE multipartIdentifier
         DROP (COLUMN | COLUMNS)
         '(' columns=multipartIdentifierList ')'                        #dropTableColumns
