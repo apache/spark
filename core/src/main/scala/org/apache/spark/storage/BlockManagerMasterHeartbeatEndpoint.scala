@@ -37,8 +37,8 @@ private[spark] class BlockManagerMasterHeartbeatEndpoint(
       context.reply(heartbeatReceived(blockManagerId))
 
     case StopBlockManagerMaster =>
-      context.reply(true)
       stop()
+      context.reply(true)
 
     case _ => // do nothing for unexpected events
   }
