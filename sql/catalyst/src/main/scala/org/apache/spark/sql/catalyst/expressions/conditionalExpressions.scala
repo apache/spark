@@ -185,7 +185,7 @@ case class CaseWhen(
     "CASE" + cases + elseCase + " END"
   }
 
-  def multiBranchesCodegen(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  private def multiBranchesCodegen(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // This variable holds the state of the result:
     // -1 means the condition is not met yet and the result is unknown.
     val NOT_MATCHED = -1
