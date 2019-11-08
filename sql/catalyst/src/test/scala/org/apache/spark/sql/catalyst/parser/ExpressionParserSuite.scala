@@ -433,10 +433,13 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
     // Interval.
-    val intervalLiteral = Literal(IntervalUtils.fromString("interval 3 month 1 hour"))
+    var intervalLiteral = Literal(IntervalUtils.fromString("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
     intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
+    assertEqual("+interval '3 month 1 hour'", intervalLiteral)
+    intervalLiteral = Literal(IntervalUtils.fromString("interval -3 month -1 hour"))
+    assertEqual("-interval '3 month 1 hour'", intervalLiteral)
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
@@ -603,11 +606,18 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("intervals") {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
-      assertEqual(s"interval $intervalValue", expected)
+      Seq(
+        "" -> expected,
+        "+" -> expected,
+        "-" -> expected.copy(
+          value = IntervalUtils.negate(expected.value.asInstanceOf[CalendarInterval]))
+      ).foreach { case (sign, expectedLiteral) =>
+        assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
 
-      // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-        assertEqual(intervalValue, expected)
+        // SPARK-23264 Support interval values without INTERVAL clauses if ANSI SQL enabled
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          assertEqual(intervalValue, expected)
+        }
       }
     }
 
