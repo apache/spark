@@ -47,10 +47,10 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  *
  * Use ExecutorResourceRequests class as a convenience API.
  *
- * @param resourceName    Name of the resource
- * @param amount          Amount requesting
- * @param units           Optional units of the amount. For things like Memory, default is
- *                        no units, only byte types (b, mb, gb, etc) are currently supported.
+ * @param resourceName Name of the resource
+ * @param amount Amount requesting
+ * @param units Optional units of the amount. For things like Memory, default is
+ *              no units, only byte types (b, mb, gb, etc) are currently supported.
  * @param discoveryScript Optional script used to discover the resources. This is required on some
  *                        cluster managers that don't tell Spark the addresses of the resources
  *                        allocated. The script runs on Executors startup to discover the addresses
@@ -58,7 +58,7 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  * @param vendor Optional vendor, required for some cluster managers
  *
  * This api is currently private until the rest of the pieces are in place and then it
- *  will become public.
+ * will become public.
  */
 private[spark] class ExecutorResourceRequest(
     val resourceName: String,
