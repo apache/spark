@@ -37,6 +37,8 @@ private[spark] class ExecutorPodsAllocator(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     clock: Clock) extends Logging {
 
+  private val EXIT_MAX_EXECUTOR_FAILURES = 10
+
   private val EXECUTOR_ID_COUNTER = new AtomicLong(0L)
 
   private val totalExpectedExecutors = new AtomicInteger(0)
@@ -46,6 +48,16 @@ private[spark] class ExecutorPodsAllocator(
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
   private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000)
+
+  // maxNumExecutorFailures must be less than Int.MaxValue
+  private lazy val maxNumExecutorFailures = conf.get(KUBERNETES_MAX_EXECUTOR_FAILURES)
+    .getOrElse {
+      math.max(3, if (totalExpectedExecutors.get() > Int.MaxValue / 2) {
+        Int.MaxValue
+      } else {
+        (2 * totalExpectedExecutors.get())
+      })
+    }
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
@@ -88,6 +100,7 @@ private[spark] class ExecutorPodsAllocator(
   private def onNewSnapshots(
       applicationId: String,
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = synchronized {
+
     newlyCreatedExecutors --= snapshots.flatMap(_.executorPods.keys)
     // For all executors we've created against the API but have not seen in a snapshot
     // yet - check the current time. If the current time has exceeded some threshold,
@@ -145,6 +158,13 @@ private[spark] class ExecutorPodsAllocator(
       logDebug(s"Pod allocation status: $currentRunningCount running, " +
         s"${currentPendingExecutors.size} pending, " +
         s"${newlyCreatedExecutors.size} unacknowledged.")
+
+      val numExecutorFailed =
+        EXECUTOR_ID_COUNTER.get() - currentPendingExecutors.size - currentRunningCount
+      if (numExecutorFailed >= maxNumExecutorFailures) {
+        logError(s"Max number of executor failures ($maxNumExecutorFailures) reached")
+        System.exit(EXIT_MAX_EXECUTOR_FAILURES)
+      }
     }
 
     val currentTotalExpectedExecutors = totalExpectedExecutors.get
