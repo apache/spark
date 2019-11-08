@@ -125,6 +125,27 @@ class ResourceProfileSuite extends SparkFunSuite {
     assert(taskError.contains("Task resource not allowed"))
   }
 
+  test("Test ExecutorResourceRequests memory helpers") {
+    val rprof = new ResourceProfile()
+    val ereqs = new ExecutorResourceRequests()
+    ereqs.memory("4g")
+    ereqs.memoryOverhead("2000m").pysparkMemory("512")
+    rprof.require(ereqs)
+
+    assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 4096,
+      s"Executor resources should have 4096 memory")
+    assert(rprof.executorResources(ResourceProfile.MEMORY).units === "m",
+      s"Executor resources should have memory units mb")
+    assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).amount === 2000,
+      s"Executor resources should have 2000 overhead memory")
+    assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).units === "m",
+      s"Executor resources should have memory units mb")
+    assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount === 512,
+      s"Executor resources should have 512 pyspark memory")
+    assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).units === "m",
+      s"Executor resources should have memory units mb")
+  }
+
   test("Test TaskResourceRequest fractional") {
     val rprof = new ResourceProfile()
     val treqs = new TaskResourceRequests().resource("resource.gpu", 0.33)

@@ -19,8 +19,8 @@ package org.apache.spark.resource
 
 import scala.collection.mutable
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.resource.ResourceProfile._
-import org.apache.spark.util.Utils
 
 /**
  * A set of Executor resource requests. This is used in conjunction with the ResourceProfile to
@@ -50,6 +50,19 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
   }
 
   /**
+   * Specify heap memory. The value specified will be converted to MiB.
+   *
+   * @param amount Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
+   *               Default unit is MiB if not specified.
+   */
+  def memory(amount: String): this.type = {
+    val amountMiB = JavaUtils.byteStringAsMb(amount)
+    val rr = new ExecutorResourceRequest(MEMORY, amountMiB, "m")
+    _executorResources(MEMORY) = rr
+    this
+  }
+
+  /**
    * Specify overhead memory.
    *
    * @param amount Amount of memory.
@@ -58,6 +71,19 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
    */
   def memoryOverhead(amount: Long, units: String): this.type = {
     val rr = new ExecutorResourceRequest(OVERHEAD_MEM, amount, units)
+    _executorResources(OVERHEAD_MEM) = rr
+    this
+  }
+
+  /**
+   * Specify overhead memory. The value specified will be converted to MiB.
+   *
+   * @param amount Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
+   *               Default unit is MiB if not specified.
+   */
+  def memoryOverhead(amount: String): this.type = {
+    val amountMiB = JavaUtils.byteStringAsMb(amount)
+    val rr = new ExecutorResourceRequest(OVERHEAD_MEM, amountMiB, "m")
     _executorResources(OVERHEAD_MEM) = rr
     this
   }
@@ -75,8 +101,17 @@ private[spark] class ExecutorResourceRequests() extends Serializable {
     this
   }
 
-  private def memoryAsMib(amount: Long, units: String): Long = {
-    Utils.byteStringAsMb(amount + units)
+  /**
+   * Specify overhead memory. The value specified will be converted to MiB.
+   *
+   * @param amount Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
+   *               Default unit is MiB if not specified.
+   */
+  def pysparkMemory(amount: String): this.type = {
+    val amountMiB = JavaUtils.byteStringAsMb(amount)
+    val rr = new ExecutorResourceRequest(PYSPARK_MEM, amountMiB, "m")
+    _executorResources(PYSPARK_MEM) = rr
+    this
   }
 
   /**
