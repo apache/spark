@@ -40,24 +40,6 @@ public final class CalendarInterval implements Serializable {
     this.microseconds = microseconds;
   }
 
-  public CalendarInterval add(CalendarInterval that) {
-    int months = this.months + that.months;
-    int days = this.days + that.days;
-    long microseconds = this.microseconds + that.microseconds;
-    return new CalendarInterval(months, days, microseconds);
-  }
-
-  public CalendarInterval subtract(CalendarInterval that) {
-    int months = this.months - that.months;
-    int days = this.days - that.days;
-    long microseconds = this.microseconds - that.microseconds;
-    return new CalendarInterval(months, days, microseconds);
-  }
-
-  public CalendarInterval negate() {
-    return new CalendarInterval(-this.months, -this.days, -this.microseconds);
-  }
-
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
