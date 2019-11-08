@@ -26,11 +26,12 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
-import org.apache.spark.unsafe.types.CalendarInterval
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -720,7 +721,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
       Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
-      Literal(IntervalUtils.fromString("interval 12 hours"))),
+      Literal(fromString("interval 12 hours"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
@@ -729,7 +730,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
       Literal(Timestamp.valueOf("2018-01-02 00:00:01")),
-      Literal(IntervalUtils.fromString("interval 12 hours"))),
+      Literal(fromString("interval 12 hours"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
@@ -738,7 +739,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(IntervalUtils.fromString("interval 12 hours").negate())),
+      Literal(negate(fromString("interval 12 hours")))),
       Seq(
         Timestamp.valueOf("2018-01-02 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
@@ -747,7 +748,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
       Literal(Timestamp.valueOf("2017-12-31 23:59:59")),
-      Literal(IntervalUtils.fromString("interval 12 hours").negate())),
+      Literal(negate(fromString("interval 12 hours")))),
       Seq(
         Timestamp.valueOf("2018-01-02 00:00:00"),
         Timestamp.valueOf("2018-01-01 12:00:00"),
@@ -756,7 +757,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
       Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
-      Literal(IntervalUtils.fromString("interval 1 month"))),
+      Literal(fromString("interval 1 month"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-02-01 00:00:00"),
@@ -765,7 +766,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(IntervalUtils.fromString("interval 1 month").negate())),
+      Literal(negate(fromString("interval 1 month")))),
       Seq(
         Timestamp.valueOf("2018-03-01 00:00:00"),
         Timestamp.valueOf("2018-02-01 00:00:00"),
@@ -774,7 +775,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-03-03 00:00:00")),
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
-      Literal(IntervalUtils.fromString("interval 1 month 1 day").negate())),
+      Literal(negate(fromString("interval 1 month 1 day")))),
       Seq(
         Timestamp.valueOf("2018-03-03 00:00:00"),
         Timestamp.valueOf("2018-02-02 00:00:00"),
@@ -783,7 +784,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-31 00:00:00")),
       Literal(Timestamp.valueOf("2018-04-30 00:00:00")),
-      Literal(IntervalUtils.fromString("interval 1 month"))),
+      Literal(fromString("interval 1 month"))),
       Seq(
         Timestamp.valueOf("2018-01-31 00:00:00"),
         Timestamp.valueOf("2018-02-28 00:00:00"),
@@ -793,7 +794,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
       Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
-      Literal(IntervalUtils.fromString("interval 1 month 1 second"))),
+      Literal(fromString("interval 1 month 1 second"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-02-01 00:00:01")))
@@ -801,7 +802,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
       Literal(Timestamp.valueOf("2018-03-01 00:04:06")),
-      Literal(IntervalUtils.fromString("interval 1 month 2 minutes 3 seconds"))),
+      Literal(fromString("interval 1 month 2 minutes 3 seconds"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00"),
         Timestamp.valueOf("2018-02-01 00:02:03"),
@@ -810,7 +811,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
       Literal(Timestamp.valueOf("2023-01-01 00:00:00")),
-      Literal(CalendarInterval.fromYearMonthString("1-5"))),
+      Literal(fromYearMonthString("1-5"))),
       Seq(
         Timestamp.valueOf("2018-01-01 00:00:00.000"),
         Timestamp.valueOf("2019-06-01 00:00:00.000"),
@@ -820,7 +821,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new Sequence(
       Literal(Timestamp.valueOf("2022-04-01 00:00:00")),
       Literal(Timestamp.valueOf("2017-01-01 00:00:00")),
-      Literal(CalendarInterval.fromYearMonthString("1-5").negate())),
+      Literal(negate(fromYearMonthString("1-5")))),
       Seq(
         Timestamp.valueOf("2022-04-01 00:00:00.000"),
         Timestamp.valueOf("2020-11-01 00:00:00.000"),
@@ -839,7 +840,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(new Sequence(
         Literal(Timestamp.valueOf("2018-03-25 01:30:00")),
         Literal(Timestamp.valueOf("2018-03-25 03:30:00")),
-        Literal(IntervalUtils.fromString("interval 30 minutes"))),
+        Literal(fromString("interval 30 minutes"))),
         Seq(
           Timestamp.valueOf("2018-03-25 01:30:00"),
           Timestamp.valueOf("2018-03-25 03:00:00"),
@@ -849,7 +850,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(new Sequence(
         Literal(Timestamp.valueOf("2018-10-28 01:30:00")),
         Literal(Timestamp.valueOf("2018-10-28 03:30:00")),
-        Literal(IntervalUtils.fromString("interval 30 minutes"))),
+        Literal(fromString("interval 30 minutes"))),
         Seq(
           Timestamp.valueOf("2018-10-28 01:30:00"),
           noDST(Timestamp.valueOf("2018-10-28 02:00:00")),
@@ -866,7 +867,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(new Sequence(
         Literal(Date.valueOf("2018-01-01")),
         Literal(Date.valueOf("2018-01-05")),
-        Literal(IntervalUtils.fromString("interval 2 days"))),
+        Literal(fromString("interval 2 days"))),
         Seq(
           Date.valueOf("2018-01-01"),
           Date.valueOf("2018-01-03"),
@@ -875,7 +876,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(new Sequence(
         Literal(Date.valueOf("2018-01-01")),
         Literal(Date.valueOf("2018-03-01")),
-        Literal(IntervalUtils.fromString("interval 1 month"))),
+        Literal(fromString("interval 1 month"))),
         Seq(
           Date.valueOf("2018-01-01"),
           Date.valueOf("2018-02-01"),
@@ -884,7 +885,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(new Sequence(
         Literal(Date.valueOf("2018-01-31")),
         Literal(Date.valueOf("2018-04-30")),
-        Literal(IntervalUtils.fromString("interval 1 month"))),
+        Literal(fromString("interval 1 month"))),
         Seq(
           Date.valueOf("2018-01-31"),
           Date.valueOf("2018-02-28"),
@@ -894,7 +895,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       checkEvaluation(new Sequence(
         Literal(Date.valueOf("2018-01-01")),
         Literal(Date.valueOf("2023-01-01")),
-        Literal(CalendarInterval.fromYearMonthString("1-5"))),
+        Literal(fromYearMonthString("1-5"))),
         Seq(
           Date.valueOf("2018-01-01"),
           Date.valueOf("2019-06-01"),
@@ -905,16 +906,16 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         new Sequence(
           Literal(Date.valueOf("1970-01-02")),
           Literal(Date.valueOf("1970-01-01")),
-          Literal(IntervalUtils.fromString("interval 1 day"))),
+          Literal(fromString("interval 1 day"))),
         EmptyRow, "sequence boundaries: 1 to 0 by 1")
 
       checkExceptionInExpression[IllegalArgumentException](
         new Sequence(
           Literal(Date.valueOf("1970-01-01")),
           Literal(Date.valueOf("1970-02-01")),
-          Literal(IntervalUtils.fromString("interval 1 month").negate())),
+          Literal(negate(fromString("interval 1 month")))),
         EmptyRow,
-        s"sequence boundaries: 0 to 2678400000000 by -${28 * CalendarInterval.MICROS_PER_DAY}")
+        s"sequence boundaries: 0 to 2678400000000 by -${28 * MICROS_PER_DAY}")
     }
   }
 

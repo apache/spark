@@ -247,6 +247,15 @@ case class CreateNamespace(
     properties: Map[String, String]) extends Command
 
 /**
+ * The logical plan of the DROP NAMESPACE command that works for v2 catalogs.
+ */
+case class DropNamespace(
+    catalog: SupportsNamespaces,
+    namespace: Seq[String],
+    ifExists: Boolean,
+    cascade: Boolean) extends Command
+
+/**
  * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
 case class ShowNamespaces(
@@ -262,7 +271,7 @@ case class ShowNamespaces(
  */
 case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
 
-  override def children: Seq[LogicalPlan] = Seq(table)
+  override lazy val resolved: Boolean = table.resolved
 
   override def output: Seq[Attribute] = DescribeTableSchema.describeTableAttributes()
 }
@@ -304,9 +313,7 @@ case class AlterTable(
     table: NamedRelation,
     changes: Seq[TableChange]) extends Command {
 
-  override def children: Seq[LogicalPlan] = Seq(table)
-
-  override lazy val resolved: Boolean = childrenResolved && {
+  override lazy val resolved: Boolean = table.resolved && {
     changes.forall {
       case add: AddColumn =>
         add.fieldNames match {
@@ -355,3 +362,12 @@ case class SetCatalogAndNamespace(
 case class RefreshTable(
     catalog: TableCatalog,
     ident: Identifier) extends Command
+
+/**
+ * The logical plan of the SHOW CURRENT NAMESPACE command that works for v2 catalogs.
+ */
+case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("catalog", StringType, nullable = false)(),
+    AttributeReference("namespace", StringType, nullable = false)())
+}

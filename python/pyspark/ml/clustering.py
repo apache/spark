@@ -97,7 +97,7 @@ class ClusteringSummary(JavaWrapper):
 
 @inherit_doc
 class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol,
-                             HasProbabilityCol, HasTol):
+                             HasProbabilityCol, HasTol, HasAggregationDepth):
     """
     Params for :py:class:`GaussianMixture` and :py:class:`GaussianMixtureModel`.
 
@@ -229,6 +229,8 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     >>> gm.getMaxIter()
     10
     >>> model = gm.fit(df)
+    >>> model.getAggregationDepth()
+    2
     >>> model.getFeaturesCol()
     'features'
     >>> model.setPredictionCol("newPrediction")
@@ -281,15 +283,17 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
-                 probabilityCol="probability", tol=0.01, maxIter=100, seed=None):
+                 probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
+                 aggregationDepth=2):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
-                 probabilityCol="probability", tol=0.01, maxIter=100, seed=None)
+                 probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
+                 aggregationDepth=2)
         """
         super(GaussianMixture, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.GaussianMixture",
                                             self.uid)
-        self._setDefault(k=2, tol=0.01, maxIter=100)
+        self._setDefault(k=2, tol=0.01, maxIter=100, aggregationDepth=2)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -299,10 +303,12 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     @keyword_only
     @since("2.0.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
-                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None):
+                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
+                  aggregationDepth=2):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
-                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None)
+                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
+                  aggregationDepth=2)
 
         Sets params for GaussianMixture.
         """
@@ -357,6 +363,13 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
         Sets the value of :py:attr:`tol`.
         """
         return self._set(tol=value)
+
+    @since("3.0.0")
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
 
 
 class GaussianMixtureSummary(ClusteringSummary):

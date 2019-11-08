@@ -1154,7 +1154,7 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("watermark pushdown: no pushdown on watermark attribute #1") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1169,7 +1169,7 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("watermark pushdown: no pushdown for nondeterministic filter") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1184,7 +1184,7 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("watermark pushdown: full pushdown") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1198,7 +1198,7 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("watermark pushdown: no pushdown on watermark attribute #2") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
 
     val originalQuery = EventTimeWatermark('a, interval, testRelation)
       .where('a === 5 && 'b === 10)

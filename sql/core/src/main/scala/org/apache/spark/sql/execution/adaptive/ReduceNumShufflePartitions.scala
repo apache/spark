@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.adaptive.rule
+package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.adaptive.{LocalShuffleReaderExec, QueryStageExec, ReusedQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -182,13 +181,18 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
   }
 }
 
+/**
+ * A wrapper of shuffle query stage, which submits fewer reduce task as one reduce task may read
+ * multiple shuffle partitions. This can avoid many small reduce tasks that hurt performance.
+ *
+ * @param child It's usually `ShuffleQueryStageExec` or `ReusedQueryStageExec`, but can be the
+ *              shuffle exchange node during canonicalization.
+ */
 case class CoalescedShuffleReaderExec(
-    child: QueryStageExec,
+    child: SparkPlan,
     partitionStartIndices: Array[Int]) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
-
-  override def doCanonicalize(): SparkPlan = child.canonicalized
 
   override def outputPartitioning: Partitioning = {
     UnknownPartitioning(partitionStartIndices.length)
