@@ -1083,12 +1083,28 @@ object functions {
   def isnan(e: Column): Column = withExpr { IsNaN(e.expr) }
 
   /**
+   * Return true iff the column is NaN.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def isnan(columnName: String): Column = isnan(Column(columnName))
+
+  /**
    * Return true iff the column is null.
    *
    * @group normal_funcs
    * @since 1.6.0
    */
   def isnull(e: Column): Column = withExpr { IsNull(e.expr) }
+
+  /**
+   * Return true iff the column is null.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def isnull(columnName: String): Column = isnull(Column(columnName))
 
   /**
    * A column expression that generates monotonically increasing 64-bit integers.
@@ -1121,6 +1137,16 @@ object functions {
   def nanvl(col1: Column, col2: Column): Column = withExpr { NaNvl(col1.expr, col2.expr) }
 
   /**
+   * Returns col1 if it is not NaN, or col2 if col1 is NaN.
+   *
+   * Both inputs should be floating point columns (DoubleType or FloatType).
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
+  def nanvl(col1Name: String, col2Name: String): Column = nanvl(Column(col1Name), Column(col2Name))
+
+  /**
    * Unary minus, i.e. negate the expression.
    * {{{
    *   // Select the amount column and negates all values.
@@ -1137,6 +1163,22 @@ object functions {
   def negate(e: Column): Column = -e
 
   /**
+   * Unary minus, i.e. negate the expression.
+   * {{{
+   *   // Select the amount column and negates all values.
+   *   // Scala:
+   *   df.select( -df("amount") )
+   *
+   *   // Java:
+   *   df.select( negate(df.col("amount")) );
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.3.0
+   */
+  def negate(columnName: String): Column = negate(Column(columnName))
+
+  /**
    * Inversion of boolean expression, i.e. NOT.
    * {{{
    *   // Scala: select rows that are not active (isActive === false)
@@ -1150,6 +1192,21 @@ object functions {
    * @since 1.3.0
    */
   def not(e: Column): Column = !e
+
+  /**
+   * Inversion of boolean expression, i.e. NOT.
+   * {{{
+   *   // Scala: select rows that are not active (isActive === false)
+   *   df.filter( !df("isActive") )
+   *
+   *   // Java:
+   *   df.filter( not(df.col("isActive")) );
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.3.0
+   */
+  def not(columnName: String): Column = not(Column(columnName))
 
   /**
    * Generate a random column with independent and identically distributed (i.i.d.) samples
@@ -1277,6 +1334,14 @@ object functions {
    * @since 1.4.0
    */
   def bitwiseNOT(e: Column): Column = withExpr { BitwiseNot(e.expr) }
+
+  /**
+   * Computes bitwise NOT (~) of a number.
+   *
+   * @group normal_funcs
+   * @since 1.4.0
+   */
+  def bitwiseNOT(columnName: String): Column = bitwiseNOT(Column(columnName))
 
   /**
    * Parses the expression string into the column that it represents, similar to
