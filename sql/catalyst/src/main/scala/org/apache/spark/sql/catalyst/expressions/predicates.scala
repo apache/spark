@@ -489,29 +489,18 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
 case class ExistsSubquery(child: Expression,
                           subQuery: String,
-                          hset: Set[Any]) extends UnaryExpression with Predicate {
+                          result: Boolean) extends UnaryExpression with Predicate {
 
-  require(hset != null, "hset could not be null")
+  require(result != null, "hset could not be null")
 
   override def toString: String = s"Exists ${subQuery}"
 
   override def nullable: Boolean = child.nullable
 
   protected override def nullSafeEval(value: Any): Any = {
-    if (set.contains(value)) {
-      true
-    } else {
-      false
-    }
+    true
   }
 
-  @transient lazy val set: Set[Any] = child.dataType match {
-    case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
-    case _: NullType => hset
-    case _ =>
-      // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ (hset - null)
-  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     genCodeWithSet(ctx, ev)
@@ -519,9 +508,9 @@ case class ExistsSubquery(child: Expression,
 
   private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
-      val setTerm = ctx.addReferenceObj("set", set)
+      val setTerm = ctx.addReferenceObj("result", result)
       s"""
-         |${ev.value} = $setTerm.size() > 0;
+         |${ev.value} = $setTerm;
        """.stripMargin
     })
   }

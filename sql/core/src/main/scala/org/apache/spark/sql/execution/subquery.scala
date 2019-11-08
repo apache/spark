@@ -179,10 +179,10 @@ case class ExistsExec(child: Expression,
                       subQuery: String,
                       plan: BaseSubqueryExec,
                       exprId: ExprId,
-                      private var resultBroadcast: Broadcast[Array[Any]] = null)
+                      private var resultBroadcast: Broadcast[Boolean] = null)
   extends ExecSubqueryExpression {
 
-  @transient private var result: Array[Any] = _
+  @transient private var result: Boolean = _
 
   override def dataType: DataType = BooleanType
   override def children: Seq[Expression] = child :: Nil
@@ -197,26 +197,20 @@ case class ExistsExec(child: Expression,
 
 
   def updateResult(): Unit = {
-    val rows = plan.executeCollect()
-    result = child.dataType match {
-      case _: StructType => rows.toArray
-      case _ => rows.map(_.get(0, child.dataType))
-    }
-    resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
+    result = !plan.execute().isEmpty()
+    resultBroadcast = plan.sqlContext.sparkContext.broadcast[Boolean](result)
   }
 
-  def values(): Option[Array[Any]] = Option(resultBroadcast).map(_.value)
+  def values(): Option[Boolean] = Option(resultBroadcast).map(_.value)
 
   private def prepareResult(): Unit = {
     require(resultBroadcast != null, s"$this has not finished")
-    if (result == null) {
-      result = resultBroadcast.value
-    }
+    result = resultBroadcast.value
   }
 
   override def eval(input: InternalRow): Any = {
     prepareResult()
-    !result.isEmpty
+    result
   }
 
   override lazy val canonicalized: ExistsExec = {
@@ -230,7 +224,7 @@ case class ExistsExec(child: Expression,
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     prepareResult()
-    ExistsSubquery(child, subQuery, result.toSet).doGenCode(ctx, ev)
+    ExistsSubquery(child, subQuery, result).doGenCode(ctx, ev)
   }
 }
 
