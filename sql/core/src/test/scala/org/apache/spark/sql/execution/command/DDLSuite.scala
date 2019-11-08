@@ -2817,4 +2817,42 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-29421: Create Table LIKE USING provider") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t1", "t2", "t3", "t4", "t5") {
+      sql("CREATE TABLE s(a INT, b INT) USING parquet")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.provider == Some("parquet"))
+
+      sql("CREATE TABLE t1 LIKE s USING orc")
+      val table1 = catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table1.provider == Some("orc"))
+
+      sql("CREATE TABLE t2 LIKE s USING com.databricks.spark.csv")
+      val table2 = catalog.getTableMetadata(TableIdentifier("t2"))
+      assert(table2.provider == Some("com.databricks.spark.csv"))
+
+      val e1 = intercept[ClassNotFoundException] {
+        sql("CREATE TABLE t3 LIKE s USING com.databricks.Spark.csv")
+      }.getMessage
+      assert(e1.contains("Failed to find data source: com.databricks.Spark.csv"))
+
+      val e2 = intercept[ClassNotFoundException] {
+        sql("CREATE TABLE t4 LIKE s USING unknown")
+      }.getMessage
+      assert(e2.contains("Failed to find data source"))
+
+      if (spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive") {
+        sql("CREATE TABLE t5 LIKE s USING org.apache.spark.sql.hive.orc")
+        val table = catalog.getTableMetadata(TableIdentifier("t5"))
+        assert(table.provider == Some("org.apache.spark.sql.hive.orc"))
+      } else {
+        val e = intercept[AnalysisException] {
+          sql("CREATE TABLE t5 LIKE s USING org.apache.spark.sql.hive.orc")
+        }.getMessage
+        assert(e.contains("Hive built-in ORC data source must be used with Hive support enabled"))
+      }
+    }
+  }
 }

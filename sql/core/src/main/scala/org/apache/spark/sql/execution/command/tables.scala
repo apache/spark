@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.{URI, URISyntaxException}
-import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -68,20 +67,19 @@ import org.apache.spark.sql.util.SchemaUtils
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
+    provider: Option[String],
     location: Option[String],
-    ifNotExists: Boolean,
-    provider: Option[String]) extends RunnableCommand {
+    ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
 
     val newProvider = if (provider.isDefined) {
-      val providerWithLowerCase = provider.get.toLowerCase(Locale.ROOT)
       // check the validation of provider input, invalid provider will throw
       // AnalysisException or ClassNotFoundException or NoSuchMethodException
-      DataSource.lookupDataSource(providerWithLowerCase, sparkSession.sessionState.conf)
-      Some(providerWithLowerCase)
+      DataSource.lookupDataSource(provider.get, sparkSession.sessionState.conf)
+      provider
     } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
       Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else {

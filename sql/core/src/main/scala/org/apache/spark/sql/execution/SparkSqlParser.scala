@@ -1001,9 +1001,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
     val targetTable = visitTableIdentifier(ctx.target)
     val sourceTable = visitTableIdentifier(ctx.source)
-    val location = Option(ctx.locationSpec).map(visitLocationSpec)
     val provider = Option(ctx.tableProvider).map(_.qualifiedName.getText)
-    CreateTableLikeCommand(targetTable, sourceTable, location, ctx.EXISTS != null, provider)
+    val location = Option(ctx.locationSpec).map(visitLocationSpec)
+    CreateTableLikeCommand(targetTable, sourceTable, provider, location, ctx.EXISTS != null)
   }
 
   /**
