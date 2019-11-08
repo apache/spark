@@ -2677,9 +2677,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       operationNotAllowed(s"ALTER TABLE table $verb COLUMN requires a TYPE or a COMMENT", ctx)
     }
 
+    val tableIdentifier = ctx.multipartIdentifier(0)
+    val qualifiedColumn = ctx.multipartIdentifier(1)
+
     AlterTableAlterColumnStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      typedVisit[Seq[String]](ctx.qualifiedName),
+      visitMultipartIdentifier(tableIdentifier),
+      typedVisit[Seq[String]](qualifiedColumn),
       Option(ctx.dataType).map(typedVisit[DataType]),
       Option(ctx.comment).map(string))
   }

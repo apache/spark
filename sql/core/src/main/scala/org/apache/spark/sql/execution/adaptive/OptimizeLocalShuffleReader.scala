@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
@@ -99,29 +99,23 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
   }
 }
 
-case class LocalShuffleReaderExec(child: QueryStageExec) extends UnaryExecNode {
+/**
+ * A wrapper of shuffle query stage, which submits one reduce task per mapper to read the shuffle
+ * files written by one mapper. By doing this, it's very likely to read the shuffle files locally,
+ * as the shuffle files that a reduce task needs to read are in one node.
+ *
+ * @param child It's usually `ShuffleQueryStageExec` or `ReusedQueryStageExec`, but can be the
+ *              shuffle exchange node during canonicalization.
+ */
+case class LocalShuffleReaderExec(child: SparkPlan) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
-  override def doCanonicalize(): SparkPlan = child.canonicalized
-
-  override def outputPartitioning: Partitioning = {
-
-    def tryReserveChildPartitioning(stage: ShuffleQueryStageExec): Partitioning = {
-      val initialPartitioning = stage.plan.child.outputPartitioning
-      if (initialPartitioning.isInstanceOf[UnknownPartitioning]) {
-        UnknownPartitioning(stage.plan.shuffleDependency.rdd.partitions.length)
-      } else {
-        initialPartitioning
-      }
-    }
-
-    child match {
-      case stage: ShuffleQueryStageExec =>
-        tryReserveChildPartitioning(stage)
-      case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
-        tryReserveChildPartitioning(stage)
-    }
+  override def outputPartitioning: Partitioning = child match {
+    case stage: ShuffleQueryStageExec =>
+      stage.plan.child.outputPartitioning
+    case r @ ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+      r.updatePartitioning(stage.plan.child.outputPartitioning)
   }
 
   private var cachedShuffleRDD: RDD[InternalRow] = null

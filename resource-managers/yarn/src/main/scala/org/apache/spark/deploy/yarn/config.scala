@@ -33,6 +33,13 @@ package object config {
     .toSequence
     .createOptional
 
+  private[spark] val APPLICATION_PRIORITY = ConfigBuilder("spark.yarn.priority")
+    .doc("Application priority for YARN to define pending applications ordering policy, those" +
+      " with higher value have a better opportunity to be activated. Currently, YARN only" +
+      " supports application priority when using FIFO ordering policy.")
+    .intConf
+    .createOptional
+
   private[spark] val AM_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.am.attemptFailuresValidityInterval")
       .doc("Interval after which AM failures will be considered independent and " +

@@ -24,10 +24,8 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.feature.{StandardScaler => OldStandardScaler}
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -109,13 +107,15 @@ class StandardScaler @Since("1.4.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map {
-      case Row(v: Vector) => OldVectors.fromML(v)
-    }
-    val scaler = new OldStandardScaler(withMean = $(withMean), withStd = $(withStd))
-    val scalerModel = scaler.fit(input)
-    copyValues(new StandardScalerModel(uid, scalerModel.std.compressed,
-      scalerModel.mean.compressed).setParent(this))
+
+    val Row(mean: Vector, variance: Vector) = dataset
+      .select(Summarizer.metrics("mean", "variance").summary(col($(inputCol))).as("summary"))
+      .select("summary.mean", "summary.variance")
+      .first()
+
+    val std = Vectors.dense(variance.toArray.map(math.sqrt))
+
+    copyValues(new StandardScalerModel(uid, std.compressed, mean.compressed).setParent(this))
   }
 
   @Since("1.4.0")
