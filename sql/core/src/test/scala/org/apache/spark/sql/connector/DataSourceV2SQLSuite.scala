@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -767,28 +768,44 @@ class DataSourceV2SQLSuite
 
   test("CreateNameSpace: basic tests") {
     // Session catalog is used.
-    sql("CREATE NAMESPACE ns")
-    testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
+    withNamespace("ns") {
+      sql("CREATE NAMESPACE ns")
+      testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
+    }
 
     // V2 non-session catalog is used.
-    sql("CREATE NAMESPACE testcat.ns1.ns2")
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
+    withNamespace("testcat.ns1.ns2") {
+      sql("CREATE NAMESPACE testcat.ns1.ns2")
+      testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
+      testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
+    }
 
+    withNamespace("testcat.test") {
+      withTempDir { tmpDir =>
+        val path = tmpDir.getCanonicalPath
+        sql(s"CREATE NAMESPACE testcat.test LOCATION '$path'")
+        val metadata =
+          catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("test")).asScala
+        val catalogPath = metadata(V2SessionCatalog.LOCATION_TABLE_PROP)
+        assert(catalogPath.equals(catalogPath))
+      }
+    }
     // TODO: Add tests for validating namespace metadata when DESCRIBE NAMESPACE is available.
   }
 
   test("CreateNameSpace: test handling of 'IF NOT EXIST'") {
-    sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
+    withNamespace("testcat.ns1") {
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
 
-    // The 'ns1' namespace already exists, so this should fail.
-    val exception = intercept[NamespaceAlreadyExistsException] {
-      sql("CREATE NAMESPACE testcat.ns1")
+      // The 'ns1' namespace already exists, so this should fail.
+      val exception = intercept[NamespaceAlreadyExistsException] {
+        sql("CREATE NAMESPACE testcat.ns1")
+      }
+      assert(exception.getMessage.contains("Namespace 'ns1' already exists"))
+
+      // The following will be no-op since the namespace already exists.
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
     }
-    assert(exception.getMessage.contains("Namespace 'ns1' already exists"))
-
-    // The following will be no-op since the namespace already exists.
-    sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
   }
 
   test("DropNamespace: basic tests") {
