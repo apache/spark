@@ -34,11 +34,6 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_PREFIX
  * specify executor and task requirements for an RDD that will get applied during a
  * stage. This allows the user to change the resource requirements between stages.
  *
- * Only supports a subset of the resources for now. The config names supported correspond to the
- * regular Spark configs with the prefix removed. For instance overhead memory in this api
- * is memoryOverhead, which is spark.executor.memoryOverhead with spark.executor removed.
- * Resources like GPUs are resource.gpu (spark configs spark.executor.resource.gpu.*)
- *
  * This class is private now for initial development, once we have the feature in place
  * this will become public.
  */
@@ -50,7 +45,6 @@ private[spark] class ResourceProfile() extends Serializable {
   private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
 
   def id: Int = _id
-
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.toMap
   def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.toMap
 
@@ -126,8 +120,7 @@ private[spark] object ResourceProfile extends Logging {
 
   private def addDefaultTaskResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
     val cpusPerTask = conf.get(CPUS_PER_TASK)
-    val treqs = new TaskResourceRequests()
-    treqs.cpus(cpusPerTask)
+    val treqs = new TaskResourceRequests().cpus(cpusPerTask)
     val taskReq = ResourceUtils.parseResourceRequirements(conf, SPARK_TASK_PREFIX)
     taskReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.resourceName}"
@@ -138,7 +131,6 @@ private[spark] object ResourceProfile extends Logging {
 
   private def addDefaultExecutorResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
     val ereqs = new ExecutorResourceRequests()
-
     ereqs.cores(conf.get(EXECUTOR_CORES))
     ereqs.memory(conf.get(EXECUTOR_MEMORY), "m")
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)

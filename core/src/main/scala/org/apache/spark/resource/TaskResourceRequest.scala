@@ -26,6 +26,8 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
  *
+ * Use TaskResourceRequests class as a convenience API.
+ *
  * This api is currently private until the rest of the pieces are in place and then it
  * will become public.
  */

@@ -45,7 +45,7 @@ import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
  *
  * See the configuration and cluster specific docs for more details.
  *
- * There are alternative constructors for working with Java.
+ * Use ExecutorResourceRequests class as a convenience API.
  *
  * @param resourceName    Name of the resource
  * @param amount          Amount requesting
@@ -76,5 +76,4 @@ private[spark] class ExecutorResourceRequest(
   if (!allowedExecutorResources.contains(resourceName) && !resourceName.startsWith(RESOURCE_DOT)) {
     throw new IllegalArgumentException(s"Executor resource not allowed: $resourceName")
   }
-
 }

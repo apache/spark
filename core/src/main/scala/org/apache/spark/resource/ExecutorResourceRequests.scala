@@ -20,11 +20,10 @@ package org.apache.spark.resource
 import scala.collection.mutable
 
 import org.apache.spark.resource.ResourceProfile._
-import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
 import org.apache.spark.util.Utils
 
 /**
- * An set of Executor resource requests. This is used in conjunction with the ResourceProfile to
+ * A set of Executor resource requests. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
  *
