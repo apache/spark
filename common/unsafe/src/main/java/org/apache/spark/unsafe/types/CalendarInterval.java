@@ -24,14 +24,12 @@ import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
-import scala.math.Ordered;
-
 import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
 /**
  * The internal representation of interval type.
  */
-public final class CalendarInterval implements Serializable, Ordered<CalendarInterval> {
+public final class CalendarInterval implements Serializable, Comparable<CalendarInterval> {
   public final int months;
   public final int days;
   public final long microseconds;
@@ -58,7 +56,7 @@ public final class CalendarInterval implements Serializable, Ordered<CalendarInt
   }
 
   @Override
-  public int compare(CalendarInterval that) {
+  public int compareTo(CalendarInterval that) {
     long thisAdjustDays =
       this.microseconds / MICROS_PER_DAY + this.days + this.months * DAYS_PER_MONTH;
     long thatAdjustDays =
