@@ -51,13 +51,13 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
-    case CalendarIntervalType => CalendarIntervalType
+    case interval: CalendarIntervalType => interval
     case _ => DoubleType
   }
 
   private lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
-    case CalendarIntervalType => CalendarIntervalType
+    case interval: CalendarIntervalType => interval
     case _ => DoubleType
   }
 

@@ -663,7 +663,7 @@ struct<i:int,sum(CAST(v AS INTERVAL)) OVER (ORDER BY i ASC NULLS FIRST ROWS BETW
 
 
 -- !query 65
-select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where v is null
+select avg(cast(v as interval)) from VALUES (null) t(v)
 -- !query 65 schema
 struct<avg(CAST(v AS INTERVAL)):interval>
 -- !query 65 output

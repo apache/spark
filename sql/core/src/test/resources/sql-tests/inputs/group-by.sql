@@ -196,7 +196,7 @@ FROM VALUES(1,'1 seconds'),(1,'2 seconds'),(2,NULL),(2,NULL) t(i,v);
 
 -- average with interval type
 -- null
-select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where v is null;
+select avg(cast(v as interval)) from VALUES (null) t(v);
 
 -- empty set
 select avg(cast(v as interval)) from VALUES ('1 seconds'), ('2 seconds'), (null) t(v) where 1=0;
