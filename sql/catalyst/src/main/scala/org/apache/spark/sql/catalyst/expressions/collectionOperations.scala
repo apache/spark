@@ -28,14 +28,14 @@ import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
-import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -2613,7 +2613,7 @@ object Sequence {
       new CalendarInterval(0, 1, 0))
 
     private val backedSequenceImpl = new IntegralSequenceImpl[T](dt)
-    private val microsPerDay = 24 * CalendarInterval.MICROS_PER_HOUR
+    private val microsPerDay = HOURS_PER_DAY * MICROS_PER_HOUR
     // We choose a minimum days(28) in one month to calculate the `intervalStepInMicros`
     // in order to make sure the estimated array length is long enough
     private val microsPerMonth = 28 * microsPerDay

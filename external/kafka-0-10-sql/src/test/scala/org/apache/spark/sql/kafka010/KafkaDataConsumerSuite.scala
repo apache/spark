@@ -195,7 +195,7 @@ class KafkaDataConsumerSuite
 
     @volatile var error: Throwable = null
 
-    def consume(i: Int): Unit = {
+    def consume(): Unit = {
       val taskContext = if (Random.nextBoolean) {
         new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), null, null, null)
       } else {
@@ -233,9 +233,9 @@ class KafkaDataConsumerSuite
 
     val threadpool = Executors.newFixedThreadPool(numThreads)
     try {
-      val futures = (1 to numConsumerUsages).map { i =>
+      val futures = (1 to numConsumerUsages).map { _ =>
         threadpool.submit(new Runnable {
-          override def run(): Unit = { consume(i) }
+          override def run(): Unit = { consume() }
         })
       }
       futures.foreach(_.get(1, TimeUnit.MINUTES))

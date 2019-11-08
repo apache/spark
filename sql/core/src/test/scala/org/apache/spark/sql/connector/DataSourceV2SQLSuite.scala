@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -767,28 +768,44 @@ class DataSourceV2SQLSuite
 
   test("CreateNameSpace: basic tests") {
     // Session catalog is used.
-    sql("CREATE NAMESPACE ns")
-    testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
+    withNamespace("ns") {
+      sql("CREATE NAMESPACE ns")
+      testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
+    }
 
     // V2 non-session catalog is used.
-    sql("CREATE NAMESPACE testcat.ns1.ns2")
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
+    withNamespace("testcat.ns1.ns2") {
+      sql("CREATE NAMESPACE testcat.ns1.ns2")
+      testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
+      testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
+    }
 
+    withNamespace("testcat.test") {
+      withTempDir { tmpDir =>
+        val path = tmpDir.getCanonicalPath
+        sql(s"CREATE NAMESPACE testcat.test LOCATION '$path'")
+        val metadata =
+          catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("test")).asScala
+        val catalogPath = metadata(V2SessionCatalog.LOCATION_TABLE_PROP)
+        assert(catalogPath.equals(catalogPath))
+      }
+    }
     // TODO: Add tests for validating namespace metadata when DESCRIBE NAMESPACE is available.
   }
 
   test("CreateNameSpace: test handling of 'IF NOT EXIST'") {
-    sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
+    withNamespace("testcat.ns1") {
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
 
-    // The 'ns1' namespace already exists, so this should fail.
-    val exception = intercept[NamespaceAlreadyExistsException] {
-      sql("CREATE NAMESPACE testcat.ns1")
+      // The 'ns1' namespace already exists, so this should fail.
+      val exception = intercept[NamespaceAlreadyExistsException] {
+        sql("CREATE NAMESPACE testcat.ns1")
+      }
+      assert(exception.getMessage.contains("Namespace 'ns1' already exists"))
+
+      // The following will be no-op since the namespace already exists.
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
     }
-    assert(exception.getMessage.contains("Namespace 'ns1' already exists"))
-
-    // The following will be no-op since the namespace already exists.
-    sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
   }
 
   test("DropNamespace: basic tests") {
@@ -988,6 +1005,29 @@ class DataSourceV2SQLSuite
     sql("USE testcat.ns1.ns2")
     val catalogManager = spark.sessionState.catalogManager
     assert(catalogManager.currentNamespace === Array("ns1", "ns2"))
+  }
+
+  test("ShowCurrentNamespace: basic tests") {
+    def testShowCurrentNamespace(expectedCatalogName: String, expectedNamespace: String): Unit = {
+      val schema = new StructType()
+        .add("catalog", StringType, nullable = false)
+        .add("namespace", StringType, nullable = false)
+      val df = sql("SHOW CURRENT NAMESPACE")
+      val rows = df.collect
+
+      assert(df.schema === schema)
+      assert(rows.length == 1)
+      assert(rows(0).getAs[String](0) === expectedCatalogName)
+      assert(rows(0).getAs[String](1) === expectedNamespace)
+    }
+
+    // Initially, the v2 session catalog is set as a current catalog.
+    testShowCurrentNamespace("spark_catalog", "default")
+
+    sql("USE testcat")
+    testShowCurrentNamespace("testcat", "")
+    sql("USE testcat.ns1.ns2")
+    testShowCurrentNamespace("testcat", "ns1.ns2")
   }
 
   test("tableCreation: partition column case insensitive resolution") {
@@ -1385,6 +1425,17 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("ALTER TABLE ADD PARTITION") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
+      }
+      assert(e.message.contains("ALTER TABLE ADD PARTITION is only supported with v1 tables"))
+    }
+  }
+
   test("ALTER TABLE RENAME PARTITION") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1404,6 +1455,17 @@ class DataSourceV2SQLSuite
         sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
       }
       assert(e.message.contains("ALTER TABLE DROP PARTITION is only supported with v1 tables"))
+    }
+  }
+
+  test("ALTER TABLE SerDe properties") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
+      }
+      assert(e.message.contains("ALTER TABLE SerDe Properties is only supported with v1 tables"))
     }
   }
 
