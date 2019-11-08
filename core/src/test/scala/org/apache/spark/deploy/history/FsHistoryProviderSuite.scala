@@ -25,7 +25,6 @@ import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.runtime.BoxesRunTime
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.FileUtils
@@ -52,7 +51,6 @@ import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.logging.DriverLogger
-
 
 class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
@@ -1287,8 +1285,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
   test("SPARK-29755 LogInfo should be serialized/deserialized by jackson properly") {
     def assertSerDe(serializer: KVStoreScalaSerializer, info: LogInfo): Unit = {
-      val infoAfterSerDe = serializer.deserialize(
-        serializer.serialize(info), classOf[LogInfo])
+      val infoAfterSerDe = serializer.deserialize(serializer.serialize(info), classOf[LogInfo])
       assert(infoAfterSerDe === info)
       assertOptionAfterSerde(infoAfterSerDe.lastIndex, info.lastIndex)
     }

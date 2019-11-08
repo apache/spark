@@ -1169,14 +1169,16 @@ private[history] case class LogInfo(
     appId: Option[String],
     attemptId: Option[String],
     fileSize: Long,
-    @JsonDeserialize(contentAs = classOf[JLong]) lastIndex: Option[Long],
+    @JsonDeserialize(contentAs = classOf[JLong])
+    lastIndex: Option[Long],
     isComplete: Boolean)
 
 private[history] class AttemptInfoWrapper(
     val info: ApplicationAttemptInfo,
     val logPath: String,
     val fileSize: Long,
-    @JsonDeserialize(contentAs = classOf[JLong]) val lastIndex: Option[Long],
+    @JsonDeserialize(contentAs = classOf[JLong])
+    val lastIndex: Option[Long],
     val adminAcls: Option[String],
     val viewAcls: Option[String],
     val adminAclsGroups: Option[String],
