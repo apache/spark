@@ -166,6 +166,8 @@ def get_default_python_executables():
         if not p:
             LOGGER.error("No python3 executable found.  Exiting!")
             os._exit(1)
+        else:
+            python_execs.insert(0, p)
     return python_execs
 
 
