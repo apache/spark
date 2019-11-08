@@ -394,8 +394,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
             | AND EXISTS (SELECT * from s3 where s3.id > 6)
           """.stripMargin),
         Row(5) :: Row(7) :: Nil)
-
-
+      
       checkAnswer(
         sql(
           """
@@ -405,7 +404,6 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
           """.stripMargin),
         Row(1, 1) :: Row(3, 3) :: Row(5, null) :: Row(7, null) :: Row(9, 9) :: Nil)
 
-
       checkAnswer(
         sql(
           """
@@ -413,7 +411,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
             | FULL OUTER JOIN  s2 ON s1.id = s2.id
             | AND EXISTS (SELECT * from s3 where s3.id > 6)
           """.stripMargin),
-        Row(1, 1) :: Row(3, 3) :: Row(5, null) :: Row(7, null) :: Row(null, 4) :: Row(null, 6) :: Row(9, 9) :: Nil)
+        Row(1, 1) :: Row(3, 3) :: Row(5, null) :: Row(7, null) ::
+          Row(null, 4) :: Row(null, 6) :: Row(9, 9) :: Nil)
     }
   }
 
