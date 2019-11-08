@@ -131,9 +131,6 @@ class ErrorParserSuite extends AnalysisTest {
       """
         |CREATE TABLE IF NOT EXISTS tab
         |USING test-provider
-        |COMMENT 'This is the staging page view table'
-        |LOCATION '/user/external/page_view'
-        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
         |AS SELECT * FROM src""".stripMargin, 3, 10, 11, msg + " test-provider")
     intercept("SHOW TABLES IN hyphen-database", 1, 21, 22, msg + " hyphen-database")
     intercept("SHOW TABLE EXTENDED IN hyphen-db LIKE \"str\"", 1, 29, 30, msg + " hyphen-db")
