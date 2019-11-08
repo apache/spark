@@ -17,6 +17,10 @@
 
 package org.apache.spark.resource
 
+import scala.collection.mutable
+
+import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
+
 /**
  * A task resource request. This is used in conjuntion with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
@@ -25,24 +29,13 @@ package org.apache.spark.resource
  * This api is currently private until the rest of the pieces are in place and then it
  * will become public.
  */
-private[spark] class TaskResourceRequest(val resourceName: String,
-    val amount: Double) extends Serializable {
+private[spark] class TaskResourceRequest(val resourceName: String, val amount: Double)
+  extends Serializable {
 
   assert(amount <= 0.5 || amount % 1 == 0,
     s"The resource amount ${amount} must be either <= 0.5, or a whole number.")
 
-  override def toString(): String = {
-    s"TaskResourceRequest: resourceName: $resourceName, amount = $amount"
-  }
-}
-
-private[spark] object TaskResourceRequest {
-
-  def cpus(amount: Double): TaskResourceRequest = {
-    new TaskResourceRequest("cpus", amount)
-  }
-
-  def resource(rName: String, amount: Double): TaskResourceRequest = {
-    new TaskResourceRequest(rName, amount)
+  if (!resourceName.equals(ResourceProfile.CPUS) && !resourceName.startsWith(RESOURCE_DOT)) {
+    throw new IllegalArgumentException(s"Task resource not allowed: $resourceName")
   }
 }

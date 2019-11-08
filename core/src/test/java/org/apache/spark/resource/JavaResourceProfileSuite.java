@@ -30,15 +30,15 @@ public class JavaResourceProfileSuite {
 
   @Test
   public void testResourceProfileAccessFromJava() throws Exception {
-    ExecutorResourceRequest execReqGpu =
-      new ExecutorResourceRequest(GpuResource, 2, "", "myscript");
-    ExecutorResourceRequest execReqFpga =
-      new ExecutorResourceRequest(FPGAResource, 3, "", "myfpgascript", "nvidia");
+    ExecutorResourceRequests execReqGpu =
+      new ExecutorResourceRequests().resource(GpuResource, 2,"myscript", "");
+    ExecutorResourceRequests execReqFpga =
+      new ExecutorResourceRequests().resource(FPGAResource, 3, "myfpgascript", "nvidia");
 
     ResourceProfile rprof = new ResourceProfile();
     rprof.require(execReqGpu);
     rprof.require(execReqFpga);
-    TaskResourceRequest taskReq1 = new TaskResourceRequest(GpuResource, 1);
+    TaskResourceRequests taskReq1 = new TaskResourceRequests().resource(GpuResource, 1);
     rprof.require(taskReq1);
 
     assertEquals(rprof.executorResources().size(), 2);

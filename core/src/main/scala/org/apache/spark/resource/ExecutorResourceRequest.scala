@@ -17,6 +17,10 @@
 
 package org.apache.spark.resource
 
+import scala.collection.mutable
+
+import org.apache.spark.resource.ResourceUtils.RESOURCE_DOT
+
 /**
  * An Executor resource request. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
@@ -43,15 +47,34 @@ package org.apache.spark.resource
  *
  * There are alternative constructors for working with Java.
  *
- * @param resourceName Name of the resource
- * @param amount Amount requesting
+ * @param resourceName    Name of the resource
+ * @param amount          Amount requesting
+ * @param units           Optional units of the amount. For things like Memory, default is
+ *                        no units, only byte types (b, mb, gb, etc) are currently supported.
+ * @param discoveryScript Optional script used to discover the resources. This is required on some
+ *                        cluster managers that don't tell Spark the addresses of the resources
+ *                        allocated. The script runs on Executors startup to discover the addresses
+ *                        of the resources available.
+ * @param vendor Optional vendor, required for some cluster managers
  *
  * This api is currently private until the rest of the pieces are in place and then it
- * will become public.
+ *  will become public.
  */
-private[spark] class ExecutorResourceRequest( val resourceName: String,
-    val amount: Int,
+private[spark] class ExecutorResourceRequest(
+    val resourceName: String,
+    val amount: Long,
     val units: String = "",
     val discoveryScript: String = "",
     val vendor: String = "") extends Serializable {
+
+  private val allowedExecutorResources = mutable.HashSet[String](
+    ResourceProfile.MEMORY,
+    ResourceProfile.OVERHEAD_MEM,
+    ResourceProfile.PYSPARK_MEM,
+    ResourceProfile.CORES)
+
+  if (!allowedExecutorResources.contains(resourceName) && !resourceName.startsWith(RESOURCE_DOT)) {
+    throw new IllegalArgumentException(s"Executor resource not allowed: $resourceName")
+  }
+
 }

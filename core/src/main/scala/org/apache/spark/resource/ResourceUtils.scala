@@ -104,7 +104,7 @@ private[spark] object ResourceUtils extends Logging {
     val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
     val amount = settings.getOrElse(AMOUNT,
       throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
-    ).toInt
+    ).toLong
     val discoveryScript = settings.get(DISCOVERY_SCRIPT)
     val vendor = settings.get(VENDOR)
     ResourceRequest(resourceId, amount, discoveryScript, vendor)
@@ -124,6 +124,18 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
+  def parseFractionalAmount(amountDouble: Double): (Int, Int) = {
+    val parts = if (amountDouble <= 0.5) {
+      Math.floor(1.0 / amountDouble).toInt
+    } else if (amountDouble % 1 != 0) {
+      throw new SparkException(
+        s"The resource amount ${amountDouble} must be either <= 0.5, or a whole number.")
+    } else {
+      1
+    }
+    (Math.ceil(amountDouble).toInt, parts)
+  }
+
   def parseResourceRequirements(sparkConf: SparkConf, componentName: String)
     : Seq[ResourceRequirement] = {
     listResourceIds(sparkConf, componentName).map { resourceId =>
@@ -132,15 +144,7 @@ private[spark] object ResourceUtils extends Logging {
         throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
       ).toDouble
       val (amount, parts) = if (componentName.equalsIgnoreCase(SPARK_TASK_PREFIX)) {
-        val parts = if (amountDouble <= 0.5) {
-          Math.floor(1.0 / amountDouble).toInt
-        } else if (amountDouble % 1 != 0) {
-          throw new SparkException(
-            s"The resource amount ${amountDouble} must be either <= 0.5, or a whole number.")
-        } else {
-          1
-        }
-        (Math.ceil(amountDouble).toInt, parts)
+        parseFractionalAmount(amountDouble)
       } else if (amountDouble % 1 != 0) {
         throw new SparkException(
           s"Only tasks support fractional resources, please check your $componentName settings")

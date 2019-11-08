@@ -19,6 +19,9 @@ package org.apache.spark.resource
 
 import scala.collection.mutable
 
+import org.apache.spark.resource.ResourceProfile._
+import org.apache.spark.resource.ResourceUtils._
+
 /**
  * A set of task resource requests. This is used in conjuntion with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
@@ -29,23 +32,42 @@ import scala.collection.mutable
  */
 private[spark] class TaskResourceRequests() extends Serializable {
 
-  private val _taskResources = new mutable.HashMap[String, ResourceRequirement]()
+  private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
 
-  private val CPUS = "cpus"
+  def requests: Map[String, TaskResourceRequest] = _taskResources.toMap
 
-  private[spark] def requests: Map[String, ResourceRequirement] = _taskResources.toMap
-
-  def cpus(amount: Double): Unit = {
-    val t = new ResourceRequirement(CPUS, amount)
+  /**
+   * Specify number of cpus per Task.
+   *
+   * @param amount Number of cpus to allocate per Task.
+   */
+  def cpus(amount: Int): this.type = {
+    val t = new TaskResourceRequest(CPUS, amount)
     _taskResources(CPUS) = t
+    this
   }
 
-  def resource(rName: String, amount: Double): Unit = {
-    val t = new ResourceRequirement(rName, amount)
+  /**
+   *  Amount of a particular custom resource(GPU, FPGA, etc) to use. The resource names supported
+   *  correspond to the regular Spark configs with the prefix removed. For instance, resources
+   *  like GPUs are resource.gpu (spark configs spark.task.resource.gpu.*)
+   *
+   * @param resourceName Name of the resource.
+   * @param amount Amount requesting as a Double to support fractional resource requests.
+   *               Valid values are less than or equal to 0.5 or whole numbers.
+   */
+  def resource(rName: String, amount: Double): this.type = {
+    val t = new TaskResourceRequest(rName, amount)
     _taskResources(rName) = t
+    this
   }
 
-  def taskRequests: Map[String, Double] = {
-    _taskResources.map { case (n, tr) => (n, tr.amount)}.toMap
+  def addRequest(treq: TaskResourceRequest): this.type = {
+    _taskResources(treq.resourceName) = treq
+    this
+  }
+
+  override def toString: String = {
+    s"Task resource requests: ${_taskResources}"
   }
 }

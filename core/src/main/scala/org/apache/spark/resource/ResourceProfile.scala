@@ -21,14 +21,13 @@ import java.util.{Map => JMap}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.HashSet
 import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
+import org.apache.spark.resource.ResourceUtils.RESOURCE_PREFIX
 
 /**
  * Resource profile to associate with an RDD. A ResourceProfile allows the user to
@@ -52,10 +51,7 @@ private[spark] class ResourceProfile() extends Serializable {
 
   def id: Int = _id
 
-  def exec: ExecutorResourceRequests
-
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.toMap
-
   def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.toMap
 
   /**
@@ -68,19 +64,13 @@ private[spark] class ResourceProfile() extends Serializable {
    */
   def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = _executorResources.asJava
 
-
   def reset(): Unit = {
     _taskResources.clear()
     _executorResources.clear()
   }
 
-  def require(request: TaskResourceRequest): this.type = {
-    val rName = request.resourceName
-    this
-  }
-
-  def require(request: ExecutorResourceRequest): this.type = {
-    val rName = request.resourceName
+  def require(requests: ExecutorResourceRequests): this.type = {
+    _executorResources ++= requests.requests
     this
   }
 
@@ -136,27 +126,28 @@ private[spark] object ResourceProfile extends Logging {
 
   private def addDefaultTaskResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
     val cpusPerTask = conf.get(CPUS_PER_TASK)
-    rprof.require(new TaskResourceRequest(CPUS, cpusPerTask))
+    val treqs = new TaskResourceRequests()
+    treqs.cpus(cpusPerTask)
     val taskReq = ResourceUtils.parseResourceRequirements(conf, SPARK_TASK_PREFIX)
-
     taskReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.resourceName}"
-      rprof.require(new TaskResourceRequest(name, req.amount))
+      treqs.resource(name, req.amount)
     }
+    rprof.require(treqs)
   }
 
   private def addDefaultExecutorResources(rprof: ResourceProfile, conf: SparkConf): Unit = {
-    rprof.require(new ExecutorResourceRequest(CORES, conf.get(EXECUTOR_CORES)))
-    rprof.require(
-      new ExecutorResourceRequest(MEMORY, conf.get(EXECUTOR_MEMORY).toInt, "b"))
-    val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
+    val ereqs = new ExecutorResourceRequests()
 
+    ereqs.cores(conf.get(EXECUTOR_CORES))
+    ereqs.memory(conf.get(EXECUTOR_MEMORY), "m")
+    val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
     execReq.foreach { req =>
       val name = s"${RESOURCE_PREFIX}.${req.id.resourceName}"
-      val execReq = new ExecutorResourceRequest(name, req.amount, "",
-        req.discoveryScript.getOrElse(""), req.vendor.getOrElse(""))
-      rprof.require(execReq)
+      ereqs.resource(name, req.amount, req.discoveryScript.getOrElse(""),
+        req.vendor.getOrElse(""))
     }
+    rprof.require(ereqs)
   }
 
   // for testing purposes
