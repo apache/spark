@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Exists, ExistsSubquery, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, ExistsSubquery, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
