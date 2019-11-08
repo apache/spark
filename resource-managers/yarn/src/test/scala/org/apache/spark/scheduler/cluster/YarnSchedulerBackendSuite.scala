@@ -25,6 +25,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.ui.TestFilter
@@ -52,7 +53,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
   private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
       extends YarnSchedulerBackend(scheduler, sc) {
     def setHostToLocalTaskCount(hostToLocalTaskCount: Map[(String, ResourceProfile), Int]): Unit = {
-      val rpId = ResourcePofile.DEFAULT_RESOURCE_PROFILE_ID
+      val rpId = DEFAULT_RESOURCE_PROFILE_ID
       val rpHostToLocal = Map(rpId -> hostToLocalTaskCount)
       this.rpHostToLocalTaskCount = rpHostToLocal
     }
