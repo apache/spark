@@ -307,6 +307,10 @@ private[spark] class Client(
       }
     }
     appContext.setUnmanagedAM(isClientUnmanagedAMEnabled)
+
+    sparkConf.get(APPLICATION_PRIORITY).foreach { appPriority =>
+      appContext.setPriority(Priority.newInstance(appPriority))
+    }
     appContext
   }
 
