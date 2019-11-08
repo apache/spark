@@ -18,33 +18,38 @@
 package org.apache.spark.metrics.source
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.config.METRICS_STATIC_SOURCES_ENABLED
 
 class SourceConfigSuite extends SparkFunSuite with LocalSparkContext {
 
-  test("Test configuration for static sources registration") {
+  test("Test configuration for adding static sources registration") {
     val conf = new SparkConf()
-    conf.set("spark.metrics.static.sources.enabled", "true")
+    conf.set(METRICS_STATIC_SOURCES_ENABLED, true)
     val sc = new SparkContext("local", "test", conf)
-    val metricsSystem = sc.env.metricsSystem
+    try {
+      val metricsSystem = sc.env.metricsSystem
 
-    // Static sources should be registered
-    assert (metricsSystem.getSourcesByName("CodeGenerator").nonEmpty)
-    assert (metricsSystem.getSourcesByName("HiveExternalCatalog").nonEmpty)
-
-    sc.stop()
+      // Static sources should be registered
+      assert (metricsSystem.getSourcesByName("CodeGenerator").nonEmpty)
+      assert (metricsSystem.getSourcesByName("HiveExternalCatalog").nonEmpty)
+    } finally {
+      sc.stop()
+    }
   }
 
   test("Test configuration for skipping static sources registration") {
     val conf = new SparkConf()
-    conf.set("spark.metrics.static.sources.enabled", "false")
+    conf.set(METRICS_STATIC_SOURCES_ENABLED, false)
     val sc = new SparkContext("local", "test", conf)
-    val metricsSystem = sc.env.metricsSystem
+    try {
+      val metricsSystem = sc.env.metricsSystem
 
-    // Static sources should be registered
-    assert (metricsSystem.getSourcesByName("CodeGenerator").isEmpty)
-    assert (metricsSystem.getSourcesByName("HiveExternalCatalog").isEmpty)
-
-    sc.stop()
+      // Static sources should not be registered
+      assert (metricsSystem.getSourcesByName("CodeGenerator").isEmpty)
+      assert (metricsSystem.getSourcesByName("HiveExternalCatalog").isEmpty)
+    } finally {
+      sc.stop()
+    }
   }
 
 }
