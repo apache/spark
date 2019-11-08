@@ -501,7 +501,6 @@ case class ExistsSubquery(child: Expression,
     true
   }
 
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     genCodeWithSet(ctx, ev)
   }
