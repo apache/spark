@@ -323,6 +323,12 @@ class MultilayerPerceptronClassificationModel private[ml] (
   override protected def predictRaw(features: Vector): Vector = mlpModel.predictRaw(features)
 
   override def numClasses: Int = layers.last
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"MultilayerPerceptronClassificationModel: uid = $uid, numClasses = $numClasses, " +
+      s"numFeatures = $numFeatures, numLayers = ${layers.length}"
+  }
 }
 
 @Since("2.0.0")

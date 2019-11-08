@@ -338,6 +338,11 @@ class ALSModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter = new ALSModel.ALSModelWriter(this)
 
+  @Since("3.0.0")
+  override def toString: String = {
+    s"ALSModel: uid = $uid, rank = $rank"
+  }
+
   /**
    * Returns top `numItems` items recommended for each user, for all users.
    * @param numItems max number of recommendations for each user

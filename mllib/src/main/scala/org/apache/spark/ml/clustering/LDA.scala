@@ -620,6 +620,11 @@ class LocalLDAModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new LocalLDAModel.LocalLDAModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"LocalLDAModel: uid = $uid, k = ${$(k)}, numFeatures = $vocabSize"
+  }
 }
 
 
@@ -783,6 +788,11 @@ class DistributedLDAModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new DistributedLDAModel.DistributedWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"DistributedLDAModel: uid = $uid, k = ${$(k)}, numFeatures = $vocabSize"
+  }
 }
 
 

@@ -310,6 +310,11 @@ class FPGrowthModel private[ml] (
 
   @Since("2.2.0")
   override def write: MLWriter = new FPGrowthModel.FPGrowthModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"FPGrowthModel: uid = $uid, numTrainingRecords = $numTrainingRecords"
+  }
 }
 
 @Since("2.2.0")
