@@ -1315,11 +1315,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         val (leftEvaluateCondition, commonCondition) =
           rest.partition(expr => expr.references.subsetOf(left.outputSet))
         (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
-      case FullOuter =>
-        val (bothEvaluateCondition, commonCondition) =
-          pushDownCandidates.partition(cond =>
-            cond.references.subsetOf(left.outputSet) && cond.references.subsetOf(right.outputSet))
-        (bothEvaluateCondition, bothEvaluateCondition, commonCondition)
+      case FullOuter => (null, null, null)
       case NaturalJoin(_) => (null, null, null)
       case UsingJoin(_, _) => (null, null, null)
     }
@@ -1406,12 +1402,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           Join(newLeft, newRight, joinType, newJoinCond, hint)
         case FullOuter =>
-          val newLeft = leftJoinConditions.
-            reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
-          val newRight = rightJoinConditions.
-            reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-          val newJoinCond = commonJoinCondition.reduceLeftOption(And)
-          Join(newLeft, newRight, FullOuter, newJoinCond, hint)
+          j
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
         case UsingJoin(_, _) => sys.error("Untransformed Using join node")
       }

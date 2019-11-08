@@ -380,6 +380,15 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         sql(
           """
+            | SELECT s1.id, s2.id as id2 FROM s1
+            | RIGHT OUTER JOIN  s2 ON s1.id = s2.id
+            | AND NOT EXISTS (SELECT * from s3 where s3.id > 6)
+          """.stripMargin),
+        Row(null, 1) :: Row(null, 3) :: Row(null, 4) :: Row(null, 6) :: Row(null, 9) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
             | SELECT s1.id FROM s1
             | LEFT SEMI JOIN  s2 ON s1.id = s2.id
             | AND EXISTS (SELECT * from s3 where s3.id > 6)
@@ -390,10 +399,28 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
         sql(
           """
             | SELECT s1.id FROM s1
+            | LEFT SEMI JOIN  s2 ON s1.id = s2.id
+            | AND NOT EXISTS (SELECT * from s3 where s3.id > 6)
+          """.stripMargin),
+      Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | SELECT s1.id FROM s1
             | LEFT ANTI JOIN  s2 ON s1.id = s2.id
             | AND EXISTS (SELECT * from s3 where s3.id > 6)
           """.stripMargin),
         Row(5) :: Row(7) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | SELECT s1.id FROM s1
+            | LEFT ANTI JOIN  s2 ON s1.id = s2.id
+            | AND NOT EXISTS (SELECT * from s3 where s3.id > 6)
+          """.stripMargin),
+        Row(1) :: Row(3):: Row(5) :: Row(7) :: Row(9) :: Nil)
 
       checkAnswer(
         sql(
@@ -408,11 +435,10 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
         sql(
           """
             | SELECT s1.id, s2.id as id2 FROM s1
-            | FULL OUTER JOIN  s2 ON s1.id = s2.id
-            | AND EXISTS (SELECT * from s3 where s3.id > 6)
+            | LEFT OUTER JOIN s2 ON s1.id = s2.id
+            | AND NOT EXISTS (SELECT * from s3 where s3.id > 6)
           """.stripMargin),
-        Row(1, 1) :: Row(3, 3) :: Row(5, null) :: Row(7, null) ::
-          Row(null, 4) :: Row(null, 6) :: Row(9, 9) :: Nil)
+        Row(1, null) :: Row(3, null) :: Row(5, null) :: Row(7, null) :: Row(9, null) :: Nil)
     }
   }
 
