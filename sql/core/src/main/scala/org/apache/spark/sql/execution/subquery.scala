@@ -171,7 +171,10 @@ case class InSubqueryExec(
   }
 }
 
-
+/**
+ * The physical node of exists-subquery. This is for support use exists in join's on condition,
+ * since some join type we can't pushdown exists condition, we plan it here
+ */
 case class ExistsExec(child: Expression,
                       subQuery: String,
                       plan: BaseSubqueryExec,
