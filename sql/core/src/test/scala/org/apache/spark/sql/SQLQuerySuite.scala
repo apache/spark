@@ -3306,6 +3306,26 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         """.stripMargin).collect()
     }
   }
+
+  test("SPARK-29682: Aggregation conflicts are resolved") {
+    val numsDF = Seq(1, 2, 3).toDF("nums")
+    val cubeDF = numsDF
+      .cube("nums")
+      .agg(max(lit(0)).as("agcol"), grouping_id().as("gid"))
+
+    checkAnswer(
+      cubeDF.select("nums").join(cubeDF, "nums"),
+      Row(1, 0, 0) :: Row(2, 0, 0) :: Row(3, 0, 0) :: Nil)
+
+    val group0 = cubeDF.filter(col("gid") <=> lit(0))
+    val group1 = cubeDF.filter(col("gid") <=> lit(1))
+
+    checkAnswer(
+      cubeDF.select("nums").distinct
+        .join(group0, Seq("nums"), "inner")
+        .join(group1, Seq("nums"), "inner"),
+      Seq.empty)
+  }
 }
 
 case class Foo(bar: Option[String])

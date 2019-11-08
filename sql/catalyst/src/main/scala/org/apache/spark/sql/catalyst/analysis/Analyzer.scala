@@ -21,7 +21,7 @@ import java.util
 import java.util.Locale
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
@@ -951,12 +951,15 @@ class Analyzer(
 
         // Handle projects that create conflicting aliases.
         case oldVersion @ Project(projectList, _)
-            if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
+            if hasConflictInAlias(projectList, conflictingAttributes) =>
           (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
 
         case oldVersion @ Aggregate(_, aggregateExpressions, _)
-            if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
-          (oldVersion, oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions)))
+            if hasConflict(aggregateExpressions, conflictingAttributes) =>
+          (oldVersion,
+            oldVersion.copy(
+              aggregateExpressions =
+                newNamedExpression(aggregateExpressions, conflictingAttributes)))
 
         case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
@@ -967,10 +970,11 @@ class Analyzer(
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
           (oldVersion, oldVersion.copy(generatorOutput = newOutput))
 
-        case oldVersion @ Window(windowExpressions, _, _, child)
-            if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
-              .nonEmpty =>
-          (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
+        case oldVersion @ Window(windowExpressions, _, _, _)
+            if hasConflict(windowExpressions, conflictingAttributes) =>
+          (oldVersion,
+            oldVersion.copy(
+              windowExpressions = newNamedExpression(windowExpressions, conflictingAttributes)))
       }
         // Only handle first case, others will be fixed on the next pass.
         .headOption match {
@@ -989,6 +993,8 @@ class Analyzer(
             case other => other transformExpressions {
               case a: Attribute =>
                 dedupAttr(a, attributeRewrites)
+              case alias: Alias =>
+                dedupAlias(alias, attributeRewrites)
               case s: SubqueryExpression =>
                 s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
             }
@@ -999,6 +1005,14 @@ class Analyzer(
     private def dedupAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
       val exprId = attrMap.getOrElse(attr, attr).exprId
       attr.withExprId(exprId)
+    }
+
+    private def dedupAlias(alias: Alias, attrMap: AttributeMap[Attribute]): Alias = {
+      attrMap.get(alias.toAttribute) match {
+        case Some(attr) =>
+          Alias(alias.child, alias.name)(attr.exprId, alias.qualifier, alias.explicitMetadata)
+        case None => alias
+      }
     }
 
     /**
@@ -1183,6 +1197,19 @@ class Analyzer(
         q.mapExpressions(resolveExpressionTopDown(_, q))
     }
 
+    def hasConflictInAlias(
+        projectList: Seq[NamedExpression],
+        conflictingAttributes: AttributeSet): Boolean = {
+      AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
+        .intersect(conflictingAttributes).nonEmpty
+    }
+
+    def hasConflict(
+        expressions: Seq[NamedExpression],
+        conflictingAttributes: AttributeSet): Boolean = {
+      AttributeSet(expressions.map(_.toAttribute)).intersect(conflictingAttributes).nonEmpty
+    }
+
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
       expressions.map {
         case a: Alias => Alias(a.child, a.name)()
@@ -1190,8 +1217,18 @@ class Analyzer(
       }
     }
 
-    def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
-      AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
+    def newNamedExpression(
+        expressions: Seq[NamedExpression],
+        conflictingAttributes: AttributeSet): Seq[NamedExpression] = {
+      val newExprs = HashMap[NamedExpression, NamedExpression]()
+      expressions.map {
+        case a: Alias => Alias(a.child, a.name)(
+          qualifier = a.qualifier,
+          explicitMetadata = a.explicitMetadata)
+        case expr if conflictingAttributes.contains(expr) =>
+          newExprs.getOrElseUpdate(expr, expr.newInstance)
+        case other => other
+      }
     }
 
     /**
