@@ -53,11 +53,11 @@ def run_cmd(cmd, return_output=False):
         cmd = cmd.split()
     try:
         if return_output:
-            return subprocess_check_output(cmd).decode(sys.getdefaultencoding())
+            return subprocess_check_output(cmd).decode('utf-8')
         else:
             popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
             for stdout_line in popen.stdout:
-                print(stdout_line.decode(sys.getdefaultencoding()), end='')
+                print(stdout_line.decode('utf-8', end='')
             popen.stdout.close()
             return_code = popen.wait()
             return return_code
