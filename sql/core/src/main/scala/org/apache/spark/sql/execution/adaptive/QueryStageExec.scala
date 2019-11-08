@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable
 import scala.concurrent.Future
 
 import org.apache.spark.{FutureAction, MapOutputStatistics}
