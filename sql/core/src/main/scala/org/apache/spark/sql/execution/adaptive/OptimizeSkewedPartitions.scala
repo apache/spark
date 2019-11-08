@@ -107,10 +107,10 @@ case class OptimizeSkewedPartitions(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   /**
-    * Base optimization support check: the join type is supported and plan statistics is available.
-    * Note that for some join types(like left outer), whether a certain partition can be optimized
-    * also depends on the filed isSkewAndSupportsSplit.
-    */
+   * Base optimization support check: the join type is supported and plan statistics is available.
+   * Note that for some join types(like left outer), whether a certain partition can be optimized
+   * also depends on the filed isSkewAndSupportsSplit.
+   */
   private def supportOptimization(
     joinType: JoinType,
     leftStage: QueryStageExec,
