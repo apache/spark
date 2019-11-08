@@ -110,6 +110,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
       } else {
         null
       }
+      lazy val listenerName = Utils.getFormattedClassName(listener)
       try {
         doPostEvent(listener, event)
         if (Thread.interrupted()) {
@@ -119,16 +120,16 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
         }
       } catch {
         case ie: InterruptedException =>
-          logError(s"Interrupted while posting to ${Utils.getFormattedClassName(listener)}.  " +
-            s"Removing that listener.", ie)
+          logError(s"Interrupted while posting to ${listenerName}. Removing that listener.", ie)
           removeListenerOnError(listener)
         case NonFatal(e) if !isIgnorableException(e) =>
-          logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
+          logError(s"Listener ${listenerName} threw an exception", e)
       } finally {
         if (maybeTimerContext != null) {
           val elapsed = maybeTimerContext.stop()
           if (logSlowEventEnabled && elapsed > logSlowEventThreshold) {
-            logError(s"Process of event ${event} took ${elapsed / 1000000000d}s.")
+            logError(s"Process of event ${event} by listener ${listenerName} took " +
+              s"${elapsed / 1000000000d}s.")
           }
         }
       }

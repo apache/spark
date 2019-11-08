@@ -608,6 +608,7 @@ package object config {
 
   private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_ENABLED =
     ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent.enabled")
+      .internal()
       .doc("When enabled, log the event that takes too much time to process. This helps us " +
         "discover the event types that cause performance bottlenecks. The time threshold is " +
         "controlled by spark.scheduler.listenerbus.logSlowEvent.threshold.")
@@ -616,6 +617,7 @@ package object config {
 
   private[spark] val LISTENER_BUS_LOG_SLOW_EVENT_TIME_THRESHOLD =
     ConfigBuilder("spark.scheduler.listenerbus.logSlowEvent.threshold")
+      .internal()
       .doc("The time threshold of whether a event is considered to be taking too much time to " +
         "process. Log the event if spark.scheduler.listenerbus.logSlowEvent.enabled is true.")
       .timeConf(TimeUnit.NANOSECONDS)
