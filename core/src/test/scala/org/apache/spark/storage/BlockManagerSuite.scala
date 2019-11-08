@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -144,10 +145,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     sc = mock(classOf[SparkContext])
     when(sc.conf).thenReturn(conf)
 
+    val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None)), rpcEnv.setupEndpoint("blockmanagerHeartbeat",
-      new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true)), conf, true))
+        new LiveListenerBus(conf), None, blockManagerInfo)),
+      rpcEnv.setupEndpoint("blockmanagerHeartbeat",
+      new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
 
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()

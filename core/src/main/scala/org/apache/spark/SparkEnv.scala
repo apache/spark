@@ -22,6 +22,7 @@ import java.net.Socket
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.concurrent
 import scala.collection.mutable
 import scala.util.Properties
 
@@ -339,6 +340,8 @@ object SparkEnv extends Logging {
       None
     }
 
+    // Mapping from block manager id to the block manager's information.
+    val blockManagerInfo = new concurrent.TrieMap[BlockManagerId, BlockManagerInfo]()
     val blockManagerMaster = new BlockManagerMaster(
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_ENDPOINT_NAME,
@@ -351,10 +354,10 @@ object SparkEnv extends Logging {
             externalShuffleClient
           } else {
             None
-          })),
+          }, blockManagerInfo)),
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
-        new BlockManagerMasterHeartbeatEndpoint(rpcEnv, isLocal)),
+        new BlockManagerMasterHeartbeatEndpoint(rpcEnv, isLocal, blockManagerInfo)),
       conf,
       isDriver)
 

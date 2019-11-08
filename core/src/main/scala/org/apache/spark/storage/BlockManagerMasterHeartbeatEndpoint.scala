@@ -21,39 +21,20 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
-import org.apache.spark.storage.BlockManagerMessages.{BlockManagerHeartbeat, RegisterBlockManager, RemoveExecutor, StopBlockManagerMaster, UpdateBlockInfo}
+import org.apache.spark.storage.BlockManagerMessages.{BlockManagerHeartbeat, StopBlockManagerMaster, UpdateBlockInfo}
 
 /**
  * Separate heartbeat out of BlockManagerMasterEndpoint due to performance consideration.
  */
 private[spark] class BlockManagerMasterHeartbeatEndpoint(
     override val rpcEnv: RpcEnv,
-    isLocal: Boolean)
+    isLocal: Boolean,
+    blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo])
   extends ThreadSafeRpcEndpoint with Logging {
 
-  // Mapping from block manager id to its last seen ms.
-  private val blockManagerLastSeen = new mutable.HashMap[BlockManagerId, Long]
-
-  // Mapping from executor ID to block manager ID.
-  private val blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId]
-
-  // Use BlockManagerId -> Long to manage the heartbeat last seen, so the events which to handle
-  // in this class due to whether or not the block manager id and last seen will be changed.
-  // `RegisterBlockManager` and `RemoveExecutor` updates the BlockManagerId
-  // and `UpdateBlockInfo` and `BlockManagerHeartbeat` updates the last seen time.
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case RegisterBlockManager(blockManagerId, _, _, _, _) =>
-      updateLastSeenMs(blockManagerId)
-      blockManagerIdByExecutor(blockManagerId.executorId) = blockManagerId
-      context.reply(true)
-
     case UpdateBlockInfo(blockManagerId, _, _, _, _) =>
-      updateLastSeenMs(blockManagerId)
-      context.reply(true)
-
-    case RemoveExecutor(execId) =>
-      blockManagerIdByExecutor.get(execId).foreach(blockManagerLastSeen.remove)
-      blockManagerIdByExecutor -= execId
+      heartbeatReceived(blockManagerId)
       context.reply(true)
 
     case BlockManagerHeartbeat(blockManagerId) =>
@@ -71,15 +52,11 @@ private[spark] class BlockManagerMasterHeartbeatEndpoint(
    * indicating that the block manager should re-register.
    */
   private def heartbeatReceived(blockManagerId: BlockManagerId): Boolean = {
-    if (!blockManagerLastSeen.contains(blockManagerId)) {
+    if (!blockManagerInfo.contains(blockManagerId)) {
       blockManagerId.isDriver && !isLocal
     } else {
-      updateLastSeenMs(blockManagerId)
+      blockManagerInfo(blockManagerId).updateLastSeenMs()
       true
     }
-  }
-
-  def updateLastSeenMs(blockManagerId: BlockManagerId) {
-    blockManagerLastSeen(blockManagerId) = System.currentTimeMillis()
   }
 }

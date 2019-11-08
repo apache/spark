@@ -45,11 +45,9 @@ class BlockManagerMasterEndpoint(
     val isLocal: Boolean,
     conf: SparkConf,
     listenerBus: LiveListenerBus,
-    externalBlockStoreClient: Option[ExternalBlockStoreClient])
+    externalBlockStoreClient: Option[ExternalBlockStoreClient],
+    blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo])
   extends ThreadSafeRpcEndpoint with Logging {
-
-  // Mapping from block manager id to the block manager's information.
-  private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
 
   // Mapping from external shuffle service block manager id to the block statuses.
   private val blockStatusByShuffleService =
@@ -571,12 +569,17 @@ private[spark] class BlockManagerInfo(
 
   val externalShuffleServiceEnabled = externalShuffleServiceBlockStatus.isDefined
 
+  private var _lastSeenMs: Long = timeMs
   private var _remainingMem: Long = maxMem
 
   // Mapping from block id to its status.
   private val _blocks = new JHashMap[BlockId, BlockStatus]
 
   def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
+
+  def updateLastSeenMs() {
+    _lastSeenMs = System.currentTimeMillis()
+  }
 
   def updateBlockInfo(
       blockId: BlockId,
@@ -671,6 +674,8 @@ private[spark] class BlockManagerInfo(
   }
 
   def remainingMem: Long = _remainingMem
+
+  def lastSeenMs: Long = _lastSeenMs
 
   def blocks: JHashMap[BlockId, BlockStatus] = _blocks
 
