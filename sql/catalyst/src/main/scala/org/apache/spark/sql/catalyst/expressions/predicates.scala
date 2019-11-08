@@ -487,6 +487,50 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 }
 
+case class ExistsSubquery(child: Expression,
+                          subQuery: String,
+                          hset: Set[Any]) extends UnaryExpression with Predicate {
+
+  require(hset != null, "hset could not be null")
+
+  override def toString: String = s"Exists ${subQuery}"
+
+  override def nullable: Boolean = child.nullable
+
+  protected override def nullSafeEval(value: Any): Any = {
+    if (set.contains(value)) {
+      true
+    } else {
+      false
+    }
+  }
+
+  @transient lazy val set: Set[Any] = child.dataType match {
+    case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
+    case _: NullType => hset
+    case _ =>
+      // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
+      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ (hset - null)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    genCodeWithSet(ctx, ev)
+  }
+
+  private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val setTerm = ctx.addReferenceObj("set", set)
+      s"""
+         |${ev.value} = $setTerm.size() > 0;
+       """.stripMargin
+    })
+  }
+
+  override def sql: String = {
+    s"(EXISTS (${subQuery}))"
+  }
+}
+
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Logical AND.")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {

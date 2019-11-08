@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Exists, ExistsSubquery, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
@@ -171,6 +171,66 @@ case class InSubqueryExec(
   }
 }
 
+
+case class ExistsExec(child: Expression,
+                      subQuery: String,
+                      plan: BaseSubqueryExec,
+                      exprId: ExprId,
+                      private var resultBroadcast: Broadcast[Array[Any]] = null)
+  extends ExecSubqueryExpression {
+
+  @transient private var result: Array[Any] = _
+
+  override def dataType: DataType = BooleanType
+  override def children: Seq[Expression] = child :: Nil
+  override def nullable: Boolean = child.nullable
+  override def toString: String = s"EXISTS ${plan.name}"
+  override def withNewPlan(plan: BaseSubqueryExec): ExistsExec = copy(plan = plan)
+
+  override def semanticEquals(other: Expression): Boolean = other match {
+    case in: ExistsExec => child.semanticEquals(in.child) && plan.sameResult(in.plan)
+    case _ => false
+  }
+
+
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect()
+    result = child.dataType match {
+      case _: StructType => rows.toArray
+      case _ => rows.map(_.get(0, child.dataType))
+    }
+    resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
+  }
+
+  def values(): Option[Array[Any]] = Option(resultBroadcast).map(_.value)
+
+  private def prepareResult(): Unit = {
+    require(resultBroadcast != null, s"$this has not finished")
+    if (result == null) {
+      result = resultBroadcast.value
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    prepareResult()
+    !result.isEmpty
+  }
+
+  override lazy val canonicalized: ExistsExec = {
+    copy(
+      child = child.canonicalized,
+      subQuery = subQuery,
+      plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
+      exprId = ExprId(0),
+      resultBroadcast = null)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    prepareResult()
+    ExistsSubquery(child, subQuery, result.toSet).doGenCode(ctx, ev)
+  }
+}
+
 /**
  * Plans subqueries that are present in the given [[SparkPlan]].
  */
@@ -194,6 +254,19 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         }
         val executedPlan = new QueryExecution(sparkSession, query).executedPlan
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
+      case expressions.Exists(sub, children, exprId) =>
+        val expr = if (children.length == 1) {
+          children.head
+        } else {
+          CreateNamedStruct(
+            children.zipWithIndex.flatMap { case (v, index) =>
+              Seq(Literal(s"col_$index"), v)
+            }
+          )
+        }
+        val executedPlan = new QueryExecution(sparkSession, sub).executedPlan
+        ExistsExec(expr, sub.treeString,
+          SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
     }
   }
 }
