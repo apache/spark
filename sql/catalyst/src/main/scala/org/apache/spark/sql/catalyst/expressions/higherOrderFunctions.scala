@@ -289,25 +289,28 @@ case class ArrayTransform(
 /**
  * Sorts elements in an array using a comparator function.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, func) - Sorts the input array in ascending order. The elements of the " +
-    "input array must be orderable. Null elements will be placed at the end of the returned " +
-    "array. Since 3.0.0 also sorts and returns the array based on the given " +
-    "comparator function. The comparator will take two nullable arguments " +
-    "representing two nullable elements of the array." +
-    "It returns -1, 0, or 1 as the first nullable element is less than, equal to, or greater " +
-    "than the second nullable element. If the comparator function returns other " +
-    "values (including NULL), the query will fail and raise an error.",
+  usage = """_FUNC_(expr, func) - Sorts the input array in ascending order. The elements of the
+    input array must be orderable. Null elements will be placed at the end of the returned
+    array. Since 3.0.0 also sorts and returns the array based on the given
+    comparator function. The comparator will take two nullable arguments
+    representing two nullable elements of the array.
+    It returns -1, 0, or 1 as the first nullable element is less than, equal to, or greater
+    than the second nullable element. If the comparator function returns other
+    values (including NULL), the query will fail and raise an error.
+    """,
   examples = """
     Examples:
-      > SELECT _FUNC_(array(5, 6, 1), (x, y) -> f(x, y));
+      > SELECT _FUNC_(array(5, 6, 1), (left, right) -> If(And(IsNull(left), IsNull(right)), 0, If(IsNull(left), 1, If(IsNull(right), -1, If(left < right, -1, If(left > right, 1, 0))))));
        [1,5,6]
-      > SELECT _FUNC_(array('bc', 'ab', 'dc'), (x, y) -> f(x, y));
-       ["dc", "bc", "ab"]
+      > SELECT _FUNC_(array('bc', 'ab', 'dc'), (left, right) -> If(And(IsNull(left), IsNull(right)), 0, If(IsNull(left), 1, If(IsNull(right), -1, If(left < right, -1, If(left > right, 1, 0))))));
+       ["dc","bc","ab"]
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
-       ["d", "c", "b", "a", null]
+       ["a","b","c","d",null]
   """,
   since = "2.4.0")
+// scalastyle:on line.size.limit
 case class ArraySort(
     argument: Expression,
     function: Expression)
@@ -319,7 +322,6 @@ case class ArraySort(
     argument.dataType.asInstanceOf[ArrayType].elementType
 
   override def dataType: ArrayType = argument.dataType.asInstanceOf[ArrayType]
-
   override def checkInputDataTypes(): TypeCheckResult = {
     checkArgumentDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
