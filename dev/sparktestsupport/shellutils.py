@@ -57,7 +57,8 @@ def run_cmd(cmd, return_output=False):
         else:
             popen = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True)
             for stdout_line in popen.stdout:
-                print(stdout_line.decode(sys.getdefaultencoding()), end='')
+                line = stdout_line.encode(sys.getdefaultencoding())
+                print(line.decode(sys.getdefaultencoding()), end='')
             popen.stdout.close()
             return_code = popen.wait()
             return return_code
