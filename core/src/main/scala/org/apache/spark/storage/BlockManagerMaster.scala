@@ -47,7 +47,6 @@ class BlockManagerMaster(
    *  This is only called on the driver side. Non-blocking
    */
   def removeExecutorAsync(execId: String): Unit = {
-    driverHeartbeatEndPoint.ask[Boolean](RemoveExecutor(execId))
     driverEndpoint.ask[Boolean](RemoveExecutor(execId))
     logInfo("Removal of executor " + execId + " requested")
   }
@@ -64,10 +63,8 @@ class BlockManagerMaster(
       maxOffHeapMemSize: Long,
       slaveEndpoint: RpcEndpointRef): BlockManagerId = {
     logInfo(s"Registering BlockManager $id")
-    val register =
-      RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint)
-    driverHeartbeatEndPoint.ask[Boolean](register)
-    val updatedId = driverEndpoint.askSync[BlockManagerId](register)
+    val updatedId = driverEndpoint.askSync[BlockManagerId](
+      RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
     logInfo(s"Registered BlockManager $updatedId")
     updatedId
   }
@@ -78,9 +75,8 @@ class BlockManagerMaster(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
-    val update = UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize)
-    driverHeartbeatEndPoint.ask[Boolean](update)
-    val res = driverEndpoint.askSync[Boolean](update)
+    val res = driverEndpoint.askSync[Boolean](
+      UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize))
     logDebug(s"Updated info of block $blockId")
     res
   }
@@ -240,12 +236,8 @@ class BlockManagerMaster(
     }
   }
 
-  /**
-   * Send a one-way message to the master endpoint and heartbeat endpoint,
-   * to which we expect it to reply with true. Use async way to ask heartbeat endpoint.
-   */
-  private def tell(message: ToBlockManagerMaster): Unit = {
-    driverHeartbeatEndPoint.ask[Boolean](message)
+  /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
+  private def tell(message: Any): Unit = {
     if (!driverEndpoint.askSync[Boolean](message)) {
       throw new SparkException("BlockManagerMasterEndpoint returned false, expected true.")
     }
