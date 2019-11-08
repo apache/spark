@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange}
+import org.apache.spark.sql.execution.command.CreateTableLikeCommand
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -141,6 +142,24 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         writeOptions = c.options.filterKeys(_ != "path"),
         ignoreIfExists = c.ifNotExists)
 
+    case CreateTableLikeStatement(target, source, loc, ifNotExists) =>
+      (source, target) match {
+        case (SessionCatalog(tCatalog, t), SessionCatalog(sCatalog, s)) =>
+          val CatalogAndIdentifierParts(targetCatalog, targetParts) = t
+          val CatalogAndIdentifierParts(sourceCatalog, sourceParts) = s
+          CreateTableLikeCommand(v1targetTable, v1sourceTable, location, ifNotExists)
+
+        case (NonSessionCatalog(tCatalog, t), NonSessionCatalog(sCatalog, s)) =>
+          CreateTableLike(tCatalog.asTableCatalog,
+            t.asIdentifier,
+            sCatalog.asTableCatalog,
+            s.asIdentifier,
+            ifNotExists)
+        case (SessionCatalog(tCatalog, t), NonSessionCatalog(sCatalog, s)) =>
+        case (NonSessionCatalog(tCatalog, t), SessionCatalog(sCatalog, s)) =>
+      }
+
+
     case CreateTableLikeStatement(
          NonSessionCatalog(tCatalog, t), NonSessionCatalog(sCatalog, s), loc, ifNotExists ) =>
       if (loc.nonEmpty) {
@@ -224,6 +243,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   object NonSessionCatalog {
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
       case CatalogAndIdentifierParts(catalog, parts) if !isSessionCatalog(catalog) =>
+        Some(catalog -> parts)
+      case _ => None
+    }
+  }
+
+  object SessionCatalog {
+    def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
+      case CatalogAndIdentifierParts(catalog, parts) if isSessionCatalog(catalog) =>
         Some(catalog -> parts)
       case _ => None
     }
