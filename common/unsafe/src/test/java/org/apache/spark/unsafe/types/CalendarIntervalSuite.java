@@ -19,8 +19,11 @@ package org.apache.spark.unsafe.types;
 
 import org.junit.Test;
 
+import java.time.Duration;
+import java.time.Period;
+
 import static org.junit.Assert.*;
-import static org.apache.spark.unsafe.types.CalendarInterval.*;
+import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
 public class CalendarIntervalSuite {
 
@@ -48,50 +51,35 @@ public class CalendarIntervalSuite {
     CalendarInterval i;
 
     i = new CalendarInterval(0, 0, 0);
-    assertEquals("interval 0 microseconds", i.toString());
+    assertEquals("0 seconds", i.toString());
 
     i = new CalendarInterval(34, 0, 0);
-    assertEquals("interval 2 years 10 months", i.toString());
+    assertEquals("2 years 10 months", i.toString());
 
     i = new CalendarInterval(-34, 0, 0);
-    assertEquals("interval -2 years -10 months", i.toString());
+    assertEquals("-2 years -10 months", i.toString());
 
     i = new CalendarInterval(0, 31, 0);
-    assertEquals("interval 31 days", i.toString());
+    assertEquals("31 days", i.toString());
 
     i = new CalendarInterval(0, -31, 0);
-    assertEquals("interval -31 days", i.toString());
+    assertEquals("-31 days", i.toString());
 
     i = new CalendarInterval(0, 0, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
-    assertEquals("interval 3 hours 13 minutes 0.000123 seconds", i.toString());
+    assertEquals("3 hours 13 minutes 0.000123 seconds", i.toString());
 
     i = new CalendarInterval(0, 0, -3 * MICROS_PER_HOUR - 13 * MICROS_PER_MINUTE - 123);
-    assertEquals("interval -3 hours -13 minutes -0.000123 seconds", i.toString());
+    assertEquals("-3 hours -13 minutes -0.000123 seconds", i.toString());
 
     i = new CalendarInterval(34, 31, 3 * MICROS_PER_HOUR + 13 * MICROS_PER_MINUTE + 123);
-    assertEquals("interval 2 years 10 months 31 days 3 hours 13 minutes 0.000123 seconds",
+    assertEquals("2 years 10 months 31 days 3 hours 13 minutes 0.000123 seconds",
       i.toString());
   }
 
   @Test
-  public void addTest() {
-    CalendarInterval input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR);
-    CalendarInterval input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR);
-    assertEquals(new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR), input1.add(input2));
-
-    input1 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR);
-    input2 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR);
-    assertEquals(new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR), input1.add(input2));
-  }
-
-  @Test
-  public void subtractTest() {
-    CalendarInterval input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR);
-    CalendarInterval input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR);
-    assertEquals(new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR), input1.subtract(input2));
-
-    input1 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR);
-    input2 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR);
-    assertEquals(new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR), input1.subtract(input2));
+  public void periodAndDurationTest() {
+    CalendarInterval interval = new CalendarInterval(120, -40, 123456);
+    assertEquals(Period.of(0, 120, -40), interval.extractAsPeriod());
+    assertEquals(Duration.ofNanos(123456000), interval.extractAsDuration());
   }
 }

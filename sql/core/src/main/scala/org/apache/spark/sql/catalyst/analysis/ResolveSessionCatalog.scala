@@ -390,6 +390,13 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
+    case AlterTableAddPartitionStatement(tableName, partitionSpecsAndLocs, ifNotExists) =>
+      val v1TableName = parseV1Table(tableName, "ALTER TABLE ADD PARTITION")
+      AlterTableAddPartitionCommand(
+        v1TableName.asTableIdentifier,
+        partitionSpecsAndLocs,
+        ifNotExists)
+
     case AlterTableRenamePartitionStatement(tableName, from, to) =>
       val v1TableName = parseV1Table(tableName, "ALTER TABLE RENAME PARTITION")
       AlterTableRenamePartitionCommand(
@@ -405,6 +412,15 @@ class ResolveSessionCatalog(
         ifExists,
         purge,
         retainData)
+
+    case AlterTableSerDePropertiesStatement(
+      tableName, serdeClassName, serdeProperties, partitionSpec) =>
+      val v1TableName = parseV1Table(tableName, "ALTER TABLE SerDe Properties")
+      AlterTableSerDePropertiesCommand(
+        v1TableName.asTableIdentifier,
+        serdeClassName,
+        serdeProperties,
+        partitionSpec)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {
