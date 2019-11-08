@@ -17,6 +17,11 @@
 
 package org.apache.spark.resource
 
+import scala.collection.mutable
+
+import org.apache.spark.util.Utils
+import org.apache.spark.internal.config._
+
 /**
  * An Executor resource request. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
@@ -49,9 +54,69 @@ package org.apache.spark.resource
  * This api is currently private until the rest of the pieces are in place and then it
  * will become public.
  */
-private[spark] class ExecutorResourceRequest( val resourceName: String,
-    val amount: Int,
-    val units: String = "",
-    val discoveryScript: String = "",
-    val vendor: String = "") extends Serializable {
+private[spark] class ExecutorResourceRequests() extends Serializable {
+
+  private val CORES = "cores"
+  private val MEMORY = "memory"
+  private val OVERHEAD_MEM = "memoryOverhead"
+  private val PYSPARK_MEM = "pyspark.memory"
+
+  private val _executorResources = new mutable.HashMap[String, ResourceRequest]()
+
+  /**
+   * Specify heap memory.
+   *
+   * @param amount Amount of memory.
+   * @param units Optional units of the amount. For things like Memory, default is no units,
+   *              only byte types (b, mb, gb, etc) are currently supported.
+   *
+   */
+  def memory(amount: Long, units: String): Unit = {
+    val amountAsBytes = Utils.byteStringAsMb(amount + units)
+    val rr =
+      new ResourceRequest(ResourceID(SPARK_EXECUTOR_PREFIX, MEMORY), amountAsBytes, None, None)
+    _executorResources(MEMORY) = rr
+  }
+
+  def memoryOverhead(amount: Int, units: String): Unit = {
+    rName = "memoryOverhead"
+    rAmount = amount
+    rUnits = units
+  }
+
+  def pysparkMemory(amount: Int, units: String): Unit = {
+    rName = "pyspark.memory"
+    rAmount = amount
+    rUnits = units
+  }
+
+  def cores(amount: Int): Unit = {
+    val t = new ExecutorResourceRequest(CORES, amount)
+    _executorResources(CORES) = t
+  }
+
+  /**
+   *  Amount of a particular custom resource(GPU, FPGA, etc) to use. The resource names supported
+   *  correspond to the regular Spark configs with the prefix removed. For instance, resources
+   *  like GPUs are resource.gpu (spark configs spark.executor.resource.gpu.*)
+   *
+   * @param resourceName Name of the resource.
+   * @param amount amount of that resource per executor to use.
+   * @param discoveryScript Optional script used to discover the resources. This is required on
+   *                        some cluster managers that don't tell Spark the addresses of
+   *                        the resources allocated. The script runs on Executors startup to
+   *                        of the resources available.
+   * @param vendor Optional vendor, required for some cluster managers
+   */
+  def resource(
+      resourceName: String,
+      amount: Int,
+      discoveryScript: String,
+      vendor: String): Unit = {
+    rName = resourceName
+    rAmount = amount
+    rDiscoveryScript = discoveryScript
+    rVendor = vendor
+  }
+
 }

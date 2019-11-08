@@ -43,11 +43,11 @@ private[spark] case class ResourceID(componentName: String, resourceName: String
 
 private[spark] case class ResourceRequest(
     id: ResourceID,
-    amount: Int,
+    amount: Long,
     discoveryScript: Option[String],
     vendor: Option[String])
 
-private[spark] case class ResourceRequirement(resourceName: String, amount: Int)
+private[spark] case class ResourceRequirement(resourceName: String, amount: Long)
 
 /**
  * Case class representing allocated resource addresses for a specific resource.

@@ -40,17 +40,6 @@ import org.apache.spark.resource.ResourceUtils.{RESOURCE_DOT, RESOURCE_PREFIX}
  * is memoryOverhead, which is spark.executor.memoryOverhead with spark.executor removed.
  * Resources like GPUs are resource.gpu (spark configs spark.executor.resource.gpu.*)
  *
- * Executor:
- *   memory - heap
- *   memoryOverhead
- *   pyspark.memory
- *   cores
- *   resource.[resourceName] - GPU, FPGA, etc
- *
- * Task requirements:
- *   cpus
- *   resource.[resourceName] - GPU, FPGA, etc
- *
  * This class is private now for initial development, once we have the feature in place
  * this will become public.
  */
@@ -61,15 +50,9 @@ private[spark] class ResourceProfile() extends Serializable {
   private val _taskResources = new mutable.HashMap[String, TaskResourceRequest]()
   private val _executorResources = new mutable.HashMap[String, ExecutorResourceRequest]()
 
-  private val allowedExecutorResources = HashSet[String](
-    ResourceProfile.MEMORY,
-    ResourceProfile.OVERHEAD_MEM,
-    ResourceProfile.PYSPARK_MEM,
-    ResourceProfile.CORES)
-
-  private val allowedTaskResources = HashSet[String](ResourceProfile.CPUS)
-
   def id: Int = _id
+
+  def exec: ExecutorResourceRequests
 
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.toMap
 
@@ -93,21 +76,16 @@ private[spark] class ResourceProfile() extends Serializable {
 
   def require(request: TaskResourceRequest): this.type = {
     val rName = request.resourceName
-    if (allowedTaskResources.contains(rName) || rName.startsWith(RESOURCE_DOT)) {
-      _taskResources(request.resourceName) = request
-    } else {
-      throw new IllegalArgumentException(s"Task resource not allowed: ${request.resourceName}")
-    }
     this
   }
 
   def require(request: ExecutorResourceRequest): this.type = {
     val rName = request.resourceName
-    if (allowedExecutorResources.contains(rName) || rName.startsWith(RESOURCE_DOT)) {
-      _executorResources(request.resourceName) = request
-    } else {
-      throw new IllegalArgumentException(s"Executor resource not allowed: ${request.resourceName}")
-    }
+    this
+  }
+
+  def require(requests: TaskResourceRequests): this.type = {
+    _taskResources ++= requests.requests
     this
   }
 
