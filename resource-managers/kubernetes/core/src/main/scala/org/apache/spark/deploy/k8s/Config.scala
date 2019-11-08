@@ -190,7 +190,7 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_MAX_EXECUTOR_FAILURES =
     ConfigBuilder("spark.kubernetes.max.executor.failures")
-      .doc("")
+      .doc("The maximum number of executor failures before failing the application.")
       .intConf
       .createOptional
 
