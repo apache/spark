@@ -159,7 +159,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python3.6", "pypy"] if which(x)]
+    python_execs = [x for x in ["python3.6"] if which(x)]
 
     if "python3.6" not in python_execs:
         p = which("python3")
