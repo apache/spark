@@ -264,7 +264,7 @@ def exec_sbt(sbt_args=()):
     echo_proc.wait()
     for line in iter(sbt_proc.stdout.readline, b''):
         if not sbt_output_filter.match(line):
-            print(line, end='')
+            print(line.decode(sys.getdefaultencoding()), end='')
     retcode = sbt_proc.wait()
 
     if retcode != 0:
