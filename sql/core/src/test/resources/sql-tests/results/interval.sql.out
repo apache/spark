@@ -43,11 +43,11 @@ true
 
 
 -- !query 5
-select interval '-1 day' >= interval '-23 hour'
+select interval '-1 day' <= interval '-23 hour'
 -- !query 5 schema
-struct<(-1 days >= -23 hours):boolean>
+struct<(-1 days <= -23 hours):boolean>
 -- !query 5 output
-false
+true
 
 
 -- !query 6

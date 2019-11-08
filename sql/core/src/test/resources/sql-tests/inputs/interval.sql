@@ -8,7 +8,7 @@ select null > interval '-1 day';
 
 -- less than or equal
 select interval '1 minutes' < interval '1 hour';
-select interval '-1 day' >= interval '-23 hour';
+select interval '-1 day' <= interval '-23 hour';
 
 -- equal
 select interval '1 year' = interval '360 days';
