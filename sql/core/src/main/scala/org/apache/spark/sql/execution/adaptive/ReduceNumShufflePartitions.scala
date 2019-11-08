@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.MapOutputStatistics
@@ -63,6 +64,7 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
 
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
       case _: LocalShuffleReaderExec => Nil
+      case _: SkewedShuffleReaderExec => Nil
       case stage: ShuffleQueryStageExec => Seq(stage)
       case _ => plan.children.flatMap(collectShuffleStages)
     }
@@ -87,14 +89,16 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
       if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
-        val partitionStartIndices = estimatePartitionStartIndices(validMetrics.toArray)
+        val omittedPartitions = shuffleStages(0).skewedPartitions
+        val (partitionStartIndices, partitionEndIndices) = estimatePartitionStartIndices(
+          validMetrics.toArray, omittedPartitions)
         // This transformation adds new nodes, so we must use `transformUp` here.
         plan.transformUp {
           // even for shuffle exchange whose input RDD has 0 partition, we should still update its
           // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
           // number of output partitions.
           case stage: ShuffleQueryStageExec =>
-            CoalescedShuffleReaderExec(stage, partitionStartIndices)
+            CoalescedShuffleReaderExec(stage, partitionStartIndices, partitionEndIndices)
         }
       } else {
         plan
@@ -103,12 +107,14 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   /**
-   * Estimates partition start indices for post-shuffle partitions based on
-   * mapOutputStatistics provided by all pre-shuffle stages.
+   * Estimates partition start and end indices for post-shuffle partitions based on
+   * mapOutputStatistics provided by all pre-shuffle stages and skip the omittedPartitions
+   * already handled in skewed partition optimization.
    */
   // visible for testing.
   private[sql] def estimatePartitionStartIndices(
-      mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
+      mapOutputStatistics: Array[MapOutputStatistics],
+      omittedPartitions: mutable.HashSet[Int] = mutable.HashSet.empty): (Array[Int], Array[Int]) = {
     val minNumPostShufflePartitions = conf.minNumPostShufflePartitions
     val advisoryTargetPostShuffleInputSize = conf.targetPostShuffleInputSize
     // If minNumPostShufflePartitions is defined, it is possible that we need to use a
@@ -144,36 +150,57 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
     val numPreShufflePartitions = distinctNumPreShufflePartitions.head
 
     val partitionStartIndices = ArrayBuffer[Int]()
-    // The first element of partitionStartIndices is always 0.
-    partitionStartIndices += 0
+    val partitionEndIndices = ArrayBuffer[Int]()
 
-    var postShuffleInputSize = 0L
+    def nextStartIndex(i: Int): Int = {
+      var index = i
+      while (index < numPreShufflePartitions && omittedPartitions.contains(index)) {
+        index = index + 1
+      }
+      index
+    }
 
-    var i = 0
-    while (i < numPreShufflePartitions) {
-      // We calculate the total size of ith pre-shuffle partitions from all pre-shuffle stages.
-      // Then, we add the total size to postShuffleInputSize.
-      var nextShuffleInputSize = 0L
+    def partitionSize(partitionId: Int): Long = {
+      var size = 0L
       var j = 0
       while (j < mapOutputStatistics.length) {
-        nextShuffleInputSize += mapOutputStatistics(j).bytesByPartitionId(i)
+        val statistics = mapOutputStatistics(j)
+        size += statistics.bytesByPartitionId(partitionId)
         j += 1
       }
+      size
+    }
+
+    val firstStartIndex = nextStartIndex(0)
+
+    partitionStartIndices += firstStartIndex
+
+    var postShuffleInputSize = partitionSize(firstStartIndex)
+
+    var i = firstStartIndex
+    var nextIndex = nextStartIndex(i + 1)
+    while (nextIndex < numPreShufflePartitions) {
+      // We calculate the total size of ith pre-shuffle partitions from all pre-shuffle stages.
+      // Then, we add the total size to postShuffleInputSize.
+      var nextShuffleInputSize = partitionSize(nextIndex)
 
       // If including the nextShuffleInputSize would exceed the target partition size, then start a
       // new partition.
-      if (i > 0 && postShuffleInputSize + nextShuffleInputSize > targetPostShuffleInputSize) {
-        partitionStartIndices += i
+      if (nextIndex != i + 1 ||
+        (postShuffleInputSize + nextShuffleInputSize > targetPostShuffleInputSize)) {
+        partitionEndIndices += i + 1
+        partitionStartIndices += nextIndex
         // reset postShuffleInputSize.
         postShuffleInputSize = nextShuffleInputSize
+        i = nextIndex
       } else {
         postShuffleInputSize += nextShuffleInputSize
+        i += 1
       }
-
-      i += 1
+      nextIndex = nextStartIndex(nextIndex + 1)
     }
-
-    partitionStartIndices.toArray
+    partitionEndIndices += i + 1
+    (partitionStartIndices.toArray, partitionEndIndices.toArray)
   }
 }
 
@@ -186,7 +213,8 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
  */
 case class CoalescedShuffleReaderExec(
     child: SparkPlan,
-    partitionStartIndices: Array[Int]) extends UnaryExecNode {
+    partitionStartIndices: Array[Int],
+    partitionEndIndices: Array[Int]) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -200,7 +228,7 @@ case class CoalescedShuffleReaderExec(
     if (cachedShuffleRDD == null) {
       cachedShuffleRDD = child match {
         case stage: ShuffleQueryStageExec =>
-          stage.shuffle.createShuffledRDD(Some(partitionStartIndices))
+          stage.shuffle.createShuffledRDD(Some(partitionStartIndices), Some(partitionEndIndices))
         case _ =>
           throw new IllegalStateException("operating on canonicalization plan")
       }

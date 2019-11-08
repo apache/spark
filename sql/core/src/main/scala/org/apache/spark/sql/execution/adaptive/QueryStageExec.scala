@@ -134,7 +134,8 @@ abstract class QueryStageExec extends LeafExecNode {
  */
 case class ShuffleQueryStageExec(
     override val id: Int,
-    override val plan: SparkPlan) extends QueryStageExec {
+    override val plan: SparkPlan,
+    var skewedPartitions: mutable.HashSet[Int] = mutable.HashSet.empty) extends QueryStageExec {
 
   @transient val shuffle = plan match {
     case s: ShuffleExchangeExec => s

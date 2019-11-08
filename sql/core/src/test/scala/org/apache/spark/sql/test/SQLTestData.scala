@@ -287,6 +287,24 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val skewData1: DataFrame = {
+    val df1 =
+      spark
+        .range(0, 1000, 1, 10)
+        .selectExpr("id % 5 as key1", "id as value1").toDF()
+    df1.createOrReplaceTempView("skewData1")
+    df1
+  }
+
+  protected lazy val skewData2: DataFrame = {
+    val df2 =
+      spark
+        .range(0, 1000, 1, 10)
+        .selectExpr("id % 1 as key2", "id as value2").toDF()
+    df2.createOrReplaceTempView("skewData2")
+    df2
+  }
+
   /**
    * Initialize all test data such that all temp tables are properly registered.
    */
@@ -316,6 +334,8 @@ private[sql] trait SQLTestData { self =>
     salary
     complexData
     courseSales
+    skewData1
+    skewData2
   }
 }
 

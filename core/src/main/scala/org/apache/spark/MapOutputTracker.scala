@@ -356,6 +356,21 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
+   * Called from executors to get the server URIs and output sizes for each shuffle block that
+   * needs to be read from a specific map output partitions (partitionIndex) and is
+   * produced by a range mapper (startMapId, endMapId)
+   *
+   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+   *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
+   *         tuples describing the shuffle blocks that are stored at that block manager.
+   */
+  def getMapSizesByRangeMapIndex(
+      shuffleId: Int,
+      partitionIndex: Int,
+      startMapId: Int,
+      endMapId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
+
+  /**
    * Deletes map output status information for the specified shuffle stage.
    */
   def unregisterShuffle(shuffleId: Int): Unit
@@ -688,20 +703,25 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /**
-   * Return the location where the Mapper ran. The locations each includes both a host and an
+   * Return the locations where the Mappers ran. The locations each includes both a host and an
    * executor id on that host.
    *
    * @param dep shuffle dependency object
-   * @param mapId the map id
+   * @param startMapId the start map id
+   * @param endMapId the end map id
    * @return a sequence of locations where task runs.
    */
-  def getMapLocation(dep: ShuffleDependency[_, _, _], mapId: Int): Seq[String] =
+  def getMapLocation(
+      dep: ShuffleDependency[_, _, _],
+      startMapId: Int,
+      endMapId: Int): Seq[String] =
   {
     val shuffleStatus = shuffleStatuses.get(dep.shuffleId).orNull
     if (shuffleStatus != null) {
       shuffleStatus.withMapStatuses { statuses =>
-        if (mapId >= 0 && mapId < statuses.length) {
-          Seq(statuses(mapId).location.host)
+        if (startMapId < endMapId && (startMapId >= 0 && endMapId < statuses.length)) {
+          val statusesPicked = statuses.slice(startMapId, endMapId).filter(_ != null)
+          statusesPicked.map { status => status.location.host}.toSeq
         } else {
           Nil
         }
@@ -766,6 +786,22 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
+  override def getMapSizesByRangeMapIndex(
+      shuffleId: Int,
+      partitionIndex: Int,
+      startMapId: Int,
+      endMapId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) =>
+        shuffleStatus.withMapStatuses { statuses =>
+          MapOutputTracker.convertMapStatuses(
+            shuffleId, partitionIndex, statuses, startMapId, endMapId)
+        }
+      case None =>
+        Iterator.empty
+    }
+  }
+
   override def stop(): Unit = {
     mapOutputRequests.offer(PoisonPill)
     threadpool.shutdown()
@@ -822,6 +858,22 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     try {
       MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition,
         statuses, Some(mapIndex))
+    } catch {
+      case e: MetadataFetchFailedException =>
+        // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
+        mapStatuses.clear()
+        throw e
+    }
+  }
+
+  override def getMapSizesByRangeMapIndex(
+      shuffleId: Int,
+      partitionIndex: Int,
+      startMapId: Int,
+      endMapId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    val statuses = getStatuses(shuffleId, conf)
+    try {
+      MapOutputTracker.convertMapStatuses(shuffleId, partitionIndex, statuses, startMapId, endMapId)
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
@@ -1012,4 +1064,50 @@ private[spark] object MapOutputTracker extends Logging {
 
     splitsByAddress.iterator
   }
+
+  /**
+   * Given an array of map statuses, a specific map output partitions and a range
+   * mappers (startMapId, endMapId),returns a sequence that, for each block manager ID,
+   * lists the shuffle block IDs and corresponding shuffle
+   * block sizes stored at that block manager.
+   * Note that empty blocks are filtered in the result.
+   *
+   * If any of the statuses is null (indicating a missing location due to a failed mapper),
+   * throws a FetchFailedException.
+   *
+   * @param shuffleId Identifier for the shuffle
+   * @param partitionIndex Specific of map output partition ID
+   * @param statuses List of map statuses, indexed by map partition index.
+   * @param startMapId Start Map ID
+   * @param endMapId End map ID
+   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+   *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
+   *         tuples describing the shuffle blocks that are stored at that block manager.
+   */
+  def convertMapStatuses(
+      shuffleId: Int,
+      partitionIndex: Int,
+      statuses: Array[MapStatus],
+      startMapId: Int,
+      endMapId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    assert (statuses != null)
+    val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
+    val iter = statuses.iterator.zipWithIndex
+    for ((status, mapIndex) <- iter.slice(startMapId, endMapId)) {
+      if (status == null) {
+        val errorMessage = s"Missing an output location for shuffle $shuffleId"
+        logError(errorMessage)
+        throw new MetadataFetchFailedException(shuffleId, partitionIndex, errorMessage)
+      } else {
+        val size = status.getSizeForBlock(partitionIndex)
+        if (size != 0) {
+          splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
+            ((ShuffleBlockId(shuffleId, status.mapId, partitionIndex), size, mapIndex))
+        }
+      }
+    }
+
+    splitsByAddress.iterator
+  }
+
 }

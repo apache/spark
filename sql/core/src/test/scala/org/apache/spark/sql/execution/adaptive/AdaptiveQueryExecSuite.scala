@@ -558,6 +558,7 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+<<<<<<< HEAD
 
   test("SPARK-29906: AQE should not introduce extra shuffle for outermost limit") {
     var numStages = 0
@@ -576,6 +577,142 @@ class AdaptiveQueryExecSuite
       }
     } finally {
       spark.sparkContext.removeSparkListener(listener)
+=======
+  test("adaptive skew join both in left and right for inner join ") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR.key -> "1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      // left stats: [4403, 0, 1927, 1927, 1927]
+      // right stats:[6292, 0,  0,     0,     0]
+      // the partition 0 in both left and right are all skewed.
+      // And the partition 0 in left is split to 2 smj and the partition 0
+      // in right is split to 5 smjs. So total 11 smjs.
+      // Union
+      // +- SortMergeJoin
+      //   +- Sort
+      //     +- CoalescedShuffleReader
+      //       +- ShuffleQueryStage
+      //   +- Sort
+      //     +- CoalescedShuffleReader
+      //     +- ShuffleQueryStage
+      // +- SortMergeJoin
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+      //             .
+      //             .
+      //             .
+      // +- SortMergeJoin
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+
+      val smjAfter = findTopLevelSortMergeJoin(adaptivePlan)
+      assert(smjAfter.size == 11)
+    }
+  }
+
+  test("adaptive skew join both in left and right for left outer join ") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR.key -> "1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM skewData1 left outer join skewData2 ON key1 = key2")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      // left stats: [4403, 0, 1927, 1927, 1927]
+      // right stats:[6292, 0,  0,     0,     0]
+      // the partition 0 in both left and right are all skewed.
+      // But for left outer join, we don't split the right partition even skewed.
+      // And the partition 0 in left is split to 2 smj. So total 3 smjs.
+      // Union
+      // +- SortMergeJoin
+      //   +- Sort
+      //     +- CoalescedShuffleReader
+      //       +- ShuffleQueryStage
+      //   +- Sort
+      //     +- CoalescedShuffleReader
+      //     +- ShuffleQueryStage
+      // +- SortMergeJoin
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+      //             .
+      //             .
+      //             .
+      // +- SortMergeJoin
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+
+      val smjAfter = findTopLevelSortMergeJoin(adaptivePlan)
+      assert(smjAfter.size == 3)
+    }
+  }
+  test("adaptive skew join both in left and right for right outer join ") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR.key -> "1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM skewData1 right outer join skewData2 ON key1 = key2")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      // left stats: [4403, 0, 1927, 1927, 1927]
+      // right stats:[6292, 0,  0,     0,     0]
+      // the partition 0 in both left and right are all skewed.
+      // But for right outer join, we don't split the left partition even skewed.
+      // And the partition 0 in right is split to 5 smj. So total 6 smjs.
+      // Union
+      // +- SortMergeJoin
+      //   +- Sort
+      //     +- CoalescedShuffleReader
+      //       +- ShuffleQueryStage
+      //   +- Sort
+      //     +- CoalescedShuffleReader
+      //     +- ShuffleQueryStage
+      // +- SortMergeJoin
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+      //             .
+      //             .
+      //             .
+      // +- SortMergeJoin
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+      //   +- Sort
+      //     +- SkewedShuffleReader
+      //       +- ShuffleQueryStage
+
+      val smjAfter = findTopLevelSortMergeJoin(adaptivePlan)
+      assert(smjAfter.size == 6)
+>>>>>>> optimize skewed partition based on data size
     }
   }
 
