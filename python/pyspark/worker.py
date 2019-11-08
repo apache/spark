@@ -403,9 +403,6 @@ def read_udfs(pickleSer, infile, eval_type):
             idx += offsets_len
         return parsed
 
-    udfs = {}
-    call_udf = []
-    mapper_str = ""
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         # Create function like this:
         #   lambda a: f([a[0]], [a[0], a[1]])
@@ -416,41 +413,43 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, udf = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0)
-        udfs['f'] = udf
+        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
         parsed_offsets = extract_key_value_indexes(arg_offsets)
-        keys = ["a[%d]" % (o,) for o in parsed_offsets[0][0]]
-        vals = ["a[%d]" % (o, ) for o in parsed_offsets[0][1]]
-        mapper_str = "lambda a: f([%s], [%s])" % (", ".join(keys), ", ".join(vals))
+
+        def mapper(a):
+            keys = [a[o] for o in parsed_offsets[0][0]]
+            vals = [a[o] for o in parsed_offsets[0][1]]
+            return f(keys, vals)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         # We assume there is only one UDF here because cogrouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
-        arg_offsets, udf = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0)
-        udfs['f'] = udf
+        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+
         parsed_offsets = extract_key_value_indexes(arg_offsets)
-        df1_keys = ["a[0][%d]" % (o, ) for o in parsed_offsets[0][0]]
-        df1_vals = ["a[0][%d]" % (o, ) for o in parsed_offsets[0][1]]
-        df2_keys = ["a[1][%d]" % (o, ) for o in parsed_offsets[1][0]]
-        df2_vals = ["a[1][%d]" % (o, ) for o in parsed_offsets[1][1]]
-        mapper_str = "lambda a: f([%s], [%s], [%s], [%s])" % (
-            ", ".join(df1_keys), ", ".join(df1_vals), ", ".join(df2_keys), ", ".join(df2_vals))
+
+        def mapper(a):
+            df1_keys = [a[0][o] for o in parsed_offsets[0][0]]
+            df1_vals = [a[0][o] for o in parsed_offsets[0][1]]
+            df2_keys = [a[1][o] for o in parsed_offsets[1][0]]
+            df2_vals = [a[1][o] for o in parsed_offsets[1][1]]
+            return f(df1_keys, df1_vals, df2_keys, df2_vals)
     else:
         # Create function like this:
         #   lambda a: (f0(a[0]), f1(a[1], a[2]), f2(a[3]))
         # In the special case of a single UDF this will return a single result rather
         # than a tuple of results; this is the format that the JVM side expects.
+        udfs = []
         for i in range(num_udfs):
-            arg_offsets, udf = read_single_udf(
-                pickleSer, infile, eval_type, runner_conf, udf_index=i)
-            udfs['f%d' % i] = udf
-            args = ["a[%d]" % o for o in arg_offsets]
-            call_udf.append("f%d(%s)" % (i, ", ".join(args)))
-        mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
+            udfs.append(read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i))
 
-    mapper = eval(mapper_str, udfs)
+        def mapper(a):
+            result = tuple(f(*[a[o] for o in arg_offsets]) for (arg_offsets, f) in udfs)
+            if len(result) == 1:
+                return result[0]
+            else:
+                return result
+
     func = lambda _, it: map(mapper, it)
 
     # profiling is not supported for UDF
