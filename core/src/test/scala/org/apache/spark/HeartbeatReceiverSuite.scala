@@ -60,6 +60,7 @@ class HeartbeatReceiverSuite
     PrivateMethod[collection.Map[String, Long]](Symbol("executorLastSeen"))
   private val _executorTimeoutMs = PrivateMethod[Long](Symbol("executorTimeoutMs"))
   private val _killExecutorThread = PrivateMethod[ExecutorService](Symbol("killExecutorThread"))
+  var conf: SparkConf = _
 
   /**
    * Before each test, set up the SparkContext and a custom [[HeartbeatReceiver]]
@@ -67,7 +68,7 @@ class HeartbeatReceiverSuite
    */
   override def beforeEach(): Unit = {
     super.beforeEach()
-    val conf = new SparkConf()
+    conf = new SparkConf()
       .setMaster("local[2]")
       .setAppName("test")
       .set(DYN_ALLOCATION_TESTING, true)
@@ -163,7 +164,7 @@ class HeartbeatReceiverSuite
   test("expire dead hosts should kill executors with replacement (SPARK-8119)") {
     // Set up a fake backend and cluster manager to simulate killing executors
     val rpcEnv = sc.env.rpcEnv
-    val fakeClusterManager = new FakeClusterManager(rpcEnv)
+    val fakeClusterManager = new FakeClusterManager(rpcEnv, conf)
     val fakeClusterManagerRef = rpcEnv.setupEndpoint("fake-cm", fakeClusterManager)
     val fakeSchedulerBackend = new FakeSchedulerBackend(scheduler, rpcEnv, fakeClusterManagerRef)
     when(sc.schedulerBackend).thenReturn(fakeSchedulerBackend)
@@ -293,7 +294,7 @@ private class FakeSchedulerBackend(
 /**
  * Dummy cluster manager to simulate responses to executor allocation requests.
  */
-private class FakeClusterManager(override val rpcEnv: RpcEnv) extends RpcEndpoint {
+private class FakeClusterManager(override val rpcEnv: RpcEnv, conf: SparkConf) extends RpcEndpoint {
   private var targetNumExecutors = 0
   private val executorIdsToKill = new mutable.HashSet[String]
 
@@ -302,8 +303,8 @@ private class FakeClusterManager(override val rpcEnv: RpcEnv) extends RpcEndpoin
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RequestExecutors(_, _, _, resourceProfileToTotalExecs) =>
-      // TODO - update
-      targetNumExecutors = 1
+      targetNumExecutors =
+        resourceProfileToTotalExecs(ResourceProfile.getOrCreateDefaultProfile(conf))
       context.reply(true)
     case KillExecutors(executorIds) =>
       executorIdsToKill ++= executorIds
