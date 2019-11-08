@@ -118,7 +118,7 @@ select
   interval '2-2' year to month + dateval
 from interval_arithmetic
 -- !query 9 schema
-struct<dateval:date,CAST(CAST(dateval AS TIMESTAMP) - 2 years 2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) - -2 years -2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + 2 years 2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + -2 years -2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + (- 2 years 2 months) AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + 2 years 2 months AS DATE):date>
+struct<dateval:date,CAST(CAST(dateval AS TIMESTAMP) - 2 years 2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) - -2 years -2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + 2 years 2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + -2 years -2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + -2 years -2 months AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + 2 years 2 months AS DATE):date>
 -- !query 9 output
 2012-01-01	2009-11-01	2014-03-01	2014-03-01	2009-11-01	2009-11-01	2014-03-01
 
@@ -150,7 +150,7 @@ select
   interval '2-2' year to month + tsval
 from interval_arithmetic
 -- !query 11 schema
-struct<tsval:timestamp,CAST(tsval - 2 years 2 months AS TIMESTAMP):timestamp,CAST(tsval - -2 years -2 months AS TIMESTAMP):timestamp,CAST(tsval + 2 years 2 months AS TIMESTAMP):timestamp,CAST(tsval + -2 years -2 months AS TIMESTAMP):timestamp,CAST(tsval + (- 2 years 2 months) AS TIMESTAMP):timestamp,CAST(tsval + 2 years 2 months AS TIMESTAMP):timestamp>
+struct<tsval:timestamp,CAST(tsval - 2 years 2 months AS TIMESTAMP):timestamp,CAST(tsval - -2 years -2 months AS TIMESTAMP):timestamp,CAST(tsval + 2 years 2 months AS TIMESTAMP):timestamp,CAST(tsval + -2 years -2 months AS TIMESTAMP):timestamp,CAST(tsval + -2 years -2 months AS TIMESTAMP):timestamp,CAST(tsval + 2 years 2 months AS TIMESTAMP):timestamp>
 -- !query 11 output
 2012-01-01 00:00:00	2009-11-01 00:00:00	2014-03-01 00:00:00	2014-03-01 00:00:00	2009-11-01 00:00:00	2009-11-01 00:00:00	2014-03-01 00:00:00
 
@@ -204,7 +204,7 @@ select
   interval '99 11:22:33.123456789' day to second + dateval
 from interval_arithmetic
 -- !query 15 schema
-struct<dateval:date,CAST(CAST(dateval AS TIMESTAMP) - 99 days 11 hours 22 minutes 33.123456 seconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) - -99 days -11 hours -22 minutes -33.123456 seconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + 99 days 11 hours 22 minutes 33.123456 seconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + -99 days -11 hours -22 minutes -33.123456 seconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + (- 99 days 11 hours 22 minutes 33.123456 seconds) AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + 99 days 11 hours 22 minutes 33.123456 seconds AS DATE):date>
+struct<dateval:date,CAST(CAST(dateval AS TIMESTAMP) - 99 days 11 hours 22 minutes 33.123456 seconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) - -99 days -11 hours -22 minutes -33.123456 seconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + 99 days 11 hours 22 minutes 33.123456 seconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + -99 days -11 hours -22 minutes -33.123456 seconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + -99 days -11 hours -22 minutes -33.123456 seconds AS DATE):date,CAST(CAST(dateval AS TIMESTAMP) + 99 days 11 hours 22 minutes 33.123456 seconds AS DATE):date>
 -- !query 15 output
 2012-01-01	2011-09-23	2012-04-09	2012-04-09	2011-09-23	2011-09-23	2012-04-09
 
@@ -236,7 +236,7 @@ select
   interval '99 11:22:33.123456789' day to second + tsval
 from interval_arithmetic
 -- !query 17 schema
-struct<tsval:timestamp,CAST(tsval - 99 days 11 hours 22 minutes 33.123456 seconds AS TIMESTAMP):timestamp,CAST(tsval - -99 days -11 hours -22 minutes -33.123456 seconds AS TIMESTAMP):timestamp,CAST(tsval + 99 days 11 hours 22 minutes 33.123456 seconds AS TIMESTAMP):timestamp,CAST(tsval + -99 days -11 hours -22 minutes -33.123456 seconds AS TIMESTAMP):timestamp,CAST(tsval + (- 99 days 11 hours 22 minutes 33.123456 seconds) AS TIMESTAMP):timestamp,CAST(tsval + 99 days 11 hours 22 minutes 33.123456 seconds AS TIMESTAMP):timestamp>
+struct<tsval:timestamp,CAST(tsval - 99 days 11 hours 22 minutes 33.123456 seconds AS TIMESTAMP):timestamp,CAST(tsval - -99 days -11 hours -22 minutes -33.123456 seconds AS TIMESTAMP):timestamp,CAST(tsval + 99 days 11 hours 22 minutes 33.123456 seconds AS TIMESTAMP):timestamp,CAST(tsval + -99 days -11 hours -22 minutes -33.123456 seconds AS TIMESTAMP):timestamp,CAST(tsval + -99 days -11 hours -22 minutes -33.123456 seconds AS TIMESTAMP):timestamp,CAST(tsval + 99 days 11 hours 22 minutes 33.123456 seconds AS TIMESTAMP):timestamp>
 -- !query 17 output
 2012-01-01 00:00:00	2011-09-23 12:37:26.876544	2012-04-09 11:22:33.123456	2012-04-09 11:22:33.123456	2011-09-23 12:37:26.876544	2011-09-23 12:37:26.876544	2012-04-09 11:22:33.123456
 
