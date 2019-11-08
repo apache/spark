@@ -55,12 +55,7 @@ def run_cmd(cmd, return_output=False):
         if return_output:
             return subprocess_check_output(cmd).decode('utf-8')
         else:
-            popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-            for stdout_line in popen.stdout:
-                print(stdout_line.decode('utf-8'), end='')
-            popen.stdout.close()
-            return_code = popen.wait()
-            return return_code
+            return subprocess.run(cmd, universal_newlines=True, check=True)
     except subprocess.CalledProcessError as e:
         exit_from_command_with_retcode(e.cmd, e.returncode)
 
