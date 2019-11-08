@@ -146,11 +146,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(Min('arrayField))
     assertSuccess(new EveryAgg('booleanField))
     assertSuccess(new AnyAgg('booleanField))
-    assertSuccess(new SomeAgg('booleanField))
 
     assertError(Min('mapField), "min does not support ordering on type")
     assertError(Max('mapField), "max does not support ordering on type")
-    assertError(Sum('booleanField), "function sum requires numeric type")
+    assertError(Sum('booleanField), "requires (numeric or interval) type")
     assertError(Average('booleanField), "function average requires numeric type")
   }
 

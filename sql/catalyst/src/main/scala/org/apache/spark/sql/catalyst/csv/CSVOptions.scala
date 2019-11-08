@@ -95,7 +95,7 @@ class CSVOptions(
     }
   }
 
-  val delimiter = CSVExprUtils.toChar(
+  val delimiter = CSVExprUtils.toDelimiterStr(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)

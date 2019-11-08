@@ -26,8 +26,9 @@ import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * Helper functions for converting between internal and external date and time representations.
@@ -45,20 +46,6 @@ object DateTimeUtils {
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
-
-  // Pre-calculated values can provide an opportunity of additional optimizations
-  // to the compiler like constants propagation and folding.
-  final val NANOS_PER_MICROS: Long = 1000
-  final val MICROS_PER_MILLIS: Long = 1000
-  final val MILLIS_PER_SECOND: Long = 1000
-  final val SECONDS_PER_DAY: Long = 24 * 60 * 60
-  final val MICROS_PER_SECOND: Long = MILLIS_PER_SECOND * MICROS_PER_MILLIS
-  final val NANOS_PER_MILLIS: Long = NANOS_PER_MICROS * MICROS_PER_MILLIS
-  final val NANOS_PER_SECOND: Long = NANOS_PER_MICROS * MICROS_PER_SECOND
-  final val MICROS_PER_DAY: Long = SECONDS_PER_DAY * MICROS_PER_SECOND
-  final val MILLIS_PER_MINUTE: Long = 60 * MILLIS_PER_SECOND
-  final val MILLIS_PER_HOUR: Long = 60 * MILLIS_PER_MINUTE
-  final val MILLIS_PER_DAY: Long = SECONDS_PER_DAY * MILLIS_PER_SECOND
 
   // number of days between 1.1.1970 and 1.1.2001
   final val to2001 = -11323
@@ -286,7 +273,7 @@ object DateTimeUtils {
             i += 1
           }
         } else {
-          if (b == ':' || b == ' ') {
+          if (i < segments.length && (b == ':' || b == ' ')) {
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
@@ -575,11 +562,13 @@ object DateTimeUtils {
   def timestampAddInterval(
       start: SQLTimestamp,
       months: Int,
+      days: Int,
       microseconds: Long,
       zoneId: ZoneId): SQLTimestamp = {
     val resultTimestamp = microsToInstant(start)
       .atZone(zoneId)
       .plusMonths(months)
+      .plusDays(days)
       .plus(microseconds, ChronoUnit.MICROS)
     instantToMicros(resultTimestamp.toInstant)
   }
@@ -949,5 +938,21 @@ object DateTimeUtils {
     } else {
       None
     }
+  }
+
+  /**
+   * Subtracts two dates.
+   * @param endDate - the end date, exclusive
+   * @param startDate - the start date, inclusive
+   * @return an interval between two dates. The interval can be negative
+   *         if the end date is before the start date.
+   */
+  def subtractDates(endDate: SQLDate, startDate: SQLDate): CalendarInterval = {
+    val period = Period.between(
+      LocalDate.ofEpochDay(startDate),
+      LocalDate.ofEpochDay(endDate))
+    val months = period.getMonths + 12 * period.getYears
+    val days = period.getDays
+    new CalendarInterval(months, days, 0)
   }
 }

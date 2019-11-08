@@ -26,8 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
-import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsWrite, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -87,10 +86,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case "overwrite" => mode(SaveMode.Overwrite)
       case "append" => mode(SaveMode.Append)
       case "ignore" => mode(SaveMode.Ignore)
-      case "error" | "errorifexists" => mode(SaveMode.ErrorIfExists)
-      case "default" => this
-      case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
-        "Accepted save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists'.")
+      case "error" | "errorifexists" | "default" => mode(SaveMode.ErrorIfExists)
+      case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. Accepted " +
+        "save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists', 'default'.")
     }
   }
 
@@ -343,6 +341,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def insertInto(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
     assertNotBucketed("insertInto")
 
@@ -356,14 +355,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val session = df.sparkSession
     val canUseV2 = lookupV2Provider().isDefined
-    val sessionCatalog = session.sessionState.analyzer.sessionCatalog
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
-      case CatalogObjectIdentifier(Some(catalog), ident) =>
+      case CatalogObjectIdentifier(catalog, ident) if !isSessionCatalog(catalog) =>
         insertInto(catalog, ident)
 
-      case CatalogObjectIdentifier(None, ident) if canUseV2 && ident.namespace().length <= 1 =>
-        insertInto(sessionCatalog, ident)
+      case CatalogObjectIdentifier(catalog, ident)
+          if isSessionCatalog(catalog) && canUseV2 && ident.namespace().length <= 1 =>
+        insertInto(catalog, ident)
 
       case AsTableIdentifier(tableIdentifier) =>
         insertInto(tableIdentifier)
@@ -482,17 +481,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def saveAsTable(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
     val session = df.sparkSession
     val canUseV2 = lookupV2Provider().isDefined
-    val sessionCatalog = session.sessionState.analyzer.sessionCatalog
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
-      case CatalogObjectIdentifier(Some(catalog), ident) =>
+      case CatalogObjectIdentifier(catalog, ident) if !isSessionCatalog(catalog) =>
         saveAsTable(catalog.asTableCatalog, ident)
 
-      case CatalogObjectIdentifier(None, ident) if canUseV2 && ident.namespace().length <= 1 =>
-        saveAsTable(sessionCatalog.asTableCatalog, ident)
+      case CatalogObjectIdentifier(catalog, ident)
+        if isSessionCatalog(catalog) && canUseV2 && ident.namespace().length <= 1 =>
+        saveAsTable(catalog.asTableCatalog, ident)
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsTable(tableIdentifier)
@@ -687,6 +687,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
    * files. If it is not set, the UTF-8 charset will be used. </li>
    * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
+   * <li>`ignoreNullFields` (default `true`): Whether to ignore null fields
+   * when generating JSON objects. </li>
    * </ul>
    *
    * @since 1.4.0

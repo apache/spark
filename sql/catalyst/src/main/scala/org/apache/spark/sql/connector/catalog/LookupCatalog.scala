@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 
@@ -29,22 +28,9 @@ private[sql] trait LookupCatalog extends Logging {
   protected val catalogManager: CatalogManager
 
   /**
-   * Returns the default catalog. When set, this catalog is used for all identifiers that do not
-   * set a specific catalog. When this is None, the session catalog is responsible for the
-   * identifier.
-   *
-   * If this is None and a table's provider (source) is a v2 provider, the v2 session catalog will
-   * be used.
+   * Returns the current catalog set.
    */
-  def defaultCatalog: Option[CatalogPlugin] = catalogManager.defaultCatalog
-
-  /**
-   * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
-   * session catalog is responsible for an identifier, but the source requires the v2 catalog API.
-   * This happens when the source implementation extends the v2 TableProvider API and is not listed
-   * in the fallback configuration, spark.sql.sources.write.useV1SourceList
-   */
-  def sessionCatalog: CatalogPlugin = catalogManager.v2SessionCatalog
+  def currentCatalog: CatalogPlugin = catalogManager.currentCatalog
 
   /**
    * Extract catalog plugin and remaining identifier names.
@@ -65,35 +51,32 @@ private[sql] trait LookupCatalog extends Logging {
     }
   }
 
-  type CatalogObjectIdentifier = (Option[CatalogPlugin], Identifier)
-
   /**
-   * Extract catalog and identifier from a multi-part identifier with the default catalog if needed.
+   * Extract catalog and identifier from a multi-part identifier with the current catalog if needed.
    */
   object CatalogObjectIdentifier {
-    def unapply(parts: Seq[String]): Some[CatalogObjectIdentifier] = parts match {
+    def unapply(parts: Seq[String]): Some[(CatalogPlugin, Identifier)] = parts match {
       case CatalogAndIdentifier(maybeCatalog, nameParts) =>
         Some((
-            maybeCatalog.orElse(defaultCatalog),
+            maybeCatalog.getOrElse(currentCatalog),
             Identifier.of(nameParts.init.toArray, nameParts.last)
         ))
     }
   }
 
-  type CatalogNamespace = (Option[CatalogPlugin], Seq[String])
-
   /**
-   * Extract catalog and namespace from a multi-part identifier with the default catalog if needed.
+   * Extract catalog and namespace from a multi-part identifier with the current catalog if needed.
    * Catalog name takes precedence over namespaces.
    */
-  object CatalogNamespace {
-    def unapply(parts: Seq[String]): Some[CatalogNamespace] = parts match {
+  object CatalogAndNamespace {
+    def unapply(parts: Seq[String]): Some[(CatalogPlugin, Option[Seq[String]])] = parts match {
       case Seq(catalogName, tail @ _*) =>
         try {
-          Some((Some(catalogManager.catalog(catalogName)), tail))
+          Some(
+            (catalogManager.catalog(catalogName), if (tail.isEmpty) { None } else { Some(tail) }))
         } catch {
           case _: CatalogNotFoundException =>
-            Some((defaultCatalog, parts))
+            Some((currentCatalog, Some(parts)))
         }
     }
   }
@@ -105,7 +88,7 @@ private[sql] trait LookupCatalog extends Logging {
    */
   object AsTableIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogAndIdentifier(None, names) if defaultCatalog.isEmpty =>
+      case CatalogAndIdentifier(None, names) if CatalogV2Util.isSessionCatalog(currentCatalog) =>
         names match {
           case Seq(name) =>
             Some(TableIdentifier(name))
@@ -130,6 +113,21 @@ private[sql] trait LookupCatalog extends Logging {
         Some(TableIdentifier(table, Some(database)))
       case _ =>
         None
+    }
+  }
+
+  /**
+   * Extract catalog and the rest name parts from a multi-part identifier.
+   */
+  object CatalogAndIdentifierParts {
+    def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = {
+      assert(nameParts.nonEmpty)
+      try {
+        Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+      } catch {
+        case _: CatalogNotFoundException =>
+          Some((currentCatalog, nameParts))
+      }
     }
   }
 }

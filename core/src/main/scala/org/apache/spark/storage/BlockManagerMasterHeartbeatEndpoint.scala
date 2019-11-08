@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEnv}
 import org.apache.spark.storage.BlockManagerMessages.{BlockManagerHeartbeat, StopBlockManagerMaster, UpdateBlockInfo}
 
 /**
@@ -30,7 +30,7 @@ private[spark] class BlockManagerMasterHeartbeatEndpoint(
     override val rpcEnv: RpcEnv,
     isLocal: Boolean,
     blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo])
-  extends ThreadSafeRpcEndpoint with Logging {
+  extends IsolatedRpcEndpoint with Logging {
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case UpdateBlockInfo(blockManagerId, _, _, _, _) =>

@@ -18,21 +18,23 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
-import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol, HasWeightCol}
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * Evaluator for multiclass classification, which expects two input columns: prediction and label.
+ * Evaluator for multiclass classification, which expects input columns: prediction, label,
+ * weight (optional) and probability (only for logLoss).
  */
 @Since("1.5.0")
 class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") override val uid: String)
-  extends Evaluator with HasPredictionCol with HasLabelCol
-    with HasWeightCol with DefaultParamsWritable {
+  extends Evaluator with HasPredictionCol with HasLabelCol with HasWeightCol
+    with HasProbabilityCol with DefaultParamsWritable {
 
   import MulticlassClassificationEvaluator.supportedMetricNames
 
@@ -40,8 +42,12 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def this() = this(Identifiable.randomUID("mcEval"))
 
   /**
-   * param for metric name in evaluation (supports `"f1"` (default), `"weightedPrecision"`,
-   * `"weightedRecall"`, `"accuracy"`)
+   * param for metric name in evaluation (supports `"f1"` (default), `"accuracy"`,
+   * `"weightedPrecision"`, `"weightedRecall"`, `"weightedTruePositiveRate"`,
+   * `"weightedFalsePositiveRate"`, `"weightedFMeasure"`, `"truePositiveRateByLabel"`,
+   * `"falsePositiveRateByLabel"`, `"precisionByLabel"`, `"recallByLabel"`,
+   * `"fMeasureByLabel"`, `"logLoss"`)
+   *
    * @group param
    */
   @Since("1.5.0")
@@ -70,6 +76,10 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   /** @group setParam */
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setProbabilityCol(value: String): this.type = set(probabilityCol, value)
 
   @Since("3.0.0")
   final val metricLabel: DoubleParam = new DoubleParam(this, "metricLabel",
@@ -104,6 +114,21 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   setDefault(beta -> 1.0)
 
+  @Since("3.0.0")
+  final val eps: DoubleParam = new DoubleParam(this, "eps",
+    "log-loss is undefined for p=0 or p=1, so probabilities are clipped to " +
+      "max(eps, min(1 - eps, p)).",
+    ParamValidators.inRange(0, 0.5, false, false))
+
+  /** @group getParam */
+  @Since("3.0.0")
+  def getEps: Double = $(eps)
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setEps(value: Double): this.type = set(eps, value)
+
+  setDefault(eps -> 1e-15)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
@@ -111,13 +136,29 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
     SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
     SchemaUtils.checkNumericType(schema, $(labelCol))
 
-    val predictionAndLabelsWithWeights =
-      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType),
-        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
+    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
+      col($(weightCol)).cast(DoubleType)
+    } else {
+      lit(1.0)
+    }
+
+    val rdd = if ($(metricName) == "logLoss") {
+      // probabilityCol is only needed to compute logloss
+      require(isDefined(probabilityCol) && $(probabilityCol).nonEmpty)
+      val p = DatasetUtils.columnToVector(dataset, $(probabilityCol))
+      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w, p)
+        .rdd.map {
+        case Row(prediction: Double, label: Double, weight: Double, probability: Vector) =>
+          (prediction, label, weight, probability.toArray)
+      }
+    } else {
+      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType), w)
         .rdd.map {
         case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
       }
-    val metrics = new MulticlassMetrics(predictionAndLabelsWithWeights)
+    }
+
+    val metrics = new MulticlassMetrics(rdd)
     $(metricName) match {
       case "f1" => metrics.weightedFMeasure
       case "accuracy" => metrics.accuracy
@@ -131,16 +172,14 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
       case "precisionByLabel" => metrics.precision($(metricLabel))
       case "recallByLabel" => metrics.recall($(metricLabel))
       case "fMeasureByLabel" => metrics.fMeasure($(metricLabel), $(beta))
+      case "logLoss" => metrics.logLoss($(eps))
     }
   }
 
   @Since("1.5.0")
-  override def isLargerBetter: Boolean = {
-    $(metricName) match {
-      case "weightedFalsePositiveRate" => false
-      case "falsePositiveRateByLabel" => false
-      case _ => true
-    }
+  override def isLargerBetter: Boolean = $(metricName) match {
+    case "weightedFalsePositiveRate" | "falsePositiveRateByLabel" | "logLoss" => false
+    case _ => true
   }
 
   @Since("1.5.0")
@@ -154,7 +193,7 @@ object MulticlassClassificationEvaluator
   private val supportedMetricNames = Array("f1", "accuracy", "weightedPrecision", "weightedRecall",
     "weightedTruePositiveRate", "weightedFalsePositiveRate", "weightedFMeasure",
     "truePositiveRateByLabel", "falsePositiveRateByLabel", "precisionByLabel", "recallByLabel",
-    "fMeasureByLabel")
+    "fMeasureByLabel", "logLoss")
 
   @Since("1.6.0")
   override def load(path: String): MulticlassClassificationEvaluator = super.load(path)

@@ -20,6 +20,7 @@ package org.apache.spark.streaming
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
@@ -50,8 +51,8 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       outputStreams.foreach(_.remember(rememberDuration))
       outputStreams.foreach(_.validateAtStart())
       numReceivers = inputStreams.count(_.isInstanceOf[ReceiverInputDStream[_]])
-      inputStreamNameAndID = inputStreams.map(is => (is.name, is.id))
-      inputStreams.par.foreach(_.start())
+      inputStreamNameAndID = inputStreams.map(is => (is.name, is.id)).toSeq
+      new ParVector(inputStreams.toVector).foreach(_.start())
     }
   }
 
@@ -61,7 +62,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def stop(): Unit = {
     this.synchronized {
-      inputStreams.par.foreach(_.stop())
+      new ParVector(inputStreams.toVector).foreach(_.stop())
     }
   }
 

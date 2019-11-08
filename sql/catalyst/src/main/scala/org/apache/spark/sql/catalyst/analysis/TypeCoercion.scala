@@ -828,8 +828,11 @@ object TypeCoercion {
   /**
    * 1. Turns Add/Subtract of DateType/TimestampType/StringType and CalendarIntervalType
    *    to TimeAdd/TimeSub.
-   * 2. Turns Add/Subtract of DateType/IntegerType and IntegerType/DateType
-   *    to DateAdd/DateSub/DateDiff.
+   * 2. Turns Add/Subtract of TimestampType/DateType/IntegerType
+   *    and TimestampType/IntegerType/DateType to DateAdd/DateSub/SubtractDates and
+   *    to SubtractTimestamps.
+   * 3. Turns Multiply/Divide of CalendarIntervalType and NumericType
+   *    to MultiplyInterval/DivideInterval
    */
   object DateTimeOperations extends Rule[LogicalPlan] {
 
@@ -845,11 +848,24 @@ object TypeCoercion {
         Cast(TimeAdd(l, r), l.dataType)
       case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
         Cast(TimeSub(l, r), l.dataType)
+      case Multiply(l @ CalendarIntervalType(), r @ NumericType()) =>
+        MultiplyInterval(l, r)
+      case Multiply(l @ NumericType(), r @ CalendarIntervalType()) =>
+        MultiplyInterval(r, l)
+      case Divide(l @ CalendarIntervalType(), r @ NumericType()) =>
+        DivideInterval(l, r)
 
       case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
       case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
       case Subtract(l @ DateType(), r @ IntegerType()) => DateSub(l, r)
-      case Subtract(l @ DateType(), r @ DateType()) => DateDiff(l, r)
+      case Subtract(l @ DateType(), r @ DateType()) =>
+        if (SQLConf.get.usePostgreSQLDialect) DateDiff(l, r) else SubtractDates(l, r)
+      case Subtract(l @ TimestampType(), r @ TimestampType()) =>
+        SubtractTimestamps(l, r)
+      case Subtract(l @ TimestampType(), r @ DateType()) =>
+        SubtractTimestamps(l, Cast(r, TimestampType))
+      case Subtract(l @ DateType(), r @ TimestampType()) =>
+        SubtractTimestamps(Cast(l, TimestampType), r)
     }
   }
 
@@ -863,8 +879,12 @@ object TypeCoercion {
       case e if !e.childrenResolved => e
 
       // If DecimalType operands are involved, DecimalPrecision will handle it
+      // If CalendarIntervalType operands are involved, DateTimeOperations will handle it
       case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
-          !right.dataType.isInstanceOf[DecimalType] && left.dataType != right.dataType =>
+          !right.dataType.isInstanceOf[DecimalType] &&
+          !left.dataType.isInstanceOf[CalendarIntervalType] &&
+          !right.dataType.isInstanceOf[CalendarIntervalType] &&
+          left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
           if (b.inputType.acceptsType(commonType)) {
             // If the expression accepts the tightest common type, cast to that.
