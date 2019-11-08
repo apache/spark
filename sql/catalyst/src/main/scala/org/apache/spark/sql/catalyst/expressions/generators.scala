@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -355,6 +356,11 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
        2
        3
        4
+      > SELECT _FUNC_(a) FROM VALUES (array(array(1,2), array(3,4))) AS v1(a);
+       1
+       2
+       3
+       4
   """,
   since = "3.0.0")
 case class UnNest(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
@@ -362,13 +368,23 @@ case class UnNest(child: Expression) extends UnaryExpression with Generator with
   override def prettyName: String = "unnest"
 
   override def elementSchema: StructType = {
-    new StructType().add(prettyName, getLeafDataType(child.dataType))
+    new StructType().add(prettyName, getLeafDataType(child.dataType), true)
   }
 
   // TODO: multidimensional arrays must have array expressions with matching dimensions
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(_: NullType, _) => TypeCheckResult.TypeCheckSuccess
     case _: ArrayType =>
+      var currentType = child.dataType
+      while(currentType.isInstanceOf[ArrayType]) {
+        val arrayType = currentType.asInstanceOf[ArrayType]
+        if (arrayType.containsNull && !arrayType.elementType.isInstanceOf[AtomicType]) {
+          return TypeCheckResult.TypeCheckFailure("multidimensional arrays must not contains nulls")
+        }
+        currentType = getElementTypeOrItself(currentType)
+      }
       TypeUtils.checkForSameTypeInputExpr(child.children.map(_.dataType), s"function $prettyName")
+
     case _ =>
       TypeCheckResult.TypeCheckFailure(
         s"input to function unnest should be array type not ${child.dataType.catalogString}")
@@ -380,22 +396,31 @@ case class UnNest(child: Expression) extends UnaryExpression with Generator with
     case at => at
   }
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = eval0(input, child)
+  private def getElementTypeOrItself(typ: DataType): DataType = typ match {
+    case ArrayType(et, _) => et
+    case _ => typ
+  }
 
-  private def eval0(input: InternalRow, expr: Expression): TraversableOnce[InternalRow] = {
-    expr.dataType match {
-      case ArrayType(et1, _) =>
-        val inputArray = child.eval(input).asInstanceOf[ArrayData]
-        if (inputArray == null) {
-          Nil
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    var inputArray = child.eval(input).asInstanceOf[ArrayData]
+    if (inputArray == null) {
+      Nil
+    } else {
+      val rows = ArrayBuffer[InternalRow]()
+      var currentType = child.dataType
+      while (currentType.isInstanceOf[ArrayType]) {
+        val currentElementType = getElementTypeOrItself(currentType)
+        if (!currentElementType.isInstanceOf[ArrayType]) {
+          inputArray.foreach(currentElementType, (_, e) => rows += InternalRow(e))
         } else {
-          val rows = new Array[InternalRow](inputArray.numElements())
-          inputArray.foreach(et1, (i, e) => { rows(i) = InternalRow(e) })
-          et1 match {
-            case ArrayType(_, _) => rows.zip(expr.children).flatMap { case (r, e) => eval0(r, e) }
-            case _ => rows
+          val array = inputArray.toObjectArray(currentElementType).flatMap {
+            _.asInstanceOf[ArrayData].toObjectArray(getElementTypeOrItself(currentElementType))
           }
+          inputArray = new GenericArrayData(array)
         }
+        currentType = currentElementType
+      }
+      rows
     }
   }
 }
