@@ -577,7 +577,7 @@ private[spark] class BlockManagerInfo(
 
   def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
 
-  def updateLastSeenMs() {
+  def updateLastSeenMs(): Unit = {
     _lastSeenMs = System.currentTimeMillis()
   }
 
@@ -586,6 +586,8 @@ private[spark] class BlockManagerInfo(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Unit = {
+
+    updateLastSeenMs()
 
     val blockExists = _blocks.containsKey(blockId)
     var originalMemSize: Long = 0

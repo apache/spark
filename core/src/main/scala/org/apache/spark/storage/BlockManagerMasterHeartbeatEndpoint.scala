@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEnv}
-import org.apache.spark.storage.BlockManagerMessages.{BlockManagerHeartbeat, StopBlockManagerMaster, UpdateBlockInfo}
+import org.apache.spark.storage.BlockManagerMessages.{BlockManagerHeartbeat, StopBlockManagerMaster}
 
 /**
  * Separate heartbeat out of BlockManagerMasterEndpoint due to performance consideration.
@@ -33,10 +33,6 @@ private[spark] class BlockManagerMasterHeartbeatEndpoint(
   extends IsolatedRpcEndpoint with Logging {
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case UpdateBlockInfo(blockManagerId, _, _, _, _) =>
-      heartbeatReceived(blockManagerId)
-      context.reply(true)
-
     case BlockManagerHeartbeat(blockManagerId) =>
       context.reply(heartbeatReceived(blockManagerId))
 
