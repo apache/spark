@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
        1.5
       > SELECT _FUNC_(cast(v as interval)) FROM VALUES ('-1 weeks'), ('2 seconds'), (null) t(v);
-       interval -3 days -11 hours -59 minutes -59 seconds
+       -3 days -11 hours -59 minutes -59 seconds
   """,
   since = "1.0.0")
 case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
