@@ -68,7 +68,7 @@ private[spark] class Executor(
   @volatile private var executorShutdown = false
   ShutdownHookManager.addShutdownHook(
     () => if (!executorShutdown) {
-      pluginShutdown()
+      stop()
     }
   )
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -300,13 +300,6 @@ private[spark] class Executor(
     threadPool.shutdown()
 
     // Notify plugins that executor is shutting down so they can terminate cleanly
-    pluginShutdown()
-    if (!isLocal) {
-      env.stop()
-    }
-  }
-
-  private def pluginShutdown(): Unit = {
     if (!executorShutdown) {
       executorShutdown = true
       Utils.withContextClassLoader(replClassLoader) {
@@ -320,6 +313,9 @@ private[spark] class Executor(
         }
       }
       plugins.foreach(_.shutdown())
+    }
+    if (!isLocal) {
+      env.stop()
     }
   }
 
