@@ -513,6 +513,8 @@ def isnan(col):
     [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
     sc = SparkContext._active_spark_context
+    if type(col) is str:
+        return Column(sc._jvm.functions.isnan(col))
     return Column(sc._jvm.functions.isnan(_to_java_column(col)))
 
 
@@ -525,6 +527,8 @@ def isnull(col):
     [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
     sc = SparkContext._active_spark_context
+    if type(col) is str:
+        return Column(sc._jvm.functions.isnull(col))
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
 
 
@@ -577,6 +581,8 @@ def nanvl(col1, col2):
     [Row(r1=1.0, r2=1.0), Row(r1=2.0, r2=2.0)]
     """
     sc = SparkContext._active_spark_context
+    if type(col1) is str and type(col2) is str:
+        return Column(sc._jvm.functions.nanvl(col1, col2))
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
