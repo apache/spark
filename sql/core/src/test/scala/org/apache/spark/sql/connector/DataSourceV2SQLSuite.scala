@@ -1469,7 +1469,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ALTER TABLE AS QUERY") {
+  test("ALTER VIEW AS QUERY") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW $v AS SELECT 1")
