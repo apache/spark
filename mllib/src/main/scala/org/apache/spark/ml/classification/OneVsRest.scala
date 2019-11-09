@@ -260,8 +260,8 @@ final class OneVsRestModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"OneVsRestModel: uid=$uid, classifier=${$(classifier)}, " +
-      s"numClasses=$numClasses, numFeatures=$numFeatures"
+    s"OneVsRestModel: uid=$uid, classifier=${$(classifier)}, numClasses=$numClasses, " +
+      s"numFeatures=$numFeatures"
   }
 }
 

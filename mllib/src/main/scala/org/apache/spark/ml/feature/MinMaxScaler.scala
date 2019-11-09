@@ -229,8 +229,8 @@ class MinMaxScalerModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"MinMaxScalerModel: uid=$uid, numFeatures=${originalMin.size}, " +
-      s"min=${$(min)}, max=${$(max)}"
+    s"MinMaxScalerModel: uid=$uid, numFeatures=${originalMin.size}, min=${$(min)}, " +
+      s"max=${$(max)}"
   }
 }
 

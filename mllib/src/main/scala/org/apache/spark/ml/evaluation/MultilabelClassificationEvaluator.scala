@@ -124,8 +124,8 @@ class MultilabelClassificationEvaluator (override val uid: String)
 
   @Since("3.0.0")
   override def toString: String = {
-    s"MultilabelClassificationEvaluator: uid=$uid, " +
-      s"metricName=${$(metricName)}, metricLabel=${$(metricLabel)}"
+    s"MultilabelClassificationEvaluator: uid=$uid, metricName=${$(metricName)}, " +
+      s"metricLabel=${$(metricLabel)}"
   }
 }
 

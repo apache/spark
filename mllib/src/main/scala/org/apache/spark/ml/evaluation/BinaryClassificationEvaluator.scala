@@ -133,8 +133,8 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
 
   @Since("3.0.0")
   override def toString: String = {
-    s"BinaryClassificationEvaluator: uid=$uid, " +
-      s"metricName=${$(metricName)}, numBins=${$(numBins)}"
+    s"BinaryClassificationEvaluator: uid=$uid, metricName=${$(metricName)}, " +
+      s"numBins=${$(numBins)}"
   }
 }
 

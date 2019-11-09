@@ -123,8 +123,8 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
 
   @Since("3.0.0")
   override def toString: String = {
-    s"ClusteringEvaluator: uid=$uid, " +
-      s"metricName=${$(metricName)}, distanceMeasure=${$(distanceMeasure)}"
+    s"ClusteringEvaluator: uid=$uid, metricName=${$(metricName)}, " +
+      s"distanceMeasure=${$(distanceMeasure)}"
   }
 }
 

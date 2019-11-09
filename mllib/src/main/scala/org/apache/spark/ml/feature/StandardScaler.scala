@@ -187,8 +187,8 @@ class StandardScalerModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"StandardScalerModel: uid=$uid, numFeatures=${mean.size}" +
-      s"withMean=${$(withMean)}, withStd=${$(withStd)}"
+    s"StandardScalerModel: uid=$uid, numFeatures=${mean.size}, withMean=${$(withMean)}, " +
+      s"withStd=${$(withStd)}"
   }
 }
 

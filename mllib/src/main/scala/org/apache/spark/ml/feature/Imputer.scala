@@ -277,8 +277,7 @@ class ImputerModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"ImputerModel: uid=$uid, strategy=${$(strategy)}, " +
-      s"missingValue=${$(missingValue)}"
+    s"ImputerModel: uid=$uid, strategy=${$(strategy)}, missingValue=${$(missingValue)}"
   }
 }
 

@@ -191,8 +191,7 @@ class GaussianMixtureModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"GaussianMixtureModel: uid=$uid, k=${weights.length}, " +
-      s"numFeatures=$numFeatures"
+    s"GaussianMixtureModel: uid=$uid, k=${weights.length}, numFeatures=$numFeatures"
   }
 
   /**

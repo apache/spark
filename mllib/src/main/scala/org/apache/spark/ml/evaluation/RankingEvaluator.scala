@@ -108,8 +108,7 @@ class RankingEvaluator (override val uid: String)
 
   @Since("3.0.0")
   override def toString: String = {
-    s"RankingEvaluator: uid=$uid, " +
-      s"metricName=${$(metricName)}, k=${$(k)}"
+    s"RankingEvaluator: uid=$uid, metricName=${$(metricName)}, k=${$(k)}"
   }
 }
 

@@ -127,8 +127,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("3.0.0")
   override def toString: String = {
-    s"RegressionEvaluator: uid=$uid, " +
-      s"metricName=${$(metricName)}, throughOrigin=${$(throughOrigin)}"
+    s"RegressionEvaluator: uid=$uid, metricName=${$(metricName)}, " +
+      s"throughOrigin=${$(throughOrigin)}"
   }
 }
 

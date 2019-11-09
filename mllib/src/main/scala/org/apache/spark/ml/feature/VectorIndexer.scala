@@ -509,8 +509,7 @@ class VectorIndexerModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"VectorIndexerModel: uid=$uid, numFeatures=$numFeatures, " +
-      s"handleInvalid=${$(handleInvalid)}"
+    s"VectorIndexerModel: uid=$uid, numFeatures=$numFeatures, handleInvalid=${$(handleInvalid)}"
   }
 }
 

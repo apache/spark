@@ -150,8 +150,8 @@ class BisectingKMeansModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"BisectingKMeansModel: uid=$uid, k=${parentModel.k}, " +
-      s"distanceMeasure=${$(distanceMeasure)}, numFeatures=$numFeatures"
+    s"BisectingKMeansModel: uid=$uid, k=${parentModel.k}, distanceMeasure=${$(distanceMeasure)}, " +
+      s"numFeatures=$numFeatures"
   }
 
   /**
