@@ -284,24 +284,24 @@ private[spark] class Executor(
   }
 
   def stop(): Unit = {
-    env.metricsSystem.report()
-    try {
-      metricsPoller.stop()
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Unable to stop executor metrics poller", e)
-    }
-    try {
-      heartbeater.stop()
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Unable to stop heartbeater", e)
-    }
-    threadPool.shutdown()
-
-    // Notify plugins that executor is shutting down so they can terminate cleanly
     if (!executorShutdown) {
       executorShutdown = true
+      env.metricsSystem.report()
+      try {
+        metricsPoller.stop()
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Unable to stop executor metrics poller", e)
+      }
+      try {
+        heartbeater.stop()
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Unable to stop heartbeater", e)
+      }
+      threadPool.shutdown()
+
+      // Notify plugins that executor is shutting down so they can terminate cleanly
       Utils.withContextClassLoader(replClassLoader) {
         executorPlugins.foreach { plugin =>
           try {
@@ -313,9 +313,9 @@ private[spark] class Executor(
         }
       }
       plugins.foreach(_.shutdown())
-    }
-    if (!isLocal) {
-      env.stop()
+      if (!isLocal) {
+        env.stop()
+      }
     }
   }
 
