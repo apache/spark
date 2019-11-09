@@ -235,7 +235,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       }
 
       val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-      val provider = ctx.tableProvider.qualifiedName.getText
+      val provider = ctx.tableProvider.multipartIdentifier.getText
       val schema = Option(ctx.colTypeList()).map(createSchema)
 
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
@@ -256,7 +256,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       userSpecifiedSchema = Option(ctx.colTypeList()).map(createSchema),
       replace = ctx.REPLACE != null,
       global = ctx.GLOBAL != null,
-      provider = ctx.tableProvider.qualifiedName.getText,
+      provider = ctx.tableProvider.multipartIdentifier.getText,
       options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
@@ -331,8 +331,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       case Some(x) => throw new ParseException(s"SHOW $x FUNCTIONS not supported", ctx)
     }
 
-    val (db, pat) = if (qualifiedName != null) {
-      val name = visitFunctionName(qualifiedName)
+    val (db, pat) = if (multipartIdentifier != null) {
+      val name = visitFunctionName(multipartIdentifier)
       (name.database, Some(name.funcName))
     } else if (pattern != null) {
       (None, Some(string(pattern)))
@@ -364,7 +364,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     }
 
     // Extract database, name & alias.
-    val functionIdentifier = visitFunctionName(ctx.qualifiedName)
+    val functionIdentifier = visitFunctionName(ctx.multipartIdentifier)
     CreateFunctionCommand(
       functionIdentifier.database,
       functionIdentifier.funcName,
@@ -384,7 +384,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val functionIdentifier = visitFunctionName(ctx.qualifiedName)
+    val functionIdentifier = visitFunctionName(ctx.multipartIdentifier)
     DropFunctionCommand(
       functionIdentifier.database,
       functionIdentifier.funcName,
@@ -992,7 +992,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       storage = storage.copy(locationUri = customLocation)
     }
 
-    val provider = ctx.tableProvider.qualifiedName.getText
+    val provider = ctx.tableProvider.multipartIdentifier.getText
 
     (false, storage, Some(provider))
   }
