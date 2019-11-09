@@ -669,10 +669,6 @@ multipartIdentifier
     : parts+=errorCapturingIdentifier ('.' parts+=errorCapturingIdentifier)*
     ;
 
-multipartIdentifierList
-    : multipartIdentifier (',' multipartIdentifier)*
-    ;
-
 tableIdentifier
     : (db=errorCapturingIdentifier '.')? table=errorCapturingIdentifier
     ;
