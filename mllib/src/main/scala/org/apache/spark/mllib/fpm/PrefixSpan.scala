@@ -217,6 +217,7 @@ object PrefixSpan extends Logging {
       data: RDD[Array[Array[Item]]],
       minCount: Long): Array[Item] = {
 
+    data.persist()
     data.flatMap { itemsets =>
       val uniqItems = mutable.Set.empty[Item]
       itemsets.foreach(set => uniqItems ++= set)

@@ -165,13 +165,15 @@ class BinaryClassificationMetrics @Since("3.0.0") (
     confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
     // Create a bin for each distinct score value, count weighted positives and
     // negatives within each bin, and then sort by score values in descending order.
-    val counts = scoreLabelsWeight.combineByKey(
+    val binnedWeights = scoreLabelsWeight.combineByKey(
       createCombiner = (labelAndWeight: (Double, Double)) =>
         new BinaryLabelCounter(0.0, 0.0) += (labelAndWeight._1, labelAndWeight._2),
       mergeValue = (c: BinaryLabelCounter, labelAndWeight: (Double, Double)) =>
         c += (labelAndWeight._1, labelAndWeight._2),
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
-    ).sortByKey(ascending = false)
+    )
+    binnedWeights.persist()
+    val counts = binnedWeights.sortByKey(ascending = false)
 
     val binnedCounts =
       // Only down-sample if bins is > 0

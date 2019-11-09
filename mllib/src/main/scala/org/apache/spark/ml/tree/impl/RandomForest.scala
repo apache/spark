@@ -122,6 +122,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     timer.start("init")
 
     val retaggedInput = input.retag(classOf[Instance])
+    retaggedInput.persist()
     val metadata =
       DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
 

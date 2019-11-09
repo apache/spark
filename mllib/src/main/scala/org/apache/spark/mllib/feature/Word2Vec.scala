@@ -309,6 +309,7 @@ class Word2Vec extends Serializable with Logging {
   @Since("1.1.0")
   def fit[S <: Iterable[String]](dataset: RDD[S]): Word2VecModel = {
 
+    dataset.persist()
     learnVocab(dataset)
 
     createBinaryTree()
