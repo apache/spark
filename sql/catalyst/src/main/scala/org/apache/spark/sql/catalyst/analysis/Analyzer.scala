@@ -949,10 +949,12 @@ class Analyzer(
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           (oldVersion, oldVersion.copy(serializer = oldVersion.serializer.map(_.newInstance())))
 
-        // Handle projects that create conflicting aliases.
         case oldVersion @ Project(projectList, _)
-            if hasConflictInAlias(projectList, conflictingAttributes) =>
-          (oldVersion, oldVersion.copy(projectList = newAliases(projectList)))
+            if hasConflict(projectList, conflictingAttributes) =>
+          (oldVersion,
+            oldVersion.copy(
+              projectList =
+                newNamedExpression(projectList, conflictingAttributes)))
 
         case oldVersion @ Aggregate(_, aggregateExpressions, _)
             if hasConflict(aggregateExpressions, conflictingAttributes) =>
@@ -1010,7 +1012,7 @@ class Analyzer(
     private def dedupAlias(alias: Alias, attrMap: AttributeMap[Attribute]): Alias = {
       attrMap.get(alias.toAttribute) match {
         case Some(attr) =>
-          Alias(alias.child, alias.name)(attr.exprId, alias.qualifier, alias.explicitMetadata)
+          Alias(alias.child, alias.name)(exprId = attr.exprId)
         case None => alias
       }
     }
@@ -1210,24 +1212,19 @@ class Analyzer(
       AttributeSet(expressions.map(_.toAttribute)).intersect(conflictingAttributes).nonEmpty
     }
 
-    def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
-      expressions.map {
-        case a: Alias => Alias(a.child, a.name)()
-        case other => other
-      }
-    }
-
     def newNamedExpression(
         expressions: Seq[NamedExpression],
         conflictingAttributes: AttributeSet): Seq[NamedExpression] = {
       val newExprs = HashMap[NamedExpression, NamedExpression]()
-      expressions.map {
-        case a: Alias => Alias(a.child, a.name)(
-          qualifier = a.qualifier,
-          explicitMetadata = a.explicitMetadata)
-        case expr if conflictingAttributes.contains(expr) =>
-          newExprs.getOrElseUpdate(expr, expr.newInstance)
-        case other => other
+      expressions.map { expr =>
+        if (conflictingAttributes.contains(expr)) {
+          expr match {
+            case a: Alias => Alias(a.child, a.name)()
+            case other => newExprs.getOrElseUpdate(other, other.newInstance)
+          }
+        } else {
+          expr
+        }
       }
     }
 
