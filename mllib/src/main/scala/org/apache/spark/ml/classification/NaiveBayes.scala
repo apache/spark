@@ -460,7 +460,7 @@ class NaiveBayesModel private[ml] (
     Vectors.dense(prob)
   }
 
-  private lazy val predictRawFunc = {
+  @transient private lazy val predictRawFunc = {
     $(modelType) match {
       case Multinomial =>
         features: Vector => multinomialCalculation(features)
