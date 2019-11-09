@@ -41,3 +41,12 @@ select max(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 se
 
 -- min
 select min(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v);
+
+-- SPARK-29605: cast string to intervals
+select cast(v as interval) from values ('1 second') t(v);
+select cast(v as interval) from values ('+1 second') t(v);
+select cast(v as interval) from values ('-1 second') t(v);
+select cast(v as interval) from values ('+     1 second') t(v);
+select cast(v as interval) from values ('-     1 second') t(v);
+select cast(v as interval) from values ('- -1 second') t(v);
+select cast(v as interval) from values ('- +1 second') t(v);
