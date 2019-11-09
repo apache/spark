@@ -764,7 +764,7 @@ errorCapturingMultiUnitsInterval
     ;
 
 multiUnitsInterval
-    : STRING
+    : {!ansi}? STRING
     | (intervalValue intervalUnit)+
     ;
 
