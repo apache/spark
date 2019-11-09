@@ -141,8 +141,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       Some(Array.fill($(numFolds))(Array.fill[Model[_]](epm.length)(null)))
     } else None
 
+    val inputRDD = dataset.toDF.rdd
+    inputRDD.persist()
     // Compute metrics for each model over each split
-    val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
+    val splits = MLUtils.kFold(inputRDD, $(numFolds), $(seed))
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
