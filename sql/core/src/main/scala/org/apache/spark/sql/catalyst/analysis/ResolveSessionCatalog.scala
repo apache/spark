@@ -421,6 +421,14 @@ class ResolveSessionCatalog(
         serdeClassName,
         serdeProperties,
         partitionSpec)
+
+    case AlterViewAsStatement(
+    tableName, originalText, query) =>
+      val v1TableName = parseV1Table(tableName, "ALTER VIEW QUERY")
+      AlterViewAsCommand(
+        v1TableName.asTableIdentifier,
+        originalText,
+        query)
   }
 
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = {

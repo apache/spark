@@ -1469,6 +1469,14 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("ALTER TABLE AS QUERY") {
+    val v = "testcat.ns1.ns2.v"
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER VIEW $v AS SELECT 1")
+    }
+    assert(e.message.contains("ALTER VIEW QUERY is only supported with v1 tables"))
+  }
+
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")

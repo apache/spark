@@ -1404,6 +1404,13 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed7, expected7)
   }
 
+  test("alter view: AS Query") {
+    val parsed = parsePlan("ALTER VIEW a.b.c AS SELECT 1")
+    val expected = AlterViewAsStatement(
+      Seq("a", "b", "c"), "SELECT 1", parsePlan("SELECT 1"))
+    comparePlans(parsed, expected)
+  }
+
   private case class TableSpec(
       name: Seq[String],
       schema: Option[StructType],
