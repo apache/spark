@@ -1960,18 +1960,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
       try {
-        val units = ctx.intervalUnit().asScala.map { unit =>
-          IntervalUnit.fromString(unit.getText)
-        }.toArray
-
-        val values = ctx.intervalValue().asScala.map { value =>
-          if (value.STRING() != null) {
-            string(value.STRING())
-          } else {
-            value.getText
-          }
-        }.toArray
-        IntervalUtils.fromUnitStrings(units, values)
+        if (ctx.STRING() != null) {
+          val str = string(ctx.STRING()).trim.toLowerCase(Locale.ROOT)
+          IntervalUtils.fromMultiUnitsString(str)
+        } else {
+          val units = ctx.intervalUnit().asScala.map { unit =>
+             IntervalUnit.fromString(unit.getText)
+          }.toArray
+          val values = ctx.intervalValue().asScala.map { value =>
+             if (value.STRING() != null) {
+                string(value.STRING())
+             } else {
+               value.getText
+             }
+          }.toArray
+          IntervalUtils.fromUnitStrings(units, values)
+        }
       } catch {
         case i: IllegalArgumentException =>
           val e = new ParseException(i.getMessage, ctx)

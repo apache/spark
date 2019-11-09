@@ -236,6 +236,56 @@ object IntervalUtils {
     }
   }
 
+  /**
+   * Converts a string with multiple value unit pairs to [[CalendarInterval]] case-insensitively.
+   *
+   * @throws IllegalArgumentException if the input string is not in valid interval format.
+   */
+  def fromMultiUnitsString(str: String): CalendarInterval = {
+    if (str == null) throw new IllegalArgumentException("Interval multi unit string cannot be null")
+
+    try {
+      var months: Int = 0
+      var days: Int = 0
+      var us: Long = 0L
+      var array = """-\s+""".r.replaceAllIn(str, "-").split("\\s+").filter(_ != "+").toList
+      require(array.length % 2 == 0, "Interval string should be value and unit pairs")
+      while (array.nonEmpty) {
+        array match {
+          case valueStr :: unit :: tail =>
+            if (isYear(unit)) {
+              months = Math.addExact(months, Math.multiplyExact(valueStr.toInt, MONTHS_PER_YEAR))
+            } else if (isMonth(unit)) {
+              months = Math.addExact(months, valueStr.toInt)
+            } else if (isWeek(unit)) {
+              days = Math.addExact(days, Math.multiplyExact(valueStr.toInt, DAYS_PER_WEEK))
+            } else if (isDay(unit)) {
+              days = Math.addExact(days, valueStr.toInt)
+            } else if (isHour(unit)) {
+              us = Math.addExact(us, Math.multiplyExact(valueStr.toLong, MICROS_PER_HOUR))
+            } else if (isMinute(unit)) {
+              us = Math.addExact(us, Math.multiplyExact(valueStr.toLong, MICROS_PER_MINUTE))
+            } else if (isSecond(unit)) {
+              us = Math.addExact(us, parseSecondNano(valueStr))
+            } else if (isMs(unit)) {
+              us = Math.addExact(us, Math.multiplyExact(valueStr.toLong, MICROS_PER_MILLIS))
+            } else if (isUs(unit)) {
+              us = Math.addExact(us, valueStr.toLong)
+            } else {
+              throw new IllegalArgumentException(s"Error paring interval unit: $unit")
+            }
+            array = tail
+          case _ => // never reach
+        }
+      }
+      new CalendarInterval(months, days, us)
+    } catch {
+      case e: Exception =>
+        val ex = new IllegalArgumentException(s"Invalid interval string: $str\n" + e.getMessage, e)
+        throw ex
+    }
+  }
+
   def fromUnitStrings(units: Array[IntervalUnit], fields: Array[String]): CalendarInterval = {
     assert(units.length == fields.length)
     var months: Int = 0
@@ -607,15 +657,32 @@ object IntervalUnit extends Enumeration {
   val YEAR, MONTH, WEEK, DAY, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, NANOSECOND = Value
 
   def fromString(unit: String): IntervalUnit = unit.toLowerCase(Locale.ROOT) match {
-    case "year" | "years" | "y" | "yr" | "yrs" => YEAR
-    case "month" | "months" | "mon" | "mons" => MONTH
-    case "week" | "weeks" | "w" => WEEK
-    case "day" | "days" | "d" => DAY
-    case "hour" | "hours" | "h" | "hr" | "hrs" => HOUR
-    case "minute" | "minutes" | "m" | "min" | "mins" => MINUTE
-    case "second" | "seconds" | "s" | "sec" | "secs" => SECOND
-    case "millisecond" | "milliseconds" | "ms" | "msec" | "msecs" | "mseconds" => MILLISECOND
-    case "microsecond" | "microseconds" | "us" | "usec" | "usecs" | "useconds" => MICROSECOND
+    case "year" | "years" => YEAR
+    case "month" | "months" => MONTH
+    case "week" | "weeks" => WEEK
+    case "day" | "days" => DAY
+    case "hour" | "hours" => HOUR
+    case "minute" | "minutes" => MINUTE
+    case "second" | "seconds" => SECOND
+    case "millisecond" | "milliseconds" => MILLISECOND
+    case "microsecond" | "microseconds" => MICROSECOND
     case u => throw new IllegalArgumentException(s"Invalid interval unit: $u")
   }
+
+  val isYear: String => Boolean =
+    y => """y((r)|(rs)|(ear)|(ears))?""".r.pattern.matcher(y).matches()
+  val isMonth: String => Boolean =
+    mon => """mon((s)|(th)|(ths))?""".r.pattern.matcher(mon).matches()
+  val isWeek: String => Boolean = w => """w((eek)|(eeks))?""".r.pattern.matcher(w).matches()
+  val isDay: String => Boolean = d => """d((ay)|(ays))?""".r.pattern.matcher(d).matches()
+  val isHour: String => Boolean =
+    h => """h((r)|(rs)|(our)|(ours))?""".r.pattern.matcher(h).matches()
+  val isMinute: String => Boolean =
+    m => """m((in)|(ins)|(inute)|(inutes))?""".r.pattern.matcher(m).matches()
+  val isSecond: String => Boolean =
+    s => """s((ec)|(ecs)|(econd)|(econds))?""".r.pattern.matcher(s).matches()
+  val isMs: String => Boolean =
+    ms => """(ms((ec)|(ecs)|(econds))?|(millisecond)[s]?)""".r.pattern.matcher(ms).matches()
+  val isUs: String => Boolean =
+    us => """(us((ec)|(ecs)|(econds))?|(microsecond)[s]?)""".r.pattern.matcher(us).matches()
 }
