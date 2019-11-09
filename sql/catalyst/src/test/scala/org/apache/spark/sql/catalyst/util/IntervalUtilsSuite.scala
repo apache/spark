@@ -117,7 +117,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
       fail("Expected to throw an exception for the invalid input")
     } catch {
       case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("month 15 outside range"))
+        assert(e.getMessage.contains("MONTH 15 outside range"))
     }
 
     try {
@@ -149,7 +149,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
       fail("Expected to throw an exception for the invalid input")
     } catch {
       case e: IllegalArgumentException =>
-        assert(e.getMessage.contains("hour 30 outside range"))
+        assert(e.getMessage.contains("HOUR 30 outside range"))
     }
 
     try {
