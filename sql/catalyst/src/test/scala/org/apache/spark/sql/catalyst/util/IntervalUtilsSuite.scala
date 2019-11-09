@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite {
@@ -161,7 +162,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
 
     try {
-      fromDayTimeString("5 1:12:20", "hour", "microsecond")
+      fromDayTimeString("5 1:12:20", Hour, Microsecond)
       fail("Expected to throw an exception for the invalid convention type")
     } catch {
       case e: IllegalArgumentException =>
