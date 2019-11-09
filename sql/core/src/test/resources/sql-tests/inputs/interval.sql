@@ -41,3 +41,12 @@ select max(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 se
 
 -- min
 select min(cast(v as interval)) from VALUES ('1 seconds'), ('4 seconds'), ('3 seconds') t(v);
+
+-- make intervals
+select make_interval(1);
+select make_interval(1, 2);
+select make_interval(1, 2, 3);
+select make_interval(1, 2, 3, 4);
+select make_interval(1, 2, 3, 4, 5);
+select make_interval(1, 2, 3, 4, 5, 6);
+select make_interval(1, 2, 3, 4, 5, 6, 7.008009);
