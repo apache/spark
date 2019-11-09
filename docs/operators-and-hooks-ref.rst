@@ -305,11 +305,11 @@ These integrations allow you to perform various operations within the Amazon Web
      - Sensors
 
    * - `Amazon Athena <https://aws.amazon.com/athena/>`__
-     - :mod:`airflow.providers.aws.hooks.athena`
-     - :mod:`airflow.providers.aws.operators.athena`
-     - :mod:`airflow.providers.aws.sensors.athena`
+     - :mod:`airflow.providers.amazon.aws.hooks.athena`
+     - :mod:`airflow.providers.amazon.aws.operators.athena`
+     - :mod:`airflow.providers.amazon.aws.sensors.athena`
 
-   * - `AWS Batch <https://aws.amazon.com/athena/>`__
+   * - `AWS Batch <https://aws.amazon.com/batch/>`__
      -
      - :mod:`airflow.contrib.operators.awsbatch_operator`
      -
@@ -348,8 +348,8 @@ These integrations allow you to perform various operations within the Amazon Web
      -
      -
 
-   * - `AWS Lambda <https://aws.amazon.com/kinesis/>`__
-     - :mod:`airflow.contrib.hooks.aws_lambda_hook`
+   * - `AWS Lambda <https://aws.amazon.com/lambda/>`__
+     - :mod:`airflow.providers.amazon.aws.hooks.lambda_function`
      -
      -
 
@@ -359,7 +359,7 @@ These integrations allow you to perform various operations within the Amazon Web
      - :mod:`airflow.contrib.sensors.aws_redshift_cluster_sensor`
 
    * - `Amazon Simple Storage Service (S3) <https://aws.amazon.com/s3/>`__
-     - :mod:`airflow.providers.aws.hooks.s3`
+     - :mod:`airflow.providers.amazon.aws.hooks.s3`
      - :mod:`airflow.operators.s3_file_transform_operator`,
        :mod:`airflow.contrib.operators.s3_copy_object_operator`,
        :mod:`airflow.contrib.operators.s3_delete_objects_operator`,
@@ -387,10 +387,10 @@ These integrations allow you to perform various operations within the Amazon Web
      - :mod:`airflow.contrib.operators.sns_publish_operator`
      -
 
-   * - `Amazon Simple Queue Service (SQS) <https://aws.amazon.com/sns/>`__
-     - :mod:`airflow.providers.aws.hooks.sqs`
-     - :mod:`airflow.providers.aws.operators.sqs`
-     - :mod:`airflow.providers.aws.sensors.sqs`
+   * - `Amazon Simple Queue Service (SQS) <https://aws.amazon.com/sqs/>`__
+     - :mod:`airflow.providers.amazon.aws.hooks.sqs`
+     - :mod:`airflow.providers.amazon.aws.operators.sqs`
+     - :mod:`airflow.providers.amazon.aws.sensors.sqs`
 
 Transfer operators and hooks
 ''''''''''''''''''''''''''''
