@@ -545,6 +545,13 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
               found <- sapply(funcList, function(func) {
                 ifelse(identical(func, obj), TRUE, FALSE)
               })
+              if (sum(found) > 0) {
+                # If function has been examined
+                if (identical(parent.env(environment(funcList[found][[1]])), func.env)) {
+                  # If the parent environment is identical to current parent
+                  break
+                }
+              }
               # Function has not been examined, record it and recursively clean its closure.
               assign(nodeChar,
                      if (is.null(funcList[[1]])) {
