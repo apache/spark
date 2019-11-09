@@ -173,6 +173,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
     ).sortByKey(ascending = false)
 
+    counts.persist()
     val binnedCounts =
       // Only down-sample if bins is > 0
       if (numBins == 0) {
@@ -206,6 +207,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
           })
         }
       }
+    counts.unpersist()
 
     val agg = binnedCounts.values.mapPartitions { iter =>
       val agg = new BinaryLabelCounter()
