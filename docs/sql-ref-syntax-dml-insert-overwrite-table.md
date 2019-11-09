@@ -43,7 +43,7 @@ INSERT OVERWRITE [ TABLE ] table_name
 
 <dl>
   <dt><code><em>VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]</em></code></dt>
-  <dd>Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.</dd>
+  <dd>Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to separate each value in the clause. More than one set of values can be specified to insert multiple rows.</dd>
 </dl>
 
 <dl>

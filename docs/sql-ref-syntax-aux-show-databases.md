@@ -22,7 +22,7 @@ license: |
 ### Description
 Lists the databases that match an optionally supplied string pattern. If no
 pattern is supplied then the command lists all the databases in the system.
-Please note that the usage of `SCHEMAS` and `DATABASES` are interchangable
+Please note that the usage of `SCHEMAS` and `DATABASES` are interchangeable
 and mean the same thing.
 
 ### Syntax
