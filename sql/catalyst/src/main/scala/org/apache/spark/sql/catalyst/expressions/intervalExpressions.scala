@@ -168,9 +168,9 @@ case class DivideInterval(interval: Expression, num: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
-       2014-12-28 06:30:45.887
-      > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
+      > SELECT _FUNC_(100, 11, 1, 1, 12, 30, 01.001001);
+       100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds
+      > SELECT _FUNC_(100, null, 3);
        NULL
   """,
   since = "3.0.0")
