@@ -112,7 +112,7 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("1.5.0")
   def setModelType(value: String): this.type = set(modelType, value)
-  setDefault(modelType -> NaiveBayes.Multinomial)
+  setDefault(modelType -> Multinomial)
 
   /**
    * Sets the value of param [[weightCol]].
@@ -521,6 +521,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
   /** [[MLWriter]] instance for [[NaiveBayesModel]] */
   private[NaiveBayesModel] class NaiveBayesModelWriter(instance: NaiveBayesModel) extends MLWriter {
+    import NaiveBayes._
 
     private case class Data(pi: Vector, theta: Matrix)
     private case class GaussianData(pi: Vector, theta: Matrix, sigma: Matrix)
@@ -530,21 +531,23 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val dataPath = new Path(path, "data").toString
 
-      if (instance.getModelType != NaiveBayes.Gaussian) {
-        // Save model data: pi, theta
-        require(instance.sigma == null)
-        val data = Data(instance.pi, instance.theta)
-        sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
-      } else {
-        // Save model data: pi, theta, sigma
-        require(instance.sigma != null)
-        val data = GaussianData(instance.pi, instance.theta, instance.sigma)
-        sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      instance.getModelType match {
+        case Multinomial | Bernoulli =>
+          // Save model data: pi, theta
+          require(instance.sigma == null)
+          val data = Data(instance.pi, instance.theta)
+          sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+
+        case Gaussian =>
+          require(instance.sigma != null)
+          val data = GaussianData(instance.pi, instance.theta, instance.sigma)
+          sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
       }
     }
   }
 
   private class NaiveBayesModelReader extends MLReader[NaiveBayesModel] {
+    import NaiveBayes._
 
     /** Checked against metadata when loading model */
     private val className = classOf[NaiveBayesModel].getName
@@ -560,7 +563,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val data = sparkSession.read.parquet(dataPath)
       val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
 
-      val model = if (major.toInt < 3 || modelType != NaiveBayes.Gaussian) {
+      val model = if (major.toInt < 3 || modelType != Gaussian) {
         val Row(pi: Vector, theta: Matrix) =
           MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
             .select("pi", "theta")
