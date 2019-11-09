@@ -215,8 +215,9 @@ class NaiveBayes @Since("1.5.0") (
         case Bernoulli => math.log(n + 2.0 * lambda)
       }
       var j = 0
+      val offset = i * numFeatures
       while (j < numFeatures) {
-        thetaArray(i * numFeatures + j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+        thetaArray(offset + j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
         j += 1
       }
       i += 1
@@ -267,8 +268,12 @@ class NaiveBayes @Since("1.5.0") (
     // [https://github.com/scikit-learn/scikit-learn/blob/0.21.X/sklearn/naive_bayes.py#L348]
     // and discussion [https://github.com/scikit-learn/scikit-learn/pull/5349] for detail.
     val epsilon = Iterator.range(0, numFeatures).map { j =>
-      val globalSum = aggregated.map(t => t._3(j) * t._2).sum
-      val globalSqrSum = aggregated.map(t => t._4(j)).sum
+      var globalSum = 0.0
+      var globalSqrSum = 0.0
+      aggregated.foreach { case (_, weightSum, mean, squareSum) =>
+        globalSum += mean(j) * weightSum
+        globalSqrSum += squareSum(j)
+      }
       globalSqrSum / numInstances -
         globalSum * globalSum / numInstances / numInstances
     }.max * 1e-9
@@ -282,13 +287,15 @@ class NaiveBayes @Since("1.5.0") (
     val sigmaArray = new Array[Double](numLabels * numFeatures)
 
     var i = 0
-    aggregated.foreach { case (_, n, mean, squareSum) =>
-      piArray(i) = math.log(n / numInstances)
+    val logNumInstances = math.log(numInstances)
+    aggregated.foreach { case (_, weightSum, mean, squareSum) =>
+      piArray(i) = math.log(weightSum) - logNumInstances
       var j = 0
+      val offset = i * numFeatures
       while (j < numFeatures) {
         val m = mean(j)
-        thetaArray(i * numFeatures + j) = m
-        sigmaArray(i * numFeatures + j) = epsilon + squareSum(j) / n - m * m
+        thetaArray(offset + j) = m
+        sigmaArray(offset + j) = epsilon + squareSum(j) / weightSum - m * m
         j += 1
       }
       i += 1
@@ -389,11 +396,10 @@ class NaiveBayesModel private[ml] (
         value - math.log1p(-math.exp(value))
       }
       (thetaMinusNegTheta, negTheta.multiply(ones))
-    case Multinomial => (null, null)
-    case Gaussian => (null, null)
     case _ =>
       // This should never happen.
-      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
+        "Variables thetaMinusNegTheta and negThetaSum should only be precomputed in Bernoulli NB.")
   }
 
   /**
@@ -408,11 +414,10 @@ class NaiveBayesModel private[ml] (
           math.log(sigma(i, j))
         }.sum
       }
-    case Multinomial => null
-    case Bernoulli => null
     case _ =>
       // This should never happen.
-      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
+        "Variables logVarSum should only be precomputed in Gaussian NB.")
   }
 
   @Since("1.6.0")
@@ -455,7 +460,7 @@ class NaiveBayesModel private[ml] (
     Vectors.dense(prob)
   }
 
-  @transient private lazy val predictRawFunc = {
+  private val predictRawFunc = {
     $(modelType) match {
       case Multinomial =>
         features: Vector => multinomialCalculation(features)
