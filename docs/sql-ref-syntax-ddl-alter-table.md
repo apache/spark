@@ -101,7 +101,7 @@ this overrides the old value with the new one.
 ##### Syntax
 {% highlight sql %}
 
---Set SERDE Propeties
+--Set SERDE Properties
 ALTER TABLE table_name [PARTITION part_spec]
     SET SERDEPROPERTIES (key1=val1, key2=val2, ...)
 

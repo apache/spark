@@ -855,6 +855,11 @@ object TypeCoercion {
       case Divide(l @ CalendarIntervalType(), r @ NumericType()) =>
         DivideInterval(l, r)
 
+      case b @ BinaryOperator(l @ CalendarIntervalType(), r @ NullType()) =>
+        b.withNewChildren(Seq(l, Cast(r, CalendarIntervalType)))
+      case b @ BinaryOperator(l @ NullType(), r @ CalendarIntervalType()) =>
+        b.withNewChildren(Seq(Cast(l, CalendarIntervalType), r))
+
       case Add(l @ DateType(), r @ IntegerType()) => DateAdd(l, r)
       case Add(l @ IntegerType(), r @ DateType()) => DateAdd(r, l)
       case Subtract(l @ DateType(), r @ IntegerType()) => DateSub(l, r)
