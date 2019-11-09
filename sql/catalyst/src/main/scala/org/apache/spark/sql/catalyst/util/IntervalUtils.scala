@@ -248,7 +248,8 @@ object IntervalUtils {
       var months: Int = 0
       var days: Int = 0
       var us: Long = 0L
-      var array = """-\s+""".r.replaceAllIn(str, "-").split("\\s+").filter(_ != "+").toList
+      var array = """-\s+""".r.replaceAllIn(str.stripPrefix("interval "), "-")
+        .split("\\s+").filter(_ != "+").toList
       require(array.length % 2 == 0, "Interval string should be value and unit pairs")
       while (array.nonEmpty) {
         array match {
