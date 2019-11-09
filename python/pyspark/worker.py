@@ -404,9 +404,6 @@ def read_udfs(pickleSer, infile, eval_type):
         return parsed
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        # Create function like this:
-        #   lambda a: f([a[0]], [a[0], a[1]])
-
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
@@ -416,6 +413,8 @@ def read_udfs(pickleSer, infile, eval_type):
         arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
+        # Create function like this:
+        #   mapper a: f([a[0]], [a[0], a[1]])
         def mapper(a):
             keys = [a[o] for o in parsed_offsets[0][0]]
             vals = [a[o] for o in parsed_offsets[0][1]]
@@ -435,16 +434,14 @@ def read_udfs(pickleSer, infile, eval_type):
             df2_vals = [a[1][o] for o in parsed_offsets[1][1]]
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
     else:
-        # Create function like this:
-        #   lambda a: (f0(a[0]), f1(a[1], a[2]), f2(a[3]))
-        # In the special case of a single UDF this will return a single result rather
-        # than a tuple of results; this is the format that the JVM side expects.
         udfs = []
         for i in range(num_udfs):
             udfs.append(read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i))
 
         def mapper(a):
             result = tuple(f(*[a[o] for o in arg_offsets]) for (arg_offsets, f) in udfs)
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
             if len(result) == 1:
                 return result[0]
             else:
