@@ -409,9 +409,12 @@ object IntervalUtils {
   }
 
   private object ParseState extends Enumeration {
+    type ParseState = Value
+
     val PREFIX,
         BEGIN_VALUE,
         PARSE_SIGN,
+        TRIM_VALUE,
         PARSE_UNIT_VALUE,
         FRACTIONAL_PART,
         BEGIN_UNIT_NAME,
@@ -439,7 +442,7 @@ object IntervalUtils {
     val s = input.trim.toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
-    if (bytes.length == 0) {
+    if (bytes.isEmpty) {
       return null
     }
     var state = PREFIX
@@ -451,6 +454,13 @@ object IntervalUtils {
     var microseconds: Long = 0
     var fractionScale: Int = 0
     var fraction: Int = 0
+
+    def trimToNextState(b: Byte, next: ParseState): Unit = {
+      b match {
+        case ' ' => i += 1
+        case _ => state = next
+      }
+    }
 
     while (i < bytes.length) {
       val b = bytes(i)
@@ -464,11 +474,7 @@ object IntervalUtils {
             }
           }
           state = BEGIN_VALUE
-        case BEGIN_VALUE =>
-          b match {
-            case ' ' => i += 1
-            case _ => state = PARSE_SIGN
-          }
+        case BEGIN_VALUE => trimToNextState(b, PARSE_SIGN)
         case PARSE_SIGN =>
           b match {
             case '-' =>
@@ -486,7 +492,8 @@ object IntervalUtils {
           // Sets the scale to an invalid value to track fraction presence
           // in the BEGIN_UNIT_NAME state
           fractionScale = -1
-          state = PARSE_UNIT_VALUE
+          state = TRIM_VALUE
+        case TRIM_VALUE => trimToNextState(b, PARSE_UNIT_VALUE)
         case PARSE_UNIT_VALUE =>
           b match {
             case _ if '0' <= b && b <= '9' =>
