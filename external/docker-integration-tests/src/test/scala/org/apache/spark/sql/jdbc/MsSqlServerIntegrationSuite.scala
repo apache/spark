@@ -203,7 +203,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
 
-  test("Write tables with ShortType") {
+  test("SPARK-29644: Write tables with ShortType") {
     import testImplicits._
     val df = Seq(-32768.toShort, 0.toShort, 1.toShort, 38.toShort, 32768.toShort).toDF("a")
     val tablename = "shorttable"
@@ -224,7 +224,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(colType(0) == "class java.lang.Short")
   }
 
-  test("Write tables with ByteType") {
+  test("SPARK-29644: Write tables with ByteType") {
     import testImplicits._
     val df = Seq(-127.toByte, 0.toByte, 1.toByte, 38.toByte, 128.toByte).toDF("a")
     val tablename = "bytetable"
