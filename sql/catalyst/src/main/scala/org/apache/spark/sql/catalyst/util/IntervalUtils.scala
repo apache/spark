@@ -28,6 +28,20 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 object IntervalUtils {
 
+  object IntervalUnit extends Enumeration {
+    type IntervalUnit = Value
+
+    val Microsecond = Value(0, "microsecond")
+    val Millisecond = Value(1, "millisecond")
+    val Second = Value(2, "second")
+    val Minute = Value(3, "minute")
+    val Hour = Value(4, "hour")
+    val Day = Value(5, "day")
+    val Week = Value(6, "week")
+    val Month = Value(7, "month")
+    val Year = Value(8, "year")
+  }
+
   def getYears(interval: CalendarInterval): Int = {
     interval.months / MONTHS_PER_YEAR
   }
