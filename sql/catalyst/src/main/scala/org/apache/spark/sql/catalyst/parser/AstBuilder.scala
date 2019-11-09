@@ -341,21 +341,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
   }
 
-  override def visitDeleteFromTable(
-      ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
-
-    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val tableAlias = if (ctx.tableAlias() != null) {
-      val ident = ctx.tableAlias().strictIdentifier()
-      // We do not allow columns aliases after table alias.
-      if (ctx.tableAlias().identifierList() != null) {
-        throw new ParseException("Columns aliases is not allowed in DELETE.",
-          ctx.tableAlias().identifierList())
+  private def getTableAliasWithoutColumnAlias(
+      ctx: TableAliasContext, op: String): Option[String] = {
+    if (ctx == null) {
+      None
+    } else {
+      val ident = ctx.strictIdentifier()
+      if (ctx.identifierList() != null) {
+        throw new ParseException(s"Columns aliases are not allowed in $op.", ctx.identifierList())
       }
       if (ident != null) Some(ident.getText) else None
-    } else {
-      None
     }
+  }
+
+  override def visitDeleteFromTable(
+      ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
+    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
     val predicate = if (ctx.whereClause() != null) {
       Some(expression(ctx.whereClause().booleanExpression()))
     } else {
@@ -367,18 +369,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val tableAlias = if (ctx.tableAlias() != null) {
-      val ident = ctx.tableAlias().strictIdentifier()
-      // We do not allow columns aliases after table alias.
-      if (ctx.tableAlias().identifierList() != null) {
-        throw new ParseException("Columns aliases is not allowed in UPDATE.",
-          ctx.tableAlias().identifierList())
-      }
-      if (ident != null) Some(ident.getText) else None
-    } else {
-      None
-    }
-    val (attrs, values) = ctx.setClause().assign().asScala.map {
+    val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")
+    val (attrs, values) = ctx.setClause().assignmentList().assignment().asScala.map {
       kv => visitMultipartIdentifier(kv.key) -> expression(kv.value)
     }.unzip
     val predicate = if (ctx.whereClause() != null) {
@@ -393,6 +385,95 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       attrs,
       values,
       predicate)
+  }
+
+  private def withAssignments(assignCtx: SqlBaseParser.AssignmentListContext): Seq[Assignment] =
+    withOrigin(assignCtx) {
+      assignCtx.assignment().asScala.map { assign =>
+        Assignment(UnresolvedAttribute(visitMultipartIdentifier(assign.key)),
+          expression(assign.value))
+      }
+    }
+
+  override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
+    val targetTable = UnresolvedRelation(visitMultipartIdentifier(ctx.target))
+    val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
+    val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
+
+    val sourceTableOrQuery = if (ctx.source != null) {
+      UnresolvedRelation(visitMultipartIdentifier(ctx.source))
+    } else if (ctx.sourceQuery != null) {
+      visitQuery(ctx.sourceQuery)
+    } else {
+      throw new ParseException("Empty source for merge: you should specify a source" +
+          " table/subquery in merge.", ctx.source)
+    }
+    val sourceTableAlias = getTableAliasWithoutColumnAlias(ctx.sourceAlias, "MERGE")
+    val aliasedSource =
+      sourceTableAlias.map(SubqueryAlias(_, sourceTableOrQuery)).getOrElse(sourceTableOrQuery)
+
+    val mergeCondition = expression(ctx.mergeCondition)
+
+    val matchedClauses = ctx.matchedClause()
+    if (matchedClauses.size() > 2) {
+      throw new ParseException("There should be at most 2 'WHEN MATCHED' clauses.",
+        matchedClauses.get(2))
+    }
+    val matchedActions = matchedClauses.asScala.map {
+      clause => {
+        if (clause.matchedAction().DELETE() != null) {
+          DeleteAction(Option(clause.matchedCond).map(expression))
+        } else if (clause.matchedAction().UPDATE() != null) {
+          val condition = Option(clause.matchedCond).map(expression)
+          if (clause.matchedAction().ASTERISK() != null) {
+            UpdateAction(condition, Seq())
+          } else {
+            UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()))
+          }
+        } else {
+          // It should not be here.
+          throw new ParseException(
+            s"Unrecognized matched action: ${clause.matchedAction().getText}",
+            clause.matchedAction())
+        }
+      }
+    }
+    val notMatchedClauses = ctx.notMatchedClause()
+    if (notMatchedClauses.size() > 1) {
+      throw new ParseException("There should be at most 1 'WHEN NOT MATCHED' clause.",
+        notMatchedClauses.get(1))
+    }
+    val notMatchedActions = notMatchedClauses.asScala.map {
+      clause => {
+        if (clause.notMatchedAction().INSERT() != null) {
+          val condition = Option(clause.notMatchedCond).map(expression)
+          if (clause.notMatchedAction().ASTERISK() != null) {
+            InsertAction(condition, Seq())
+          } else {
+            val columns = clause.notMatchedAction().columns.multipartIdentifier()
+                .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
+            val values = clause.notMatchedAction().expression().asScala.map(expression)
+            if (columns.size != values.size) {
+              throw new ParseException("The number of inserted values cannot match the fields.",
+                clause.notMatchedAction())
+            }
+            InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)))
+          }
+        } else {
+          // It should not be here.
+          throw new ParseException(
+            s"Unrecognized not matched action: ${clause.notMatchedAction().getText}",
+            clause.notMatchedAction())
+        }
+      }
+    }
+
+    MergeIntoTable(
+      aliasedTarget,
+      aliasedSource,
+      mergeCondition,
+      matchedActions,
+      notMatchedActions)
   }
 
   /**
