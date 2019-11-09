@@ -45,7 +45,7 @@ SHOW TABLE EXTENDED [IN|FROM database_name] LIKE 'identifier_with_wildcards' [PA
     Specifies the regular expression pattern that is used to filter out unwanted tables.
     <ul> 
        <li> Except for `*` and `|` character, the pattern works like a regex.</li>
-       <li> `*` alone matches 0 or more characters and `|` is used to separate multiple regex,
+       <li> `*` alone matches 0 or more characters and `|` is used to separate multiple different regexes,
              any of which can match. </li>
        <li> The leading and trailing blanks are trimmed in the input pattern before processing.</li>
     </ul> 
