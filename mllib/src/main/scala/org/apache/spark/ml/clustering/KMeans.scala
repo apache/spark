@@ -158,7 +158,8 @@ class KMeansModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"KMeansModel: uid = $uid, k = ${$(k)}, numFeatures = $numFeatures"
+    s"KMeansModel: uid=$uid, k=${parentModel.k}, " +
+      s"distanceMeasure=${$(distanceMeasure)}, numFeatures=$numFeatures"
   }
 
   /**

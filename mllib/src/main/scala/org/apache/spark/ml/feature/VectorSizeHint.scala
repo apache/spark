@@ -176,6 +176,12 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
 
   @Since("2.3.0")
   override def copy(extra: ParamMap): this.type = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"VectorSizeHint: uid=$uid, size=${$(size)}, " +
+      s"handleInvalid=${$(handleInvalid)}"
+  }
 }
 
 @Since("2.3.0")

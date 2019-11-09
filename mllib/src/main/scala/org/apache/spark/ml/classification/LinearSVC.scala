@@ -328,7 +328,7 @@ class LinearSVCModel private[classification] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"LinearSVCModel: uid = $uid, numClasses = $numClasses, numFeatures = $numFeatures"
+    s"LinearSVCModel: uid=$uid, numClasses=$numClasses, numFeatures=$numFeatures"
   }
 }
 

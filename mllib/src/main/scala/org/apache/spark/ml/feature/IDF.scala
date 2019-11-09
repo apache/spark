@@ -175,9 +175,13 @@ class IDFModel private[ml] (
   @Since("3.0.0")
   def numDocs: Long = idfModel.numDocs
 
-
   @Since("1.6.0")
   override def write: MLWriter = new IDFModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"IDFModel: uid=$uid, numDocs=$numDocs"
+  }
 }
 
 @Since("1.6.0")

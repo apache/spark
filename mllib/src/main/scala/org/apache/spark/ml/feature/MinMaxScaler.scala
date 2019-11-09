@@ -226,6 +226,12 @@ class MinMaxScalerModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new MinMaxScalerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"MinMaxScalerModel: uid=$uid, numFeatures=${originalMin.size}, " +
+      s"min=${$(min)}, max=${$(max)}"
+  }
 }
 
 @Since("1.6.0")

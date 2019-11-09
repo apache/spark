@@ -705,7 +705,7 @@ class LinearRegressionModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"LinearRegressionModel: uid = $uid, numFeatures = $numFeatures"
+    s"LinearRegressionModel: uid=$uid, numFeatures=$numFeatures"
   }
 }
 

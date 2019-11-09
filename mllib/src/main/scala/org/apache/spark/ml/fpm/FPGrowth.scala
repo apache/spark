@@ -313,7 +313,7 @@ class FPGrowthModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"FPGrowthModel: uid = $uid, numTrainingRecords = $numTrainingRecords"
+    s"FPGrowthModel: uid=$uid, numTrainingRecords=$numTrainingRecords"
   }
 }
 

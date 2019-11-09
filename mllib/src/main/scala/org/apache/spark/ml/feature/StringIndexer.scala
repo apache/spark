@@ -412,7 +412,7 @@ class StringIndexerModel (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
-    var (inputColNames, outputColNames) = getInOutCols()
+    val (inputColNames, outputColNames) = getInOutCols()
     val outputColumns = new Array[Column](outputColNames.length)
 
     // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKIP_INVALID`.
@@ -473,6 +473,12 @@ class StringIndexerModel (
 
   @Since("1.6.0")
   override def write: StringIndexModelWriter = new StringIndexModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"StringIndexerModel: uid=$uid, numInputCols=${labelsArray.length}, " +
+      s"stringOrderType=${$(stringOrderType)}, handleInvalid=${$(handleInvalid)}"
+  }
 }
 
 @Since("1.6.0")

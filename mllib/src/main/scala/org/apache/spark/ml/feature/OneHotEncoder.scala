@@ -376,6 +376,12 @@ class OneHotEncoderModel private[ml] (
 
   @Since("3.0.0")
   override def write: MLWriter = new OneHotEncoderModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"OneHotEncoderModel: uid=$uid, numColumns=${categorySizes.length}, " +
+      s"dropLast=${$(dropLast)}, handleInvalid=${$(handleInvalid)}"
+  }
 }
 
 @Since("3.0.0")

@@ -105,6 +105,12 @@ class RankingEvaluator (override val uid: String)
   override def isLargerBetter: Boolean = true
 
   override def copy(extra: ParamMap): RankingEvaluator = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"RankingEvaluator: uid=$uid, " +
+      s"metricName=${$(metricName)}, k=${$(k)}"
+  }
 }
 
 

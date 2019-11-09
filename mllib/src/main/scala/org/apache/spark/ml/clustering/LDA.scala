@@ -623,7 +623,7 @@ class LocalLDAModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"LocalLDAModel: uid = $uid, k = ${$(k)}, numFeatures = $vocabSize"
+    s"LocalLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
   }
 }
 
@@ -791,7 +791,7 @@ class DistributedLDAModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"DistributedLDAModel: uid = $uid, k = ${$(k)}, numFeatures = $vocabSize"
+    s"DistributedLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
   }
 }
 

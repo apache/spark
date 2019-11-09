@@ -127,6 +127,11 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"HashingTF: uid=$uid, binary=${$(binary)}, numFeatures=${$(numFeatures)}"
+  }
 }
 
 @Since("1.6.0")

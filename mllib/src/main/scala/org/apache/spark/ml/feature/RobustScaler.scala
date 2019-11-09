@@ -251,6 +251,12 @@ class RobustScalerModel private[ml] (
   }
 
   override def write: MLWriter = new RobustScalerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"RobustScalerModel: uid=$uid, numFeatures=${median.size}, " +
+      s"withCentering=${$(withCentering)}, withScaling=${$(withScaling)}"
+  }
 }
 
 @Since("3.0.0")

@@ -340,7 +340,7 @@ class ALSModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"ALSModel: uid = $uid, rank = $rank"
+    s"ALSModel: uid=$uid, rank=$rank"
   }
 
   /**

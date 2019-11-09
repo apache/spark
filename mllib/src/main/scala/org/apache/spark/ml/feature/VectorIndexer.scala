@@ -428,7 +428,7 @@ class VectorIndexerModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)
-    val transformUDF = udf { (vector: Vector) => transformFunc(vector) }
+    val transformUDF = udf { vector: Vector => transformFunc(vector) }
     val newCol = transformUDF(dataset($(inputCol)))
     val ds = dataset.withColumn($(outputCol), newCol, newField.metadata)
     if (getHandleInvalid == VectorIndexer.SKIP_INVALID) {
@@ -506,6 +506,12 @@ class VectorIndexerModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new VectorIndexerModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"VectorIndexerModel: uid=$uid, numFeatures=$numFeatures, " +
+      s"handleInvalid=${$(handleInvalid)}"
+  }
 }
 
 @Since("1.6.0")

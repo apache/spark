@@ -326,8 +326,8 @@ class MultilayerPerceptronClassificationModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"MultilayerPerceptronClassificationModel: uid = $uid, numClasses = $numClasses, " +
-      s"numFeatures = $numFeatures, numLayers = ${layers.length}"
+    s"MultilayerPerceptronClassificationModel: uid=$uid, numLayers=${layers.length}, " +
+      s"numClasses=$numClasses, numFeatures=$numFeatures"
   }
 }
 
