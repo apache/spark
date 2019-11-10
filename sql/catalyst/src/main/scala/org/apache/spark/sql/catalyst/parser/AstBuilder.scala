@@ -3165,4 +3165,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       // TODO a partition spec is allowed to have optional values. This is currently violated.
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
+
+  /**
+   * Alter the query of a view. This creates a [[AlterViewAsStatement]]
+   *
+   * For example:
+   * {{{
+   *   ALTER VIEW multi_part_name AS SELECT ...;
+   * }}}
+   */
+  override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
+    AlterViewAsStatement(
+      visitMultipartIdentifier(ctx.multipartIdentifier),
+      originalText = source(ctx.query),
+      query = plan(ctx.query))
+  }
 }
