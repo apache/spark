@@ -178,7 +178,7 @@ statement
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTempViewUsing
-    | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
+    | ALTER VIEW multipartIdentifier AS? query                         #alterViewQuery
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
         multipartIdentifier AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
@@ -767,7 +767,7 @@ primaryExpression
 constant
     : NULL                                                                                     #nullLiteral
     | interval                                                                                 #intervalLiteral
-    | identifier STRING                                                                        #typeConstructor
+    | negativeSign=MINUS? identifier STRING                                                    #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | STRING+                                                                                  #stringLiteral
@@ -790,7 +790,7 @@ booleanValue
     ;
 
 interval
-    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
+    : negativeSign=MINUS? INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
     | {ansi}? (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 

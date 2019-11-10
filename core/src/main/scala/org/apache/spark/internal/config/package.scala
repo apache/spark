@@ -615,6 +615,12 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val METRICS_STATIC_SOURCES_ENABLED =
+    ConfigBuilder("spark.metrics.static.sources.enabled")
+      .doc("Whether to register static sources with the metrics system.")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
     .stringConf
     .createOptional

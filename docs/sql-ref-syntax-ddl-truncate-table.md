@@ -56,7 +56,7 @@ SELECT * from Student;
 | XYZ   | 3       | 12   |
 +-------+---------+------+--+
 
--- Removes all rows from the table in the partion specified
+-- Removes all rows from the table in the partition specified
 TRUNCATE TABLE Student partition(age=10);
 
 --After truncate execution, records belonging to partition age=10 are removed
