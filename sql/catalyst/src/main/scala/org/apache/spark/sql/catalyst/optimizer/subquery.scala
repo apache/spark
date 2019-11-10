@@ -106,12 +106,20 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
-        case (p, Exists(sub, conditions, _)) =>
-          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          buildJoin(outerPlan, sub, LeftSemi, joinCond)
-        case (p, Not(Exists(sub, conditions, _))) =>
-          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          buildJoin(outerPlan, sub, LeftAnti, joinCond)
+        case (p, exists @ Exists(sub, conditions, _)) =>
+          if (SubqueryExpression.hasCorrelatedSubquery(exists)) {
+            val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
+            buildJoin(outerPlan, sub, LeftSemi, joinCond)
+          } else {
+            Filter(exists, newFilter)
+          }
+        case (p, Not(exists @ Exists(sub, conditions, _))) =>
+          if (SubqueryExpression.hasCorrelatedSubquery(exists)) {
+            val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
+            buildJoin(outerPlan, sub, LeftAnti, joinCond)
+          } else {
+            Filter(Not(exists), newFilter)
+          }
         case (p, InSubquery(values, ListQuery(sub, conditions, _, _))) =>
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
