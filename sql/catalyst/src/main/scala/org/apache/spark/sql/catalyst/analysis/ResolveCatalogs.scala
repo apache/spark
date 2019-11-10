@@ -21,7 +21,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange}
-import org.apache.spark.sql.execution.command.CreateTableLikeCommand
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -142,35 +141,36 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         writeOptions = c.options.filterKeys(_ != "path"),
         ignoreIfExists = c.ifNotExists)
 
-    case CreateTableLikeStatement(target, source, loc, ifNotExists) =>
-      (source, target) match {
-        case (SessionCatalog(tCatalog, t), SessionCatalog(sCatalog, s)) =>
-          val CatalogAndIdentifierParts(targetCatalog, targetParts) = t
-          val CatalogAndIdentifierParts(sourceCatalog, sourceParts) = s
-          CreateTableLikeCommand(v1targetTable, v1sourceTable, location, ifNotExists)
-
+    case c @ CreateTableLikeStatement(target, source, loc, ifNotExists) =>
+      def validateLocation(loc: Option[String]) = {
+        if (loc.isDefined) {
+          throw new AnalysisException("Location clause not supported for " +
+            "CREATE TABLE LIKE statement when tables are of V2 type")
+        }
+      }
+      (target, source) match {
         case (NonSessionCatalog(tCatalog, t), NonSessionCatalog(sCatalog, s)) =>
+          validateLocation(loc)
           CreateTableLike(tCatalog.asTableCatalog,
-            t.asIdentifier,
-            sCatalog.asTableCatalog,
-            s.asIdentifier,
+            t,
+            Some(sCatalog.asTableCatalog),
+            s,
+            ifNotExists)
+        case (NonSessionCatalog(tCatalog, t), SessionCatalog(sCatalog, s)) =>
+          validateLocation(loc)
+          CreateTableLike(tCatalog.asTableCatalog,
+            t,
+            None,
+            source,
             ifNotExists)
         case (SessionCatalog(tCatalog, t), NonSessionCatalog(sCatalog, s)) =>
-        case (NonSessionCatalog(tCatalog, t), SessionCatalog(sCatalog, s)) =>
-      }
+            throw new AnalysisException("CREATE TABLE LIKE is not allowed when " +
+              "source table is V2 type and target table is V1 type")
 
-
-    case CreateTableLikeStatement(
-         NonSessionCatalog(tCatalog, t), NonSessionCatalog(sCatalog, s), loc, ifNotExists ) =>
-      if (loc.nonEmpty) {
-        throw new AnalysisException("Location clause not supported for" +
-          " CREATE TABLE LIKE statement when tables are of V2 type.")
+        // When target and source are V1 type, its handled in v1 CreateTableLikeCommand. We
+        // return from here without any transformation and its handled in ResolveSessionCatalog.
+        case _ => c
       }
-      CreateTableLike(tCatalog.asTableCatalog,
-        t.asIdentifier,
-        sCatalog.asTableCatalog,
-        s.asIdentifier,
-        ifNotExists)
 
     case RefreshTableStatement(NonSessionCatalog(catalog, tableName)) =>
       RefreshTable(catalog.asTableCatalog, tableName.asIdentifier)

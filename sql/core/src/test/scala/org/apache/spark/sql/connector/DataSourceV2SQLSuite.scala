@@ -1563,7 +1563,7 @@ class DataSourceV2SQLSuite
     assert(e.message.contains("ALTER VIEW QUERY is only supported with v1 tables"))
   }
 
-  test("CREATE TABLE LIKE") {
+  test("CREATE TABLE LIKE with target v2 and source v2") {
     val targetTable = "testcat.target_tab"
     val sourceTable = "testcat.source_tab"
 
@@ -1602,6 +1602,55 @@ class DataSourceV2SQLSuite
 
       // No error when IF NOT EXISTS is specified.
       sql(s"CREATE TABLE IF NOT EXISTS $targetTable LIKE $sourceTable")
+    }
+  }
+
+  test("CREATE TABLE LIKE with target v2 and source v1") {
+    val targetTable = "testcat.target_tab"
+    val sourceTable = "default.source_tab"
+
+    withTable(targetTable, sourceTable) {
+      val e1 = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $targetTable LIKE $sourceTable")
+      }
+      assert(e1.message.contains("Table or view 'source_tab' not found in database 'default'"))
+
+      val e2 = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $targetTable LIKE $sourceTable LOCATION '/tmp'")
+      }
+      assert(e2.message.contains("Location clause not supported for CREATE TABLE LIKE" +
+        " statement when tables are of V2 type"))
+
+      sql(
+        s"""
+           |CREATE TABLE $sourceTable
+           |(id bigint, data string, p int) USING parquet PARTITIONED BY (id, p)
+           |TBLPROPERTIES ('prop'='propvalue')
+           |""".stripMargin)
+      sql(s"CREATE TABLE $targetTable LIKE $sourceTable")
+      val testCatalog = catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array(), "target_tab"))
+      assert(table.name == targetTable)
+      assert(table.partitioning().size == 2)
+      assert(table.partitioning()(0) == LogicalExpressions.identity("id"))
+      assert(table.partitioning()(1) == LogicalExpressions.identity("p"))
+      assert(table.properties.asScala == Map("prop" -> "propvalue"))
+
+      // 2nd invocation should result in error.
+      val e3 = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $targetTable LIKE $sourceTable")
+      }
+      assert(e3.message.contains("Table target_tab already exists"))
+
+      // No error when IF NOT EXISTS is specified.
+      sql(s"CREATE TABLE IF NOT EXISTS $targetTable LIKE $sourceTable")
+
+      // if target is V1 and source if V2 then its not allowed.
+      val e4 = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $sourceTable LIKE $targetTable")
+      }
+      assert(e4.message.contains("CREATE TABLE LIKE is not allowed when source table" +
+        " is V2 type and target table is V1 type"))
     }
   }
 

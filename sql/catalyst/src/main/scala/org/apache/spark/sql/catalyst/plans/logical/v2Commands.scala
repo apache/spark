@@ -192,9 +192,9 @@ case class CreateTableAsSelect(
  */
 case class CreateTableLike(
     targetCatalog: TableCatalog,
-    targetTableName: Identifier,
-    sourceCatalog: TableCatalog,
-    sourceTableName: Identifier,
+    targetTableName: Seq[String],
+    sourceCatalog: Option[TableCatalog],
+    sourceTableName: Seq[String],
     ifNotExists: Boolean) extends Command
 
 /**

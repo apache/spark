@@ -21,26 +21,33 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableChange, V1Table}
 
 /**
- * Physical plan node for altering a table.
+ * Physical plan node for CREATE TABLE LIKE statement.
  */
 case class CreateTableLikeExec(
     targetCatalog: TableCatalog,
-    targetTable: Identifier,
-    sourceCatalog: TableCatalog,
-    sourceTable: Identifier,
+    targetTable: Seq[String],
+    sourceCatalog: Option[TableCatalog],
+    sourceTable: Seq[String],
     ifNotExists: Boolean) extends V2CommandExec {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val sourceTab = sourceCatalog.loadTable(sourceTable)
-    if (!targetCatalog.tableExists(targetTable)) {
+    val sessionCatalog = sqlContext.sparkSession.sessionState.catalog
+    // If source catalog is not specified then its resolved from session catalog.
+    val sourceTab = sourceCatalog.map { catalog =>
+      catalog.loadTable(sourceTable.asIdentifier)
+    }.getOrElse(
+      V1Table(sessionCatalog.getTempViewOrPermanentTableMetadata(sourceTable.asTableIdentifier))
+    )
+
+    if (!targetCatalog.tableExists(targetTable.asIdentifier)) {
       try {
-        targetCatalog.createTable(targetTable,
+        targetCatalog.createTable(targetTable.asIdentifier,
           sourceTab.schema,
           sourceTab.partitioning,
           sourceTab.properties())
@@ -49,7 +56,7 @@ case class CreateTableLikeExec(
           logWarning(s"Table ${targetTable.quoted} was created concurrently. Ignoring.")
       }
     } else if (!ifNotExists) {
-      throw new TableAlreadyExistsException(targetTable)
+      throw new TableAlreadyExistsException(targetTable.asIdentifier)
     }
 
     Seq.empty
