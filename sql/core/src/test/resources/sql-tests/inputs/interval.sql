@@ -56,3 +56,12 @@ select null * interval '2 seconds';
 -- interval with a negative sign
 select -interval '-1 month 1 day -1 second';
 select -interval -1 month 1 day -1 second;
+
+-- make intervals
+select make_interval(1);
+select make_interval(1, 2);
+select make_interval(1, 2, 3);
+select make_interval(1, 2, 3, 4);
+select make_interval(1, 2, 3, 4, 5);
+select make_interval(1, 2, 3, 4, 5, 6);
+select make_interval(1, 2, 3, 4, 5, 6, 7.008009);

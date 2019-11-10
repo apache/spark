@@ -419,6 +419,7 @@ object FunctionRegistry {
     expression[TimeWindow]("window"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[MakeInterval]("make_interval"),
     expression[DatePart]("date_part"),
 
     // collection functions
