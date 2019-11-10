@@ -491,8 +491,6 @@ case class ExistsSubquery(child: Expression,
                           subQuery: String,
                           result: Boolean) extends UnaryExpression with Predicate {
 
-  require(result != null, "hset could not be null")
-
   override def toString: String = s"Exists ${subQuery}"
 
   override def nullable: Boolean = child.nullable
