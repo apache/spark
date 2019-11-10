@@ -379,8 +379,9 @@ class OneHotEncoderModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"OneHotEncoderModel: uid=$uid, numColumns=${categorySizes.length}, " +
-      s"dropLast=${$(dropLast)}, handleInvalid=${$(handleInvalid)}"
+    s"OneHotEncoderModel: uid=$uid, dropLast=${$(dropLast)}, handleInvalid=${$(handleInvalid)}" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(outputCols).map(c => s", numOutputCols=${c.length}").getOrElse("")
   }
 }
 

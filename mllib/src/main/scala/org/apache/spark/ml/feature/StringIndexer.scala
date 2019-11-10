@@ -476,8 +476,10 @@ class StringIndexerModel (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"StringIndexerModel: uid=$uid, numInputCols=${labelsArray.length}, " +
-      s"stringOrderType=${$(stringOrderType)}, handleInvalid=${$(handleInvalid)}"
+    s"StringIndexerModel: uid=$uid, handleInvalid=${$(handleInvalid)}" +
+      get(stringOrderType).map(t => s", stringOrderType=$t").getOrElse("") +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("") +
+      get(outputCols).map(c => s", numOutputCols=${c.length}").getOrElse("")
   }
 }
 
