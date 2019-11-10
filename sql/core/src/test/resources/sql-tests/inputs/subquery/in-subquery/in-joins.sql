@@ -375,3 +375,10 @@ SELECT s1.id, s2.id AS id2 FROM s1
 FULL OUTER JOIN s2
 ON s1.id = s2.id
 AND s1.id NOT IN (SELECT id FROM s3);
+
+
+DROP VIEW s1;
+
+DROP VIEW s2;
+
+DROP VIEW s3;
