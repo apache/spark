@@ -187,20 +187,20 @@ case class MakeInterval(
   extends SeptenaryExpression with ImplicitCastInputTypes {
 
   def this(
-    years: Expression,
-    months: Expression,
-    weeks: Expression,
-    days: Expression,
-    hours: Expression,
-    mins: Expression) = {
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression,
+      mins: Expression) = {
     this(years, months, weeks, days, hours, mins, Literal(Decimal(0, 8, 6)))
   }
   def this(
-    years: Expression,
-    months: Expression,
-    weeks: Expression,
-    days: Expression,
-    hours: Expression) = {
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression) = {
     this(years, months, weeks, days, hours, Literal(0))
   }
   def this(years: Expression, months: Expression, weeks: Expression, days: Expression) =
