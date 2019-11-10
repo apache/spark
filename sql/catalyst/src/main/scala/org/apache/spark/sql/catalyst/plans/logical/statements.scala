@@ -238,6 +238,13 @@ case class AlterViewUnsetPropertiesStatement(
     propertyKeys: Seq[String],
     ifExists: Boolean) extends ParsedStatement
 
+/**
+ * ALTER VIEW ... Query command, as parsed from SQL.
+ */
+case class AlterViewAsStatement(
+    viewName: Seq[String],
+    originalText: String,
+    query: LogicalPlan) extends ParsedStatement
 
 /**
  * A DROP TABLE statement, as parsed from SQL.

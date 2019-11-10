@@ -747,6 +747,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
       case _: UpdateTable =>
         throw new UnsupportedOperationException(s"UPDATE TABLE is not supported temporarily.")
+      case _: MergeIntoTable =>
+        throw new UnsupportedOperationException(s"MERGE INTO TABLE is not supported temporarily.")
       case _ => Nil
     }
   }
