@@ -24,9 +24,8 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUnit}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -434,7 +433,7 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
     // Interval.
-    val intervalLiteral = Literal(fromString("interval 3 month 1 hour"))
+    val intervalLiteral = Literal(IntervalUtils.fromString("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
     intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
@@ -599,7 +598,7 @@ class ExpressionParserSuite extends AnalysisTest {
     "microsecond")
 
   def intervalLiteral(u: String, s: String): Literal = {
-    Literal(fromUnitStrings(Array(u), Array(s)))
+    Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
   }
 
   test("intervals") {
@@ -642,7 +641,7 @@ class ExpressionParserSuite extends AnalysisTest {
         0,
         0,
         13 * MICROS_PER_SECOND + 123 * MICROS_PER_MILLIS + 456)))
-    checkIntervals("1.001 second", Literal(fromString("1 second 1 millisecond")))
+    checkIntervals("1.001 second", Literal(IntervalUtils.fromString("1 second 1 millisecond")))
 
     // Non Existing unit
     intercept("interval 10 nanoseconds",
@@ -651,7 +650,7 @@ class ExpressionParserSuite extends AnalysisTest {
     // Year-Month intervals.
     val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0")
     yearMonthValues.foreach { value =>
-      val result = Literal(fromYearMonthString(value))
+      val result = Literal(IntervalUtils.fromYearMonthString(value))
       checkIntervals(s"'$value' year to month", result)
     }
 
@@ -664,7 +663,7 @@ class ExpressionParserSuite extends AnalysisTest {
       "-1 0:0:0",
       "1 0:0:1")
     datTimeValues.foreach { value =>
-      val result = Literal(fromDayTimeString(value))
+      val result = Literal(IntervalUtils.fromDayTimeString(value))
       checkIntervals(s"'$value' day to second", result)
     }
 
@@ -676,7 +675,7 @@ class ExpressionParserSuite extends AnalysisTest {
       "0:0:0",
       "0:0:1")
     hourTimeValues.foreach { value =>
-      val result = Literal(fromDayTimeString(value))
+      val result = Literal(IntervalUtils.fromDayTimeString(value))
       checkIntervals(s"'$value' hour to second", result)
     }
 
