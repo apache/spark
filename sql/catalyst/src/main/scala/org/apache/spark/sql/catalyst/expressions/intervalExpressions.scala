@@ -161,6 +161,7 @@ case class DivideInterval(interval: Expression, num: Expression)
     Arguments:
       * years - the number of years, positive or negative
       * months - the number of months, positive or negative
+      * weeks - the number of weeks, positive or negative
       * days - the number of days, positive or negative
       * hours - the number of hours, positive or negative
       * mins - the number of minutes, positive or negative
