@@ -1083,6 +1083,13 @@ object functions {
   def isnan(e: Column): Column = withExpr { IsNaN(e.expr) }
 
   /**
+   * Return true iff the column is NaN.
+   *
+   * @group normal_funcs
+   */
+  def isnan(columnName: String): Column = isnan(Column(columnName))
+
+  /**
    * Return true iff the column is null.
    *
    * @group normal_funcs

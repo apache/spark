@@ -20,18 +20,15 @@ package org.apache.spark.sql
 import java.sql.Date
 import java.util.Locale
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-import org.scalatest.Matchers._
-
 import org.apache.spark.sql.catalyst.expressions.{In, InSet, NamedExpression}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.scalatest.Matchers._
 
 class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -251,6 +248,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       testData.select(isnan($"a"), isnan($"b")),
+      Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
+
+    checkAnswer(
+      testData.select(isnan("a"), isnan("b")),
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
