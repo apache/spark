@@ -162,7 +162,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
 
     try {
-      fromDayTimeString("5 1:12:20", Hour, Microsecond)
+      fromDayTimeString("5 1:12:20", HOUR, MICROSECOND)
       fail("Expected to throw an exception for the invalid convention type")
     } catch {
       case e: IllegalArgumentException =>

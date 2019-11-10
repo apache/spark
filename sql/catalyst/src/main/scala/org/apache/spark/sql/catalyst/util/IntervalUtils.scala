@@ -31,16 +31,16 @@ object IntervalUtils {
   object IntervalUnit extends Enumeration {
     type IntervalUnit = Value
 
-    val Nanosecond = Value(0, "nanosecond")
-    val Microsecond = Value(1, "microsecond")
-    val Millisecond = Value(2, "millisecond")
-    val Second = Value(3, "second")
-    val Minute = Value(4, "minute")
-    val Hour = Value(5, "hour")
-    val Day = Value(6, "day")
-    val Week = Value(7, "week")
-    val Month = Value(8, "month")
-    val Year = Value(9, "year")
+    val NANOSECOND = Value(0, "nanosecond")
+    val MICROSECOND = Value(1, "microsecond")
+    val MILLISECOND = Value(2, "millisecond")
+    val SECOND = Value(3, "second")
+    val MINUTE = Value(4, "minute")
+    val HOUR = Value(5, "hour")
+    val DAY = Value(6, "day")
+    val WEEK = Value(7, "week")
+    val MONTH = Value(8, "month")
+    val YEAR = Value(9, "year")
   }
   import IntervalUnit._
 
@@ -152,8 +152,8 @@ object IntervalUtils {
     require(input != null, "Interval year-month string must be not null")
     def toInterval(yearStr: String, monthStr: String): CalendarInterval = {
       try {
-        val years = toLongWithRange(Year, yearStr, 0, Integer.MAX_VALUE).toInt
-        val months = toLongWithRange(Month, monthStr, 0, 11).toInt
+        val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE).toInt
+        val months = toLongWithRange(MONTH, monthStr, 0, 11).toInt
         val totalMonths = Math.addExact(Math.multiplyExact(years, 12), months)
         new CalendarInterval(totalMonths, 0, 0)
       } catch {
@@ -180,7 +180,7 @@ object IntervalUtils {
    * adapted from HiveIntervalDayTime.valueOf
    */
   def fromDayTimeString(s: String): CalendarInterval = {
-    fromDayTimeString(s, Day, Second)
+    fromDayTimeString(s, DAY, SECOND)
   }
 
   private val dayTimePattern =
@@ -206,33 +206,33 @@ object IntervalUtils {
       val days = if (m.group(2) == null) {
         0
       } else {
-        toLongWithRange(Day, m.group(3), 0, Integer.MAX_VALUE).toInt
+        toLongWithRange(DAY, m.group(3), 0, Integer.MAX_VALUE).toInt
       }
       var hours: Long = 0L
       var minutes: Long = 0L
       var seconds: Long = 0L
-      if (m.group(5) != null || from == Minute) { // 'HH:mm:ss' or 'mm:ss minute'
-        hours = toLongWithRange(Hour, m.group(5), 0, 23)
-        minutes = toLongWithRange(Minute, m.group(6), 0, 59)
-        seconds = toLongWithRange(Second, m.group(7), 0, 59)
+      if (m.group(5) != null || from == MINUTE) { // 'HH:mm:ss' or 'mm:ss minute'
+        hours = toLongWithRange(HOUR, m.group(5), 0, 23)
+        minutes = toLongWithRange(MINUTE, m.group(6), 0, 59)
+        seconds = toLongWithRange(SECOND, m.group(7), 0, 59)
       } else if (m.group(8) != null) { // 'mm:ss.nn'
-        minutes = toLongWithRange(Minute, m.group(6), 0, 59)
-        seconds = toLongWithRange(Second, m.group(7), 0, 59)
+        minutes = toLongWithRange(MINUTE, m.group(6), 0, 59)
+        seconds = toLongWithRange(SECOND, m.group(7), 0, 59)
       } else { // 'HH:mm'
-        hours = toLongWithRange(Hour, m.group(6), 0, 23)
-        minutes = toLongWithRange(Second, m.group(7), 0, 59)
+        hours = toLongWithRange(HOUR, m.group(6), 0, 23)
+        minutes = toLongWithRange(SECOND, m.group(7), 0, 59)
       }
       // Hive allow nanosecond precision interval
       var secondsFraction = parseNanos(m.group(9), seconds < 0)
       to match {
-        case Hour =>
+        case HOUR =>
           minutes = 0
           seconds = 0
           secondsFraction = 0
-        case Minute =>
+        case MINUTE =>
           seconds = 0
           secondsFraction = 0
-        case Second =>
+        case SECOND =>
           // No-op
         case _ =>
           throw new IllegalArgumentException(
@@ -259,26 +259,26 @@ object IntervalUtils {
     while (i < units.length) {
       try {
         units(i) match {
-          case Year =>
+          case YEAR =>
             months = Math.addExact(months, Math.multiplyExact(values(i).toInt, 12))
-          case Month =>
+          case MONTH =>
             months = Math.addExact(months, values(i).toInt)
-          case Week =>
+          case WEEK =>
             days = Math.addExact(days, Math.multiplyExact(values(i).toInt, 7))
-          case Day =>
+          case DAY =>
             days = Math.addExact(days, values(i).toInt)
-          case Hour =>
+          case HOUR =>
             val hoursUs = Math.multiplyExact(values(i).toLong, MICROS_PER_HOUR)
             microseconds = Math.addExact(microseconds, hoursUs)
-          case Minute =>
+          case MINUTE =>
             val minutesUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MINUTE)
             microseconds = Math.addExact(microseconds, minutesUs)
-          case Second =>
+          case SECOND =>
             microseconds = Math.addExact(microseconds, parseSecondNano(values(i)))
-          case Millisecond =>
+          case MILLISECOND =>
             val millisUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MILLIS)
             microseconds = Math.addExact(microseconds, millisUs)
-          case Microsecond =>
+          case MICROSECOND =>
             microseconds = Math.addExact(microseconds, values(i).toLong)
         }
       } catch {
@@ -297,7 +297,7 @@ object IntervalUtils {
       val alignedStr = if (nanosStr.length < maxNanosLen) {
         (nanosStr + "000000000").substring(0, maxNanosLen)
       } else nanosStr
-      val nanos = toLongWithRange(Nanosecond, alignedStr, 0L, 999999999L)
+      val nanos = toLongWithRange(NANOSECOND, alignedStr, 0L, 999999999L)
       val micros = nanos / NANOS_PER_MICROS
       if (isNegative) -micros else micros
     } else {
@@ -311,7 +311,7 @@ object IntervalUtils {
   private def parseSecondNano(secondNano: String): Long = {
     def parseSeconds(secondsStr: String): Long = {
       toLongWithRange(
-        Second,
+        SECOND,
         secondsStr,
         Long.MinValue / MICROS_PER_SECOND,
         Long.MaxValue / MICROS_PER_SECOND) * MICROS_PER_SECOND
@@ -438,15 +438,15 @@ object IntervalUtils {
   private def unitToUtf8(unit: IntervalUnit): UTF8String = {
     UTF8String.fromString(unit.toString)
   }
-  private final val yearStr = unitToUtf8(Year)
-  private final val monthStr = unitToUtf8(Month)
-  private final val weekStr = unitToUtf8(Week)
-  private final val dayStr = unitToUtf8(Day)
-  private final val hourStr = unitToUtf8(Hour)
-  private final val minuteStr = unitToUtf8(Minute)
-  private final val secondStr = unitToUtf8(Second)
-  private final val millisStr = unitToUtf8(Millisecond)
-  private final val microsStr = unitToUtf8(Microsecond)
+  private final val yearStr = unitToUtf8(YEAR)
+  private final val monthStr = unitToUtf8(MONTH)
+  private final val weekStr = unitToUtf8(WEEK)
+  private final val dayStr = unitToUtf8(DAY)
+  private final val hourStr = unitToUtf8(HOUR)
+  private final val minuteStr = unitToUtf8(MINUTE)
+  private final val secondStr = unitToUtf8(SECOND)
+  private final val millisStr = unitToUtf8(MILLISECOND)
+  private final val microsStr = unitToUtf8(MICROSECOND)
 
   def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._

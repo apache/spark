@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{IntervalUnit => iu}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -588,17 +588,17 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   val intervalUnits = Seq(
-    iu.Year,
-    iu.Month,
-    iu.Week,
-    iu.Day,
-    iu.Hour,
-    iu.Minute,
-    iu.Second,
-    iu.Millisecond,
-    iu.Microsecond)
+    YEAR,
+    MONTH,
+    WEEK,
+    DAY,
+    HOUR,
+    MINUTE,
+    SECOND,
+    MILLISECOND,
+    MICROSECOND)
 
-  def intervalLiteral(u: iu.IntervalUnit, s: String): Literal = {
+  def intervalLiteral(u: IntervalUnit, s: String): Literal = {
     Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
   }
 
@@ -629,7 +629,7 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // Hive nanosecond notation.
-    checkIntervals("13.123456789 seconds", intervalLiteral(iu.Second, "13.123456789"))
+    checkIntervals("13.123456789 seconds", intervalLiteral(SECOND, "13.123456789"))
     checkIntervals(
       "-13.123456789 second",
       Literal(new CalendarInterval(

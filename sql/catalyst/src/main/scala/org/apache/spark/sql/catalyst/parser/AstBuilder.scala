@@ -2098,17 +2098,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case ("year", "month") =>
             IntervalUtils.fromYearMonthString(value)
           case ("day", "hour") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.Day, IntervalUnit.Hour)
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.HOUR)
           case ("day", "minute") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.Day, IntervalUnit.Minute)
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.MINUTE)
           case ("day", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.Day, IntervalUnit.Second)
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.SECOND)
           case ("hour", "minute") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.Hour, IntervalUnit.Minute)
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.MINUTE)
           case ("hour", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.Hour, IntervalUnit.Second)
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.SECOND)
           case ("minute", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.Minute, IntervalUnit.Second)
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.MINUTE, IntervalUnit.SECOND)
           case _ =>
             throw new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
         }
