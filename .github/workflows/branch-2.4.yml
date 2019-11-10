@@ -24,15 +24,15 @@ jobs:
     - uses: actions/cache@v1
       with:
         path: ~/.m2/repository/com
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-com-${{ hashFiles('**/pom.xml') }}
+        key: ${{ matrix.scala }}-${{ matrix.hadoop }}-maven-com-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-maven-com-
+          ${{ matrix.scala }}-${{ matrix.hadoop }}-maven-com-
     - uses: actions/cache@v1
       with:
         path: ~/.m2/repository/org
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-org-${{ hashFiles('**/pom.xml') }}
+        key: ${{ matrix.scala }}-${{ matrix.hadoop }}-maven-org-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-maven-org-
+          ${{ matrix.scala }}-${{ matrix.hadoop }}-maven-org-
     - name: Set up JDK 8
       uses: actions/setup-java@v1
       with:
