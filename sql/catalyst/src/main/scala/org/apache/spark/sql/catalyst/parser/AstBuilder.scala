@@ -1782,7 +1782,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(applySign(ctx.sign, interval), CalendarIntervalType)
+          Literal(applyNegativeSign(ctx.negativeSign, interval), CalendarIntervalType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
@@ -1926,7 +1926,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
-  private def applySign(sign: Token, interval: CalendarInterval): CalendarInterval = {
+  private def applyNegativeSign(sign: Token, interval: CalendarInterval): CalendarInterval = {
     if (sign != null && sign.getText == "-") {
       IntervalUtils.negate(interval)
     } else {
@@ -1947,7 +1947,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           innerCtx.unitToUnitInterval)
       }
-      val interval = applySign(ctx.sign, visitMultiUnitsInterval(innerCtx.multiUnitsInterval))
+      val interval = applyNegativeSign(
+        ctx.negativeSign,
+        visitMultiUnitsInterval(innerCtx.multiUnitsInterval))
       Literal(interval, CalendarIntervalType)
     } else if (ctx.errorCapturingUnitToUnitInterval != null) {
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
@@ -1957,7 +1959,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           errorCtx)
       }
-      val interval = applySign(ctx.sign, visitUnitToUnitInterval(innerCtx.body))
+      val interval = applyNegativeSign(ctx.negativeSign, visitUnitToUnitInterval(innerCtx.body))
       Literal(interval, CalendarIntervalType)
     } else {
       throw new ParseException("at least one time unit should be given for interval literal", ctx)

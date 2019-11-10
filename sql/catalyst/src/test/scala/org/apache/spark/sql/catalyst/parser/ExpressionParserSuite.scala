@@ -437,7 +437,6 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
     intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
-    assertEqual("+interval '3 month 1 hour'", intervalLiteral)
     assertEqual(
       "-interval '3 month 1 hour'",
       Literal(IntervalUtils.fromString("interval -3 month -1 hour")))
@@ -609,7 +608,6 @@ class ExpressionParserSuite extends AnalysisTest {
     def checkIntervals(intervalValue: String, expected: Literal): Unit = {
       Seq(
         "" -> expected,
-        "+" -> expected,
         "-" -> expected.copy(
           value = IntervalUtils.negate(expected.value.asInstanceOf[CalendarInterval]))
       ).foreach { case (sign, expectedLiteral) =>
