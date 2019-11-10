@@ -1787,14 +1787,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     val offerResult = manager.resourceOffer("exec1", "host1", ANY)
     assert(offerResult.isDefined,
-      "Expect resource offer on iteration %s to return a task".format(0))
+      "Expect resource offer on iteration 0 to return a task")
     assert(offerResult.get.index === 0)
     val reason = new ExceptionFailure(
       new TaskOutputFileAlreadyExistException(
         new FileAlreadyExistsException("file already exists")),
       Seq.empty[AccumulableInfo])
     manager.handleFailedTask(offerResult.get.taskId, TaskState.FAILED, reason)
-    assert(MAX_TASK_FAILURES > 1)
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 }

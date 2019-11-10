@@ -738,14 +738,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-29649: Stop task set if FileAlreadyExistsException was thrown") {
+  test("Stop task set if FileAlreadyExistsException was thrown") {
     withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
         "fs.file.impl.disable.cache" -> "true") {
       withTable("t") {
         sql(
           """
-            |create table t(i int, part1 int) using parquet
-            |partitioned by (part1)
+            |CREATE TABLE t(i INT, part1 INT) USING PARQUET
+            |PARTITIONED BY (part1)
           """.stripMargin)
 
         val df = Seq((1, 1)).toDF("i", "part1")
