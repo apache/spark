@@ -99,25 +99,6 @@ select interval '20 40:32.99899999' minute to second;
 select interval '40:32.99899999' minute to second;
 select interval '40:32' minute to second;
 
--- abbreviations support for interval multi unit string
-select interval '1 years 2 months 3 weeks 4 days 5 hours 6 minutes 7 seconds 8 milliseconds 9 microseconds';
-select interval '1 year 2 month 3 week 4 day 5 hour 6 minute 7 second 8 millisecond 9 microsecond';
-select interval '1 y 2 mon 3 w 4 d 5 h 6 m 7 s 8 ms 9 us';
-select interval '1 y 2 yr -1 yrs 3 years -2 mons - 3 w  + 4 d +5 hrs 6 mins 7 secs 8 msecs 9 usecs';
-select interval 'day 1 y';
-select interval '1 1 y';
-select interval '1 1 1 y';
-select interval '1 daY';
-select interval '';
-select interval ' ';
-select interval '-';
-select interval '- year';
-select interval '-1 yea';
-
--- abbreviations not cover these which require units as keywords in sql parser
-select interval 1 y 2 mon 3 week;
-select interval '30' y '25' mon;
-
 -- ns is not supported
 select interval 10 nanoseconds;
 
