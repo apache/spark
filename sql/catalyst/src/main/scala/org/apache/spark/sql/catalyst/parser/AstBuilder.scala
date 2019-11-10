@@ -1881,7 +1881,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(interval, CalendarIntervalType)
+          Literal(applyNegativeSign(ctx.negativeSign, interval), CalendarIntervalType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
@@ -2025,6 +2025,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  private def applyNegativeSign(sign: Token, interval: CalendarInterval): CalendarInterval = {
+    if (sign != null && sign.getText == "-") {
+      IntervalUtils.negate(interval)
+    } else {
+      interval
+    }
+  }
+
   /**
    * Create a [[CalendarInterval]] literal expression. Two syntaxes are supported:
    * - multiple unit value pairs, for instance: interval 2 months 2 days.
@@ -2038,7 +2046,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           innerCtx.unitToUnitInterval)
       }
-      Literal(visitMultiUnitsInterval(innerCtx.multiUnitsInterval), CalendarIntervalType)
+      val interval = applyNegativeSign(
+        ctx.negativeSign,
+        visitMultiUnitsInterval(innerCtx.multiUnitsInterval))
+      Literal(interval, CalendarIntervalType)
     } else if (ctx.errorCapturingUnitToUnitInterval != null) {
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
@@ -2047,7 +2058,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           errorCtx)
       }
-      Literal(visitUnitToUnitInterval(innerCtx.body), CalendarIntervalType)
+      val interval = applyNegativeSign(ctx.negativeSign, visitUnitToUnitInterval(innerCtx.body))
+      Literal(interval, CalendarIntervalType)
     } else {
       throw new ParseException("at least one time unit should be given for interval literal", ctx)
     }
