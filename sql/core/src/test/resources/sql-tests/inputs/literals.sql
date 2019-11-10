@@ -107,6 +107,12 @@ select interval '1 y 2 yr -1 yrs 3 years -2 mons - 3 w  + 4 d +5 hrs 6 mins 7 se
 select interval 'day 1 y';
 select interval '1 1 y';
 select interval '1 1 1 y';
+select interval '1 daY';
+select interval '';
+select interval ' ';
+select interval '-';
+select interval '- year';
+select interval '-1 yea';
 
 -- abbreviations not cover these which require units as keywords in sql parser
 select interval 1 y 2 mon 3 week;

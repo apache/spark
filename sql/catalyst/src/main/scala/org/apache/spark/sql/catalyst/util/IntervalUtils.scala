@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -188,7 +189,7 @@ object IntervalUtils {
           seconds = 0
           secondsFraction = 0
         case "second" =>
-        // No-op
+          // No-op
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot support (interval '$input' $from to $to) expression")
@@ -235,8 +236,10 @@ object IntervalUtils {
     var days: Int = 0
     var us: Long = 0L
     var array = """-\s+""".r.replaceAllIn(str.stripPrefix("interval "), "-")
+      .toLowerCase(Locale.ROOT)
       .split("\\s+").filter(_ != "+").toList
-    require(array.length % 2 == 0, "Interval string should be value and unit pairs")
+    require(array.nonEmpty && array.length % 2 == 0,
+      "Interval string should be value and unit pairs")
 
     try {
       while (array.nonEmpty) {
@@ -269,9 +272,9 @@ object IntervalUtils {
       }
       new CalendarInterval(months, days, us)
     } catch {
+      case e: IllegalArgumentException => throw e
       case e: Exception =>
-        val ex = new IllegalArgumentException(s"Invalid interval string: $str\n" + e.getMessage, e)
-        throw ex
+        throw new IllegalArgumentException(s"Invalid interval string: $str\n" + e.getMessage, e)
     }
   }
 

@@ -36,8 +36,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{IntervalUnit, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1778,7 +1778,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
             IntervalUtils.fromMultiUnitsString(value)
           } catch {
             case e: IllegalArgumentException =>
-              val ex = new ParseException("Cannot parse the INTERVAL value: " + value, ctx)
+              val ex = new ParseException(s"Cannot parse the INTERVAL value: $value\n" +
+                e.getMessage, ctx)
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
@@ -1972,6 +1973,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           value.getText
         }
       }.toArray
+
       try {
         IntervalUtils.fromUnitStrings(units, values)
       } catch {
