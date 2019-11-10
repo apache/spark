@@ -725,7 +725,7 @@ class Dataset[T] private[sql](
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
     val parsedDelay =
       try {
-        IntervalUtils.fromString(delayThreshold)
+        IntervalUtils.fromMultiUnitsString(delayThreshold)
       } catch {
         case e: IllegalArgumentException =>
           throw new AnalysisException(

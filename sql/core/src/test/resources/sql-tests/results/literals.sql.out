@@ -479,12 +479,11 @@ struct<>
 -- !query 53 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Invalid interval string: day 1 y
-requirement failed: Interval string should be value and unit pairs(line 1, pos 16)
+Cannot parse the INTERVAL value: day 1 y(line 1, pos 7)
 
 == SQL ==
 select interval 'day 1 y'
-----------------^^^
+-------^^^
 
 
 -- !query 54
@@ -494,12 +493,11 @@ struct<>
 -- !query 54 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Invalid interval string: 1 1 y
-requirement failed: Interval string should be value and unit pairs(line 1, pos 16)
+Cannot parse the INTERVAL value: 1 1 y(line 1, pos 7)
 
 == SQL ==
 select interval '1 1 y'
-----------------^^^
+-------^^^
 
 
 -- !query 55
@@ -509,12 +507,11 @@ struct<>
 -- !query 55 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Invalid interval string: 1 1 1 y
-Error paring interval unit: 1(line 1, pos 16)
+Cannot parse the INTERVAL value: 1 1 1 y(line 1, pos 7)
 
 == SQL ==
 select interval '1 1 1 y'
-----------------^^^
+-------^^^
 
 
 -- !query 56
@@ -636,16 +633,9 @@ struct<map(1, 1 days, 2, 21 days):map<int,interval>>
 -- !query 66
 select interval 'interval 3 year 1 hour'
 -- !query 66 schema
-struct<>
+struct<3 years 1 hours:interval>
 -- !query 66 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Invalid interval string: interval 3 year 1 hour
-requirement failed: Interval string should be value and unit pairs(line 1, pos 16)
-
-== SQL ==
-select interval 'interval 3 year 1 hour'
-----------------^^^
+3 years 1 hours
 
 
 -- !query 67

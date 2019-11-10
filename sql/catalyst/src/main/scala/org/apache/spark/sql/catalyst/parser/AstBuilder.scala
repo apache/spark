@@ -1775,7 +1775,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
           val interval = try {
-            IntervalUtils.fromString(value)
+            IntervalUtils.fromMultiUnitsString(value)
           } catch {
             case e: IllegalArgumentException =>
               val ex = new ParseException("Cannot parse the INTERVAL value: " + value, ctx)
@@ -1959,23 +1959,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      try {
-        if (ctx.STRING() != null) {
-          val str = string(ctx.STRING()).trim.toLowerCase(Locale.ROOT)
-          IntervalUtils.fromMultiUnitsString(str)
+      val units = ctx.intervalUnit().asScala.map { unit =>
+        val u = unit.getText.toLowerCase(Locale.ROOT)
+        // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
+        if (u.endsWith("s")) u.substring(0, u.length - 1) else u
+      }.toArray
+
+      val values = ctx.intervalValue().asScala.map { value =>
+        if (value.STRING() != null) {
+          string(value.STRING())
         } else {
-          val units = ctx.intervalUnit().asScala.map { unit =>
-             IntervalUnit.fromString(unit.getText)
-          }.toArray
-          val values = ctx.intervalValue().asScala.map { value =>
-             if (value.STRING() != null) {
-                string(value.STRING())
-             } else {
-               value.getText
-             }
-          }.toArray
-          IntervalUtils.fromUnitStrings(units, values)
+          value.getText
         }
+      }.toArray
+      try {
+        IntervalUtils.fromUnitStrings(units, values)
       } catch {
         case i: IllegalArgumentException =>
           val e = new ParseException(i.getMessage, ctx)
@@ -2000,17 +1998,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case ("year", "month") =>
             IntervalUtils.fromYearMonthString(value)
           case ("day", "hour") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.HOUR)
+            IntervalUtils.fromDayTimeString(value, "day", "hour")
           case ("day", "minute") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.MINUTE)
+            IntervalUtils.fromDayTimeString(value, "day", "minute")
           case ("day", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.SECOND)
+            IntervalUtils.fromDayTimeString(value, "day", "second")
           case ("hour", "minute") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.MINUTE)
+            IntervalUtils.fromDayTimeString(value, "hour", "minute")
           case ("hour", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.SECOND)
+            IntervalUtils.fromDayTimeString(value, "hour", "second")
           case ("minute", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.MINUTE, IntervalUnit.SECOND)
+            IntervalUtils.fromDayTimeString(value, "minute", "second")
           case _ =>
             throw new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
         }

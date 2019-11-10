@@ -531,7 +531,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     // Simple tests
     val inputRow = InternalRow.fromSeq(Seq(
       false, 3.toByte, 15.toShort, -83, 129L, 1.0f, 8.0, UTF8String.fromString("test"),
-      Decimal(255), IntervalUtils.fromString("interval 1 day"), Array[Byte](1, 2)
+      Decimal(255), IntervalUtils.fromMultiUnitsString("interval 1 day"), Array[Byte](1, 2)
     ))
     val fields1 = Array(
       BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
