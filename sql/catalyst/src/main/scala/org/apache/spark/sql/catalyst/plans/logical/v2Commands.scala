@@ -412,3 +412,14 @@ case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command 
     AttributeReference("catalog", StringType, nullable = false)(),
     AttributeReference("namespace", StringType, nullable = false)())
 }
+
+/**
+ * The logical plan of the SHOW TBLPROPERTIES command that works for v2 catalogs.
+ */
+case class ShowTableProperties(
+    table: NamedRelation,
+    propertyKey: Option[String]) extends Command{
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("key", StringType, nullable = false)(),
+    AttributeReference("value", StringType, nullable = false)())
+}
