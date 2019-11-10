@@ -24,8 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.scheduler._
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.ExecutionState
 import org.apache.spark.sql.hive.thriftserver.ui.{ExecutionInfo, SessionInfo}
 import org.apache.spark.sql.internal.SQLConf
@@ -37,7 +36,7 @@ import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
 private[thriftserver] class HiveThriftServer2Listener(
   kvstore: ElementTrackingStore,
   server: Option[HiveServer2],
-  sqlContext: Option[SQLContext],
+  sqlConf: Option[SQLConf],
   sc: Option[SparkContext],
   sparkConf: Option[SparkConf] = None,
   live: Boolean = true) extends SparkListener {
@@ -47,7 +46,7 @@ private[thriftserver] class HiveThriftServer2Listener(
 
   private val (retainedStatements: Int, retainedSessions: Int) = {
     if (live) {
-      val conf = sqlContext.get.conf
+      val conf = sqlConf.get
       (conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT),
         conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT))
     } else {
@@ -55,6 +54,11 @@ private[thriftserver] class HiveThriftServer2Listener(
       (conf.get(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT),
         conf.get(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT))
     }
+  }
+
+  // Returns true if this listener has no live data. Exposed for tests only.
+  private[thriftserver] def noLiveData(): Boolean = {
+    sessionList.isEmpty && executionList.isEmpty
   }
 
   kvstore.addTrigger(classOf[SessionInfo], retainedSessions) { count =>
@@ -91,16 +95,40 @@ private[thriftserver] class HiveThriftServer2Listener(
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-    if (jobStart.properties != null) {
-      val groupId = jobStart.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID)
+    val properties = jobStart.properties
+    if (properties != null) {
+      val groupId = properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID)
       if (groupId != null) {
-        executionList.values().asScala.filter(_.groupId == groupId).foreach(
-          exec => {
-            exec.jobId += jobStart.jobId.toString
-            exec.groupId = groupId
-            updateLiveStore(exec)
-          }
-        )
+        updateJobDetails(jobStart.jobId.toString, groupId)
+        }
+      }
+    }
+
+  /**
+   * This method is to handle out of order events. ie. Job event come after execution end event.
+   * @param jobId
+   * @param groupId
+   */
+  private def updateJobDetails(jobId: String, groupId: String): Unit = {
+    val execList = executionList.values().asScala.filter(_.groupId == groupId).toSeq
+    if (execList.nonEmpty) {
+      execList.foreach { exec =>
+        exec.jobId += jobId.toString
+        exec.groupId = groupId
+        updateLiveStore(exec)
+      }
+    } else {
+      // This will happen only if JobStart event comes after Execution End event. This scenario may
+      // happen only for live listeners, as history listners removes the executionList at the end of
+      // replay.
+      val storeExecInfo = kvstore.view(classOf[ExecutionInfo]).asScala.filter(_.groupId == groupId)
+      storeExecInfo.foreach { exec =>
+        val liveExec = getOrCreateExecution(exec.execId, exec.statement, exec.sessionId,
+          exec.startTimestamp, exec.userName)
+        liveExec.jobId += jobId.toString
+        liveExec.groupId = groupId
+        updateLiveStore(liveExec)
+        executionList.remove(liveExec.execId)
       }
     }
   }
@@ -265,11 +293,11 @@ private[thriftserver] class HiveThriftServer2Listener(
     if (countToDelete <= 0L) {
       return
     }
-    val view = kvstore.view(classOf[ExecutionInfo]).index("execId").first(0L)
+    val view = kvstore.view(classOf[ExecutionInfo])
     val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt) { j =>
       j.finishTimestamp != 0
     }
-    toDelete.foreach { j => kvstore.delete(j.getClass(), j.execId) }
+    toDelete.foreach { j => kvstore.delete(j.getClass, j.execId) }
   }
 
   private def cleanupSession(count: Long): Unit = {
@@ -277,11 +305,12 @@ private[thriftserver] class HiveThriftServer2Listener(
     if (countToDelete <= 0L) {
       return
     }
-    val view = kvstore.view(classOf[SessionInfo]).index("sessionId").first(0L)
+    val view = kvstore.view(classOf[SessionInfo])
     val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt) { j =>
       j.finishTimestamp != 0L
     }
-    toDelete.foreach { j => kvstore.delete(j.getClass(), j.sessionId) }
+
+    toDelete.foreach { j => kvstore.delete(j.getClass, j.sessionId) }
   }
 
   /**

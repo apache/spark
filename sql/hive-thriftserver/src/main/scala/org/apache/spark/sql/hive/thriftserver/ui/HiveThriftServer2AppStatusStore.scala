@@ -52,6 +52,15 @@ class HiveThriftServer2AppStatusStore(
       case _: NoSuchElementException => None
     }
   }
+
+  def getExecution(executionId: String): Option[ExecutionInfo] = {
+    try {
+      Some(store.read(classOf[ExecutionInfo], executionId))
+    } catch {
+      case _: NoSuchElementException => None
+    }
+  }
+
   /**
    * When an error or a cancellation occurs, we set the finishTimestamp of the statement.
    * Therefore, when we count the number of running statements, we need to exclude errors and

@@ -49,13 +49,10 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
   private def getStatusStore: HiveThriftServer2AppStatusStore = {
     kvstore = new ElementTrackingStore(new InMemoryStore, new SparkConf())
     val server = mock(classOf[HiveThriftServer2], RETURNS_SMART_NULLS)
-    val sqlContext = mock(classOf[SQLContext])
     val sc = mock(classOf[SparkContext])
     val sqlConf = new SQLConf
-    when(sqlContext.conf).thenReturn(sqlConf)
-    when(sqlContext.sparkContext).thenReturn(sc)
 
-    val listener = new HiveThriftServer2Listener(kvstore, Some(server), Some(sqlContext), Some(sc))
+    val listener = new HiveThriftServer2Listener(kvstore, Some(server), Some(sqlConf), Some(sc))
     val statusStore = new HiveThriftServer2AppStatusStore(kvstore, Some(listener))
 
     listener.onOtherEvent(SparkListenerSessionCreated("localhost", "sessionid", "user",
