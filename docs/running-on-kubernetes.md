@@ -1074,7 +1074,7 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.max.executor.failure</code></td>
+  <td><code>spark.kubernetes.max.executor.failures</code></td>
   <td>numExecutors * 2, with minimum of 3</td>
   <td>
     The maximum number of executor failures before failing the application.
