@@ -20,13 +20,42 @@ package org.apache.spark.sql.catalyst.util
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{MICROS_PER_MILLIS, MICROS_PER_SECOND}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite {
 
-  test("fromString: basic") {
+  private def checkFromString(input: String, expected: CalendarInterval): Unit = {
+    assert(fromString(input) === expected)
+    assert(stringToInterval(UTF8String.fromString(input)) === expected)
+  }
+
+  private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
+    try {
+      fromString(input)
+      fail("Expected to throw an exception for the invalid input")
+    } catch {
+      case e: IllegalArgumentException =>
+        val msg = e.getMessage
+        assert(msg.contains(errorMsg))
+    }
+    assert(stringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def testSingleUnit(
+    unit: String, number: Int, months: Int, days: Int, microseconds: Long): Unit = {
+    for (prefix <- Seq("interval ", "")) {
+      val input1 = prefix + number + " " + unit
+      val input2 = prefix + number + " " + unit + "s"
+      val result = new CalendarInterval(months, days, microseconds)
+      checkFromString(input1, result)
+      checkFromString(input2, result)
+    }
+  }
+
+  test("string to interval: basic") {
     testSingleUnit("YEAR", 3, 36, 0, 0)
     testSingleUnit("Month", 3, 3, 0, 0)
     testSingleUnit("Week", 3, 0, 21, 0)
@@ -37,58 +66,46 @@ class IntervalUtilsSuite extends SparkFunSuite {
     testSingleUnit("MilliSecond", 3, 0, 0, 3 * MICROS_PER_MILLIS)
     testSingleUnit("MicroSecond", 3, 0, 0, 3)
 
-    for (input <- Seq(null, "", " ")) {
-      try {
-        fromString(input)
-        fail("Expected to throw an exception for the invalid input")
-      } catch {
-        case e: IllegalArgumentException =>
-          val msg = e.getMessage
-          if (input == null) {
-            assert(msg.contains("cannot be null"))
-          }
-      }
-    }
+    checkFromInvalidString(null, "cannot be null")
 
-    for (input <- Seq("interval", "interval1 day", "foo", "foo 1 day")) {
-      try {
-        fromString(input)
-        fail("Expected to throw an exception for the invalid input")
-      } catch {
-        case e: IllegalArgumentException =>
-          val msg = e.getMessage
-          assert(msg.contains("Invalid interval string"))
-      }
+    for (input <- Seq("", " ", "interval", "interval1 day", "foo", "foo 1 day")) {
+      checkFromInvalidString(input, "Invalid interval string")
     }
   }
 
-  test("fromString: random order field") {
-    val input = "1 day 1 year"
-    val result = new CalendarInterval(12, 1, 0)
-    assert(fromString(input) == result)
-  }
 
-  test("fromString: duplicated fields") {
-    val input = "1 day 1 day"
-    val result = new CalendarInterval(0, 2, 0)
-    assert(fromString(input) == result)
-  }
-
-  test("fromString: value with +/-") {
-    val input = "+1 year -1 day"
-    val result = new CalendarInterval(12, -1, 0)
-    assert(fromString(input) == result)
-  }
-
-  private def testSingleUnit(
-      unit: String, number: Int, months: Int, days: Int, microseconds: Long): Unit = {
-    for (prefix <- Seq("interval ", "")) {
-      val input1 = prefix + number + " " + unit
-      val input2 = prefix + number + " " + unit + "s"
-      val result = new CalendarInterval(months, days, microseconds)
-      assert(fromString(input1) == result)
-      assert(fromString(input2) == result)
+  test("string to interval: multiple units") {
+    Seq(
+      "-1 MONTH 1 day -1 microseconds" -> new CalendarInterval(-1, 1, -1),
+      " 123 MONTHS        123 DAYS  123 Microsecond    " -> new CalendarInterval(123, 123, 123),
+      "interval -1 day +3 Microseconds" -> new CalendarInterval(0, -1, 3),
+      "  interval  8  years -11 months 123  weeks   -1 day " +
+        "23 hours -22 minutes 1 second  -123  millisecond    567 microseconds " ->
+        new CalendarInterval(85, 860, 81480877567L)).foreach { case (input, expected) =>
+      checkFromString(input, expected)
     }
+  }
+
+  test("string to interval: special cases") {
+    // Support any order of interval units
+    checkFromString("1 day 1 year", new CalendarInterval(12, 1, 0))
+    // Allow duplicated units and summarize their values
+    checkFromString("1 day 10 day", new CalendarInterval(0, 11, 0))
+    // Only the seconds units can have the fractional part
+    checkFromInvalidString("1.5 days", "Error parsing interval string")
+    checkFromInvalidString("1. hour", "Error parsing interval string")
+  }
+
+  test("string to interval: seconds with fractional part") {
+    checkFromString("0.1 seconds", new CalendarInterval(0, 0, 100000))
+    checkFromString("1. seconds", new CalendarInterval(0, 0, 1000000))
+    checkFromString("123.001 seconds", new CalendarInterval(0, 0, 123001000))
+    checkFromString("1.001001 seconds", new CalendarInterval(0, 0, 1001001))
+    checkFromString("1 minute 1.001001 seconds", new CalendarInterval(0, 0, 61001001))
+    checkFromString("-1.5 seconds", new CalendarInterval(0, 0, -1500000))
+    // truncate nanoseconds to microseconds
+    checkFromString("0.999999999 seconds", new CalendarInterval(0, 0, 999999))
+    checkFromInvalidString("0.123456789123 seconds", "Error parsing interval string")
   }
 
   test("from year-month string") {
@@ -145,7 +162,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
 
     try {
-      fromDayTimeString("5 1:12:20", "hour", "microsecond")
+      fromDayTimeString("5 1:12:20", HOUR, MICROSECOND)
       fail("Expected to throw an exception for the invalid convention type")
     } catch {
       case e: IllegalArgumentException =>
@@ -187,6 +204,29 @@ class IntervalUtilsSuite extends SparkFunSuite {
     assert(!isNegative("-1 year 380 days", 31))
   }
 
+  test("negate") {
+    assert(negate(new CalendarInterval(1, 2, 3)) === new CalendarInterval(-1, -2, -3))
+  }
+
+  test("subtract one interval by another") {
+    val input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR)
+    val input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR)
+    assert(new CalendarInterval(1, -3, -99 * MICROS_PER_HOUR) === subtract(input1, input2))
+    val input3 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR)
+    val input4 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR)
+    assert(new CalendarInterval(-85, -180, -281 * MICROS_PER_HOUR) === subtract(input3, input4))
+  }
+
+  test("add two intervals") {
+    val input1 = new CalendarInterval(3, 1, 1 * MICROS_PER_HOUR)
+    val input2 = new CalendarInterval(2, 4, 100 * MICROS_PER_HOUR)
+    assert(new CalendarInterval(5, 5, 101 * MICROS_PER_HOUR) === add(input1, input2))
+
+    val input3 = new CalendarInterval(-10, -30, -81 * MICROS_PER_HOUR)
+    val input4 = new CalendarInterval(75, 150, 200 * MICROS_PER_HOUR)
+    assert(new CalendarInterval(65, 120, 119 * MICROS_PER_HOUR) === add(input3, input4))
+  }
+
   test("multiply by num") {
     var interval = new CalendarInterval(0, 0, 0)
     assert(interval === multiply(interval, 0))
@@ -222,7 +262,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
       fail("Expected to throw an exception on divide by zero")
     } catch {
       case e: ArithmeticException =>
-        assert(e.getMessage.contains("overflow"))
+        assert(e.getMessage.contains("divide by zero"))
     }
   }
 }
