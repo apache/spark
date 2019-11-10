@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2061,7 +2062,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         val u = unit.getText.toLowerCase(Locale.ROOT)
         // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
         if (u.endsWith("s")) u.substring(0, u.length - 1) else u
-      }.toArray
+      }.map(IntervalUtils.IntervalUnit.withName).toArray
 
       val values = ctx.intervalValue().asScala.map { value =>
         if (value.STRING() != null) {
@@ -2097,17 +2098,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case ("year", "month") =>
             IntervalUtils.fromYearMonthString(value)
           case ("day", "hour") =>
-            IntervalUtils.fromDayTimeString(value, "day", "hour")
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.HOUR)
           case ("day", "minute") =>
-            IntervalUtils.fromDayTimeString(value, "day", "minute")
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.MINUTE)
           case ("day", "second") =>
-            IntervalUtils.fromDayTimeString(value, "day", "second")
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.SECOND)
           case ("hour", "minute") =>
-            IntervalUtils.fromDayTimeString(value, "hour", "minute")
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.MINUTE)
           case ("hour", "second") =>
-            IntervalUtils.fromDayTimeString(value, "hour", "second")
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.SECOND)
           case ("minute", "second") =>
-            IntervalUtils.fromDayTimeString(value, "minute", "second")
+            IntervalUtils.fromDayTimeString(value, IntervalUnit.MINUTE, IntervalUnit.SECOND)
           case _ =>
             throw new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
         }

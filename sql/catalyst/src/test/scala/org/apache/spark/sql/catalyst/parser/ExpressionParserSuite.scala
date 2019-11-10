@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -587,17 +588,17 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   val intervalUnits = Seq(
-    "year",
-    "month",
-    "week",
-    "day",
-    "hour",
-    "minute",
-    "second",
-    "millisecond",
-    "microsecond")
+    YEAR,
+    MONTH,
+    WEEK,
+    DAY,
+    HOUR,
+    MINUTE,
+    SECOND,
+    MILLISECOND,
+    MICROSECOND)
 
-  def intervalLiteral(u: String, s: String): Literal = {
+  def intervalLiteral(u: IntervalUnit, s: String): Literal = {
     Literal(IntervalUtils.fromUnitStrings(Array(u), Array(s)))
   }
 
@@ -628,7 +629,7 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // Hive nanosecond notation.
-    checkIntervals("13.123456789 seconds", intervalLiteral("second", "13.123456789"))
+    checkIntervals("13.123456789 seconds", intervalLiteral(SECOND, "13.123456789"))
     checkIntervals(
       "-13.123456789 second",
       Literal(new CalendarInterval(
@@ -699,7 +700,7 @@ class ExpressionParserSuite extends AnalysisTest {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
         val aliases = defaultParser.parseExpression(intervalValue).collect {
           case a @ Alias(_: Literal, name)
-            if intervalUnits.exists { unit => name.startsWith(unit) } => a
+            if intervalUnits.exists { unit => name.startsWith(unit.toString) } => a
         }
         assert(aliases.size === 1)
       }
