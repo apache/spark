@@ -20,6 +20,19 @@ jobs:
 
     steps:
     - uses: actions/checkout@master
+    # We split caches because GitHub Action Cache has a 400MB-size limit.
+    - uses: actions/cache@v1
+      with:
+        path: ~/.m2/repository/com
+        key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-com-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ matrix.java }}-${{ matrix.hadoop }}-maven-com-
+    - uses: actions/cache@v1
+      with:
+        path: ~/.m2/repository/org
+        key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-org-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ matrix.java }}-${{ matrix.hadoop }}-maven-org-
     - name: Set up JDK 8
       uses: actions/setup-java@v1
       with:
@@ -32,6 +45,7 @@ jobs:
         export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Pscala-${{ matrix.scala }} -P${{ matrix.hadoop }} -Phadoop-cloud install
+        rm -rf ~/.m2/repository/org/apache/spark
 
 
   lint:
