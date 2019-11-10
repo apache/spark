@@ -98,7 +98,6 @@ select interval '15:40:32.99899999' hour to second;
 select interval '20 40:32.99899999' minute to second;
 select interval '40:32.99899999' minute to second;
 select interval '40:32' minute to second;
-
 -- ns is not supported
 select interval 10 nanoseconds;
 
