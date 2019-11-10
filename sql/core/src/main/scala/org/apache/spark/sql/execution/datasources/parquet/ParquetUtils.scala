@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.util.OptionalLong
 
 import scala.collection.JavaConverters._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -28,6 +30,8 @@ import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.Statistics
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
+
 
 object ParquetUtils {
   def inferSchema(
@@ -115,25 +119,36 @@ object ParquetUtils {
   }
 
   def getStatistics(files: Array[String], configuration: Configuration): Statistics = {
-    var bytes = 0L
-    var rows = 0L
-    files.foreach { file =>
-      val reader =
-        ParquetFileReader.open(HadoopInputFile.fromPath(new Path(file), configuration))
-      try {
-        reader.getRowGroups.asScala.foreach{ metadata =>
-          bytes += metadata.getTotalByteSize
-          rows += metadata.getRowCount
+    val parallelism = configuration.getInt("spark.sql.parquet.collectStatistics.parallelism", 8)
+    val pool = ThreadUtils.newDaemonFixedThreadPool(parallelism, "parquet-collect-statistics-pool")
+
+    try {
+      implicit val executionContext = ExecutionContext.fromExecutor(pool)
+      val future = files.map{ file =>
+        Future{
+          val reader =
+            ParquetFileReader.open(HadoopInputFile.fromPath(new Path(file), configuration))
+          try {
+            reader.getRowGroups.asScala.foldLeft(0L, 0L) { case ((b, r), metadata) =>
+              (b + metadata.getTotalByteSize, r + metadata.getRowCount)
+            }
+          } finally {
+            reader.close()
+          }
         }
-      } finally {
-        reader.close()
+      }.toSeq
+      val (bytes, rows) =
+        ThreadUtils.awaitResult(Future.sequence(future), Duration.Inf)
+        .reduce{case (s1, s2) =>
+          (s1._1 + s2._1, s1._2 + s2._2)
+        }
+      new Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.of(bytes)
+
+        override def numRows(): OptionalLong = OptionalLong.of(rows)
       }
-    }
-
-    new Statistics {
-      override def sizeInBytes(): OptionalLong = OptionalLong.of(bytes)
-
-      override def numRows(): OptionalLong = OptionalLong.of(rows)
+    } finally {
+      pool.shutdown()
     }
   }
 

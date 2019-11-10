@@ -83,7 +83,10 @@ case class ParquetScan(
       // Use the parquet api to get Statistics.
       ParquetUtils.getStatistics(fileIndex.inputFiles, hadoopConf)
     } catch {
-      case _ => super.estimateStatistics()
+      case _ =>
+        logWarning(s"Can not collect statistics with parquet metadata, " +
+          s"will fallback to file scan")
+        super.estimateStatistics()
     }
   }
 
