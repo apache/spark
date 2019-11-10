@@ -113,7 +113,9 @@ object SQLConf {
    * Returns the active config object within the current scope. If there is an active SparkSession,
    * the proper SQLConf associated with the thread's active session is used. If it's called from
    * tasks in the executor side, a SQLConf will be created from job local properties, which are set
-   * and propagated from the driver side.
+   * and propagated from the driver side, unless a `SQLConf` has been set in the scope by
+   * `withExistingConf` as done for propagating SQLConf for operations performed on RDDs created
+   * from DataFrames.
    *
    * The way this works is a little bit convoluted, due to the fact that config was added initially
    * only for physical plans (and as a result not in sql/catalyst module).
@@ -127,7 +129,12 @@ object SQLConf {
    */
   def get: SQLConf = {
     if (TaskContext.get != null) {
-      new ReadOnlySQLConf(TaskContext.get())
+      val conf = existingConf.get()
+      if (conf != null) {
+        conf
+      } else {
+        new ReadOnlySQLConf(TaskContext.get())
+      }
     } else {
       val isSchedulerEventLoopThread = SparkContext.getActive
         .flatMap { sc => Option(sc.dagScheduler) }
@@ -1289,6 +1296,15 @@ object SQLConf {
         "to use position if not. When false, a grouped map Pandas UDF will assign columns from " +
         "the returned Pandas DataFrame based on position, regardless of column label type. " +
         "This configuration will be deprecated in future releases.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val USE_CONF_ON_RDD_OPERATION =
+    buildConf("spark.sql.legacy.rdd.applyConf")
+      .internal()
+      .doc("When false, SQL configurations are disregarded when operations on a RDD derived from" +
+        " a dataframe are executed. This is the (buggy) behavior up to 2.4.4. This config is " +
+        "deprecated and it will be removed in 3.0.0.")
       .booleanConf
       .createWithDefault(true)
 
