@@ -53,8 +53,6 @@ select interval '2 seconds' / null;
 select interval '2 seconds' * null;
 select null * interval '2 seconds';
 
--- interval with sign
+-- interval with a negative sign
 select -interval '-1 month 1 day -1 second';
-select +interval '-1 month 1 day -1 second';
 select -interval -1 month 1 day -1 second;
-select +interval -1 month 1 day -1 second;
