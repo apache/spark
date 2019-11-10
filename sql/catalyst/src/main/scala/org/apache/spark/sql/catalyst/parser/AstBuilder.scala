@@ -1774,7 +1774,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
-          val intervalWithoutSign = try {
+          val interval = try {
             IntervalUtils.fromString(value)
           } catch {
             case e: IllegalArgumentException =>
@@ -1782,10 +1782,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          val interval = if (ctx.sign != null && ctx.sign.getText == "-") {
-            IntervalUtils.negate(intervalWithoutSign)
-          } else intervalWithoutSign
-          Literal(interval, CalendarIntervalType)
+          Literal(applySign(ctx.sign, interval), CalendarIntervalType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
@@ -1929,19 +1926,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  private def applySign(sign: Token, interval: CalendarInterval): CalendarInterval = {
+    if (sign != null && sign.getText == "-") {
+      IntervalUtils.negate(interval)
+    } else {
+      interval
+    }
+  }
+
   /**
    * Create a [[CalendarInterval]] literal expression. Two syntaxes are supported:
    * - multiple unit value pairs, for instance: interval 2 months 2 days.
    * - from-to unit, for instance: interval '1-2' year to month.
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
-    def applySign(interval: CalendarInterval): CalendarInterval = {
-      if (ctx.sign != null && ctx.sign.getText == "-") {
-        IntervalUtils.negate(interval)
-      } else {
-        interval
-      }
-    }
     if (ctx.errorCapturingMultiUnitsInterval != null) {
       val innerCtx = ctx.errorCapturingMultiUnitsInterval
       if (innerCtx.unitToUnitInterval != null) {
@@ -1949,7 +1947,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           innerCtx.unitToUnitInterval)
       }
-      val interval = applySign(visitMultiUnitsInterval(innerCtx.multiUnitsInterval))
+      val interval = applySign(ctx.sign, visitMultiUnitsInterval(innerCtx.multiUnitsInterval))
       Literal(interval, CalendarIntervalType)
     } else if (ctx.errorCapturingUnitToUnitInterval != null) {
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
@@ -1959,7 +1957,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           "Can only have a single from-to unit in the interval literal syntax",
           errorCtx)
       }
-      val interval = applySign(visitUnitToUnitInterval(innerCtx.body))
+      val interval = applySign(ctx.sign, visitUnitToUnitInterval(innerCtx.body))
       Literal(interval, CalendarIntervalType)
     } else {
       throw new ParseException("at least one time unit should be given for interval literal", ctx)
