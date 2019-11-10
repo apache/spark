@@ -616,4 +616,21 @@ object IntervalUtils {
 
     result
   }
+
+  def makeInterval(
+      years: Int,
+      months: Int,
+      weeks: Int,
+      days: Int,
+      hours: Int,
+      mins: Int,
+      secs: Decimal): CalendarInterval = {
+    val totalMonths = Math.addExact(months, Math.multiplyExact(years, MONTHS_PER_YEAR))
+    val totalDays = Math.addExact(days, Math.multiplyExact(weeks, DAYS_PER_WEEK))
+    var micros = (secs * Decimal(MICROS_PER_SECOND)).toLong
+    micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
+    micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
+
+    new CalendarInterval(totalMonths, totalDays, micros)
+  }
 }
