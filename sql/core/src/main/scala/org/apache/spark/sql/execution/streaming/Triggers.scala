@@ -31,7 +31,7 @@ private object Triggers {
   }
 
   def convert(interval: String): Long = {
-    val cal = IntervalUtils.fromMultiUnitsString(interval)
+    val cal = IntervalUtils.fromString(interval)
     if (cal.months != 0) {
       throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
     }

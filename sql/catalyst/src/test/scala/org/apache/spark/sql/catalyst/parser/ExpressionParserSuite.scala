@@ -434,7 +434,7 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
     // Interval.
-    val intervalLiteral = Literal(fromMultiUnitsString("interval 3 month 1 hour"))
+    val intervalLiteral = Literal(fromString("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
     assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
     intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
@@ -642,7 +642,7 @@ class ExpressionParserSuite extends AnalysisTest {
         0,
         0,
         13 * MICROS_PER_SECOND + 123 * MICROS_PER_MILLIS + 456)))
-    checkIntervals("1.001 second", Literal(fromMultiUnitsString("1 second 1 millisecond")))
+    checkIntervals("1.001 second", Literal(fromString("1 second 1 millisecond")))
 
     // Non Existing unit
     intercept("interval 10 nanoseconds",

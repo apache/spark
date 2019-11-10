@@ -1873,7 +1873,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
           val interval = try {
-            IntervalUtils.fromMultiUnitsString(value)
+            IntervalUtils.fromString(value)
           } catch {
             case e: IllegalArgumentException =>
               val ex = new ParseException(s"Cannot parse the INTERVAL value: $value\n" +

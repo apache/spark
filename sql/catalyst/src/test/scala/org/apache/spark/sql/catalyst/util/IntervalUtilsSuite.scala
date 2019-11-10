@@ -27,13 +27,13 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 class IntervalUtilsSuite extends SparkFunSuite {
 
   private def checkFromString(input: String, expected: CalendarInterval): Unit = {
-    assert(fromMultiUnitsString(input) === expected)
+    assert(fromString(input) === expected)
     assert(stringToInterval(UTF8String.fromString(input)) === expected)
   }
 
   private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
     try {
-      fromMultiUnitsString(input)
+      fromString(input)
       fail("Expected to throw an exception for the invalid input")
     } catch {
       case e: IllegalArgumentException =>
@@ -161,7 +161,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
     }
 
     try {
-      fromDayTimeString("5 1:12:20", "day", "microsecond")
+      fromDayTimeString("5 1:12:20", "hour", "microsecond")
       fail("Expected to throw an exception for the invalid convention type")
     } catch {
       case e: IllegalArgumentException =>
@@ -171,7 +171,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   test("interval duration") {
     def duration(s: String, unit: TimeUnit, daysPerMonth: Int): Long = {
-      IntervalUtils.getDuration(fromMultiUnitsString(s), unit, daysPerMonth)
+      IntervalUtils.getDuration(fromString(s), unit, daysPerMonth)
     }
 
     assert(duration("0 seconds", TimeUnit.MILLISECONDS, 31) === 0)
@@ -190,7 +190,7 @@ class IntervalUtilsSuite extends SparkFunSuite {
 
   test("negative interval") {
     def isNegative(s: String, daysPerMonth: Int): Boolean = {
-      IntervalUtils.isNegative(fromMultiUnitsString(s), daysPerMonth)
+      IntervalUtils.isNegative(fromString(s), daysPerMonth)
     }
 
     assert(isNegative("-1 months", 28))

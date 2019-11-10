@@ -252,7 +252,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("hive-hash for CalendarInterval type") {
     def checkHiveHashForIntervalType(interval: String, expected: Long): Unit = {
-      checkHiveHash(IntervalUtils.fromMultiUnitsString(interval), CalendarIntervalType, expected)
+      checkHiveHash(IntervalUtils.fromString(interval), CalendarIntervalType, expected)
     }
 
     // ----- MICROSEC -----

@@ -230,7 +230,7 @@ object IntervalUtils {
    *
    * @throws IllegalArgumentException if the input string is not in valid interval format.
    */
-  def fromMultiUnitsString(str: String): CalendarInterval = {
+  def fromString(str: String): CalendarInterval = {
     if (str == null) throw new IllegalArgumentException("Interval multi unit string cannot be null")
     var months: Int = 0
     var days: Int = 0

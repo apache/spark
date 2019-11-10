@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
-import org.apache.spark.sql.catalyst.util.IntervalUtils.fromMultiUnitsString
+import org.apache.spark.sql.catalyst.util.IntervalUtils.fromString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -1091,16 +1091,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(SubtractTimestamps(Literal(end), Literal(end)),
       new CalendarInterval(0, 0, 0))
     checkEvaluation(SubtractTimestamps(Literal(end), Literal(Instant.EPOCH)),
-      fromMultiUnitsString("interval " +
+      fromString("interval " +
         "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds"))
     checkEvaluation(SubtractTimestamps(Literal(Instant.EPOCH), Literal(end)),
-      fromMultiUnitsString("interval " +
+      fromString("interval " +
         "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds"))
     checkEvaluation(
       SubtractTimestamps(
         Literal(Instant.parse("9999-12-31T23:59:59.999999Z")),
         Literal(Instant.parse("0001-01-01T00:00:00Z"))),
-      fromMultiUnitsString("interval " +
+      fromString("interval " +
         "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds"))
   }
 
@@ -1109,18 +1109,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(SubtractDates(Literal(end), Literal(end)),
       new CalendarInterval(0, 0, 0))
     checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
-      fromMultiUnitsString("interval 1 days"))
+      fromString("interval 1 days"))
     checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),
-      fromMultiUnitsString("interval -1 days"))
+      fromString("interval -1 days"))
     val epochDate = Literal(LocalDate.ofEpochDay(0))
     checkEvaluation(SubtractDates(Literal(end), epochDate),
-      fromMultiUnitsString("interval 49 years 9 months 4 days"))
+      fromString("interval 49 years 9 months 4 days"))
     checkEvaluation(SubtractDates(epochDate, Literal(end)),
-      fromMultiUnitsString("interval -49 years -9 months -4 days"))
+      fromString("interval -49 years -9 months -4 days"))
     checkEvaluation(
       SubtractDates(
         Literal(LocalDate.of(10000, 1, 1)),
         Literal(LocalDate.of(1, 1, 1))),
-      fromMultiUnitsString("interval 9999 years"))
+      fromString("interval 9999 years"))
   }
 }
