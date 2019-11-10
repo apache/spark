@@ -36,14 +36,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
  */
 abstract class AbstractSqlParser(conf: SQLConf) extends ParserInterface with Logging {
 
-  /**
-   * Creates [[CalendarInterval]] for a given SQL String. Throws [[ParseException]] if the SQL
-   * string is not a valid interval format.
-   */
-  def parseInterval(sqlText: String): CalendarInterval = parse(sqlText) { parser =>
-    astBuilder.visitSingleInterval(parser.singleInterval())
-  }
-
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())

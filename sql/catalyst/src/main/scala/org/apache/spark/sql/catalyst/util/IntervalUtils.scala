@@ -275,8 +275,8 @@ object IntervalUtils {
     }
   }
 
-  def fromUnitStrings(units: Array[String], fields: Array[String]): CalendarInterval = {
-    assert(units.length == fields.length)
+  def fromUnitStrings(units: Array[String], values: Array[String]): CalendarInterval = {
+    assert(units.length == values.length)
     var months: Int = 0
     var days: Int = 0
     var microseconds: Long = 0
@@ -285,26 +285,26 @@ object IntervalUtils {
       try {
         units(i) match {
           case "year" =>
-            months = Math.addExact(months, Math.multiplyExact(fields(i).toInt, 12))
+            months = Math.addExact(months, Math.multiplyExact(values(i).toInt, 12))
           case "month" =>
-            months = Math.addExact(months, fields(i).toInt)
+            months = Math.addExact(months, values(i).toInt)
           case "week" =>
-            days = Math.addExact(days, Math.multiplyExact(fields(i).toInt, 7))
+            days = Math.addExact(days, Math.multiplyExact(values(i).toInt, 7))
           case "day" =>
-            days = Math.addExact(days, fields(i).toInt)
+            days = Math.addExact(days, values(i).toInt)
           case "hour" =>
-            val hoursUs = Math.multiplyExact(fields(i).toLong, MICROS_PER_HOUR)
+            val hoursUs = Math.multiplyExact(values(i).toLong, MICROS_PER_HOUR)
             microseconds = Math.addExact(microseconds, hoursUs)
           case "minute" =>
-            val minutesUs = Math.multiplyExact(fields(i).toLong, MICROS_PER_MINUTE)
+            val minutesUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MINUTE)
             microseconds = Math.addExact(microseconds, minutesUs)
           case "second" =>
-            microseconds = Math.addExact(microseconds, parseSecondNano(fields(i)))
+            microseconds = Math.addExact(microseconds, parseSecondNano(values(i)))
           case "millisecond" =>
-            val millisUs = Math.multiplyExact(fields(i).toLong, MICROS_PER_MILLIS)
+            val millisUs = Math.multiplyExact(values(i).toLong, MICROS_PER_MILLIS)
             microseconds = Math.addExact(microseconds, millisUs)
           case "microsecond" =>
-            microseconds = Math.addExact(microseconds, fields(i).toLong)
+            microseconds = Math.addExact(microseconds, values(i).toLong)
         }
       } catch {
         case e: Exception =>
