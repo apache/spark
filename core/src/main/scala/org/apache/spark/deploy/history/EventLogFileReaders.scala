@@ -231,12 +231,7 @@ class RollingEventLogFilesFileReader(
     val lastCompactedFileIdx = eventLogFiles.lastIndexWhere { fs =>
       EventLogFileWriter.isCompacted(fs.getPath)
     }
-
-    val filesToRead = if (lastCompactedFileIdx > -1) {
-      eventLogFiles.drop(lastCompactedFileIdx)
-    } else {
-      eventLogFiles
-    }
+    val filesToRead = eventLogFiles.drop(lastCompactedFileIdx)
 
     val indices = filesToRead.map { file => getIndex(file.getPath.getName) }
     require((indices.head to indices.last) == indices, "Found missing event log file, expected" +

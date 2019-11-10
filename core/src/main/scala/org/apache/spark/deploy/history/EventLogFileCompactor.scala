@@ -101,12 +101,7 @@ class EventLogFileCompactor(
     val lastCompactedFileIdx = eventLogFiles.lastIndexWhere { fs =>
       EventLogFileWriter.isCompacted(fs.getPath)
     }
-
-    val files = if (lastCompactedFileIdx > -1) {
-      eventLogFiles.drop(lastCompactedFileIdx)
-    } else {
-      eventLogFiles
-    }
+    val files = eventLogFiles.drop(lastCompactedFileIdx)
 
     if (files.length > maxFilesToRetain) {
       (files.dropRight(maxFilesToRetain), files.takeRight(maxFilesToRetain))
@@ -233,6 +228,7 @@ class CompactedEventLogFileWriter(
 
   override val logPath: String = originalFilePath.toUri.toString + EventLogFileWriter.COMPACTED
 
+  // override to make writeLine method be 'public' only for this class
   override def writeLine(line: String, flushLogger: Boolean): Unit = {
     super.writeLine(line, flushLogger)
   }
