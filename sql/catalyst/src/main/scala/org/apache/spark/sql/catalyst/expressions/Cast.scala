@@ -410,7 +410,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   // TimestampConverter
-  private[this] def castToTimestamp(from: DataType): Any => Any = from match {
+  protected[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull)
     case BooleanType =>
@@ -1159,7 +1159,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  private[this] def castToTimestampCode(
+  protected[this] def castToTimestampCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
