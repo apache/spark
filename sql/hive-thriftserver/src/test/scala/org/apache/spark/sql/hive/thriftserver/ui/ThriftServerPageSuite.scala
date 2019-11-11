@@ -25,7 +25,6 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.SparkListenerJobStart
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.thriftserver._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.status.ElementTrackingStore

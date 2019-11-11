@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.ExecutionState
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2Listener
 import org.apache.spark.status.KVUtils.KVIndexParam
-import org.apache.spark.util.kvstore.KVStore
+import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
 /**
  * Provides a view of a KVStore with methods that make it easy to query SQL-specific state. There's
@@ -76,11 +77,11 @@ class HiveThriftServer2AppStatusStore(
       execInfo.state == ExecutionState.CLOSED)
   }
 
-  def getSessionCount(): Long = {
+  def getSessionCount: Long = {
     store.count(classOf[SessionInfo])
   }
 
-  def getExecutionCount(): Long = {
+  def getExecutionCount: Long = {
     store.count(classOf[ExecutionInfo])
   }
 }
@@ -92,7 +93,8 @@ private[thriftserver] class SessionInfo(
     val userName: String,
     val finishTimestamp: Long,
     val totalExecution: Long) {
-
+  @JsonIgnore @KVIndex("finishTime")
+  private def finishTimeIndex: Long = if (finishTimestamp > 0L ) finishTimestamp else -1L
   def totalTime: Long = {
     if (finishTimestamp == 0L) {
       System.currentTimeMillis - startTimestamp
@@ -115,7 +117,8 @@ private[thriftserver] class ExecutionInfo(
     val state: ExecutionState.Value,
     val jobId: ArrayBuffer[String],
     val groupId: String) {
-
+  @JsonIgnore @KVIndex("finishTime")
+  private def finishTimeIndex: Long = if (finishTimestamp > 0L ) finishTimestamp else -1L
   def totalTime(endTime: Long): Long = {
     if (endTime == 0L) {
       System.currentTimeMillis - startTimestamp
