@@ -101,17 +101,29 @@ struct<1 years 2 months:interval>
 -- !query 12
 SELECT interval '1 2:03' day to hour
 -- !query 12 schema
-struct<1 days 2 hours:interval>
+struct<>
 -- !query 12 output
-1 days 2 hours
+org.apache.spark.sql.catalyst.parser.ParseException
+
+requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<day>\d+) (?<hour>\d{1,2})$': 1 2:03(line 1, pos 16)
+
+== SQL ==
+SELECT interval '1 2:03' day to hour
+----------------^^^
 
 
 -- !query 13
 SELECT interval '1 2:03:04' day to hour
 -- !query 13 schema
-struct<1 days 2 hours:interval>
+struct<>
 -- !query 13 output
-1 days 2 hours
+org.apache.spark.sql.catalyst.parser.ParseException
+
+requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<day>\d+) (?<hour>\d{1,2})$': 1 2:03:04(line 1, pos 16)
+
+== SQL ==
+SELECT interval '1 2:03:04' day to hour
+----------------^^^
 
 
 -- !query 14
@@ -125,17 +137,29 @@ struct<1 days 2 hours 3 minutes:interval>
 -- !query 15
 SELECT interval '1 2:03:04' day to minute
 -- !query 15 schema
-struct<1 days 2 hours 3 minutes:interval>
+struct<>
 -- !query 15 output
-1 days 2 hours 3 minutes
+org.apache.spark.sql.catalyst.parser.ParseException
+
+requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<day>\d+) (?<hour>\d{1,2}):(?<minute>\d{1,2})$': 1 2:03:04(line 1, pos 16)
+
+== SQL ==
+SELECT interval '1 2:03:04' day to minute
+----------------^^^
 
 
 -- !query 16
 SELECT interval '1 2:03' day to second
 -- !query 16 schema
-struct<1 days 2 hours 3 minutes:interval>
+struct<>
 -- !query 16 output
-1 days 2 hours 3 minutes
+org.apache.spark.sql.catalyst.parser.ParseException
+
+requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<day>\d+) (?<hour>\d{1,2}):(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 1 2:03(line 1, pos 16)
+
+== SQL ==
+SELECT interval '1 2:03' day to second
+----------------^^^
 
 
 -- !query 17
@@ -149,46 +173,82 @@ struct<1 days 2 hours 3 minutes 4 seconds:interval>
 -- !query 18
 SELECT interval '1 2:03' hour to minute
 -- !query 18 schema
-struct<1 days 2 hours 3 minutes:interval>
+struct<>
 -- !query 18 output
-1 days 2 hours 3 minutes
+org.apache.spark.sql.catalyst.parser.ParseException
+
+requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<hour>\d{1,2}):(?<minute>\d{1,2})$': 1 2:03(line 1, pos 16)
+
+== SQL ==
+SELECT interval '1 2:03' hour to minute
+----------------^^^
 
 
 -- !query 19
 SELECT interval '1 2:03:04' hour to minute
 -- !query 19 schema
-struct<1 days 2 hours 3 minutes:interval>
+struct<>
 -- !query 19 output
-1 days 2 hours 3 minutes
+org.apache.spark.sql.catalyst.parser.ParseException
+
+requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<hour>\d{1,2}):(?<minute>\d{1,2})$': 1 2:03:04(line 1, pos 16)
+
+== SQL ==
+SELECT interval '1 2:03:04' hour to minute
+----------------^^^
 
 
 -- !query 20
 SELECT interval '1 2:03' hour to second
 -- !query 20 schema
-struct<1 days 2 hours 3 minutes:interval>
+struct<>
 -- !query 20 output
-1 days 2 hours 3 minutes
+org.apache.spark.sql.catalyst.parser.ParseException
+
+requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<hour>\d{1,2}):(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 1 2:03(line 1, pos 16)
+
+== SQL ==
+SELECT interval '1 2:03' hour to second
+----------------^^^
 
 
 -- !query 21
 SELECT interval '1 2:03:04' hour to second
 -- !query 21 schema
-struct<1 days 2 hours 3 minutes 4 seconds:interval>
+struct<>
 -- !query 21 output
-1 days 2 hours 3 minutes 4 seconds
+org.apache.spark.sql.catalyst.parser.ParseException
+
+requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<hour>\d{1,2}):(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 1 2:03:04(line 1, pos 16)
+
+== SQL ==
+SELECT interval '1 2:03:04' hour to second
+----------------^^^
 
 
 -- !query 22
 SELECT interval '1 2:03' minute to second
 -- !query 22 schema
-struct<1 days 2 minutes 3 seconds:interval>
+struct<>
 -- !query 22 output
-1 days 2 minutes 3 seconds
+org.apache.spark.sql.catalyst.parser.ParseException
+
+requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 1 2:03(line 1, pos 16)
+
+== SQL ==
+SELECT interval '1 2:03' minute to second
+----------------^^^
 
 
 -- !query 23
 SELECT interval '1 2:03:04' minute to second
 -- !query 23 schema
-struct<1 days 2 hours 3 minutes 4 seconds:interval>
+struct<>
 -- !query 23 output
-1 days 2 hours 3 minutes 4 seconds
+org.apache.spark.sql.catalyst.parser.ParseException
+
+requirement failed: Interval string must match day-time format of '^(?<sign>[+|-])?(?<minute>\d{1,2}):(?<second>(\d{1,2})(\.(\d{1,9}))?)$': 1 2:03:04(line 1, pos 16)
+
+== SQL ==
+SELECT interval '1 2:03:04' minute to second
+----------------^^^
