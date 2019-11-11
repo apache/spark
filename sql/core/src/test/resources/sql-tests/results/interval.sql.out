@@ -181,202 +181,128 @@ struct<min(CAST(v AS INTERVAL)):interval>
 
 
 -- !query 22
-select interval '1 years 2 months 3 weeks 4 days 5 hours 6 minutes 7 seconds 8 milliseconds 9 microseconds'
+select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15')
 -- !query 22 schema
-struct<1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds:interval>
+struct<multiply_interval(subtracttimestamps(TIMESTAMP('2019-10-15 10:11:12.001002'), CAST(DATE '2019-10-15' AS TIMESTAMP)), CAST(3 AS DOUBLE)):interval>
 -- !query 22 output
-1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds
+30 hours 33 minutes 36.003006 seconds
 
 
 -- !query 23
-select interval '1 year 2 month 3 week 4 day 5 hour 6 minute 7 second 8 millisecond 9 microsecond'
+select interval 4 month 2 weeks 3 microseconds * 1.5
 -- !query 23 schema
-struct<1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds:interval>
+struct<multiply_interval(4 months 14 days 0.000003 seconds, CAST(1.5 AS DOUBLE)):interval>
 -- !query 23 output
-1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds
+6 months 21 days 0.000005 seconds
 
 
 -- !query 24
-select interval '1 y 2 mon 3 w 4 d 5 h 6 m 7 s 8 ms 9 us'
+select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5
 -- !query 24 schema
-struct<1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds:interval>
+struct<divide_interval(subtracttimestamps(TIMESTAMP('2019-10-15 00:00:00'), TIMESTAMP('2019-10-14 00:00:00')), CAST(1.5 AS DOUBLE)):interval>
 -- !query 24 output
-1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds
+16 hours
 
 
 -- !query 25
-select interval '1 y 2 yr -1 yrs 3 years -2 mons - 3 w  + 4 d +5 hrs 6 mins 7 secs 8 msecs 9 usecs'
+select interval '2 seconds' / 0
 -- !query 25 schema
-struct<4 years 10 months -17 days 5 hours 6 minutes 7.008009 seconds:interval>
+struct<divide_interval(2 seconds, CAST(0 AS DOUBLE)):interval>
 -- !query 25 output
-4 years 10 months -17 days 5 hours 6 minutes 7.008009 seconds
+NULL
 
 
 -- !query 26
-select interval 'day 1 y'
+select interval '2 seconds' / null
 -- !query 26 schema
-struct<>
+struct<divide_interval(2 seconds, CAST(NULL AS DOUBLE)):interval>
 -- !query 26 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: day 1 y
-requirement failed: Interval string should be value and unit pairs(line 1, pos 7)
-
-== SQL ==
-select interval 'day 1 y'
--------^^^
+NULL
 
 
 -- !query 27
-select interval '1 1 y'
+select interval '2 seconds' * null
 -- !query 27 schema
-struct<>
+struct<multiply_interval(2 seconds, CAST(NULL AS DOUBLE)):interval>
 -- !query 27 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: 1 1 y
-requirement failed: Interval string should be value and unit pairs(line 1, pos 7)
-
-== SQL ==
-select interval '1 1 y'
--------^^^
+NULL
 
 
 -- !query 28
-select interval '1 1 1 y'
+select null * interval '2 seconds'
 -- !query 28 schema
-struct<>
+struct<multiply_interval(2 seconds, CAST(NULL AS DOUBLE)):interval>
 -- !query 28 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: 1 1 1 y
-Error paring interval unit: 1(line 1, pos 7)
-
-== SQL ==
-select interval '1 1 1 y'
--------^^^
+NULL
 
 
 -- !query 29
-select interval '1 daY'
+select -interval '-1 month 1 day -1 second'
 -- !query 29 schema
-struct<1 days:interval>
+struct<1 months -1 days 1 seconds:interval>
 -- !query 29 output
-1 days
+1 months -1 days 1 seconds
 
 
 -- !query 30
-select interval ''
+select -interval -1 month 1 day -1 second
 -- !query 30 schema
-struct<>
+struct<1 months -1 days 1 seconds:interval>
 -- !query 30 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: 
-requirement failed: Interval string should be value and unit pairs(line 1, pos 7)
-
-== SQL ==
-select interval ''
--------^^^
+1 months -1 days 1 seconds
 
 
 -- !query 31
-select interval ' '
+select make_interval(1)
 -- !query 31 schema
-struct<>
+struct<make_interval(1, 0, 0, 0, 0, 0, 0.000000):interval>
 -- !query 31 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value:  
-requirement failed: Interval string should be value and unit pairs(line 1, pos 7)
-
-== SQL ==
-select interval ' '
--------^^^
+1 years
 
 
 -- !query 32
-select interval '-'
+select make_interval(1, 2)
 -- !query 32 schema
-struct<>
+struct<make_interval(1, 2, 0, 0, 0, 0, 0.000000):interval>
 -- !query 32 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: -
-requirement failed: Interval string should be value and unit pairs(line 1, pos 7)
-
-== SQL ==
-select interval '-'
--------^^^
+1 years 2 months
 
 
 -- !query 33
-select interval '- year'
+select make_interval(1, 2, 3)
 -- !query 33 schema
-struct<>
+struct<make_interval(1, 2, 3, 0, 0, 0, 0.000000):interval>
 -- !query 33 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: - year
-requirement failed: Interval string should be value and unit pairs(line 1, pos 7)
-
-== SQL ==
-select interval '- year'
--------^^^
+1 years 2 months 21 days
 
 
 -- !query 34
-select interval '-1 yea'
+select make_interval(1, 2, 3, 4)
 -- !query 34 schema
-struct<>
+struct<make_interval(1, 2, 3, 4, 0, 0, 0.000000):interval>
 -- !query 34 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the INTERVAL value: -1 yea
-Error paring interval unit: yea(line 1, pos 7)
-
-== SQL ==
-select interval '-1 yea'
--------^^^
+1 years 2 months 25 days
 
 
 -- !query 35
-select interval 1 y 2 mon 3 week
+select make_interval(1, 2, 3, 4, 5)
 -- !query 35 schema
-struct<>
+struct<make_interval(1, 2, 3, 4, 5, 0, 0.000000):interval>
 -- !query 35 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input '1 y'(line 1, pos 18)
-
-== SQL ==
-select interval 1 y 2 mon 3 week
-------------------^^^
+1 years 2 months 25 days 5 hours
 
 
 -- !query 36
-select interval '30' y '25' mon
+select make_interval(1, 2, 3, 4, 5, 6)
 -- !query 36 schema
-struct<>
+struct<make_interval(1, 2, 3, 4, 5, 6, 0.000000):interval>
 -- !query 36 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-mismatched input ''25'' expecting {<EOF>, ',', 'CLUSTER', 'DISTRIBUTE', 'EXCEPT', 'FROM', 'GROUP', 'HAVING', 'INTERSECT', 'LATERAL', 'LIMIT', 'ORDER', 'MINUS', 'SORT', 'UNION', 'WHERE', 'WINDOW', '-'}(line 1, pos 23)
-
-== SQL ==
-select interval '30' y '25' mon
------------------------^^^
+1 years 2 months 25 days 5 hours 6 minutes
 
 
 -- !query 37
-select interval '-1 yrs' year to month
+select make_interval(1, 2, 3, 4, 5, 6, 7.008009)
 -- !query 37 schema
-struct<>
+struct<make_interval(1, 2, 3, 4, 5, 6, CAST(7.008009 AS DECIMAL(8,6))):interval>
 -- !query 37 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Interval string does not match year-month format of 'y-m': -1 yrs(line 1, pos 16)
-
-== SQL ==
-select interval '-1 yrs' year to month
-----------------^^^
+1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds

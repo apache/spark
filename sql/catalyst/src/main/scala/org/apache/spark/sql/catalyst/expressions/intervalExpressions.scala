@@ -153,3 +153,107 @@ case class MultiplyInterval(interval: Expression, num: Expression)
 
 case class DivideInterval(interval: Expression, num: Expression)
   extends IntervalNumOperation(interval, num, divide, "divide")
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(years, months, weeks, days, hours, mins, secs) - Make interval from years, months, weeks, days, hours, mins and secs.",
+  arguments = """
+    Arguments:
+      * years - the number of years, positive or negative
+      * months - the number of months, positive or negative
+      * weeks - the number of weeks, positive or negative
+      * days - the number of days, positive or negative
+      * hours - the number of hours, positive or negative
+      * mins - the number of minutes, positive or negative
+      * secs - the number of seconds with the fractional part in microsecond precision.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(100, 11, 1, 1, 12, 30, 01.001001);
+       100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds
+      > SELECT _FUNC_(100, null, 3);
+       NULL
+  """,
+  since = "3.0.0")
+// scalastyle:on line.size.limit
+case class MakeInterval(
+    years: Expression,
+    months: Expression,
+    weeks: Expression,
+    days: Expression,
+    hours: Expression,
+    mins: Expression,
+    secs: Expression)
+  extends SeptenaryExpression with ImplicitCastInputTypes {
+
+  def this(
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression,
+      mins: Expression) = {
+    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, 8, 6)))
+  }
+  def this(
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression) = {
+    this(years, months, weeks, days, hours, Literal(0))
+  }
+  def this(years: Expression, months: Expression, weeks: Expression, days: Expression) =
+    this(years, months, weeks, days, Literal(0))
+  def this(years: Expression, months: Expression, weeks: Expression) =
+    this(years, months, weeks, Literal(0))
+  def this(years: Expression, months: Expression) = this(years, months, Literal(0))
+  def this(years: Expression) = this(years, Literal(0))
+  def this() = this(Literal(0))
+
+  override def children: Seq[Expression] = Seq(years, months, weeks, days, hours, mins, secs)
+  // Accept `secs` as DecimalType to avoid loosing precision of microseconds while converting
+  // them to the fractional part of `secs`.
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType,
+    IntegerType, IntegerType, IntegerType, DecimalType(8, 6))
+  override def dataType: DataType = CalendarIntervalType
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(
+      year: Any,
+      month: Any,
+      week: Any,
+      day: Any,
+      hour: Any,
+      min: Any,
+      sec: Option[Any]): Any = {
+    try {
+      IntervalUtils.makeInterval(
+        year.asInstanceOf[Int],
+        month.asInstanceOf[Int],
+        week.asInstanceOf[Int],
+        day.asInstanceOf[Int],
+        hour.asInstanceOf[Int],
+        min.asInstanceOf[Int],
+        sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, 8, 6)))
+    } catch {
+      case _: ArithmeticException => null
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (year, month, week, day, hour, min, sec) => {
+      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+      val secFrac = sec.getOrElse("0")
+      s"""
+        try {
+          ${ev.value} = $iu.makeInterval($year, $month, $week, $day, $hour, $min, $secFrac);
+        } catch (java.lang.ArithmeticException e) {
+          ${ev.isNull} = true;
+        }
+      """
+    })
+  }
+
+  override def prettyName: String = "make_interval"
+}
