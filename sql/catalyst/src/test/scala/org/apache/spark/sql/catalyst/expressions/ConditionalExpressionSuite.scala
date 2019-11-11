@@ -220,7 +220,8 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("SPARK-22705: case when should use less global variables") {
     val ctx = new CodegenContext()
-    CaseWhen(Seq((Literal.create(false, BooleanType), Literal(1))), Literal(-1)).genCode(ctx)
+    CaseWhen(Seq((Literal.create(false, BooleanType), Literal(1)),
+      (Literal.create(false, BooleanType), Literal(2))), Literal(-1)).genCode(ctx)
     assert(ctx.inlinedMutableStates.size == 1)
   }
 

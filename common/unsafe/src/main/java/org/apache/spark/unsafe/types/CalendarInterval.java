@@ -29,7 +29,7 @@ import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 /**
  * The internal representation of interval type.
  */
-public final class CalendarInterval implements Serializable {
+public final class CalendarInterval implements Serializable, Comparable<CalendarInterval> {
   public final int months;
   public final int days;
   public final long microseconds;
@@ -38,24 +38,6 @@ public final class CalendarInterval implements Serializable {
     this.months = months;
     this.days = days;
     this.microseconds = microseconds;
-  }
-
-  public CalendarInterval add(CalendarInterval that) {
-    int months = this.months + that.months;
-    int days = this.days + that.days;
-    long microseconds = this.microseconds + that.microseconds;
-    return new CalendarInterval(months, days, microseconds);
-  }
-
-  public CalendarInterval subtract(CalendarInterval that) {
-    int months = this.months - that.months;
-    int days = this.days - that.days;
-    long microseconds = this.microseconds - that.microseconds;
-    return new CalendarInterval(months, days, microseconds);
-  }
-
-  public CalendarInterval negate() {
-    return new CalendarInterval(-this.months, -this.days, -this.microseconds);
   }
 
   @Override
@@ -71,6 +53,29 @@ public final class CalendarInterval implements Serializable {
   @Override
   public int hashCode() {
     return Objects.hash(months, days, microseconds);
+  }
+
+  @Override
+  public int compareTo(CalendarInterval that) {
+    long thisAdjustDays =
+      this.microseconds / MICROS_PER_DAY + this.days + this.months * DAYS_PER_MONTH;
+    long thatAdjustDays =
+      that.microseconds / MICROS_PER_DAY + that.days + that.months * DAYS_PER_MONTH;
+    long daysDiff = thisAdjustDays - thatAdjustDays;
+    if (daysDiff == 0) {
+      long msDiff = (this.microseconds % MICROS_PER_DAY) - (that.microseconds % MICROS_PER_DAY);
+      if (msDiff == 0) {
+        return 0;
+      } else if (msDiff > 0) {
+        return 1;
+      } else {
+        return -1;
+      }
+    } else if (daysDiff > 0){
+      return 1;
+    } else {
+      return -1;
+    }
   }
 
   @Override
