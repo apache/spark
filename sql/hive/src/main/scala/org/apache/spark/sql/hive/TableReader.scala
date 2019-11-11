@@ -267,7 +267,17 @@ class HadoopTableReader(
     if (hivePartitionRDDs.size == 0) {
       new EmptyRDD[InternalRow](sparkSession.sparkContext)
     } else {
-      new UnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)
+      val unionRDD = new UnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)
+      val partNums = unionRDD.partitions.length
+      val maxPartNums = SQLConf.get.getConf(HiveUtils.HIVE_TABLE_SCAN_MAX_PARALLELISM)
+      if (maxPartNums.isDefined && partNums > maxPartNums.get) {
+        logWarning(s"Union of Hive partitions' HadoopRDDs has ${partNums} partitions " +
+          "which exceeds the config `spark.sql.hive.tableScan.maxParallelism`. " +
+          s"Coalesces the Union RDD to ${maxPartNums.get} partitions.")
+        unionRDD.coalesce(maxPartNums.get)
+      } else {
+        unionRDD
+      }
     }
   }
 

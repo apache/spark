@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -184,6 +185,35 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
       val scan1 = getHiveTableScanExec(s"SELECT * FROM $table WHERE a = 1 AND b = 2")
       val scan2 = getHiveTableScanExec(s"SELECT * FROM $table WHERE b = 2 AND a = 1")
       assert(scan1.sameResult(scan2))
+    }
+  }
+
+  test("HiveTableScanExec should not increase data parallelism") {
+    withSQLConf(HiveUtils.HIVE_TABLE_SCAN_MAX_PARALLELISM.key -> "1") {
+      val view = "src"
+      withTempView(view) {
+        spark.range(1, 5).createOrReplaceTempView(view)
+        val table = "hive_tbl_part"
+        withTable(table) {
+          sql(
+            s"""
+               |CREATE TABLE $table (id int)
+               |PARTITIONED BY (a int, b int)
+             """.stripMargin)
+          sql(
+            s"""
+               |FROM $view v
+               |INSERT INTO TABLE $table
+               |PARTITION (a=1, b=2)
+               |SELECT v.id
+               |INSERT INTO TABLE $table
+               |PARTITION (a=2, b=3)
+               |SELECT v.id
+             """.stripMargin)
+          val scanRdd = getHiveTableScanExec(s"SELECT * FROM $table").execute()
+          assert(scanRdd.partitions.length == 1)
+        }
+      }
     }
   }
 

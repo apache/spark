@@ -155,6 +155,16 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val HIVE_TABLE_SCAN_MAX_PARALLELISM = buildConf("spark.sql.hive.tableScan.maxParallelism")
+    .doc("When reading Hive partitioned table, the default parallelism is the sum of Hive " +
+      "partition RDDs' parallelism. For Hive table of many partitions with many files, " +
+      "the parallelism could be very big and not good for Spark job scheduling. This optional " +
+      "config can set a maximum parallelism for reading Hive partitioned table. If the result " +
+      "RDD of reading such table is larger than this value, Spark will reduce the partition " +
+      "number by doing a coalesce on the RDD.")
+    .intConf
+    .createOptional
+
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
    * this does not necessarily need to be the same version of Hive that is used internally by
