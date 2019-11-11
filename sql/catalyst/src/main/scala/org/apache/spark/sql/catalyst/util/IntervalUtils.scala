@@ -183,8 +183,24 @@ object IntervalUtils {
     fromDayTimeString(s, DAY, SECOND)
   }
 
-  private val dayTimePattern =
-    "^([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?$".r
+  private val signRe = "(?<sign>[+|-])"
+  private val dayRe = "((?<day>\\d+)\\s+)"
+  private val hourRe = "(?<hour>\\d{1,2}+)"
+  private val minuteRe = "(?<minute>\\d{1,2}+)"
+  private val secondRe = "(?<second>(\\d{1,2}+)(\\.(\\d{1,9}+))?)"
+
+  private val dayTimePattern = Map(
+    (MINUTE, SECOND) -> s"^$signRe?$minuteRe:$secondRe$$".r,
+    (HOUR, MINUTE) -> s"^$signRe?$hourRe:$minuteRe$$".r,
+    (HOUR, SECOND) -> s"^$signRe?$hourRe:$minuteRe:$secondRe$$".r,
+    (DAY, HOUR) -> s"^$signRe?$dayRe $hourRe$$".r,
+    (DAY, MINUTE) -> s"^$signRe?$dayRe $hourRe:$minuteRe$$".r,
+    (DAY, SECOND) -> s"^$signRe?$dayRe $hourRe:$minuteRe$secondRe$$".r
+  )
+
+  private def unitsRange(start: IntervalUnit, end: IntervalUnit): Seq[IntervalUnit] = {
+    (start.id to end.id).map(IntervalUnit(_))
+  }
 
   /**
    * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
@@ -197,51 +213,34 @@ object IntervalUtils {
    */
   def fromDayTimeString(input: String, from: IntervalUnit, to: IntervalUnit): CalendarInterval = {
     require(input != null, "Interval day-time string must be not null")
-    assert(input.length == input.trim.length)
-    val m = dayTimePattern.pattern.matcher(input)
-    require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input")
+    val regexp = dayTimePattern.get(from -> to)
+    require(regexp.isDefined, s"Cannot support (interval '$input' $from to $to) expression")
+    val pattern = regexp.get.pattern
+    val m = pattern.matcher(input)
+    require(m.matches, s"Interval string must match day-time format of '$pattern': $input")
 
     try {
-      val sign = if (m.group(1) != null && m.group(1) == "-") -1 else 1
-      val days = if (m.group(2) == null) {
-        0
-      } else {
-        toLongWithRange(DAY, m.group(3), 0, Integer.MAX_VALUE).toInt
-      }
-      var hours: Long = 0L
-      var minutes: Long = 0L
-      var seconds: Long = 0L
-      if (m.group(5) != null || from == MINUTE) { // 'HH:mm:ss' or 'mm:ss minute'
-        hours = toLongWithRange(HOUR, m.group(5), 0, 23)
-        minutes = toLongWithRange(MINUTE, m.group(6), 0, 59)
-        seconds = toLongWithRange(SECOND, m.group(7), 0, 59)
-      } else if (m.group(8) != null) { // 'mm:ss.nn'
-        minutes = toLongWithRange(MINUTE, m.group(6), 0, 59)
-        seconds = toLongWithRange(SECOND, m.group(7), 0, 59)
-      } else { // 'HH:mm'
-        hours = toLongWithRange(HOUR, m.group(6), 0, 23)
-        minutes = toLongWithRange(SECOND, m.group(7), 0, 59)
-      }
-      // Hive allow nanosecond precision interval
-      var secondsFraction = parseNanos(m.group(9), seconds < 0)
-      to match {
-        case HOUR =>
-          minutes = 0
-          seconds = 0
-          secondsFraction = 0
-        case MINUTE =>
-          seconds = 0
-          secondsFraction = 0
-        case SECOND =>
-          // No-op
+      var micros: Long = 0L
+      var days: Int = 0
+
+      unitsRange(to, from).foreach {
+        case unit @ DAY =>
+          val parsed = toLongWithRange(unit, m.group(unit.toString), 0, Int.MaxValue)
+          days = Math.toIntExact(parsed)
+        case unit @ HOUR =>
+          val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 23)
+          micros = Math.addExact(micros, Math.multiplyExact(parsed, MICROS_PER_HOUR))
+        case unit @ MINUTE =>
+          val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 59)
+          micros = Math.addExact(micros, Math.multiplyExact(parsed, MICROS_PER_MINUTE))
+        case unit @ SECOND =>
+          val parsed = parseSecondNano(m.group(unit.toString))
+          micros = Math.addExact(micros, parsed)
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot support (interval '$input' $from to $to) expression")
       }
-      var micros = secondsFraction
-      micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
-      micros = Math.addExact(micros, Math.multiplyExact(minutes, MICROS_PER_MINUTE))
-      micros = Math.addExact(micros, Math.multiplyExact(seconds, MICROS_PER_SECOND))
+      val sign = if (m.group("sign") != null && m.group("sign") == "-") -1 else 1
       new CalendarInterval(0, sign * days, sign * micros)
     } catch {
       case e: Exception =>
