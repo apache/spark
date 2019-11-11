@@ -113,14 +113,21 @@ private[spark] class Executor(
   // create. The map key is a task id.
   private val taskReaperForTask: HashMap[Long, TaskReaper] = HashMap[Long, TaskReaper]()
 
-  val executorMetricsSource = new ExecutorMetricsSource
+  val executorMetricsSource =
+    if (conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
+      new ExecutorMetricsSource
+    } else {
+      null
+    }
 
   if (!isLocal) {
     env.blockManager.initialize(conf.getAppId)
     env.metricsSystem.registerSource(executorSource)
     env.metricsSystem.registerSource(new JVMCPUSource())
-    executorMetricsSource.register
-    env.metricsSystem.registerSource(executorMetricsSource)
+    if (conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
+      executorMetricsSource.register
+      env.metricsSystem.registerSource(executorMetricsSource)
+    }
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
   }
 

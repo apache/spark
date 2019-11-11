@@ -551,8 +551,12 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
-    val executorMetricsSource = new ExecutorMetricsSource
-    executorMetricsSource.register
+    val executorMetricsSource =
+      if (_conf.get(METRICS_EXECUTORMETRICS_SOURCE_ENABLED)) {
+        new ExecutorMetricsSource
+      } else {
+        null
+      }
 
     // create and start the heartbeater for collecting memory metrics
     _heartbeater = new Heartbeater(
@@ -625,7 +629,10 @@ class SparkContext(config: SparkConf) extends Logging {
     _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
     _env.metricsSystem.registerSource(new JVMCPUSource())
-    env.metricsSystem.registerSource(executorMetricsSource)
+    if (executorMetricsSource != null) {
+      executorMetricsSource.register
+      env.metricsSystem.registerSource(executorMetricsSource)
+    }
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
     }

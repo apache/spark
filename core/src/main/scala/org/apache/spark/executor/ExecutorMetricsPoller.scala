@@ -81,7 +81,9 @@ private[spark] class ExecutorMetricsPoller(
     // get the latest values for the metrics
     val latestMetrics = ExecutorMetrics.getCurrentMetrics(memoryManager)
 
-    executorMetricsSource.updateMetricsSnapshot(latestMetrics)
+    if (executorMetricsSource != null) {
+      executorMetricsSource.updateMetricsSnapshot(latestMetrics)
+    }
 
     def updatePeaks(metrics: AtomicLongArray): Unit = {
       (0 until metrics.length).foreach { i =>

@@ -996,9 +996,11 @@ This is the component with the largest amount of instrumented metrics
   - jvmCpuTime
 
 - namespace=ExecutorMetrics
-   - This contains memory-related metrics. A full list of available metrics in this namespace can be
-    found in the corresponding entry for the Executor component instance.
-
+  - **note:** these metrics are conditional to a configuration parameter:
+    `spark.metrics.executormetrics.source.enabled` (default is true) 
+  - This source contains memory-related metrics. A full list of available metrics in this 
+    namespace can be found in the corresponding entry for the Executor component instance.
+ 
 - namespace=plugin.\<Plugin Class Name>
   - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
   configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
@@ -1051,9 +1053,12 @@ when running in local mode.
   - threadpool.startedTasks
 
 - namespace=ExecutorMetrics
-  - **note:** ExecutorMetrics are updated as part of heartbeat processes scheduled
+  - **notes:** 
+    - These metrics are conditional to a configuration parameter:
+    `spark.metrics.executormetrics.source.enabled` (default is true) 
+    - ExecutorMetrics are updated as part of heartbeat processes scheduled
    for the executors and for the driver at regular intervals: `spark.executor.heartbeatInterval`, default 10 seconds
-   An optional faster polling mechanism is available for executor memory metrics, 
+    - An optional faster polling mechanism is available for executor memory metrics, 
    it can be activated by setting a polling interval (in milliseconds) using the configuration parameter `spark.executor.metrics.pollingInterval`
   - JVMHeapMemory
   - JVMOffHeapMemory
