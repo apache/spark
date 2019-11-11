@@ -772,17 +772,15 @@ class DDLParserSuite extends AnalysisTest {
 
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
-      DeleteFromStatement(
-        Seq("testcat", "ns1", "ns2", "tbl"),
-        None,
+      DeleteFromTable(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         None))
   }
 
   test("delete from table: with alias and where clause") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl AS t WHERE t.a = 2",
-      DeleteFromStatement(
-        Seq("testcat", "ns1", "ns2", "tbl"),
-        Some("t"),
+      DeleteFromTable(
+        SubqueryAlias("t", UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"))),
         Some(EqualTo(UnresolvedAttribute("t.a"), Literal(2)))))
   }
 
@@ -798,13 +796,12 @@ class DDLParserSuite extends AnalysisTest {
     parseCompare(
       """
         |UPDATE testcat.ns1.ns2.tbl
-        |SET t.a='Robert', t.b=32
+        |SET a='Robert', b=32
       """.stripMargin,
-      UpdateTableStatement(
-        Seq("testcat", "ns1", "ns2", "tbl"),
-        None,
-        Seq(Seq("t", "a"), Seq("t", "b")),
-        Seq(Literal("Robert"), Literal(32)),
+      UpdateTable(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Seq(Assignment(UnresolvedAttribute("a"), Literal("Robert")),
+          Assignment(UnresolvedAttribute("b"), Literal(32))),
         None))
   }
 
@@ -815,11 +812,10 @@ class DDLParserSuite extends AnalysisTest {
         |SET t.a='Robert', t.b=32
         |WHERE t.c=2
       """.stripMargin,
-      UpdateTableStatement(
-        Seq("testcat", "ns1", "ns2", "tbl"),
-        Some("t"),
-        Seq(Seq("t", "a"), Seq("t", "b")),
-        Seq(Literal("Robert"), Literal(32)),
+      UpdateTable(
+        SubqueryAlias("t", UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"))),
+        Seq(Assignment(UnresolvedAttribute("t.a"), Literal("Robert")),
+          Assignment(UnresolvedAttribute("t.b"), Literal(32))),
         Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
   }
 

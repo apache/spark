@@ -1283,7 +1283,7 @@ class DataSourceV2SQLSuite
       // UPDATE non-existing table
       assertAnalysisError(
         "UPDATE dummy SET name='abc'",
-        "Table not found")
+        "Table or view not found")
 
       // UPDATE non-existing column
       assertAnalysisError(

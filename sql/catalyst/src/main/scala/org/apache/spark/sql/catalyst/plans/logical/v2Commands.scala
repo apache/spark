@@ -290,8 +290,7 @@ case class DeleteFromTable(
  */
 case class UpdateTable(
     table: LogicalPlan,
-    columns: Seq[Expression],
-    values: Seq[Expression],
+    assignments: Seq[Assignment],
     condition: Option[Expression]) extends Command with SupportsSubquery {
   override def children: Seq[LogicalPlan] = table :: Nil
 }
