@@ -67,9 +67,7 @@ private[spark] class Executor(
 
   @volatile private var executorShutdown = false
   ShutdownHookManager.addShutdownHook(
-    () => if (!executorShutdown) {
-      stop()
-    }
+    () => stop()
   )
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
