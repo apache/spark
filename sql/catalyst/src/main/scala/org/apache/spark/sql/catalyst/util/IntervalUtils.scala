@@ -428,15 +428,15 @@ object IntervalUtils {
     type ParseState = Value
 
     val PREFIX,
-        BEGIN_VALUE,
-        PARSE_SIGN,
-        TRIM_BEFORE_PARSE_VALUE,
-        PARSE_UNIT_VALUE,
-        FRACTIONAL_PART,
-        TRIM_BEFORE_PARSE_UNIT,
-        BEGIN_UNIT_NAME,
-        UNIT_NAME_SUFFIX,
-        END_UNIT_NAME = Value
+        NEXT_VALUE_UNIT,
+        SIGN,
+        TRIM_BEFORE_VALUE,
+        VALUE,
+        VALUE_FRACTIONAL_PART,
+        TRIM_BEFORE_UNIT,
+        UNIT_BEGIN,
+        UNIT_SUFFIX,
+        UNIT_END = Value
   }
   private final val intervalStr = UTF8String.fromString("interval ")
   private def unitToUtf8(unit: IntervalUnit): UTF8String = {
@@ -493,9 +493,9 @@ object IntervalUtils {
               i += intervalStr.numBytes()
             }
           }
-          state = BEGIN_VALUE
-        case BEGIN_VALUE => trimToNextState(b, PARSE_SIGN)
-        case PARSE_SIGN =>
+          state = NEXT_VALUE_UNIT
+        case NEXT_VALUE_UNIT => trimToNextState(b, SIGN)
+        case SIGN =>
           b match {
             case '-' =>
               isNegative = true
@@ -512,9 +512,9 @@ object IntervalUtils {
           // Sets the scale to an invalid value to track fraction presence
           // in the BEGIN_UNIT_NAME state
           fractionScale = -1
-          state = TRIM_BEFORE_PARSE_VALUE
-        case TRIM_BEFORE_PARSE_VALUE => trimToNextState(b, PARSE_UNIT_VALUE)
-        case PARSE_UNIT_VALUE =>
+          state = TRIM_BEFORE_VALUE
+        case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
+        case VALUE =>
           b match {
             case _ if '0' <= b && b <= '9' =>
               try {
@@ -522,26 +522,26 @@ object IntervalUtils {
               } catch {
                 case _: ArithmeticException => return null
               }
-            case ' ' => state = TRIM_BEFORE_PARSE_UNIT
+            case ' ' => state = TRIM_BEFORE_UNIT
             case '.' =>
               fractionScale = (NANOS_PER_SECOND / 10).toInt
-              state = FRACTIONAL_PART
+              state = VALUE_FRACTIONAL_PART
             case _ => return null
           }
           i += 1
-        case FRACTIONAL_PART =>
+        case VALUE_FRACTIONAL_PART =>
           b match {
             case _ if '0' <= b && b <= '9' && fractionScale > 0 =>
               fraction += (b - '0') * fractionScale
               fractionScale /= 10
             case ' ' =>
               fraction /= NANOS_PER_MICROS.toInt
-              state = TRIM_BEFORE_PARSE_UNIT
+              state = TRIM_BEFORE_UNIT
             case _ => return null
           }
           i += 1
-        case TRIM_BEFORE_PARSE_UNIT => trimToNextState(b, BEGIN_UNIT_NAME)
-        case BEGIN_UNIT_NAME =>
+        case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
+        case UNIT_BEGIN =>
           // Checks that only seconds can have the fractional part
           if (b != 's' && fractionScale >= 0) {
             return null
@@ -594,26 +594,26 @@ object IntervalUtils {
           } catch {
             case _: ArithmeticException => return null
           }
-          state = UNIT_NAME_SUFFIX
-        case UNIT_NAME_SUFFIX =>
+          state = UNIT_SUFFIX
+        case UNIT_SUFFIX =>
           b match {
-            case 's' => state = END_UNIT_NAME
-            case ' ' => state = BEGIN_VALUE
+            case 's' => state = UNIT_END
+            case ' ' => state = NEXT_VALUE_UNIT
             case _ => return null
           }
           i += 1
-        case END_UNIT_NAME =>
+        case UNIT_END =>
           b match {
             case ' ' =>
               i += 1
-              state = BEGIN_VALUE
+              state = NEXT_VALUE_UNIT
             case _ => return null
           }
       }
     }
 
     val result = state match {
-      case UNIT_NAME_SUFFIX | END_UNIT_NAME | BEGIN_VALUE =>
+      case UNIT_SUFFIX | UNIT_END | NEXT_VALUE_UNIT =>
         new CalendarInterval(months, days, microseconds)
       case _ => null
     }
