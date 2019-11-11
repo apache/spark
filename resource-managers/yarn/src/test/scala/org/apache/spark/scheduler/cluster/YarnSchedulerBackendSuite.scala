@@ -52,10 +52,8 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
 
   private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
       extends YarnSchedulerBackend(scheduler, sc) {
-    def setHostToLocalTaskCount(hostToLocalTaskCount: Map[(String, ResourceProfile), Int]): Unit = {
-      val rpId = DEFAULT_RESOURCE_PROFILE_ID
-      val rpHostToLocal = Map(rpId -> hostToLocalTaskCount)
-      this.rpHostToLocalTaskCount = rpHostToLocal
+    def setHostToLocalTaskCount(hostToLocalTaskCount: Map[Int, Map[String, Int]]): Unit = {
+      this.rpHostToLocalTaskCount = hostToLocalTaskCount
     }
   }
 
@@ -71,8 +69,8 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       blacklist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
       numRequested <- 0 until 10
       hostToLocalCount <- IndexedSeq(
-        Map.empty[(String, ResourceProfile), Int],
-        Map(("a", defaultResourceProf) -> 1, ("b", defaultResourceProf) -> 2)
+        Map.empty[Int, Map[String, Int]],
+        Map(defaultResourceProf.id -> Map("a" -> 1), defaultResourceProf.id -> Map("b" -> 2))
       )
     } {
       yarnSchedulerBackendExtended.setHostToLocalTaskCount(hostToLocalCount)
