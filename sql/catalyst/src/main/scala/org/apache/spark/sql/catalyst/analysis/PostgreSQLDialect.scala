@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.Cast
-import org.apache.spark.sql.catalyst.expressions.postgreSQL.PostgreCastStringToBoolean
+import org.apache.spark.sql.catalyst.expressions.postgreSQL.PostgreCastToBoolean
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -27,19 +27,18 @@ import org.apache.spark.sql.types.{BooleanType, StringType}
 
 object PostgreSQLDialect {
   val postgreSQLDialectRules: List[Rule[LogicalPlan]] =
-    CastStringToBoolean ::
+    CastToBoolean ::
       Nil
 
-  object CastStringToBoolean extends Rule[LogicalPlan] with Logging {
+  object CastToBoolean extends Rule[LogicalPlan] with Logging {
     override def apply(plan: LogicalPlan): LogicalPlan = {
       // The SQL configuration `spark.sql.dialect` can be changed in runtime.
       // To make sure the configuration is effective, we have to check it during rule execution.
       val conf = SQLConf.get
       if (conf.usePostgreSQLDialect) {
         plan.transformExpressions {
-          case Cast(child, dataType, _)
-            if dataType == BooleanType && child.dataType == StringType =>
-            PostgreCastStringToBoolean(child)
+          case Cast(child, dataType, timeZoneId) if dataType == BooleanType =>
+            PostgreCastToBoolean(child, timeZoneId)
         }
       } else {
         plan
