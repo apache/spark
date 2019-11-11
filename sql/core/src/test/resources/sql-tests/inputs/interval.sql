@@ -66,7 +66,7 @@ select make_interval(1, 2, 3, 4, 5);
 select make_interval(1, 2, 3, 4, 5, 6);
 select make_interval(1, 2, 3, 4, 5, 6, 7.008009);
 
--- SPARK-29605: cast string to intervals
+-- cast string to intervals
 select cast(v as interval) from values ('1 second') t(v);
 select cast(v as interval) from values ('+1 second') t(v);
 select cast(v as interval) from values ('-1 second') t(v);
