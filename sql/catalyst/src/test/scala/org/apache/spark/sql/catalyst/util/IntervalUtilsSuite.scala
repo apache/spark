@@ -271,26 +271,26 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   test("from bounded day-time string") {
     val input = "5 12:40:30.999999999"
 
-    def check(from: String, to: String, expected: String): Unit = {
+    def check(from: IntervalUnit, to: IntervalUnit, expected: String): Unit = {
       withClue(s"from = $from, to = $to") {
         assert(fromDayTimeString(input, from, to) === fromString(expected))
       }
     }
 
     withSQLConf(SQLConf.DIALECT.key -> "Spark") {
-      check("hour", "minute", "12 hours 40 minutes")
-      check("hour", "second", "12 hours 40 minutes 30.999999 seconds")
-      check("minute", "second", "40 minutes 30.999999 seconds")
-      check("day", "hour", "5 days 12 hours")
-      check("day", "minute", "5 days 12 hours 40 minutes")
+      check(HOUR, MINUTE, "12 hours 40 minutes")
+      check(HOUR, SECOND, "12 hours 40 minutes 30.999999 seconds")
+      check(MINUTE, SECOND, "40 minutes 30.999999 seconds")
+      check(DAY, HOUR, "5 days 12 hours")
+      check(DAY, MINUTE, "5 days 12 hours 40 minutes")
     }
 
     withSQLConf(SQLConf.DIALECT.key -> "PostgreSQL") {
-      check("hour", "minute", "5 days 12 hours 40 minutes")
-      check("hour", "second", "5 days 12 hours 40 minutes 30.999999 seconds")
-      check("minute", "second", "5 days 12 hours 40 minutes 30.999999 seconds")
-      check("day", "hour", "5 days 12 hours")
-      check("day", "minute", "5 days 12 hours 40 minutes")
+      check(HOUR, MINUTE, "5 days 12 hours 40 minutes")
+      check(HOUR, SECOND, "5 days 12 hours 40 minutes 30.999999 seconds")
+      check(MINUTE, SECOND, "5 days 12 hours 40 minutes 30.999999 seconds")
+      check(DAY, HOUR, "5 days 12 hours")
+      check(DAY, MINUTE, "5 days 12 hours 40 minutes")
     }
   }
 }

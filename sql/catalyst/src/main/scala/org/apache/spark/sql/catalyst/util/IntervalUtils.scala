@@ -227,21 +227,21 @@ object IntervalUtils {
       var secondsFraction = parseNanos(m.group(9), seconds < 0)
       val resetValuesUpToFrom = !SQLConf.get.usePostgreSQLDialect
       (from, to) match {
-        case ("day", "second") => // No-op
-        case ("day", "minute") =>
+        case (DAY, SECOND) => // No-op
+        case (DAY, MINUTE) =>
           seconds = 0
           secondsFraction = 0
-        case ("day", "hour") =>
+        case (DAY, HOUR) =>
           minutes = 0
           seconds = 0
           secondsFraction = 0
-        case ("hour", "second") =>
+        case (HOUR, SECOND) =>
           if (resetValuesUpToFrom) days = 0
-        case ("hour", "minute") =>
+        case (HOUR, MINUTE) =>
           if (resetValuesUpToFrom) days = 0
           seconds = 0
           secondsFraction = 0
-        case ("minute", "second") =>
+        case (MINUTE, SECOND) =>
           if (resetValuesUpToFrom) {
             days = 0
             hours = 0
